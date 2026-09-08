@@ -60,7 +60,7 @@ module JiraNot
           end
 
           definition.fronts.each do |front|
-            module_record = definition.module(front['module_id'])
+            module_record = definition.module_record(front['module_id'])
             next unless module_record
             front_parts(front, module_record, definition).each do |part|
               add_part.call(part)
@@ -69,7 +69,7 @@ module JiraNot
           end
 
           definition.drawer_sets.each do |drawer_set|
-            module_record = definition.module(drawer_set['module_id'])
+            module_record = definition.module_record(drawer_set['module_id'])
             next unless module_record
             drawer_face_parts(drawer_set, module_record, definition).each do |part|
               add_part.call(part)
