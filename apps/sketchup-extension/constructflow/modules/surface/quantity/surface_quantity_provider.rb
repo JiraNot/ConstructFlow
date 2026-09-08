@@ -6,7 +6,7 @@ module JiraNot
       module Quantity
         class SurfaceQuantityProvider
           PROVIDER_ID = 'constructflow.surface.quantity'
-          FORMULA_VERSION = 1
+          FORMULA_VERSION = 2
 
           def surface_quantities(smart_object:, definition:)
             [
@@ -59,7 +59,16 @@ module JiraNot
             ].freeze
           end
 
-          def pattern_quantities(smart_object:, definition:, surface_definition:)
+          def pattern_quantities(smart_object:, definition:, surface_definition:, layout_definition: nil)
+            if layout_definition&.solved?
+              return layout_quantities(
+                smart_object: smart_object,
+                layout_definition: layout_definition,
+                pattern_definition: definition,
+                surface_definition: surface_definition
+              )
+            end
+
             count = definition.provisional_piece_count(surface_definition.net_area_mm2)
             [item(
               smart_object: smart_object,
@@ -70,11 +79,62 @@ module JiraNot
               unit: 'pcs',
               breakdown: {
                 layout_state: definition.layout_state,
-                quantity_status: definition.layout_state == 'locked' ? 'layout_based_pending_cut_solver' : 'preliminary_area_based',
+                quantity_status: 'preliminary_area_based',
                 module_mm: definition.module_mm,
                 joint_mm: definition.joint_mm
               }
             )].freeze
+          end
+
+          def layout_quantities(smart_object:, layout_definition:, pattern_definition:, surface_definition:)
+            status = layout_definition.solved? ? 'solved_piece_layout' : layout_definition.status
+            common = {
+              quantity_status: status,
+              pattern: pattern_definition.pattern,
+              module_mm: pattern_definition.module_mm,
+              joint_mm: pattern_definition.joint_mm,
+              solver_version: layout_definition.solver_version,
+              minimum_cut_violations: layout_definition.minimum_cut_violations.length,
+              coverage_ratio: layout_definition.coverage_ratio(surface_definition.net_area_mm2)
+            }
+            [
+              item(
+                smart_object: smart_object,
+                classification: "surface.pattern.#{pattern_definition.pattern}.modules.total",
+                description: 'Solved paving pieces total',
+                measure: 'count',
+                value: layout_definition.piece_count,
+                unit: 'pcs',
+                breakdown: common.merge(full_count: layout_definition.full_count, cut_count: layout_definition.cut_count)
+              ),
+              item(
+                smart_object: smart_object,
+                classification: "surface.pattern.#{pattern_definition.pattern}.modules.full",
+                description: 'Solved full paving pieces',
+                measure: 'count',
+                value: layout_definition.full_count,
+                unit: 'pcs',
+                breakdown: common
+              ),
+              item(
+                smart_object: smart_object,
+                classification: "surface.pattern.#{pattern_definition.pattern}.modules.cut",
+                description: 'Solved cut paving pieces',
+                measure: 'count',
+                value: layout_definition.cut_count,
+                unit: 'pcs',
+                breakdown: common
+              ),
+              item(
+                smart_object: smart_object,
+                classification: 'surface.pattern.cut_waste_area',
+                description: 'Cut-piece nominal waste area before offcut reuse',
+                measure: 'area',
+                value: layout_definition.cut_waste_area_mm2 / 1_000_000.0,
+                unit: 'm2',
+                breakdown: common.merge(reuse_status: 'not_optimized')
+              )
+            ].freeze
           end
 
           def parking_quantities(smart_object:, definition:)
