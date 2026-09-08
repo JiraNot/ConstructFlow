@@ -5,6 +5,7 @@ require 'sketchup.rb'
 require_relative 'core/id_generator'
 require_relative 'core/diagnostic_log'
 require_relative 'core/attribute_store'
+require_relative 'core/units'
 require_relative 'core/phase'
 require_relative 'core/project_store'
 require_relative 'core/level_registry'
@@ -17,6 +18,14 @@ require_relative 'core/command_bus'
 require_relative 'core/module_registry'
 require_relative 'core/module_loader'
 require_relative 'core/sketchup_app_observer'
+
+require_relative 'modules/architecture/wall_definition'
+require_relative 'modules/architecture/wall_repository'
+require_relative 'modules/architecture/validators/wall_validator'
+require_relative 'modules/architecture/quantity/wall_quantity_provider'
+require_relative 'modules/architecture/wall_geometry'
+require_relative 'modules/architecture/tools/wall_tool'
+require_relative 'modules/architecture/registration'
 
 module JiraNot
   module ConstructFlow
@@ -38,7 +47,7 @@ module JiraNot
 
       class << self
         attr_reader :modules, :module_loader, :events, :commands, :levels, :project,
-                    :smart_objects, :diagnostics, :migrations, :active_model
+                    :smart_objects, :diagnostics, :migrations, :active_model, :menu
 
         def boot!
           return if @booted
@@ -60,6 +69,7 @@ module JiraNot
           attach_model(Sketchup.active_model)
           install_model_observer
           install_ui_entry
+          install_builtin_modules
           @booted = true
           @diagnostics.info('runtime_booted', 'ConstructFlow runtime booted')
         end
@@ -216,8 +226,12 @@ module JiraNot
         end
 
         def install_ui_entry
-          menu = UI.menu('Extensions').add_submenu('ConstructFlow')
-          menu.add_item('Foundation Inspector') { show_inspector }
+          @menu = UI.menu('Extensions').add_submenu('ConstructFlow')
+          @menu.add_item('Foundation Inspector') { show_inspector }
+        end
+
+        def install_builtin_modules
+          Architecture::Registration.install(self)
         end
 
         def show_inspector
