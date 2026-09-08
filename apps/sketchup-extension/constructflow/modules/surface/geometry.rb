@@ -49,6 +49,24 @@ module JiraNot
           group
         end
 
+        def rebuild_locked_layout!(group, layout_definition:)
+          raise ArgumentError, layout_definition.errors.join('; ') unless layout_definition.valid?
+
+          entities = group.entities
+          entities.clear!
+          return group unless layout_definition.solved?
+
+          layout_definition.pieces.each do |piece|
+            if piece['classification'] == 'full'
+              add_closed_loop(entities, piece['cell_world_mm'])
+            else
+              Array(piece['fragments_mm']).each { |loop| add_closed_loop(entities, loop) if loop.length >= 3 }
+              Array(piece['void_fragments_mm']).each { |loop| add_closed_loop(entities, loop) if loop.length >= 3 }
+            end
+          end
+          group
+        end
+
         def create_border_group(model, surface_definition:, border_definition:)
           group = model.active_entities.add_group
           group.name = 'ConstructFlow Paving Border'
