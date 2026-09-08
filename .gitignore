@@ -1,0 +1,30 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+coverage/
+*.log
+
+# Ruby
+.bundle/
+vendor/bundle/
+
+# SketchUp packaging
+*.rbz
+*.zip
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Generated project artifacts
+.tmp/
+tmp/
+artifacts/
