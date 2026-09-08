@@ -1,0 +1,89 @@
+# ConstructFlow Documentation — Single Source of Truth
+
+This directory is the authoritative product and engineering specification for ConstructFlow by JiraNot.
+
+## Authority
+
+When implementation, comments, issues, AI-agent instructions, prototypes, or conversations conflict with the documents under `docs/`, the documents under `docs/` win unless an approved Architecture Decision Record (ADR) explicitly changes them.
+
+No production module should introduce behavior that contradicts an approved specification without updating the documentation in the same pull request.
+
+## Reading order
+
+1. `MASTER-BLUEPRINT.md` — product mission, complete domain scope and non-goals.
+2. `ROADMAP.md` — implementation sequence; it does not reduce the master scope.
+3. `OBJECT-REGISTRY.md` — canonical ownership of smart-object families.
+4. `WORKFLOW-REGISTRY.md` — canonical real-world workflows the platform must support.
+5. `architecture/MODULAR-ARCHITECTURE.md` — module boundaries and dependency rules.
+6. `architecture/CORE-CONTRACTS.md` — shared contracts.
+7. `architecture/SMART-OBJECT-SCHEMA.md` — canonical object envelope and lifecycle.
+8. `architecture/PHASE-LEVEL-REVISION.md` — existing/demolition/new, level and revision semantics.
+9. `architecture/INTERACTION-MODEL.md` and `architecture/UI-UX-SPEC.md` — modeling interaction and UI behavior.
+10. `architecture/COMMAND-CATALOG.md`, `EVENT-CATALOG.md`, `CONNECTOR-STANDARD.md` — cross-module integration contracts.
+11. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
+12. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
+13. `decisions/` — architecture decisions that explain or amend the baseline.
+
+## Specification status vocabulary
+
+- **Draft** — idea is documented but not binding for implementation.
+- **Proposed** — reviewed enough for implementation planning, but may still change.
+- **Accepted** — binding architecture/product contract.
+- **Implemented** — accepted contract has a verified implementation.
+- **Deprecated** — retained for migration/history but must not be used for new work.
+
+Unless a document says otherwise, the architecture foundation documents in this repository are **Accepted v1 foundation contracts** and detailed module behaviors remain **Proposed** until their acceptance criteria are implemented.
+
+## Change-control rule
+
+Every change that affects a public module contract, persisted model data, lifecycle semantics, units, connector behavior, command input/output, events, quantity outputs, drawing outputs, or AI command access must include at least one of:
+
+- an update to the relevant authoritative document;
+- a new ADR under `docs/decisions/`;
+- a schema migration note where persisted data changes.
+
+## Source hierarchy
+
+If two documents appear to conflict, use this precedence:
+
+1. Accepted ADR with the highest sequence number that explicitly addresses the conflict.
+2. `MASTER-BLUEPRINT.md` for product scope and non-goals.
+3. Architecture contract documents for data and integration semantics.
+4. Module specifications for domain behavior.
+5. `WORKFLOW-REGISTRY.md` for expected user outcomes.
+6. `ROADMAP.md` for sequencing only.
+
+Roadmap phase order never deletes a requirement from the master blueprint.
+
+## Implementation traceability
+
+Every production command, smart-object type, quantity provider, drawing provider and validator should be traceable to a spec ID. Recommended identifiers:
+
+- Object: `OBJ-<DOMAIN>-###`
+- Command: `CMD-<DOMAIN>-###`
+- Event: `EVT-<DOMAIN>-###`
+- Workflow: existing IDs in `WORKFLOW-REGISTRY.md`
+- Acceptance criterion: `AC-<DOMAIN>-###`
+
+## AI-agent rule
+
+Coding agents must read this file first. They must not invent a new cross-module contract when an existing contract can express the requirement. If a necessary contract is missing, the agent should add or propose the specification before coupling modules directly.
+
+## Definition of documentation-complete for a feature
+
+A feature is ready for implementation only when its spec defines, where applicable:
+
+- owner module;
+- smart objects and persisted fields;
+- commands and validation;
+- emitted/consumed events;
+- hosts and connectors;
+- phase/level behavior;
+- concept vs construction LOD behavior;
+- quantities;
+- drawings/details;
+- QA rules;
+- library/catalog behavior;
+- acceptance criteria and tests.
+
+This directory is therefore not background documentation. It is the product contract that implementation must satisfy.
