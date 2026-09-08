@@ -30,11 +30,21 @@ module JiraNot
           geometry = OpeningGeometry.new
           validator = Validators::OpeningValidator.new(host_capability: host_capability)
           quantity_provider = Quantity::OpeningQuantityProvider.new
+          infill_host_capability = OpeningInfillHostCapability.new(
+            repository: repository,
+            object_resolver: ->(object_id) { runtime.smart_objects.fetch_by_id(object_id) },
+            wall_host_capability: host_capability
+          )
 
           runtime.capabilities.register(
             'opening.hosted_void',
             owner_module: 'constructflow.opening',
             provider: repository
+          )
+          runtime.capabilities.register(
+            'opening.infill_host',
+            owner_module: 'constructflow.opening',
+            provider: infill_host_capability
           )
           runtime.capabilities.register(
             'opening.quantity',
@@ -101,7 +111,9 @@ module JiraNot
             'ModifyOpening',
             owner_module: 'constructflow.opening',
             validator: lambda { |command|
-              modify_validation_errors(command[:input], runtime, repository, host_capability, validator)
+              modify_validation_errors(
+                command[:input], runtime, repository, host_capability, validator, infill_host_capability
+              )
             }
           ) do |command|
             input = command[:input]
@@ -156,7 +168,7 @@ module JiraNot
           [error.message]
         end
 
-        def modify_validation_errors(input, runtime, repository, host_capability, validator)
+        def modify_validation_errors(input, runtime, repository, host_capability, validator, infill_host_capability)
           smart_object = resolve_opening(input, runtime)
           return ['opening not found'] unless smart_object
 
@@ -173,7 +185,17 @@ module JiraNot
             height_mm: value_or(input, :height_mm, current.height_mm),
             sill_mm: value_or(input, :sill_mm, current.sill_mm)
           )
-          validator.validate(updated, host_object: host).map { |issue| issue[:message] }
+          errors = validator.validate(updated, host_object: host).map { |issue| issue[:message] }
+          infill = repository.infill_ref(smart_object.entity)
+          if infill
+            fit = infill_host_capability.fit_status(
+              smart_object,
+              width_mm: updated.width_mm,
+              height_mm: updated.height_mm
+            )
+            errors << 'opening resize would invalidate attached infill' unless fit == 'exact_fit'
+          end
+          errors
         rescue StandardError => error
           [error.message]
         end

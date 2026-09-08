@@ -34,8 +34,18 @@ require_relative 'modules/opening/opening_repository'
 require_relative 'modules/opening/validators/opening_validator'
 require_relative 'modules/opening/quantity/opening_quantity_provider'
 require_relative 'modules/opening/opening_geometry'
+require_relative 'modules/opening/opening_infill_host_capability'
 require_relative 'modules/opening/tools/opening_tool'
 require_relative 'modules/opening/registration'
+
+require_relative 'modules/door_window/door_window_type'
+require_relative 'modules/door_window/type_registry'
+require_relative 'modules/door_window/instance_definition'
+require_relative 'modules/door_window/instance_repository'
+require_relative 'modules/door_window/validators/door_window_validator'
+require_relative 'modules/door_window/quantity/door_window_quantity_provider'
+require_relative 'modules/door_window/door_window_geometry'
+require_relative 'modules/door_window/registration'
 
 module JiraNot
   module ConstructFlow
@@ -245,6 +255,7 @@ module JiraNot
         def install_builtin_modules
           Architecture::Registration.install(self)
           Opening::Registration.install(self)
+          DoorWindow::Registration.install(self)
         end
 
         def show_inspector

@@ -34,6 +34,15 @@ require File.join(OPENING, 'opening_definition')
 require File.join(OPENING, 'opening_repository')
 require File.join(OPENING, 'validators', 'opening_validator')
 require File.join(OPENING, 'quantity', 'opening_quantity_provider')
+require File.join(OPENING, 'opening_infill_host_capability')
+
+DOOR_WINDOW = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'door_window')
+require File.join(DOOR_WINDOW, 'door_window_type')
+require File.join(DOOR_WINDOW, 'type_registry')
+require File.join(DOOR_WINDOW, 'instance_definition')
+require File.join(DOOR_WINDOW, 'instance_repository')
+require File.join(DOOR_WINDOW, 'validators', 'door_window_validator')
+require File.join(DOOR_WINDOW, 'quantity', 'door_window_quantity_provider')
 
 class FakeAttributeCarrier
   def initialize
