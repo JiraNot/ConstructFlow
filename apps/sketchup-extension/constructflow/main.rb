@@ -99,6 +99,15 @@ require_relative 'modules/interior/quantity/interior_quantity_provider'
 require_relative 'modules/interior/tools/cabinet_run_tool'
 require_relative 'modules/interior/registration'
 
+require_relative 'modules/library/catalog_asset_definition'
+require_relative 'modules/library/project_asset_snapshot'
+require_relative 'modules/library/catalog_store'
+require_relative 'modules/library/placed_asset_definition'
+require_relative 'modules/library/placed_asset_repository'
+require_relative 'modules/library/geometry'
+require_relative 'modules/library/catalog_capability'
+require_relative 'modules/library/registration'
+
 require_relative 'modules/drainage/manhole_definition'
 require_relative 'modules/drainage/pipe_route_definition'
 require_relative 'modules/drainage/repository'
@@ -327,6 +336,7 @@ module JiraNot
           Surface::Registration.install(self)
           Surface::LayoutRegistration.install(self)
           Interior::Registration.install(self)
+          Library::Registration.install(self)
           Drainage::Registration.install(self)
         end
 
