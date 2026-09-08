@@ -118,6 +118,12 @@ module JiraNot
           full = hole_area <= AREA_EPSILON && (nominal_area - visible_area).abs <= [nominal_area * 1.0e-6, AREA_EPSILON].max
           effective_cut = full ? [width, height].min : visible_area / [width, height].max
           minimum_cut_violation = !full && effective_cut + EPSILON < pattern_definition.minimum_cut_mm
+          cell_local = [
+            [rect[0], rect[1]],
+            [rect[2], rect[1]],
+            [rect[2], rect[3]],
+            [rect[0], rect[3]]
+          ]
 
           {
             'id' => "piece_r#{row}_c#{column}",
@@ -130,6 +136,7 @@ module JiraNot
             'minimum_effective_cut_mm' => effective_cut,
             'minimum_cut_violation' => minimum_cut_violation,
             'cell_local_mm' => rect,
+            'cell_world_mm' => to_world_loop(cell_local, pattern_definition.origin_mm, basis),
             'fragments_mm' => outer_fragments.map { |polygon| to_world_loop(polygon, pattern_definition.origin_mm, basis) },
             'void_fragments_mm' => hole_fragments.map { |polygon| to_world_loop(polygon, pattern_definition.origin_mm, basis) }
           }
