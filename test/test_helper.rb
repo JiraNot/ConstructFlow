@@ -67,6 +67,15 @@ require File.join(ROOF, 'edge_host_capability')
 require File.join(ROOF, 'validators', 'roof_validator')
 require File.join(ROOF, 'quantity', 'roof_quantity_provider')
 
+STRUCTURE = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'structure')
+require File.join(STRUCTURE, 'column_definition')
+require File.join(STRUCTURE, 'foundation_definition')
+require File.join(STRUCTURE, 'rebar_set_definition')
+require File.join(STRUCTURE, 'repository')
+require File.join(STRUCTURE, 'coordination_capability')
+require File.join(STRUCTURE, 'validators', 'structure_validator')
+require File.join(STRUCTURE, 'quantity', 'structure_quantity_provider')
+
 class FakeAttributeCarrier
   def initialize
     @attributes = Hash.new { |hash, key| hash[key] = {} }
