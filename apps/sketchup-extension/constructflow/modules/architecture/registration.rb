@@ -28,6 +28,12 @@ module JiraNot
           repository = WallRepository.new
           geometry = WallGeometry.new
           validator = Validators::WallValidator.new
+          host_capability = WallHostCapability.new(repository: repository, geometry: geometry)
+          runtime.capabilities.register(
+            'wall.host_surface',
+            owner_module: 'constructflow.architecture',
+            provider: host_capability
+          )
 
           runtime.commands.register(
             'CreateWall',
@@ -69,7 +75,11 @@ module JiraNot
             smart_object = resolve_wall(input, runtime)
             current = repository.read(smart_object.entity)
             updated = current.with(path_mm: input[:path_mm] || input['path_mm'])
-            geometry.rebuild!(smart_object.entity, updated)
+            geometry.rebuild!(
+              smart_object.entity,
+              updated,
+              openings: repository.host_openings(smart_object.entity)
+            )
             repository.write(smart_object.entity, updated)
             runtime.smart_objects.mark_dirty(smart_object.entity, 'dirty_quantity', 'dirty_drawing')
 
@@ -95,7 +105,11 @@ module JiraNot
               thickness_mm: input[:thickness_mm] || input['thickness_mm'] || current.thickness_mm,
               wall_type_id: input[:wall_type_id] || input['wall_type_id'] || current.wall_type_id
             )
-            geometry.rebuild!(smart_object.entity, updated)
+            geometry.rebuild!(
+              smart_object.entity,
+              updated,
+              openings: repository.host_openings(smart_object.entity)
+            )
             repository.write(smart_object.entity, updated)
             runtime.smart_objects.mark_dirty(smart_object.entity, 'dirty_quantity', 'dirty_drawing')
 
