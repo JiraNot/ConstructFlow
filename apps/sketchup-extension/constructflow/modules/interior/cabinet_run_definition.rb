@@ -104,7 +104,7 @@ module JiraNot
           end.freeze
         end
 
-        def module(module_id)
+        def module_record(module_id)
           modules.find { |mod| mod['id'] == module_id.to_s }
         end
 
@@ -145,7 +145,7 @@ module JiraNot
 
         def assign_front(module_id:, front_type:, style: 'flat', material_id: 'front.hmr.18')
           id = module_id.to_s
-          raise ArgumentError, "unknown cabinet module: #{id}" unless module(id)
+          raise ArgumentError, "unknown cabinet module: #{id}" unless module_record(id)
           type = front_type.to_s
           front_style = style.to_s
           raise ArgumentError, "unsupported front type: #{type}" unless FRONT_TYPES.include?(type)
@@ -164,7 +164,7 @@ module JiraNot
         def add_drawer_set(module_id:, count:, slide_type: 'soft_close', heights_mm: nil,
                            face_material_id: 'front.hmr.18')
           id = module_id.to_s
-          raise ArgumentError, "unknown cabinet module: #{id}" unless module(id)
+          raise ArgumentError, "unknown cabinet module: #{id}" unless module_record(id)
           drawer_count = Integer(count)
           raise ArgumentError, 'drawer count must be at least 1' if drawer_count < 1
           heights = if heights_mm.nil? || Array(heights_mm).empty?
