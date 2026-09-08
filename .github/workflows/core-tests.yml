@@ -14,7 +14,7 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
-      - name: Syntax check Core Ruby files
-        run: find apps/sketchup-extension/constructflow/core -name '*.rb' -print0 | xargs -0 -n1 ruby -c
-      - name: Run Core unit tests
+      - name: Syntax check Ruby files
+        run: find apps/sketchup-extension/constructflow/core apps/sketchup-extension/constructflow/modules -name '*.rb' -print0 | xargs -0 -n1 ruby -c
+      - name: Run Ruby unit tests
         run: ruby -Itest -e 'Dir["test/**/*_test.rb"].sort.each { |file| require_relative file }'

@@ -8,6 +8,7 @@ CORE = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'core')
 require File.join(CORE, 'id_generator')
 require File.join(CORE, 'diagnostic_log')
 require File.join(CORE, 'attribute_store')
+require File.join(CORE, 'units')
 require File.join(CORE, 'phase')
 require File.join(CORE, 'project_store')
 require File.join(CORE, 'level_registry')
@@ -19,6 +20,12 @@ require File.join(CORE, 'event_bus')
 require File.join(CORE, 'command_bus')
 require File.join(CORE, 'module_registry')
 require File.join(CORE, 'module_loader')
+
+ARCH = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'architecture')
+require File.join(ARCH, 'wall_definition')
+require File.join(ARCH, 'wall_repository')
+require File.join(ARCH, 'validators', 'wall_validator')
+require File.join(ARCH, 'quantity', 'wall_quantity_provider')
 
 class FakeAttributeCarrier
   def initialize
