@@ -78,6 +78,8 @@ require_relative 'modules/structure/registration'
 
 require_relative 'modules/surface/surface_definition'
 require_relative 'modules/surface/pattern_definition'
+require_relative 'modules/surface/paving_layout_definition'
+require_relative 'modules/surface/layout_solver'
 require_relative 'modules/surface/border_definition'
 require_relative 'modules/surface/parking_layout_definition'
 require_relative 'modules/surface/repository'
@@ -85,6 +87,7 @@ require_relative 'modules/surface/geometry'
 require_relative 'modules/surface/validators/surface_validator'
 require_relative 'modules/surface/quantity/surface_quantity_provider'
 require_relative 'modules/surface/registration'
+require_relative 'modules/surface/layout_registration'
 
 require_relative 'modules/drainage/manhole_definition'
 require_relative 'modules/drainage/pipe_route_definition'
@@ -312,6 +315,7 @@ module JiraNot
           Roof::Registration.install(self)
           Structure::Registration.install(self)
           Surface::Registration.install(self)
+          Surface::LayoutRegistration.install(self)
           Drainage::Registration.install(self)
         end
 

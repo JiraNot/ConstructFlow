@@ -7,6 +7,7 @@ module JiraNot
         DICTIONARY = 'constructflow.surface'
         SURFACE_KEY = 'surface_definition'
         PATTERN_KEY = 'pattern_definition'
+        LAYOUT_KEY = 'paving_layout_definition'
         BORDER_KEY = 'border_definition'
         PARKING_KEY = 'parking_layout_definition'
 
@@ -30,6 +31,22 @@ module JiraNot
           raise ArgumentError, 'PatternDefinition required' unless definition.is_a?(PatternDefinition)
           write(entity, PATTERN_KEY, definition.to_h)
           definition
+        end
+
+        def read_layout(entity)
+          payload = read(entity, LAYOUT_KEY)
+          payload ? PavingLayoutDefinition.from_h(payload) : nil
+        end
+
+        def write_layout(entity, definition)
+          raise ArgumentError, 'PavingLayoutDefinition required' unless definition.is_a?(PavingLayoutDefinition)
+          write(entity, LAYOUT_KEY, definition.to_h)
+          definition
+        end
+
+        def clear_layout(entity)
+          Core::AttributeStore.new(entity).delete(LAYOUT_KEY, dictionary: DICTIONARY)
+          true
         end
 
         def read_border(entity)
