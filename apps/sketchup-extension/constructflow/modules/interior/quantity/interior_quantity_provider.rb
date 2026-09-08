@@ -11,7 +11,7 @@ module JiraNot
           def cabinet_quantities(smart_object:, definition:)
             front_area = definition.fronts.sum do |front|
               next 0.0 if front['front_type'] == 'open'
-              mod = definition.module(front['module_id'])
+              mod = definition.module_record(front['module_id'])
               next 0.0 unless mod
               Float(mod['width_mm']) * definition.opening_height_mm
             end
