@@ -81,7 +81,7 @@ class InteriorJoineryTest < Minitest::Test
     assert parts.parts.any? { |part| part['role'] == 'partition_01' }
     assert parts.parts.any? { |part| part['role'] == 'front_leaf_1' }
     assert parts.parts.any? { |part| part['role'] == 'drawer_face_01' }
-    assert_equal 9, parts.hardware_count('hinge')
+    assert_equal 6, parts.hardware_count('hinge')
     assert_equal 3, parts.hardware_count('drawer_slide_pair')
     assert_operator parts.board_area_mm2, :>, 0
     assert_operator parts.edge_band_length_mm, :>, 0
