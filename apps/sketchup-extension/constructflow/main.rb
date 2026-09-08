@@ -48,6 +48,23 @@ require_relative 'modules/door_window/quantity/door_window_quantity_provider'
 require_relative 'modules/door_window/door_window_geometry'
 require_relative 'modules/door_window/registration'
 
+require_relative 'modules/extension/extension_definition'
+require_relative 'modules/extension/repository'
+require_relative 'modules/extension/geometry'
+require_relative 'modules/extension/boundary_capability'
+require_relative 'modules/extension/validators/extension_validator'
+require_relative 'modules/extension/quantity/extension_quantity_provider'
+require_relative 'modules/extension/registration'
+
+require_relative 'modules/roof/roof_definition'
+require_relative 'modules/roof/gutter_definition'
+require_relative 'modules/roof/repository'
+require_relative 'modules/roof/geometry'
+require_relative 'modules/roof/edge_host_capability'
+require_relative 'modules/roof/validators/roof_validator'
+require_relative 'modules/roof/quantity/roof_quantity_provider'
+require_relative 'modules/roof/registration'
+
 require_relative 'modules/drainage/manhole_definition'
 require_relative 'modules/drainage/pipe_route_definition'
 require_relative 'modules/drainage/repository'
@@ -270,6 +287,8 @@ module JiraNot
           Architecture::Registration.install(self)
           Opening::Registration.install(self)
           DoorWindow::Registration.install(self)
+          Extension::Registration.install(self)
+          Roof::Registration.install(self)
           Drainage::Registration.install(self)
         end
 
