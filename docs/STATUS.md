@@ -33,9 +33,32 @@ This file is the current high-level status dashboard. It is informational; autho
 
 ## Implementation status
 
-ConstructFlow is still at **Foundation / architecture implementation** stage.
+ConstructFlow is at **Foundation implementation** stage.
 
-Current implementation includes the SketchUp extension shell and initial Core runtime scaffolding such as module registry, event bus, command bus, phase/level foundations and attribute persistence helpers.
+Implemented in the F1 Core branch:
+
+- stable ConstructFlow/project ID generation;
+- model-local ProjectStore and working-phase persistence;
+- semantic LevelRegistry persistence in canonical millimetres, including unknown/verify-on-site levels;
+- canonical SmartObject envelope and SmartObjectManager scan/recovery index;
+- lifecycle, level-reference, relationship and dirty-state persistence;
+- deterministic migration registry scaffolding;
+- SketchUp transaction manager;
+- versioned CommandBus with validation-before-mutation and common human/AI actor envelope;
+- versioned EventBus with subscriber-failure isolation and bounded diagnostics;
+- manifest/capability validation and dependency-aware ModuleLoader rollback;
+- model open/new observer and Foundation Inspector runtime entry;
+- pure-Ruby foundation unit tests and GitHub Actions workflow.
+
+Pure-Ruby test evidence before PR: **14 tests / 45 assertions / 0 failures / 0 errors**. This evidence validates Core contracts without the SketchUp runtime.
+
+The following still require real SketchUp integration evidence before Gate F1 can be marked complete:
+
+- `.skp` save, application close/reopen and same-ID recovery in SketchUp;
+- real SketchUp Undo/Redo of semantic metadata + geometry in one operation;
+- copy/duplicate identity behavior through SketchUp native copy workflows;
+- model observer behavior across real New/Open operations;
+- migration fixture exercised against real model attributes.
 
 The presence of a requirement in documentation does **not** mean that feature is implemented.
 
@@ -43,7 +66,9 @@ The presence of a requirement in documentation does **not** mean that feature is
 
 ### Gate F0 — Architecture baseline
 
-Required:
+Status: **Complete**.
+
+Evidence:
 
 - docs Single Source of Truth established;
 - core contracts accepted;
@@ -51,22 +76,15 @@ Required:
 - command/event/connector architecture accepted;
 - module ownership map established.
 
-Status: documentation prepared in this branch.
-
 ### Gate F1 — Core persistence proof
 
-Required evidence:
+Status: **In progress**.
 
-- create smart object;
-- stable ID;
-- phase + level metadata;
-- save `.skp`;
-- close/reopen;
-- recover same semantic object;
-- Undo/Redo works;
-- invalid command rolls back cleanly.
+Implemented and unit-tested foundation exists. Real SketchUp integration evidence remains required for save/reopen, Undo/Redo and native-copy identity behavior.
 
 ### Gate F2 — First Architecture proof
+
+Status: **Not started**.
 
 Required evidence:
 
@@ -80,6 +98,8 @@ Required evidence:
 - QA validation stub.
 
 ### Gate F3 — Cross-module proof
+
+Status: **Not started**.
 
 Suggested proof workflow:
 
