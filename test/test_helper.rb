@@ -52,6 +52,21 @@ require File.join(DRAINAGE, 'repository')
 require File.join(DRAINAGE, 'validators', 'drainage_validator')
 require File.join(DRAINAGE, 'quantity', 'drainage_quantity_provider')
 
+EXTENSION = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'extension')
+require File.join(EXTENSION, 'extension_definition')
+require File.join(EXTENSION, 'repository')
+require File.join(EXTENSION, 'boundary_capability')
+require File.join(EXTENSION, 'validators', 'extension_validator')
+require File.join(EXTENSION, 'quantity', 'extension_quantity_provider')
+
+ROOF = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'roof')
+require File.join(ROOF, 'roof_definition')
+require File.join(ROOF, 'gutter_definition')
+require File.join(ROOF, 'repository')
+require File.join(ROOF, 'edge_host_capability')
+require File.join(ROOF, 'validators', 'roof_validator')
+require File.join(ROOF, 'quantity', 'roof_quantity_provider')
+
 class FakeAttributeCarrier
   def initialize
     @attributes = Hash.new { |hash, key| hash[key] = {} }
