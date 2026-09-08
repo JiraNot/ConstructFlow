@@ -36,7 +36,7 @@ module JiraNot
 
         def add_segment(entities, start_mm, finish_mm, thickness_mm, height_mm, openings)
           if openings.empty?
-            add_segment_cell(entities, start_mm, finish_mm, thickness_mm, 0.0, segment_length_mm(start_mm, finish_mm), 0.0, height_mm)
+            add_full_segment(entities, start_mm, finish_mm, thickness_mm, height_mm)
             return
           end
 
@@ -61,6 +61,30 @@ module JiraNot
               add_segment_cell(entities, start_mm, finish_mm, thickness_mm, x0, x1, z0, z1)
             end
           end
+        end
+
+        def add_full_segment(entities, start_mm, finish_mm, thickness_mm, height_mm)
+          start = point_mm(start_mm)
+          finish = point_mm(finish_mm)
+          dx = finish.x - start.x
+          dy = finish.y - start.y
+          planar_length = Math.sqrt((dx * dx) + (dy * dy))
+          raise ArgumentError, 'wall segment cannot be vertical/zero in plan' if planar_length <= 1e-9
+
+          half = Core::Units.mm_to_su(thickness_mm) / 2.0
+          ox = (-dy / planar_length) * half
+          oy = (dx / planar_length) * half
+
+          face = entities.add_face(
+            Geom::Point3d.new(start.x + ox, start.y + oy, start.z),
+            Geom::Point3d.new(finish.x + ox, finish.y + oy, finish.z),
+            Geom::Point3d.new(finish.x - ox, finish.y - oy, finish.z),
+            Geom::Point3d.new(start.x - ox, start.y - oy, start.z)
+          )
+          raise 'failed to create wall base face' unless face
+
+          face.reverse! if face.normal.z < 0
+          face.pushpull(Core::Units.mm_to_su(height_mm))
         end
 
         def add_segment_cell(entities, start_mm, finish_mm, thickness_mm, x0_mm, x1_mm, z0_mm, z1_mm)
