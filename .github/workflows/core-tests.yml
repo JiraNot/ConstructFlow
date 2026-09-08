@@ -1,0 +1,20 @@
+name: Core Ruby Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+      - name: Syntax check Core Ruby files
+        run: find apps/sketchup-extension/constructflow/core -name '*.rb' -print0 | xargs -0 -n1 ruby -c
+      - name: Run Core unit tests
+        run: ruby -Itest -e 'Dir["test/**/*_test.rb"].sort.each { |file| require_relative file }'
