@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://constructflow.dev/schemas/smart-object.schema.json",
+  "title": "ConstructFlow Smart Object",
+  "type": "object",
+  "required": ["id", "object_type", "owner_module", "schema_version", "created_phase", "status"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "object_type": { "type": "string", "minLength": 1 },
+    "owner_module": { "type": "string", "pattern": "^constructflow\\.[a-z0-9_.-]+$" },
+    "schema_version": { "type": "integer", "minimum": 1 },
+    "created_phase": {
+      "type": "string",
+      "enum": ["existing", "demolition", "new_construction"]
+    },
+    "removed_phase": {
+      "type": ["string", "null"],
+      "enum": ["demolition", "new_construction", null]
+    },
+    "level_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role", "level_id"],
+        "properties": {
+          "role": { "type": "string" },
+          "level_id": { "type": "string" },
+          "offset": { "type": "number" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "host_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "connector_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "catalog_ref": { "type": ["string", "null"] },
+    "geometry_ref": { "type": ["string", "array", "null"] },
+    "status": {
+      "type": "string",
+      "enum": ["active", "warning", "invalid", "archived"]
+    },
+    "module_data": {
+      "type": "object",
+      "description": "Namespaced domain payload owned by registered modules."
+    },
+    "revision_meta": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
