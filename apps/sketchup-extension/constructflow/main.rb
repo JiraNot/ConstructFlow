@@ -65,6 +65,17 @@ require_relative 'modules/roof/validators/roof_validator'
 require_relative 'modules/roof/quantity/roof_quantity_provider'
 require_relative 'modules/roof/registration'
 
+require_relative 'modules/structure/column_definition'
+require_relative 'modules/structure/foundation_definition'
+require_relative 'modules/structure/rebar_set_definition'
+require_relative 'modules/structure/repository'
+require_relative 'modules/structure/geometry'
+require_relative 'modules/structure/coordination_capability'
+require_relative 'modules/structure/validators/structure_validator'
+require_relative 'modules/structure/quantity/structure_quantity_provider'
+require_relative 'modules/structure/tools/column_tool'
+require_relative 'modules/structure/registration'
+
 require_relative 'modules/drainage/manhole_definition'
 require_relative 'modules/drainage/pipe_route_definition'
 require_relative 'modules/drainage/repository'
@@ -289,6 +300,7 @@ module JiraNot
           DoorWindow::Registration.install(self)
           Extension::Registration.install(self)
           Roof::Registration.install(self)
+          Structure::Registration.install(self)
           Drainage::Registration.install(self)
         end
 
