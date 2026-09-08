@@ -29,6 +29,14 @@ module JiraNot
         def relationship_id
           generate('rel')
         end
+
+        def connector_id
+          generate('conn')
+        end
+
+        def connection_id
+          generate('connection')
+        end
       end
     end
   end

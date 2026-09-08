@@ -21,6 +21,7 @@ require File.join(CORE, 'command_bus')
 require File.join(CORE, 'module_registry')
 require File.join(CORE, 'module_loader')
 require File.join(CORE, 'capability_registry')
+require File.join(CORE, 'connector_registry')
 
 ARCH = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'architecture')
 require File.join(ARCH, 'wall_definition')
@@ -43,6 +44,13 @@ require File.join(DOOR_WINDOW, 'instance_definition')
 require File.join(DOOR_WINDOW, 'instance_repository')
 require File.join(DOOR_WINDOW, 'validators', 'door_window_validator')
 require File.join(DOOR_WINDOW, 'quantity', 'door_window_quantity_provider')
+
+DRAINAGE = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'drainage')
+require File.join(DRAINAGE, 'manhole_definition')
+require File.join(DRAINAGE, 'pipe_route_definition')
+require File.join(DRAINAGE, 'repository')
+require File.join(DRAINAGE, 'validators', 'drainage_validator')
+require File.join(DRAINAGE, 'quantity', 'drainage_quantity_provider')
 
 class FakeAttributeCarrier
   def initialize
