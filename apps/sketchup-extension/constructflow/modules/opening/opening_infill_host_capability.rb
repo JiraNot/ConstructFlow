@@ -7,9 +7,9 @@ module JiraNot
         CAPABILITY_ID = 'opening.infill_host'
         DEFAULT_TOLERANCE_MM = 2.0
 
-        def initialize(repository:, smart_objects:, wall_host_capability:)
+        def initialize(repository:, object_resolver:, wall_host_capability:)
           @repository = repository
-          @smart_objects = smart_objects
+          @object_resolver = object_resolver
           @wall_host_capability = wall_host_capability
         end
 
@@ -41,7 +41,7 @@ module JiraNot
 
         def frame_points(opening_object)
           value = definition(opening_object)
-          wall = @smart_objects.fetch_by_id(value.host_object_id)
+          wall = @object_resolver.call(value.host_object_id)
           raise KeyError, "opening wall host not found: #{value.host_object_id}" unless wall
 
           @wall_host_capability.opening_frame_points(wall, value.host_descriptor)
