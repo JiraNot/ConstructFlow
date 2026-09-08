@@ -151,6 +151,37 @@ module JiraNot
           fetch(entity)
         end
 
+        def add_relationship(entity, kind:, target_id:, role: nil, metadata: {})
+          object = fetch_required(entity)
+          raise ArgumentError, 'relationship kind required' if kind.to_s.strip.empty?
+          raise ArgumentError, 'relationship target_id required' if target_id.to_s.strip.empty?
+
+          relationship = {
+            'id' => @id_generator.relationship_id,
+            'kind' => kind.to_s,
+            'target_id' => target_id.to_s,
+            'role' => role&.to_s,
+            'metadata' => metadata || {}
+          }
+          updated = Array(object.relationships).map(&:dup)
+          updated << relationship
+          update_relationships(entity, updated)
+          relationship.freeze
+        end
+
+        def remove_relationship(entity, relationship_id: nil, kind: nil, target_id: nil)
+          object = fetch_required(entity)
+          before = Array(object.relationships)
+          after = before.reject do |relationship|
+            id_match = relationship_id.nil? || relationship['id'].to_s == relationship_id.to_s || relationship[:id].to_s == relationship_id.to_s
+            kind_match = kind.nil? || relationship['kind'].to_s == kind.to_s || relationship[:kind].to_s == kind.to_s
+            target_match = target_id.nil? || relationship['target_id'].to_s == target_id.to_s || relationship[:target_id].to_s == target_id.to_s
+            id_match && kind_match && target_match
+          end
+          update_relationships(entity, after) if after.length != before.length
+          before.length - after.length
+        end
+
         def mark_dirty(entity, *flags)
           fetch_required(entity)
           store = AttributeStore.new(entity)

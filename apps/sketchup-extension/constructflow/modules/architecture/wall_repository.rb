@@ -6,6 +6,7 @@ module JiraNot
       class WallRepository
         DICTIONARY = 'constructflow.architecture'
         WALL_KEY = 'wall_definition'
+        HOST_OPENINGS_KEY = 'host_openings'
 
         def read(entity)
           store = Core::AttributeStore.new(entity)
@@ -22,6 +23,28 @@ module JiraNot
             dictionary: DICTIONARY
           )
           definition
+        end
+
+        def host_openings(entity)
+          Array(
+            Core::AttributeStore.new(entity).read_json(
+              HOST_OPENINGS_KEY,
+              [],
+              dictionary: DICTIONARY
+            )
+          )
+        end
+
+        def write_host_openings(entity, openings)
+          normalized = Array(openings).map do |opening|
+            opening.each_with_object({}) { |(key, value), result| result[key.to_s] = value }
+          end
+          Core::AttributeStore.new(entity).write_json(
+            HOST_OPENINGS_KEY,
+            normalized,
+            dictionary: DICTIONARY
+          )
+          normalized
         end
       end
     end

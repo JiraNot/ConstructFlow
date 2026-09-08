@@ -17,6 +17,7 @@ require_relative 'core/event_bus'
 require_relative 'core/command_bus'
 require_relative 'core/module_registry'
 require_relative 'core/module_loader'
+require_relative 'core/capability_registry'
 require_relative 'core/sketchup_app_observer'
 
 require_relative 'modules/architecture/wall_definition'
@@ -24,8 +25,17 @@ require_relative 'modules/architecture/wall_repository'
 require_relative 'modules/architecture/validators/wall_validator'
 require_relative 'modules/architecture/quantity/wall_quantity_provider'
 require_relative 'modules/architecture/wall_geometry'
+require_relative 'modules/architecture/wall_host_capability'
 require_relative 'modules/architecture/tools/wall_tool'
 require_relative 'modules/architecture/registration'
+
+require_relative 'modules/opening/opening_definition'
+require_relative 'modules/opening/opening_repository'
+require_relative 'modules/opening/validators/opening_validator'
+require_relative 'modules/opening/quantity/opening_quantity_provider'
+require_relative 'modules/opening/opening_geometry'
+require_relative 'modules/opening/tools/opening_tool'
+require_relative 'modules/opening/registration'
 
 module JiraNot
   module ConstructFlow
@@ -37,7 +47,7 @@ module JiraNot
         schema_version: 1,
         requires: [],
         optional_capabilities: [],
-        provides: %w[core.smart_objects core.commands core.events core.levels],
+        provides: %w[core.smart_objects core.commands core.events core.levels core.capabilities],
         objects: [],
         commands: %w[SetWorkingPhase CreateLevel ModifyLevel DemolishObject ConvertSelectionToSmartObject],
         events: %w[WorkingPhaseChanged LevelCreated LevelChanged ObjectCreated ObjectConverted ObjectDemolished ObjectPhaseChanged],
@@ -47,7 +57,8 @@ module JiraNot
 
       class << self
         attr_reader :modules, :module_loader, :events, :commands, :levels, :project,
-                    :smart_objects, :diagnostics, :migrations, :active_model, :menu
+                    :smart_objects, :diagnostics, :migrations, :active_model, :menu,
+                    :capabilities
 
         def boot!
           return if @booted
@@ -57,6 +68,7 @@ module JiraNot
           @modules = Core::ModuleRegistry.new(diagnostics: @diagnostics)
           @modules.register(manifest: CORE_MANIFEST)
           @module_loader = Core::ModuleLoader.new(registry: @modules, diagnostics: @diagnostics)
+          @capabilities = Core::CapabilityRegistry.new(diagnostics: @diagnostics)
           @events = Core::EventBus.new(id_generator: @ids, diagnostics: @diagnostics)
           @migrations = Core::MigrationRegistry.new
           @commands = Core::CommandBus.new(
@@ -232,6 +244,7 @@ module JiraNot
 
         def install_builtin_modules
           Architecture::Registration.install(self)
+          Opening::Registration.install(self)
         end
 
         def show_inspector
@@ -243,6 +256,7 @@ module JiraNot
             "Project: #{@project&.project_id || '-'}",
             "Working phase: #{@project&.working_phase || '-'}",
             "Modules: #{@modules.size}",
+            "Capabilities: #{@capabilities.size}",
             "Levels: #{@levels&.size || 0}",
             "Smart objects: #{@smart_objects&.size || 0}",
             '',
