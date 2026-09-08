@@ -76,6 +76,15 @@ require File.join(STRUCTURE, 'coordination_capability')
 require File.join(STRUCTURE, 'validators', 'structure_validator')
 require File.join(STRUCTURE, 'quantity', 'structure_quantity_provider')
 
+SURFACE = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'surface')
+require File.join(SURFACE, 'surface_definition')
+require File.join(SURFACE, 'pattern_definition')
+require File.join(SURFACE, 'border_definition')
+require File.join(SURFACE, 'parking_layout_definition')
+require File.join(SURFACE, 'repository')
+require File.join(SURFACE, 'validators', 'surface_validator')
+require File.join(SURFACE, 'quantity', 'surface_quantity_provider')
+
 class FakeAttributeCarrier
   def initialize
     @attributes = Hash.new { |hash, key| hash[key] = {} }
