@@ -89,6 +89,16 @@ require_relative 'modules/surface/quantity/surface_quantity_provider'
 require_relative 'modules/surface/registration'
 require_relative 'modules/surface/layout_registration'
 
+require_relative 'modules/interior/cabinet_run_definition'
+require_relative 'modules/interior/joinery_part_set_definition'
+require_relative 'modules/interior/joinery_part_generator'
+require_relative 'modules/interior/repository'
+require_relative 'modules/interior/geometry'
+require_relative 'modules/interior/validators/interior_validator'
+require_relative 'modules/interior/quantity/interior_quantity_provider'
+require_relative 'modules/interior/tools/cabinet_run_tool'
+require_relative 'modules/interior/registration'
+
 require_relative 'modules/drainage/manhole_definition'
 require_relative 'modules/drainage/pipe_route_definition'
 require_relative 'modules/drainage/repository'
@@ -316,6 +326,7 @@ module JiraNot
           Structure::Registration.install(self)
           Surface::Registration.install(self)
           Surface::LayoutRegistration.install(self)
+          Interior::Registration.install(self)
           Drainage::Registration.install(self)
         end
 
