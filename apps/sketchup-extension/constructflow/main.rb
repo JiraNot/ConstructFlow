@@ -18,6 +18,7 @@ require_relative 'core/command_bus'
 require_relative 'core/module_registry'
 require_relative 'core/module_loader'
 require_relative 'core/capability_registry'
+require_relative 'core/connector_registry'
 require_relative 'core/sketchup_app_observer'
 
 require_relative 'modules/architecture/wall_definition'
@@ -47,6 +48,15 @@ require_relative 'modules/door_window/quantity/door_window_quantity_provider'
 require_relative 'modules/door_window/door_window_geometry'
 require_relative 'modules/door_window/registration'
 
+require_relative 'modules/drainage/manhole_definition'
+require_relative 'modules/drainage/pipe_route_definition'
+require_relative 'modules/drainage/repository'
+require_relative 'modules/drainage/validators/drainage_validator'
+require_relative 'modules/drainage/quantity/drainage_quantity_provider'
+require_relative 'modules/drainage/geometry'
+require_relative 'modules/drainage/tools/manhole_tool'
+require_relative 'modules/drainage/registration'
+
 module JiraNot
   module ConstructFlow
     module Runtime
@@ -57,7 +67,7 @@ module JiraNot
         schema_version: 1,
         requires: [],
         optional_capabilities: [],
-        provides: %w[core.smart_objects core.commands core.events core.levels core.capabilities],
+        provides: %w[core.smart_objects core.commands core.events core.levels core.capabilities core.connectors],
         objects: [],
         commands: %w[SetWorkingPhase CreateLevel ModifyLevel DemolishObject ConvertSelectionToSmartObject],
         events: %w[WorkingPhaseChanged LevelCreated LevelChanged ObjectCreated ObjectConverted ObjectDemolished ObjectPhaseChanged],
@@ -68,7 +78,7 @@ module JiraNot
       class << self
         attr_reader :modules, :module_loader, :events, :commands, :levels, :project,
                     :smart_objects, :diagnostics, :migrations, :active_model, :menu,
-                    :capabilities
+                    :capabilities, :connectors
 
         def boot!
           return if @booted
@@ -79,6 +89,7 @@ module JiraNot
           @modules.register(manifest: CORE_MANIFEST)
           @module_loader = Core::ModuleLoader.new(registry: @modules, diagnostics: @diagnostics)
           @capabilities = Core::CapabilityRegistry.new(diagnostics: @diagnostics)
+          @connectors = Core::ConnectorRegistry.new(id_generator: @ids, diagnostics: @diagnostics)
           @events = Core::EventBus.new(id_generator: @ids, diagnostics: @diagnostics)
           @migrations = Core::MigrationRegistry.new
           @commands = Core::CommandBus.new(
@@ -114,12 +125,15 @@ module JiraNot
             diagnostics: @diagnostics
           )
           object_count = @smart_objects.scan!
+          @connectors.attach_model(model)
           @commands.transaction_manager = Core::TransactionManager.new(model: model)
           @diagnostics.info(
             'model_attached',
             'ConstructFlow attached to SketchUp model',
             project_id: @project.project_id,
-            smart_objects: object_count
+            smart_objects: object_count,
+            connectors: @connectors.connector_count,
+            connections: @connectors.connection_count
           )
         end
 
@@ -256,6 +270,7 @@ module JiraNot
           Architecture::Registration.install(self)
           Opening::Registration.install(self)
           DoorWindow::Registration.install(self)
+          Drainage::Registration.install(self)
         end
 
         def show_inspector
@@ -270,6 +285,8 @@ module JiraNot
             "Capabilities: #{@capabilities.size}",
             "Levels: #{@levels&.size || 0}",
             "Smart objects: #{@smart_objects&.size || 0}",
+            "Connectors: #{@connectors&.connector_count || 0}",
+            "Connections: #{@connectors&.connection_count || 0}",
             '',
             'Recent diagnostics:',
             *(recent.empty? ? ['(none)'] : recent)
