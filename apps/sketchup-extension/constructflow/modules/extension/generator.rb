@@ -16,22 +16,33 @@ module JiraNot
         }.freeze
 
         def initialize(definition)
+          raise ArgumentError, 'extension definition is required' unless definition
+
           @definition = definition
         end
 
         def intents(options = {})
-          settings = deep_merge(DEFAULTS, symbolize_keys(options))
+          options = symbolize_keys(options)
+          overrides = options.fetch(:domains, {})
+          settings = deep_merge(DEFAULTS, overrides)
           {
-            extension_id: options[:extension_id] || options['extension_id'],
+            extension_id: options[:extension_id],
             program: @definition.program,
             mode: @definition.mode,
             boundary_mm: @definition.boundary_mm,
             base_level_id: @definition.base_level_id,
+            base_offset_mm: @definition.base_offset_mm,
             target_height_mm: @definition.target_height_mm,
             roof_intent: @definition.roof_intent,
             attachment_host_id: @definition.attachment_host_id,
             domains: settings
-          }
+          }.freeze
+        end
+
+        def enabled_domains(options = {})
+          intents(options)[:domains].each_with_object([]) do |(domain, config), result|
+            result << domain.to_s if config.is_a?(Hash) && config[:enabled]
+          end.freeze
         end
 
         private
