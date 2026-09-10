@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'native_layout_sheet_decorator'
+
 module JiraNot
   module ConstructFlow
     module Core
