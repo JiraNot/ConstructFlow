@@ -58,7 +58,7 @@ module JiraNot
           raise ArgumentError, 'generated extension attachment opening required before door/window infill' unless opening && opening_host.compatible_host?(opening)
 
           registry = TypeRegistry.new(runtime.active_model)
-          type, source_state = resolve_type(config, registry, opening_host.dimensions(opening))
+          type, source_state = resolve_type(config, registry, opening_host.dimensions(opening), persist: true)
           instance = InstanceDefinition.new(
             type_id: type.id,
             opening_object_id: opening.id,
@@ -167,7 +167,7 @@ module JiraNot
           }
         end
 
-        def resolve_type(config, registry, opening_dimensions)
+        def resolve_type(config, registry, opening_dimensions, persist: true)
           type_id = fetch(config, :type_id).to_s.strip
           return [registry.fetch(type_id), 'confirmed'] unless type_id.empty? || !registry.registered?(type_id)
 
@@ -198,7 +198,7 @@ module JiraNot
           )
           raise ArgumentError, type.errors.join('; ') unless type.valid?
 
-          registry.register(type) unless registry.registered?(type.id)
+          registry.register(type) if persist && !registry.registered?(type.id)
           [type, frame_explicit && panel_explicit ? 'confirmed' : 'assumed']
         end
 
@@ -275,7 +275,7 @@ module JiraNot
           return errors + ['generated extension attachment opening required before door/window infill'] unless opening && opening_host.compatible_host?(opening)
 
           registry = TypeRegistry.new(runtime.active_model)
-          type, = resolve_type(config, registry, opening_host.dimensions(opening))
+          type, = resolve_type(config, registry, opening_host.dimensions(opening), persist: false)
           existing = find_generated(runtime, extension_id)
           instance = InstanceDefinition.new(
             type_id: type.id,
