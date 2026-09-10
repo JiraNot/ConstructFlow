@@ -57,6 +57,7 @@ module JiraNot
             repository: repository,
             resolver: attachment_resolver,
             boundary: boundary,
+            extension_id: extension_id,
             intent: intent,
             config: config
           )
@@ -191,7 +192,7 @@ module JiraNot
           explicit_type && explicit_thickness ? 'confirmed' : 'assumed'
         end
 
-        def resolve_attachment(runtime:, repository:, resolver:, boundary:, intent:, config:)
+        def resolve_attachment(runtime:, repository:, resolver:, boundary:, extension_id:, intent:, config:)
           host_id = fetch(intent, :attachment_host_id)
           return nil if host_id.to_s.strip.empty?
 
@@ -199,7 +200,8 @@ module JiraNot
             runtime: runtime,
             boundary_mm: boundary,
             attachment_host_id: host_id,
-            explicit_edge_index: fetch(config, :attachment_edge_index)
+            explicit_edge_index: fetch(config, :attachment_edge_index),
+            source_extension_id: extension_id
           )
         end
 
