@@ -3,6 +3,8 @@
 require_relative '../test_helper'
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/architecture/attachment_edge_resolver')
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/opening/extension_command_registration')
+require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/extension/generator')
+require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/extension/orchestrator')
 
 AttachmentOpeningObject = Struct.new(
   :id, :type, :owner_module, :entity, :relationships, :created_phase, :source_state,
