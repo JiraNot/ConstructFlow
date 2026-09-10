@@ -4,6 +4,7 @@ require_relative '../test_helper'
 require File.join(CORE, 'drawing_view_preset_registry')
 require File.join(CORE, 'drawing_view_preset_registration')
 require File.join(CORE, 'drawing_sheet_spec')
+require File.join(CORE, 'drawing_sheet_metadata')
 require File.join(CORE, 'vector_lineweight_profile')
 require File.join(CORE, 'layout_export_plan_builder')
 
@@ -32,9 +33,12 @@ class LayoutExportPlanBuilderTest < Minitest::Test
     assert_equal '1:50', plan.dig('sheet', 'viewports', 0, 'scale')
     assert_equal 0.35, plan.dig('vector_style', 'weights_mm', 'strong')
     assert_equal 'planned', plan['native_layout_status']
+    assert_equal 'P-101', plan.dig('sheet', 'title_block', 'fields', 'sheet_number')
+    assert_equal '1:50', plan.dig('sheet', 'title_block', 'fields', 'scale')
+    assert_equal 'P01', plan.dig('sheet', 'revisions', 0, 'code')
   end
 
-  def test_supports_custom_sheet_identity_and_revision
+  def test_supports_custom_sheet_identity_revision_and_project_metadata
     plan = JiraNot::ConstructFlow::Core::LayoutExportPlanBuilder.new(runtime: LayoutPresetRuntime.new)
                                                                   .build_for_preset(
                                                                     'plumbing.simple',
@@ -42,7 +46,15 @@ class LayoutExportPlanBuilderTest < Minitest::Test
                                                                     sheet_number: 'P-001',
                                                                     sheet_title: 'Drainage Overview',
                                                                     revision: 'A02',
-                                                                    issue_status: 'issued'
+                                                                    issue_status: 'issued',
+                                                                    project_name: 'House Renovation',
+                                                                    project_number: 'CF-001',
+                                                                    drawn_by: 'NN',
+                                                                    checked_by: 'PA',
+                                                                    revisions: [
+                                                                      { code: 'A01', description: 'For review', date: '2026-09-01', status: 'review', author: 'NN' },
+                                                                      { code: 'A02', description: 'Issued', date: '2026-09-10', status: 'issued', author: 'NN' }
+                                                                    ]
                                                                   )
 
     assert_equal 'sheet.plumbing.001', plan.dig('sheet', 'id')
@@ -50,6 +62,10 @@ class LayoutExportPlanBuilderTest < Minitest::Test
     assert_equal 'Drainage Overview', plan.dig('sheet', 'title')
     assert_equal 'A02', plan.dig('sheet', 'revision')
     assert_equal 'issued', plan.dig('sheet', 'issue_status')
+    assert_equal 'House Renovation', plan.dig('sheet', 'title_block', 'fields', 'project_name')
+    assert_equal 'CF-001', plan.dig('sheet', 'title_block', 'fields', 'project_number')
+    assert_equal 2, plan.dig('sheet', 'revisions').length
+    assert_equal 'Issued', plan.dig('sheet', 'revisions', 1, 'description')
   end
 
   def test_viewport_rejects_non_positive_bounds
