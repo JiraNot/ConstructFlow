@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative 'entity_guard'
+require_relative 'geometry_guard'
+
 module JiraNot
   module ConstructFlow
     module Core
