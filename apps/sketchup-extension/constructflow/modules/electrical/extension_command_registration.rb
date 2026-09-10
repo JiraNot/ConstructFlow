@@ -26,10 +26,24 @@ module JiraNot
           intent = fetch(input, :intent) || {}
           extension_id = extension_id_from(input, intent)
           raise ArgumentError, 'extension_id required' if extension_id.empty?
+          existing = find_generated(runtime, extension_id)
 
           unless auto_lighting?(intent)
+            if existing
+              runtime.smart_objects.erase!(existing.entity)
+              return {
+                created_object_ids: [], updated_object_ids: [], removed_object_ids: [existing.id],
+                warnings: ['previous auto-generated extension lighting was removed because the current intent no longer requests deterministic lighting'],
+                events: [
+                  { name: 'ElectricalExtensionIntentReviewed', object_ids: [existing.id], payload: { extension_id: extension_id, generated: false, removed: true } },
+                  { name: 'GeometryChanged', object_ids: [existing.id], payload: { removed: true, reason: 'source_intent_reconciled' } },
+                  { name: 'QuantityDirty', object_ids: [existing.id] },
+                  { name: 'DrawingDirty', object_ids: [existing.id] }
+                ]
+              }
+            end
             return {
-              created_object_ids: [], updated_object_ids: [],
+              created_object_ids: [], updated_object_ids: [], removed_object_ids: [],
               warnings: ['electrical extension intent has no deterministic fixture request; no final electrical design was invented'],
               events: [{ name: 'ElectricalExtensionIntentReviewed', payload: { extension_id: extension_id, generated: false } }]
             }
@@ -37,7 +51,6 @@ module JiraNot
 
           definition = definition_from(input)
           raise ArgumentError, definition.errors.join('; ') unless definition.valid?
-          existing = find_generated(runtime, extension_id)
           created_ids = []
           updated_ids = []
           events = []
@@ -81,6 +94,7 @@ module JiraNot
           {
             created_object_ids: created_ids,
             updated_object_ids: updated_ids,
+            removed_object_ids: [],
             warnings: ['auto-generated lighting is preliminary and requires electrical designer review'],
             events: events
           }
