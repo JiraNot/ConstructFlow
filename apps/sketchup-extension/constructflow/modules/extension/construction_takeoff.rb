@@ -7,6 +7,7 @@ module JiraNot
         def initialize(runtime:)
           @runtime = runtime
           @extension_repository = Repository.new
+          @architecture_repository = Architecture::WallRepository.new
           @structure_repository = Structure::Repository.new
           @surface_repository = Surface::Repository.new
           @roof_repository = Roof::Repository.new
@@ -14,6 +15,7 @@ module JiraNot
           @interior_repository = Interior::Repository.new
           @electrical_repository = Electrical::Repository.new
           @extension_provider = Quantity::ExtensionQuantityProvider.new
+          @architecture_provider = Architecture::Quantity::WallQuantityProvider.new
           @structure_provider = Structure::Quantity::StructureQuantityProvider.new
           @surface_provider = Surface::Quantity::SurfaceQuantityProvider.new
           @roof_provider = Roof::Quantity::RoofQuantityProvider.new
@@ -85,6 +87,10 @@ module JiraNot
           when 'extension.zone'
             definition_items(object, @extension_repository.read(object.entity)) do |definition|
               @extension_provider.quantities(smart_object: object, definition: definition)
+            end
+          when 'architecture.wall'
+            definition_items(object, @architecture_repository.read(object.entity)) do |definition|
+              @architecture_provider.quantities(smart_object: object, definition: definition)
             end
           when 'structure.column'
             definition_items(object, @structure_repository.read_column(object.entity)) do |definition|
