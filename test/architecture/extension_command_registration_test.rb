@@ -16,7 +16,7 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
   end
 
   ArchitectureExtensionObject = Struct.new(
-    :id, :type, :owner_module, :entity, :relationships, :source_state,
+    :id, :type, :owner_module, :entity, :relationships, :source_state, :level_refs,
     keyword_init: true
   )
 
@@ -33,14 +33,15 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
       objects
     end
 
-    def create(entity:, type:, owner_module:, source_state:, **_options)
+    def create(entity:, type:, owner_module:, source_state:, level_refs: [], **_options)
       object = ArchitectureExtensionObject.new(
         id: "wall-#{@next_id}",
         type: type,
         owner_module: owner_module,
         entity: entity,
         relationships: [],
-        source_state: source_state
+        source_state: source_state,
+        level_refs: Array(level_refs)
       )
       @next_id += 1
       objects << object
@@ -55,6 +56,11 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
         'role' => role,
         'metadata' => metadata
       }
+    end
+
+    def update_level_refs(entity, values)
+      @by_entity.fetch(entity).level_refs = Array(values)
+      @by_entity[entity]
     end
 
     def mark_dirty(_entity, *_flags)
@@ -125,6 +131,13 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
     end
   end
 
+  class ArchitectureExtensionLevels
+    def fetch(id)
+      values = { 'ffl-a' => 100.0, 'ffl-b' => 250.0 }
+      Struct.new(:elevation_mm).new(values.fetch(id.to_s))
+    end
+  end
+
   ArchitectureExtensionRuntime = Struct.new(:smart_objects, :active_model, :levels)
 
   def rectangle(width: 6000, depth: 4000, closed: false)
@@ -133,11 +146,12 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
     points
   end
 
-  def intent(boundary: rectangle, config: {})
+  def intent(boundary: rectangle, config: {}, base_level_id: nil, base_offset_mm: 0)
     {
       'extension_id' => 'ext-1',
       'boundary_mm' => boundary,
-      'base_offset_mm' => 0,
+      'base_level_id' => base_level_id,
+      'base_offset_mm' => base_offset_mm,
       'target_height_mm' => 3000,
       'config' => config
     }
@@ -172,13 +186,18 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
     assert_equal 1, result[:warnings].length
   end
 
-  def test_regeneration_preserves_identity_and_hosted_openings
+  def test_regeneration_preserves_identity_hosted_openings_and_updates_level_refs
     smart_objects = ArchitectureExtensionSmartObjects.new
     geometry = ArchitectureExtensionGeometry.new
     repository = ArchitectureExtensionRepository.new
-    runtime = ArchitectureExtensionRuntime.new(smart_objects, Object.new, nil)
+    runtime = ArchitectureExtensionRuntime.new(smart_objects, Object.new, ArchitectureExtensionLevels.new)
 
-    first = generate(runtime: runtime, geometry: geometry, repository: repository, intent_value: intent)
+    first = generate(
+      runtime: runtime,
+      geometry: geometry,
+      repository: repository,
+      intent_value: intent(base_level_id: 'ffl-a', base_offset_mm: 25)
+    )
     ids = smart_objects.objects.map(&:id)
     first_wall = smart_objects.objects.first
     openings = [{ 'segment_index' => 0, 'start_offset_mm' => 500, 'width_mm' => 900, 'height_mm' => 2100, 'sill_mm' => 0 }]
@@ -188,7 +207,7 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
       runtime: runtime,
       geometry: geometry,
       repository: repository,
-      intent_value: intent(boundary: rectangle(width: 7000))
+      intent_value: intent(boundary: rectangle(width: 7000), base_level_id: 'ffl-b', base_offset_mm: 50)
     )
 
     assert_equal 4, first[:created_object_ids].length
@@ -198,6 +217,9 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
     assert_equal ids, smart_objects.objects.map(&:id)
     assert_equal openings, geometry.rebuilt.find { |entry| entry[0].equal?(first_wall.entity) }[2]
     assert_equal 7000.0, geometry.rebuilt[0][1].path_mm[1][0]
+    assert_equal 300.0, geometry.rebuilt[0][1].path_mm[0][2]
+    assert_equal 'ffl-b', first_wall.level_refs.first[:level_id]
+    assert_equal 50.0, first_wall.level_refs.first[:offset_mm]
   end
 
   def test_topology_shrink_reconciles_stale_generated_wall
