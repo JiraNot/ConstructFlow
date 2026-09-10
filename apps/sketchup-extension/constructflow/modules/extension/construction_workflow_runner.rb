@@ -51,7 +51,8 @@ module JiraNot
             strict: strict == true
           )
 
-          issue_set = ConstructionIssueSetFactory.new(runtime: @runtime).build(
+          issue_factory = ConstructionIssueSetFactory.new(runtime: @runtime)
+          issue_set = issue_factory.build(
             extension_id: extension.id,
             revision: revision,
             issue_status: issue_status,
@@ -62,7 +63,7 @@ module JiraNot
             template_scope_id: template_scope_id,
             template_use_case: template_use_case
           )
-          drawing_refresh = refresh_drawings ? refresh_issue_scenes(issue_set) : []
+          drawing_refresh = refresh_drawings ? refresh_issue_scenes(issue_set, extension.id, issue_factory) : []
           issue_plan = @runtime.drawing_issue_sets.build(issue_set)
           export_result = nil
           if export && quality['publishable']
@@ -90,12 +91,15 @@ module JiraNot
           raise ArgumentError, 'extension zone not found'
         end
 
-        def refresh_issue_scenes(issue_set)
+        def refresh_issue_scenes(issue_set, extension_id, issue_factory)
           issue_set.sheets.map do |request|
-            result = @runtime.plan_scenes.refresh_preset(request.preset_id)
+            family = request.preset_id.to_s.split('.').first
+            object_ids = issue_factory.object_ids_for_family(extension_id: extension_id, family: family)
+            result = @runtime.plan_scenes.refresh_preset(request.preset_id, object_ids: object_ids)
             {
               'preset_id' => request.preset_id,
               'scene_name' => result['scene_name'],
+              'source_object_ids' => object_ids,
               'rendered_count' => result['rendered_count'],
               'rendered_object_ids' => result['rendered_object_ids']
             }.freeze
