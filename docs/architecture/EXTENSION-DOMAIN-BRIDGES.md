@@ -23,6 +23,8 @@ The v1 construction vertical slice registers bridges for:
 
 The Extension `ExecutionRunner` dispatches these commands in dependency order. Each target module owns its definition, geometry, validation, Smart Object lifecycle and dirty-state events.
 
+Domain bridge configuration may come from durable Extension Construction Intent plus an explicit one-run override. The owning domain receives only the effective intent; it does not read Extension private storage directly.
+
 ## Idempotency and provenance
 
 Generated construction objects must carry a `generated_from` relationship to the source `extension.zone` plus a stable semantic slot. Re-running the same intent updates the matching generated object rather than duplicating it.
@@ -59,7 +61,7 @@ Current v1 reconciliation rules:
 - Interior removes the generated `primary_joinery` assumption when the current program/policy no longer permits automatic joinery.
 - Electrical removes the generated `primary_light` assumption when the current program/policy no longer permits automatic lighting.
 - Surface and Roof remain singleton generated objects and update their existing stable slots in place.
-- Drainage does **not** treat omitted endpoint overrides as deletion. Endpoint overrides are not yet a persisted Extension source contract, so missing connector IDs on a later invocation are ambiguous. Reconnect, disable or removal of a generated Drainage route requires explicit persisted intent/command semantics.
+- Drainage does **not** treat omitted fields as deletion. Persisted Construction Intent can retain explicit connector endpoints across later workflow runs; only an explicit supported disable/removal or reconnect transition may change route identity/lifecycle.
 
 Removed generated IDs must be returned through `removed_object_ids` and must invalidate downstream quantity/drawing outputs so package generation cannot retain stale takeoff or drawing content.
 
@@ -98,7 +100,9 @@ The extension footprint and target height can deterministically generate/update 
 
 Drainage must not invent network destinations. A generated route requires explicit compatible start and end connector IDs. Without both endpoints the bridge succeeds as a reviewed coordination intent with a visible warning and creates no pipe geometry.
 
-Changing the endpoints of an already generated route requires an explicit reconnect workflow; regeneration may update the path and route parameters only while endpoint identity remains stable.
+Explicit connector IDs may be supplied by the current workflow invocation or may be reused from the Extension's persisted Construction Intent. This persistence prevents a later Extension boundary/roof regeneration from forgetting a user-selected network destination.
+
+Changing the endpoints of an already generated route still requires an explicit reconnect workflow; merely persisting different IDs must not silently rewrite route connectivity. Likewise, omission of endpoint fields is not route deletion.
 
 ### Interior
 
@@ -128,7 +132,8 @@ Generated Structure foundations are ordinary Structure Smart Objects for downstr
 - AC-EXT-025: Extension dependency failure propagation remains unchanged when the real bridge set is installed.
 - AC-EXT-026: regeneration removes generated Structure slots that are no longer present in the current Extension topology and reports them in `removed_object_ids`.
 - AC-EXT-027: when automatic Interior/Electrical policy changes from enabled to disabled, their prior generated singleton assumptions are removed rather than retained as stale model/quantity/drawing content.
-- AC-EXT-028: Drainage route removal is never inferred solely from omitted non-persisted endpoint overrides; explicit source intent is required.
+- AC-EXT-028: Drainage route removal is never inferred solely from omitted endpoint fields; explicit source intent is required.
 - AC-EXT-029: default Structure Extension generation creates one preliminary foundation per generated column with reciprocal support relationships and stable `foundation_corner_N` provenance.
 - AC-EXT-030: changing foundation type/size updates the same generated foundation identities, while explicitly disabling foundations removes those generated foundations without deleting the supported columns.
 - AC-EXT-031: generated foundation concrete/formwork quantities flow into the Extension ConstructionTakeoff with source-object traceability and phase scope.
+- AC-EXT-032: explicit persisted Drainage connector endpoints are carried into later domain bridge execution when a workflow invocation provides no endpoint override.
