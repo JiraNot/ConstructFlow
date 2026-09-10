@@ -117,8 +117,11 @@ module JiraNot
         end
 
         def drainage_completeness_issues(ids, execution, strict:)
-          drainage_enabled = Array(execution && execution['steps']).any? { |step| step['domain'].to_s == 'drainage' }
-          return [] unless drainage_enabled
+          drainage_step = Array(execution && execution['steps']).find { |step| step['domain'].to_s == 'drainage' }
+          return [] unless drainage_step
+          config = drainage_step.dig('intent', 'config') || {}
+          return [] if config.is_a?(Hash) && config.key?('enabled') && config['enabled'] == false
+
           has_drainage = ids.any? do |id|
             object = @runtime.smart_objects.fetch_by_id(id)
             object && object.owner_module == 'constructflow.drainage'
