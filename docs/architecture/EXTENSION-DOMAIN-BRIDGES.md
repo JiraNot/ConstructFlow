@@ -14,6 +14,7 @@ The canonical command convention remains:
 
 The v1 construction vertical slice registers bridges for:
 
+- Architecture;
 - Structure;
 - Surface;
 - Roof;
@@ -31,6 +32,7 @@ Generated construction objects must carry a `generated_from` relationship to the
 
 Foundation slots are:
 
+- Architecture walls: `wall_edge_N`, one wall for each normalized closed boundary edge;
 - Structure columns: `corner_N`;
 - Structure foundations: `foundation_corner_N` corresponding to the supported generated column slot;
 - Surface: `primary_floor`;
@@ -56,6 +58,7 @@ This erasure is **not demolition**. Existing construction, issued construction t
 
 Current v1 reconciliation rules:
 
+- Architecture normalizes a repeated closing boundary point, produces exactly one `wall_edge_N` per remaining edge, updates matching generated walls in place, preserves registered hosted-opening data during supported wall rebuilds, and removes stale wall slots when source topology shrinks.
 - Structure removes generated `corner_N` columns whose slots no longer exist after the Extension boundary topology shrinks. Their generated `foundation_corner_N` foundations are reconciled first. Remaining slots are updated in place.
 - Structure removes all generated Extension foundations when the current Structure config explicitly disables foundation generation while retaining the current generated columns.
 - Interior removes the generated `primary_joinery` assumption when the current program/policy no longer permits automatic joinery.
@@ -65,9 +68,24 @@ Current v1 reconciliation rules:
 
 Removed generated IDs must be returned through `removed_object_ids` and must invalidate downstream quantity/drawing outputs so package generation cannot retain stale takeoff or drawing content.
 
-The current Structure `corner_N` slots are stable only while source vertex order remains stable. A future source-topology identity contract may replace positional corner slots with persistent member intent IDs; this v1 reconciliation does not claim vertex-reorder identity stability.
+The current Architecture `wall_edge_N` and Structure `corner_N` slots are stable only while source vertex order remains stable. A future source-topology identity contract may replace positional edge/corner slots with persistent member intent IDs; this v1 reconciliation does not claim vertex-reorder identity stability.
 
 ## Domain safety rules
+
+### Architecture
+
+The Architecture bridge converts the normalized Extension boundary into one Architecture-owned parametric wall per edge. It uses the existing `WallDefinition`, `WallGeometry`, `WallRepository`, `WallValidator`, wall quantity provider and plan representation; Extension does not create raw wall geometry itself.
+
+Supported v1 Architecture intent controls are:
+
+- `wall_thickness_mm`;
+- `wall_height_mm` (otherwise the Extension target height is used);
+- `wall_type_id`;
+- `orientation`.
+
+When both wall type and thickness are explicitly supplied, new generated walls may be marked `confirmed`. If either is omitted, default/generated construction data remains `assumed` and the bridge emits a review warning. Default wall dimensions are therefore modeling assumptions, not final construction specifications.
+
+A repeated final boundary point equal to the first is removed before edge generation so a four-edge rectangle does not create a fifth zero-length wall. Boundary topology shrink removes obsolete generated wall slots. Supported hosted-opening metadata is passed back into `WallGeometry#rebuild!` when an existing generated wall is regenerated, preventing a normal wall-size update from silently filling known hosted openings.
 
 ### Structure
 
@@ -114,11 +132,15 @@ A single preliminary central luminaire may be generated for deterministic covere
 
 ## Failure propagation
 
-Bridge failures use the existing Extension dependency graph. A failed domain blocks only transitive dependents. Independent domains can continue. Failed/dependency-blocked domains remain dirty and cannot be treated as current for issue/publication workflows.
+Bridge failures use the existing Extension dependency graph. A failed domain blocks only transitive dependents. Independent domains can continue. Architecture and Structure are independent v1 roots because both consume the Extension source intent directly; later domains retain their explicit dependency edges.
+
+Failed/dependency-blocked domains remain dirty and cannot be treated as current for issue/publication workflows.
 
 ## Drawing and quantity propagation
 
 A generated, updated or reconciled-away domain Smart Object must invalidate its domain-owned quantity and drawing output. Later project-level workflow stages consume semantic states and current Smart Object membership; they must not recalculate domain meaning from raw SketchUp geometry or retain removed generated IDs.
+
+Generated Architecture walls are ordinary Architecture Smart Objects downstream. `WallQuantityProvider` supplies gross area and volume, Architecture plan representations render the same walls, and `ConstructionTakeoff` aggregates only walls related to the selected source Extension through `generated_from`.
 
 Generated Structure foundations are ordinary Structure Smart Objects for downstream purposes: Structure plan representations render them, the Structure quantity provider supplies concrete/formwork quantities, and the Extension ConstructionTakeoff aggregates those items without re-deriving foundation meaning.
 
@@ -137,3 +159,7 @@ Generated Structure foundations are ordinary Structure Smart Objects for downstr
 - AC-EXT-030: changing foundation type/size updates the same generated foundation identities, while explicitly disabling foundations removes those generated foundations without deleting the supported columns.
 - AC-EXT-031: generated foundation concrete/formwork quantities flow into the Extension ConstructionTakeoff with source-object traceability and phase scope.
 - AC-EXT-032: explicit persisted Drainage connector endpoints are carried into later domain bridge execution when a workflow invocation provides no endpoint override.
+- AC-EXT-033: default Extension orchestration includes Architecture and creates exactly one generated `architecture.wall` per normalized boundary edge through `GenerateOrUpdateArchitectureFromExtension`.
+- AC-EXT-034: rerunning a changed Extension boundary updates matching `wall_edge_N` identities and removes obsolete generated wall slots rather than duplicating walls.
+- AC-EXT-035: generated Extension walls keep hosted-opening metadata during supported regeneration and their Architecture quantity/drawing outputs remain sourced from the same Smart Objects.
+- AC-EXT-036: default/generated wall construction data remains `assumed` until wall type and thickness are explicitly supplied; strict publication policy may therefore block unconfirmed walls.
