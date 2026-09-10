@@ -26,6 +26,7 @@ class ExtensionOrchestrationTest < Minitest::Test
     assert_equal 'ext-1', intents['extension_id']
     assert_equal 'kitchen', intents['program']
     assert intents['domains']['architecture']['enabled']
+    refute intents['domains']['opening']['enabled']
     refute intents['domains']['electrical']['enabled']
     assert_equal %w[architecture structure surface roof drainage interior], generator.enabled_domains(
       domains: { 'electrical' => { 'enabled' => false } }
@@ -62,7 +63,10 @@ class ExtensionOrchestrationTest < Minitest::Test
 
     assert_equal %w[roof drainage], rules['roof_changed']
     assert_includes rules['boundary_changed'], 'architecture'
+    assert_includes rules['boundary_changed'], 'opening'
     assert_includes rules['height_changed'], 'architecture'
-    assert_equal %w[architecture interior electrical], rules['architecture_changed']
+    assert_includes rules['height_changed'], 'opening'
+    assert_equal %w[architecture opening interior electrical], rules['architecture_changed']
+    assert_equal %w[opening interior electrical], rules['opening_changed']
   end
 end
