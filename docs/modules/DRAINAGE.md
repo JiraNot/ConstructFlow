@@ -86,6 +86,8 @@ A user can query what flows to a manhole without generating detailed elbows/tees
 
 - `ConnectWaste`
 - `CreatePipeRoute`
+- `PlanDrainageRoute`
+- `CreateRoutedPipe`
 - `EditPipeRoute`
 - `PlaceManhole`
 - `RelocateManhole`
@@ -96,6 +98,22 @@ A user can query what flows to a manhole without generating detailed elbows/tees
 - `ReconnectDrainageNetwork`
 - `SwapPipeType`
 
+`PlanDrainageRoute` is non-mutating and emits a deterministic route proposal. `CreateRoutedPipe` commits the same planned route through the normal Drainage Smart Object/topology creation path.
+
+## Routing modes
+
+Foundation routing supports three explicit modes:
+
+- **Manual** — user owns every intermediate control node. ConstructFlow validates but does not reshape the route.
+- **Semi-Auto** — user provides zero or more intent/control nodes; the planner inserts deterministic orthogonal path segments between anchors.
+- **Auto** — user selects compatible endpoints and the planner proposes a deterministic orthogonal route.
+
+The routing planner consumes semantic connector positions. It must not rediscover endpoints from arbitrary raw SketchUp edges.
+
+Auto and Semi-Auto may derive an end invert from the known start invert and configured minimum slope when the destination invert is unknown. If both endpoint inverts are known, ConstructFlow preserves those facts and reports reverse/insufficient slope rather than silently changing them.
+
+Unknown endpoint elevations remain `Verify On Site`. Obstacle-aware path finding, left/right alternatives around structural clashes and multi-level routing are follow-up capabilities and must remain explicit rather than being implied by this foundation slice.
+
 ## Auto route
 
 Routing can propose options:
@@ -104,6 +122,8 @@ Routing can propose options:
 - along wall;
 - external;
 - manual/control-point route.
+
+The v1 foundation implements deterministic orthogonal Auto/Semi-Auto routing and explicit Manual routing. Strategy-specific obstacle avoidance remains later work.
 
 Auto route is a proposal. User can drag route nodes before/after commit subject to validation.
 
@@ -252,9 +272,13 @@ Graphic line weights and label placement remain renderer/style concerns. Semanti
 - AC-DRN-009: structure clash can be reported using public coordination contracts.
 - AC-DRN-010: one pipe/manhole Smart Object can produce a semantic plan representation with symbols/annotations without duplicating construction identity; unknown invert is visibly marked for verification.
 - AC-DRN-011: simple, construction and coordination plan profiles expose deterministic levels of semantic detail from the same Smart Object.
+- AC-DRN-012: Manual routing preserves explicit control nodes, while Semi-Auto and Auto produce deterministic semantic route nodes from connectors without creating disconnected CAD lines.
+- AC-DRN-013: when only the start invert is known, Auto/Semi-Auto may derive a proposal from configured minimum slope; when endpoint facts conflict, they are preserved and validation reports the problem instead of silently fixing the design.
 
 ## Deferred
 
 - full hydraulic simulation;
 - municipal drainage-code automation;
-- civil-scale stormwater network analysis.
+- civil-scale stormwater network analysis;
+- obstacle-aware path finding and automatic structural-clash detours;
+- multi-level routing and automatic cleanout/manhole placement rules.
