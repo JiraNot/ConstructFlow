@@ -298,6 +298,8 @@ module JiraNot
         end
 
         def find_generated(runtime, extension_id)
+          return nil unless runtime.respond_to?(:smart_objects) && runtime.smart_objects.respond_to?(:all)
+
           runtime.smart_objects.all.find do |object|
             next false unless object.type == 'drainage.pipe_route' && object.owner_module == 'constructflow.drainage'
             Array(object.relationships).any? do |relationship|
