@@ -7,6 +7,8 @@ require_relative 'core/diagnostic_log'
 require_relative 'core/attribute_store'
 require_relative 'core/units'
 require_relative 'core/phase'
+require_relative 'core/entity_guard'
+require_relative 'core/geometry_guard'
 require_relative 'core/project_store'
 require_relative 'core/level_registry'
 require_relative 'core/migration_registry'
@@ -52,6 +54,7 @@ require_relative 'modules/extension/extension_definition'
 require_relative 'modules/extension/repository'
 require_relative 'modules/extension/geometry'
 require_relative 'modules/extension/generator'
+require_relative 'modules/extension/orchestrator'
 require_relative 'modules/extension/boundary_capability'
 require_relative 'modules/extension/validators/extension_validator'
 require_relative 'modules/extension/quantity/extension_quantity_provider'
@@ -180,6 +183,15 @@ module JiraNot
           Extension::Generator.new(definition).intents(options.merge(extension_id: object.id))
         end
 
+        def extension_plan(object_id, options = {})
+          object = @smart_objects.fetch_by_id(object_id)
+          raise ArgumentError, 'extension zone not found' unless object && object.type == 'extension.zone'
+          definition = Extension::Repository.new.read(object.entity)
+          raise ArgumentError, 'extension definition missing' unless definition
+          generator = Extension::Generator.new(definition)
+          Extension::Orchestrator.new(generator).plan(options.merge(extension_id: object.id))
+        end
+
         private
 
         def register_core_commands
@@ -198,7 +210,7 @@ module JiraNot
           @commands.register('ModifyLevel', owner_module: 'constructflow.core', validator: lambda { |command|
             id = command[:input][:id] || command[:input]['id']; id.to_s.strip.empty? ? ['level id required'] : []
           }) do |command|
-            input = command[:input]; id = input[:id] || input['id]; before = @levels.fetch(id).to_h
+            input = command[:input]; id = input[:id] || input['id']; before = @levels.fetch(id).to_h
             level = @levels.update(id, name: input[:name] || input['name'], kind: input[:kind] || input['kind'], elevation_mm: input.key?(:elevation_mm) ? input[:elevation_mm] : input['elevation_mm'], source_state: input[:source_state] || input['source_state'])
             { events: [{ name: 'LevelChanged', payload: { before: before, after: level.to_h } }] }
           end
