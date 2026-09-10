@@ -59,6 +59,12 @@ class ExtensionExecutionRunnerTest < Minitest::Test
     }
   end
 
+  def run_with_failure(command_name)
+    bus = FakeCommandBus.new(fail_on: command_name)
+    runner = JiraNot::ConstructFlow::Extension::ExecutionRunner.new(command_bus: bus)
+    [runner.execute(plan), bus]
+  end
+
   def test_executes_in_plan_order
     bus = FakeCommandBus.new
     runner = JiraNot::ConstructFlow::Extension::ExecutionRunner.new(command_bus: bus)
@@ -73,12 +79,11 @@ class ExtensionExecutionRunnerTest < Minitest::Test
       GenerateOrUpdateInteriorFromExtension
       GenerateOrUpdateElectricalFromExtension
     ], bus.calls.map(&:first)
+    assert_empty result['dirty_domains']
   end
 
-  def test_failure_skips_only_dependency_blocked_steps
-    bus = FakeCommandBus.new(fail_on: 'GenerateOrUpdateSurfaceFromExtension')
-    runner = JiraNot::ConstructFlow::Extension::ExecutionRunner.new(command_bus: bus)
-    result = runner.execute(plan)
+  def test_surface_failure_skips_only_dependency_blocked_steps_and_keeps_roof_clean
+    result, = run_with_failure('GenerateOrUpdateSurfaceFromExtension')
 
     statuses = result['steps'].to_h { |item| [item['domain'], item['status']] }
     assert_equal 'failed', statuses['surface']
@@ -86,7 +91,30 @@ class ExtensionExecutionRunnerTest < Minitest::Test
     assert_equal 'skipped', statuses['drainage']
     assert_equal 'skipped', statuses['interior']
     assert_equal 'skipped', statuses['electrical']
+    assert_equal %w[surface drainage interior electrical], result['dirty_domains']
+    refute_includes result['dirty_domains'], 'roof'
     assert_equal 'failed', result['status']
+  end
+
+  def test_structure_failure_marks_all_transitive_dependents_dirty
+    result, = run_with_failure('GenerateOrUpdateStructureFromExtension')
+
+    assert_equal %w[structure surface roof drainage interior electrical], result['dirty_domains']
+  end
+
+  def test_roof_failure_dirties_only_roof_and_drainage_branch
+    result, = run_with_failure('GenerateOrUpdateRoofFromExtension')
+
+    assert_equal %w[roof drainage], result['dirty_domains']
+    refute_includes result['dirty_domains'], 'interior'
+    refute_includes result['dirty_domains'], 'electrical'
+  end
+
+  def test_interior_failure_dirties_only_interior_and_electrical
+    result, = run_with_failure('GenerateOrUpdateInteriorFromExtension')
+
+    assert_equal %w[interior electrical], result['dirty_domains']
+    refute_includes result['dirty_domains'], 'drainage'
   end
 
   def test_dry_run_does_not_dispatch_commands
