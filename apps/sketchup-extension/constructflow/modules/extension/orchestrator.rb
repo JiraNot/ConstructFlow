@@ -4,8 +4,9 @@ module JiraNot
   module ConstructFlow
     module Extension
       class Orchestrator
-        DOMAIN_ORDER = %w[structure surface roof drainage interior electrical].freeze
+        DOMAIN_ORDER = %w[architecture structure surface roof drainage interior electrical].freeze
         DEPENDENCIES = {
+          'architecture' => [],
           'structure' => [],
           'surface' => ['structure'],
           'roof' => ['structure'],
@@ -97,8 +98,9 @@ module JiraNot
 
         def regeneration_rules
           {
-            'boundary_changed' => %w[structure surface roof drainage interior electrical],
-            'height_changed' => %w[structure roof drainage electrical interior],
+            'boundary_changed' => %w[architecture structure surface roof drainage interior electrical],
+            'height_changed' => %w[architecture structure roof drainage electrical interior],
+            'architecture_changed' => %w[architecture interior electrical],
             'roof_changed' => %w[roof drainage],
             'surface_changed' => %w[surface drainage interior],
             'structure_changed' => %w[structure roof electrical interior]

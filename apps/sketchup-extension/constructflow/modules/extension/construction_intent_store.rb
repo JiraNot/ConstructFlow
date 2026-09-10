@@ -7,7 +7,7 @@ module JiraNot
         DICTIONARY = 'constructflow.extension'
         KEY = 'construction_intent'
         SCHEMA_VERSION = 1
-        DOMAINS = %w[structure surface roof drainage interior electrical].freeze
+        DOMAINS = %w[architecture structure surface roof drainage interior electrical].freeze
 
         def read(entity)
           payload = Core::AttributeStore.new(entity).read_json(KEY, nil, dictionary: DICTIONARY)

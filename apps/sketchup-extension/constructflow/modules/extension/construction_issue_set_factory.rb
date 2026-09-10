@@ -78,9 +78,7 @@ module JiraNot
           source = resolve_extension(extension_id)
           key = family.to_s
           objects = if key == 'architecture'
-                      @runtime.smart_objects.all.select do |object|
-                        ARCHITECTURE_CONTEXT_OWNERS.include?(object.owner_module.to_s)
-                      end
+                      architecture_objects_for(source)
                     else
                       owners = FAMILY_OWNERS.fetch(key) { [] }
                       related_objects(source).select { |object| owners.include?(object.owner_module.to_s) }
@@ -96,11 +94,44 @@ module JiraNot
           raise ArgumentError, 'extension zone not found'
         end
 
+        # Architecture sheets intentionally include ordinary project Architecture,
+        # Opening and Door/Window context, but generated context from another
+        # Extension must never leak into the selected Extension's construction set.
+        def architecture_objects_for(source)
+          @runtime.smart_objects.all.select do |object|
+            next false unless ARCHITECTURE_CONTEXT_OWNERS.include?(object.owner_module.to_s)
+
+            extension_sources = extension_source_relationships(object)
+            extension_sources.empty? || extension_sources.any? do |relationship|
+              relationship_target(relationship) == source.id.to_s
+            end
+          end
+        end
+
+        def extension_source_relationships(object)
+          Array(object.relationships).select do |relationship|
+            relationship_kind(relationship) == 'generated_from' &&
+              relationship_role(relationship) == 'extension_source'
+          end
+        end
+
+        def relationship_kind(relationship)
+          (relationship['kind'] || relationship[:kind]).to_s
+        end
+
+        def relationship_role(relationship)
+          (relationship['role'] || relationship[:role]).to_s
+        end
+
+        def relationship_target(relationship)
+          (relationship['target_id'] || relationship[:target_id]).to_s
+        end
+
         def related_objects(source)
           @runtime.smart_objects.all.select do |object|
             Array(object.relationships).any? do |relationship|
-              (relationship['kind'] || relationship[:kind]).to_s == 'generated_from' &&
-                (relationship['target_id'] || relationship[:target_id]).to_s == source.id.to_s
+              relationship_kind(relationship) == 'generated_from' &&
+                relationship_target(relationship) == source.id.to_s
             end
           end
         end

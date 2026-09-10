@@ -59,6 +59,8 @@ A command is owned by the module that owns the primary semantic mutation. It may
 
 Example: `RelocateManhole` is owned by Drainage. It may request route recalculation through public network contracts and emit events that make Structure QA and Drawing invalidation react.
 
+Extension orchestration follows the same rule. `GenerateOrUpdateArchitectureFromExtension` is owned by Architecture even though the source intent comes from an Extension. The command creates/updates Architecture Smart Walls through Architecture definitions, geometry, validation and persistence; Extension never creates raw wall geometry on Architecture's behalf.
+
 ## Core command families
 
 ### Project / lifecycle
@@ -86,6 +88,7 @@ Example: `RelocateManhole` is owned by Drainage. It may request route recalculat
 - `CreateWall`
 - `ModifyWallPath`
 - `ChangeWallType`
+- `GenerateOrUpdateArchitectureFromExtension`
 - `CreateOpening`
 - `ModifyOpening`
 - `AttachOpeningInfill`
@@ -189,6 +192,23 @@ Example: `RelocateManhole` is owned by Drainage. It may request route recalculat
 
 ## Required command semantics examples
 
+### `GenerateOrUpdateArchitectureFromExtension`
+
+Owner: `constructflow.architecture`.
+
+Inputs include source Extension ID, normalized Extension construction intent, boundary, base level/offset, target height and Architecture config.
+
+Behavior:
+
+1. normalize an optional repeated closing boundary point;
+2. create or update one Architecture Smart Wall for each closed boundary edge using stable `wall_edge_N` source slots;
+3. preserve supported hosted-opening data during regeneration of surviving wall identities;
+4. reconcile obsolete generated wall slots when topology shrinks;
+5. mark wall quantity/drawing outputs dirty;
+6. return created/updated/removed Smart Object IDs and explicit assumption warnings.
+
+Default/generated wall construction data is not confirmation. New walls remain `assumed` unless both wall type and thickness are explicit in the effective construction intent.
+
 ### `DemolishObject`
 
 Preconditions:
@@ -246,6 +266,8 @@ Undo should restore semantic metadata and geometry together.
 ## Idempotency
 
 Commands are not universally idempotent, but automation commands that can be retried must define an idempotency strategy where necessary. Duplicate `command_id` must never silently create duplicate production objects if the caller retries after an uncertain response.
+
+Generated-from-source commands such as `GenerateOrUpdateArchitectureFromExtension` must converge on stable source slots rather than appending duplicate generated objects on each rerun.
 
 ## AI exposure
 

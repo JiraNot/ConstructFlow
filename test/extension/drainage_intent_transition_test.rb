@@ -301,6 +301,7 @@ class DrainageIntentTransitionTest < Minitest::Test
     ).plan(
       'extension_id' => 'ext-1',
       'domains' => {
+        'architecture' => { 'enabled' => false },
         'structure' => { 'enabled' => false },
         'surface' => { 'enabled' => false },
         'roof' => { 'enabled' => false },

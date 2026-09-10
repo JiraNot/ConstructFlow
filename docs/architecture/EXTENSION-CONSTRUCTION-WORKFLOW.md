@@ -15,11 +15,11 @@ The v1 pipeline is:
 1. Resolve the source `extension.zone` and its persisted `ExtensionDefinition`.
 2. Resolve model-local Extension Construction Intent and merge any explicit per-run domain overrides.
 3. Build the dependency-safe Extension orchestration plan from Generator defaults plus the effective domain overrides.
-4. Execute enabled domain bridges through public CommandBus commands.
+4. Execute enabled domain bridges through public CommandBus commands, including Architecture wall generation plus Structure/Surface/Roof/Drainage/Interior/Electrical work.
 5. Aggregate domain-owned quantities for the source Extension and objects generated from it.
 6. Run the construction quality gate.
 7. Build the construction drawing issue set from active domain families.
-8. Refresh the required SketchUp plan scenes using Extension-scoped object IDs.
+8. Refresh the required SketchUp plan scenes using Extension-scoped object IDs plus explicit project-context rules.
 9. Settle completed quantity/drawing outputs and clear only the corresponding proven dirty flags.
 10. Audit package currentness against the post-settlement Smart Object graph.
 11. Build renderer-neutral sheet plans.
@@ -32,8 +32,9 @@ Dry-run stops after orchestration preview and must not generate domain geometry,
 ## Ownership invariants
 
 - Extension owns orchestration and its own persisted construction-generation/output/publication evidence only.
-- Structure, Surface, Roof, Drainage, Interior and Electrical retain ownership of their Smart Objects and geometry.
+- Architecture, Structure, Surface, Roof, Drainage, Interior and Electrical retain ownership of their Smart Objects and geometry.
 - Domain generation occurs only through public commands such as `GenerateOrUpdate<Domain>FromExtension`.
+- Architecture walls generated from an Extension remain `constructflow.architecture` Smart Objects; Extension never owns or directly edits their raw geometry.
 - Quantity values are produced by the owning domain quantity provider; the workflow only aggregates them.
 - Drawing semantics are produced by domain Representation Providers; the workflow only selects presets, scopes objects and composes sheets.
 - Output settlement may clear derived dirty flags only from evidence produced by the corresponding quantity/drawing pipeline; it must not mutate domain semantics.
@@ -43,7 +44,7 @@ Dry-run stops after orchestration preview and must not generate domain geometry,
 
 ## Construction intent resolution
 
-Durable project choices are stored separately from the base `ExtensionDefinition` under the Extension Construction Intent contract. This is especially important for explicit Drainage connector endpoints, which must survive later boundary/roof changes rather than being remembered only by a one-off workflow invocation.
+Durable project choices are stored separately from the base `ExtensionDefinition` under the Extension Construction Intent contract. This is especially important for explicit Drainage connector endpoints and confirmed Architecture wall construction data, which must survive later boundary/roof changes rather than being remembered only by a one-off workflow invocation.
 
 Effective domain configuration resolves with the following precedence:
 
@@ -64,9 +65,28 @@ Generated construction objects are associated with the Extension through:
 - role: `extension_source`
 - stable domain-specific slot metadata where the domain bridge supports it.
 
-Construction takeoff and domain drawing scopes must use this relationship rather than selecting all objects in the project.
+Construction takeoff and generated-domain drawing scopes must use this relationship rather than selecting all objects in the project.
 
-Architecture context is the v1 exception: Architecture, Opening and Door/Window Smart Objects may be included as project background because an Extension commonly attaches to an existing building. This is contextual drawing background, not Extension-owned geometry. A future attachment-host graph may narrow this context further.
+Architecture has two distinct sources in the drawing package:
+
+1. **Extension-generated Architecture** — `architecture.wall` objects related to the selected Extension through `generated_from`; these are part of the Extension construction scope and quantities.
+2. **Existing/project Architecture context** — other Architecture, Opening and Door/Window Smart Objects may be included as drawing background because an Extension commonly attaches to an existing building. This context is not Extension-owned geometry and is not automatically included in the Extension construction takeoff.
+
+A future attachment-host graph may narrow project Architecture context further.
+
+## Architectural construction baseline
+
+Default Extension orchestration includes the Architecture bridge. The normalized Extension boundary generates one parametric wall per closed boundary edge:
+
+`Extension boundary edge → architecture.wall (wall_edge_N)`
+
+The owning command is `GenerateOrUpdateArchitectureFromExtension`. It uses Architecture's `WallDefinition`, `WallGeometry`, `WallRepository`, `WallValidator`, Quantity Provider and plan representation.
+
+A duplicate closing point equal to the first point is normalized away before edge generation. Matching `wall_edge_N` slots are regenerated in place. If boundary topology shrinks, obsolete generated wall slots are removed as source-intent reconciliation rather than demolition.
+
+Default wall construction data is intentionally conservative. Unless both `wall_type_id` and `wall_thickness_mm` are explicitly supplied, new generated walls use `assumed` source state and emit a review warning. Strict Construction QA therefore cannot treat default wall type/thickness as confirmed field specification.
+
+Supported hosted-opening data is preserved during normal generated-wall rebuild by passing the wall repository's opening data back to Architecture geometry generation.
 
 ## Structural construction baseline
 
@@ -90,6 +110,8 @@ These generated members are preliminary construction coordination objects. Autom
 - formula version
 - confidence/source state.
 
+Architecture coverage includes generated `architecture.wall` objects related to the source Extension. Gross wall area and wall volume come directly from `Architecture::Quantity::WallQuantityProvider`; the Extension workflow does not calculate wall quantities itself.
+
 Structure coverage includes generated columns, foundations and semantic rebar sets when those objects are related to the source Extension. Foundation concrete and formwork quantities come directly from `StructureQuantityProvider`; the Extension workflow does not calculate foundation quantities itself.
 
 Totals group by `(phase_scope, classification, unit)` and must retain the contributing source object IDs.
@@ -104,6 +126,7 @@ Required principles:
 
 - failed execution or dirty domains block publication;
 - Strict QA treats `assumed`, `unknown` and `verify_on_site` construction inputs as blocking;
+- default Extension walls whose wall type/thickness have not been explicitly confirmed remain `assumed` and are subject to the same Strict QA source-confidence rule;
 - Strict QA requires structural engineering status `engineer_approved` or `as_built` for generated structural members represented in the package;
 - enabled Drainage with no resolved Extension drainage Smart Object is unresolved, not implicitly successful;
 - an explicitly disabled Drainage transition is not misreported as unresolved enabled Drainage;
@@ -127,11 +150,11 @@ The v1 construction set uses available `*.construction` view presets for active 
 - Interior/Joinery — `I-101`
 - Electrical — `E-101`.
 
-Only active families are included. Domain plan scenes for Structure/Roof/Drainage/Surface/Interior/Electrical must be refreshed with the source Extension plus objects related through `generated_from`; they must not accidentally render generated objects belonging to another Extension.
+Only active families are included. Generated-domain plan scenes for Architecture/Structure/Roof/Drainage/Surface/Interior/Electrical must use current Smart Objects from the selected Extension and must not accidentally render generated objects belonging to another Extension.
 
-The Structure plan uses the same Structure Smart Objects and may show generated column/foundation representations according to the requested construction LOD. It must not rediscover foundations from raw SketchUp geometry.
+Architecture drawing scope may also include explicit project background Architecture/Opening/Door-Window objects as described above. Generated Extension walls and existing background walls remain distinguishable through Smart Object provenance/lifecycle; no duplicate 2D wall model is introduced.
 
-Architecture context may include project Architecture/Opening/Door-Window objects as noted above.
+The Architecture plan uses the same generated wall Smart Objects whose `WallDefinition` drives geometry and whose Wall Quantity Provider drives takeoff. The Structure plan similarly uses the same Structure Smart Objects and may show generated column/foundation representations according to requested construction LOD.
 
 The issue set carries revision, issue status, title-block metadata and template scope into the existing Drawing/LayOut pipeline.
 
@@ -203,7 +226,9 @@ Older entries remain historical evidence when later changes make the current mod
 
 The required non-dry propagation proof is:
 
-`Extension source/intent change → effective construction intent → domain regeneration/reconciliation → current Smart Object graph → current takeoff → current drawing scope → output settlement → post-settlement currentness audit → issue/export gate → latest output-state evidence → exported issue-history evidence`
+`Extension source/intent change → effective construction intent → Architecture/other domain regeneration and reconciliation → current Smart Object graph → current takeoff → current drawing scope → output settlement → post-settlement currentness audit → issue/export gate → latest output-state evidence → exported issue-history evidence`
+
+For architectural topology shrink, obsolete `wall_edge_N` generated walls are removed before package assembly. Their IDs must be absent from rebuilt takeoff coverage/items and generated Architecture drawing scope. Supported hosted openings on surviving generated walls must remain attached during normal regeneration.
 
 For structural topology shrink, obsolete generated foundations and columns are removed before package assembly. Their IDs must be absent from the rebuilt takeoff coverage/items and from the refreshed Structure drawing scope. Reusing pre-change takeoff or drawing references after the source change must make the currentness audit fail.
 
@@ -253,3 +278,6 @@ A `ConstructionWorkflowCompleted` event reports the resulting package state, inc
 - AC-CWF-020: the latest construction-output settlement/currentness/export evidence is stored model-locally on the Extension without becoming an authorization override for later dirty state.
 - AC-CWF-021: successful native export appends one idempotent construction issue-history entry with revision, fingerprints, output paths and available template evidence.
 - AC-CWF-022: blocked/partial/stale/export-failed workflows do not append construction issue history.
+- AC-CWF-023: default construction orchestration includes Architecture and generates one Architecture-owned wall per normalized Extension boundary edge.
+- AC-CWF-024: generated wall gross area/volume and Architecture plan output are derived from the same `architecture.wall` Smart Objects and remain traceable to the selected Extension.
+- AC-CWF-025: surviving generated walls preserve supported hosted openings during source regeneration, while obsolete wall slots are removed before takeoff/drawing currentness checks.

@@ -53,6 +53,24 @@ Wall parameters can include:
 
 Wall geometry is parametric where created by ConstructFlow. Converted legacy walls may use a less strict geometry ownership mode until normalized.
 
+### Extension-generated walls
+
+`GenerateOrUpdateArchitectureFromExtension` is the public Architecture-owned bridge used by Extension orchestration. It consumes the Extension boundary and creates one `architecture.wall` for each normalized closed-boundary edge.
+
+Generated walls carry:
+
+- `generated_from` → source `extension.zone`;
+- role `extension_source`;
+- stable v1 slot `wall_edge_N`;
+- New Construction lifecycle;
+- Architecture-owned `WallDefinition` and geometry.
+
+A repeated last boundary point equal to the first is normalized away before edge generation. Re-running the same topology updates existing wall slots. If topology shrinks, obsolete generated wall slots are erased as source-intent reconciliation, not demolition.
+
+Supported v1 construction-intent fields are `wall_thickness_mm`, `wall_height_mm`, `wall_type_id`, and `orientation`. When wall type or thickness is missing, the generated wall remains an `assumed` construction input and must not be presented as confirmed specification. Explicit type + thickness allows new generated walls to use `confirmed` source state.
+
+When an existing generated wall is rebuilt, Architecture passes its registered hosted-opening data back into wall geometry generation so supported openings remain cut from the wall. Host/opening identity remains owned by the existing Architecture/Opening contracts.
+
 ## Layered assemblies
 
 Example:
@@ -113,6 +131,7 @@ Room-driven MEP requirements are suggestions/checklists; Electrical/Plumbing/Dra
 - `CreateWall`
 - `ModifyWallPath`
 - `ChangeWallType`
+- `GenerateOrUpdateArchitectureFromExtension`
 - `JoinWalls`
 - `CreateArchitecturalFloor`
 - `ApplyFloorAssembly`
@@ -136,6 +155,8 @@ Architecture supports:
 - New Construction.
 
 Example new opening in an existing wall should not force demolition of the entire wall. Opening/Architecture collaboration records removed region/construction scope according to implemented demolition-detail policy.
+
+Source reconciliation of an unissued Extension-generated New Construction wall is not demolition. Existing/as-built/issued construction that requires history must continue to use lifecycle semantics rather than source reconciliation erase.
 
 ## Level behavior
 
@@ -178,6 +199,8 @@ Possible output:
 
 Openings must be deducted according to documented quantity rules and source traceability.
 
+Current Extension-generated walls flow through the existing wall provider for gross area and wall volume. The Extension package aggregates those provider results; it does not calculate wall quantities itself.
+
 ## Drawing provider
 
 - floor plans;
@@ -186,6 +209,8 @@ Openings must be deducted according to documented quantity rules and source trac
 - room tags;
 - finish/assembly tags;
 - level references.
+
+Extension-generated walls use the same Architecture plan representation as manually created walls. No separate 2D Extension-wall model is permitted.
 
 ## Validators
 
@@ -206,6 +231,10 @@ Openings must be deducted according to documented quantity rules and source trac
 - AC-ARCH-005: hosted opening remains semantically attached during supported wall length/height edits.
 - AC-ARCH-006: Undo/Redo restores wall geometry and metadata together.
 - AC-ARCH-007: room area recalculates after supported boundary change.
+- AC-ARCH-008: Extension generation produces one Architecture-owned wall per normalized boundary edge with stable `wall_edge_N` provenance.
+- AC-ARCH-009: Extension wall regeneration updates matching wall identities and removes stale generated slots after topology shrink.
+- AC-ARCH-010: supported hosted openings remain present during generated-wall rebuild.
+- AC-ARCH-011: generated-wall quantity and plan output use the same Architecture Smart Objects and domain providers.
 
 ## Deferred
 
