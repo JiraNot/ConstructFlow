@@ -25,11 +25,24 @@ context:
 
 The preset is passed through the Representation Registry to domain-owned providers. Renderers must not invent domain meaning.
 
-## Initial plumbing presets
+## Standard plan profiles
 
-- `plumbing.simple`: 1:100, coordination phase view, simple LOD.
-- `plumbing.construction`: 1:50, proposed phase view, construction LOD.
-- `plumbing.coordination`: 1:50, coordination phase view, coordination LOD.
+Plan families use three foundation profiles unless a domain contract explicitly requires another profile:
+
+- `simple`: 1:100, coordination phase view, simple LOD;
+- `construction`: 1:50, proposed phase view, construction LOD;
+- `coordination`: 1:50, coordination phase view, coordination LOD.
+
+Registered foundation plan families are:
+
+- `plumbing.*` → `plumbing_drainage_plan`;
+- `architecture.*` → `architecture_plan`;
+- `structure.*` → `structure_plan`;
+- `roof.*` → `roof_plan`;
+- `surface.*` → `surface_paving_plan`;
+- `interior.*` → `interior_joinery_plan`.
+
+The original plumbing managed tags remain `CF-DRAWING-SIMPLE`, `CF-DRAWING-CONSTRUCTION`, and `CF-DRAWING-COORDINATION` for compatibility. Other families use fully qualified managed tags such as `CF-DRAWING-ARCHITECTURE-CONSTRUCTION` so parallel scene families cannot collide.
 
 ## Phase filtering
 
@@ -44,11 +57,13 @@ Phase is independent from discipline/category and revision.
 
 ## Drawing family filtering
 
-A scene may request a drawing family. A normalized representation whose metadata declares a different drawing family is not rendered into that scene. This prevents a future generic Plan Scene service from mixing unrelated plan outputs simply because they all implement `plan`.
+A scene may request a drawing family. A normalized representation whose metadata declares a different drawing family is not rendered into that scene. This prevents a generic Plan Scene service from mixing unrelated plan outputs simply because they all implement `plan`.
 
 ## Idempotency and traceability
 
 Refreshing a preset updates its managed SketchUp output group instead of creating a second drawing identity. The group stores preset ID, scale, phase view, LOD, drawing family and source Smart Object IDs.
+
+Preset registration itself is idempotent. Installing the standard registrations more than once must not duplicate or redefine an existing preset identity.
 
 ## Extension rule
 
