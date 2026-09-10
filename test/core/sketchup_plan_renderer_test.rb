@@ -2,6 +2,8 @@
 
 require_relative '../test_helper'
 require File.join(CORE, 'representation_registry')
+require File.join(CORE, 'plan_graphic_style_registry')
+require File.join(CORE, 'plan_graphic_style_registration')
 require File.join(CORE, 'sketchup_plan_renderer')
 require File.join(CORE, 'sketchup_plan_scene_service')
 
@@ -11,16 +13,13 @@ end
 
 class FakeDrawingEntities
   include Enumerable
-
   attr_reader :items
 
   def initialize
     @items = []
   end
 
-  def each(&block)
-    @items.each(&block)
-  end
+  def each(&block) = @items.each(&block)
 
   def add_line(from, to)
     entity = FakeDrawingEntity.new
@@ -46,9 +45,7 @@ class FakeDrawingEntities
     group
   end
 
-  def clear!
-    @items.clear
-  end
+  def clear! = @items.clear
 end
 
 class FakeDrawingGroup < FakeDrawingEntity
@@ -63,17 +60,9 @@ end
 class FakePages
   attr_reader :pages
 
-  def initialize
-    @pages = {}
-  end
-
-  def [](name)
-    @pages[name]
-  end
-
-  def add(name)
-    @pages[name] = FakePage.new(name)
-  end
+  def initialize = @pages = {}
+  def [](name) = @pages[name]
+  def add(name) = @pages[name] = FakePage.new(name)
 end
 
 class FakePage
@@ -84,23 +73,13 @@ class FakePage
     @updates = 0
   end
 
-  def update
-    @updates += 1
-  end
+  def update = @updates += 1
 end
 
 class FakeLayers
-  def initialize
-    @values = {}
-  end
-
-  def [](name)
-    @values[name]
-  end
-
-  def add(name)
-    @values[name] = name
-  end
+  def initialize = @values = {}
+  def [](name) = @values[name]
+  def add(name) = @values[name] = name
 end
 
 class FakeDrawingModel < FakeAttributeCarrier
@@ -144,11 +123,11 @@ class StaticPlanProvider
   def render(object:, request:)
     {
       primitives: [
-        { 'type' => 'polyline', 'points_mm' => [[0, 0, 0], [2540, 0, 0]] },
+        { 'type' => 'polyline', 'role' => 'pipe_centerline', 'style_role' => 'construction_waste', 'points_mm' => [[0, 0, 0], [2540, 0, 0]] },
         { 'type' => 'flow_arrow', 'from_mm' => [0, 0, 0], 'to_mm' => [2540, 0, 0] }
       ],
       annotations: [
-        { 'type' => 'text', 'anchor_mm' => [1270, 0, 0], 'text' => 'Ø100' }
+        { 'type' => 'text', 'role' => 'pipe_size', 'anchor_mm' => [1270, 0, 0], 'text' => 'Ø100' }
       ],
       metadata: request
     }
@@ -156,21 +135,23 @@ class StaticPlanProvider
 end
 
 class SketchupPlanRendererTest < Minitest::Test
+  def style_registry
+    registry = JiraNot::ConstructFlow::Core::PlanGraphicStyleRegistry.new
+    JiraNot::ConstructFlow::Core::PlanGraphicStyleRegistration.install(registry)
+    registry
+  end
+
   def test_renderer_converts_millimetres_and_marks_created_entities
     entities = FakeDrawingEntities.new
     renderer = JiraNot::ConstructFlow::Core::SketchupPlanRenderer.new
     representation = {
-      'object_id' => 'pipe-1',
-      'object_type' => 'drainage.pipe_route',
-      'kind' => 'plan',
+      'object_id' => 'pipe-1', 'object_type' => 'drainage.pipe_route', 'kind' => 'plan',
       'owner_module' => 'constructflow.drainage',
       'primitives' => [
         { 'type' => 'polyline', 'points_mm' => [[0, 0, 0], [2540, 0, 0]] },
         { 'type' => 'flow_arrow', 'from_mm' => [0, 0, 0], 'to_mm' => [2540, 0, 0] }
       ],
-      'annotations' => [
-        { 'type' => 'text', 'anchor_mm' => [1270, 0, 0], 'text' => 'Ø100' }
-      ]
+      'annotations' => [{ 'type' => 'text', 'anchor_mm' => [1270, 0, 0], 'text' => 'Ø100' }]
     }
 
     created = renderer.render(representation: representation, entities: entities)
@@ -183,23 +164,51 @@ class SketchupPlanRendererTest < Minitest::Test
     assert entities.items.any? { |item| item.get_attribute('test', 'text') == 'Ø100' }
   end
 
+  def test_renderer_resolves_domain_role_then_new_phase_style
+    entities = FakeDrawingEntities.new
+    renderer = JiraNot::ConstructFlow::Core::SketchupPlanRenderer.new(style_registry: style_registry)
+    representation = {
+      'object_id' => 'pipe-new', 'object_type' => 'drainage.pipe_route', 'kind' => 'plan',
+      'owner_module' => 'constructflow.drainage',
+      'source_lifecycle' => { 'created_phase' => 'new_construction', 'removed_phase' => nil },
+      'primitives' => [
+        { 'type' => 'polyline', 'role' => 'pipe_centerline', 'style_role' => 'construction_rainwater', 'points_mm' => [[0, 0, 0], [1000, 0, 0]] }
+      ],
+      'annotations' => []
+    }
+
+    renderer.render(representation: representation, entities: entities)
+    line = entities.items.first
+
+    assert_equal 'phase_new', line.get_attribute('constructflow.graphic_style', 'style_id')
+    assert_equal 'dash', line.get_attribute('constructflow.graphic_style', 'stroke_pattern')
+    assert_equal 'strong', line.get_attribute('constructflow.graphic_style', 'line_weight')
+    assert_equal 'new_work', line.get_attribute('constructflow.graphic_style', 'color_key')
+    assert_equal 'pipe_centerline', line.get_attribute('constructflow.graphic_style', 'semantic_role')
+  end
+
+  def test_verify_annotation_overrides_phase_style
+    style = style_registry.resolve(
+      item: { 'role' => 'slope_unknown', 'status' => 'verify' },
+      representation: { 'source_lifecycle' => { 'created_phase' => 'existing' } }
+    )
+
+    assert_equal 'status_verify', style['style_id']
+    assert_equal 'dash_dot', style['stroke_pattern']
+    assert_equal 'verify', style['color_key']
+    assert_equal 'warning', style['emphasis']
+  end
+
   def test_scene_refresh_is_idempotent_and_uses_registered_plan_providers
     model = FakeDrawingModel.new
     manager = JiraNot::ConstructFlow::Core::SmartObjectManager.new(model: model)
     source_entity = FakeDrawingGroup.new
     model.entities.items << source_entity
-    object = manager.create(
-      entity: source_entity,
-      type: 'drainage.pipe_route',
-      owner_module: 'constructflow.drainage'
-    )
+    object = manager.create(entity: source_entity, type: 'drainage.pipe_route', owner_module: 'constructflow.drainage')
 
     registry = JiraNot::ConstructFlow::Core::RepresentationRegistry.new
     registry.register(
-      object_type: 'drainage.pipe_route',
-      kind: 'plan',
-      owner_module: 'constructflow.drainage',
-      provider: StaticPlanProvider.new
+      object_type: 'drainage.pipe_route', kind: 'plan', owner_module: 'constructflow.drainage', provider: StaticPlanProvider.new
     )
     runtime = FakeRepresentationRuntime.new(model: model, representations: registry, smart_objects: manager)
     service = JiraNot::ConstructFlow::Core::SketchupPlanSceneService.new(runtime: runtime)
