@@ -30,6 +30,9 @@ require_relative 'core/drawing_issue_set'
 require_relative 'core/drawing_issue_set_builder'
 require_relative 'core/native_layout_sheet_decorator'
 require_relative 'core/native_layout_adapter'
+require_relative 'core/native_layout_issue_set_backend'
+require_relative 'core/native_layout_issue_set_adapter'
+require_relative 'core/native_layout_issue_set_service'
 require_relative 'core/native_layout_export_service'
 require_relative 'core/native_layout_runtime_integration'
 require_relative 'modules/extension/execution_runner'
@@ -46,5 +49,6 @@ JiraNot::ConstructFlow::Core::LayoutTemplateRuntimeIntegration.install(JiraNot::
 JiraNot::ConstructFlow::Core::LayoutExportRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::DrawingIssueSetRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::NativeLayoutRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Core::NativeLayoutIssueSetRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::RuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
