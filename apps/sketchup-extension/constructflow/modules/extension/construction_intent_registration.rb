@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'construction_intent_store'
+
 module JiraNot
   module ConstructFlow
     module Extension
