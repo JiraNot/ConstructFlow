@@ -16,6 +16,10 @@ require_relative 'core/sketchup_plan_renderer'
 require_relative 'core/sketchup_scene_presentation_service'
 require_relative 'core/sketchup_plan_scene_service'
 require_relative 'core/plan_scene_runtime_integration'
+require_relative 'core/drawing_sheet_spec'
+require_relative 'core/vector_lineweight_profile'
+require_relative 'core/layout_export_plan_builder'
+require_relative 'core/layout_export_runtime_integration'
 require_relative 'modules/extension/execution_runner'
 require_relative 'modules/structure/extension_command_registration'
 require_relative 'modules/extension/runtime_integration'
@@ -26,5 +30,6 @@ JiraNot::ConstructFlow::Core::RepresentationRuntimeIntegration.install(JiraNot::
 JiraNot::ConstructFlow::Core::DrawingViewPresetRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::PlanGraphicStyleRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::PlanSceneRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Core::LayoutExportRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::RuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
