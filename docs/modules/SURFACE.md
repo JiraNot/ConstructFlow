@@ -218,6 +218,18 @@ Provider can output:
 - control/expansion joints;
 - cut-piece details/schedule in advanced mode.
 
+### Plan representation foundation
+
+`surface.boundary` and `surface.pattern` expose on-demand semantic `plan` representations through the shared Representation Registry. The provider reads persisted Surface definitions rather than rediscovering meaning from SketchUp geometry.
+
+Profiles are scale/LOD aware:
+
+- **Simple** — boundary/holes and pattern name/origin/direction;
+- **Construction** — adds net area, module size, joint width and base-level intent;
+- **Coordination** — adds elevation, drain target, layout state, host traceability and minimum-cut intent.
+
+Pattern direction remains independent from the boundary. The representation uses the persisted pattern coordinate system and does not create a second 2D model.
+
 ## QA
 
 - boundary invalid/self-intersecting;
@@ -240,3 +252,4 @@ Provider can output:
 - AC-SURF-006: moving Drain target marks/recalculates slope and reports impossible solution.
 - AC-SURF-007: locked layout reports traceable full/cut piece quantities.
 - AC-SURF-008: surface boundary edit marks paving quantities/drawings dirty.
+- AC-SURF-009: SurfaceBoundary and Pattern expose deterministic on-demand plan representations with Simple/Construction/Coordination profiles and drain/layout traceability.
