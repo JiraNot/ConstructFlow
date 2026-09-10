@@ -6,7 +6,7 @@ module JiraNot
       class Generator
         DEFAULTS = {
           'architecture' => { 'enabled' => true, 'walls' => 'auto' },
-          'opening' => { 'enabled' => false },
+          'opening' => { 'enabled' => nil },
           'structure' => { 'enabled' => true, 'foundation' => 'auto' },
           'surface' => { 'enabled' => true, 'floor' => 'auto' },
           'roof' => { 'enabled' => true, 'system' => 'from_extension' },
