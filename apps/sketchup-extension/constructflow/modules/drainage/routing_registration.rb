@@ -13,6 +13,7 @@ module JiraNot
           validator = Validators::DrainageValidator.new
 
           register_plan(runtime, planner)
+          register_alternatives(runtime, planner)
           register_create(runtime, planner, repository, geometry, validator)
           planner
         end
@@ -25,10 +26,32 @@ module JiraNot
             plan = build_plan(runtime, planner, input)
             {
               warnings: plan.warnings,
-              events: [{
-                name: 'DrainageRoutePlanned',
-                payload: plan.to_h
-              }]
+              events: [{ name: 'DrainageRoutePlanned', payload: plan.to_h }]
+            }
+          end
+        end
+
+        def register_alternatives(runtime, planner)
+          return if runtime.commands.registered?('PlanDrainageRouteAlternatives')
+
+          runtime.commands.register('PlanDrainageRouteAlternatives', owner_module: 'constructflow.drainage', transaction: false) do |command|
+            input = command[:input]
+            start_id = value(input, :start_connector_id).to_s
+            end_id = value(input, :end_connector_id).to_s
+            raise ArgumentError, 'start_connector_id required' if start_id.empty?
+            raise ArgumentError, 'end_connector_id required' if end_id.empty?
+
+            alternatives = RouteAlternativePlanner.new(runtime: runtime, planner: planner).alternatives(
+              start_connector: runtime.connectors.connector(start_id),
+              end_connector: runtime.connectors.connector(end_id),
+              start_invert_mm: value(input, :start_invert_mm),
+              end_invert_mm: value(input, :end_invert_mm),
+              minimum_slope_percent: value(input, :minimum_slope_percent) || Validators::DrainageValidator::MIN_SLOPE_PERCENT
+            )
+            warnings = alternatives['requires_manual'] ? ['all automatic route candidates intersect known structural obstacles; manual intervention required'] : []
+            {
+              warnings: warnings,
+              events: [{ name: 'DrainageRouteAlternativesPlanned', payload: alternatives }]
             }
           end
         end
