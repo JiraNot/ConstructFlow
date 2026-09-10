@@ -9,6 +9,8 @@ module JiraNot
           @extension_repository = Repository.new
           @architecture_repository = Architecture::WallRepository.new
           @opening_repository = Opening::OpeningRepository.new
+          @door_window_repository = DoorWindow::InstanceRepository.new
+          @door_window_types = DoorWindow::TypeRegistry.new(runtime.respond_to?(:active_model) ? runtime.active_model : nil)
           @structure_repository = Structure::Repository.new
           @surface_repository = Surface::Repository.new
           @roof_repository = Roof::Repository.new
@@ -18,6 +20,7 @@ module JiraNot
           @extension_provider = Quantity::ExtensionQuantityProvider.new
           @architecture_provider = Architecture::Quantity::WallQuantityProvider.new
           @opening_provider = Opening::Quantity::OpeningQuantityProvider.new
+          @door_window_provider = DoorWindow::Quantity::DoorWindowQuantityProvider.new
           @structure_provider = Structure::Quantity::StructureQuantityProvider.new
           @surface_provider = Surface::Quantity::SurfaceQuantityProvider.new
           @roof_provider = Roof::Quantity::RoofQuantityProvider.new
@@ -98,6 +101,11 @@ module JiraNot
             definition_items(object, @opening_repository.read(object.entity)) do |definition|
               host = @runtime.smart_objects.fetch_by_id(definition.host_object_id)
               @opening_provider.quantities(smart_object: object, definition: definition, host_object: host)
+            end
+          when 'door_window.instance'
+            definition_items(object, @door_window_repository.read(object.entity)) do |definition|
+              type = @door_window_types.fetch(definition.type_id)
+              @door_window_provider.quantities(smart_object: object, type: type)
             end
           when 'structure.column'
             definition_items(object, @structure_repository.read_column(object.entity)) do |definition|
