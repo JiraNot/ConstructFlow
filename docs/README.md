@@ -19,12 +19,13 @@ No production module should introduce behavior that contradicts an approved spec
 7. `architecture/SMART-OBJECT-SCHEMA.md` — canonical object envelope and lifecycle.
 8. `architecture/SMART-OBJECT-REPRESENTATION-SYSTEM.md` — one Smart Object with domain-owned 3D/plan/elevation/section/detail/annotation/schedule representations.
 9. `architecture/SKETCHUP-PLAN-ADAPTER.md` — renderer boundary from semantic plan representations to managed SketchUp line/text scenes.
-10. `architecture/PHASE-LEVEL-REVISION.md` — existing/demolition/new, level and revision semantics.
-11. `architecture/INTERACTION-MODEL.md` and `architecture/UI-UX-SPEC.md` — modeling interaction and UI behavior.
-12. `architecture/COMMAND-CATALOG.md`, `EVENT-CATALOG.md`, `CONNECTOR-STANDARD.md` — cross-module integration contracts.
-13. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
-14. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
-15. `decisions/` — architecture decisions that explain or amend the baseline.
+10. `architecture/DRAWING-VIEW-PRESETS.md` — deterministic scale/phase/LOD/drawing-family requests for generated scenes.
+11. `architecture/PHASE-LEVEL-REVISION.md` — existing/demolition/new, level and revision semantics.
+12. `architecture/INTERACTION-MODEL.md` and `architecture/UI-UX-SPEC.md` — modeling interaction and UI behavior.
+13. `architecture/COMMAND-CATALOG.md`, `EVENT-CATALOG.md`, `CONNECTOR-STANDARD.md` — cross-module integration contracts.
+14. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
+15. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
+16. `decisions/` — architecture decisions that explain or amend the baseline.
 
 ## Specification status vocabulary
 
