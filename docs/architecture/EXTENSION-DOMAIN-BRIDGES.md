@@ -38,6 +38,31 @@ Foundation slots are:
 
 Stable slots are implementation identities, not drawing labels.
 
+## Regeneration reconciliation
+
+Regeneration is a convergence operation, not append-only generation. After a successful bridge execution, the generated Smart Objects for that source Extension must represent the current source intent rather than an accumulation of historical generated output.
+
+A generated `new_construction` object may be erased when all of the following are true:
+
+- it is derived from the current Extension through `generated_from`;
+- the bridge owns the object's domain lifecycle;
+- its semantic slot is no longer present or no longer permitted by the current source intent;
+- the object represents generated/unissued derived work rather than existing/as-built construction that requires lifecycle history.
+
+This erasure is **not demolition**. Existing construction, issued construction that requires history, relocation and construction replacement continue to use lifecycle and replacement semantics. A stale generated new-work object must not be kept merely by setting `removed_phase=demolition`, because removal of an unissued derived result is a source reconciliation operation rather than a field demolition event.
+
+Current v1 reconciliation rules:
+
+- Structure removes generated `corner_N` columns whose slots no longer exist after the Extension boundary topology shrinks. Remaining slots are updated in place.
+- Interior removes the generated `primary_joinery` assumption when the current program/policy no longer permits automatic joinery.
+- Electrical removes the generated `primary_light` assumption when the current program/policy no longer permits automatic lighting.
+- Surface and Roof remain singleton generated objects and update their existing stable slots in place.
+- Drainage does **not** treat omitted endpoint overrides as deletion. Endpoint overrides are not yet a persisted Extension source contract, so missing connector IDs on a later invocation are ambiguous. Reconnect, disable or removal of a generated Drainage route requires explicit persisted intent/command semantics.
+
+Removed generated IDs must be returned through `removed_object_ids` and must invalidate downstream quantity/drawing outputs so package generation cannot retain stale takeoff or drawing content.
+
+The current Structure `corner_N` slots are stable only while source vertex order remains stable. A future source-topology identity contract may replace positional corner slots with persistent member intent IDs; this v1 reconciliation does not claim vertex-reorder identity stability.
+
 ## Domain safety rules
 
 ### Surface
@@ -68,7 +93,7 @@ Bridge failures use the existing Extension dependency graph. A failed domain blo
 
 ## Drawing and quantity propagation
 
-A generated or updated domain Smart Object must mark its domain-owned quantity and drawing output dirty. Later project-level workflow stages consume these semantic states; they must not recalculate domain meaning from raw SketchUp geometry.
+A generated, updated or reconciled-away domain Smart Object must invalidate its domain-owned quantity and drawing output. Later project-level workflow stages consume semantic states and current Smart Object membership; they must not recalculate domain meaning from raw SketchUp geometry or retain removed generated IDs.
 
 ## Acceptance criteria
 
@@ -78,3 +103,6 @@ A generated or updated domain Smart Object must mark its domain-owned quantity a
 - AC-EXT-023: generated Interior/Electrical assumptions are visibly preliminary and do not masquerade as final design.
 - AC-EXT-024: all bridge mutations remain inside target-domain command ownership and emit Quantity/Drawing invalidation.
 - AC-EXT-025: Extension dependency failure propagation remains unchanged when the real bridge set is installed.
+- AC-EXT-026: regeneration removes generated Structure slots that are no longer present in the current Extension topology and reports them in `removed_object_ids`.
+- AC-EXT-027: when automatic Interior/Electrical policy changes from enabled to disabled, their prior generated singleton assumptions are removed rather than retained as stale model/quantity/drawing content.
+- AC-EXT-028: Drainage route removal is never inferred solely from omitted non-persisted endpoint overrides; explicit source intent is required.
