@@ -8,6 +8,11 @@ module JiraNot
 
         def install(runtime)
           Structure::ExtensionCommandRegistration.install(runtime)
+          Surface::ExtensionCommandRegistration.install(runtime)
+          Roof::ExtensionCommandRegistration.install(runtime)
+          Drainage::ExtensionCommandRegistration.install(runtime)
+          Interior::ExtensionCommandRegistration.install(runtime)
+          Electrical::ExtensionCommandRegistration.install(runtime)
           runner = ExecutionRunner.new(command_bus: runtime.commands)
 
           runtime.define_singleton_method(:extension_execution_runner) { runner }
