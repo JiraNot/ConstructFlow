@@ -94,13 +94,24 @@ module JiraNot
           when 'existing'
             created == 'existing' && removed != 'demolition'
           when 'demolition'
-            created == 'existing'
+            created == 'existing' || modifies_existing_host?(object)
           when 'proposed'
             removed != 'demolition' && %w[existing new_construction].include?(created)
           when 'coordination', 'all', ''
             true
           else
             true
+          end
+        end
+
+        # Some construction actions are modeled as new semantic objects because
+        # they persist into the proposed state, while still describing a partial
+        # demolition of Existing construction. Keep the source lifecycle intact
+        # and admit only objects that explicitly declare that host-modification role.
+        def modifies_existing_host?(object)
+          Array(object.respond_to?(:relationships) ? object.relationships : []).any? do |relationship|
+            role = relationship['role'] || relationship[:role]
+            role.to_s == 'modifies_existing_host'
           end
         end
 

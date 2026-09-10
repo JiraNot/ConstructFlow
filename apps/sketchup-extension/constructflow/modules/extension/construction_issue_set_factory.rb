@@ -14,6 +14,7 @@ module JiraNot
           'interior' => 'interior.construction',
           'electrical' => 'electrical.construction'
         }.freeze
+        ARCHITECTURE_DEMOLITION_PRESET = 'architecture.demolition'
         SHEET_NUMBERS = {
           'architecture' => 'A-101',
           'structure' => 'S-101',
@@ -46,17 +47,14 @@ module JiraNot
           source = resolve_extension(extension_id)
           families = active_families(source)
           families = %w[structure roof surface] if families.empty?
-          sheets = families.map do |family|
-            Core::DrawingIssueSheetRequest.new(
-              preset_id: PRESETS.fetch(family),
-              options: {
-                sheet_number: SHEET_NUMBERS.fetch(family),
-                project_name: project_name,
-                project_number: project_number,
-                drawn_by: drawn_by,
-                checked_by: checked_by
-              }
-            )
+          common_options = {
+            project_name: project_name,
+            project_number: project_number,
+            drawn_by: drawn_by,
+            checked_by: checked_by
+          }
+          sheets = families.flat_map do |family|
+            sheet_requests_for_family(source, family, common_options)
           end
 
           Core::DrawingIssueSet.new(
@@ -86,7 +84,37 @@ module JiraNot
           objects.map { |object| object.id.to_s }.reject(&:empty?).uniq.sort.freeze
         end
 
+        def architecture_demolition_required?(extension_id)
+          source = resolve_extension(extension_id)
+          related_objects(source).any? do |object|
+            next false unless object.owner_module.to_s == 'constructflow.opening'
+
+            Array(object.relationships).any? do |relationship|
+              next false unless relationship_kind(relationship) == 'host'
+              next false unless relationship_role(relationship) == 'modifies_existing_host'
+
+              host = @runtime.smart_objects.fetch_by_id(relationship_target(relationship))
+              host && host.created_phase.to_s == 'existing'
+            end
+          end
+        end
+
         private
+
+        def sheet_requests_for_family(source, family, common_options)
+          requests = []
+          if family.to_s == 'architecture' && architecture_demolition_required?(source.id)
+            requests << Core::DrawingIssueSheetRequest.new(
+              preset_id: ARCHITECTURE_DEMOLITION_PRESET,
+              options: common_options.merge(sheet_number: 'A-100')
+            )
+          end
+          requests << Core::DrawingIssueSheetRequest.new(
+            preset_id: PRESETS.fetch(family),
+            options: common_options.merge(sheet_number: SHEET_NUMBERS.fetch(family))
+          )
+          requests
+        end
 
         def resolve_extension(extension_id)
           source = @runtime.smart_objects.fetch_by_id(extension_id.to_s)

@@ -20,26 +20,24 @@ module JiraNot
           raise ArgumentError, "missing wall definition for opening host #{definition.host_object_id}" unless wall_definition
 
           profile = representation_profile(request)
+          lifecycle_role = demolition_cut?(object, request) ? 'demolition' : nil
           jamb_a, jamb_b, center = opening_plan_points(definition, wall_definition)
           primitives = [
-            {
-              'type' => 'polyline',
-              'role' => 'opening_span',
-              'points_mm' => [jamb_a, jamb_b],
-              'style_role' => 'opening_void'
-            },
-            {
-              'type' => 'symbol',
-              'role' => 'opening_symbol',
-              'symbol' => 'OP',
-              'position_mm' => center,
-              'style_role' => 'opening_void'
-            }
+            primitive(
+              'polyline', 'opening_span',
+              { 'points_mm' => [jamb_a, jamb_b], 'style_role' => 'opening_void' },
+              lifecycle_role
+            ),
+            primitive(
+              'symbol', 'opening_symbol',
+              { 'symbol' => 'OP', 'position_mm' => center, 'style_role' => 'opening_void' },
+              lifecycle_role
+            )
           ]
-          annotations = [annotation('opening_tag', center, 'OP')]
+          annotations = [annotation('opening_tag', center, 'OP', lifecycle_role: lifecycle_role)]
           if profile != 'simple'
-            annotations << annotation('opening_width', center, "W #{format_number(definition.width_mm)}")
-            annotations << annotation('opening_height', center, "H #{format_number(definition.height_mm)}")
+            annotations << annotation('opening_width', center, "W #{format_number(definition.width_mm)}", lifecycle_role: lifecycle_role)
+            annotations << annotation('opening_height', center, "H #{format_number(definition.height_mm)}", lifecycle_role: lifecycle_role)
           end
           if profile == 'coordination'
             annotations << annotation('host_wall', center, "WALL #{definition.host_object_id}")
@@ -58,12 +56,27 @@ module JiraNot
               'start_offset_mm' => definition.start_offset_mm,
               'width_mm' => definition.width_mm,
               'height_mm' => definition.height_mm,
-              'sill_mm' => definition.sill_mm
+              'sill_mm' => definition.sill_mm,
+              'demolition_cut' => lifecycle_role == 'demolition'
             )
           }
         end
 
         private
+
+        def primitive(type, role, payload, lifecycle_role)
+          value = { 'type' => type, 'role' => role }.merge(payload)
+          value['lifecycle_role'] = lifecycle_role if lifecycle_role
+          value
+        end
+
+        def demolition_cut?(object, request)
+          return false unless request['phase_view'].to_s == 'demolition'
+
+          Array(object.relationships).any? do |relationship|
+            (relationship['role'] || relationship[:role]).to_s == 'modifies_existing_host'
+          end
+        end
 
         def opening_plan_points(definition, wall)
           segment = wall.path_mm.each_cons(2).to_a.fetch(definition.segment_index)
@@ -99,8 +112,10 @@ module JiraNot
           }
         end
 
-        def annotation(role, anchor_mm, text, status: 'confirmed')
-          { 'type' => 'text', 'role' => role, 'anchor_mm' => anchor_mm, 'text' => text.to_s, 'status' => status }
+        def annotation(role, anchor_mm, text, status: 'confirmed', lifecycle_role: nil)
+          value = { 'type' => 'text', 'role' => role, 'anchor_mm' => anchor_mm, 'text' => text.to_s, 'status' => status }
+          value['lifecycle_role'] = lifecycle_role if lifecycle_role
+          value
         end
 
         def format_number(value)

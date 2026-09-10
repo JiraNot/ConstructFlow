@@ -38,7 +38,12 @@ module JiraNot
           role = item['style_role'].to_s
           style.merge!(@role_styles[role]) if @role_styles.key?(role)
 
-          phase_key = lifecycle_style_key(representation)
+          # A representation primitive may describe a phase-specific construction
+          # action without changing the source Smart Object lifecycle. This is used
+          # for partial modifications such as a new Opening that represents a
+          # demolition cut through an Existing host wall in a demolition view.
+          phase_key = item['lifecycle_role'].to_s
+          phase_key = lifecycle_style_key(representation) if phase_key.empty?
           style.merge!(@phase_styles[phase_key]) if @phase_styles.key?(phase_key)
 
           status = item['status'].to_s
