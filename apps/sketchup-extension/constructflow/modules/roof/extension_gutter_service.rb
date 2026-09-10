@@ -7,7 +7,6 @@ module JiraNot
         RELATION_KIND = 'generated_from'
         RELATION_ROLE = 'extension_source'
         SLOT = 'primary_gutter'
-        AUTO_VALUES = [true, 'auto'].freeze
 
         def initialize(repository:, geometry:, validator:, edge_capability:)
           @repository = repository
@@ -21,11 +20,12 @@ module JiraNot
           existing = find_generated(runtime, extension_id)
 
           if explicit_disabled?(request)
-            return no_op('extension gutter is disabled') unless existing
+            return empty_result unless existing
             raise ArgumentError, 'generated extension gutter removal is not supported while connector lifecycle/reconnection is unresolved; keep the gutter or use an explicit roof/network change workflow'
           end
 
-          return no_op('extension gutter not requested') if request.nil? && existing.nil?
+          return empty_result if request.nil? && existing.nil?
+          validate_request!(request) unless request.nil?
 
           current = existing && @repository.read_gutter(existing.entity)
           definition, warnings = definition_for(
@@ -34,7 +34,7 @@ module JiraNot
             roof_object: roof_object,
             roof_definition: roof_definition
           )
-          return no_op(warnings.first || 'extension gutter edge is unresolved') unless definition
+          return empty_result(warnings) unless definition
 
           issues = @validator.validate_gutter(definition, roof_definition: roof_definition)
           errors = issues.select { |issue| (issue[:severity] || issue['severity']).to_s == 'error' }
@@ -70,10 +70,7 @@ module JiraNot
         def definition_for(request:, current:, roof_object:, roof_definition:)
           options = request.is_a?(Hash) ? stringify_keys(request) : {}
           if request.nil? && current
-            return [
-              current.with(roof_object_id: roof_object.id),
-              []
-            ]
+            return [current.with(roof_object_id: roof_object.id), []]
           end
 
           edge_index = if options.key?('edge_index')
@@ -101,8 +98,9 @@ module JiraNot
         end
 
         def auto_low_edge_index(roof_definition)
-          edges = roof_definition.sloped_points_mm.each_with_index.map do |point, index|
-            finish = roof_definition.sloped_points_mm[(index + 1) % roof_definition.sloped_points_mm.length]
+          points = roof_definition.sloped_points_mm
+          edges = points.each_with_index.map do |point, index|
+            finish = points[(index + 1) % points.length]
             [index, (Float(point[2]) + Float(finish[2])) / 2.0]
           end
           return nil if edges.empty?
@@ -204,9 +202,7 @@ module JiraNot
 
         def sync_outlet(runtime, object, definition, roof_object)
           connector_id = definition.outlet_connector_id.to_s
-          if connector_id.empty?
-            return register_outlet(runtime, object, definition, roof_object)
-          end
+          return register_outlet(runtime, object, definition, roof_object) if connector_id.empty?
 
           position = @edge_capability.point_on_edge_mm(roof_object, definition.edge_index, definition.outlet_ratio)
           runtime.connectors.update_connector(
@@ -225,9 +221,9 @@ module JiraNot
               (relationship['role'] || relationship[:role]).to_s == 'roof_edge'
           end
           current = host_relations.find do |relationship|
+            metadata = relationship['metadata'] || relationship[:metadata] || {}
             (relationship['target_id'] || relationship[:target_id]).to_s == roof_object.id.to_s &&
-              (((relationship['metadata'] || relationship[:metadata]) || {})['edge_index'] ||
-                ((relationship['metadata'] || relationship[:metadata]) || {})[:edge_index]).to_i == edge_index.to_i
+              (metadata['edge_index'] || metadata[:edge_index]).to_i == edge_index.to_i
           end
           return if current
 
@@ -262,18 +258,26 @@ module JiraNot
           end
         end
 
+        def validate_request!(request)
+          return if request == true || request.to_s == 'auto' || request.is_a?(Hash)
+
+          raise ArgumentError, 'roof gutter intent must be true, auto, a configuration object, or an explicit disabled value'
+        end
+
         def explicit_profile?(request)
           request.is_a?(Hash) && (request.key?('profile_id') || request.key?(:profile_id))
         end
 
         def explicit_disabled?(request)
-          request == false || %w[none disabled off].include?(request.to_s)
+          return true if request == false || %w[none disabled off].include?(request.to_s)
+          request.is_a?(Hash) && (request.key?('enabled') || request.key?(:enabled)) &&
+            (request['enabled'] == false || request[:enabled] == false)
         end
 
-        def no_op(message)
+        def empty_result(warnings = [])
           {
             created_object_ids: [], updated_object_ids: [], removed_object_ids: [],
-            warnings: [message], events: []
+            warnings: Array(warnings), events: []
           }
         end
 
