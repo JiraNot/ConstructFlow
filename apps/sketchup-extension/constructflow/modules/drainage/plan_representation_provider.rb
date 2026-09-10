@@ -27,45 +27,50 @@ module JiraNot
 
           nodes = definition.route_nodes_mm
           midpoint = path_midpoint(nodes)
-          annotations = [
-            annotation('pipe_size', midpoint, "Ø#{format_number(definition.diameter_mm)}"),
-            annotation('pipe_system', midpoint, system_label(definition.system))
+          profile = representation_profile(request)
+          primitives = [
+            {
+              'type' => 'polyline',
+              'role' => 'pipe_centerline',
+              'points_mm' => nodes,
+              'system' => definition.system,
+              'diameter_mm' => definition.diameter_mm,
+              'style_role' => pipe_style_role(profile, definition.system)
+            }
           ]
+          primitives << {
+            'type' => 'flow_arrow',
+            'role' => 'flow_direction',
+            'from_mm' => nodes[-2],
+            'to_mm' => nodes[-1]
+          } if profile != 'simple'
 
-          if definition.slope_percent
-            annotations << annotation(
-              'slope', midpoint,
-              "S=#{format_number(definition.slope_percent, 2)}%"
-            )
-          else
-            annotations << annotation('slope_unknown', midpoint, 'S=?', status: 'verify')
+          annotations = [annotation('pipe_size', midpoint, "Ø#{format_number(definition.diameter_mm)}")]
+          annotations << annotation('pipe_system', midpoint, system_label(definition.system)) if profile != 'simple'
+
+          if profile != 'simple'
+            if definition.slope_percent
+              annotations << annotation('slope', midpoint, "S=#{format_number(definition.slope_percent, 2)}%")
+            else
+              annotations << annotation('slope_unknown', midpoint, 'S=?', status: 'verify')
+            end
           end
 
-          if definition.start_invert_mm
-            annotations << annotation('invert_start', nodes.first, "IL #{format_number(definition.start_invert_mm)}")
+          if profile == 'construction' || profile == 'coordination'
+            annotations << annotation('invert_start', nodes.first, "IL #{format_number(definition.start_invert_mm)}") if definition.start_invert_mm
+            annotations << annotation('invert_end', nodes.last, "IL #{format_number(definition.end_invert_mm)}") if definition.end_invert_mm
           end
-          if definition.end_invert_mm
-            annotations << annotation('invert_end', nodes.last, "IL #{format_number(definition.end_invert_mm)}")
+
+          if profile == 'coordination'
+            annotations << annotation('route_strategy', midpoint, "ROUTE #{definition.route_strategy.to_s.upcase}")
+            annotations << annotation('connection_id', midpoint, "NET #{definition.connection_id}") if definition.connection_id
           end
 
           {
-            primitives: [
-              {
-                'type' => 'polyline',
-                'role' => 'pipe_centerline',
-                'points_mm' => nodes,
-                'system' => definition.system,
-                'diameter_mm' => definition.diameter_mm
-              },
-              {
-                'type' => 'flow_arrow',
-                'role' => 'flow_direction',
-                'from_mm' => nodes[-2],
-                'to_mm' => nodes[-1]
-              }
-            ],
+            primitives: primitives,
             annotations: annotations,
             metadata: common_metadata(request).merge(
+              'representation_profile' => profile,
               'system' => definition.system,
               'route_strategy' => definition.route_strategy,
               'length_mm' => definition.length_mm,
@@ -78,6 +83,7 @@ module JiraNot
           definition = @repository.read_manhole(object.entity)
           raise ArgumentError, "missing manhole definition for #{object.id}" unless definition
 
+          profile = representation_profile(request)
           x, y, z = definition.location_mm
           width, length = definition.size_mm
           corners = [
@@ -87,33 +93,54 @@ module JiraNot
             [x - (width / 2.0), y + (length / 2.0), z]
           ]
 
+          primitives = [
+            {
+              'type' => 'closed_polyline',
+              'role' => 'manhole_outline',
+              'points_mm' => corners + [corners.first],
+              'style_role' => 'drainage_node'
+            },
+            {
+              'type' => 'symbol',
+              'role' => 'manhole_symbol',
+              'symbol' => 'MH',
+              'position_mm' => definition.location_mm
+            }
+          ]
           annotations = [annotation('object_tag', definition.location_mm, 'MH')]
-          annotations << annotation('cover_level', definition.location_mm, "CL #{format_number(definition.cover_level_mm)}") if definition.cover_level_mm
-          annotations << annotation('invert_in', definition.location_mm, "IL-IN #{format_number(definition.invert_in_mm)}") if definition.invert_in_mm
-          annotations << annotation('invert_out', definition.location_mm, "IL-OUT #{format_number(definition.invert_out_mm)}") if definition.invert_out_mm
-          annotations << annotation('depth', definition.location_mm, "D #{format_number(definition.depth_mm)}") if definition.depth_mm
+
+          if profile == 'construction' || profile == 'coordination'
+            annotations << annotation('cover_level', definition.location_mm, "CL #{format_number(definition.cover_level_mm)}") if definition.cover_level_mm
+            annotations << annotation('invert_in', definition.location_mm, "IL-IN #{format_number(definition.invert_in_mm)}") if definition.invert_in_mm
+            annotations << annotation('invert_out', definition.location_mm, "IL-OUT #{format_number(definition.invert_out_mm)}") if definition.invert_out_mm
+            annotations << annotation('depth', definition.location_mm, "D #{format_number(definition.depth_mm)}") if definition.depth_mm
+          end
+          if profile == 'coordination'
+            annotations << annotation('manhole_type', definition.location_mm, definition.manhole_type.to_s.upcase)
+          end
 
           {
-            primitives: [
-              {
-                'type' => 'closed_polyline',
-                'role' => 'manhole_outline',
-                'points_mm' => corners + [corners.first]
-              },
-              {
-                'type' => 'symbol',
-                'role' => 'manhole_symbol',
-                'symbol' => 'MH',
-                'position_mm' => definition.location_mm
-              }
-            ],
+            primitives: primitives,
             annotations: annotations,
             metadata: common_metadata(request).merge(
+              'representation_profile' => profile,
               'manhole_type' => definition.manhole_type,
               'size_mm' => definition.size_mm,
               'levels_known' => !definition.cover_level_mm.nil?
             )
           }
+        end
+
+        def representation_profile(request)
+          lod = request['lod'].to_s
+          style = request.dig('context', 'style_preset').to_s
+          return 'simple' if lod == 'simple' || style.end_with?('.simple')
+          return 'coordination' if lod == 'coordination' || style.end_with?('.coordination')
+          'construction'
+        end
+
+        def pipe_style_role(profile, system)
+          [profile, system.to_s].join('_')
         end
 
         def annotation(role, anchor_mm, text, status: 'confirmed')
@@ -132,6 +159,7 @@ module JiraNot
             'scale' => request['scale'],
             'phase_view' => request['phase_view'],
             'lod' => request['lod'],
+            'style_preset' => request.dig('context', 'style_preset'),
             'drawing_family' => 'plumbing_drainage_plan'
           }
         end
@@ -142,19 +170,11 @@ module JiraNot
 
           a = nodes[(nodes.length - 1) / 2]
           b = nodes[nodes.length / 2]
-          [
-            (a[0] + b[0]) / 2.0,
-            (a[1] + b[1]) / 2.0,
-            (a[2] + b[2]) / 2.0
-          ]
+          [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0, (a[2] + b[2]) / 2.0]
         end
 
         def system_label(system)
-          {
-            'waste' => 'WASTE',
-            'soil' => 'SOIL',
-            'rainwater' => 'RW'
-          }.fetch(system.to_s, system.to_s.upcase)
+          { 'waste' => 'WASTE', 'soil' => 'SOIL', 'rainwater' => 'RW' }.fetch(system.to_s, system.to_s.upcase)
         end
 
         def format_number(value, precision = 0)
