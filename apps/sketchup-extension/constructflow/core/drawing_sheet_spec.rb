@@ -37,6 +37,7 @@ module JiraNot
         def normalize_bounds(value)
           values = Array(value).map { |item| Float(item) }
           raise ArgumentError, 'bounds_mm must be [x, y, width, height]' unless values.length == 4
+          raise ArgumentError, 'viewport x/y must be non-negative' if values[0].negative? || values[1].negative?
           raise ArgumentError, 'viewport width/height must be positive' unless values[2].positive? && values[3].positive?
           values
         end
@@ -75,6 +76,7 @@ module JiraNot
           raise ArgumentError, "unsupported paper size: #{@paper_size}" unless PAPER_SIZES_MM.key?(@paper_size)
           raise ArgumentError, "unsupported orientation: #{@orientation}" unless ORIENTATIONS.include?(@orientation)
           raise ArgumentError, 'viewports must be DrawingViewportSpec values' unless @viewports.all? { |item| item.is_a?(DrawingViewportSpec) }
+          validate_viewport_fit!
           freeze
         end
 
@@ -99,6 +101,15 @@ module JiraNot
         end
 
         private
+
+        def validate_viewport_fit!
+          page_width, page_height = page_size_mm
+          viewports.each do |viewport|
+            x, y, width, height = viewport.bounds_mm
+            next if (x + width) <= page_width && (y + height) <= page_height
+            raise ArgumentError, "viewport exceeds #{paper_size} #{orientation} page bounds: #{viewport.id}"
+          end
+        end
 
         def required(value, label)
           text = value.to_s
