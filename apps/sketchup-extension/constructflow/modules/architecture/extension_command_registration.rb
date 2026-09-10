@@ -49,6 +49,7 @@ module JiraNot
           wall_type_id = (fetch(config, :wall_type_id) || default_wall_type(thickness_mm)).to_s
           orientation = (fetch(config, :orientation) || 'center').to_s
           source_state = generated_source_state(config)
+          current_level_refs = level_refs(base_level_id, base_offset_mm)
 
           created_ids = []
           updated_ids = []
@@ -75,6 +76,7 @@ module JiraNot
               openings = repository.host_openings(existing.entity)
               geometry.rebuild!(existing.entity, definition, openings: openings)
               repository.write(existing.entity, definition)
+              runtime.smart_objects.update_level_refs(existing.entity, current_level_refs)
               runtime.smart_objects.mark_dirty(existing.entity, 'dirty_quantity', 'dirty_drawing')
               updated_ids << existing.id
               events << {
@@ -93,7 +95,7 @@ module JiraNot
                 owner_module: 'constructflow.architecture',
                 display_name: "Extension Wall #{index + 1}",
                 created_phase: Core::Phase::NEW_CONSTRUCTION,
-                level_refs: level_refs(base_level_id, base_offset_mm),
+                level_refs: current_level_refs,
                 source_state: source_state
               )
               repository.write(group, definition)
