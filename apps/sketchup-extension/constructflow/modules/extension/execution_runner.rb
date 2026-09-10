@@ -53,7 +53,8 @@ module JiraNot
               'extension_id' => plan['extension_id'],
               'program' => plan['program'],
               'mode' => plan['mode'],
-              'intent_action' => step['action']
+              'intent_action' => step['action'],
+              'intent' => step['intent'] || {}
             },
             actor: actor,
             project_id: project_id
