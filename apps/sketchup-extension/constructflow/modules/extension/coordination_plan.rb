@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative 'generator'
+require_relative 'orchestrator'
+
 module JiraNot
   module ConstructFlow
     module Extension
