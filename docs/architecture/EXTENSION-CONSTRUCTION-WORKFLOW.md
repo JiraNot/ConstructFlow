@@ -13,27 +13,42 @@ The workflow turns one Extension Smart Object into a coordinated, reviewable con
 The v1 pipeline is:
 
 1. Resolve the source `extension.zone` and its persisted `ExtensionDefinition`.
-2. Build the dependency-safe Extension orchestration plan.
-3. Execute enabled domain bridges through public CommandBus commands.
-4. Aggregate domain-owned quantities for the source Extension and objects generated from it.
-5. Run the construction quality gate.
-6. Build the construction drawing issue set from active domain families.
-7. Refresh the required SketchUp plan scenes using Extension-scoped object IDs.
-8. Audit package currentness against the current Smart Object graph.
-9. Build renderer-neutral sheet plans.
-10. Optionally export a native LayOut document and PDF only when both construction QA and package currentness permit publication.
+2. Resolve model-local Extension Construction Intent and merge any explicit per-run domain overrides.
+3. Build the dependency-safe Extension orchestration plan from Generator defaults plus the effective domain overrides.
+4. Execute enabled domain bridges through public CommandBus commands.
+5. Aggregate domain-owned quantities for the source Extension and objects generated from it.
+6. Run the construction quality gate.
+7. Build the construction drawing issue set from active domain families.
+8. Refresh the required SketchUp plan scenes using Extension-scoped object IDs.
+9. Audit package currentness against the current Smart Object graph.
+10. Build renderer-neutral sheet plans.
+11. Optionally export a native LayOut document and PDF only when both construction QA and package currentness permit publication.
 
 Dry-run stops after orchestration preview and must not generate domain geometry, quantities, drawing scenes, LayOut files or PDFs.
 
 ## Ownership invariants
 
-- Extension owns orchestration only.
+- Extension owns orchestration and its own persisted construction-generation intent only.
 - Structure, Surface, Roof, Drainage, Interior and Electrical retain ownership of their Smart Objects and geometry.
 - Domain generation occurs only through public commands such as `GenerateOrUpdate<Domain>FromExtension`.
 - Quantity values are produced by the owning domain quantity provider; the workflow only aggregates them.
 - Drawing semantics are produced by domain Representation Providers; the workflow only selects presets, scopes objects and composes sheets.
 - LayOut/PDF export remains owned by the Drawing/LayOut platform.
 - AI callers use the same public command boundary as human/automation callers.
+
+## Construction intent resolution
+
+Durable project choices are stored separately from the base `ExtensionDefinition` under the Extension Construction Intent contract. This is especially important for explicit Drainage connector endpoints, which must survive later boundary/roof changes rather than being remembered only by a one-off workflow invocation.
+
+Effective domain configuration resolves with the following precedence:
+
+`Generator defaults < persisted Extension Construction Intent < per-run workflow overrides`
+
+The workflow result includes a `construction_intent` trace containing persisted domain overrides, ephemeral run overrides and the resulting effective domain overrides. This trace explains generation inputs without duplicating domain Smart Object definitions.
+
+Per-run overrides do not mutate persisted intent. Persistence changes only through the explicit Extension construction-intent command boundary.
+
+Missing construction-intent storage is valid for legacy projects and behaves as an empty persisted override set.
 
 ## Source relationship and scope
 
@@ -92,6 +107,8 @@ Required principles:
 
 `preliminary` structure is useful for coordination but is not engineer-approved construction information.
 
+Persisting an intent never upgrades confidence or engineering status. A persisted preliminary assumption remains preliminary and subject to the same QA gate.
+
 ## Drawing package
 
 The v1 construction set uses available `*.construction` view presets for active families:
@@ -132,9 +149,11 @@ The scope fingerprint is traceability evidence, not a replacement for object IDs
 
 The required non-dry propagation proof is:
 
-`Extension source change → domain regeneration/reconciliation → current Smart Object graph → current takeoff → current drawing scope → currentness audit → issue/export gate`
+`Extension source/intent change → effective construction intent → domain regeneration/reconciliation → current Smart Object graph → current takeoff → current drawing scope → currentness audit → issue/export gate`
 
 For structural topology shrink, obsolete generated foundations and columns are removed before package assembly. Their IDs must be absent from the rebuilt takeoff coverage/items and from the refreshed Structure drawing scope. Reusing pre-change takeoff or drawing references after the source change must make the currentness audit fail.
+
+For persisted Drainage configuration, a later source geometry change must continue to supply the same explicitly selected connector IDs unless an explicit reconnect/disable command changes that intent.
 
 ## Publication states
 
@@ -154,7 +173,7 @@ The workflow must never report `exported` when either the QA gate or currentness
 
 The command itself does not open one giant SketchUp transaction. Domain commands retain their own CommandBus transaction boundaries; scene refresh and native export retain their own platform-specific boundaries.
 
-A `ConstructionWorkflowCompleted` event reports the resulting package state, including currentness evidence.
+A `ConstructionWorkflowCompleted` event reports the resulting package state, including currentness and construction-intent traceability evidence.
 
 ## Acceptance criteria
 
@@ -172,3 +191,5 @@ A `ConstructionWorkflowCompleted` event reports the resulting package state, inc
 - AC-CWF-012: a non-dry Extension topology change removes stale generated IDs from the current Smart Object graph, rebuilt takeoff and rebuilt drawing scope.
 - AC-CWF-013: pre-change takeoff/drawing references fail the package currentness audit after source reconciliation.
 - AC-CWF-014: native issue/export publication requires both construction QA and package currentness to be publishable; export cannot bypass a missing current drawing refresh.
+- AC-CWF-015: persisted Extension Construction Intent is merged into every workflow plan before domain orchestration, with per-run overrides taking precedence only for that invocation.
+- AC-CWF-016: a workflow rerun with no Drainage override reuses persisted explicit connector endpoints rather than reverting to missing endpoint intent.
