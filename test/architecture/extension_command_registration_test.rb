@@ -3,6 +3,7 @@
 require 'minitest/autorun'
 require_relative '../../apps/sketchup-extension/constructflow/core/phase'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/wall_definition'
+require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/attachment_edge_resolver'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/extension_command_registration'
 
 class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
@@ -33,6 +34,16 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
       objects
     end
 
+    def fetch_by_id(id)
+      objects.find { |object| object.id.to_s == id.to_s }
+    end
+
+    def seed(object)
+      objects << object
+      @by_entity[object.entity] = object
+      object
+    end
+
     def create(entity:, type:, owner_module:, source_state:, level_refs: [], **_options)
       object = ArchitectureExtensionObject.new(
         id: "wall-#{@next_id}",
@@ -44,9 +55,7 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
         level_refs: Array(level_refs)
       )
       @next_id += 1
-      objects << object
-      @by_entity[entity] = object
-      object
+      seed(object)
     end
 
     def add_relationship(entity, kind:, target_id:, role:, metadata: {})
@@ -146,13 +155,14 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
     points
   end
 
-  def intent(boundary: rectangle, config: {}, base_level_id: nil, base_offset_mm: 0)
+  def intent(boundary: rectangle, config: {}, base_level_id: nil, base_offset_mm: 0, attachment_host_id: nil)
     {
       'extension_id' => 'ext-1',
       'boundary_mm' => boundary,
       'base_level_id' => base_level_id,
       'base_offset_mm' => base_offset_mm,
       'target_height_mm' => 3000,
+      'attachment_host_id' => attachment_host_id,
       'config' => config
     }
   end
@@ -165,6 +175,36 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
       geometry: geometry,
       validator: ArchitectureExtensionValidator.new
     )
+  end
+
+  def add_host_wall(smart_objects:, repository:, id: 'host-wall', path: [[0, 0, 0], [6000, 0, 0]])
+    entity = ArchitectureExtensionEntity.new("#{id}-entity")
+    object = ArchitectureExtensionObject.new(
+      id: id,
+      type: 'architecture.wall',
+      owner_module: 'constructflow.architecture',
+      entity: entity,
+      relationships: [],
+      source_state: 'measured',
+      level_refs: []
+    )
+    smart_objects.seed(object)
+    repository.write(entity, JiraNot::ConstructFlow::Architecture::WallDefinition.new(path_mm: path))
+    object
+  end
+
+  def generated_walls(smart_objects)
+    smart_objects.objects.select do |object|
+      object.relationships.any? do |relationship|
+        relationship['kind'] == 'generated_from' && relationship['target_id'] == 'ext-1'
+      end
+    end
+  end
+
+  def generated_slots(smart_objects)
+    generated_walls(smart_objects).map do |object|
+      object.relationships.find { |relationship| relationship['kind'] == 'generated_from' }.dig('metadata', 'slot')
+    end.sort
   end
 
   def test_first_generation_creates_one_wall_per_boundary_edge
@@ -184,6 +224,53 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
     assert smart_objects.objects.all? { |object| object.owner_module == 'constructflow.architecture' }
     assert smart_objects.objects.all? { |object| object.source_state == 'assumed' }
     assert_equal 1, result[:warnings].length
+  end
+
+  def test_attachment_host_suppresses_matching_extension_edge
+    smart_objects = ArchitectureExtensionSmartObjects.new
+    geometry = ArchitectureExtensionGeometry.new
+    repository = ArchitectureExtensionRepository.new
+    host = add_host_wall(smart_objects: smart_objects, repository: repository)
+    runtime = ArchitectureExtensionRuntime.new(smart_objects, Object.new, nil)
+
+    result = generate(
+      runtime: runtime,
+      geometry: geometry,
+      repository: repository,
+      intent_value: intent(attachment_host_id: host.id)
+    )
+
+    assert_equal 3, result[:created_object_ids].length
+    assert_equal 3, generated_walls(smart_objects).length
+    assert_equal %w[wall_edge_1 wall_edge_2 wall_edge_3], generated_slots(smart_objects)
+    assert_equal 0, result.dig(:attachment, 'edge_index')
+    assert_equal 'geometry_match', result.dig(:attachment, 'resolution')
+    refute host.entity.erased
+  end
+
+  def test_adding_attachment_reconciles_previously_generated_overlap_wall
+    smart_objects = ArchitectureExtensionSmartObjects.new
+    geometry = ArchitectureExtensionGeometry.new
+    repository = ArchitectureExtensionRepository.new
+    runtime = ArchitectureExtensionRuntime.new(smart_objects, Object.new, nil)
+
+    generate(runtime: runtime, geometry: geometry, repository: repository, intent_value: intent)
+    prior_overlap = generated_walls(smart_objects).find do |object|
+      object.relationships.any? { |relationship| relationship.dig('metadata', 'slot') == 'wall_edge_0' }
+    end
+    host = add_host_wall(smart_objects: smart_objects, repository: repository)
+
+    result = generate(
+      runtime: runtime,
+      geometry: geometry,
+      repository: repository,
+      intent_value: intent(attachment_host_id: host.id)
+    )
+
+    assert_includes result[:removed_object_ids], prior_overlap.id
+    assert prior_overlap.entity.erased
+    assert_equal %w[wall_edge_1 wall_edge_2 wall_edge_3], generated_slots(smart_objects)
+    assert_equal 3, result[:updated_object_ids].length
   end
 
   def test_regeneration_preserves_identity_hosted_openings_and_updates_level_refs

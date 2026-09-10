@@ -17,6 +17,7 @@ module JiraNot
           repository = WallRepository.new
           geometry = WallGeometry.new
           validator = Validators::WallValidator.new
+          attachment_resolver = AttachmentEdgeResolver.new(repository: repository)
           runtime.commands.register(
             COMMAND,
             owner_module: 'constructflow.architecture',
@@ -27,12 +28,13 @@ module JiraNot
               input: command[:input],
               repository: repository,
               geometry: geometry,
-              validator: validator
+              validator: validator,
+              attachment_resolver: attachment_resolver
             )
           end
         end
 
-        def generate_or_update(runtime:, input:, repository:, geometry:, validator:)
+        def generate_or_update(runtime:, input:, repository:, geometry:, validator:, attachment_resolver: nil)
           intent = fetch(input, :intent) || {}
           extension_id = (fetch(input, :extension_id) || fetch(intent, :extension_id)).to_s
           raise ArgumentError, 'extension_id required' if extension_id.empty?
@@ -50,6 +52,15 @@ module JiraNot
           orientation = (fetch(config, :orientation) || 'center').to_s
           source_state = generated_source_state(config)
           current_level_refs = level_refs(base_level_id, base_offset_mm)
+          attachment = resolve_attachment(
+            runtime: runtime,
+            repository: repository,
+            resolver: attachment_resolver,
+            boundary: boundary,
+            extension_id: extension_id,
+            intent: intent,
+            config: config
+          )
 
           created_ids = []
           updated_ids = []
@@ -57,7 +68,17 @@ module JiraNot
           events = []
           desired_slots = []
 
+          if attachment
+            events << {
+              name: 'ExtensionAttachmentEdgeResolved',
+              object_ids: [attachment.host_object_id.to_s],
+              payload: attachment.to_h.merge('extension_id' => extension_id)
+            }
+          end
+
           boundary.each_with_index do |point, index|
+            next if attachment && index == attachment.edge_index
+
             finish = boundary[(index + 1) % boundary.length]
             slot = "#{SLOT_PREFIX}#{index}"
             desired_slots << slot
@@ -129,12 +150,17 @@ module JiraNot
           touched_ids = (created_ids + updated_ids + removed_ids).uniq
           events << { name: 'QuantityDirty', object_ids: touched_ids } unless touched_ids.empty?
           events << { name: 'DrawingDirty', object_ids: touched_ids } unless touched_ids.empty?
+          warnings = []
+          if source_state == 'assumed'
+            warnings << 'generated extension walls use assumed/default construction data; confirm wall type and thickness before final issue'
+          end
           {
             created_object_ids: created_ids.uniq,
             updated_object_ids: updated_ids.uniq,
             removed_object_ids: removed_ids.uniq,
-            warnings: source_state == 'assumed' ? ['generated extension walls use assumed/default construction data; confirm wall type and thickness before final issue'] : [],
-            events: events
+            warnings: warnings,
+            events: events,
+            attachment: attachment&.to_h
           }
         end
 
@@ -164,6 +190,19 @@ module JiraNot
           explicit_type = key?(config, :wall_type_id)
           explicit_thickness = key?(config, :wall_thickness_mm)
           explicit_type && explicit_thickness ? 'confirmed' : 'assumed'
+        end
+
+        def resolve_attachment(runtime:, repository:, resolver:, boundary:, extension_id:, intent:, config:)
+          host_id = fetch(intent, :attachment_host_id)
+          return nil if host_id.to_s.strip.empty?
+
+          (resolver || AttachmentEdgeResolver.new(repository: repository)).resolve(
+            runtime: runtime,
+            boundary_mm: boundary,
+            attachment_host_id: host_id,
+            explicit_edge_index: fetch(config, :attachment_edge_index),
+            source_extension_id: extension_id
+          )
         end
 
         def find_generated(runtime, extension_id, slot)
@@ -208,6 +247,10 @@ module JiraNot
           height = Float(fetch(config, :wall_height_mm) || fetch(intent, :target_height_mm) || WallDefinition::DEFAULT_HEIGHT_MM)
           errors << 'wall thickness must be greater than zero' unless thickness.positive?
           errors << 'wall height must be greater than zero' unless height.positive?
+          unless fetch(config, :attachment_edge_index).nil?
+            index = Integer(fetch(config, :attachment_edge_index))
+            errors << 'attachment_edge_index is outside extension boundary' unless index.between?(0, boundary.length - 1)
+          end
           errors
         rescue StandardError => error
           [error.message]
