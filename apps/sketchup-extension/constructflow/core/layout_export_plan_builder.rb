@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'layout_template_placeholder_map'
+
 module JiraNot
   module ConstructFlow
     module Core
@@ -18,7 +20,8 @@ module JiraNot
                              paper_size: 'A3', orientation: 'landscape', template_key: 'constructflow.standard',
                              revision: 'P01', issue_status: 'working', viewport_bounds_mm: DEFAULT_VIEWPORT_BOUNDS_MM,
                              render_mode: 'vector', project_name: '', project_number: '', drawn_by: '', checked_by: '',
-                             revisions: nil)
+                             revisions: nil, placeholder_tokens: nil, template_strategy: 'prefer_template',
+                             revision_placeholder_prefix: 'CF:REV')
           preset = @runtime.drawing_view_presets.fetch!(preset_id)
           viewport = DrawingViewportSpec.new(
             id: "viewport.#{preset.id}",
@@ -42,6 +45,13 @@ module JiraNot
             viewports: [viewport]
           )
 
+          placeholder_map = LayoutTemplatePlaceholderMap.new(
+            template_key: template_key,
+            field_tokens: placeholder_tokens || LayoutTemplatePlaceholderMap::DEFAULT_FIELD_TOKENS,
+            revision_prefix: revision_placeholder_prefix,
+            strategy: template_strategy
+          )
+
           title_block = TitleBlockSpec.new(
             template_key: template_key,
             bounds_mm: title_block_bounds(sheet.page_size_mm),
@@ -56,7 +66,8 @@ module JiraNot
               'drawn_by' => drawn_by,
               'checked_by' => checked_by,
               'drawing_family' => preset.drawing_family
-            }
+            },
+            placeholder_map: placeholder_map
           )
 
           revision_rows = normalize_revisions(revisions, revision: sheet.revision, issue_status: sheet.issue_status)
