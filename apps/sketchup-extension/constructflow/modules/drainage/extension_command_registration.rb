@@ -35,14 +35,32 @@ module JiraNot
           extension_id = extension_id_from(input, intent)
           raise ArgumentError, 'extension_id required' if extension_id.empty?
           config = fetch(intent, :config) || {}
+          existing = find_generated(runtime, extension_id)
+
+          if explicitly_disabled?(config)
+            return remove_generated_route(
+              runtime: runtime,
+              object: existing,
+              repository: repository,
+              extension_id: extension_id
+            )
+          end
+
           start_id = fetch(config, :start_connector_id).to_s
           end_id = fetch(config, :end_connector_id).to_s
 
           if start_id.empty? || end_id.empty?
             return {
-              created_object_ids: [], updated_object_ids: [],
+              created_object_ids: [], updated_object_ids: [], removed_object_ids: [],
               warnings: ['drainage extension intent requires explicit start/end connectors; no drainage route was invented'],
-              events: [{ name: 'DrainageExtensionIntentReviewed', payload: { extension_id: extension_id, generated: false, reason: 'connectors_required' } }]
+              events: [{
+                name: 'DrainageExtensionIntentReviewed',
+                payload: {
+                  extension_id: extension_id,
+                  generated: false,
+                  reason: existing ? 'connectors_omitted_existing_route_preserved' : 'connectors_required'
+                }
+              }]
             }
           end
 
@@ -58,7 +76,6 @@ module JiraNot
             minimum_slope_percent: fetch(config, :minimum_slope_percent) || Validators::DrainageValidator::MIN_SLOPE_PERCENT,
             orthogonal_preference: fetch(config, :orthogonal_preference) || 'x_first'
           )
-          existing = find_generated(runtime, extension_id)
           if existing
             return update_existing(
               runtime: runtime, object: existing, repository: repository, geometry: geometry,
@@ -95,6 +112,8 @@ module JiraNot
           raise ArgumentError, errors.map { |issue| issue[:message] }.join('; ') unless errors.empty?
           {
             created_object_ids: [object.id],
+            updated_object_ids: [],
+            removed_object_ids: [],
             warnings: (plan.warnings + warning_messages(issues)).uniq,
             events: [
               { name: 'ObjectCreated', object_ids: [object.id], payload: { type: 'drainage.pipe_route', source: extension_id, slot: SLOT } },
@@ -111,14 +130,18 @@ module JiraNot
         def update_existing(runtime:, object:, repository:, geometry:, validator:, plan:, start_id:, end_id:, config:, extension_id:)
           current = repository.read_pipe_route(object.entity)
           raise ArgumentError, 'generated drainage route definition missing' unless current
-          if current.start_connector_id != start_id || current.end_connector_id != end_id
-            raise ArgumentError, 'generated drainage route endpoints changed; use an explicit reconnect workflow'
+
+          endpoints_changed = current.start_connector_id != start_id || current.end_connector_id != end_id
+          if endpoints_changed && !explicit_reconnect?(config)
+            raise ArgumentError, 'generated drainage route endpoints changed; set reconnect: true for an explicit reconnect transition'
           end
 
           updated = current.with(
             system: fetch(config, :system) || current.system,
             diameter_mm: fetch(config, :diameter_mm) || current.diameter_mm,
             route_nodes_mm: plan.route_nodes_mm,
+            start_connector_id: start_id,
+            end_connector_id: end_id,
             start_invert_mm: plan.start_invert_mm,
             end_invert_mm: plan.end_invert_mm,
             material: fetch(config, :material) || current.material,
@@ -127,21 +150,151 @@ module JiraNot
           issues = validator.validate_route(updated)
           errors = issues.select { |issue| issue[:severity] == 'error' }
           raise ArgumentError, errors.map { |issue| issue[:message] }.join('; ') unless errors.empty?
+
+          connection_changed = endpoints_changed || current.system != updated.system
+          connection_id = current.connection_id
+          if connection_changed
+            connection_id = rebuild_connection(
+              runtime: runtime,
+              object: object,
+              current: current,
+              updated: updated
+            )
+            updated = updated.with(connection_id: connection_id)
+          end
+
+          replace_endpoint_relationships(runtime, object, current, updated) if endpoints_changed
           geometry.rebuild_pipe!(object.entity, updated)
           repository.write_pipe_route(object.entity, updated)
           runtime.smart_objects.mark_dirty(object.entity, 'dirty_quantity', 'dirty_drawing')
           {
             created_object_ids: [],
             updated_object_ids: [object.id],
+            removed_object_ids: [],
             warnings: (plan.warnings + warning_messages(issues)).uniq,
             events: [
-              { name: 'RouteChanged', object_ids: [object.id], payload: { source: extension_id, route_strategy: updated.route_strategy } },
+              {
+                name: endpoints_changed ? 'DrainageExtensionRouteReconnected' : 'RouteChanged',
+                object_ids: [object.id],
+                payload: {
+                  source: extension_id,
+                  route_strategy: updated.route_strategy,
+                  start_connector_id: updated.start_connector_id,
+                  end_connector_id: updated.end_connector_id,
+                  connection_id: connection_id
+                }
+              },
+              { name: 'DrainageTopologyChanged', object_ids: [object.id], payload: { source: extension_id, connection_id: connection_id } },
               { name: 'GeometryChanged', object_ids: [object.id] },
               { name: 'QuantityDirty', object_ids: [object.id] },
               { name: 'DrawingDirty', object_ids: [object.id] },
               { name: 'ValidationStateChanged', object_ids: [object.id], payload: { issues: issues } }
             ]
           }
+        end
+
+        def remove_generated_route(runtime:, object:, repository:, extension_id:)
+          unless object
+            return {
+              created_object_ids: [], updated_object_ids: [], removed_object_ids: [], warnings: [],
+              events: [{
+                name: 'DrainageExtensionIntentReviewed',
+                payload: { extension_id: extension_id, generated: false, reason: 'explicitly_disabled' }
+              }]
+            }
+          end
+
+          definition = repository.read_pipe_route(object.entity)
+          connection = route_connection(runtime, object, definition)
+          runtime.connectors.disconnect(connection['id']) if connection
+          runtime.smart_objects.erase!(object.entity)
+          {
+            created_object_ids: [], updated_object_ids: [], removed_object_ids: [object.id], warnings: [],
+            events: [
+              {
+                name: 'DrainageExtensionRouteRemoved',
+                object_ids: [object.id],
+                payload: { source: extension_id, reason: 'explicit_intent_disabled', connection_id: connection && connection['id'] }
+              },
+              { name: 'DrainageTopologyChanged', object_ids: [object.id], payload: { source: extension_id, removed: true } },
+              { name: 'GeometryChanged', object_ids: [object.id], payload: { removed: true, reason: 'source_intent_reconciled' } },
+              { name: 'QuantityDirty', object_ids: [object.id] },
+              { name: 'DrawingDirty', object_ids: [object.id] }
+            ]
+          }
+        end
+
+        def rebuild_connection(runtime:, object:, current:, updated:)
+          connection = route_connection(runtime, object, current)
+          raise ArgumentError, 'generated drainage route connection missing; repair the network before reconnecting' unless connection
+
+          metadata = (connection['metadata'] || {}).merge('route_object_id' => object.id)
+          connection_id = connection['id']
+          runtime.connectors.disconnect(connection_id)
+          replacement = runtime.connectors.register_connection(
+            from_connector_id: updated.start_connector_id,
+            to_connector_id: updated.end_connector_id,
+            system: "drainage.#{updated.system}",
+            metadata: metadata,
+            connection_id: connection_id
+          )
+          replacement['id']
+        end
+
+        def route_connection(runtime, object, definition)
+          connection_id = definition&.connection_id.to_s
+          if !connection_id.empty?
+            begin
+              return runtime.connectors.connection(connection_id)
+            rescue KeyError
+              # Fall through to route metadata lookup for recoverable older state.
+            end
+          end
+          runtime.connectors.connection_for_route(object.id)
+        end
+
+        def replace_endpoint_relationships(runtime, object, current, updated)
+          old_owner_ids = [current.start_connector_id, current.end_connector_id].filter_map do |connector_id|
+            connector_owner_id(runtime, connector_id)
+          end.uniq
+          new_owner_ids = [updated.start_connector_id, updated.end_connector_id].filter_map do |connector_id|
+            connector_owner_id(runtime, connector_id)
+          end.uniq
+
+          old_owner_ids.each do |owner_id|
+            runtime.smart_objects.remove_relationship(
+              object.entity,
+              kind: 'connects_to',
+              target_id: owner_id
+            )
+          end
+          new_owner_ids.each do |owner_id|
+            connector_id = [updated.start_connector_id, updated.end_connector_id].find do |candidate|
+              connector_owner_id(runtime, candidate) == owner_id
+            end
+            runtime.smart_objects.add_relationship(
+              object.entity,
+              kind: 'connects_to',
+              target_id: owner_id,
+              role: 'drainage_endpoint',
+              metadata: { connector_id: connector_id }
+            )
+          end
+        end
+
+        def connector_owner_id(runtime, connector_id)
+          runtime.connectors.connector(connector_id)['owner_object_id'].to_s
+        rescue KeyError
+          nil
+        end
+
+        def explicitly_disabled?(config)
+          return false unless key?(config, :enabled)
+          value(config, :enabled) == false
+        end
+
+        def explicit_reconnect?(config)
+          key?(config, :reconnect) && value(config, :reconnect) == true
         end
 
         def find_generated(runtime, extension_id)
@@ -163,6 +316,16 @@ module JiraNot
 
         def warning_messages(issues)
           Array(issues).reject { |issue| issue[:severity] == 'error' }.map { |issue| issue[:message].to_s }.uniq
+        end
+
+        def key?(hash, key)
+          hash.respond_to?(:key?) && (hash.key?(key) || hash.key?(key.to_s))
+        end
+
+        def value(hash, key)
+          return hash[key] if hash.respond_to?(:key?) && hash.key?(key)
+          return hash[key.to_s] if hash.respond_to?(:key?) && hash.key?(key.to_s)
+          nil
         end
 
         def fetch(hash, key)
