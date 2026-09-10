@@ -191,6 +191,31 @@ Existing network can contain Remain/Demolish/Unknown segments. New routes are Ne
 - rainwater drainage plan;
 - schedule/schematic later.
 
+### Smart Object plan representation
+
+Drainage owns its plan representation through the Core Smart Object Representation System. Drawing/LayOut orchestration consumes this semantic output and must not infer pipe meaning from raw SketchUp edges or solids.
+
+`drainage.pipe_route / plan` provides, at minimum:
+
+- route centerline polyline from semantic route nodes;
+- flow direction arrow;
+- pipe system and diameter annotation;
+- slope annotation when invert data is known;
+- explicit `S=? / verify` annotation when invert data is insufficient;
+- start/end invert labels when known;
+- representation metadata containing view/scale/phase/LOD context and route strategy.
+
+`drainage.manhole / plan` provides, at minimum:
+
+- manhole outline from semantic location and size;
+- `MH` plan symbol;
+- semantic object tag;
+- cover level, inlet invert, outlet invert and depth annotations when known.
+
+Plan representation is `on_demand`. It is derived from the same Smart Object definition used by model geometry; it is not a second independently editable drainage object.
+
+Future drawing styles may change line weights, abbreviations, tag numbering and placement without changing the semantic representation contract.
+
 ## QA
 
 - unconnected required waste outlet;
@@ -214,6 +239,7 @@ Existing network can contain Remain/Demolish/Unknown segments. New routes are Ne
 - AC-DRN-007: Insert Intermediate Manhole splits network while preserving topology.
 - AC-DRN-008: moving drainage node dirties Surface/Quantity/Drawing through events rather than private mutations.
 - AC-DRN-009: structure clash can be reported using public coordination contracts.
+- AC-DRN-010: one pipe/manhole Smart Object can produce a semantic plan representation with symbols/annotations without duplicating construction identity; unknown invert is visibly marked for verification.
 
 ## Deferred
 
