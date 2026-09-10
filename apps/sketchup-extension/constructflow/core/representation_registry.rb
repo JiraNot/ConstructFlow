@@ -8,12 +8,7 @@ module JiraNot
         POLICIES = %w[persistent on_demand].freeze
 
         ProviderEntry = Struct.new(
-          :object_type,
-          :kind,
-          :owner_module,
-          :policy,
-          :provider,
-          :metadata,
+          :object_type, :kind, :owner_module, :policy, :provider, :metadata,
           keyword_init: true
         )
 
@@ -128,6 +123,7 @@ module JiraNot
             'kind' => entry.kind,
             'owner_module' => entry.owner_module,
             'policy' => entry.policy,
+            'source_lifecycle' => lifecycle_payload(object).freeze,
             'geometry_refs' => Array(value['geometry_refs']).freeze,
             'primitives' => Array(value['primitives']).freeze,
             'annotations' => Array(value['annotations']).freeze,
@@ -135,11 +131,23 @@ module JiraNot
           }.freeze
         end
 
-        def stringify_keys(value)
-          return value unless value.is_a?(Hash)
+        def lifecycle_payload(object)
+          {
+            'created_phase' => (object.respond_to?(:created_phase) ? object.created_phase : nil)&.to_s,
+            'removed_phase' => (object.respond_to?(:removed_phase) ? object.removed_phase : nil)&.to_s,
+            'status' => (object.respond_to?(:status) ? object.status : nil)&.to_s,
+            'source_state' => (object.respond_to?(:source_state) ? object.source_state : nil)&.to_s
+          }
+        end
 
-          value.each_with_object({}) do |(key, item), result|
-            result[key.to_s] = item.is_a?(Hash) ? stringify_keys(item) : item
+        def stringify_keys(value)
+          case value
+          when Hash
+            value.each_with_object({}) { |(key, item), result| result[key.to_s] = stringify_keys(item) }
+          when Array
+            value.map { |item| stringify_keys(item) }
+          else
+            value
           end
         end
       end
