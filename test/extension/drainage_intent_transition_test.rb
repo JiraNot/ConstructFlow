@@ -3,6 +3,9 @@
 require_relative '../test_helper'
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/drainage/route_planner')
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/drainage/extension_command_registration')
+require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/extension/generator')
+require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/extension/orchestrator')
+require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/extension/construction_quality_gate')
 
 DrainageTransitionObject = Struct.new(:id, :type, :owner_module, :entity, :relationships, keyword_init: true)
 DrainageTransitionPlan = Struct.new(:route_nodes_mm, :start_invert_mm, :end_invert_mm, :mode, :warnings, keyword_init: true)
@@ -131,6 +134,24 @@ class DrainageTransitionPlanner
 end
 
 DrainageTransitionRuntime = Struct.new(:smart_objects, :connectors)
+DrainageQualityObject = Struct.new(
+  :id, :type, :owner_module, :entity, :relationships, :source_state,
+  keyword_init: true
+)
+
+class DrainageQualitySmartObjects
+  def initialize(objects)
+    @objects = objects
+  end
+
+  def all
+    @objects.dup
+  end
+
+  def fetch_by_id(id)
+    @objects.find { |object| object.id.to_s == id.to_s }
+  end
+end
 
 class DrainageIntentTransitionTest < Minitest::Test
   def setup
@@ -267,5 +288,61 @@ class DrainageIntentTransitionTest < Minitest::Test
                                   .map { |relationship| relationship['target_id'] }.sort
     assert_equal %w[fixture-old mh-new], targets
     assert_equal 'DrainageExtensionRouteReconnected', result[:events].first[:name]
+  end
+
+  def test_orchestrator_executes_explicit_disabled_drainage_as_reconciliation_step
+    definition = JiraNot::ConstructFlow::Extension::ExtensionDefinition.new(
+      boundary_mm: [[0, 0, 0], [4000, 0, 0], [4000, 3000, 0], [0, 3000, 0]],
+      program: 'carport',
+      mode: 'construction'
+    )
+    plan = JiraNot::ConstructFlow::Extension::Orchestrator.new(
+      JiraNot::ConstructFlow::Extension::Generator.new(definition)
+    ).plan(
+      'extension_id' => 'ext-1',
+      'domains' => {
+        'structure' => { 'enabled' => false },
+        'surface' => { 'enabled' => false },
+        'roof' => { 'enabled' => false },
+        'drainage' => { 'enabled' => false },
+        'interior' => { 'enabled' => false },
+        'electrical' => { 'enabled' => false }
+      }
+    )
+
+    assert_equal ['drainage'], plan['steps'].map { |step| step['domain'] }
+    assert_equal 'reconcile_disabled_intent', plan['steps'].first['action']
+    assert_equal false, plan['steps'].first.dig('intent', 'config', 'enabled')
+  end
+
+  def test_quality_gate_does_not_report_disabled_drainage_as_unresolved
+    source = DrainageQualityObject.new(
+      id: 'ext-1',
+      type: 'extension.zone',
+      owner_module: 'constructflow.extension',
+      entity: DrainageTransitionEntity.new,
+      relationships: [],
+      source_state: 'confirmed'
+    )
+    runtime = Struct.new(:smart_objects).new(DrainageQualitySmartObjects.new([source]))
+    execution = {
+      'status' => 'success',
+      'dirty_domains' => [],
+      'steps' => [{
+        'domain' => 'drainage',
+        'status' => 'success',
+        'errors' => [],
+        'warnings' => [],
+        'intent' => { 'config' => { 'enabled' => false } }
+      }]
+    }
+
+    result = JiraNot::ConstructFlow::Extension::ConstructionQualityGate.new(runtime: runtime).run(
+      extension_id: 'ext-1',
+      execution: execution,
+      strict: true
+    )
+
+    refute result['issues'].any? { |issue| issue['rule_id'] == 'construction.drainage.unresolved_intent' }
   end
 end
