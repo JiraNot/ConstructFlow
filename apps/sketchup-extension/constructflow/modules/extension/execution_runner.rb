@@ -17,7 +17,7 @@ module JiraNot
           results = steps.map do |step|
             domain = step.fetch('domain').to_s
             dependencies = Array(step['dependencies']).map(&:to_s)
-            blocked = dependencies.any? { |dependency| states[dependency] != 'success' }
+            blocked = !dry_run && dependencies.any? { |dependency| states[dependency] != 'success' }
 
             result = if blocked
                        step_result(step, 'skipped', errors: ['dependency_failed'])
@@ -36,7 +36,7 @@ module JiraNot
             'status' => overall_status(results, dry_run: dry_run),
             'dry_run' => !!dry_run,
             'steps' => results.freeze,
-            'dirty_domains' => dirty_domains(results).freeze
+            'dirty_domains' => (dry_run ? [] : dirty_domains(results)).freeze
           }.freeze
         end
 
