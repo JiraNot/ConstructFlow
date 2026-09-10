@@ -51,6 +51,13 @@ require_relative 'modules/opening/plan_representation_provider'
 require_relative 'modules/opening/representation_registration'
 require_relative 'modules/door_window/plan_representation_provider'
 require_relative 'modules/door_window/representation_registration'
+require_relative 'modules/electrical/device_definition'
+require_relative 'modules/electrical/circuit_definition'
+require_relative 'modules/electrical/repository'
+require_relative 'modules/electrical/geometry'
+require_relative 'modules/electrical/registration'
+require_relative 'modules/electrical/plan_representation_provider'
+require_relative 'modules/electrical/representation_registration'
 require_relative 'modules/extension/runtime_integration'
 require_relative 'modules/drainage/plan_representation_provider'
 require_relative 'modules/drainage/representation_registration'
@@ -64,6 +71,7 @@ JiraNot::ConstructFlow::Core::LayoutExportRuntimeIntegration.install(JiraNot::Co
 JiraNot::ConstructFlow::Core::DrawingIssueSetRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::NativeLayoutRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::NativeLayoutIssueSetRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Electrical::Registration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Structure::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Roof::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Surface::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
@@ -71,5 +79,6 @@ JiraNot::ConstructFlow::Interior::RepresentationRegistration.install(JiraNot::Co
 JiraNot::ConstructFlow::Architecture::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Opening::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::DoorWindow::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Electrical::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::RuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)

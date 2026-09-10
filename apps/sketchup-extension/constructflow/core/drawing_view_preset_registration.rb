@@ -18,7 +18,8 @@ module JiraNot
           ['structure', 'Structure Plan', 'structure_plan', false],
           ['roof', 'Roof Plan', 'roof_plan', false],
           ['surface', 'Surface / Paving Plan', 'surface_paving_plan', false],
-          ['interior', 'Interior / Joinery Plan', 'interior_joinery_plan', false]
+          ['interior', 'Interior / Joinery Plan', 'interior_joinery_plan', false],
+          ['electrical', 'Electrical Plan', 'electrical_plan', false]
         ].freeze
 
         def install(registry)

@@ -10,9 +10,9 @@ class DrawingViewPresetRegistryTest < Minitest::Test
     JiraNot::ConstructFlow::Core::DrawingViewPresetRegistration.install(@registry)
   end
 
-  def test_registers_six_plan_families_with_three_profiles_each
-    assert_equal 18, @registry.size
-    %w[plumbing architecture structure roof surface interior].each do |family|
+  def test_registers_seven_plan_families_with_three_profiles_each
+    assert_equal 21, @registry.size
+    %w[plumbing architecture structure roof surface interior electrical].each do |family|
       %w[simple construction coordination].each do |profile|
         assert @registry.fetch("#{family}.#{profile}"), "missing #{family}.#{profile}"
       end
@@ -40,7 +40,8 @@ class DrawingViewPresetRegistryTest < Minitest::Test
       'structure.construction' => 'structure_plan',
       'roof.construction' => 'roof_plan',
       'surface.construction' => 'surface_paving_plan',
-      'interior.construction' => 'interior_joinery_plan'
+      'interior.construction' => 'interior_joinery_plan',
+      'electrical.construction' => 'electrical_plan'
     }
     tags = expected.map do |id, drawing_family|
       preset = @registry.fetch!(id)
@@ -50,11 +51,12 @@ class DrawingViewPresetRegistryTest < Minitest::Test
     end
     assert_equal tags.length, tags.uniq.length
     assert_includes tags, 'CF-DRAWING-ARCHITECTURE-CONSTRUCTION'
+    assert_includes tags, 'CF-DRAWING-ELECTRICAL-CONSTRUCTION'
   end
 
   def test_install_is_idempotent
     JiraNot::ConstructFlow::Core::DrawingViewPresetRegistration.install(@registry)
-    assert_equal 18, @registry.size
+    assert_equal 21, @registry.size
   end
 
   def test_unknown_preset_fails_explicitly
