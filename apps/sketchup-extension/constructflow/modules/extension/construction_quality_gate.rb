@@ -5,9 +5,11 @@ module JiraNot
     module Extension
       class ConstructionQualityGate
         RISK_SOURCE_STATES = %w[assumed unknown verify_on_site].freeze
+        APPROVED_STRUCTURE_STATUSES = %w[engineer_approved as_built].freeze
 
         def initialize(runtime:)
           @runtime = runtime
+          @structure_repository = Structure::Repository.new
         end
 
         def run(extension_id:, execution:, takeoff: nil, strict: false)
@@ -18,6 +20,8 @@ module JiraNot
           issues = []
           issues.concat(execution_issues(execution))
           issues.concat(source_state_issues(ids, strict: strict))
+          issues.concat(structure_approval_issues(ids, strict: strict))
+          issues.concat(drainage_completeness_issues(ids, execution, strict: strict))
           issues.concat(drainage_issues(ids))
           issues.concat(takeoff_issues(takeoff)) if takeoff
           issues = unique_issues(issues)
@@ -86,6 +90,46 @@ module JiraNot
               "#{object.type} source state is #{object.source_state}; review required before final issue"
             )
           end
+        end
+
+        def structure_approval_issues(ids, strict:)
+          ids.filter_map do |id|
+            object = @runtime.smart_objects.fetch_by_id(id)
+            next unless object && object.owner_module == 'constructflow.structure'
+            definition = case object.type
+                         when 'structure.column' then @structure_repository.read_column(object.entity)
+                         when 'structure.foundation' then @structure_repository.read_foundation(object.entity)
+                         end
+            next unless definition && definition.respond_to?(:engineering_status)
+            next if APPROVED_STRUCTURE_STATUSES.include?(definition.engineering_status.to_s)
+
+            issue(
+              'construction.structure.engineering_status', strict ? 'error' : 'warning', object,
+              "#{object.type} engineering status is #{definition.engineering_status}; engineer approval required before construction issue",
+              engineering_status: definition.engineering_status
+            )
+          rescue StandardError => error
+            issue(
+              'construction.structure.definition_review_failed', 'error', object,
+              "structure approval check failed: #{error.message}"
+            )
+          end
+        end
+
+        def drainage_completeness_issues(ids, execution, strict:)
+          drainage_enabled = Array(execution && execution['steps']).any? { |step| step['domain'].to_s == 'drainage' }
+          return [] unless drainage_enabled
+          has_drainage = ids.any? do |id|
+            object = @runtime.smart_objects.fetch_by_id(id)
+            object && object.owner_module == 'constructflow.drainage'
+          end
+          return [] if has_drainage
+
+          [issue(
+            'construction.drainage.unresolved_intent', strict ? 'error' : 'warning', nil,
+            'drainage is enabled but no extension drainage Smart Object is resolved; explicit network endpoints are required before final issue',
+            domain: 'drainage'
+          )]
         end
 
         def drainage_issues(ids)
