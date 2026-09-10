@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'sketchup_scene_presentation_service'
+
 module JiraNot
   module ConstructFlow
     module Core
@@ -8,7 +10,7 @@ module JiraNot
         DEFAULT_SCENE_NAME = 'ConstructFlow - Plumbing Plan'
         DEFAULT_TAG_NAME = 'CF-DRAWING-PLUMBING'
 
-        def initialize(runtime:, renderer: nil)
+        def initialize(runtime:, renderer: nil, presentation_service: nil)
           @runtime = runtime
           style_registry = runtime.respond_to?(:plan_graphic_styles) ? runtime.plan_graphic_styles : nil
           native_adapter = SketchupNativeGraphicStyleAdapter.new
@@ -16,6 +18,7 @@ module JiraNot
             style_registry: style_registry,
             native_style_adapter: native_adapter
           )
+          @presentation_service = presentation_service || SketchupScenePresentationService.new
         end
 
         def refresh_preset(preset_id, object_ids: nil)
@@ -63,11 +66,16 @@ module JiraNot
 
             persist_group_metadata(group, scene_name, scale, phase_view, lod, drawing_family, preset_id, rendered_ids)
             page = ensure_scene_page(model, scene_name)
+            presentation = @presentation_service.apply(model: model, page: page, active_drawing_tag: tag_name)
             configure_top_parallel_view(model, page)
             {
-              'scene_name' => scene_name.to_s, 'group' => group, 'page' => page,
+              'scene_name' => scene_name.to_s,
+              'group' => group,
+              'page' => page,
               'preset_id' => preset_id&.to_s,
-              'rendered_object_ids' => rendered_ids.freeze, 'rendered_count' => rendered_ids.length
+              'presentation' => presentation,
+              'rendered_object_ids' => rendered_ids.freeze,
+              'rendered_count' => rendered_ids.length
             }.freeze
           end
         end
