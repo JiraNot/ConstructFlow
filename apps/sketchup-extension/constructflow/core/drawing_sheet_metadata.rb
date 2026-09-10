@@ -35,12 +35,13 @@ module JiraNot
       end
 
       class TitleBlockSpec
-        attr_reader :template_key, :bounds_mm, :fields
+        attr_reader :template_key, :bounds_mm, :fields, :placeholder_map
 
-        def initialize(template_key:, bounds_mm:, fields: {})
+        def initialize(template_key:, bounds_mm:, fields: {}, placeholder_map: nil)
           @template_key = required(template_key, 'title block template_key')
           @bounds_mm = normalize_bounds(bounds_mm).freeze
           @fields = stringify_keys(fields || {}).freeze
+          @placeholder_map = normalize_placeholder_map(placeholder_map).freeze
           freeze
         end
 
@@ -48,7 +49,8 @@ module JiraNot
           {
             'template_key' => template_key,
             'bounds_mm' => bounds_mm,
-            'fields' => fields
+            'fields' => fields,
+            'placeholder_map' => placeholder_map
           }.freeze
         end
 
@@ -64,6 +66,26 @@ module JiraNot
 
         def stringify_keys(value)
           value.each_with_object({}) { |(key, item), result| result[key.to_s] = item.to_s }
+        end
+
+        def normalize_placeholder_map(value)
+          data = if value.respond_to?(:to_h)
+                   value.to_h
+                 else
+                   value || {}
+                 end
+          deep_stringify(data)
+        end
+
+        def deep_stringify(value)
+          case value
+          when Hash
+            value.each_with_object({}) { |(key, item), result| result[key.to_s] = deep_stringify(item) }
+          when Array
+            value.map { |item| deep_stringify(item) }
+          else
+            value
+          end
         end
 
         def required(value, label)
