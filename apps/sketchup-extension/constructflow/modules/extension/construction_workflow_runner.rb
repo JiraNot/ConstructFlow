@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'existing_conflict_scan'
 require_relative 'construction_output_settlement'
 require_relative 'construction_issue_history_store'
 
