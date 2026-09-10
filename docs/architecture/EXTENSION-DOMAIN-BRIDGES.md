@@ -29,7 +29,8 @@ Generated construction objects must carry a `generated_from` relationship to the
 
 Foundation slots are:
 
-- Structure: existing stable member slots (`corner_N`);
+- Structure columns: `corner_N`;
+- Structure foundations: `foundation_corner_N` corresponding to the supported generated column slot;
 - Surface: `primary_floor`;
 - Roof: `primary`;
 - Drainage: `primary_route` when explicit network endpoints are supplied;
@@ -53,7 +54,8 @@ This erasure is **not demolition**. Existing construction, issued construction t
 
 Current v1 reconciliation rules:
 
-- Structure removes generated `corner_N` columns whose slots no longer exist after the Extension boundary topology shrinks. Remaining slots are updated in place.
+- Structure removes generated `corner_N` columns whose slots no longer exist after the Extension boundary topology shrinks. Their generated `foundation_corner_N` foundations are reconciled first. Remaining slots are updated in place.
+- Structure removes all generated Extension foundations when the current Structure config explicitly disables foundation generation while retaining the current generated columns.
 - Interior removes the generated `primary_joinery` assumption when the current program/policy no longer permits automatic joinery.
 - Electrical removes the generated `primary_light` assumption when the current program/policy no longer permits automatic lighting.
 - Surface and Roof remain singleton generated objects and update their existing stable slots in place.
@@ -64,6 +66,25 @@ Removed generated IDs must be returned through `removed_object_ids` and must inv
 The current Structure `corner_N` slots are stable only while source vertex order remains stable. A future source-topology identity contract may replace positional corner slots with persistent member intent IDs; this v1 reconciliation does not claim vertex-reorder identity stability.
 
 ## Domain safety rules
+
+### Structure
+
+The Structure bridge creates or updates one preliminary column per Extension boundary corner. When the Structure config uses the default `foundation: auto`, it also creates or updates one preliminary foundation supporting each generated column.
+
+Foundation generation uses the Structure domain's own `FoundationDefinition`, geometry, validation, quantity and plan-representation contracts. The Extension bridge only passes orchestration intent.
+
+Foundation controls in the v1 intent are:
+
+- `foundation`: `auto`, a supported foundation type (`spread_footing` or `pile_cap`), or an explicit disabled value (`false`, `none`, `disabled`, `off`);
+- `foundation_type`: supported type when `foundation` remains `auto`;
+- `foundation_size_mm`: width, length and thickness;
+- `foundation_top_offset_mm`: offset from the generated column base elevation;
+- `foundation_material`;
+- `foundation_engineering_status`.
+
+Defaults are deliberately preliminary: spread footing, `800 x 800 x 300 mm`, reinforced concrete, top at the column base and `preliminary` engineering status. These defaults are modeling assumptions, not structural design approval. Final construction issue remains subject to the Construction Quality Gate.
+
+A generated foundation carries both `generated_from` provenance to the Extension and a `supports` relation to its generated column; the column carries the reciprocal `supported_by` relation. If foundation generation is explicitly disabled, this generated relationship pair is reconciled away with the generated foundation.
 
 ### Surface
 
@@ -95,6 +116,8 @@ Bridge failures use the existing Extension dependency graph. A failed domain blo
 
 A generated, updated or reconciled-away domain Smart Object must invalidate its domain-owned quantity and drawing output. Later project-level workflow stages consume semantic states and current Smart Object membership; they must not recalculate domain meaning from raw SketchUp geometry or retain removed generated IDs.
 
+Generated Structure foundations are ordinary Structure Smart Objects for downstream purposes: Structure plan representations render them, the Structure quantity provider supplies concrete/formwork quantities, and the Extension ConstructionTakeoff aggregates those items without re-deriving foundation meaning.
+
 ## Acceptance criteria
 
 - AC-EXT-020: every enabled v1 Extension domain resolves to a registered public `GenerateOrUpdate*FromExtension` command.
@@ -106,3 +129,6 @@ A generated, updated or reconciled-away domain Smart Object must invalidate its 
 - AC-EXT-026: regeneration removes generated Structure slots that are no longer present in the current Extension topology and reports them in `removed_object_ids`.
 - AC-EXT-027: when automatic Interior/Electrical policy changes from enabled to disabled, their prior generated singleton assumptions are removed rather than retained as stale model/quantity/drawing content.
 - AC-EXT-028: Drainage route removal is never inferred solely from omitted non-persisted endpoint overrides; explicit source intent is required.
+- AC-EXT-029: default Structure Extension generation creates one preliminary foundation per generated column with reciprocal support relationships and stable `foundation_corner_N` provenance.
+- AC-EXT-030: changing foundation type/size updates the same generated foundation identities, while explicitly disabling foundations removes those generated foundations without deleting the supported columns.
+- AC-EXT-031: generated foundation concrete/formwork quantities flow into the Extension ConstructionTakeoff with source-object traceability and phase scope.
