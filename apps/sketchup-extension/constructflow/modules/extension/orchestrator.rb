@@ -27,7 +27,8 @@ module JiraNot
               'domain' => domain,
               'dependencies' => DEPENDENCIES.fetch(domain, []).select { |dependency| enabled.include?(dependency) },
               'action' => 'generate_or_update_intent',
-              'geometry_owner' => "constructflow.#{domain}"
+              'geometry_owner' => "constructflow.#{domain}",
+              'intent' => domain_intent(intent, domain)
             }
           end
 
@@ -41,6 +42,21 @@ module JiraNot
         end
 
         private
+
+        def domain_intent(intent, domain)
+          {
+            'extension_id' => intent['extension_id'],
+            'program' => intent['program'],
+            'mode' => intent['mode'],
+            'boundary_mm' => intent['boundary_mm'],
+            'base_level_id' => intent['base_level_id'],
+            'base_offset_mm' => intent['base_offset_mm'],
+            'target_height_mm' => intent['target_height_mm'],
+            'roof_intent' => intent['roof_intent'],
+            'attachment_host_id' => intent['attachment_host_id'],
+            'config' => intent.fetch('domains').fetch(domain, {})
+          }.freeze
+        end
 
         def topological_order(domains)
           requested = domains.map(&:to_s).uniq
