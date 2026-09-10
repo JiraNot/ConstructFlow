@@ -77,6 +77,7 @@ module JiraNot
 
           sheet = plan.fetch('sheet')
           source = plan.fetch('source')
+          template = decoration['template_placeholders'] || {}
           document.set_attribute(DICTIONARY, 'format', FORMAT)
           document.set_attribute(DICTIONARY, 'sheet_id', sheet['id'].to_s)
           document.set_attribute(DICTIONARY, 'sheet_number', sheet['number'].to_s)
@@ -88,6 +89,8 @@ module JiraNot
           document.set_attribute(DICTIONARY, 'viewport_count', viewport_count)
           document.set_attribute(DICTIONARY, 'title_block_created', decoration['title_block_created'])
           document.set_attribute(DICTIONARY, 'revision_rows', decoration['revision_rows'])
+          document.set_attribute(DICTIONARY, 'template_placeholders_used', template['template_used'] == true)
+          document.set_attribute(DICTIONARY, 'template_placeholder_match_count', template['matched_count'].to_i)
         end
 
         def validate_plan!(plan)
@@ -191,6 +194,29 @@ module JiraNot
           Layout::Rectangle.new(bounds)
         end
 
+        # Returns text entities from both shared template layers and the current
+        # page's non-shared layers. Groups are traversed recursively when the
+        # runtime exposes an entities collection on the group.
+        def template_text_entities(document, page)
+          collections = []
+          collections << document.shared_entities if document.respond_to?(:shared_entities)
+          collections << page.nonshared_entities if page && page.respond_to?(:nonshared_entities)
+          flatten_text_entities(collections)
+        end
+
+        def text_plain_text(entity)
+          entity.respond_to?(:plain_text) ? entity.plain_text.to_s : ''
+        end
+
+        def set_text_plain_text(entity, value)
+          raise ArgumentError, 'template text entity is not editable' unless entity.respond_to?(:plain_text=)
+          entity.plain_text = value.to_s
+        end
+
+        def entity_locked?(entity)
+          entity.respond_to?(:locked?) ? entity.locked? : false
+        end
+
         def select_scene(model, scene_name)
           scenes = model.scenes
           index = scenes.index(scene_name.to_s)
@@ -231,6 +257,26 @@ module JiraNot
         end
 
         private
+
+        def flatten_text_entities(collections)
+          result = []
+          stack = collections.compact.flat_map { |collection| enumerable_values(collection) }
+          until stack.empty?
+            entity = stack.shift
+            if entity.respond_to?(:plain_text) && entity.respond_to?(:plain_text=)
+              result << entity
+            elsif entity.respond_to?(:entities)
+              stack.concat(enumerable_values(entity.entities))
+            end
+          end
+          result
+        end
+
+        def enumerable_values(collection)
+          return collection.to_a if collection.respond_to?(:to_a)
+          return collection.each.to_a if collection.respond_to?(:each)
+          []
+        end
 
         def ensure_api!
           return if defined?(Layout::Document) && defined?(Layout::SketchUpModel) && defined?(Geom::Bounds2d)

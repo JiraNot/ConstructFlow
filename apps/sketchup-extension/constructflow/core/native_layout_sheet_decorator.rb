@@ -1,30 +1,48 @@
 # frozen_string_literal: true
 
+require_relative 'native_layout_template_placeholder_mapper'
+
 module JiraNot
   module ConstructFlow
     module Core
       class NativeLayoutSheetDecorator
         MM_PER_INCH = 25.4
 
-        def initialize(backend:)
+        def initialize(backend:, placeholder_mapper: nil)
           @backend = backend
+          @placeholder_mapper = placeholder_mapper || NativeLayoutTemplatePlaceholderMapper.new(backend: backend)
         end
 
         def apply(document:, page:, layer:, sheet:)
           data = stringify_keys(sheet || {})
           title_block = data['title_block'] || {}
           revisions = Array(data['revisions'])
+          placeholder_result = @placeholder_mapper.apply(
+            document: document,
+            page: page,
+            title_block: title_block,
+            revisions: revisions
+          )
+          strategy = placeholder_result['strategy'].to_s
+          template_used = placeholder_result['template_used'] == true
           created = []
 
-          unless title_block.empty?
-            created.concat(render_title_block(document, page, layer, title_block))
-          end
-          created.concat(render_revision_table(document, page, layer, title_block, revisions)) unless revisions.empty?
+          render_generic_title = !title_block.empty? && (
+            strategy == 'generic_only' || (strategy == 'prefer_template' && !template_used)
+          )
+          created.concat(render_title_block(document, page, layer, title_block)) if render_generic_title
+
+          revision_placeholders_used = placeholder_result['matched_fields'].any? { |key| key.start_with?('revision.') }
+          render_generic_revisions = !revisions.empty? && !title_block.empty? && (
+            strategy == 'generic_only' || (strategy == 'prefer_template' && !revision_placeholders_used)
+          )
+          created.concat(render_revision_table(document, page, layer, title_block, revisions)) if render_generic_revisions
 
           {
-            'title_block_created' => !title_block.empty?,
+            'title_block_created' => render_generic_title,
             'revision_rows' => revisions.length,
-            'entity_count' => created.length
+            'entity_count' => created.length,
+            'template_placeholders' => placeholder_result
           }.freeze
         end
 
