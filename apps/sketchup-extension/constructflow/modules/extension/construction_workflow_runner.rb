@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'construction_output_settlement'
+
 module JiraNot
   module ConstructFlow
     module Extension
@@ -50,9 +52,11 @@ module JiraNot
               'quality_gate' => nil,
               'takeoff' => nil,
               'drawing_refresh' => [].freeze,
+              'output_settlement' => nil,
               'currentness' => nil,
               'issue_set' => nil,
-              'export' => nil
+              'export' => nil,
+              'output_state' => nil
             }.freeze
           end
 
@@ -77,6 +81,14 @@ module JiraNot
             template_use_case: template_use_case
           )
           drawing_refresh = refresh_drawings ? refresh_issue_scenes(issue_set, extension.id, issue_factory) : []
+          settlement_service = ConstructionOutputSettlement.new(runtime: @runtime)
+          output_settlement = settlement_service.settle(
+            extension_id: extension.id,
+            takeoff: takeoff,
+            issue_set: issue_set,
+            drawing_refresh: drawing_refresh,
+            drawings_required: !export.nil?
+          )
           currentness = ConstructionCurrentnessAudit.new(runtime: @runtime, issue_factory: issue_factory).run(
             extension_id: extension.id,
             takeoff: takeoff,
@@ -85,9 +97,18 @@ module JiraNot
           )
           issue_plan = @runtime.drawing_issue_sets.build(issue_set)
           export_result = nil
-          if export && quality['publishable'] && currentness['publishable']
+          if export && quality['publishable'] && output_settlement['publishable'] && currentness['publishable']
             export_result = export_issue_set(issue_set, stringify_keys(export))
           end
+          output_state = settlement_service.record(
+            extension_id: extension.id,
+            settlement: output_settlement,
+            currentness: currentness,
+            revision: revision,
+            issue_status: issue_status,
+            export_requested: !export.nil?,
+            export_result: export_result
+          )
 
           {
             'format' => 'constructflow.extension_construction_workflow.v1',
@@ -95,6 +116,7 @@ module JiraNot
             'status' => workflow_status(
               execution,
               quality,
+              output_settlement,
               currentness,
               export_result,
               export_requested: !export.nil?
@@ -104,9 +126,11 @@ module JiraNot
             'quality_gate' => quality,
             'takeoff' => takeoff,
             'drawing_refresh' => drawing_refresh.freeze,
+            'output_settlement' => output_settlement,
             'currentness' => currentness,
             'issue_set' => issue_plan,
-            'export' => export_result
+            'export' => export_result,
+            'output_state' => output_state
           }.freeze
         end
 
@@ -149,8 +173,8 @@ module JiraNot
           )
         end
 
-        def workflow_status(execution, quality, currentness, export_result, export_requested:)
-          return 'blocked' unless execution['status'] == 'success' && quality['publishable'] && currentness['publishable']
+        def workflow_status(execution, quality, settlement, currentness, export_result, export_requested:)
+          return 'blocked' unless execution['status'] == 'success' && quality['publishable'] && settlement['publishable'] && currentness['publishable']
           return 'ready' unless export_requested
           return 'export_failed' if export_result.nil?
           'exported'
