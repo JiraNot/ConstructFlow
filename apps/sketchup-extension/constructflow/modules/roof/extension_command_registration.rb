@@ -17,6 +17,13 @@ module JiraNot
           repository = Repository.new
           geometry = Geometry.new
           validator = Validators::RoofValidator.new
+          edge_capability = EdgeHostCapability.new(repository: repository)
+          gutter_service = ExtensionGutterService.new(
+            repository: repository,
+            geometry: geometry,
+            validator: validator,
+            edge_capability: edge_capability
+          )
           runtime.commands.register(
             COMMAND,
             owner_module: 'constructflow.roof',
@@ -27,12 +34,13 @@ module JiraNot
               input: command[:input],
               repository: repository,
               geometry: geometry,
-              validator: validator
+              validator: validator,
+              gutter_service: gutter_service
             )
           end
         end
 
-        def generate_or_update(runtime:, input:, repository:, geometry:, validator:)
+        def generate_or_update(runtime:, input:, repository:, geometry:, validator:, gutter_service: nil)
           intent = fetch(input, :intent) || {}
           extension_id = extension_id_from(input, intent)
           definition = definition_from(input)
@@ -43,7 +51,9 @@ module JiraNot
           existing = find_generated(runtime, extension_id)
           created_ids = []
           updated_ids = []
+          removed_ids = []
           events = []
+          roof_object = existing
 
           if existing
             geometry.rebuild_roof!(existing.entity, definition)
@@ -72,20 +82,40 @@ module JiraNot
             )
             runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
             created_ids << object.id
+            roof_object = object
             events << { name: 'ObjectCreated', object_ids: [object.id], payload: { type: 'roof.system', source: extension_id, slot: SLOT } }
             events << { name: 'RoofGenerated', object_ids: [object.id], payload: { source: extension_id, roof_form: definition.roof_form } }
             events << { name: 'GeometryChanged', object_ids: [object.id], payload: { source: extension_id, slot: SLOT } }
           end
 
-          touched_ids = (created_ids + updated_ids).uniq
+          gutter_service ||= ExtensionGutterService.new(
+            repository: repository,
+            geometry: geometry,
+            validator: validator,
+            edge_capability: EdgeHostCapability.new(repository: repository)
+          )
+          gutter_result = gutter_service.sync(
+            runtime: runtime,
+            extension_id: extension_id,
+            roof_object: roof_object,
+            roof_definition: definition,
+            config: fetch(intent, :config) || {}
+          )
+          created_ids.concat(Array(gutter_result[:created_object_ids]))
+          updated_ids.concat(Array(gutter_result[:updated_object_ids]))
+          removed_ids.concat(Array(gutter_result[:removed_object_ids]))
+          events.concat(Array(gutter_result[:events]))
+
+          touched_ids = (created_ids + updated_ids + removed_ids).uniq
           events << { name: 'QuantityDirty', object_ids: touched_ids } unless touched_ids.empty?
           events << { name: 'DrawingDirty', object_ids: touched_ids } unless touched_ids.empty?
           events << { name: 'ValidationStateChanged', object_ids: touched_ids, payload: { issues: issues } } unless touched_ids.empty?
 
           {
-            created_object_ids: created_ids,
-            updated_object_ids: updated_ids,
-            warnings: warning_messages(issues),
+            created_object_ids: created_ids.uniq,
+            updated_object_ids: updated_ids.uniq,
+            removed_object_ids: removed_ids.uniq,
+            warnings: (warning_messages(issues) + Array(gutter_result[:warnings])).uniq,
             events: events
           }
         end
