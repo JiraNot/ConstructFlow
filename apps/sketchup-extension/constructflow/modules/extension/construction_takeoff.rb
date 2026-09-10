@@ -90,6 +90,14 @@ module JiraNot
             definition_items(object, @structure_repository.read_column(object.entity)) do |definition|
               @structure_provider.column_quantities(smart_object: object, definition: definition)
             end
+          when 'structure.foundation'
+            definition_items(object, @structure_repository.read_foundation(object.entity)) do |definition|
+              @structure_provider.foundation_quantities(smart_object: object, definition: definition)
+            end
+          when 'structure.rebar_set'
+            definition_items(object, @structure_repository.read_rebar_set(object.entity)) do |definition|
+              @structure_provider.rebar_quantities(smart_object: object, definition: definition)
+            end
           when 'surface.boundary'
             definition_items(object, @surface_repository.read_surface(object.entity)) do |definition|
               @surface_provider.surface_quantities(smart_object: object, definition: definition)

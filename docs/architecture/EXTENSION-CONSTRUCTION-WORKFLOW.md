@@ -47,6 +47,16 @@ Construction takeoff and domain drawing scopes must use this relationship rather
 
 Architecture context is the v1 exception: Architecture, Opening and Door/Window Smart Objects may be included as project background because an Extension commonly attaches to an existing building. This is contextual drawing background, not Extension-owned geometry. A future attachment-host graph may narrow this context further.
 
+## Structural construction baseline
+
+The default Structure Extension intent includes `foundation: auto`. The executable Structure bridge therefore produces a preliminary vertical support pair for each Extension corner:
+
+`Extension corner → generated Column → generated Foundation`
+
+Both objects remain Structure-owned Smart Objects. Foundations use reciprocal `supports` / `supported_by` relationships with their generated columns and `generated_from` provenance to the source Extension. Boundary topology changes reconcile both member and foundation slots so stale structural geometry cannot remain in model, takeoff or drawings.
+
+These generated members are preliminary construction coordination objects. Automatic geometry and quantities do not constitute engineering approval; Strict Construction QA continues to require `engineer_approved` or `as_built` status before publication.
+
 ## Quantity package
 
 `ConstructionTakeoff` aggregates quantity items for supported Extension-related Smart Objects while preserving each provider's:
@@ -58,6 +68,8 @@ Architecture context is the v1 exception: Architecture, Opening and Door/Window 
 - phase scope
 - formula version
 - confidence/source state.
+
+Structure coverage includes generated columns, foundations and semantic rebar sets when those objects are related to the source Extension. Foundation concrete and formwork quantities come directly from `StructureQuantityProvider`; the Extension workflow does not calculate foundation quantities itself.
 
 Totals group by `(phase_scope, classification, unit)` and must retain the contributing source object IDs.
 
@@ -92,6 +104,8 @@ The v1 construction set uses available `*.construction` view presets for active 
 - Electrical — `E-101`.
 
 Only active families are included. Domain plan scenes for Structure/Roof/Drainage/Surface/Interior/Electrical must be refreshed with the source Extension plus objects related through `generated_from`; they must not accidentally render generated objects belonging to another Extension.
+
+The Structure plan uses the same Structure Smart Objects and may show generated column/foundation representations according to the requested construction LOD. It must not rediscover foundations from raw SketchUp geometry.
 
 Architecture context may include project Architecture/Opening/Door-Window objects as noted above.
 
@@ -128,3 +142,5 @@ A `ConstructionWorkflowCompleted` event reports the resulting package state.
 - AC-CWF-007: refreshed domain scenes are scoped so another Extension's generated domain objects are excluded.
 - AC-CWF-008: publication/export cannot proceed when the quality gate is not publishable.
 - AC-CWF-009: the same semantic Smart Objects feed geometry, quantities, plan representations and LayOut output; no duplicate 2D semantic model is introduced.
+- AC-CWF-010: default Structure orchestration produces generated foundations with columns, and their concrete/formwork quantities and Structure plan representations flow through the same package pipeline.
+- AC-CWF-011: structural topology reconciliation removes obsolete generated foundations before the current takeoff/drawing package is assembled.
