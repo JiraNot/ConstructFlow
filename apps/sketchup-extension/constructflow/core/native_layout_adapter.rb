@@ -10,8 +10,9 @@ module JiraNot
         FORMAT = 'constructflow.layout_export_plan.v1'
         DICTIONARY = 'constructflow.layout_export'
 
-        def initialize(backend: RubyLayoutBackend.new)
+        def initialize(backend: RubyLayoutBackend.new, sheet_decorator: nil)
           @backend = backend
+          @sheet_decorator = sheet_decorator || NativeLayoutSheetDecorator.new(backend: backend)
         end
 
         def build(export_plan:, skp_path:, layout_path:, pdf_path: nil, template_path: nil)
@@ -33,8 +34,9 @@ module JiraNot
           created_viewports = Array(sheet.fetch('viewports')).map do |viewport|
             create_viewport(document: document, page: page, layer: layer, skp_path: skp_path, viewport: viewport)
           end
+          decoration = @sheet_decorator.apply(document: document, page: page, layer: layer, sheet: sheet)
 
-          persist_metadata(document, plan, created_viewports.length)
+          persist_metadata(document, plan, created_viewports.length, decoration)
           @backend.save(document, layout_path)
           @backend.export_pdf(document, pdf_path) if pdf_path
 
@@ -46,6 +48,7 @@ module JiraNot
             'sheet_number' => sheet['number'].to_s,
             'preset_id' => source['preset_id'].to_s,
             'viewport_count' => created_viewports.length,
+            'sheet_decoration' => decoration,
             'native_backend' => @backend.name
           }.freeze
         end
@@ -67,7 +70,7 @@ module JiraNot
           model
         end
 
-        def persist_metadata(document, plan, viewport_count)
+        def persist_metadata(document, plan, viewport_count, decoration)
           return unless document.respond_to?(:set_attribute)
 
           sheet = plan.fetch('sheet')
@@ -81,6 +84,8 @@ module JiraNot
           document.set_attribute(DICTIONARY, 'preset_id', source['preset_id'].to_s)
           document.set_attribute(DICTIONARY, 'scene_name', source['scene_name'].to_s)
           document.set_attribute(DICTIONARY, 'viewport_count', viewport_count)
+          document.set_attribute(DICTIONARY, 'title_block_created', decoration['title_block_created'])
+          document.set_attribute(DICTIONARY, 'revision_rows', decoration['revision_rows'])
         end
 
         def validate_plan!(plan)
@@ -172,6 +177,16 @@ module JiraNot
         def create_sketchup_model(path, bounds)
           ensure_api!
           Layout::SketchUpModel.new(path.to_s, bounds)
+        end
+
+        def create_text(text, bounds)
+          ensure_api!
+          Layout::FormattedText.new(text.to_s, bounds)
+        end
+
+        def create_rectangle(bounds)
+          ensure_api!
+          Layout::Rectangle.new(bounds)
         end
 
         def select_scene(model, scene_name)
