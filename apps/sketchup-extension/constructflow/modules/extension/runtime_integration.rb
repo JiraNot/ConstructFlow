@@ -9,6 +9,7 @@ module JiraNot
         def install(runtime)
           Architecture::ExtensionCommandRegistration.install(runtime)
           Opening::ExtensionCommandRegistration.install(runtime)
+          DoorWindow::ExtensionCommandRegistration.install(runtime)
           Structure::ExtensionCommandRegistration.install(runtime)
           Surface::ExtensionCommandRegistration.install(runtime)
           Roof::ExtensionCommandRegistration.install(runtime)
