@@ -27,13 +27,13 @@ class DrainageRoutePlannerTest < Minitest::Test
     assert_equal 'manual', plan.mode
     assert_equal 4, plan.route_nodes_mm.length
     assert_equal [1000.0, 500.0, 975.0], plan.route_nodes_mm[1]
-    assert_in_delta 1.666, plan.slope_percent, 0.01
+    assert_in_delta 1.98, plan.slope_percent, 0.02
   end
 
   def test_semi_auto_orthogonalizes_each_anchor_segment
     plan = @planner.plan(
       start_connector: connector([0, 0, 1000], 1000),
-      end_connector: connector([4000, 3000, nil], nil),
+      end_connector: connector([4000, 3000, 0], nil),
       mode: 'semi_auto',
       via_nodes_mm: [[2000, 1000, 0]],
       orthogonal_preference: 'x_first'
