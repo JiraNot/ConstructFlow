@@ -8,12 +8,13 @@ module JiraNot
         DICTIONARY = 'constructflow.representation'
         STYLE_DICTIONARY = 'constructflow.graphic_style'
 
-        def initialize(annotation_step_mm: 150.0, style_registry: nil)
+        def initialize(annotation_step_mm: 150.0, style_registry: nil, native_style_adapter: nil)
           @annotation_step_mm = Float(annotation_step_mm)
           @style_registry = style_registry
+          @native_style_adapter = native_style_adapter
         end
 
-        def render(representation:, entities:)
+        def render(representation:, entities:, model: nil)
           result = stringify_keys(representation || {})
           raise ArgumentError, 'entities collection required' unless entities
           raise ArgumentError, 'representation object_id required' if result['object_id'].to_s.empty?
@@ -23,14 +24,14 @@ module JiraNot
           Array(result['primitives']).each do |primitive|
             primitive = stringify_keys(primitive)
             entities_created = render_primitive(entities, primitive)
-            apply_style(entities_created, primitive, result)
+            apply_style(entities_created, primitive, result, model)
             created.concat(entities_created)
           end
           Array(result['annotations']).each_with_index do |annotation, index|
             annotation = stringify_keys(annotation)
             entity = render_annotation(entities, annotation, index)
             if entity
-              apply_style([entity], annotation, result)
+              apply_style([entity], annotation, result, model)
               created << entity
             end
           end
@@ -120,7 +121,7 @@ module JiraNot
           entities.add_text(text, sketchup_point(anchor))
         end
 
-        def apply_style(entities, item, representation)
+        def apply_style(entities, item, representation, model)
           return if entities.empty? || @style_registry.nil?
 
           style = @style_registry.resolve(item: item, representation: representation)
@@ -131,6 +132,7 @@ module JiraNot
             entity.set_attribute(STYLE_DICTIONARY, 'semantic_role', item['role'].to_s)
             entity.set_attribute(STYLE_DICTIONARY, 'source_style_role', item['style_role'].to_s)
             entity.set_attribute(STYLE_DICTIONARY, 'status', item['status'].to_s)
+            @native_style_adapter&.apply(entity: entity, style: style, model: model)
           end
         end
 

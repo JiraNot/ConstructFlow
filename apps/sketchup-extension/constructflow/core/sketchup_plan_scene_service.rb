@@ -11,7 +11,11 @@ module JiraNot
         def initialize(runtime:, renderer: nil)
           @runtime = runtime
           style_registry = runtime.respond_to?(:plan_graphic_styles) ? runtime.plan_graphic_styles : nil
-          @renderer = renderer || SketchupPlanRenderer.new(style_registry: style_registry)
+          native_adapter = SketchupNativeGraphicStyleAdapter.new
+          @renderer = renderer || SketchupPlanRenderer.new(
+            style_registry: style_registry,
+            native_style_adapter: native_adapter
+          )
         end
 
         def refresh_preset(preset_id, object_ids: nil)
@@ -53,7 +57,7 @@ module JiraNot
               )
               next if drawing_family && representation.dig('metadata', 'drawing_family').to_s != drawing_family.to_s
 
-              @renderer.render(representation: representation, entities: group.entities)
+              @renderer.render(representation: representation, entities: group.entities, model: model)
               rendered_ids << object.id
             end
 
