@@ -65,6 +65,8 @@ require_relative 'modules/drainage/route_alternative_planner'
 require_relative 'modules/drainage/route_edit_service'
 require_relative 'modules/drainage/intermediate_manhole_planner'
 require_relative 'modules/drainage/intermediate_manhole_service'
+require_relative 'modules/drainage/route_detour_planner'
+require_relative 'modules/drainage/route_detour_registration'
 require_relative 'modules/drainage/routing_registration'
 require_relative 'modules/drainage/plan_representation_provider'
 require_relative 'modules/drainage/representation_registration'
@@ -88,5 +90,6 @@ JiraNot::ConstructFlow::Opening::RepresentationRegistration.install(JiraNot::Con
 JiraNot::ConstructFlow::DoorWindow::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Electrical::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RoutingRegistration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Drainage::RouteDetourRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::RuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
