@@ -37,6 +37,8 @@ require_relative 'core/native_layout_export_service'
 require_relative 'core/native_layout_runtime_integration'
 require_relative 'modules/extension/execution_runner'
 require_relative 'modules/structure/extension_command_registration'
+require_relative 'modules/structure/plan_representation_provider'
+require_relative 'modules/structure/representation_registration'
 require_relative 'modules/extension/runtime_integration'
 require_relative 'modules/drainage/plan_representation_provider'
 require_relative 'modules/drainage/representation_registration'
@@ -50,5 +52,6 @@ JiraNot::ConstructFlow::Core::LayoutExportRuntimeIntegration.install(JiraNot::Co
 JiraNot::ConstructFlow::Core::DrawingIssueSetRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::NativeLayoutRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::NativeLayoutIssueSetRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Structure::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::RuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
