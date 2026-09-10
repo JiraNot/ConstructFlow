@@ -147,7 +147,7 @@ module JiraNot
           page_info = document.page_info
           page_info.width = width_in
           page_info.height = height_in
-          page_info.units = Layout::Document::DECIMAL_MILLIMETERS if page_info.respond_to?(:units=) && defined?(Layout::Document::DECIMAL_MILLIMETERS)
+          document.units = Layout::Document::DECIMAL_MILLIMETERS if document.respond_to?(:units=) && defined?(Layout::Document::DECIMAL_MILLIMETERS)
           page_info.output_resolution = Layout::PageInfo::RESOLUTION_HIGH if page_info.respond_to?(:output_resolution=) && defined?(Layout::PageInfo::RESOLUTION_HIGH)
           page_info
         end
