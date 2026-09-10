@@ -182,6 +182,20 @@ Formula/version traceability is required.
 - reinforcement drawings;
 - BBS.
 
+### Plan representation foundation
+
+`structure.column` and `structure.foundation` expose on-demand semantic `plan` representations through the shared Representation Registry. The provider owns structural meaning; the Drawing platform owns scene/sheet composition.
+
+For the foundation slice:
+
+- column plan output includes a section outline and semantic column symbol;
+- foundation plan output includes a footprint outline and footing/pile-cap symbol;
+- Simple profile keeps tags/symbols lightweight;
+- Construction profile adds member/foundation sizes;
+- Coordination profile additionally exposes engineering status and support-reference context;
+- non-approved engineering status is represented as `verify`, not as approved design;
+- representations are derived from the same Smart Objects and do not create a second 2D model.
+
 ## QA / Coordination
 
 Modeling/coordination checks:
@@ -207,6 +221,8 @@ Engineering checks, if ever implemented, must be clearly separated from licensed
 - AC-STR-006: physical rebar generation can be removed/regenerated without changing semantic reinforcement identity.
 - AC-STR-007: steel profile swap updates quantity and drawing dirty states.
 - AC-STR-008: structural outputs visibly state preliminary/modeling status where engineering approval is not provided.
+- AC-STR-009: column and foundation Smart Objects expose on-demand plan representations without duplicating semantic model data.
+- AC-STR-010: coordination plan output marks preliminary structural status as verification-required and preserves supported-object traceability.
 
 ## Deferred
 
