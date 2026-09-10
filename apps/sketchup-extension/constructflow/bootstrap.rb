@@ -26,6 +26,8 @@ require_relative 'core/layout_template_asset_verifier'
 require_relative 'core/layout_template_runtime_integration'
 require_relative 'core/layout_export_plan_builder'
 require_relative 'core/layout_export_runtime_integration'
+require_relative 'core/drawing_issue_set'
+require_relative 'core/drawing_issue_set_builder'
 require_relative 'core/native_layout_sheet_decorator'
 require_relative 'core/native_layout_adapter'
 require_relative 'core/native_layout_export_service'
@@ -42,6 +44,7 @@ JiraNot::ConstructFlow::Core::PlanGraphicStyleRuntimeIntegration.install(JiraNot
 JiraNot::ConstructFlow::Core::PlanSceneRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::LayoutTemplateRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::LayoutExportRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Core::DrawingIssueSetRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::NativeLayoutRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::RuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
