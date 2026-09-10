@@ -23,6 +23,19 @@ module JiraNot
           'interior' => 'I-101',
           'electrical' => 'E-101'
         }.freeze
+        FAMILY_OWNERS = {
+          'structure' => %w[constructflow.structure],
+          'roof' => %w[constructflow.roof],
+          'plumbing' => %w[constructflow.drainage],
+          'surface' => %w[constructflow.surface],
+          'interior' => %w[constructflow.interior],
+          'electrical' => %w[constructflow.electrical]
+        }.freeze
+        ARCHITECTURE_CONTEXT_OWNERS = %w[
+          constructflow.architecture
+          constructflow.opening
+          constructflow.door_window
+        ].freeze
 
         def initialize(runtime:)
           @runtime = runtime
@@ -30,9 +43,7 @@ module JiraNot
 
         def build(extension_id:, revision: 'P01', issue_status: 'working', project_name: '', project_number: '',
                   drawn_by: '', checked_by: '', template_scope_id: '', template_use_case: 'construction')
-          source = @runtime.smart_objects.fetch_by_id(extension_id.to_s)
-          raise ArgumentError, 'extension zone not found' unless source && source.type == 'extension.zone'
-
+          source = resolve_extension(extension_id)
           families = active_families(source)
           families = %w[structure roof surface] if families.empty?
           sheets = families.map do |family|
@@ -60,19 +71,30 @@ module JiraNot
         end
 
         def active_families(source)
-          types = related_objects(source).map(&:type)
-          candidates = []
-          candidates << 'architecture' if @runtime.smart_objects.all.any? { |object| object.owner_module == 'constructflow.architecture' }
-          candidates << 'structure' if types.any? { |type| type.start_with?('structure.') }
-          candidates << 'roof' if types.any? { |type| type.start_with?('roof.') }
-          candidates << 'plumbing' if types.any? { |type| type.start_with?('drainage.') }
-          candidates << 'surface' if types.any? { |type| type.start_with?('surface.') }
-          candidates << 'interior' if types.any? { |type| type.start_with?('interior.') }
-          candidates << 'electrical' if types.any? { |type| type.start_with?('electrical.') }
-          FAMILY_ORDER.select { |family| candidates.include?(family) }.freeze
+          FAMILY_ORDER.select { |family| !object_ids_for_family(extension_id: source.id, family: family).empty? }.freeze
+        end
+
+        def object_ids_for_family(extension_id:, family:)
+          source = resolve_extension(extension_id)
+          key = family.to_s
+          objects = if key == 'architecture'
+                      @runtime.smart_objects.all.select do |object|
+                        ARCHITECTURE_CONTEXT_OWNERS.include?(object.owner_module.to_s)
+                      end
+                    else
+                      owners = FAMILY_OWNERS.fetch(key) { [] }
+                      related_objects(source).select { |object| owners.include?(object.owner_module.to_s) }
+                    end
+          objects.map { |object| object.id.to_s }.reject(&:empty?).uniq.sort.freeze
         end
 
         private
+
+        def resolve_extension(extension_id)
+          source = @runtime.smart_objects.fetch_by_id(extension_id.to_s)
+          return source if source && source.type == 'extension.zone'
+          raise ArgumentError, 'extension zone not found'
+        end
 
         def related_objects(source)
           @runtime.smart_objects.all.select do |object|
