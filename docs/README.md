@@ -29,12 +29,13 @@ No production module should introduce behavior that contradicts an approved spec
 17. `architecture/LAYOUT-TEMPLATE-PLACEHOLDERS.md` — safe mapping of normalized sheet metadata into company LayOut templates.
 18. `architecture/LAYOUT-TEMPLATE-REGISTRY.md` — company template asset selection, compatibility and immutable version resolution.
 19. `architecture/LAYOUT-TEMPLATE-PINNING.md` — project/drawing-set template pins and SHA-256 asset verification.
-20. `architecture/PHASE-LEVEL-REVISION.md` — existing/demolition/new, level and revision semantics.
-21. `architecture/INTERACTION-MODEL.md` and `architecture/UI-UX-SPEC.md` — modeling interaction and UI behavior.
-22. `architecture/COMMAND-CATALOG.md`, `EVENT-CATALOG.md`, `CONNECTOR-STANDARD.md` — cross-module integration contracts.
-23. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
-24. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
-25. `decisions/` — architecture decisions that explain or amend the baseline.
+20. `architecture/DRAWING-ISSUE-SETS.md` — renderer-neutral coordinated multi-sheet issue-set contract.
+21. `architecture/PHASE-LEVEL-REVISION.md` — existing/demolition/new, level and revision semantics.
+22. `architecture/INTERACTION-MODEL.md` and `architecture/UI-UX-SPEC.md` — modeling interaction and UI behavior.
+23. `architecture/COMMAND-CATALOG.md`, `EVENT-CATALOG.md`, `CONNECTOR-STANDARD.md` — cross-module integration contracts.
+24. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
+25. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
+26. `decisions/` — architecture decisions that explain or amend the baseline.
 
 ## Specification status vocabulary
 
