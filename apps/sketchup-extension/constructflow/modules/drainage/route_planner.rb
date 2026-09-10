@@ -50,7 +50,9 @@ module JiraNot
           min_slope = Float(minimum_slope_percent)
           raise ArgumentError, 'minimum slope cannot be negative' if min_slope.negative?
           end_invert = derive_end_invert(start_invert, end_invert, horizontal_length, min_slope, selected_mode)
-          nodes = apply_vertical_profile(nodes, start_invert, end_invert) if start_invert && end_invert
+          if selected_mode != 'manual' && start_invert && end_invert
+            nodes = apply_vertical_profile(nodes, start_invert, end_invert)
+          end
           slope = slope_percent(start_invert, end_invert, horizontal_length)
           warnings = route_warnings(start_invert, end_invert, slope, min_slope)
 
