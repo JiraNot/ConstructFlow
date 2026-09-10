@@ -85,6 +85,7 @@ require_relative 'modules/drainage/representation_registration'
 require_relative 'modules/extension/construction_takeoff'
 require_relative 'modules/extension/construction_quality_gate'
 require_relative 'modules/extension/construction_issue_set_factory'
+require_relative 'modules/extension/construction_currentness_audit'
 require_relative 'modules/extension/construction_workflow_runner'
 require_relative 'modules/extension/construction_workflow_registration'
 
