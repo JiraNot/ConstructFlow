@@ -59,6 +59,8 @@ require_relative 'modules/electrical/registration'
 require_relative 'modules/electrical/plan_representation_provider'
 require_relative 'modules/electrical/representation_registration'
 require_relative 'modules/extension/runtime_integration'
+require_relative 'modules/drainage/route_planner'
+require_relative 'modules/drainage/routing_registration'
 require_relative 'modules/drainage/plan_representation_provider'
 require_relative 'modules/drainage/representation_registration'
 
@@ -80,5 +82,6 @@ JiraNot::ConstructFlow::Architecture::RepresentationRegistration.install(JiraNot
 JiraNot::ConstructFlow::Opening::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::DoorWindow::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Electrical::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Drainage::RoutingRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::RuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
