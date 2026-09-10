@@ -46,10 +46,11 @@ module JiraNot
             )
             warnings = Array(result.dig('quality_gate', 'issues')).select { |issue| issue['severity'] == 'warning' }
                            .map { |issue| issue['message'] }
+            warnings.concat(settlement_warnings(result['output_settlement']))
             warnings.concat(
               Array(result.dig('currentness', 'issues')).map { |issue| issue['message'] }
             )
-            warnings << 'construction workflow is blocked by generation, QA, or package currentness' if result['status'] == 'blocked'
+            warnings << 'construction workflow is blocked by generation, QA, output settlement, or package currentness' if result['status'] == 'blocked'
             {
               warnings: warnings.uniq,
               events: [{ name: 'ConstructionWorkflowCompleted', object_ids: [result['extension_id']], payload: result }]
@@ -87,19 +88,48 @@ module JiraNot
             )
             if defined?(UI)
               qa = result['quality_gate'] || {}
+              settlement = result['output_settlement'] || {}
               currentness = result['currentness'] || {}
+              issue_entry = result['issue_history_entry'] || {}
+              issue_line = issue_entry['issue_id'].to_s.empty? ? 'not exported' : issue_entry['issue_id']
               UI.messagebox(
                 "Construction workflow: #{result['status']}\n" \
                 "QA: #{qa['status']} (#{qa['error_count']} errors / #{qa['warning_count']} warnings)\n" \
+                "Output settlement: #{settlement['status']}\n" \
                 "Currentness: #{currentness['status']}\n" \
                 "Takeoff items: #{result.dig('takeoff', 'item_count')}\n" \
-                "Sheets: #{result.dig('issue_set', 'sheet_count')}"
+                "Sheets: #{result.dig('issue_set', 'sheet_count')}\n" \
+                "Issue evidence: #{issue_line}"
               )
             end
           rescue StandardError => error
             UI.messagebox("ConstructFlow Construction Workflow failed: #{error.message}") if defined?(UI)
           end
           runtime.instance_variable_set(:@construction_workflow_ui_installed, true)
+        end
+
+        def settlement_warnings(settlement)
+          return [] unless settlement && settlement['status'].to_s == 'partial'
+
+          quantity = settlement['quantity'] || {}
+          drawing = settlement['drawing'] || {}
+          warnings = []
+          unless Array(quantity['unsettled_object_ids']).empty?
+            warnings << "quantity output unsettled for: #{Array(quantity['unsettled_object_ids']).join(', ')}"
+          end
+          unless Array(drawing['missing_preset_ids']).empty?
+            warnings << "drawing refresh missing presets: #{Array(drawing['missing_preset_ids']).join(', ')}"
+          end
+          unless Array(drawing['missing_rendered_object_ids']).empty?
+            warnings << "drawing refresh missed objects: #{Array(drawing['missing_rendered_object_ids']).join(', ')}"
+          end
+          unless Array(drawing['stale_rendered_object_ids']).empty?
+            warnings << "drawing refresh contains stale objects: #{Array(drawing['stale_rendered_object_ids']).join(', ')}"
+          end
+          unless Array(drawing['extra_preset_ids']).empty?
+            warnings << "drawing refresh contains unexpected presets: #{Array(drawing['extra_preset_ids']).join(', ')}"
+          end
+          warnings
         end
 
         def selected_extension(runtime)

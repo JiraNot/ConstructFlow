@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'construction_output_settlement'
+require_relative 'construction_issue_history_store'
 
 module JiraNot
   module ConstructFlow
@@ -10,6 +11,7 @@ module JiraNot
           @runtime = runtime
           @repository = Repository.new
           @intent_store = ConstructionIntentStore.new
+          @issue_history_store = ConstructionIssueHistoryStore.new(runtime: runtime)
         end
 
         def run(extension_id:, domains: {}, revision: 'P01', issue_status: 'working', strict: false,
@@ -56,7 +58,8 @@ module JiraNot
               'currentness' => nil,
               'issue_set' => nil,
               'export' => nil,
-              'output_state' => nil
+              'output_state' => nil,
+              'issue_history_entry' => nil
             }.freeze
           end
 
@@ -100,6 +103,14 @@ module JiraNot
           if export && quality['publishable'] && output_settlement['publishable'] && currentness['publishable']
             export_result = export_issue_set(issue_set, stringify_keys(export))
           end
+          status = workflow_status(
+            execution,
+            quality,
+            output_settlement,
+            currentness,
+            export_result,
+            export_requested: !export.nil?
+          )
           output_state = settlement_service.record(
             extension_id: extension.id,
             settlement: output_settlement,
@@ -109,18 +120,21 @@ module JiraNot
             export_requested: !export.nil?,
             export_result: export_result
           )
+          issue_history_entry = if status == 'exported'
+                                  @issue_history_store.record(
+                                    extension_id: extension.id,
+                                    revision: revision,
+                                    issue_status: issue_status,
+                                    settlement: output_settlement,
+                                    currentness: currentness,
+                                    export_result: export_result
+                                  )
+                                end
 
           {
             'format' => 'constructflow.extension_construction_workflow.v1',
             'extension_id' => extension.id,
-            'status' => workflow_status(
-              execution,
-              quality,
-              output_settlement,
-              currentness,
-              export_result,
-              export_requested: !export.nil?
-            ),
+            'status' => status,
             'construction_intent' => intent_trace,
             'execution' => execution,
             'quality_gate' => quality,
@@ -130,7 +144,8 @@ module JiraNot
             'currentness' => currentness,
             'issue_set' => issue_plan,
             'export' => export_result,
-            'output_state' => output_state
+            'output_state' => output_state,
+            'issue_history_entry' => issue_history_entry
           }.freeze
         end
 
