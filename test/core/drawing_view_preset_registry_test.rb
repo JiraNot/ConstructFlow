@@ -10,13 +10,14 @@ class DrawingViewPresetRegistryTest < Minitest::Test
     JiraNot::ConstructFlow::Core::DrawingViewPresetRegistration.install(@registry)
   end
 
-  def test_registers_seven_plan_families_with_three_profiles_each
-    assert_equal 21, @registry.size
+  def test_registers_seven_plan_families_with_three_profiles_each_plus_architecture_demolition
+    assert_equal 22, @registry.size
     %w[plumbing architecture structure roof surface interior electrical].each do |family|
       %w[simple construction coordination].each do |profile|
         assert @registry.fetch("#{family}.#{profile}"), "missing #{family}.#{profile}"
       end
     end
+    assert @registry.fetch('architecture.demolition')
   end
 
   def test_construction_preset_carries_scale_phase_and_lod
@@ -26,6 +27,16 @@ class DrawingViewPresetRegistryTest < Minitest::Test
     assert_equal 'construction', preset.lod
     assert_equal 'plumbing_drainage_plan', preset.drawing_family
     assert_equal 'plumbing.construction', preset.context['style_preset']
+  end
+
+  def test_architecture_demolition_preset_is_phase_specific_and_has_unique_managed_tag
+    preset = @registry.fetch!('architecture.demolition')
+    assert_equal '1:50', preset.scale
+    assert_equal 'demolition', preset.phase_view
+    assert_equal 'construction', preset.lod
+    assert_equal 'architecture_plan', preset.drawing_family
+    assert_equal 'CF-DRAWING-ARCHITECTURE-DEMOLITION', preset.tag_name
+    assert_equal 'architecture.demolition', preset.context['style_preset']
   end
 
   def test_preserves_legacy_plumbing_scene_and_tag_identity
@@ -56,7 +67,7 @@ class DrawingViewPresetRegistryTest < Minitest::Test
 
   def test_install_is_idempotent
     JiraNot::ConstructFlow::Core::DrawingViewPresetRegistration.install(@registry)
-    assert_equal 21, @registry.size
+    assert_equal 22, @registry.size
   end
 
   def test_unknown_preset_fails_explicitly
