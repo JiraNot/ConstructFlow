@@ -134,12 +134,12 @@ class DrainageTransitionPlanner
 end
 
 DrainageTransitionRuntime = Struct.new(:smart_objects, :connectors)
-DrainageQualityObject = Struct.new(
+ExtensionDrainageQualityObject = Struct.new(
   :id, :type, :owner_module, :entity, :relationships, :source_state,
   keyword_init: true
 )
 
-class DrainageQualitySmartObjects
+class ExtensionDrainageQualitySmartObjects
   def initialize(objects)
     @objects = objects
   end
@@ -316,7 +316,7 @@ class DrainageIntentTransitionTest < Minitest::Test
   end
 
   def test_quality_gate_does_not_report_disabled_drainage_as_unresolved
-    source = DrainageQualityObject.new(
+    source = ExtensionDrainageQualityObject.new(
       id: 'ext-1',
       type: 'extension.zone',
       owner_module: 'constructflow.extension',
@@ -324,7 +324,7 @@ class DrainageIntentTransitionTest < Minitest::Test
       relationships: [],
       source_state: 'confirmed'
     )
-    runtime = Struct.new(:smart_objects).new(DrainageQualitySmartObjects.new([source]))
+    runtime = Struct.new(:smart_objects).new(ExtensionDrainageQualitySmartObjects.new([source]))
     execution = {
       'status' => 'success',
       'dirty_domains' => [],
