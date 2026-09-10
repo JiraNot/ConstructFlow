@@ -8,11 +8,11 @@ module JiraNot
           id: 'constructflow.electrical', name: 'Electrical', version: '0.1.0', schema_version: 1,
           requires: ['constructflow.core'],
           optional_capabilities: %w[architecture.host interior.requirement drawing.provider],
-          provides: %w[electrical.logical_network],
+          provides: %w[electrical.logical_network electrical.quantity],
           objects: %w[electrical.luminaire electrical.switch electrical.outlet electrical.data electrical.tv electrical.dedicated_outlet],
           commands: %w[PlaceElectricalFixture PlaceSwitch PlaceOutlet AssignElectricalCircuit ConnectSwitchControl],
           events: %w[ElectricalDevicePlaced ElectricalCircuitChanged ElectricalControlChanged GeometryChanged DrawingDirty QuantityDirty],
-          providers: [], validators: %w[electrical.device.validity electrical.control.validity]
+          providers: ['constructflow.electrical.quantity'], validators: %w[electrical.device.validity electrical.control.validity]
         }.freeze
 
         module_function
@@ -22,6 +22,13 @@ module JiraNot
           runtime.module_loader.load(MANIFEST)
           repository = Repository.new
           geometry = Geometry.new
+          quantity_provider = Quantity::ElectricalQuantityProvider.new
+
+          runtime.capabilities.register(
+            'electrical.quantity',
+            owner_module: 'constructflow.electrical',
+            provider: quantity_provider
+          )
 
           register_place(runtime, repository, geometry, 'PlaceElectricalFixture', default_kind: 'luminaire')
           register_place(runtime, repository, geometry, 'PlaceSwitch', default_kind: 'switch')
