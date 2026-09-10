@@ -3,15 +3,14 @@
 module JiraNot
   module ConstructFlow
     module Core
-      # Renderer-neutral representations are converted to lightweight SketchUp
-      # line/text geometry here. Domain modules remain owners of semantic output;
-      # this adapter only knows primitive shapes and SketchUp units.
       class SketchupPlanRenderer
         MM_PER_INCH = 25.4
         DICTIONARY = 'constructflow.representation'
+        STYLE_DICTIONARY = 'constructflow.graphic_style'
 
-        def initialize(annotation_step_mm: 150.0)
+        def initialize(annotation_step_mm: 150.0, style_registry: nil)
           @annotation_step_mm = Float(annotation_step_mm)
+          @style_registry = style_registry
         end
 
         def render(representation:, entities:)
@@ -22,11 +21,18 @@ module JiraNot
 
           created = []
           Array(result['primitives']).each do |primitive|
-            created.concat(render_primitive(entities, stringify_keys(primitive)))
+            primitive = stringify_keys(primitive)
+            entities_created = render_primitive(entities, primitive)
+            apply_style(entities_created, primitive, result)
+            created.concat(entities_created)
           end
           Array(result['annotations']).each_with_index do |annotation, index|
-            entity = render_annotation(entities, stringify_keys(annotation), index)
-            created << entity if entity
+            annotation = stringify_keys(annotation)
+            entity = render_annotation(entities, annotation, index)
+            if entity
+              apply_style([entity], annotation, result)
+              created << entity
+            end
           end
 
           created.each do |entity|
@@ -35,6 +41,9 @@ module JiraNot
             entity.set_attribute(DICTIONARY, 'source_object_id', result['object_id'].to_s)
             entity.set_attribute(DICTIONARY, 'representation_kind', result['kind'].to_s)
             entity.set_attribute(DICTIONARY, 'owner_module', result['owner_module'].to_s)
+            lifecycle = result['source_lifecycle'] || {}
+            entity.set_attribute(DICTIONARY, 'created_phase', lifecycle['created_phase'].to_s)
+            entity.set_attribute(DICTIONARY, 'removed_phase', lifecycle['removed_phase'].to_s)
           end
           created.freeze
         end
@@ -60,7 +69,6 @@ module JiraNot
 
           points.each_cons(2).filter_map do |from, to|
             next if same_point?(from, to)
-
             entities.add_line(from, to)
           end
         end
@@ -90,17 +98,12 @@ module JiraNot
           left = sketchup_point([base_x + (px * half_width), base_y + (py * half_width), z])
           right = sketchup_point([base_x - (px * half_width), base_y - (py * half_width), z])
 
-          [
-            entities.add_line(from, to),
-            entities.add_line(to, left),
-            entities.add_line(to, right)
-          ].compact
+          [entities.add_line(from, to), entities.add_line(to, left), entities.add_line(to, right)].compact
         end
 
         def render_symbol(entities, primitive)
           text = primitive['symbol'].to_s
           return [] if text.empty? || !entities.respond_to?(:add_text)
-
           [entities.add_text(text, sketchup_point(primitive['position_mm']))].compact
         end
 
@@ -110,20 +113,30 @@ module JiraNot
 
           text = annotation['text'].to_s
           return nil if text.empty?
-
           anchor = Array(annotation['anchor_mm']).map(&:to_f)
           return nil if anchor.length < 3
 
-          # Semantic providers own the anchor. The SketchUp adapter applies only a
-          # deterministic display offset so several labels at one node stay legible.
           anchor[1] += @annotation_step_mm * index
           entities.add_text(text, sketchup_point(anchor))
+        end
+
+        def apply_style(entities, item, representation)
+          return if entities.empty? || @style_registry.nil?
+
+          style = @style_registry.resolve(item: item, representation: representation)
+          entities.each do |entity|
+            next unless entity.respond_to?(:set_attribute)
+
+            style.each { |key, value| entity.set_attribute(STYLE_DICTIONARY, key.to_s, value.to_s) }
+            entity.set_attribute(STYLE_DICTIONARY, 'semantic_role', item['role'].to_s)
+            entity.set_attribute(STYLE_DICTIONARY, 'source_style_role', item['style_role'].to_s)
+            entity.set_attribute(STYLE_DICTIONARY, 'status', item['status'].to_s)
+          end
         end
 
         def sketchup_point(point_mm)
           values = Array(point_mm)
           raise ArgumentError, 'point requires x, y, z' if values.length < 3
-
           values.first(3).map { |value| Float(value) / MM_PER_INCH }
         end
 
@@ -132,10 +145,13 @@ module JiraNot
         end
 
         def stringify_keys(value)
-          return value unless value.is_a?(Hash)
-
-          value.each_with_object({}) do |(key, item), result|
-            result[key.to_s] = item.is_a?(Hash) ? stringify_keys(item) : item
+          case value
+          when Hash
+            value.each_with_object({}) { |(key, item), result| result[key.to_s] = stringify_keys(item) }
+          when Array
+            value.map { |item| stringify_keys(item) }
+          else
+            value
           end
         end
       end
