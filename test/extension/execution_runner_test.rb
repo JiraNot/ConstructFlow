@@ -7,14 +7,16 @@ class ExtensionExecutionRunnerTest < Minitest::Test
   class FakeCommandBus
     attr_reader :calls
 
-    def initialize(fail_on: nil)
+    def initialize(fail_on: nil, reject_on: nil)
       @fail_on = fail_on
+      @reject_on = reject_on
       @calls = []
     end
 
     def execute(name, input, actor:, project_id:)
       @calls << [name, input, actor, project_id]
       return result('failed', errors: ['boom']) if name == @fail_on
+      return result('rejected', errors: ['invalid intent']) if name == @reject_on
 
       result('success', updated_object_ids: ["obj-#{@calls.length}"])
     end
@@ -94,6 +96,19 @@ class ExtensionExecutionRunnerTest < Minitest::Test
     assert_equal %w[surface drainage interior electrical], result['dirty_domains']
     refute_includes result['dirty_domains'], 'roof'
     assert_equal 'failed', result['status']
+  end
+
+  def test_rejected_command_is_a_failed_execution_root_and_dirties_dependents
+    bus = FakeCommandBus.new(reject_on: 'GenerateOrUpdateSurfaceFromExtension')
+    runner = JiraNot::ConstructFlow::Extension::ExecutionRunner.new(command_bus: bus)
+    result = runner.execute(plan)
+
+    statuses = result['steps'].to_h { |item| [item['domain'], item['status']] }
+    assert_equal 'rejected', statuses['surface']
+    assert_equal 'success', statuses['roof']
+    assert_equal 'skipped', statuses['drainage']
+    assert_equal 'failed', result['status']
+    assert_equal %w[surface drainage interior electrical], result['dirty_domains']
   end
 
   def test_structure_failure_marks_all_transitive_dependents_dirty
