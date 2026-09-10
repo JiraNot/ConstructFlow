@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'sketchup_scene_presentation_service'
+
 module JiraNot
   module ConstructFlow
     module Core
@@ -8,7 +10,7 @@ module JiraNot
         DEFAULT_SCENE_NAME = 'ConstructFlow - Plumbing Plan'
         DEFAULT_TAG_NAME = 'CF-DRAWING-PLUMBING'
 
-        def initialize(runtime:, renderer: nil, presentation_service: SketchupScenePresentationService.new)
+        def initialize(runtime:, renderer: nil, presentation_service: nil)
           @runtime = runtime
           style_registry = runtime.respond_to?(:plan_graphic_styles) ? runtime.plan_graphic_styles : nil
           native_adapter = SketchupNativeGraphicStyleAdapter.new
@@ -16,7 +18,7 @@ module JiraNot
             style_registry: style_registry,
             native_style_adapter: native_adapter
           )
-          @presentation_service = presentation_service
+          @presentation_service = presentation_service || SketchupScenePresentationService.new
         end
 
         def refresh_preset(preset_id, object_ids: nil)
