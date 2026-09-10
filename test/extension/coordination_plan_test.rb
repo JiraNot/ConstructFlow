@@ -17,7 +17,9 @@ class ExtensionCoordinationPlanTest < Minitest::Test
       extension_id: 'ext-1', definition: definition
     )
 
-    assert_equal %w[drainage electrical interior roof structure surface], plan.modules
+    assert_equal %w[architecture drainage electrical interior roof structure surface], plan.modules
+    assert_equal 'wall-1', plan.intent_for('architecture')['attachment_host_id']
+    assert_equal 2800.0, plan.intent_for('architecture')['target_height_mm']
     assert_equal 'lean_to', plan.intent_for('roof')['roof_intent']
     assert_equal 'kitchen', plan.intent_for('interior')['program']
     assert_equal true, plan.intent_for('drainage')['roof_rainwater']
