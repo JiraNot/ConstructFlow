@@ -189,6 +189,34 @@ class ConstructionWorkflowTest < Minitest::Test
     assert_equal %w[S-101 R-101], issue_set.sheets.map { |sheet| sheet.options[:sheet_number] }
   end
 
+  def test_issue_set_scopes_generated_domains_to_one_extension_and_keeps_architecture_context
+    extension_a = object(id: 'ext-a', type: 'extension.zone', owner: 'constructflow.extension')
+    extension_b = object(id: 'ext-b', type: 'extension.zone', owner: 'constructflow.extension')
+    column_a = object(
+      id: 'column-a', type: 'structure.column', owner: 'constructflow.structure',
+      relationships: generated_from('ext-a')
+    )
+    column_b = object(
+      id: 'column-b', type: 'structure.column', owner: 'constructflow.structure',
+      relationships: generated_from('ext-b')
+    )
+    roof_a = object(
+      id: 'roof-a', type: 'roof.system', owner: 'constructflow.roof',
+      relationships: generated_from('ext-a')
+    )
+    wall = object(id: 'wall-1', type: 'architecture.wall', owner: 'constructflow.architecture')
+    opening = object(id: 'opening-1', type: 'opening.void', owner: 'constructflow.opening')
+    runtime = Struct.new(:smart_objects).new(
+      ConstructionWorkflowObjects.new([extension_a, extension_b, column_a, column_b, roof_a, wall, opening])
+    )
+    factory = JiraNot::ConstructFlow::Extension::ConstructionIssueSetFactory.new(runtime: runtime)
+
+    assert_equal ['column-a'], factory.object_ids_for_family(extension_id: 'ext-a', family: 'structure')
+    assert_equal ['roof-a'], factory.object_ids_for_family(extension_id: 'ext-a', family: 'roof')
+    assert_equal %w[opening-1 wall-1], factory.object_ids_for_family(extension_id: 'ext-a', family: 'architecture')
+    refute_includes factory.object_ids_for_family(extension_id: 'ext-a', family: 'structure'), 'column-b'
+  end
+
   def test_workflow_dry_run_stops_before_takeoff_and_drawing_mutation
     extension_entity = FakeEntity.new
     extension = object(
