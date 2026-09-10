@@ -58,6 +58,7 @@ require_relative 'modules/electrical/device_definition'
 require_relative 'modules/electrical/circuit_definition'
 require_relative 'modules/electrical/repository'
 require_relative 'modules/electrical/geometry'
+require_relative 'modules/electrical/quantity/electrical_quantity_provider'
 require_relative 'modules/electrical/registration'
 require_relative 'modules/electrical/extension_command_registration'
 require_relative 'modules/electrical/plan_representation_provider'
@@ -81,6 +82,11 @@ require_relative 'modules/drainage/route_node_ui_registration'
 require_relative 'modules/drainage/routing_registration'
 require_relative 'modules/drainage/plan_representation_provider'
 require_relative 'modules/drainage/representation_registration'
+require_relative 'modules/extension/construction_takeoff'
+require_relative 'modules/extension/construction_quality_gate'
+require_relative 'modules/extension/construction_issue_set_factory'
+require_relative 'modules/extension/construction_workflow_runner'
+require_relative 'modules/extension/construction_workflow_registration'
 
 JiraNot::ConstructFlow::Core::RepresentationRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::DrawingViewPresetRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
@@ -106,3 +112,4 @@ JiraNot::ConstructFlow::Drainage::QualityRegistration.install(JiraNot::Construct
 JiraNot::ConstructFlow::Drainage::RouteNodeUiRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::RuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Extension::ConstructionWorkflowRegistration.install(JiraNot::ConstructFlow::Runtime)
