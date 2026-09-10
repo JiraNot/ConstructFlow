@@ -8,9 +8,10 @@ module JiraNot
         DEFAULT_SCENE_NAME = 'ConstructFlow - Plumbing Plan'
         DEFAULT_TAG_NAME = 'CF-DRAWING-PLUMBING'
 
-        def initialize(runtime:, renderer: SketchupPlanRenderer.new)
+        def initialize(runtime:, renderer: nil)
           @runtime = runtime
-          @renderer = renderer
+          style_registry = runtime.respond_to?(:plan_graphic_styles) ? runtime.plan_graphic_styles : nil
+          @renderer = renderer || SketchupPlanRenderer.new(style_registry: style_registry)
         end
 
         def refresh_preset(preset_id, object_ids: nil)
@@ -163,8 +164,14 @@ module JiraNot
         end
 
         def stringify_keys(value)
-          return value unless value.is_a?(Hash)
-          value.each_with_object({}) { |(key, item), result| result[key.to_s] = item.is_a?(Hash) ? stringify_keys(item) : item }
+          case value
+          when Hash
+            value.each_with_object({}) { |(key, item), result| result[key.to_s] = stringify_keys(item) }
+          when Array
+            value.map { |item| stringify_keys(item) }
+          else
+            value
+          end
         end
       end
     end
