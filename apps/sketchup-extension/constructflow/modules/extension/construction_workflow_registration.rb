@@ -46,7 +46,10 @@ module JiraNot
             )
             warnings = Array(result.dig('quality_gate', 'issues')).select { |issue| issue['severity'] == 'warning' }
                            .map { |issue| issue['message'] }
-            warnings << 'construction workflow is blocked by QA or failed generation' if result['status'] == 'blocked'
+            warnings.concat(
+              Array(result.dig('currentness', 'issues')).map { |issue| issue['message'] }
+            )
+            warnings << 'construction workflow is blocked by generation, QA, or package currentness' if result['status'] == 'blocked'
             {
               warnings: warnings.uniq,
               events: [{ name: 'ConstructionWorkflowCompleted', object_ids: [result['extension_id']], payload: result }]
@@ -84,9 +87,11 @@ module JiraNot
             )
             if defined?(UI)
               qa = result['quality_gate'] || {}
+              currentness = result['currentness'] || {}
               UI.messagebox(
                 "Construction workflow: #{result['status']}\n" \
                 "QA: #{qa['status']} (#{qa['error_count']} errors / #{qa['warning_count']} warnings)\n" \
+                "Currentness: #{currentness['status']}\n" \
                 "Takeoff items: #{result.dig('takeoff', 'item_count')}\n" \
                 "Sheets: #{result.dig('issue_set', 'sheet_count')}"
               )
