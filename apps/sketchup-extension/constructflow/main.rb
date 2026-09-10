@@ -20,6 +20,8 @@ require_relative 'core/module_loader'
 require_relative 'core/capability_registry'
 require_relative 'core/connector_registry'
 require_relative 'core/sketchup_app_observer'
+require_relative 'core/entity_guard'
+require_relative 'core/geometry_guard'
 
 require_relative 'modules/architecture/wall_definition'
 require_relative 'modules/architecture/wall_repository'
@@ -29,7 +31,6 @@ require_relative 'modules/architecture/wall_geometry'
 require_relative 'modules/architecture/wall_host_capability'
 require_relative 'modules/architecture/tools/wall_tool'
 require_relative 'modules/architecture/registration'
-
 require_relative 'modules/opening/opening_definition'
 require_relative 'modules/opening/opening_repository'
 require_relative 'modules/opening/validators/opening_validator'
@@ -38,7 +39,6 @@ require_relative 'modules/opening/opening_geometry'
 require_relative 'modules/opening/opening_infill_host_capability'
 require_relative 'modules/opening/tools/opening_tool'
 require_relative 'modules/opening/registration'
-
 require_relative 'modules/door_window/door_window_type'
 require_relative 'modules/door_window/type_registry'
 require_relative 'modules/door_window/instance_definition'
@@ -47,16 +47,19 @@ require_relative 'modules/door_window/validators/door_window_validator'
 require_relative 'modules/door_window/quantity/door_window_quantity_provider'
 require_relative 'modules/door_window/door_window_geometry'
 require_relative 'modules/door_window/registration'
-
 require_relative 'modules/extension/extension_definition'
 require_relative 'modules/extension/repository'
 require_relative 'modules/extension/geometry'
 require_relative 'modules/extension/boundary_capability'
 require_relative 'modules/extension/coordination_plan'
+require_relative 'modules/extension/generator'
+require_relative 'modules/extension/orchestrator'
+require_relative 'modules/extension/execution_result'
+require_relative 'modules/extension/execution_engine'
+require_relative 'modules/extension/domain_handlers'
 require_relative 'modules/extension/validators/extension_validator'
 require_relative 'modules/extension/quantity/extension_quantity_provider'
 require_relative 'modules/extension/registration'
-
 require_relative 'modules/roof/roof_definition'
 require_relative 'modules/roof/gutter_definition'
 require_relative 'modules/roof/repository'
@@ -65,7 +68,6 @@ require_relative 'modules/roof/edge_host_capability'
 require_relative 'modules/roof/validators/roof_validator'
 require_relative 'modules/roof/quantity/roof_quantity_provider'
 require_relative 'modules/roof/registration'
-
 require_relative 'modules/structure/column_definition'
 require_relative 'modules/structure/foundation_definition'
 require_relative 'modules/structure/rebar_set_definition'
@@ -76,7 +78,6 @@ require_relative 'modules/structure/validators/structure_validator'
 require_relative 'modules/structure/quantity/structure_quantity_provider'
 require_relative 'modules/structure/tools/column_tool'
 require_relative 'modules/structure/registration'
-
 require_relative 'modules/surface/surface_definition'
 require_relative 'modules/surface/pattern_definition'
 require_relative 'modules/surface/paving_layout_definition'
@@ -89,7 +90,6 @@ require_relative 'modules/surface/validators/surface_validator'
 require_relative 'modules/surface/quantity/surface_quantity_provider'
 require_relative 'modules/surface/registration'
 require_relative 'modules/surface/layout_registration'
-
 require_relative 'modules/interior/cabinet_run_definition'
 require_relative 'modules/interior/joinery_part_set_definition'
 require_relative 'modules/interior/joinery_part_generator'
@@ -99,7 +99,6 @@ require_relative 'modules/interior/validators/interior_validator'
 require_relative 'modules/interior/quantity/interior_quantity_provider'
 require_relative 'modules/interior/tools/cabinet_run_tool'
 require_relative 'modules/interior/registration'
-
 require_relative 'modules/library/catalog_asset_definition'
 require_relative 'modules/library/project_asset_snapshot'
 require_relative 'modules/library/catalog_store'
@@ -108,7 +107,6 @@ require_relative 'modules/library/placed_asset_repository'
 require_relative 'modules/library/geometry'
 require_relative 'modules/library/catalog_capability'
 require_relative 'modules/library/registration'
-
 require_relative 'modules/drainage/manhole_definition'
 require_relative 'modules/drainage/pipe_route_definition'
 require_relative 'modules/drainage/repository'
@@ -133,7 +131,7 @@ module JiraNot
       class << self
         attr_reader :modules, :module_loader, :events, :commands, :levels, :project,
                     :smart_objects, :diagnostics, :migrations, :active_model, :menu,
-                    :capabilities, :connectors
+                    :capabilities, :connectors, :extension_execution_engine
 
         def boot!
           return if @booted
@@ -152,30 +150,29 @@ module JiraNot
           install_model_observer
           install_ui_entry
           install_builtin_modules
+          install_extension_execution_engine
           @booted = true
           @diagnostics.info('runtime_booted', 'ConstructFlow runtime booted')
         end
 
-        def booted?
-          !!@booted
+        def extension_plan(definition, options = {})
+          Extension::Orchestrator.new(Extension::Generator.new(definition)).plan(options)
         end
 
-        def attach_model(model)
-          return unless model
-          @active_model = model
-          @project = Core::ProjectStore.new(model, id_generator: @ids)
-          @project.ensure_project!
-          @levels = Core::LevelRegistry.new(project_store: @project)
-          @smart_objects = Core::SmartObjectManager.new(model: model, levels: @levels, id_generator: @ids, diagnostics: @diagnostics)
-          object_count = @smart_objects.scan!
-          @connectors.attach_model(model)
-          @commands.transaction_manager = Core::TransactionManager.new(model: model)
-          @diagnostics.info('model_attached', 'ConstructFlow attached to SketchUp model', project_id: @project.project_id,
-                            smart_objects: object_count, connectors: @connectors.connector_count,
-                            connections: @connectors.connection_count)
+        def execute_extension(plan, dry_run: false)
+          raise 'extension execution engine is not installed' unless @extension_execution_engine
+          @extension_execution_engine.execute(plan, dry_run: dry_run)
         end
 
         private
+
+        def install_extension_execution_engine
+          handlers = Extension::DomainHandlers.build(self)
+          @extension_execution_engine = ExtensionExecutionEngine.new(
+            handlers: handlers,
+            transaction_manager: @commands.transaction_manager
+          )
+        end
 
         def register_core_commands
           @commands.register('SetWorkingPhase', owner_module: 'constructflow.core', validator: lambda { |command|
@@ -238,52 +235,19 @@ module JiraNot
             if object.nil? then ['smart object required'] elsif object.created_phase != Core::Phase::EXISTING then ['only existing construction can be demolished'] else [] end
           }) do |command|
             object = resolve_object(command[:input])
-            updated = @smart_objects.update_lifecycle(object.entity, removed_phase: Core::Phase::DEMOLITION)
-            @smart_objects.mark_dirty(updated.entity, 'dirty_quantity', 'dirty_drawing')
-            { updated_object_ids: [updated.id], events: [{ name: 'ObjectDemolished', object_ids: [updated.id] },
-                                                          { name: 'ObjectPhaseChanged', object_ids: [updated.id], payload: { removed_phase: Core::Phase::DEMOLITION } }] }
+            @smart_objects.update_phase(object.id, Core::Phase::DEMOLISHED)
+            { removed_object_ids: [object.id], events: [{ name: 'ObjectDemolished', object_ids: [object.id], payload: { type: object.type } }] }
           end
         end
 
         def resolve_object(input)
-          entity = input[:entity] || input['entity']; return @smart_objects.fetch(entity) if entity
-          object_id = input[:object_id] || input['object_id']; object_id ? @smart_objects.fetch_by_id(object_id) : nil
-        end
-
-        def install_model_observer
-          @app_observer = Core::SketchupAppObserver.new { |model| attach_model(model) }
-          Sketchup.add_observer(@app_observer)
-        end
-
-        def install_ui_entry
-          @menu = UI.menu('Extensions').add_submenu('ConstructFlow')
-          @menu.add_item('Foundation Inspector') { show_inspector }
-        end
-
-        def install_builtin_modules
-          Architecture::Registration.install(self)
-          Opening::Registration.install(self)
-          DoorWindow::Registration.install(self)
-          Extension::Registration.install(self)
-          Roof::Registration.install(self)
-          Structure::Registration.install(self)
-          Surface::Registration.install(self)
-          Surface::LayoutRegistration.install(self)
-          Interior::Registration.install(self)
-          Library::Registration.install(self)
-          Drainage::Registration.install(self)
-        end
-
-        def show_inspector
-          recent = @diagnostics.recent(5).map { |entry| "[#{entry.severity}] #{entry.code}: #{entry.message}" }
-          message = ['ConstructFlow Foundation', "Project: #{@project&.project_id || '-'}", "Working phase: #{@project&.working_phase || '-'}",
-                     "Modules: #{@modules.size}", "Capabilities: #{@capabilities.size}", "Levels: #{@levels&.size || 0}",
-                     "Smart objects: #{@smart_objects&.size || 0}", "Connectors: #{@connectors&.connector_count || 0}",
-                     "Connections: #{@connectors&.connection_count || 0}", '', 'Recent diagnostics:', *(recent.empty? ? ['(none)'] : recent)].join("\n")
-          UI.messagebox(message)
+          id = input[:id] || input['id']
+          return @smart_objects.fetch(id) if id
+          entity = input[:entity] || input['entity']
+          return @smart_objects.find_by_entity(entity) if entity
+          nil
         end
       end
     end
-    Runtime.boot!
   end
 end
