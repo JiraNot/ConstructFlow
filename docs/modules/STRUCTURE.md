@@ -182,6 +182,18 @@ Formula/version traceability is required.
 - reinforcement drawings;
 - BBS.
 
+### Plan representation foundation
+
+`structure.column`, `structure.foundation`, and `structure.rebar_set` expose on-demand semantic `plan` representations through the shared Representation Registry. The provider reads persisted Structure definitions rather than rediscovering meaning from SketchUp edges/faces.
+
+Profiles are scale/LOD aware:
+
+- **Simple** — column/foundation outline + symbol and minimal rebar tag;
+- **Construction** — adds member size, foundation top elevation, rebar role and grade;
+- **Coordination** — adds engineering-status/verification intent, level/support/host traceability.
+
+Preliminary structural status must surface as verification status in coordination output. Rebar plan tags anchor to their semantic structural host and do not require physical 3D bars.
+
 ## QA / Coordination
 
 Modeling/coordination checks:
@@ -207,6 +219,7 @@ Engineering checks, if ever implemented, must be clearly separated from licensed
 - AC-STR-006: physical rebar generation can be removed/regenerated without changing semantic reinforcement identity.
 - AC-STR-007: steel profile swap updates quantity and drawing dirty states.
 - AC-STR-008: structural outputs visibly state preliminary/modeling status where engineering approval is not provided.
+- AC-STR-009: column, foundation and RebarSet expose deterministic on-demand plan representations from semantic definitions, with Simple/Construction/Coordination profiles and preliminary status surfaced as Verify in coordination output.
 
 ## Deferred
 
