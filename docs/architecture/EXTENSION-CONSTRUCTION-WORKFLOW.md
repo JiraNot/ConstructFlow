@@ -25,17 +25,19 @@ The v1 pipeline is:
 11. Build renderer-neutral sheet plans.
 12. Optionally export a native LayOut document and PDF only when construction QA, required output settlement and package currentness all permit publication.
 13. Persist the latest construction-output evidence on the source Extension.
+14. When native export succeeds, append idempotent construction issue-history evidence for that exported revision.
 
-Dry-run stops after orchestration preview and must not generate domain geometry, quantities, drawing scenes, settlement state, LayOut files or PDFs.
+Dry-run stops after orchestration preview and must not generate domain geometry, quantities, drawing scenes, settlement state, issue history, LayOut files or PDFs.
 
 ## Ownership invariants
 
-- Extension owns orchestration and its own persisted construction-generation/output evidence only.
+- Extension owns orchestration and its own persisted construction-generation/output/publication evidence only.
 - Structure, Surface, Roof, Drainage, Interior and Electrical retain ownership of their Smart Objects and geometry.
 - Domain generation occurs only through public commands such as `GenerateOrUpdate<Domain>FromExtension`.
 - Quantity values are produced by the owning domain quantity provider; the workflow only aggregates them.
 - Drawing semantics are produced by domain Representation Providers; the workflow only selects presets, scopes objects and composes sheets.
 - Output settlement may clear derived dirty flags only from evidence produced by the corresponding quantity/drawing pipeline; it must not mutate domain semantics.
+- Issue history records successful export evidence only; historical evidence never authorizes current publication.
 - LayOut/PDF export remains owned by the Drawing/LayOut platform.
 - AI callers use the same public command boundary as human/automation callers.
 
@@ -187,11 +189,21 @@ The record includes revision/issue status, settlement state, takeoff/drawing fin
 
 This record is evidence only. A later semantic mutation may mark objects dirty again; old output-state evidence must never override those dirty flags or automatically authorize publication. Legacy models without this state remain valid and simply have no prior package-settlement evidence.
 
+## Construction issue history
+
+The latest output-state record is not sufficient document-control history because it is replaced by every workflow run. A successful exported package therefore also appends an entry under the Construction Issue History contract.
+
+Issue history is written only when workflow status is `exported`. It preserves revision/issue status, scope/takeoff/drawing fingerprints, output paths/backend and available template version/hash evidence.
+
+The issue ID is deterministic for that evidence bundle. Re-exporting the same revision with the same current scope, derived outputs, destinations and template evidence returns the existing entry rather than appending a duplicate. A changed revision or changed evidence creates a new history row.
+
+Older entries remain historical evidence when later changes make the current model dirty. They never satisfy current QA, currentness or settlement gates and never clear dirty flags.
+
 ## Change propagation proof
 
 The required non-dry propagation proof is:
 
-`Extension source/intent change → effective construction intent → domain regeneration/reconciliation → current Smart Object graph → current takeoff → current drawing scope → output settlement → post-settlement currentness audit → issue/export gate → output-state evidence`
+`Extension source/intent change → effective construction intent → domain regeneration/reconciliation → current Smart Object graph → current takeoff → current drawing scope → output settlement → post-settlement currentness audit → issue/export gate → latest output-state evidence → exported issue-history evidence`
 
 For structural topology shrink, obsolete generated foundations and columns are removed before package assembly. Their IDs must be absent from the rebuilt takeoff coverage/items and from the refreshed Structure drawing scope. Reusing pre-change takeoff or drawing references after the source change must make the currentness audit fail.
 
@@ -204,18 +216,18 @@ The workflow result uses:
 - `preview` — dry-run only;
 - `blocked` — execution, construction QA, required output settlement or package currentness does not permit publication;
 - `ready` — package is built and publishable but export was not requested;
-- `exported` — requested native export completed;
+- `exported` — requested native export completed and may be recorded in issue history;
 - `export_failed` — export was requested but no successful export result was returned.
 
-The workflow must never report `exported` when QA, required output settlement or currentness blocks publication.
+The workflow must never report `exported` or append issue history when QA, required output settlement or currentness blocks publication.
 
 ## Public command
 
 `RunExtensionConstructionWorkflow` is the public orchestration command for human, automation and later AI callers.
 
-The command itself does not open one giant SketchUp transaction. Domain commands retain their own CommandBus transaction boundaries; scene refresh, dirty-flag settlement and native export retain their own platform/service boundaries.
+The command itself does not open one giant SketchUp transaction. Domain commands retain their own CommandBus transaction boundaries; scene refresh, dirty-flag settlement, history persistence and native export retain their own platform/service boundaries.
 
-A `ConstructionWorkflowCompleted` event reports the resulting package state, including construction-intent, output-settlement and currentness traceability evidence.
+A `ConstructionWorkflowCompleted` event reports the resulting package state, including construction-intent, output-settlement, currentness and issue-history traceability evidence.
 
 ## Acceptance criteria
 
@@ -223,7 +235,7 @@ A `ConstructionWorkflowCompleted` event reports the resulting package state, inc
 - AC-CWF-002: takeoff totals are traceable to Smart Object IDs and phase scope.
 - AC-CWF-003: Strict QA blocks preliminary structural engineering status.
 - AC-CWF-004: Strict QA blocks enabled-but-unresolved Drainage.
-- AC-CWF-005: dry-run mutates no geometry/drawing/settlement/export outputs.
+- AC-CWF-005: dry-run mutates no geometry/drawing/settlement/history/export outputs.
 - AC-CWF-006: issue-set families follow generated Extension content plus explicit Architecture context.
 - AC-CWF-007: refreshed domain scenes are scoped so another Extension's generated domain objects are excluded.
 - AC-CWF-008: publication/export cannot proceed when the quality gate is not publishable.
@@ -239,3 +251,5 @@ A `ConstructionWorkflowCompleted` event reports the resulting package state, inc
 - AC-CWF-018: drawing dirty state clears only for current objects actually rendered by the requested issue-set refresh; missing/stale render evidence remains unsettled.
 - AC-CWF-019: currentness is audited after settlement so its scope fingerprint describes the post-settlement Smart Object state.
 - AC-CWF-020: the latest construction-output settlement/currentness/export evidence is stored model-locally on the Extension without becoming an authorization override for later dirty state.
+- AC-CWF-021: successful native export appends one idempotent construction issue-history entry with revision, fingerprints, output paths and available template evidence.
+- AC-CWF-022: blocked/partial/stale/export-failed workflows do not append construction issue history.
