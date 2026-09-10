@@ -19,6 +19,9 @@ require_relative 'core/plan_scene_runtime_integration'
 require_relative 'core/drawing_sheet_spec'
 require_relative 'core/drawing_sheet_metadata'
 require_relative 'core/vector_lineweight_profile'
+require_relative 'core/layout_template_placeholder_map'
+require_relative 'core/layout_template_registry'
+require_relative 'core/layout_template_runtime_integration'
 require_relative 'core/layout_export_plan_builder'
 require_relative 'core/layout_export_runtime_integration'
 require_relative 'core/native_layout_sheet_decorator'
@@ -35,6 +38,7 @@ JiraNot::ConstructFlow::Core::RepresentationRuntimeIntegration.install(JiraNot::
 JiraNot::ConstructFlow::Core::DrawingViewPresetRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::PlanGraphicStyleRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::PlanSceneRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Core::LayoutTemplateRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::LayoutExportRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::NativeLayoutRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
