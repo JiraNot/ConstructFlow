@@ -89,6 +89,7 @@ require_relative 'modules/extension/construction_quality_gate'
 require_relative 'modules/extension/construction_issue_set_factory'
 require_relative 'modules/extension/construction_currentness_audit'
 require_relative 'modules/extension/construction_output_settlement'
+require_relative 'modules/extension/construction_issue_history_store'
 require_relative 'modules/extension/construction_workflow_runner'
 require_relative 'modules/extension/construction_workflow_registration'
 
