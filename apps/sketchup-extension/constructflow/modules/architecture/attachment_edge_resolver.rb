@@ -27,7 +27,7 @@ module JiraNot
           @min_overlap_mm = Float(min_overlap_mm)
         end
 
-        def resolve(runtime:, boundary_mm:, attachment_host_id:, explicit_edge_index: nil)
+        def resolve(runtime:, boundary_mm:, attachment_host_id:, explicit_edge_index: nil, source_extension_id: nil)
           host_id = attachment_host_id.to_s.strip
           return nil if host_id.empty?
 
@@ -35,6 +35,9 @@ module JiraNot
           raise ArgumentError, "attachment host #{host_id} not found" unless host
           unless host.type.to_s == 'architecture.wall' && host.owner_module.to_s == 'constructflow.architecture'
             raise ArgumentError, "attachment host #{host_id} must be an Architecture Smart Wall"
+          end
+          if generated_from_source_extension?(host, source_extension_id)
+            raise ArgumentError, "attachment host #{host_id} cannot be a wall generated from the same Extension"
           end
 
           host_definition = @repository.read(host.entity)
@@ -67,15 +70,13 @@ module JiraNot
           end
           raise ArgumentError, "attachment host #{host_id} does not overlap any extension boundary edge" if candidates.empty?
 
-          max_overlap = candidates.map(&:last).max
-          best = candidates.select { |_index, overlap| (overlap - max_overlap).abs <= 0.001 }
-          if best.length != 1
-            indexes = best.map(&:first).join(', ')
+          if candidates.length != 1
+            indexes = candidates.map(&:first).join(', ')
             raise ArgumentError,
                   "attachment host #{host_id} matches multiple extension edges (#{indexes}); set architecture.attachment_edge_index explicitly"
           end
 
-          index, overlap = best.first
+          index, overlap = candidates.first
           Result.new(
             host_object_id: host.id,
             edge_index: index,
@@ -85,6 +86,16 @@ module JiraNot
         end
 
         private
+
+        def generated_from_source_extension?(host, extension_id)
+          source_id = extension_id.to_s.strip
+          return false if source_id.empty? || !host.respond_to?(:relationships)
+
+          Array(host.relationships).any? do |relationship|
+            (relationship['kind'] || relationship[:kind]).to_s == 'generated_from' &&
+              (relationship['target_id'] || relationship[:target_id]).to_s == source_id
+          end
+        end
 
         def boundary_edges(boundary_mm)
           points = Array(boundary_mm)
