@@ -81,6 +81,8 @@ module JiraNot
           {
             'domain' => step.fetch('domain').to_s,
             'geometry_owner' => step['geometry_owner'],
+            'action' => step['action'],
+            'intent' => step['intent'] || {},
             'status' => status.to_s,
             'command_id' => command_id,
             'created_object_ids' => Array(created_object_ids).map(&:to_s).freeze,
