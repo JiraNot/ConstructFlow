@@ -4,17 +4,18 @@ module JiraNot
   module ConstructFlow
     module Extension
       class Orchestrator
-        DOMAIN_ORDER = %w[architecture structure surface roof drainage interior electrical].freeze
+        DOMAIN_ORDER = %w[architecture opening structure surface roof drainage interior electrical].freeze
         DEPENDENCIES = {
           'architecture' => [],
+          'opening' => ['architecture'],
           'structure' => [],
           'surface' => ['structure'],
           'roof' => ['structure'],
           'drainage' => ['roof', 'surface'],
-          'interior' => ['structure', 'surface'],
-          'electrical' => ['structure', 'interior']
+          'interior' => ['architecture', 'opening', 'structure', 'surface'],
+          'electrical' => ['architecture', 'opening', 'structure', 'interior']
         }.freeze
-        DISABLE_RECONCILIATION_DOMAINS = %w[drainage].freeze
+        DISABLE_RECONCILIATION_DOMAINS = %w[opening drainage].freeze
 
         def initialize(generator)
           @generator = generator
@@ -98,9 +99,10 @@ module JiraNot
 
         def regeneration_rules
           {
-            'boundary_changed' => %w[architecture structure surface roof drainage interior electrical],
-            'height_changed' => %w[architecture structure roof drainage electrical interior],
-            'architecture_changed' => %w[architecture interior electrical],
+            'boundary_changed' => %w[architecture opening structure surface roof drainage interior electrical],
+            'height_changed' => %w[architecture opening structure roof drainage electrical interior],
+            'architecture_changed' => %w[architecture opening interior electrical],
+            'opening_changed' => %w[opening interior electrical],
             'roof_changed' => %w[roof drainage],
             'surface_changed' => %w[surface drainage interior],
             'structure_changed' => %w[structure roof electrical interior]
