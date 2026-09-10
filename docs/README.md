@@ -24,12 +24,13 @@ No production module should introduce behavior that contradicts an approved spec
 12. `architecture/SKETCHUP-NATIVE-GRAPHIC-STYLE-ADAPTER.md` — native SketchUp Tag/color/dash mapping for renderer-neutral style intent.
 13. `architecture/SKETCHUP-SCENE-PRESENTATION.md` — managed per-scene ConstructFlow visibility without mutating unrelated user tags.
 14. `architecture/LAYOUT-VECTOR-OUTPUT.md` — renderer-neutral sheet, viewport, vector lineweight and LayOut/PDF export intent.
-15. `architecture/PHASE-LEVEL-REVISION.md` — existing/demolition/new, level and revision semantics.
-16. `architecture/INTERACTION-MODEL.md` and `architecture/UI-UX-SPEC.md` — modeling interaction and UI behavior.
-17. `architecture/COMMAND-CATALOG.md`, `EVENT-CATALOG.md`, `CONNECTOR-STANDARD.md` — cross-module integration contracts.
-18. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
-19. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
-20. `decisions/` — architecture decisions that explain or amend the baseline.
+15. `architecture/NATIVE-LAYOUT-ADAPTER.md` — official LayOut Ruby API boundary for native pages, viewports, `.layout` save and optional PDF export.
+16. `architecture/PHASE-LEVEL-REVISION.md` — existing/demolition/new, level and revision semantics.
+17. `architecture/INTERACTION-MODEL.md` and `architecture/UI-UX-SPEC.md` — modeling interaction and UI behavior.
+18. `architecture/COMMAND-CATALOG.md`, `EVENT-CATALOG.md`, `CONNECTOR-STANDARD.md` — cross-module integration contracts.
+19. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
+20. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
+21. `decisions/` — architecture decisions that explain or amend the baseline.
 
 ## Specification status vocabulary
 
