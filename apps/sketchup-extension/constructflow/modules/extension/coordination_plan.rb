@@ -10,7 +10,7 @@ module JiraNot
       # Produces a deterministic dependency plan for an extension zone.
       # It does not create geometry; domain modules consume the intents independently.
       class CoordinationPlan
-        MODULES = %w[structure surface roof drainage electrical interior].freeze
+        MODULES = %w[architecture structure surface roof drainage electrical interior].freeze
 
         attr_reader :extension_id, :intents
 
@@ -39,6 +39,13 @@ module JiraNot
         def self.from_definition(extension_id:, definition:)
           boundary = definition.boundary_mm
           {
+            'architecture' => {
+              'boundary_mm' => boundary,
+              'base_level_id' => definition.base_level_id,
+              'base_offset_mm' => definition.base_offset_mm,
+              'target_height_mm' => definition.target_height_mm,
+              'attachment_host_id' => definition.attachment_host_id
+            },
             'structure' => {
               'boundary_mm' => boundary,
               'base_level_id' => definition.base_level_id,
