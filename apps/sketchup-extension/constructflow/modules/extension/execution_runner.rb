@@ -36,7 +36,7 @@ module JiraNot
             'status' => overall_status(results, dry_run: dry_run),
             'dry_run' => !!dry_run,
             'steps' => results.freeze,
-            'dirty_domains' => (dry_run ? [] : dirty_domains(results)).freeze
+            'dirty_domains' => (dry_run ? [] : dirty_domains(steps, results)).freeze
           }.freeze
         end
 
@@ -98,10 +98,37 @@ module JiraNot
           'success'
         end
 
-        def dirty_domains(results)
-          failed_index = results.index { |result| !SUCCESS_STATUSES.include?(result['status']) }
-          return [] unless failed_index
-          results[failed_index..].map { |result| result['domain'] }
+        # Dirty only domains whose own execution failed plus their transitive
+        # dependents. Independent later steps are not dirty merely because they
+        # appear after a failure. Explicitly skipped domains are not roots; a
+        # dependency_failed skip is included only when reachable from a failed root.
+        def dirty_domains(steps, results)
+          failed = results.select { |result| result['status'] == 'failed' }.map { |result| result['domain'] }
+          return [] if failed.empty?
+
+          dependents = build_dependents(steps)
+          dirty = failed.dup
+          queue = failed.dup
+          until queue.empty?
+            domain = queue.shift
+            Array(dependents[domain]).each do |dependent|
+              next if dirty.include?(dependent)
+              dirty << dependent
+              queue << dependent
+            end
+          end
+
+          order = steps.map { |step| step.fetch('domain').to_s }
+          order.select { |domain| dirty.include?(domain) }
+        end
+
+        def build_dependents(steps)
+          steps.each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |step, result|
+            domain = step.fetch('domain').to_s
+            Array(step['dependencies']).map(&:to_s).each do |dependency|
+              result[dependency] << domain unless result[dependency].include?(domain)
+            end
+          end
         end
       end
     end
