@@ -12,8 +12,8 @@ module JiraNot
           'surface' => ['structure'],
           'roof' => ['structure'],
           'drainage' => ['roof', 'surface'],
-          'interior' => ['architecture', 'opening', 'structure', 'surface'],
-          'electrical' => ['architecture', 'opening', 'structure', 'interior']
+          'interior' => ['structure', 'surface'],
+          'electrical' => ['structure', 'interior']
         }.freeze
         DISABLE_RECONCILIATION_DOMAINS = %w[opening drainage].freeze
 
