@@ -17,12 +17,13 @@ No production module should introduce behavior that contradicts an approved spec
 5. `architecture/MODULAR-ARCHITECTURE.md` — module boundaries and dependency rules.
 6. `architecture/CORE-CONTRACTS.md` — shared contracts.
 7. `architecture/SMART-OBJECT-SCHEMA.md` — canonical object envelope and lifecycle.
-8. `architecture/PHASE-LEVEL-REVISION.md` — existing/demolition/new, level and revision semantics.
-9. `architecture/INTERACTION-MODEL.md` and `architecture/UI-UX-SPEC.md` — modeling interaction and UI behavior.
-10. `architecture/COMMAND-CATALOG.md`, `EVENT-CATALOG.md`, `CONNECTOR-STANDARD.md` — cross-module integration contracts.
-11. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
-12. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
-13. `decisions/` — architecture decisions that explain or amend the baseline.
+8. `architecture/SMART-OBJECT-REPRESENTATION-SYSTEM.md` — one Smart Object with domain-owned 3D/plan/elevation/section/detail/annotation/schedule representations.
+9. `architecture/PHASE-LEVEL-REVISION.md` — existing/demolition/new, level and revision semantics.
+10. `architecture/INTERACTION-MODEL.md` and `architecture/UI-UX-SPEC.md` — modeling interaction and UI behavior.
+11. `architecture/COMMAND-CATALOG.md`, `EVENT-CATALOG.md`, `CONNECTOR-STANDARD.md` — cross-module integration contracts.
+12. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
+13. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
+14. `decisions/` — architecture decisions that explain or amend the baseline.
 
 ## Specification status vocabulary
 
