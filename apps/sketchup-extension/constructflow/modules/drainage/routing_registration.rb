@@ -12,39 +12,35 @@ module JiraNot
           geometry = Geometry.new
           validator = Validators::DrainageValidator.new
           edit_service = RouteEditService.new
+          intermediate_service = IntermediateManholeService.new(runtime: runtime, repository: repository, geometry: geometry, validator: validator)
 
           register_plan(runtime, planner)
           register_alternatives(runtime, planner)
           register_create(runtime, planner, repository, geometry, validator)
           register_route_edits(runtime, edit_service, repository, geometry, validator)
+          register_intermediate_manhole(runtime, intermediate_service)
           planner
         end
 
         def register_plan(runtime, planner)
           return if runtime.commands.registered?('PlanDrainageRoute')
-
           runtime.commands.register('PlanDrainageRoute', owner_module: 'constructflow.drainage', transaction: false) do |command|
-            input = command[:input]
-            plan = build_plan(runtime, planner, input)
+            plan = build_plan(runtime, planner, command[:input])
             { warnings: plan.warnings, events: [{ name: 'DrainageRoutePlanned', payload: plan.to_h }] }
           end
         end
 
         def register_alternatives(runtime, planner)
           return if runtime.commands.registered?('PlanDrainageRouteAlternatives')
-
           runtime.commands.register('PlanDrainageRouteAlternatives', owner_module: 'constructflow.drainage', transaction: false) do |command|
             input = command[:input]
             start_id = value(input, :start_connector_id).to_s
             end_id = value(input, :end_connector_id).to_s
             raise ArgumentError, 'start_connector_id required' if start_id.empty?
             raise ArgumentError, 'end_connector_id required' if end_id.empty?
-
             alternatives = RouteAlternativePlanner.new(runtime: runtime, planner: planner).alternatives(
-              start_connector: runtime.connectors.connector(start_id),
-              end_connector: runtime.connectors.connector(end_id),
-              start_invert_mm: value(input, :start_invert_mm),
-              end_invert_mm: value(input, :end_invert_mm),
+              start_connector: runtime.connectors.connector(start_id), end_connector: runtime.connectors.connector(end_id),
+              start_invert_mm: value(input, :start_invert_mm), end_invert_mm: value(input, :end_invert_mm),
               minimum_slope_percent: value(input, :minimum_slope_percent) || Validators::DrainageValidator::MIN_SLOPE_PERCENT
             )
             warnings = alternatives['requires_manual'] ? ['all automatic route candidates intersect known structural obstacles; manual intervention required'] : []
@@ -54,7 +50,6 @@ module JiraNot
 
         def register_create(runtime, planner, repository, geometry, validator)
           return if runtime.commands.registered?('CreateRoutedPipe')
-
           runtime.commands.register(
             'CreateRoutedPipe', owner_module: 'constructflow.drainage',
             validator: lambda { |command|
@@ -99,6 +94,37 @@ module JiraNot
           end
         end
 
+        def register_intermediate_manhole(runtime, service)
+          return if runtime.commands.registered?('InsertIntermediateManhole')
+          runtime.commands.register('InsertIntermediateManhole', owner_module: 'constructflow.drainage') do |command|
+            input = command[:input]
+            route = resolve_route(runtime, input)
+            result = service.insert(
+              route_object: route,
+              segment_index: value(input, :segment_index),
+              segment_ratio: value(input, :segment_ratio) || 0.5,
+              size_mm: value(input, :size_mm) || ManholeDefinition::DEFAULT_SIZE_MM,
+              cover_level_mm: value(input, :cover_level_mm),
+              manhole_type: value(input, :manhole_type) || 'inspection',
+              display_name: value(input, :display_name) || 'Intermediate Manhole'
+            )
+            affected = Array(result[:updated_ids])
+            created = Array(result[:created_ids])
+            {
+              created_object_ids: created,
+              updated_object_ids: affected,
+              warnings: result[:warnings],
+              events: [
+                { name: 'ObjectCreated', object_ids: [result[:manhole_id]], payload: { type: 'drainage.manhole' } },
+                { name: 'DrainageIntermediateManholeInserted', object_ids: affected, payload: result[:split].merge('manhole_id' => result[:manhole_id], 'route_ids' => result[:route_ids]) },
+                { name: 'DrainageTopologyChanged', object_ids: affected },
+                { name: 'QuantityDirty', object_ids: affected },
+                { name: 'DrawingDirty', object_ids: affected }
+              ]
+            }
+          end
+        end
+
         def register_edit_command(runtime, command_name, _service, repository, geometry, validator, &transform)
           return if runtime.commands.registered?(command_name)
           runtime.commands.register(command_name, owner_module: 'constructflow.drainage') do |command|
@@ -114,14 +140,11 @@ module JiraNot
             repository.write_pipe_route(object.entity, updated)
             runtime.smart_objects.mark_dirty(object.entity, 'dirty_quantity', 'dirty_drawing')
             {
-              updated_object_ids: [object.id],
-              warnings: Registration.warning_messages(issues),
+              updated_object_ids: [object.id], warnings: Registration.warning_messages(issues),
               events: [
                 { name: 'RouteChanged', object_ids: [object.id], payload: { route_strategy: updated.route_strategy, node_count: updated.route_nodes_mm.length } },
-                { name: 'GeometryChanged', object_ids: [object.id] },
-                { name: 'QuantityDirty', object_ids: [object.id] },
-                { name: 'DrawingDirty', object_ids: [object.id] },
-                { name: 'ValidationStateChanged', object_ids: [object.id], payload: { issues: issues } }
+                { name: 'GeometryChanged', object_ids: [object.id] }, { name: 'QuantityDirty', object_ids: [object.id] },
+                { name: 'DrawingDirty', object_ids: [object.id] }, { name: 'ValidationStateChanged', object_ids: [object.id], payload: { issues: issues } }
               ]
             }
           end
