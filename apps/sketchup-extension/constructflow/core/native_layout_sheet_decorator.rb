@@ -34,9 +34,7 @@ module JiraNot
 
           revision_placeholders_used = placeholder_result['matched_fields'].any? { |key| key.start_with?('revision.') }
           render_generic_revisions = !revisions.empty? && !title_block.empty? && (
-            strategy == 'generic_only' ||
-            (strategy == 'prefer_template' && !revision_placeholders_used) ||
-            (strategy == 'template_only' ? false : false)
+            strategy == 'generic_only' || (strategy == 'prefer_template' && !revision_placeholders_used)
           )
           created.concat(render_revision_table(document, page, layer, title_block, revisions)) if render_generic_revisions
 
