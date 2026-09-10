@@ -4,6 +4,7 @@ require_relative '../test_helper'
 require File.join(CORE, 'representation_registry')
 require File.join(CORE, 'plan_graphic_style_registry')
 require File.join(CORE, 'plan_graphic_style_registration')
+require File.join(CORE, 'sketchup_native_graphic_style_adapter')
 require File.join(CORE, 'sketchup_plan_renderer')
 require File.join(CORE, 'sketchup_plan_scene_service')
 
@@ -76,14 +77,31 @@ class FakePage
   def update = @updates += 1
 end
 
+class FakeLineStyle
+  attr_reader :name
+  def initialize(name) = @name = name
+end
+
+class FakeLayer
+  attr_reader :name
+  attr_accessor :line_style, :color, :visible
+
+  def initialize(name)
+    @name = name
+    @visible = true
+  end
+end
+
 class FakeLayers
+  attr_reader :values
+
   def initialize = @values = {}
   def [](name) = @values[name]
-  def add(name) = @values[name] = name
+  def add(name) = @values[name] = FakeLayer.new(name)
 end
 
 class FakeDrawingModel < FakeAttributeCarrier
-  attr_reader :entities, :operations, :pages, :layers
+  attr_reader :entities, :operations, :pages, :layers, :line_styles
 
   def initialize
     super()
@@ -91,6 +109,7 @@ class FakeDrawingModel < FakeAttributeCarrier
     @operations = []
     @pages = FakePages.new
     @layers = FakeLayers.new
+    @line_styles = [FakeLineStyle.new('Dash'), FakeLineStyle.new('Dash Dot'), FakeLineStyle.new('Dotted')]
   end
 
   def start_operation(name, disable_ui = true, next_transparent = false, transparent = false)
@@ -185,6 +204,35 @@ class SketchupPlanRendererTest < Minitest::Test
     assert_equal 'strong', line.get_attribute('constructflow.graphic_style', 'line_weight')
     assert_equal 'new_work', line.get_attribute('constructflow.graphic_style', 'color_key')
     assert_equal 'pipe_centerline', line.get_attribute('constructflow.graphic_style', 'semantic_role')
+  end
+
+  def test_native_adapter_maps_style_to_tag_color_and_dash
+    model = FakeDrawingModel.new
+    entities = FakeDrawingEntities.new
+    renderer = JiraNot::ConstructFlow::Core::SketchupPlanRenderer.new(
+      style_registry: style_registry,
+      native_style_adapter: JiraNot::ConstructFlow::Core::SketchupNativeGraphicStyleAdapter.new
+    )
+    representation = {
+      'object_id' => 'pipe-rw', 'object_type' => 'drainage.pipe_route', 'kind' => 'plan',
+      'owner_module' => 'constructflow.drainage',
+      'source_lifecycle' => {},
+      'primitives' => [
+        { 'type' => 'polyline', 'role' => 'pipe_centerline', 'style_role' => 'construction_rainwater', 'points_mm' => [[0, 0, 0], [1000, 0, 0]] }
+      ],
+      'annotations' => []
+    }
+
+    renderer.render(representation: representation, entities: entities, model: model)
+    line = entities.items.first
+    tag = line.layer
+
+    assert_equal 'CF-STYLE-RAINWATER-DASH-NORMAL', tag.name
+    assert_equal 'Dash', tag.line_style.name
+    assert_equal [60, 110, 155], tag.color
+    assert_equal true, line.get_attribute('constructflow.native_graphic_style', 'native_applied')
+    assert_equal 'Dash', line.get_attribute('constructflow.native_graphic_style', 'line_style')
+    assert_equal '60,110,155', line.get_attribute('constructflow.native_graphic_style', 'color_rgb')
   end
 
   def test_verify_annotation_overrides_phase_style
