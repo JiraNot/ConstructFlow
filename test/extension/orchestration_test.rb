@@ -25,8 +25,9 @@ class ExtensionOrchestrationTest < Minitest::Test
 
     assert_equal 'ext-1', intents['extension_id']
     assert_equal 'kitchen', intents['program']
+    assert intents['domains']['architecture']['enabled']
     refute intents['domains']['electrical']['enabled']
-    assert_equal %w[structure surface roof drainage interior], generator.enabled_domains(
+    assert_equal %w[architecture structure surface roof drainage interior], generator.enabled_domains(
       domains: { 'electrical' => { 'enabled' => false } }
     )
   end
@@ -36,7 +37,9 @@ class ExtensionOrchestrationTest < Minitest::Test
     orchestrator = JiraNot::ConstructFlow::Extension::Orchestrator.new(generator)
     plan = orchestrator.plan(extension_id: 'ext-1')
 
-    assert_equal %w[structure surface roof drainage interior electrical], plan['steps'].map { |step| step['domain'] }
+    assert_equal %w[architecture structure surface roof drainage interior electrical], plan['steps'].map { |step| step['domain'] }
+    architecture = plan['steps'].find { |step| step['domain'] == 'architecture' }
+    assert_empty architecture['dependencies']
     drainage = plan['steps'].find { |step| step['domain'] == 'drainage' }
     assert_equal %w[roof surface], drainage['dependencies']
   end
@@ -48,6 +51,7 @@ class ExtensionOrchestrationTest < Minitest::Test
 
     domains = plan['steps'].map { |step| step['domain'] }
     refute_includes domains, 'surface'
+    assert_includes domains, 'architecture'
     assert_includes domains, 'drainage'
   end
 
@@ -57,6 +61,8 @@ class ExtensionOrchestrationTest < Minitest::Test
     rules = orchestrator.plan['regeneration']
 
     assert_equal %w[roof drainage], rules['roof_changed']
-    assert_includes rules['boundary_changed'], 'interior'
+    assert_includes rules['boundary_changed'], 'architecture'
+    assert_includes rules['height_changed'], 'architecture'
+    assert_equal %w[architecture interior electrical], rules['architecture_changed']
   end
 end
