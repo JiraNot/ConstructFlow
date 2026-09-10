@@ -7,6 +7,7 @@ module JiraNot
         def initialize(runtime:)
           @runtime = runtime
           @repository = Repository.new
+          @intent_store = ConstructionIntentStore.new
         end
 
         def run(extension_id:, domains: {}, revision: 'P01', issue_status: 'working', strict: false,
@@ -17,9 +18,19 @@ module JiraNot
           definition = @repository.read(extension.entity)
           raise ArgumentError, 'extension definition missing' unless definition
 
+          runtime_overrides = stringify_keys(domains || {})
+          persisted_intent = @intent_store.read(extension.entity)
+          effective_overrides = @intent_store.effective_domains(extension.entity, runtime_overrides)
+          intent_trace = {
+            'schema_version' => persisted_intent['schema_version'],
+            'persisted_domains' => persisted_intent['domains'],
+            'run_overrides' => runtime_overrides.freeze,
+            'effective_domain_overrides' => effective_overrides
+          }.freeze
+
           plan_options = {
             'extension_id' => extension.id,
-            'domains' => stringify_keys(domains || {})
+            'domains' => effective_overrides
           }
           plan = @runtime.extension_plan(definition, plan_options)
           execution = @runtime.execute_extension(
@@ -34,6 +45,7 @@ module JiraNot
               'format' => 'constructflow.extension_construction_workflow.v1',
               'extension_id' => extension.id,
               'status' => 'preview',
+              'construction_intent' => intent_trace,
               'execution' => execution,
               'quality_gate' => nil,
               'takeoff' => nil,
@@ -87,6 +99,7 @@ module JiraNot
               export_result,
               export_requested: !export.nil?
             ),
+            'construction_intent' => intent_trace,
             'execution' => execution,
             'quality_gate' => quality,
             'takeoff' => takeoff,
