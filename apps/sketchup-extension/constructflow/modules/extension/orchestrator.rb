@@ -13,6 +13,7 @@ module JiraNot
           'interior' => ['structure', 'surface'],
           'electrical' => ['structure', 'interior']
         }.freeze
+        DISABLE_RECONCILIATION_DOMAINS = %w[drainage].freeze
 
         def initialize(generator)
           @generator = generator
@@ -21,12 +22,15 @@ module JiraNot
         def plan(options = {})
           intent = @generator.intents(options)
           enabled = @generator.enabled_domains(options)
-          ordered = topological_order(enabled)
+          transition_domains = disabled_reconciliation_domains(intent)
+          requested = (enabled + transition_domains).uniq
+          ordered = topological_order(requested)
           steps = ordered.map do |domain|
+            config = intent.fetch('domains').fetch(domain, {})
             {
               'domain' => domain,
-              'dependencies' => DEPENDENCIES.fetch(domain, []).select { |dependency| enabled.include?(dependency) },
-              'action' => 'generate_or_update_intent',
+              'dependencies' => DEPENDENCIES.fetch(domain, []).select { |dependency| requested.include?(dependency) },
+              'action' => explicit_disable?(config) ? 'reconcile_disabled_intent' : 'generate_or_update_intent',
               'geometry_owner' => "constructflow.#{domain}",
               'intent' => domain_intent(intent, domain)
             }
@@ -42,6 +46,18 @@ module JiraNot
         end
 
         private
+
+        def disabled_reconciliation_domains(intent)
+          domains = intent.fetch('domains', {})
+          DISABLE_RECONCILIATION_DOMAINS.select do |domain|
+            config = domains[domain]
+            config.is_a?(Hash) && explicit_disable?(config)
+          end
+        end
+
+        def explicit_disable?(config)
+          config.is_a?(Hash) && config.key?('enabled') && config['enabled'] == false
+        end
 
         def domain_intent(intent, domain)
           {
