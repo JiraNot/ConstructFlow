@@ -167,6 +167,18 @@ Roof provider can produce:
 - roof junction/flashing details;
 - gutter/downpipe plan/elevation references.
 
+### Plan representation foundation
+
+`roof.system` and `roof.gutter` expose on-demand semantic `plan` representations through the shared Representation Registry. The provider reads `RoofDefinition` and `GutterDefinition`, not raw SketchUp faces/edges.
+
+Profiles are scale/LOD aware:
+
+- **Simple** — roof boundary/form and gutter path/outlet;
+- **Construction** — adds roof slope, covering system and gutter profile;
+- **Coordination** — adds low elevation, generated-from traceability, roof host and rainwater outlet connector references.
+
+The slope direction is a renderer-neutral arrow derived from semantic slope direction. Gutter geometry follows the referenced semantic roof edge and outlet ratio so plan output remains tied to the same Smart Objects.
+
 ## QA
 
 - invalid/zero slope;
@@ -189,3 +201,4 @@ Roof provider can produce:
 - AC-ROOF-006: existing-wall junction can generate/suggest compatible flashing detail.
 - AC-ROOF-007: changing roof system marks related quantities/drawings/QA dirty.
 - AC-ROOF-008: partial existing eave demolition can coexist with remaining existing roof lifecycle.
+- AC-ROOF-009: RoofSystem and Gutter expose deterministic on-demand plan representations from semantic definitions with Simple/Construction/Coordination profiles, including slope direction and rainwater outlet traceability.
