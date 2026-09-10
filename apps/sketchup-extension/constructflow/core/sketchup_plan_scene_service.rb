@@ -13,13 +13,28 @@ module JiraNot
           @renderer = renderer
         end
 
+        def refresh_preset(preset_id, object_ids: nil)
+          preset = @runtime.drawing_view_presets.fetch!(preset_id)
+          refresh(
+            scene_name: preset.scene_name,
+            tag_name: preset.tag_name,
+            scale: preset.scale,
+            phase_view: preset.phase_view,
+            lod: preset.lod,
+            drawing_family: preset.drawing_family,
+            preset_id: preset.id,
+            context: preset.context,
+            object_ids: object_ids
+          )
+        end
+
         def refresh(scene_name: DEFAULT_SCENE_NAME, tag_name: DEFAULT_TAG_NAME,
                     scale: '1:50', phase_view: 'proposed', lod: 'construction',
-                    object_ids: nil)
+                    drawing_family: nil, preset_id: nil, context: {}, object_ids: nil)
           model = @runtime.active_model
           raise ArgumentError, 'active SketchUp model required' unless model
 
-          objects = selected_objects(object_ids)
+          objects = selected_objects(object_ids).select { |object| visible_in_phase?(object, phase_view) }
           transaction = TransactionManager.new(model: model)
           transaction.run("Refresh #{scene_name}") do
             group = find_or_create_output_group(model, scene_name)
@@ -31,28 +46,23 @@ module JiraNot
               next unless @runtime.representations.registered?(object.type, 'plan')
 
               representation = @runtime.representations.render(
-                object: object,
-                kind: 'plan',
-                view: scene_name,
-                scale: scale,
-                phase_view: phase_view,
-                lod: lod,
-                context: { 'renderer' => 'sketchup' }
+                object: object, kind: 'plan', view: scene_name, scale: scale,
+                phase_view: phase_view, lod: lod,
+                context: { 'renderer' => 'sketchup', 'drawing_family' => drawing_family }.merge(stringify_keys(context || {}))
               )
+              next if drawing_family && representation.dig('metadata', 'drawing_family').to_s != drawing_family.to_s
+
               @renderer.render(representation: representation, entities: group.entities)
               rendered_ids << object.id
             end
 
-            persist_group_metadata(group, scene_name, scale, phase_view, lod, rendered_ids)
+            persist_group_metadata(group, scene_name, scale, phase_view, lod, drawing_family, preset_id, rendered_ids)
             page = ensure_scene_page(model, scene_name)
             configure_top_parallel_view(model, page)
-
             {
-              'scene_name' => scene_name.to_s,
-              'group' => group,
-              'page' => page,
-              'rendered_object_ids' => rendered_ids.freeze,
-              'rendered_count' => rendered_ids.length
+              'scene_name' => scene_name.to_s, 'group' => group, 'page' => page,
+              'preset_id' => preset_id&.to_s,
+              'rendered_object_ids' => rendered_ids.freeze, 'rendered_count' => rendered_ids.length
             }.freeze
           end
         end
@@ -61,8 +71,24 @@ module JiraNot
 
         def selected_objects(object_ids)
           return @runtime.smart_objects.all if object_ids.nil?
-
           Array(object_ids).filter_map { |id| @runtime.smart_objects.fetch_by_id(id) }
+        end
+
+        def visible_in_phase?(object, phase_view)
+          created = object.respond_to?(:created_phase) ? object.created_phase.to_s : ''
+          removed = object.respond_to?(:removed_phase) ? object.removed_phase.to_s : ''
+          case phase_view.to_s
+          when 'existing'
+            created == 'existing' && removed != 'demolition'
+          when 'demolition'
+            created == 'existing'
+          when 'proposed'
+            removed != 'demolition' && %w[existing new_construction].include?(created)
+          when 'coordination', 'all', ''
+            true
+          else
+            true
+          end
         end
 
         def find_or_create_output_group(model, scene_name)
@@ -70,12 +96,9 @@ module JiraNot
             next unless entity.respond_to?(:get_attribute)
             next unless entity.get_attribute(DICTIONARY, 'managed', false)
             next unless entity.get_attribute(DICTIONARY, 'scene_name', '').to_s == scene_name.to_s
-
             return entity
           end
-
           raise ArgumentError, 'model entities do not support groups' unless model.entities.respond_to?(:add_group)
-
           group = model.entities.add_group
           group.name = scene_name.to_s if group.respond_to?(:name=)
           group.set_attribute(DICTIONARY, 'managed', true) if group.respond_to?(:set_attribute)
@@ -96,28 +119,26 @@ module JiraNot
         end
 
         def assign_tag(model, group, tag_name)
-          return unless group.respond_to?(:layer=)
-          return unless model.respond_to?(:layers)
-
+          return unless group.respond_to?(:layer=) && model.respond_to?(:layers)
           tag = model.layers[tag_name.to_s]
           tag ||= model.layers.add(tag_name.to_s) if model.layers.respond_to?(:add)
           group.layer = tag if tag
         end
 
-        def persist_group_metadata(group, scene_name, scale, phase_view, lod, object_ids)
+        def persist_group_metadata(group, scene_name, scale, phase_view, lod, drawing_family, preset_id, object_ids)
           return unless group.respond_to?(:set_attribute)
-
           group.set_attribute(DICTIONARY, 'managed', true)
           group.set_attribute(DICTIONARY, 'scene_name', scene_name.to_s)
           group.set_attribute(DICTIONARY, 'scale', scale.to_s)
           group.set_attribute(DICTIONARY, 'phase_view', phase_view.to_s)
           group.set_attribute(DICTIONARY, 'lod', lod.to_s)
+          group.set_attribute(DICTIONARY, 'drawing_family', drawing_family.to_s) if drawing_family
+          group.set_attribute(DICTIONARY, 'preset_id', preset_id.to_s) if preset_id
           group.set_attribute(DICTIONARY, 'source_object_ids', object_ids.join(','))
         end
 
         def ensure_scene_page(model, scene_name)
           return nil unless model.respond_to?(:pages)
-
           pages = model.pages
           page = pages[scene_name.to_s] if pages.respond_to?(:[])
           page ||= pages.add(scene_name.to_s) if pages.respond_to?(:add)
@@ -125,35 +146,25 @@ module JiraNot
         end
 
         def configure_top_parallel_view(model, page)
-          return unless model.respond_to?(:active_view)
-          return unless defined?(Sketchup::Camera)
-
+          return unless model.respond_to?(:active_view) && defined?(Sketchup::Camera)
           bounds = model.respond_to?(:bounds) ? model.bounds : nil
-          center = if bounds && bounds.respond_to?(:center)
-                     bounds.center
-                   else
-                     [0.0, 0.0, 0.0]
-                   end
+          center = bounds && bounds.respond_to?(:center) ? bounds.center : [0.0, 0.0, 0.0]
           cx, cy, cz = point_components(center)
-          eye = [cx, cy, cz + 10_000.0]
-          target = [cx, cy, cz]
-          camera = Sketchup::Camera.new(eye, target, [0.0, 1.0, 0.0], false)
+          camera = Sketchup::Camera.new([cx, cy, cz + 10_000.0], [cx, cy, cz], [0.0, 1.0, 0.0], false)
           model.active_view.camera = camera if model.active_view.respond_to?(:camera=)
-
-          # Updating the page after setting the camera records the orthographic top view.
           page.update if page && page.respond_to?(:update)
         rescue StandardError
-          # Scene creation is useful even if camera APIs differ between SketchUp versions.
           nil
         end
 
         def point_components(point)
-          if point.respond_to?(:x) && point.respond_to?(:y) && point.respond_to?(:z)
-            [point.x.to_f, point.y.to_f, point.z.to_f]
-          else
-            values = Array(point)
-            [values[0].to_f, values[1].to_f, values[2].to_f]
-          end
+          return [point.x.to_f, point.y.to_f, point.z.to_f] if point.respond_to?(:x) && point.respond_to?(:y) && point.respond_to?(:z)
+          values = Array(point); [values[0].to_f, values[1].to_f, values[2].to_f]
+        end
+
+        def stringify_keys(value)
+          return value unless value.is_a?(Hash)
+          value.each_with_object({}) { |(key, item), result| result[key.to_s] = item.is_a?(Hash) ? stringify_keys(item) : item }
         end
       end
     end
