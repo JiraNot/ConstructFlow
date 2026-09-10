@@ -167,6 +167,18 @@ Roof provider can produce:
 - roof junction/flashing details;
 - gutter/downpipe plan/elevation references.
 
+### Plan representation foundation
+
+`roof.system` exposes an on-demand semantic `plan` representation through the shared Representation Registry. Roof owns the semantic boundary, slope direction, covering system and generation traceability; Drawing owns scenes/sheets and native output.
+
+Profiles:
+
+- Simple: roof boundary and roof-form tag;
+- Construction: adds slope direction arrow, slope percentage and covering system;
+- Coordination: additionally exposes `generated_from_id` where available.
+
+The representation comes from the same Roof Smart Object. It does not create a second 2D roof model. Gutter plan geometry remains a later slice because the gutter definition references a hosted roof edge and must resolve that host through an explicit public relationship/capability rather than infer geometry from raw entities.
+
 ## QA
 
 - invalid/zero slope;
@@ -189,3 +201,4 @@ Roof provider can produce:
 - AC-ROOF-006: existing-wall junction can generate/suggest compatible flashing detail.
 - AC-ROOF-007: changing roof system marks related quantities/drawings/QA dirty.
 - AC-ROOF-008: partial existing eave demolition can coexist with remaining existing roof lifecycle.
+- AC-ROOF-009: RoofSystem exposes a scale/LOD-aware plan representation with boundary, slope intent and generation traceability without duplicating semantic model data.
