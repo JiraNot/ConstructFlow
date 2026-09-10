@@ -5,6 +5,7 @@ module JiraNot
     module Extension
       class ExecutionRunner
         SUCCESS_STATUSES = %w[success skipped].freeze
+        FAILURE_STATUSES = %w[failed rejected].freeze
 
         def initialize(command_bus:, command_resolver: nil)
           @command_bus = command_bus
@@ -95,17 +96,17 @@ module JiraNot
 
         def overall_status(results, dry_run:)
           return 'preview' if dry_run
-          return 'failed' if results.any? { |result| result['status'] == 'failed' }
+          return 'failed' if results.any? { |result| FAILURE_STATUSES.include?(result['status']) }
           return 'partial' if results.any? { |result| result['status'] == 'skipped' }
           'success'
         end
 
-        # Dirty only domains whose own execution failed plus their transitive
+        # Dirty only domains whose own execution failed/rejected plus their transitive
         # dependents. Independent later steps are not dirty merely because they
         # appear after a failure. Explicitly skipped domains are not roots; a
         # dependency_failed skip is included only when reachable from a failed root.
         def dirty_domains(steps, results)
-          failed = results.select { |result| result['status'] == 'failed' }.map { |result| result['domain'] }
+          failed = results.select { |result| FAILURE_STATUSES.include?(result['status']) }.map { |result| result['domain'] }
           return [] if failed.empty?
 
           dependents = build_dependents(steps)

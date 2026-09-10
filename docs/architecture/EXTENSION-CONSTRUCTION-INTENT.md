@@ -6,7 +6,7 @@ Status: Accepted v1 foundation contract
 
 Persist durable construction-generation choices for an `extension.zone` inside the SketchUp project so later regeneration, boundary edits and workflow reruns do not depend on chat history or one-off command arguments.
 
-The persisted construction intent belongs to the Extension module. It configures sibling-domain public generation commands but does not transfer ownership of Structure, Surface, Roof, Drainage, Interior or Electrical Smart Objects to Extension.
+The persisted construction intent belongs to the Extension module. It configures sibling-domain public generation commands but does not transfer ownership of Architecture, Opening, Structure, Surface, Roof, Drainage, Interior or Electrical Smart Objects to Extension.
 
 ## Storage
 
@@ -21,6 +21,8 @@ Logical shape:
 ```yaml
 schema_version: 1
 domains:
+  architecture: {}
+  opening: {}
   structure: {}
   surface: {}
   roof: {}
@@ -59,7 +61,7 @@ Unknown domain names or non-hash domain configurations are rejected rather than 
 
 ## Durable Drainage intent
 
-Drainage endpoints are the primary reason this contract is required. When a user has explicitly selected compatible start/end connectors, the IDs may be persisted under:
+Drainage endpoints are a primary reason this contract is required. When a user has explicitly selected compatible start/end connectors, the IDs may be persisted under:
 
 ```yaml
 domains:
@@ -75,18 +77,40 @@ A later Extension boundary or roof change can then regenerate the route using th
 
 The system must never invent connector IDs or network destinations. Missing persisted endpoints remain unresolved and continue to be handled by Drainage QA.
 
+## Durable attachment-opening intent
+
+An Extension attachment host does not imply that the existing wall should be cut. Attachment opening intent is therefore opt-in and may be persisted only as explicit Opening-domain configuration, for example:
+
+```yaml
+domains:
+  opening:
+    enabled: true
+    confirm_modify_existing_host: true
+    width_mm: 900
+    height_mm: 2100
+    sill_mm: 0
+```
+
+Persisting `opening.enabled: true` does not bypass the Opening validator or the Extension Attachment Host resolver. Every workflow run still validates the host wall, shared edge, opening bounds and overlap rules through the owning domain contracts.
+
+Omitting the `opening` domain, or leaving its default enabled state unset, means no attachment-opening action. It must not be treated as deletion. A previously generated `attachment_opening` is reconciled only through explicit `opening.enabled: false`.
+
+Changing the attachment host of an already generated opening requires explicit `rehost: true` in addition to the normal host validation. Persisted configuration never grants implicit permission to move a destructive host modification to another wall.
+
 ## Explicit disable and removal semantics
 
-Missing keys do not mean deletion. In particular, omission of Drainage endpoint fields from a later run is not permission to erase or reconnect an existing generated route.
+Missing keys do not mean deletion. In particular, omission of Drainage endpoint fields from a later run is not permission to erase or reconnect an existing generated route, and omission of Opening intent is not permission to fill/remove a generated attachment opening.
 
 A domain disable/removal transition must be represented explicitly, for example with `enabled: false`, and the owning domain bridge must define the reconciliation/lifecycle behavior before destructive action occurs.
 
-Endpoint identity changes also require explicit reconnect semantics. Persisting a different connector ID must not silently rewrite an already connected route unless the owning Drainage command explicitly supports that transition.
+Endpoint or host identity changes also require explicit transition semantics. Persisting a different connector ID or attachment host ID must not silently rewrite an existing network/host relationship unless the owning command explicitly supports that transition.
 
 ## Other domain examples
 
 The same payload may persist deterministic project choices such as:
 
+- Architecture wall type/thickness/height and explicit attachment-edge disambiguation;
+- Opening attachment-opening dimensions/confirmation/rehost transition;
 - Structure foundation policy/type/size and engineering-status intent;
 - Surface system/material options;
 - Roof generation options;
@@ -119,3 +143,5 @@ This trace is evidence of how generation was configured. It does not duplicate t
 - AC-ECI-004: run overrides win for that invocation but do not mutate the persisted payload.
 - AC-ECI-005: persisted Drainage start/end connector IDs are reused on later regeneration rather than being invented or forgotten.
 - AC-ECI-006: omission of a field is never interpreted as destructive disable/removal; destructive transitions require explicit semantics.
+- AC-ECI-007: persisted Opening intent remains opt-in, requires explicit host-modification confirmation/dimensions and does not derive permission from attachment-host presence alone.
+- AC-ECI-008: explicit `opening.enabled: false` may reconcile the generated `attachment_opening`, while omitted Opening intent leaves current host modification state unchanged.

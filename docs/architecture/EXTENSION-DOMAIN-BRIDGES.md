@@ -15,6 +15,7 @@ The canonical command convention remains:
 The v1 construction vertical slice registers bridges for:
 
 - Architecture;
+- Opening (explicit opt-in attachment opening only);
 - Structure;
 - Surface;
 - Roof;
@@ -32,7 +33,8 @@ Generated construction objects must carry a `generated_from` relationship to the
 
 Foundation slots are:
 
-- Architecture walls: `wall_edge_N`, one wall for each normalized closed boundary edge;
+- Architecture walls: `wall_edge_N`, one wall for each normalized closed boundary edge except a safely resolved attachment edge;
+- Opening: `attachment_opening`, only when explicit host-modification intent is supplied;
 - Structure columns: `corner_N`;
 - Structure foundations: `foundation_corner_N` corresponding to the supported generated column slot;
 - Surface: `primary_floor`;
@@ -58,7 +60,8 @@ This erasure is **not demolition**. Existing construction, issued construction t
 
 Current v1 reconciliation rules:
 
-- Architecture normalizes a repeated closing boundary point, produces exactly one `wall_edge_N` per remaining edge, updates matching generated walls in place, preserves registered hosted-opening data during supported wall rebuilds, and removes stale wall slots when source topology shrinks.
+- Architecture normalizes a repeated closing boundary point, produces exactly one `wall_edge_N` per remaining edge except a safely resolved attachment edge, updates matching generated walls in place, preserves registered hosted-opening data during supported wall rebuilds, and removes stale wall slots when source topology shrinks or an attachment edge replaces a previously generated overlap wall.
+- Opening is disabled by default. A previously generated `attachment_opening` is removed only by explicit `opening.enabled: false`; the Opening bridge first detaches the hosted cut from its Architecture host through the public host capability, then erases the generated Opening Smart Object.
 - Structure removes generated `corner_N` columns whose slots no longer exist after the Extension boundary topology shrinks. Their generated `foundation_corner_N` foundations are reconciled first. Remaining slots are updated in place.
 - Structure removes all generated Extension foundations when the current Structure config explicitly disables foundation generation while retaining the current generated columns.
 - Interior removes the generated `primary_joinery` assumption when the current program/policy no longer permits automatic joinery.
@@ -74,18 +77,29 @@ The current Architecture `wall_edge_N` and Structure `corner_N` slots are stable
 
 ### Architecture
 
-The Architecture bridge converts the normalized Extension boundary into one Architecture-owned parametric wall per edge. It uses the existing `WallDefinition`, `WallGeometry`, `WallRepository`, `WallValidator`, wall quantity provider and plan representation; Extension does not create raw wall geometry itself.
+The Architecture bridge converts the normalized Extension boundary into Architecture-owned parametric walls. It uses the existing `WallDefinition`, `WallGeometry`, `WallRepository`, `WallValidator`, wall quantity provider and plan representation; Extension does not create raw wall geometry itself.
 
 Supported v1 Architecture intent controls are:
 
 - `wall_thickness_mm`;
 - `wall_height_mm` (otherwise the Extension target height is used);
 - `wall_type_id`;
-- `orientation`.
+- `orientation`;
+- `attachment_edge_index` when attachment-host geometry is ambiguous.
 
 When both wall type and thickness are explicitly supplied, new generated walls may be marked `confirmed`. If either is omitted, default/generated construction data remains `assumed` and the bridge emits a review warning. Default wall dimensions are therefore modeling assumptions, not final construction specifications.
 
 A repeated final boundary point equal to the first is removed before edge generation so a four-edge rectangle does not create a fifth zero-length wall. Boundary topology shrink removes obsolete generated wall slots. Supported hosted-opening metadata is passed back into `WallGeometry#rebuild!` when an existing generated wall is regenerated, preventing a normal wall-size update from silently filling known hosted openings.
+
+When `attachment_host_id` resolves safely through `EXTENSION-ATTACHMENT-HOST.md`, Architecture suppresses only the matching shared boundary edge. Attachment resolution never cuts or otherwise mutates the host wall.
+
+### Opening
+
+The Opening bridge is an explicit destructive-intent boundary for a deliberate passage/cut through an Extension attachment host. The presence of `attachment_host_id` alone must never create an opening.
+
+Generation requires `opening.enabled: true`, `opening.confirm_modify_existing_host: true`, explicit `width_mm`, explicit `height_mm`, and a valid attachment host/edge. Optional `sill_mm`, `host_start_offset_mm`, `attachment_edge_index`, and explicit `rehost: true` are defined by `EXTENSION-ATTACHMENT-OPENING.md`.
+
+The Opening module owns the hosted void, marker geometry, validation, host relationship and removal-area quantity. Extension only supplies orchestration intent. Re-running the same host intent updates the stable `attachment_opening` Smart Object; a host change is not silently accepted without explicit rehost intent.
 
 ### Structure
 
@@ -132,15 +146,19 @@ A single preliminary central luminaire may be generated for deterministic covere
 
 ## Failure propagation
 
-Bridge failures use the existing Extension dependency graph. A failed domain blocks only transitive dependents. Independent domains can continue. Architecture and Structure are independent v1 roots because both consume the Extension source intent directly; later domains retain their explicit dependency edges.
+Bridge failures use the existing Extension dependency graph. A failed or validation-rejected domain blocks only explicit transitive dependents. Independent domains can continue. Architecture and Structure are independent v1 roots because both consume the Extension source intent directly; Opening depends on Architecture only when both are requested. Later domains retain their explicit dependency edges.
 
-Failed/dependency-blocked domains remain dirty and cannot be treated as current for issue/publication workflows.
+A validation-rejected CommandBus result is an execution failure root for package status and dirty-domain propagation; it must never be misreported as successful orchestration.
+
+Failed/rejected/dependency-blocked domains remain dirty and cannot be treated as current for issue/publication workflows.
 
 ## Drawing and quantity propagation
 
 A generated, updated or reconciled-away domain Smart Object must invalidate its domain-owned quantity and drawing output. Later project-level workflow stages consume semantic states and current Smart Object membership; they must not recalculate domain meaning from raw SketchUp geometry or retain removed generated IDs.
 
 Generated Architecture walls are ordinary Architecture Smart Objects downstream. `WallQuantityProvider` supplies gross area and volume, Architecture plan representations render the same walls, and `ConstructionTakeoff` aggregates only walls related to the selected source Extension through `generated_from`.
+
+Generated attachment openings are ordinary Opening Smart Objects downstream. `OpeningQuantityProvider` supplies removed wall area, phase-scoped to Demolition when the host is Existing construction, and Architecture plan scope consumes the same Opening Smart Object through its `generated_from` provenance.
 
 Generated Structure foundations are ordinary Structure Smart Objects for downstream purposes: Structure plan representations render them, the Structure quantity provider supplies concrete/formwork quantities, and the Extension ConstructionTakeoff aggregates those items without re-deriving foundation meaning.
 
@@ -159,7 +177,10 @@ Generated Structure foundations are ordinary Structure Smart Objects for downstr
 - AC-EXT-030: changing foundation type/size updates the same generated foundation identities, while explicitly disabling foundations removes those generated foundations without deleting the supported columns.
 - AC-EXT-031: generated foundation concrete/formwork quantities flow into the Extension ConstructionTakeoff with source-object traceability and phase scope.
 - AC-EXT-032: explicit persisted Drainage connector endpoints are carried into later domain bridge execution when a workflow invocation provides no endpoint override.
-- AC-EXT-033: default Extension orchestration includes Architecture and creates exactly one generated `architecture.wall` per normalized boundary edge through `GenerateOrUpdateArchitectureFromExtension`.
+- AC-EXT-033: default Extension orchestration includes Architecture and creates generated `architecture.wall` objects for normalized boundary edges not replaced by a safely resolved attachment host edge.
 - AC-EXT-034: rerunning a changed Extension boundary updates matching `wall_edge_N` identities and removes obsolete generated wall slots rather than duplicating walls.
 - AC-EXT-035: generated Extension walls keep hosted-opening metadata during supported regeneration and their Architecture quantity/drawing outputs remain sourced from the same Smart Objects.
 - AC-EXT-036: default/generated wall construction data remains `assumed` until wall type and thickness are explicitly supplied; strict publication policy may therefore block unconfirmed walls.
+- AC-EXT-037: Opening is opt-in and a host attachment alone never authorizes a wall cut.
+- AC-EXT-038: explicit attachment-opening intent creates/updates one stable `attachment_opening` through the Opening-owned command and explicit disable reconciles it through the host capability.
+- AC-EXT-039: validation-rejected bridge commands make Extension execution fail and dirty the rejected domain plus only its transitive dependents.
