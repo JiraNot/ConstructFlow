@@ -35,15 +35,16 @@ No production module should introduce behavior that contradicts an approved spec
 23. `architecture/INTERACTION-MODEL.md` and `architecture/UI-UX-SPEC.md` — modeling interaction and UI behavior.
 24. `architecture/COMMAND-CATALOG.md`, `EVENT-CATALOG.md`, `CONNECTOR-STANDARD.md` — cross-module integration contracts.
 25. `architecture/EXTENSION-DOMAIN-BRIDGES.md` — public idempotent domain command boundary that makes Extension orchestration executable across Structure/Surface/Roof/Drainage/Interior/Electrical.
-26. `architecture/DRAINAGE-ROUTING-ALTERNATIVES.md` — structure-aware route candidate safety and explicit manual fallback.
-27. `architecture/DRAINAGE-ROUTE-EDITING.md` — semantic internal-node editing, connector-owned endpoints and regrade rules.
-28. `architecture/DRAINAGE-INTERMEDIATE-MANHOLE.md` — route splitting, lifecycle and connector continuity for inserted manholes.
-29. `architecture/DRAINAGE-OFFSET-DETOURS.md` — deterministic clearance detours around known structural coordination bounds.
-30. `architecture/DRAINAGE-QA-TAKEOFF.md` — project network QA and phase-aware Drainage quantity aggregation.
-31. `architecture/SKETCHUP-DRAINAGE-ROUTE-GRIPS.md` — SketchUp drag-to-modify adapter over semantic route commands.
-32. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
-33. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
-34. `decisions/` — architecture decisions that explain or amend the baseline.
+26. `architecture/EXTENSION-CONSTRUCTION-WORKFLOW.md` — end-to-end Extension construction package orchestration across domain generation, QA, quantity, scoped drawings and LayOut/PDF publication.
+27. `architecture/DRAINAGE-ROUTING-ALTERNATIVES.md` — structure-aware route candidate safety and explicit manual fallback.
+28. `architecture/DRAINAGE-ROUTE-EDITING.md` — semantic internal-node editing, connector-owned endpoints and regrade rules.
+29. `architecture/DRAINAGE-INTERMEDIATE-MANHOLE.md` — route splitting, lifecycle and connector continuity for inserted manholes.
+30. `architecture/DRAINAGE-OFFSET-DETOURS.md` — deterministic clearance detours around known structural coordination bounds.
+31. `architecture/DRAINAGE-QA-TAKEOFF.md` — project network QA and phase-aware Drainage quantity aggregation.
+32. `architecture/SKETCHUP-DRAINAGE-ROUTE-GRIPS.md` — SketchUp drag-to-modify adapter over semantic route commands.
+33. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
+34. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
+35. `decisions/` — architecture decisions that explain or amend the baseline.
 
 ## Specification status vocabulary
 
