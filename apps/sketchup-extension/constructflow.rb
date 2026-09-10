@@ -10,7 +10,7 @@ module JiraNot
     VERSION = '0.1.0-alpha.2'
 
     unless file_loaded?(__FILE__)
-      extension = SketchupExtension.new(EXTENSION_NAME, 'constructflow/main')
+      extension = SketchupExtension.new(EXTENSION_NAME, 'constructflow/bootstrap')
       extension.description = 'Modular design-to-construction platform for SketchUp.'
       extension.version = VERSION
       extension.creator = 'JiraNot'
