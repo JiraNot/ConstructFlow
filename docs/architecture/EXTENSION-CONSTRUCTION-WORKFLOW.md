@@ -19,8 +19,9 @@ The v1 pipeline is:
 5. Run the construction quality gate.
 6. Build the construction drawing issue set from active domain families.
 7. Refresh the required SketchUp plan scenes using Extension-scoped object IDs.
-8. Build renderer-neutral sheet plans.
-9. Optionally export a native LayOut document and PDF when the quality gate permits publication.
+8. Audit package currentness against the current Smart Object graph.
+9. Build renderer-neutral sheet plans.
+10. Optionally export a native LayOut document and PDF only when both construction QA and package currentness permit publication.
 
 Dry-run stops after orchestration preview and must not generate domain geometry, quantities, drawing scenes, LayOut files or PDFs.
 
@@ -111,17 +112,41 @@ Architecture context may include project Architecture/Opening/Door-Window object
 
 The issue set carries revision, issue status, title-block metadata and template scope into the existing Drawing/LayOut pipeline.
 
+## Package currentness audit
+
+A successful domain execution is not sufficient evidence that an issue package is current. Regeneration can remove or replace derived Smart Objects, so quantity and drawing outputs must be checked against the Smart Object graph that exists **after** reconciliation.
+
+`ConstructionCurrentnessAudit` provides this proof. It records a deterministic SHA-256 scope fingerprint and verifies:
+
+- ConstructionTakeoff coverage contains the current source Extension plus all current `generated_from` objects and no foreign/stale IDs;
+- each refreshed drawing preset was requested with the exact current family scope from `ConstructionIssueSetFactory`;
+- rendered drawing IDs still exist in the Smart Object index;
+- rendered generated-domain IDs belong to the selected Extension family scope rather than another Extension;
+- publication requiring native export has a current drawing refresh in the same workflow run.
+
+The audit result is `current` or `stale` and has its own `publishable` flag. Native LayOut/PDF export requires both `ConstructionQualityGate.publishable` and `ConstructionCurrentnessAudit.publishable`.
+
+The scope fingerprint is traceability evidence, not a replacement for object IDs or revision metadata. A source or generated-object membership change must cause the package to be re-audited; old takeoff/drawing references must never be accepted merely because the previous workflow succeeded.
+
+## Change propagation proof
+
+The required non-dry propagation proof is:
+
+`Extension source change → domain regeneration/reconciliation → current Smart Object graph → current takeoff → current drawing scope → currentness audit → issue/export gate`
+
+For structural topology shrink, obsolete generated foundations and columns are removed before package assembly. Their IDs must be absent from the rebuilt takeoff coverage/items and from the refreshed Structure drawing scope. Reusing pre-change takeoff or drawing references after the source change must make the currentness audit fail.
+
 ## Publication states
 
 The workflow result uses:
 
 - `preview` — dry-run only;
-- `blocked` — execution or QA does not permit publication;
+- `blocked` — execution, construction QA or package currentness does not permit publication;
 - `ready` — package is built and publishable but export was not requested;
 - `exported` — requested native export completed;
 - `export_failed` — export was requested but no successful export result was returned.
 
-The workflow must never report `exported` when the QA gate blocks publication.
+The workflow must never report `exported` when either the QA gate or currentness audit blocks publication.
 
 ## Public command
 
@@ -129,7 +154,7 @@ The workflow must never report `exported` when the QA gate blocks publication.
 
 The command itself does not open one giant SketchUp transaction. Domain commands retain their own CommandBus transaction boundaries; scene refresh and native export retain their own platform-specific boundaries.
 
-A `ConstructionWorkflowCompleted` event reports the resulting package state.
+A `ConstructionWorkflowCompleted` event reports the resulting package state, including currentness evidence.
 
 ## Acceptance criteria
 
@@ -144,3 +169,6 @@ A `ConstructionWorkflowCompleted` event reports the resulting package state.
 - AC-CWF-009: the same semantic Smart Objects feed geometry, quantities, plan representations and LayOut output; no duplicate 2D semantic model is introduced.
 - AC-CWF-010: default Structure orchestration produces generated foundations with columns, and their concrete/formwork quantities and Structure plan representations flow through the same package pipeline.
 - AC-CWF-011: structural topology reconciliation removes obsolete generated foundations before the current takeoff/drawing package is assembled.
+- AC-CWF-012: a non-dry Extension topology change removes stale generated IDs from the current Smart Object graph, rebuilt takeoff and rebuilt drawing scope.
+- AC-CWF-013: pre-change takeoff/drawing references fail the package currentness audit after source reconciliation.
+- AC-CWF-014: native issue/export publication requires both construction QA and package currentness to be publishable; export cannot bypass a missing current drawing refresh.
