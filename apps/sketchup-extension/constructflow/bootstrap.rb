@@ -82,6 +82,8 @@ require_relative 'modules/drainage/route_node_ui_registration'
 require_relative 'modules/drainage/routing_registration'
 require_relative 'modules/drainage/plan_representation_provider'
 require_relative 'modules/drainage/representation_registration'
+require_relative 'modules/extension/construction_intent_store'
+require_relative 'modules/extension/construction_intent_registration'
 require_relative 'modules/extension/construction_takeoff'
 require_relative 'modules/extension/construction_quality_gate'
 require_relative 'modules/extension/construction_issue_set_factory'
@@ -113,4 +115,5 @@ JiraNot::ConstructFlow::Drainage::QualityRegistration.install(JiraNot::Construct
 JiraNot::ConstructFlow::Drainage::RouteNodeUiRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::RuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Extension::ConstructionIntentRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::ConstructionWorkflowRegistration.install(JiraNot::ConstructFlow::Runtime)

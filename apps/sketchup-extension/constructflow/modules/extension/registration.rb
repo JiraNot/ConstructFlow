@@ -13,8 +13,8 @@ module JiraNot
           optional_capabilities: %w[wall.host_surface roof.generator structure.generator drainage.network],
           provides: %w[extension.boundary extension.quantity],
           objects: ['extension.zone'],
-          commands: %w[CreateExtensionZone ModifyExtensionBoundary ApplyExtensionPreset],
-          events: %w[ExtensionCreated ExtensionChanged GeometryChanged QuantityDirty DrawingDirty],
+          commands: %w[CreateExtensionZone ModifyExtensionBoundary ApplyExtensionPreset SetExtensionConstructionIntent],
+          events: %w[ExtensionCreated ExtensionChanged ExtensionConstructionIntentChanged GeometryChanged QuantityDirty DrawingDirty],
           providers: ['constructflow.extension.quantity'],
           validators: ['extension.zone.validity']
         }.freeze
