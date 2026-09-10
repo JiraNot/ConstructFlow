@@ -36,6 +36,8 @@ class LayoutExportPlanBuilderTest < Minitest::Test
     assert_equal 'P-101', plan.dig('sheet', 'title_block', 'fields', 'sheet_number')
     assert_equal '1:50', plan.dig('sheet', 'title_block', 'fields', 'scale')
     assert_equal 'P01', plan.dig('sheet', 'revisions', 0, 'code')
+    assert_equal '{{CF:PROJECT_NAME}}', plan.dig('sheet', 'title_block', 'placeholder_map', 'field_tokens', 'project_name')
+    assert_equal 'prefer_template', plan.dig('sheet', 'title_block', 'placeholder_map', 'strategy')
   end
 
   def test_supports_custom_sheet_identity_revision_and_project_metadata
@@ -66,6 +68,26 @@ class LayoutExportPlanBuilderTest < Minitest::Test
     assert_equal 'CF-001', plan.dig('sheet', 'title_block', 'fields', 'project_number')
     assert_equal 2, plan.dig('sheet', 'revisions').length
     assert_equal 'Issued', plan.dig('sheet', 'revisions', 1, 'description')
+  end
+
+  def test_supports_company_specific_placeholder_tokens_and_template_only_mode
+    plan = JiraNot::ConstructFlow::Core::LayoutExportPlanBuilder.new(runtime: LayoutPresetRuntime.new)
+                                                                  .build_for_preset(
+                                                                    'plumbing.construction',
+                                                                    template_key: 'company.a3',
+                                                                    placeholder_tokens: {
+                                                                      project_name: '<PROJECT>',
+                                                                      sheet_number: '<SHEET>'
+                                                                    },
+                                                                    template_strategy: 'template_only',
+                                                                    revision_placeholder_prefix: 'COMPANY:REV'
+                                                                  )
+
+    assert_equal 'company.a3', plan.dig('sheet', 'title_block', 'placeholder_map', 'template_key')
+    assert_equal '<PROJECT>', plan.dig('sheet', 'title_block', 'placeholder_map', 'field_tokens', 'project_name')
+    assert_equal '<SHEET>', plan.dig('sheet', 'title_block', 'placeholder_map', 'field_tokens', 'sheet_number')
+    assert_equal 'template_only', plan.dig('sheet', 'title_block', 'placeholder_map', 'strategy')
+    assert_equal 'COMPANY:REV', plan.dig('sheet', 'title_block', 'placeholder_map', 'revision_prefix')
   end
 
   def test_viewport_rejects_non_positive_bounds
