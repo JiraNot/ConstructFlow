@@ -34,9 +34,15 @@ No production module should introduce behavior that contradicts an approved spec
 22. `architecture/PHASE-LEVEL-REVISION.md` — existing/demolition/new, level and revision semantics.
 23. `architecture/INTERACTION-MODEL.md` and `architecture/UI-UX-SPEC.md` — modeling interaction and UI behavior.
 24. `architecture/COMMAND-CATALOG.md`, `EVENT-CATALOG.md`, `CONNECTOR-STANDARD.md` — cross-module integration contracts.
-25. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
-26. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
-27. `decisions/` — architecture decisions that explain or amend the baseline.
+25. `architecture/DRAINAGE-ROUTING-ALTERNATIVES.md` — structure-aware route candidate safety and explicit manual fallback.
+26. `architecture/DRAINAGE-ROUTE-EDITING.md` — semantic internal-node editing, connector-owned endpoints and regrade rules.
+27. `architecture/DRAINAGE-INTERMEDIATE-MANHOLE.md` — route splitting, lifecycle and connector continuity for inserted manholes.
+28. `architecture/DRAINAGE-OFFSET-DETOURS.md` — deterministic clearance detours around known structural coordination bounds.
+29. `architecture/DRAINAGE-QA-TAKEOFF.md` — project network QA and phase-aware Drainage quantity aggregation.
+30. `architecture/SKETCHUP-DRAINAGE-ROUTE-GRIPS.md` — SketchUp drag-to-modify adapter over semantic route commands.
+31. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
+32. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
+33. `decisions/` — architecture decisions that explain or amend the baseline.
 
 ## Specification status vocabulary
 

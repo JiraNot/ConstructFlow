@@ -70,6 +70,9 @@ require_relative 'modules/drainage/route_detour_registration'
 require_relative 'modules/drainage/network_audit'
 require_relative 'modules/drainage/quantity/project_takeoff'
 require_relative 'modules/drainage/quality_registration'
+require_relative 'modules/drainage/tools/route_node_tool'
+require_relative 'modules/drainage/route_node_picker'
+require_relative 'modules/drainage/route_node_ui_registration'
 require_relative 'modules/drainage/routing_registration'
 require_relative 'modules/drainage/plan_representation_provider'
 require_relative 'modules/drainage/representation_registration'
@@ -95,5 +98,6 @@ JiraNot::ConstructFlow::Electrical::RepresentationRegistration.install(JiraNot::
 JiraNot::ConstructFlow::Drainage::RoutingRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RouteDetourRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::QualityRegistration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Drainage::RouteNodeUiRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::RuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
