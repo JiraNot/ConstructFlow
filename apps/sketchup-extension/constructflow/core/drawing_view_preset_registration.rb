@@ -52,7 +52,7 @@ module JiraNot
         end
 
         def register(registry, id, name, drawing_family, scale, phase_view, lod, tag_name:)
-          return if registry.registered?(id)
+          return registry.fetch(id) if registry.fetch(id)
 
           registry.register(
             id: id,
