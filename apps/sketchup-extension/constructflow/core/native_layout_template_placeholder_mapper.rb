@@ -14,8 +14,11 @@ module JiraNot
         def apply(document:, page:, title_block:, revisions: [])
           block = stringify_keys(title_block || {})
           placeholder_map = stringify_keys(block['placeholder_map'] || {})
+          return empty_result('generic_only') if placeholder_map.empty?
+
           strategy = placeholder_map['strategy'].to_s
-          return empty_result(strategy) if placeholder_map.empty? || strategy == 'generic_only'
+          strategy = 'prefer_template' if strategy.empty?
+          return empty_result(strategy) if strategy == 'generic_only'
 
           fields = stringify_keys(block['fields'] || {})
           tokens = stringify_keys(placeholder_map['field_tokens'] || {})
