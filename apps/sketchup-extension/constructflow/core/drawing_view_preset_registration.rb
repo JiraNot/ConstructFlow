@@ -32,6 +32,16 @@ module JiraNot
               legacy_short_tag: legacy_short_tag
             )
           end
+          register(
+            registry,
+            'architecture.demolition',
+            'Architecture Plan - Demolition',
+            'architecture_plan',
+            '1:50',
+            'demolition',
+            'construction',
+            tag_name: 'CF-DRAWING-ARCHITECTURE-DEMOLITION'
+          )
           registry
         end
 
