@@ -45,11 +45,13 @@ module JiraNot
 
           created_ids = []
           updated_ids = []
+          removed_ids = []
           warnings = []
           events = []
+          desired_slots = boundary.each_index.map { |index| "corner_#{index}" }.freeze
 
           boundary.each_with_index do |point, index|
-            slot = "corner_#{index}"
+            slot = desired_slots[index]
             values = Array(point)
             definition = ColumnDefinition.new(
               location_mm: [values[0], values[1], base_elevation_mm],
@@ -100,30 +102,58 @@ module JiraNot
             warnings.concat(issues.select { |issue| issue[:severity] != 'error' }.map { |issue| issue[:message] })
           end
 
-          touched_ids = (created_ids + updated_ids).uniq
+          stale_generated_columns(runtime, extension_id, desired_slots).each do |object|
+            slot = generated_slot(object)
+            runtime.smart_objects.erase!(object.entity)
+            removed_ids << object.id
+            events << {
+              name: 'GeometryChanged',
+              object_ids: [object.id],
+              payload: { source: extension_id, slot: slot, removed: true, reason: 'source_intent_reconciled' }
+            }
+          end
+
+          touched_ids = (created_ids + updated_ids + removed_ids).uniq
           events << { name: 'QuantityDirty', object_ids: touched_ids } unless touched_ids.empty?
           events << { name: 'DrawingDirty', object_ids: touched_ids } unless touched_ids.empty?
 
           {
             created_object_ids: created_ids,
             updated_object_ids: updated_ids,
+            removed_object_ids: removed_ids,
             warnings: warnings.uniq,
             events: events
           }
         end
 
         def find_generated_column(runtime, extension_id, slot)
-          runtime.smart_objects.all.find do |object|
+          generated_columns(runtime, extension_id).find { |object| generated_slot(object) == slot.to_s }
+        end
+
+        def stale_generated_columns(runtime, extension_id, desired_slots)
+          allowed = Array(desired_slots).map(&:to_s)
+          generated_columns(runtime, extension_id).reject { |object| allowed.include?(generated_slot(object)) }
+        end
+
+        def generated_columns(runtime, extension_id)
+          runtime.smart_objects.all.select do |object|
             next false unless object.type == 'structure.column'
 
             Array(object.relationships).any? do |relationship|
-              metadata = relationship['metadata'] || relationship[:metadata] || {}
               (relationship['kind'] || relationship[:kind]).to_s == RELATION_KIND &&
-                (relationship['target_id'] || relationship[:target_id]).to_s == extension_id &&
-                (relationship['role'] || relationship[:role]).to_s == RELATION_ROLE &&
-                (metadata['slot'] || metadata[:slot]).to_s == slot
+                (relationship['target_id'] || relationship[:target_id]).to_s == extension_id.to_s &&
+                (relationship['role'] || relationship[:role]).to_s == RELATION_ROLE
             end
           end
+        end
+
+        def generated_slot(object)
+          relationship = Array(object.relationships).find do |value|
+            (value['kind'] || value[:kind]).to_s == RELATION_KIND &&
+              (value['role'] || value[:role]).to_s == RELATION_ROLE
+          end
+          metadata = relationship && (relationship['metadata'] || relationship[:metadata]) || {}
+          (metadata['slot'] || metadata[:slot]).to_s
         end
 
         def validation_errors(input)

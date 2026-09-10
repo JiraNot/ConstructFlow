@@ -33,10 +33,24 @@ module JiraNot
           intent = fetch(input, :intent) || {}
           extension_id = extension_id_from(input, intent)
           raise ArgumentError, 'extension_id required' if extension_id.empty?
+          existing = find_generated(runtime, extension_id)
 
           unless auto_joinery?(intent)
+            if existing
+              runtime.smart_objects.erase!(existing.entity)
+              return {
+                created_object_ids: [], updated_object_ids: [], removed_object_ids: [existing.id],
+                warnings: ['previous auto-generated extension joinery was removed because the current intent no longer requests deterministic joinery'],
+                events: [
+                  { name: 'InteriorExtensionIntentReviewed', object_ids: [existing.id], payload: { extension_id: extension_id, generated: false, removed: true } },
+                  { name: 'GeometryChanged', object_ids: [existing.id], payload: { removed: true, reason: 'source_intent_reconciled' } },
+                  { name: 'QuantityDirty', object_ids: [existing.id] },
+                  { name: 'DrawingDirty', object_ids: [existing.id] }
+                ]
+              }
+            end
             return {
-              created_object_ids: [], updated_object_ids: [],
+              created_object_ids: [], updated_object_ids: [], removed_object_ids: [],
               warnings: ['interior extension intent has no deterministic joinery request; no cabinet geometry was invented'],
               events: [{ name: 'InteriorExtensionIntentReviewed', payload: { extension_id: extension_id, generated: false } }]
             }
@@ -46,7 +60,6 @@ module JiraNot
           issues = validator.validate_cabinet(definition)
           errors = issues.select { |issue| issue[:severity] == 'error' }
           raise ArgumentError, errors.map { |issue| issue[:message] }.join('; ') unless errors.empty?
-          existing = find_generated(runtime, extension_id)
           created_ids = []
           updated_ids = []
           events = []
@@ -90,6 +103,7 @@ module JiraNot
           {
             created_object_ids: created_ids,
             updated_object_ids: updated_ids,
+            removed_object_ids: [],
             warnings: (warning_messages(issues) + ['auto-generated joinery is preliminary and requires designer review']).uniq,
             events: events
           }

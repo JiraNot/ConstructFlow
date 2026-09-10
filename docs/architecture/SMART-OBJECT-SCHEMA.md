@@ -188,6 +188,12 @@ Production deletion should be explicit:
 - commands must resolve or flag incoming relationships;
 - destructive deletion of objects with dependencies requires confirmation or deterministic cascading rules.
 
+Core may expose a low-level Smart Object erasure primitive (currently `SmartObjectManager#erase!`) for an owning command that is already authorized to discard a **new, unissued or generated derived object**. The primitive must erase the owned SketchUp entity and synchronize the runtime Smart Object index. When called inside a CommandBus transaction, the SketchUp mutation remains part of that command's undo operation.
+
+The primitive does **not** decide construction lifecycle semantics. It must not be used as a shortcut for demolition, relocation or replacement of existing/as-built construction. The calling domain command is responsible for proving that erasure is the intended semantic operation, resolving or invalidating affected relationships/connectors, reporting removed object IDs, and invalidating downstream quantity/drawing outputs.
+
+A typical authorized use is source-intent reconciliation: an Extension generator previously produced a new construction member from a semantic slot, then the source intent changes so that slot no longer exists before issue/construction history needs to be retained. That derived member may be erased rather than represented as a demolition event.
+
 ## Copy behavior
 
 Copy/paste or duplicate must pass through a smart-object duplication policy:

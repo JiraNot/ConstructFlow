@@ -122,6 +122,21 @@ module JiraNot
           @index.size
         end
 
+        # Permanently removes a Smart Object entity from the active SketchUp model
+        # and synchronizes the runtime index. The caller owns lifecycle semantics;
+        # this primitive is intended for generated design objects that are no longer
+        # part of the current source intent, not for demolition of existing work.
+        # When invoked inside CommandBus the SketchUp erase remains undoable through
+        # the command transaction.
+        def erase!(entity)
+          object = fetch_required(entity)
+          raise ArgumentError, 'smart object entity does not support erase!' unless entity.respond_to?(:erase!)
+
+          entity.erase!
+          @index.delete(object.id)
+          object
+        end
+
         def update_lifecycle(entity, created_phase: UNSET, removed_phase: UNSET)
           object = fetch_required(entity)
           next_created = created_phase.equal?(UNSET) ? object.created_phase : created_phase
