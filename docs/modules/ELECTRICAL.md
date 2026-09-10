@@ -72,6 +72,14 @@ and
 
 Physical conduit/cable geometry is optional advanced LOD and not required for electrical plans.
 
+## Foundation implementation contract
+
+The first implemented slice uses one persisted `DeviceDefinition` for luminaires, switches, outlets, dedicated outlets, data and TV points. Device data includes semantic position, mounting, optional host/level, schedule mark, circuit, electrical/product properties and construction flags.
+
+`CircuitDefinition` is stored at model scope and references Smart Object IDs rather than raw SketchUp entities. `ElectricalControlRelation` is likewise a logical model-level relation from one switch Smart Object ID to one or more load Smart Object IDs.
+
+The foundation must not create fake conduit/wire geometry merely to express a logical switch-control relationship. Drawing providers may render a symbolic control relation, but that line is documentation intent and is not a measured cable route.
+
 ## Commands
 
 - `PlaceElectricalFixture`
@@ -83,12 +91,16 @@ Physical conduit/cable geometry is optional advanced LOD and not required for el
 - `CreateLightingGroup`
 - `SwapElectricalFixtureType`
 
+Foundation implementation currently provides `PlaceElectricalFixture`, `PlaceSwitch`, `PlaceOutlet`, `AssignElectricalCircuit` and `ConnectSwitchControl`. The remaining commands stay in planned scope.
+
 ## Hosts
 
 - downlight → ceiling.host_surface;
 - wall light/switch/outlet → wall.host_surface;
 - garden light → landscape/surface placement capability;
 - strip LED → Interior/Decorative compatible host path.
+
+Host IDs are semantic references. A missing host capability must not cause the Electrical module to infer construction meaning from arbitrary SketchUp geometry.
 
 ## Parameters
 
@@ -147,6 +159,8 @@ Assets should support:
 - circuit/device schedules;
 - conduit/cable quantities only when explicit routing capability exists.
 
+The foundation slice marks quantity dirty when device membership or circuit assignment changes, but aggregate electrical quantity/schedule providers remain follow-up work.
+
 ## Drawing
 
 - lighting plan;
@@ -155,6 +169,18 @@ Assets should support:
 - device legend;
 - electrical fixture schedule;
 - optional circuit/load schedule in advanced phase.
+
+### Plan representation foundation
+
+Electrical Smart Objects expose on-demand semantic `plan` representations through the shared Representation Registry under drawing family `electrical_plan`.
+
+Profiles are:
+
+- **Simple / 1:100** — device symbol and schedule mark;
+- **Construction / 1:50** — adds device type, circuit/wattage context and symbolic switch-control relations;
+- **Coordination / 1:50** — adds host, level and mounting context.
+
+The same DeviceDefinition is used for 3D placement and plan output. No separate 2D electrical model is stored.
 
 ## QA
 
@@ -174,3 +200,5 @@ Assets should support:
 - AC-ELEC-004: electrical plan/schedule update after fixture type/count change.
 - AC-ELEC-005: Interior requirement can be checked without Interior directly creating Electrical private objects.
 - AC-ELEC-006: existing outlet replacement preserves demolition/new lifecycle.
+- AC-ELEC-007: Electrical device and circuit definitions persist independently from raw geometry and preserve Smart Object ID references.
+- AC-ELEC-008: Simple/Construction/Coordination electrical plan representations are generated on demand from the same semantic devices, with control lines treated as symbolic documentation rather than cable routes.
