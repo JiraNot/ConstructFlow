@@ -16,6 +16,7 @@ The v1 construction vertical slice registers bridges for:
 
 - Architecture;
 - Opening (explicit opt-in attachment opening only);
+- Door/Window (explicit opt-in attachment infill only);
 - Structure;
 - Surface;
 - Roof;
@@ -35,6 +36,7 @@ Foundation slots are:
 
 - Architecture walls: `wall_edge_N`, one wall for each normalized closed boundary edge except a safely resolved attachment edge;
 - Opening: `attachment_opening`, only when explicit host-modification intent is supplied;
+- Door/Window: `attachment_infill`, only when explicit infill intent is supplied for the generated attachment Opening;
 - Structure columns: `corner_N`;
 - Structure foundations: `foundation_corner_N` corresponding to the supported generated column slot;
 - Surface: `primary_floor`;
@@ -62,6 +64,7 @@ Current v1 reconciliation rules:
 
 - Architecture normalizes a repeated closing boundary point, produces exactly one `wall_edge_N` per remaining edge except a safely resolved attachment edge, updates matching generated walls in place, preserves registered hosted-opening data during supported wall rebuilds, and removes stale wall slots when source topology shrinks or an attachment edge replaces a previously generated overlap wall.
 - Opening is disabled by default. A previously generated `attachment_opening` is removed only by explicit `opening.enabled: false`; the Opening bridge first detaches the hosted cut from its Architecture host through the public host capability, then erases the generated Opening Smart Object.
+- Door/Window is independently disabled by default. A previously generated `attachment_infill` is removed only by explicit `door_window.enabled: false`; the Door/Window bridge detaches the Opening infill reference and erases only that generated new-work infill.
 - Structure removes generated `corner_N` columns whose slots no longer exist after the Extension boundary topology shrinks. Their generated `foundation_corner_N` foundations are reconciled first. Remaining slots are updated in place.
 - Structure removes all generated Extension foundations when the current Structure config explicitly disables foundation generation while retaining the current generated columns.
 - Interior removes the generated `primary_joinery` assumption when the current program/policy no longer permits automatic joinery.
@@ -100,6 +103,16 @@ The Opening bridge is an explicit destructive-intent boundary for a deliberate p
 Generation requires `opening.enabled: true`, `opening.confirm_modify_existing_host: true`, explicit `width_mm`, explicit `height_mm`, and a valid attachment host/edge. Optional `sill_mm`, `host_start_offset_mm`, `attachment_edge_index`, and explicit `rehost: true` are defined by `EXTENSION-ATTACHMENT-OPENING.md`.
 
 The Opening module owns the hosted void, marker geometry, validation, host relationship and removal-area quantity. Extension only supplies orchestration intent. Re-running the same host intent updates the stable `attachment_opening` Smart Object; a host change is not silently accepted without explicit rehost intent.
+
+### Door/Window
+
+The Door/Window bridge is a separate opt-in step after Opening. An attachment Opening may intentionally remain empty, so the existence of `attachment_opening` never invents an infill.
+
+Generation requires `door_window.enabled: true` and the current generated `attachment_opening`. It accepts either a registered `type_id`, or explicit `category` and `operation` from which a project-local type can be formed using the Opening dimensions. This prevents infill generation from silently resizing the host cut.
+
+A registered type is confirmed type selection. For a generated project-local type, omitted frame material or panel style stays visibly `assumed`; final issue must not treat those defaults as a confirmed product/specification.
+
+The generated instance uses stable slot `attachment_infill` and the normal Door/Window `host` relationship to the Opening. Type/config changes update the same Smart Object. Moving that instance to a different generated Opening requires explicit `door_window.rehost: true` plus normal fit validation. Detailed semantics are defined by `EXTENSION-ATTACHMENT-INFILL.md`.
 
 ### Structure
 
@@ -146,7 +159,7 @@ A single preliminary central luminaire may be generated for deterministic covere
 
 ## Failure propagation
 
-Bridge failures use the existing Extension dependency graph. A failed or validation-rejected domain blocks only explicit transitive dependents. Independent domains can continue. Architecture and Structure are independent v1 roots because both consume the Extension source intent directly; Opening depends on Architecture only when both are requested. Later domains retain their explicit dependency edges.
+Bridge failures use the existing Extension dependency graph. A failed or validation-rejected domain blocks only explicit transitive dependents. Independent domains can continue. Architecture and Structure are independent v1 roots because both consume the Extension source intent directly. Opening depends on Architecture when both are requested, and Door/Window depends on Opening when both are requested. Later domains retain their explicit dependency edges.
 
 A validation-rejected CommandBus result is an execution failure root for package status and dirty-domain propagation; it must never be misreported as successful orchestration.
 
@@ -159,6 +172,8 @@ A generated, updated or reconciled-away domain Smart Object must invalidate its 
 Generated Architecture walls are ordinary Architecture Smart Objects downstream. `WallQuantityProvider` supplies gross area and volume, Architecture plan representations render the same walls, and `ConstructionTakeoff` aggregates only walls related to the selected source Extension through `generated_from`.
 
 Generated attachment openings are ordinary Opening Smart Objects downstream. `OpeningQuantityProvider` supplies removed wall area, phase-scoped to Demolition when the host is Existing construction, and Architecture plan scope consumes the same Opening Smart Object through its `generated_from` provenance.
+
+Generated attachment infills are ordinary Door/Window Smart Objects downstream. `DoorWindowQuantityProvider` supplies unit/frame/panel/glazing quantities from the selected type; Architecture plan scope consumes the same Door/Window Smart Object and ConstructionTakeoff aggregates it through Extension provenance.
 
 Generated Structure foundations are ordinary Structure Smart Objects for downstream purposes: Structure plan representations render them, the Structure quantity provider supplies concrete/formwork quantities, and the Extension ConstructionTakeoff aggregates those items without re-deriving foundation meaning.
 
@@ -184,3 +199,7 @@ Generated Structure foundations are ordinary Structure Smart Objects for downstr
 - AC-EXT-037: Opening is opt-in and a host attachment alone never authorizes a wall cut.
 - AC-EXT-038: explicit attachment-opening intent creates/updates one stable `attachment_opening` through the Opening-owned command and explicit disable reconciles it through the host capability.
 - AC-EXT-039: validation-rejected bridge commands make Extension execution fail and dirty the rejected domain plus only its transitive dependents.
+- AC-EXT-040: Door/Window attachment infill is independently opt-in and requires the current generated `attachment_opening` plus valid type intent.
+- AC-EXT-041: generated `attachment_infill` type/config changes preserve Smart Object identity; changing Opening identity requires explicit rehost intent.
+- AC-EXT-042: explicit Door/Window disable reconciles only the generated attachment infill and does not remove the attachment Opening or mutate the host wall.
+- AC-EXT-043: generated Door/Window quantities flow through the domain provider into Extension ConstructionTakeoff and the same instance feeds Architecture plan/currentness scope.

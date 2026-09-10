@@ -4,10 +4,11 @@ module JiraNot
   module ConstructFlow
     module Extension
       class Orchestrator
-        DOMAIN_ORDER = %w[architecture opening structure surface roof drainage interior electrical].freeze
+        DOMAIN_ORDER = %w[architecture opening door_window structure surface roof drainage interior electrical].freeze
         DEPENDENCIES = {
           'architecture' => [],
           'opening' => ['architecture'],
+          'door_window' => ['opening'],
           'structure' => [],
           'surface' => ['structure'],
           'roof' => ['structure'],
@@ -15,7 +16,7 @@ module JiraNot
           'interior' => ['structure', 'surface'],
           'electrical' => ['structure', 'interior']
         }.freeze
-        DISABLE_RECONCILIATION_DOMAINS = %w[opening drainage].freeze
+        DISABLE_RECONCILIATION_DOMAINS = %w[opening door_window drainage].freeze
 
         def initialize(generator)
           @generator = generator
@@ -99,10 +100,11 @@ module JiraNot
 
         def regeneration_rules
           {
-            'boundary_changed' => %w[architecture opening structure surface roof drainage interior electrical],
-            'height_changed' => %w[architecture opening structure roof drainage electrical interior],
-            'architecture_changed' => %w[architecture opening interior electrical],
-            'opening_changed' => %w[opening interior electrical],
+            'boundary_changed' => %w[architecture opening door_window structure surface roof drainage interior electrical],
+            'height_changed' => %w[architecture opening door_window structure roof drainage electrical interior],
+            'architecture_changed' => %w[architecture opening door_window interior electrical],
+            'opening_changed' => %w[opening door_window interior electrical],
+            'door_window_changed' => %w[door_window interior electrical],
             'roof_changed' => %w[roof drainage],
             'surface_changed' => %w[surface drainage interior],
             'structure_changed' => %w[structure roof electrical interior]

@@ -51,7 +51,7 @@ errors: []
 events: []
 ```
 
-Rejected validation is not a runtime failure.
+Rejected validation is not a runtime exception, but an orchestration layer must treat a rejected required domain command as an unsuccessful execution step and propagate dependency dirtiness accordingly.
 
 ## Cross-module rule
 
@@ -59,7 +59,7 @@ A command is owned by the module that owns the primary semantic mutation. It may
 
 Example: `RelocateManhole` is owned by Drainage. It may request route recalculation through public network contracts and emit events that make Structure QA and Drawing invalidation react.
 
-Extension orchestration follows the same rule. `GenerateOrUpdateArchitectureFromExtension` is owned by Architecture even though the source intent comes from an Extension. The command creates/updates Architecture Smart Walls through Architecture definitions, geometry, validation and persistence; Extension never creates raw wall geometry on Architecture's behalf.
+Extension orchestration follows the same rule. `GenerateOrUpdateArchitectureFromExtension` is owned by Architecture even though the source intent comes from an Extension. `GenerateOrUpdateOpeningFromExtension` remains Opening-owned, and `GenerateOrUpdateDoorWindowFromExtension` remains Door/Window-owned. Extension passes effective intent but never takes geometry ownership from those modules.
 
 ## Core command families
 
@@ -83,7 +83,7 @@ Extension orchestration follows the same rule. `GenerateOrUpdateArchitectureFrom
 - `RepairSmartObjectReferences`
 - `DuplicateSmartObject`
 
-### Architecture / openings
+### Architecture / openings / infill
 
 - `CreateWall`
 - `ModifyWallPath`
@@ -91,9 +91,11 @@ Extension orchestration follows the same rule. `GenerateOrUpdateArchitectureFrom
 - `GenerateOrUpdateArchitectureFromExtension`
 - `CreateOpening`
 - `ModifyOpening`
+- `GenerateOrUpdateOpeningFromExtension`
 - `AttachOpeningInfill`
 - `CreateDoorWindow`
 - `SwapDoorWindowType`
+- `GenerateOrUpdateDoorWindowFromExtension`
 - `ApplyDecorativeWallSystem`
 - `CreateMouldingRun`
 
@@ -201,13 +203,31 @@ Inputs include source Extension ID, normalized Extension construction intent, bo
 Behavior:
 
 1. normalize an optional repeated closing boundary point;
-2. create or update one Architecture Smart Wall for each closed boundary edge using stable `wall_edge_N` source slots;
+2. create or update one Architecture Smart Wall for each closed boundary edge not safely replaced by an attachment-host edge, using stable `wall_edge_N` source slots;
 3. preserve supported hosted-opening data during regeneration of surviving wall identities;
-4. reconcile obsolete generated wall slots when topology shrinks;
+4. reconcile obsolete generated wall slots when topology shrinks or attachment suppresses a prior overlap wall;
 5. mark wall quantity/drawing outputs dirty;
 6. return created/updated/removed Smart Object IDs and explicit assumption warnings.
 
 Default/generated wall construction data is not confirmation. New walls remain `assumed` unless both wall type and thickness are explicit in the effective construction intent.
+
+### `GenerateOrUpdateOpeningFromExtension`
+
+Owner: `constructflow.opening`.
+
+This is an explicit host-modification boundary. Attachment-host presence alone is insufficient. Generation requires opt-in Opening intent, explicit confirmation to modify the existing host, explicit dimensions, and a safely resolved attachment host/edge.
+
+The generated Opening uses stable source slot `attachment_opening`. Host changes require explicit rehost intent. Explicit disable detaches the hosted cut and reconciles the generated new-work Opening; omitted intent is non-destructive.
+
+### `GenerateOrUpdateDoorWindowFromExtension`
+
+Owner: `constructflow.door_window`.
+
+This command is independently opt-in after the attachment Opening exists. It requires the current generated `attachment_opening` plus either a registered Door/Window type or enough explicit type intent to create a project-local type using the Opening dimensions.
+
+The generated `door_window.instance` uses stable source slot `attachment_infill` and the normal Opening host relation. Type/config changes update the same Smart Object. A different Opening identity requires explicit `rehost: true`. Explicit `door_window.enabled: false` detaches/reconciles only the generated infill; omitted intent is non-destructive.
+
+Validation must be side-effect free. Registering a project-local type is a command mutation and occurs only during successful command execution, not during validation/preview.
 
 ### `DemolishObject`
 
@@ -267,7 +287,7 @@ Undo should restore semantic metadata and geometry together.
 
 Commands are not universally idempotent, but automation commands that can be retried must define an idempotency strategy where necessary. Duplicate `command_id` must never silently create duplicate production objects if the caller retries after an uncertain response.
 
-Generated-from-source commands such as `GenerateOrUpdateArchitectureFromExtension` must converge on stable source slots rather than appending duplicate generated objects on each rerun.
+Generated-from-source commands such as `GenerateOrUpdateArchitectureFromExtension`, `GenerateOrUpdateOpeningFromExtension` and `GenerateOrUpdateDoorWindowFromExtension` must converge on stable source slots rather than appending duplicate generated objects on each rerun.
 
 ## AI exposure
 
@@ -278,7 +298,7 @@ Each command declares:
 - whether the command can destroy/replace construction history;
 - whether engineering/site verification warnings must be surfaced.
 
-High-impact destructive commands should require explicit confirmation from the user-facing orchestration layer.
+High-impact destructive commands should require explicit confirmation from the user-facing orchestration layer. In particular, an AI caller must not infer permission to cut an existing attachment host merely from the existence of an Extension/attachment relation.
 
 ## Versioning
 

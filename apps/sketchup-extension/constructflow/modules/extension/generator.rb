@@ -7,6 +7,7 @@ module JiraNot
         DEFAULTS = {
           'architecture' => { 'enabled' => true, 'walls' => 'auto' },
           'opening' => { 'enabled' => nil },
+          'door_window' => { 'enabled' => nil },
           'structure' => { 'enabled' => true, 'foundation' => 'auto' },
           'surface' => { 'enabled' => true, 'floor' => 'auto' },
           'roof' => { 'enabled' => true, 'system' => 'from_extension' },

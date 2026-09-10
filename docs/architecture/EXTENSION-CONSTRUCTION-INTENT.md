@@ -6,7 +6,7 @@ Status: Accepted v1 foundation contract
 
 Persist durable construction-generation choices for an `extension.zone` inside the SketchUp project so later regeneration, boundary edits and workflow reruns do not depend on chat history or one-off command arguments.
 
-The persisted construction intent belongs to the Extension module. It configures sibling-domain public generation commands but does not transfer ownership of Architecture, Opening, Structure, Surface, Roof, Drainage, Interior or Electrical Smart Objects to Extension.
+The persisted construction intent belongs to the Extension module. It configures sibling-domain public generation commands but does not transfer ownership of Architecture, Opening, Door/Window, Structure, Surface, Roof, Drainage, Interior or Electrical Smart Objects to Extension.
 
 ## Storage
 
@@ -23,6 +23,7 @@ schema_version: 1
 domains:
   architecture: {}
   opening: {}
+  door_window: {}
   structure: {}
   surface: {}
   roof: {}
@@ -97,13 +98,44 @@ Omitting the `opening` domain, or leaving its default enabled state unset, means
 
 Changing the attachment host of an already generated opening requires explicit `rehost: true` in addition to the normal host validation. Persisted configuration never grants implicit permission to move a destructive host modification to another wall.
 
+## Durable attachment-infill intent
+
+A generated attachment Opening still does not imply a door or window. Door/Window infill is independently opt-in and may be persisted under `door_window`, for example:
+
+```yaml
+domains:
+  door_window:
+    enabled: true
+    type_id: company.door.d01
+    schedule_mark: D01
+```
+
+or with explicit project-local type intent:
+
+```yaml
+domains:
+  door_window:
+    enabled: true
+    category: door
+    operation: swing
+    frame_material: wood
+    panel_style: solid
+    handing: right
+```
+
+The Door/Window bridge still requires the current generated `attachment_opening` and normal Opening-infill validation. Persisted intent never authorizes implicit opening creation or host-wall modification.
+
+Omitted `door_window` intent is non-destructive. Only explicit `door_window.enabled: false` may reconcile the generated `attachment_infill`. If the attachment Opening identity changes, moving an existing generated infill requires explicit `door_window.rehost: true`.
+
+A registered `type_id` is treated as explicit type selection. A project-local type built from category/operation may use preliminary frame/panel defaults, but those defaults remain `source_state: assumed` until the construction data is explicit; persistence does not upgrade confidence.
+
 ## Explicit disable and removal semantics
 
-Missing keys do not mean deletion. In particular, omission of Drainage endpoint fields from a later run is not permission to erase or reconnect an existing generated route, and omission of Opening intent is not permission to fill/remove a generated attachment opening.
+Missing keys do not mean deletion. In particular, omission of Drainage endpoint fields from a later run is not permission to erase or reconnect an existing generated route, omission of Opening intent is not permission to fill/remove a generated attachment opening, and omission of Door/Window intent is not permission to remove a generated attachment infill.
 
 A domain disable/removal transition must be represented explicitly, for example with `enabled: false`, and the owning domain bridge must define the reconciliation/lifecycle behavior before destructive action occurs.
 
-Endpoint or host identity changes also require explicit transition semantics. Persisting a different connector ID or attachment host ID must not silently rewrite an existing network/host relationship unless the owning command explicitly supports that transition.
+Endpoint or host identity changes also require explicit transition semantics. Persisting a different connector ID, attachment host ID or dependent Opening identity must not silently rewrite an existing network/host relationship unless the owning command explicitly supports that transition.
 
 ## Other domain examples
 
@@ -111,6 +143,7 @@ The same payload may persist deterministic project choices such as:
 
 - Architecture wall type/thickness/height and explicit attachment-edge disambiguation;
 - Opening attachment-opening dimensions/confirmation/rehost transition;
+- Door/Window registered type or explicit category/operation/frame/panel/rehost intent;
 - Structure foundation policy/type/size and engineering-status intent;
 - Surface system/material options;
 - Roof generation options;
@@ -145,3 +178,6 @@ This trace is evidence of how generation was configured. It does not duplicate t
 - AC-ECI-006: omission of a field is never interpreted as destructive disable/removal; destructive transitions require explicit semantics.
 - AC-ECI-007: persisted Opening intent remains opt-in, requires explicit host-modification confirmation/dimensions and does not derive permission from attachment-host presence alone.
 - AC-ECI-008: explicit `opening.enabled: false` may reconcile the generated `attachment_opening`, while omitted Opening intent leaves current host modification state unchanged.
+- AC-ECI-009: persisted Door/Window intent remains independently opt-in and requires a current generated attachment Opening plus valid type intent.
+- AC-ECI-010: explicit `door_window.enabled: false` may reconcile only the generated `attachment_infill`; omission leaves current infill state unchanged.
+- AC-ECI-011: changing an existing generated infill to a different Opening requires explicit `door_window.rehost: true` and normal fit validation.
