@@ -23,6 +23,30 @@ class ConstructionBridgeLevelRuntime
   end
 end
 
+ConstructionBridgeObject = Struct.new(:id, :type, :owner_module, :entity, :relationships, keyword_init: true)
+
+class ConstructionBridgeSmartObjects
+  attr_reader :objects, :erased_ids
+
+  def initialize(objects)
+    @objects = objects
+    @erased_ids = []
+  end
+
+  def all
+    objects
+  end
+
+  def erase!(entity)
+    object = objects.find { |value| value.entity.equal?(entity) }
+    raise KeyError, 'bridge object not found' unless object
+
+    @erased_ids << object.id
+    objects.delete(object)
+    object
+  end
+end
+
 class ConstructionDomainBridgesTest < Minitest::Test
   def intent(program: 'kitchen', config: {})
     {
@@ -35,6 +59,21 @@ class ConstructionDomainBridgesTest < Minitest::Test
       'roof_intent' => 'lean_to',
       'config' => config
     }
+  end
+
+  def generated_object(id:, type:, owner:, slot:)
+    ConstructionBridgeObject.new(
+      id: id,
+      type: type,
+      owner_module: owner,
+      entity: Object.new,
+      relationships: [{
+        'kind' => 'generated_from',
+        'target_id' => 'ext-1',
+        'role' => 'extension_source',
+        'metadata' => { 'slot' => slot }
+      }]
+    )
   end
 
   def test_roof_bridge_builds_semantic_roof_from_extension_intent
@@ -77,6 +116,26 @@ class ConstructionDomainBridgesTest < Minitest::Test
     assert_operator definition.modules.length, :>=, 1
   end
 
+  def test_interior_bridge_removes_previous_auto_joinery_when_program_no_longer_requests_it
+    cabinet = generated_object(
+      id: 'cab-1', type: 'interior.cabinet_run', owner: 'constructflow.interior', slot: 'primary_joinery'
+    )
+    smart_objects = ConstructionBridgeSmartObjects.new([cabinet])
+    runtime = Struct.new(:smart_objects).new(smart_objects)
+
+    result = JiraNot::ConstructFlow::Interior::ExtensionCommandRegistration.generate_or_update(
+      runtime: runtime,
+      input: { 'extension_id' => 'ext-1', 'intent' => intent(program: 'carport') },
+      repository: nil,
+      geometry: nil,
+      validator: nil
+    )
+
+    assert_equal ['cab-1'], result[:removed_object_ids]
+    assert_equal ['cab-1'], smart_objects.erased_ids
+    assert_empty smart_objects.objects
+  end
+
   def test_electrical_bridge_places_preliminary_light_at_extension_center
     data = intent(program: 'carport')
     definition = JiraNot::ConstructFlow::Electrical::ExtensionCommandRegistration.definition_from(
@@ -89,6 +148,25 @@ class ConstructionDomainBridgesTest < Minitest::Test
     assert_equal [2000.0, 1500.0], definition.position_mm.first(2)
     assert_in_delta 2900.0, definition.position_mm[2], 0.001
     assert definition.weatherproof
+  end
+
+  def test_electrical_bridge_removes_previous_auto_light_when_program_no_longer_requests_it
+    light = generated_object(
+      id: 'light-1', type: 'electrical.luminaire', owner: 'constructflow.electrical', slot: 'primary_light'
+    )
+    smart_objects = ConstructionBridgeSmartObjects.new([light])
+    runtime = Struct.new(:smart_objects).new(smart_objects)
+
+    result = JiraNot::ConstructFlow::Electrical::ExtensionCommandRegistration.generate_or_update(
+      runtime: runtime,
+      input: { 'extension_id' => 'ext-1', 'intent' => intent(program: 'terrace') },
+      repository: nil,
+      geometry: nil
+    )
+
+    assert_equal ['light-1'], result[:removed_object_ids]
+    assert_equal ['light-1'], smart_objects.erased_ids
+    assert_empty smart_objects.objects
   end
 
   def test_drainage_bridge_refuses_to_invent_missing_network_endpoints
