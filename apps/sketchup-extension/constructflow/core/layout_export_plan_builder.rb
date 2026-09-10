@@ -4,7 +4,7 @@ module JiraNot
   module ConstructFlow
     module Core
       class LayoutExportPlanBuilder
-        DEFAULT_VIEWPORT_BOUNDS_MM = [15.0, 15.0, 390.0, 245.0].freeze
+        DEFAULT_VIEWPORT_BOUNDS_MM = [15.0, 15.0, 390.0, 238.0].freeze
         TITLE_BLOCK_MARGIN_MM = 10.0
         TITLE_BLOCK_WIDTH_MM = 180.0
         TITLE_BLOCK_HEIGHT_MM = 28.0
