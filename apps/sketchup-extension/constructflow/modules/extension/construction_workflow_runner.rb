@@ -38,6 +38,7 @@ module JiraNot
               'quality_gate' => nil,
               'takeoff' => nil,
               'drawing_refresh' => [].freeze,
+              'currentness' => nil,
               'issue_set' => nil,
               'export' => nil
             }.freeze
@@ -64,20 +65,33 @@ module JiraNot
             template_use_case: template_use_case
           )
           drawing_refresh = refresh_drawings ? refresh_issue_scenes(issue_set, extension.id, issue_factory) : []
+          currentness = ConstructionCurrentnessAudit.new(runtime: @runtime, issue_factory: issue_factory).run(
+            extension_id: extension.id,
+            takeoff: takeoff,
+            drawing_refresh: drawing_refresh,
+            drawings_required: !export.nil?
+          )
           issue_plan = @runtime.drawing_issue_sets.build(issue_set)
           export_result = nil
-          if export && quality['publishable']
+          if export && quality['publishable'] && currentness['publishable']
             export_result = export_issue_set(issue_set, stringify_keys(export))
           end
 
           {
             'format' => 'constructflow.extension_construction_workflow.v1',
             'extension_id' => extension.id,
-            'status' => workflow_status(execution, quality, export_result, export_requested: !export.nil?),
+            'status' => workflow_status(
+              execution,
+              quality,
+              currentness,
+              export_result,
+              export_requested: !export.nil?
+            ),
             'execution' => execution,
             'quality_gate' => quality,
             'takeoff' => takeoff,
             'drawing_refresh' => drawing_refresh.freeze,
+            'currentness' => currentness,
             'issue_set' => issue_plan,
             'export' => export_result
           }.freeze
@@ -122,8 +136,8 @@ module JiraNot
           )
         end
 
-        def workflow_status(execution, quality, export_result, export_requested:)
-          return 'blocked' unless execution['status'] == 'success' && quality['publishable']
+        def workflow_status(execution, quality, currentness, export_result, export_requested:)
+          return 'blocked' unless execution['status'] == 'success' && quality['publishable'] && currentness['publishable']
           return 'ready' unless export_requested
           return 'export_failed' if export_result.nil?
           'exported'
