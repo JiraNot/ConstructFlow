@@ -167,6 +167,16 @@ Default:
 
 Detailed LOD optionally creates pipe solids/fittings.
 
+### Plan representation profiles
+
+Drainage plan output changes by drawing profile without creating separate Smart Objects.
+
+- **Simple / 1:100**: pipe centerline + pipe size; manhole outline/symbol/tag. No invert or route-detail clutter.
+- **Construction / 1:50**: centerline + flow arrow + system + diameter + slope + start/end invert; manhole cover/invert/depth.
+- **Coordination / 1:50**: Construction content plus route strategy/network identity and manhole type for coordination/debug workflows.
+
+Unknown invert remains explicit as `S=?` with verification status in profiles that display slope.
+
 ## Phase behavior
 
 Existing network can contain Remain/Demolish/Unknown segments. New routes are New Construction. Reroute operations preserve construction scope.
@@ -195,26 +205,27 @@ Existing network can contain Remain/Demolish/Unknown segments. New routes are Ne
 
 Drainage owns its plan representation through the Core Smart Object Representation System. Drawing/LayOut orchestration consumes this semantic output and must not infer pipe meaning from raw SketchUp edges or solids.
 
-`drainage.pipe_route / plan` provides, at minimum:
+`drainage.pipe_route / plan` can provide:
 
 - route centerline polyline from semantic route nodes;
-- flow direction arrow;
+- flow direction arrow according to profile;
 - pipe system and diameter annotation;
 - slope annotation when invert data is known;
 - explicit `S=? / verify` annotation when invert data is insufficient;
-- start/end invert labels when known;
-- representation metadata containing view/scale/phase/LOD context and route strategy.
+- start/end invert labels when known and required by profile;
+- representation metadata containing view/scale/phase/LOD/style context and route strategy.
 
-`drainage.manhole / plan` provides, at minimum:
+`drainage.manhole / plan` can provide:
 
 - manhole outline from semantic location and size;
 - `MH` plan symbol;
 - semantic object tag;
-- cover level, inlet invert, outlet invert and depth annotations when known.
+- cover level, inlet invert, outlet invert and depth annotations when required by profile;
+- manhole type in coordination profile.
 
 Plan representation is `on_demand`. It is derived from the same Smart Object definition used by model geometry; it is not a second independently editable drainage object.
 
-Future drawing styles may change line weights, abbreviations, tag numbering and placement without changing the semantic representation contract.
+Graphic line weights and label placement remain renderer/style concerns. Semantic inclusion/exclusion by profile remains domain-owned.
 
 ## QA
 
@@ -240,6 +251,7 @@ Future drawing styles may change line weights, abbreviations, tag numbering and 
 - AC-DRN-008: moving drainage node dirties Surface/Quantity/Drawing through events rather than private mutations.
 - AC-DRN-009: structure clash can be reported using public coordination contracts.
 - AC-DRN-010: one pipe/manhole Smart Object can produce a semantic plan representation with symbols/annotations without duplicating construction identity; unknown invert is visibly marked for verification.
+- AC-DRN-011: simple, construction and coordination plan profiles expose deterministic levels of semantic detail from the same Smart Object.
 
 ## Deferred
 
