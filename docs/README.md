@@ -50,9 +50,10 @@ No production module should introduce behavior that contradicts an approved spec
 38. `architecture/DRAINAGE-OFFSET-DETOURS.md` — deterministic clearance detours around known structural coordination bounds.
 39. `architecture/DRAINAGE-QA-TAKEOFF.md` — project network QA and phase-aware Drainage quantity aggregation.
 40. `architecture/SKETCHUP-DRAINAGE-ROUTE-GRIPS.md` — SketchUp drag-to-modify adapter over semantic route commands.
-41. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
-42. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
-43. `decisions/` — architecture decisions that explain or amend the baseline.
+41. `architecture/ROOF-RAINWATER-DOWNPIPE.md` — public Roof→Drainage gutter/downpipe topology, representation, quantity and QA contract.
+42. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
+43. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
+44. `decisions/` — architecture decisions that explain or amend the baseline.
 
 ## Specification status vocabulary
 
