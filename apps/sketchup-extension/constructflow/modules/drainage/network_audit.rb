@@ -41,7 +41,7 @@ module JiraNot
           issues = @validator.validate_route(definition).map do |value|
             issue(object, value[:rule_id], value[:severity], value[:message], state: value[:state])
           end
-          issues.concat(topology_issues(object, definition))
+          issues.concat(topology_issues(object, definition, require_connection: false))
           issues.concat(structure_clashes(object, definition))
           issues
         end
@@ -53,12 +53,12 @@ module JiraNot
           issues = definition.errors.map do |message|
             issue(object, 'drainage.downpipe.validity', 'error', message)
           end
-          issues.concat(topology_issues(object, definition)) if definition.valid?
+          issues.concat(topology_issues(object, definition, require_connection: true)) if definition.valid?
           issues.concat(structure_clashes(object, definition)) if definition.valid?
           issues
         end
 
-        def topology_issues(object, definition)
+        def topology_issues(object, definition, require_connection: false)
           issues = []
           connection = @runtime.connectors.connection_for_route(object.id)
           if definition.connection_id && connection.nil?
@@ -70,7 +70,7 @@ module JiraNot
             expected = [definition.start_connector_id, definition.end_connector_id].sort
             actual = [connection['from_connector_id'], connection['to_connector_id']].sort
             issues << issue(object, 'drainage.route.endpoint_mismatch', 'error', 'route connector endpoints do not match topology connection') unless expected == actual
-          elsif definition.connection_id.to_s.empty?
+          elsif require_connection && definition.connection_id.to_s.empty?
             issues << issue(object, 'drainage.route.connection_missing', 'error', 'route has no active network connection')
           end
           issues
