@@ -19,6 +19,21 @@ Use a disposable acceptance project that contains at least:
 
 Save the model before starting.
 
+Before recording any checkpoint, run `Extensions > ConstructFlow > Native Acceptance > Preflight Acceptance Project`.
+
+The preflight is a **read-only readiness query**. It checks that an active saved model, ConstructFlow project identity, Smart Objects, scenes and managed `CF-*` tags are present. When an Extension ID is supplied through the public command, it also checks that the source is an `extension.zone` with generated related Smart Objects. Recommended multi-domain coverage is reported as an advisory warning so an intentionally narrower native test project is not falsely blocked.
+
+The public preflight command is:
+
+```ruby
+JiraNot::ConstructFlow::Runtime.commands.execute(
+  'RunNativeAcceptancePreflight',
+  input: { extension_id: '<extension-smart-object-id>' }
+)
+```
+
+A green preflight does **not** pass any native-acceptance checkpoint. It only confirms that the project is prepared enough to begin manual/native verification.
+
 ## 1. Save / close / reopen identity
 
 1. Open `Extensions > ConstructFlow > Native Acceptance > Capture Save/Reopen Baseline`.

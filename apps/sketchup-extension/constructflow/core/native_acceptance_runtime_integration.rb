@@ -22,6 +22,33 @@ module JiraNot
         end
 
         def register_commands(runtime, service)
+          unless runtime.commands.registered?('RunNativeAcceptancePreflight')
+            runtime.commands.register(
+              'RunNativeAcceptancePreflight',
+              owner_module: 'constructflow.core',
+              validator: ->(_command) { [] }
+            ) do |command|
+              input = command[:input] || {}
+              result = service.preflight(extension_id: input[:extension_id] || input['extension_id'])
+              warnings = Array(result['warnings'])
+              unless result['ready']
+                warnings = ["native acceptance preflight failed: #{result['failed_checks'].join(', ')}", *warnings]
+              end
+              {
+                warnings: warnings,
+                events: [{
+                  name: 'NativeAcceptancePreflightCompleted',
+                  payload: {
+                    ready: result['ready'],
+                    extension_id: result['extension_id'],
+                    failed_checks: result['failed_checks'],
+                    coverage: result['coverage']
+                  }
+                }]
+              }
+            end
+          end
+
           unless runtime.commands.registered?('CaptureNativeAcceptanceBaseline')
             runtime.commands.register(
               'CaptureNativeAcceptanceBaseline',
@@ -114,6 +141,13 @@ module JiraNot
           return unless defined?(UI)
 
           submenu = runtime.menu.add_submenu('Native Acceptance')
+          submenu.add_item('Preflight Acceptance Project') do
+            begin
+              UI.messagebox(preflight_message(service.preflight))
+            rescue StandardError => error
+              UI.messagebox("Native acceptance preflight failed:\n#{error.message}")
+            end
+          end
           submenu.add_item('Capture Save/Reopen Baseline') do
             begin
               result = service.capture_baseline
@@ -134,6 +168,20 @@ module JiraNot
             summary = service.summary
             UI.messagebox(status_message(summary))
           end
+        end
+
+        def preflight_message(result)
+          lines = [
+            'ConstructFlow Native Acceptance Preflight',
+            "Ready: #{result['ready'] ? 'YES' : 'NO'}"
+          ]
+          unless result['failed_checks'].empty?
+            lines << "Fix: #{result['failed_checks'].join(', ')}"
+          end
+          unless result['warnings'].empty?
+            lines << "Warnings: #{result['warnings'].join('; ')}"
+          end
+          lines.join("\n")
         end
 
         def status_message(summary)
