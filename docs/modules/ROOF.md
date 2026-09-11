@@ -76,6 +76,7 @@ FasciaSystem:
 - `AddFlashing`
 - `CreateRoofJunction`
 - `AddGutter`
+- `PlanRoofRainwaterCatchment`
 - `ConnectDownpipe`
 
 ## Roof framing
@@ -133,6 +134,10 @@ Board layout and frame spacing may be detailed later by LOD.
 
 Gutter attaches to compatible roof edge and exposes rainwater outlet connector. Downpipe/network destination belongs to Roof + Drainage connector collaboration.
 
+Before mutating rainwater hardware, `PlanRoofRainwaterCatchment` may calculate a preliminary projected catchment flow and required outlet count from explicit design rainfall, runoff coefficient and per-outlet capacity. For a unique low eave it may suggest evenly spaced outlet ratios; ambiguous/flat conditions require explicit reviewed edge selection. The planner never chooses code rainfall/capacity data and never creates or moves gutters/downpipes.
+
+Hosted gutters keep their semantic edge/outlet ratio through supported roof regeneration. Connected Downpipes are regenerated through the public Drainage rainwater capability while preserving Smart Object and network connection identities.
+
 ## Phase behavior
 
 Supports partial demolition/modification of existing eaves/roof edges while existing roof remains. New roof/junction/flashing objects are New Construction.
@@ -145,6 +150,8 @@ Supports partial demolition/modification of existing eaves/roof edges while exis
 - flashing profiles;
 - gutter profiles;
 - manufacturer panels/products.
+
+Future catalog metadata may include verified gutter/outlet/downpipe hydraulic capacities. Planning must not invent a capacity when no verified project/catalog value exists.
 
 ## Quantity
 
@@ -187,6 +194,7 @@ The slope direction is a renderer-neutral arrow derived from semantic slope dire
 - missing flashing at configured existing-wall junction;
 - gutter without outlet;
 - rainwater outlet without destination;
+- rainwater plan missing verified rainfall/capacity inputs before final construction sizing;
 - fascia/frame geometry conflict;
 - panel/support spacing outside assembly rule metadata;
 - missing host edge after roof regeneration.
@@ -202,3 +210,5 @@ The slope direction is a renderer-neutral arrow derived from semantic slope dire
 - AC-ROOF-007: changing roof system marks related quantities/drawings/QA dirty.
 - AC-ROOF-008: partial existing eave demolition can coexist with remaining existing roof lifecycle.
 - AC-ROOF-009: RoofSystem and Gutter expose deterministic on-demand plan representations from semantic definitions with Simple/Construction/Coordination profiles, including slope direction and rainwater outlet traceability.
+- AC-ROOF-010: preliminary rainwater planning uses semantic roof plan area plus explicit rainfall/runoff/outlet-capacity inputs and does not mutate the model.
+- AC-ROOF-011: ambiguous low-eave conditions require explicit edge selection rather than an arbitrary automatic outlet edge.
