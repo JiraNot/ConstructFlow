@@ -50,6 +50,7 @@ module JiraNot
       # warning.
       class RainwaterPackageAudit
         SYSTEM = 'drainage.rainwater'
+        EVIDENCE_KEY = 'rainwater_plan_application'
 
         def initialize(runtime:)
           @runtime = runtime
@@ -136,7 +137,7 @@ module JiraNot
 
         def application_evidence(gutter)
           Core::AttributeStore.new(gutter.entity).read_json(
-            RainwaterPlanApplier::EVIDENCE_KEY,
+            EVIDENCE_KEY,
             nil,
             dictionary: Repository::DICTIONARY
           )
