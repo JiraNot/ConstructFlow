@@ -21,18 +21,22 @@ It does **not** choose local design rainfall, legal/code values, gutter profile 
 
 The command is non-mutating (`transaction: false`). It emits `RoofRainwaterCatchmentPlanned` with the complete planning evidence.
 
-Required inputs:
+Required project inputs:
 
 - `roof_object_id` or compatible Roof entity;
 - `design_rainfall_mm_per_hr`;
 - `runoff_coefficient` greater than 0 and at most 1;
-- `outlet_capacity_lps` for one proposed outlet/downpipe system.
+- exactly one outlet-capacity source:
+  - `outlet_capacity_lps` as explicit user/manual planning input; or
+  - `capacity_asset_id` plus optional `capacity_asset_version` referencing a verified `roof.rainwater_capacity` Library asset.
 
 Optional:
 
 - `edge_index` when the intended receiving eave/edge is already known.
 
-Missing hydraulic/design inputs are rejected rather than silently replaced with defaults.
+Supplying both capacity modes is rejected. Missing hydraulic/design inputs are rejected rather than silently replaced with defaults.
+
+The Library-backed mode is governed by `ROOF-RAINWATER-CAPACITY-CATALOG.md`. A catalog asset must contain verified hydraulic evidence and a basis reference; catalog existence alone does not make a capacity acceptable.
 
 ## Calculation
 
@@ -52,7 +56,22 @@ Required outlet count is:
 
 with a minimum of one outlet for a valid positive-area roof.
 
-The formula version is persisted in the returned plan as planning evidence. The result is not a claim of code compliance.
+The formula version and capacity-source evidence are carried in the returned plan. The result is not a claim of code compliance.
+
+## Capacity-source evidence
+
+Manual capacity produces:
+
+```yaml
+capacity_source:
+  kind: manual_input
+  verification_status: user_supplied
+  outlet_capacity_lps: ...
+```
+
+A verified Library profile produces versioned evidence including asset ID/version, capacity, basis ref and optional manufacturer/product/diameter/gutter profile hints.
+
+A plan resolved against a specific catalog version remains traceable to that version even if a newer version later exists.
 
 ## Edge resolution
 
@@ -75,38 +94,41 @@ These are layout suggestions only. Creating/moving gutters, connectors or downpi
 ## Safety and ownership
 
 - Roof owns catchment geometry and this planning calculation.
+- Library owns versioned catalog asset storage/search.
+- Roof consumes catalog capacity only through the public `library.catalog` capability.
 - Drainage continues to own downpipe geometry/topology.
 - Core ConnectorRegistry continues to own connector/connection identity.
 - The planner never writes Roof/Gutter/Drainage definitions.
 - The planner never creates connectors or downpipes.
 - The planner never infers a destination network.
-- The planner never chooses a design rainfall intensity or outlet hydraulic capacity.
+- The planner never chooses a design rainfall intensity or unregistered outlet hydraulic capacity.
 - A non-low explicit edge is accepted as deliberate intent but is returned with a review warning.
 
 ## Relationship to generation
 
 The safe workflow is:
 
-`Roof Smart Object → PlanRoofRainwaterCatchment → human/company/code review → AddGutter / outlet placement → ConnectDownpipe → Roof rainwater regeneration`
+`Roof Smart Object → explicit rainfall/runoff/capacity evidence → PlanRoofRainwaterCatchment → human/company/code review → AddGutter / outlet placement → ConnectDownpipe → Roof rainwater regeneration`
 
 Future automation may consume the plan through the same public command surface, but automatic construction-object mutation requires a separate explicit command/confirmation contract.
 
 ## Acceptance criteria
 
 - AC-RWC-001: a 24 m² roof at 150 mm/h and coefficient 1.0 reports 1.0 L/s preliminary peak runoff.
-- AC-RWC-002: outlet count is derived only from an explicitly supplied per-outlet capacity.
+- AC-RWC-002: outlet count is derived only from an explicitly supplied manual capacity or verified versioned Library capacity profile.
 - AC-RWC-003: a lean-to roof with one unique low eave can suggest that edge deterministically.
 - AC-RWC-004: ambiguous/flat low edges require explicit selection rather than arbitrary choice.
 - AC-RWC-005: suggested outlet ratios are deterministic and evenly distributed inside the selected edge.
-- AC-RWC-006: missing/non-positive rainfall or outlet capacity and invalid runoff coefficients are rejected.
+- AC-RWC-006: missing/non-positive rainfall or capacity and invalid runoff coefficients are rejected.
 - AC-RWC-007: the planning command mutates no Smart Object, connector, geometry or topology state.
 - AC-RWC-008: the result visibly warns that local rainfall, code and manufacturer capacity require verification before construction issue.
+- AC-RWC-009: when a capacity catalog asset is used, its exact asset ID/version and hydraulic basis evidence are returned in the plan.
+- AC-RWC-010: conflicting manual and catalog capacity inputs are rejected rather than resolved by hidden precedence.
 
 ## Deferred
 
-- company/manufacturer gutter/downpipe capacity catalogs;
 - code/jurisdiction rainfall datasets;
-- hydraulic gutter profile sizing;
+- full hydraulic gutter/downpipe profile sizing;
 - multiple catchment sub-basins/valleys;
 - automatic creation/repositioning of gutters/outlets;
 - fitting/elbow fabrication LOD;
