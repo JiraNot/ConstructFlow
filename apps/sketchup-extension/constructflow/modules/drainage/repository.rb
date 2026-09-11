@@ -7,6 +7,7 @@ module JiraNot
         DICTIONARY = 'constructflow.drainage'
         MANHOLE_KEY = 'manhole_definition'
         PIPE_ROUTE_KEY = 'pipe_route_definition'
+        DOWNPIPE_KEY = 'downpipe_definition'
 
         def read_manhole(entity)
           payload = Core::AttributeStore.new(entity).read_json(
@@ -36,6 +37,22 @@ module JiraNot
 
           Core::AttributeStore.new(entity).write_json(
             PIPE_ROUTE_KEY, definition.to_h, dictionary: DICTIONARY
+          )
+          definition
+        end
+
+        def read_downpipe(entity)
+          payload = Core::AttributeStore.new(entity).read_json(
+            DOWNPIPE_KEY, nil, dictionary: DICTIONARY
+          )
+          payload ? DownpipeDefinition.from_h(payload) : nil
+        end
+
+        def write_downpipe(entity, definition)
+          raise ArgumentError, 'DownpipeDefinition required' unless definition.is_a?(DownpipeDefinition)
+
+          Core::AttributeStore.new(entity).write_json(
+            DOWNPIPE_KEY, definition.to_h, dictionary: DICTIONARY
           )
           definition
         end
