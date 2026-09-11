@@ -82,12 +82,15 @@ timestamp: <runtime timestamp>
 
 - `NativeCopyIdentityRepaired` — emitted only after a native SketchUp copy has been re-identified through the Core identity guard; payload contains the repaired source/new ID pairs.
 - `SketchupModelAttached` — emitted by the installed native AppObserver integration after Runtime has already attached to a native New/Open model; payload includes `source`, `transition`, model path, project ID and Smart Object count.
+- `NativeLayoutExportCompleted` — emitted only after the native Drawing/LayOut service returns successfully. Payload identifies the native backend, source `.skp`, generated `.layout`/PDF paths, sheet/viewport counts and resolved template trace. The event is a fact about completed native export; acceptance subscribers still validate file existence, backend identity, active acceptance project and template evidence before passing a checkpoint.
 - `NativeAcceptancePreflightCompleted`
 - `NativeAcceptanceBaselineCaptured`
 - `NativeAcceptanceReopenVerified`
 - `NativeAcceptanceCheckpointRecorded`
 
 `SketchupModelAttached` v1 is acceptance/runtime evidence, not a domain lifecycle event. The accepted source value for objective New/Open evidence is `app_observer`; transition is `new` or `open`. A subscriber must not infer that an arbitrary programmatic Runtime attachment satisfies native observer acceptance.
+
+`NativeLayoutExportCompleted` must not be emitted by renderer-neutral plan builders or fake/native-test backends merely because an export plan was constructed. The Core native acceptance collector accepts only evidence whose backend identifies the real LayOut Ruby API and whose output/template files are present at the recorded paths.
 
 ### Domain-specific coordination
 
