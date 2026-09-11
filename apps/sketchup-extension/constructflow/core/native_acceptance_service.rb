@@ -13,6 +13,10 @@ module JiraNot
           @session_token = session_token.to_s
         end
 
+        def preflight(extension_id: nil)
+          NativeAcceptancePreflight.new(runtime: @runtime).run(extension_id: extension_id)
+        end
+
         def capture_baseline(extension_id: nil)
           store.capture_baseline(
             runtime: @runtime,
