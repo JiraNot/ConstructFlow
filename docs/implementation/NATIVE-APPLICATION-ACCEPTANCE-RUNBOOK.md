@@ -32,7 +32,7 @@ JiraNot::ConstructFlow::Runtime.commands.execute(
 )
 ```
 
-A green preflight does **not** pass any native-acceptance checkpoint. It only confirms that the project is prepared enough to begin manual/native verification.
+A green preflight does **not** pass any native-acceptance checkpoint. It only confirms that the project is prepared enough to begin native verification.
 
 ## 1. Save / close / reopen identity
 
@@ -59,15 +59,25 @@ Record `undo_redo_semantic_geometry` only after observing this in SketchUp.
 
 ## 3. Native copy identity
 
-Copy/paste or Move+Copy a representative Smart Object in SketchUp.
+After the acceptance baseline has been captured, copy/paste or Move+Copy a representative Smart Object in SketchUp.
 
-Verify that the duplicated production object does not retain the original Smart Object ID after ConstructFlow identity handling. Record `native_copy_identity` only from observed native behavior.
+ConstructFlow now records this checkpoint automatically from the live native-copy observer path. A pass requires the native copy repair event to prove that:
+
+- the copied object received a different Smart Object ID;
+- both source and copied IDs are live in the current Smart Object index;
+- inherited semantic relationships were detached from the raw copy.
+
+Open `Show Native Acceptance Status` and verify `native_copy_identity` changed to `passed`. Do **not** manually record a pass for this checkpoint; the public generic checkpoint command rejects that shortcut.
 
 ## 4. New / Open observer
 
-Create a new SketchUp model, then reopen the acceptance model without restarting the extension.
+Keep SketchUp running after the acceptance baseline is captured.
 
-Verify Runtime attaches to the correct active model, project ID and Smart Object index. Record `observer_new_open`.
+1. Create a **New Model**.
+2. Reopen the saved acceptance model with **Open**.
+3. Open `Show Native Acceptance Status`.
+
+ConstructFlow automatically records `observer_new_open` only after the installed native observer sees the exact sequence `New Model → Open Model back to the armed acceptance project`, with Runtime already attached to the reopened project. An Open event by itself does not pass the checkpoint, and the generic checkpoint command cannot manually mark it passed.
 
 ## 5. Migration fixture
 
@@ -111,9 +121,9 @@ Using a supported company/template asset, exercise the native LayOut path:
 
 Record `layout_pdf_export` with SketchUp/LayOut version, template version/hash and output paths.
 
-## Recording checkpoints
+## Recording manual checkpoints
 
-The public command is:
+For checkpoints without an objective runtime collector, use:
 
 ```ruby
 JiraNot::ConstructFlow::Runtime.commands.execute(
@@ -127,7 +137,7 @@ JiraNot::ConstructFlow::Runtime.commands.execute(
 )
 ```
 
-Do not mark a checkpoint `passed` based only on source review or CI. `skipped` remains incomplete.
+Do not mark a checkpoint `passed` based only on source review or CI. `skipped` remains incomplete. `native_copy_identity` and `observer_new_open` are runtime-objective checkpoints and cannot be manually passed through this generic command.
 
 ## Exit criterion
 
