@@ -56,9 +56,10 @@ No production module should introduce behavior that contradicts an approved spec
 44. `architecture/ROOF-RAINWATER-CAPACITY-CATALOG.md` — verified versioned Library capacity evidence consumed by rainwater planning without hidden hydraulic defaults.
 45. `architecture/ROOF-RAINWATER-PLAN-APPLICATION.md` — explicit reviewed-plan mutation boundary for one hosted gutter with multiple semantic outlet connectors and safe Downpipe selection/regeneration.
 46. `architecture/ROOF-RAINWATER-CONSTRUCTION-PACKAGE.md` — Extension provenance, BOQ/drawing scope and strict QA for applied gutters/outlets and explicit Drainage-owned Downpipes.
-47. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
-48. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
-49. `decisions/` — architecture decisions that explain or amend the baseline.
+47. `architecture/NATIVE-APPLICATION-ACCEPTANCE-EVIDENCE.md` — model-local real SketchUp/LayOut acceptance evidence, save/reopen proof and explicit native checkpoint completion semantics.
+48. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
+49. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
+50. `decisions/` — architecture decisions that explain or amend the baseline.
 
 ## Specification status vocabulary
 
@@ -101,7 +102,7 @@ Every production command, smart-object type, quantity provider, drawing provider
 - Workflow: existing IDs in `WORKFLOW-REGISTRY.md`
 - Acceptance criterion: `AC-<DOMAIN>-###`
 
-Current high-level implementation state is summarized in `STATUS.md`. The application-level evidence boundary for the coordinated Extension construction package is recorded in `implementation/CONSTRUCTION-WORKFLOW-v1-EVIDENCE.md`; that proof is intentionally distinct from real SketchUp/LayOut native acceptance evidence.
+Current high-level implementation state is summarized in `STATUS.md`. The application-level evidence boundary for the coordinated Extension construction package is recorded in `implementation/CONSTRUCTION-WORKFLOW-v1-EVIDENCE.md`; real SketchUp/LayOut verification must follow `architecture/NATIVE-APPLICATION-ACCEPTANCE-EVIDENCE.md` and `implementation/NATIVE-APPLICATION-ACCEPTANCE-RUNBOOK.md` rather than being inferred from CI.
 
 ## AI-agent rule
 
