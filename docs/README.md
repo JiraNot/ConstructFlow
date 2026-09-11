@@ -52,9 +52,10 @@ No production module should introduce behavior that contradicts an approved spec
 40. `architecture/SKETCHUP-DRAINAGE-ROUTE-GRIPS.md` — SketchUp drag-to-modify adapter over semantic route commands.
 41. `architecture/ROOF-RAINWATER-DOWNPIPE.md` — public Roof→Drainage gutter/downpipe topology, representation, quantity and QA contract.
 42. `architecture/ROOF-RAINWATER-REGENERATION.md` — deterministic hosted gutter/outlet/downpipe propagation after Roof changes while preserving semantic identities.
-43. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
-44. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
-45. `decisions/` — architecture decisions that explain or amend the baseline.
+43. `architecture/ROOF-RAINWATER-CATCHMENT-PLANNING.md` — non-mutating catchment flow, outlet-count and reviewed outlet-layout planning from explicit hydraulic inputs.
+44. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
+45. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
+46. `decisions/` — architecture decisions that explain or amend the baseline.
 
 ## Specification status vocabulary
 
