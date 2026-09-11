@@ -66,6 +66,12 @@ For non-direct/custom route strategies:
 
 This v1 behavior keeps manual routing intent while ensuring connector-owned endpoints cannot drift away from the actual network topology.
 
+## Preliminary catchment planning
+
+`ROOF-RAINWATER-CATCHMENT-PLANNING.md` defines a separate non-mutating planning command for catchment flow, required outlet count and reviewed outlet-layout suggestions.
+
+That planner requires explicit project rainfall/runoff/capacity inputs and does not mutate this regeneration chain. A planning result becomes construction intent only after a later explicit gutter/outlet/downpipe command applies reviewed values.
+
 ## Dirty propagation
 
 A successful hosted regeneration marks affected gutter/downpipe quantity and drawing outputs dirty. The Roof itself remains dirty through the existing Roof update command.
@@ -77,7 +83,7 @@ Later Construction Workflow settlement/currentness must consume the regenerated 
 - no automatic gutter rehost;
 - no automatic destination change;
 - no replacement connection ID;
-- no new hydraulic sizing assumption;
+- no implicit hydraulic sizing assumption during regeneration;
 - no Roof-owned direct write to Drainage repository/geometry;
 - no silent success when a connected downpipe capability is unavailable.
 
@@ -95,7 +101,7 @@ Later Construction Workflow settlement/currentness must consume the regenerated 
 ## Deferred
 
 - explicit gutter rehost command/UI;
-- automatic catchment sizing and downpipe count/diameter calculation;
-- automatic outlet-position optimisation;
+- company/manufacturer capacity catalogs and final gutter/downpipe diameter selection;
+- automatic application of reviewed catchment-plan outlet suggestions;
 - fitting/elbow fabrication LOD;
 - automatic underground rainwater continuation after the destination connector.

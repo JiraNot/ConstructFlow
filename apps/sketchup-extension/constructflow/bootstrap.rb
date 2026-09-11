@@ -72,6 +72,8 @@ require_relative 'modules/drainage/downpipe_definition'
 require_relative 'modules/drainage/rainwater_downpipe_service'
 require_relative 'modules/drainage/rainwater_downpipe_registration'
 require_relative 'modules/roof/rainwater_registration'
+require_relative 'modules/roof/rainwater_catchment_planner'
+require_relative 'modules/roof/rainwater_planning_registration'
 require_relative 'modules/roof/hosted_gutter_regenerator'
 require_relative 'modules/drainage/route_planner'
 require_relative 'modules/drainage/extension_command_registration'
@@ -122,6 +124,7 @@ JiraNot::ConstructFlow::DoorWindow::RepresentationRegistration.install(JiraNot::
 JiraNot::ConstructFlow::Electrical::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RainwaterDownpipeRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Roof::RainwaterRegistration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Roof::RainwaterPlanningRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RoutingRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::RouteDetourRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Drainage::QualityRegistration.install(JiraNot::ConstructFlow::Runtime)
