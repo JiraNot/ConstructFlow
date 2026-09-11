@@ -1,6 +1,6 @@
 # ConstructFlow Specification Status
 
-This file is the current high-level status dashboard. It is informational; authoritative requirements remain in the referenced specs.
+This file is the current high-level implementation dashboard. It is informational; authoritative requirements remain in the referenced specifications and accepted architecture contracts.
 
 ## Documentation foundation
 
@@ -13,13 +13,20 @@ This file is the current high-level status dashboard. It is informational; autho
 | Phase / Level / Revision | Accepted v1 | `architecture/PHASE-LEVEL-REVISION.md` |
 | Interaction model | Accepted v1 | `architecture/INTERACTION-MODEL.md` |
 | UI/UX contract | Accepted v1 | `architecture/UI-UX-SPEC.md` |
-| Commands | Accepted foundation / domain Proposed | `architecture/COMMAND-CATALOG.md` |
+| Commands | Accepted foundation / domain expanding | `architecture/COMMAND-CATALOG.md` |
 | Events | Accepted foundation | `architecture/EVENT-CATALOG.md` |
 | Hosts / Connectors | Accepted foundation | `architecture/CONNECTOR-STANDARD.md` |
 | Persistence / Migration | Accepted foundation | `architecture/PERSISTENCE-MIGRATION.md` |
 | Library / Catalog | Accepted foundation | `architecture/LIBRARY-CATALOG.md` |
 | Quantity / BOQ / Cost | Accepted foundation | `architecture/QUANTITY-CONTRACT.md` |
 | Drawing / Detail | Accepted foundation | `architecture/DRAWING-STANDARD.md` |
+| Representation system | Accepted v1 | `architecture/SMART-OBJECT-REPRESENTATION-SYSTEM.md` |
+| Drawing view presets | Accepted v1 | `architecture/DRAWING-VIEW-PRESETS.md` |
+| SketchUp plan adapter | Accepted v1 | `architecture/SKETCHUP-PLAN-ADAPTER.md` |
+| LayOut output | Accepted v1 foundation | `architecture/LAYOUT-VECTOR-OUTPUT.md` and related LayOut contracts |
+| Extension construction workflow | Accepted v1 | `architecture/EXTENSION-CONSTRUCTION-WORKFLOW.md` |
+| Extension domain bridges | Accepted v1 | `architecture/EXTENSION-DOMAIN-BRIDGES.md` |
+| Roof rainwater package | Accepted v1 | `architecture/ROOF-RAINWATER-CONSTRUCTION-PACKAGE.md` |
 | LOD / Performance | Accepted foundation | `architecture/LOD-PERFORMANCE.md` |
 | Import / Export | Accepted foundation | `architecture/IMPORT-EXPORT.md` |
 | AI orchestration | Accepted foundation | `architecture/AI-ORCHESTRATION.md` |
@@ -33,34 +40,52 @@ This file is the current high-level status dashboard. It is informational; autho
 
 ## Implementation status
 
-ConstructFlow is at **Foundation implementation** stage.
+ConstructFlow has moved beyond the original Core-only foundation. The repository now contains an **application-level Construction Workflow v1 vertical slice** that composes semantic domain objects, quantity providers, QA, drawing views, output settlement, currentness, LayOut/PDF publication boundaries and issue-history evidence through the same Smart Object graph.
 
-Implemented in the F1 Core branch:
+Implemented and covered by pure-Ruby CI include:
 
-- stable ConstructFlow/project ID generation;
-- model-local ProjectStore and working-phase persistence;
-- semantic LevelRegistry persistence in canonical millimetres, including unknown/verify-on-site levels;
-- canonical SmartObject envelope and SmartObjectManager scan/recovery index;
-- lifecycle, level-reference, relationship and dirty-state persistence;
-- deterministic migration registry scaffolding;
-- SketchUp transaction manager;
-- versioned CommandBus with validation-before-mutation and common human/AI actor envelope;
-- versioned EventBus with subscriber-failure isolation and bounded diagnostics;
-- manifest/capability validation and dependency-aware ModuleLoader rollback;
-- model open/new observer and Foundation Inspector runtime entry;
-- pure-Ruby foundation unit tests and GitHub Actions workflow.
+- Core project, level, Smart Object, lifecycle, relationship, connector, command/event and transaction foundations;
+- Smart Wall / Opening / Door-Window architecture foundations and plan representations;
+- Extension orchestration with persisted construction intent and deterministic domain command ownership;
+- Structure columns/foundations and structure quantity/drawing providers;
+- Surface/Paving foundation and semantic plan output;
+- Roof systems, gutters, reviewed rainwater catchment planning, explicit plan application and semantic downpipes;
+- Drainage graph/routing foundations, editable route nodes, gravity/invert validation, manhole split/relocation, clash-aware alternatives and QA;
+- Electrical device/circuit foundations and plan output;
+- Interior/Joinery cabinet-run foundation and quantity/drawing output;
+- Library/Catalog foundations;
+- One-Smart-Object-to-many-representations drawing architecture;
+- phase/LOD-aware drawing presets and native SketchUp style/scene presentation adapters;
+- LayOut export-plan, native adapter, title-block/revision, template-placeholder and issue-set foundations;
+- ConstructionTakeoff, ConstructionQualityGate, ConstructionOutputSettlement, ConstructionCurrentnessAudit and append-only ConstructionIssueHistory;
+- Extension existing-host attachment workflow with demolition/proposed Architecture sheets;
+- package-level rainwater QA that requires reviewed outlets to resolve to in-scope semantic Drainage downpipes before strict publication;
+- Construction Workflow v1 proof that exercises a representative multi-domain package through drawing refresh, settlement, currentness and publication evidence.
 
-Pure-Ruby test evidence before PR: **14 tests / 45 assertions / 0 failures / 0 errors**. This evidence validates Core contracts without the SketchUp runtime.
+### Construction Workflow v1 application-level proof
 
-The following still require real SketchUp integration evidence before Gate F1 can be marked complete:
+The current proof composes one Extension package across:
 
-- `.skp` save, application close/reopen and same-ID recovery in SketchUp;
+`Existing host + Extension Architecture + Structure + Roof/Rainwater + Drainage + Surface + Interior + Electrical → Takeoff → Strict QA → A/S/R/P/L/I/E views → Output Settlement → Currentness → LayOut/PDF export boundary → Output State → Issue History`
+
+The proof intentionally verifies that a generated object belonging to another Extension does not leak into the selected package scope.
+
+This is **application-level contract evidence**, executed by the pure-Ruby test harness with fake SketchUp/LayOut boundaries. It proves orchestration, semantic ownership, scope, QA, quantity and publication contracts; it does not claim that every native SketchUp/LayOut integration path has been manually exercised in the desktop applications.
+
+## Native application verification still required
+
+The following remain required before native-application gates can be marked complete:
+
+- `.skp` save, application close/reopen and same-ID recovery in real SketchUp;
 - real SketchUp Undo/Redo of semantic metadata + geometry in one operation;
-- copy/duplicate identity behavior through SketchUp native copy workflows;
+- native SketchUp copy/duplicate identity behavior;
 - model observer behavior across real New/Open operations;
-- migration fixture exercised against real model attributes.
+- migration fixtures exercised against real model attributes;
+- hands-on verification of representative interactive tools/handles in SketchUp;
+- hands-on verification that generated SketchUp scenes, native tags/styles and section/view state survive save/reopen as intended;
+- hands-on LayOut document/template/viewport/PDF export verification against supported SketchUp/LayOut versions.
 
-The presence of a requirement in documentation does **not** mean that feature is implemented.
+The presence of a requirement in documentation does **not** by itself mean native integration has been verified.
 
 ## Milestone gates
 
@@ -78,42 +103,42 @@ Evidence:
 
 ### Gate F1 — Core persistence proof
 
-Status: **In progress**.
+Status: **In progress — application foundation implemented; native proof pending**.
 
-Implemented and unit-tested foundation exists. Real SketchUp integration evidence remains required for save/reopen, Undo/Redo and native-copy identity behavior.
+The Core persistence/command/event implementation and pure-Ruby evidence exist. Real SketchUp save/reopen, Undo/Redo, native-copy identity and observer verification remain required before this gate is formally complete.
 
 ### Gate F2 — First Architecture proof
 
-Status: **Not started**.
+Status: **Application implementation advanced — formal native proof pending**.
 
-Required evidence:
-
-- Draw/Convert Smart Wall;
-- Existing vs New;
-- direct dimension modification;
-- opening host relationship;
-- persistence;
-- quantity provider stub;
-- drawing invalidation stub;
-- QA validation stub.
+Implemented application-level evidence now includes Smart Wall semantics, Existing/New lifecycle representation, hosted Openings, Door/Window infill foundations, quantity providers, plan representations, drawing invalidation and Extension-generated Architecture walls. The remaining gate decision must be based on the required real SketchUp interaction/persistence evidence, including the specific Draw/Convert/direct-manipulation acceptance paths.
 
 ### Gate F3 — Cross-module proof
 
-Status: **Not started**.
+Status: **Application-level proof achieved — formal native proof pending**.
 
-Suggested proof workflow:
+Pure-Ruby/application evidence now covers cross-module Extension orchestration, Structure/Surface/Roof/Drainage/Interior/Electrical command ownership, drainage topology/routing/lifecycle rules, cross-domain QA, quantity/drawing invalidation, package scoping and publication gates. Real SketchUp execution evidence is still required before calling the native gate complete.
 
-`Existing Drain/Manhole + New Extension + Relocate Manhole`
+### Construction Workflow v1 — Coordinated extension package
 
-Must prove:
+Status: **Application-level complete; native acceptance pending**.
 
-- lifecycle replacement;
-- connector/network topology;
-- level/invert validation;
-- event propagation;
-- quantity/drawing dirty states;
-- no hard sibling-module mutation.
+Required application contract is now represented by merged code/specs and CI evidence:
+
+- effective persisted construction intent;
+- dependency-safe domain command execution;
+- generated-object reconciliation rather than append-only duplication;
+- Architecture Existing/Demolition/Proposed package context;
+- Structure engineering-status gate;
+- explicit Drainage/Rainwater topology and QA;
+- phase-aware takeoff with Smart Object traceability;
+- drawing issue-set scope isolation by Extension;
+- output settlement and stale/current audit;
+- publication gate before LayOut/PDF export;
+- model-local output evidence and append-only issue history.
+
+The native acceptance step is separate and must exercise this representative workflow inside supported SketchUp/LayOut versions rather than replacing that evidence with unit-test claims.
 
 ## How to update this file
 
-Update status only when there is evidence in merged code/tests/specs. Do not mark a feature implemented merely because it appears in a design conversation or issue.
+Update status only when there is evidence in merged code/tests/specs. Distinguish **application-level/pure-Ruby evidence** from **real SketchUp/LayOut acceptance evidence** so a green CI run is never presented as proof of native application behavior.
