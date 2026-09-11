@@ -8,6 +8,7 @@ module JiraNot
       # semantic route geometry and persistence.
       class RainwaterDownpipeService
         SYSTEM = 'drainage.rainwater'
+        POSITION_TOLERANCE_MM = 0.001
 
         def initialize(runtime:, repository: Repository.new, geometry: Geometry.new)
           @runtime = runtime
@@ -94,13 +95,17 @@ module JiraNot
         end
 
         def normalize_or_derive_nodes(values, start_connector, end_connector)
-          supplied = Array(values)
-          return supplied unless supplied.empty?
-
           start_point = required_position(start_connector, 'gutter outlet')
           end_point = required_position(end_connector, 'rainwater destination')
-          vertical_drop = [start_point[0], start_point[1], end_point[2]]
-          compact_adjacent([start_point, vertical_drop, end_point])
+          supplied = compact_adjacent(Array(values))
+          if supplied.empty?
+            vertical_drop = [start_point[0], start_point[1], end_point[2]]
+            return compact_adjacent([start_point, vertical_drop, end_point])
+          end
+
+          raise ArgumentError, 'downpipe route must start at gutter outlet connector position' unless same_point?(supplied.first, start_point)
+          raise ArgumentError, 'downpipe route must end at rainwater destination connector position' unless same_point?(supplied.last, end_point)
+          supplied
         end
 
         def required_position(connector, label)
@@ -111,9 +116,15 @@ module JiraNot
 
         def compact_adjacent(nodes)
           nodes.each_with_object([]) do |point, result|
-            normalized = Array(point).map { |value| Float(value) }
-            result << normalized unless result.last == normalized
+            values = Array(point)
+            raise ArgumentError, 'downpipe route node requires x, y, z' unless values.length >= 3
+            normalized = [Float(values[0]), Float(values[1]), Float(values[2])]
+            result << normalized unless result.last && same_point?(result.last, normalized)
           end
+        end
+
+        def same_point?(a, b)
+          Array(a).zip(Array(b)).all? { |left, right| (Float(left) - Float(right)).abs <= POSITION_TOLERANCE_MM }
         end
 
         def add_endpoint_relationship(entity, connector, role)
