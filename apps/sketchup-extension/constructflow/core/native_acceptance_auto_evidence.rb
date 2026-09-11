@@ -3,12 +3,13 @@
 module JiraNot
   module ConstructFlow
     module Core
-      # Converts objective events emitted by real SketchUp runtime integration
-      # into model-local native-acceptance evidence. It deliberately ignores CI
-      # and source-review state; an acceptance baseline must already exist.
+      # Converts objective events emitted by real SketchUp/LayOut runtime
+      # integration into model-local native-acceptance evidence. It deliberately
+      # ignores CI and source-review state; an acceptance baseline must exist.
       class NativeAcceptanceAutoEvidence
         COPY_CHECKPOINT = 'native_copy_identity'
         OBSERVER_CHECKPOINT = 'observer_new_open'
+        LAYOUT_CHECKPOINT = 'layout_pdf_export'
 
         def initialize(runtime:, service:)
           @runtime = runtime
@@ -24,6 +25,9 @@ module JiraNot
           @subscriptions << @runtime.events.subscribe(
             'SketchupModelAttached', owner: 'constructflow.core.native_acceptance'
           ) { |event| record_model_transition(event) }
+          @subscriptions << @runtime.events.subscribe(
+            'NativeLayoutExportCompleted', owner: 'constructflow.core.native_acceptance'
+          ) { |event| record_layout_export(event) }
           self
         end
 
@@ -39,7 +43,7 @@ module JiraNot
           repairs = Array(event.dig(:payload, :repairs) || event.dig(:payload, 'repairs'))
           return if repairs.empty?
 
-          normalized = repairs.map { |repair| stringify(repair) }
+          normalized = repairs.map { |repair| deep_stringify(repair) }
           return unless normalized.all? { |repair| valid_copy_repair?(repair) }
 
           @service.record_checkpoint(
@@ -59,7 +63,7 @@ module JiraNot
           target = @service.acceptance_target
           return unless target
 
-          payload = stringify(event[:payload] || {})
+          payload = deep_stringify(event[:payload] || {})
           return unless payload['source'] == 'app_observer'
 
           transition = payload['transition'].to_s
@@ -93,6 +97,44 @@ module JiraNot
           diagnostic('native_acceptance_observer_evidence_failed', error)
         end
 
+        def record_layout_export(event)
+          session = active_acceptance_session
+          return unless session
+
+          baseline = session['baseline'] || {}
+          return unless current_model_matches?(baseline)
+
+          payload = deep_stringify(event[:payload] || {})
+          return unless valid_layout_export?(payload, baseline)
+
+          layout_path = payload['layout_path'].to_s
+          pdf_path = payload['pdf_path'].to_s
+          template = payload['template_resolution'].is_a?(Hash) ? payload['template_resolution'] : {}
+          evidence = runtime_evidence(event).merge(
+            'evidence_source' => 'native_runtime_event',
+            'export_kind' => payload['export_kind'].to_s,
+            'native_backend' => payload['native_backend'].to_s,
+            'skp_path' => payload['skp_path'].to_s,
+            'layout_path' => layout_path,
+            'layout_bytes' => file_size(layout_path),
+            'pdf_path' => pdf_path,
+            'pdf_bytes' => file_size(pdf_path),
+            'issue_set_id' => payload['issue_set_id'].to_s,
+            'preset_id' => payload['preset_id'].to_s,
+            'sheet_count' => payload['sheet_count'].to_i,
+            'viewport_count' => payload['viewport_count'].to_i,
+            'template_resolution' => template
+          )
+          @service.record_checkpoint(
+            checkpoint_id: LAYOUT_CHECKPOINT,
+            status: 'passed',
+            notes: 'Native LayOut Ruby API created a template-backed .layout document and PDF output.',
+            evidence: evidence
+          )
+        rescue StandardError => error
+          diagnostic('native_acceptance_layout_evidence_failed', error)
+        end
+
         def active_acceptance_session
           session = @service.session
           baseline = session['baseline']
@@ -122,6 +164,38 @@ module JiraNot
           !source.nil? && !copied.nil?
         end
 
+        def valid_layout_export?(payload, baseline)
+          return false unless payload['native_backend'].to_s == 'layout_ruby_api'
+          return false unless payload['skp_path'].to_s == baseline['model_path'].to_s
+
+          layout_path = payload['layout_path'].to_s
+          pdf_path = payload['pdf_path'].to_s
+          return false unless valid_output_file?(layout_path, '.layout')
+          return false unless valid_output_file?(pdf_path, '.pdf')
+
+          template = payload['template_resolution']
+          return false unless template.is_a?(Hash)
+          template_path = template['path'].to_s
+          return false if template_path.empty?
+          return false unless File.file?(template_path)
+
+          true
+        rescue StandardError
+          false
+        end
+
+        def valid_output_file?(path, extension)
+          !path.empty? && File.extname(path).downcase == extension && File.file?(path) && File.size(path).positive?
+        rescue StandardError
+          false
+        end
+
+        def file_size(path)
+          File.size(path.to_s)
+        rescue StandardError
+          0
+        end
+
         def target_match?(target, payload)
           payload['model_path'].to_s == target['model_path'].to_s &&
             payload['project_id'].to_s == target['project_id'].to_s
@@ -139,10 +213,11 @@ module JiraNot
         end
 
         def runtime_evidence(event)
+          model = @runtime.active_model
           {
             'event_id' => event[:event_id].to_s,
             'timestamp' => event[:timestamp].to_s,
-            'model_path' => (@runtime.active_model.respond_to?(:path) ? @runtime.active_model.path.to_s : ''),
+            'model_path' => (model && model.respond_to?(:path) ? model.path.to_s : ''),
             'project_id' => @runtime.project&.project_id.to_s,
             'application_version' => sketchup_version
           }
@@ -156,10 +231,15 @@ module JiraNot
           ''
         end
 
-        def stringify(value)
-          return {} unless value.is_a?(Hash)
-
-          value.each_with_object({}) { |(key, item), result| result[key.to_s] = item }
+        def deep_stringify(value)
+          case value
+          when Hash
+            value.each_with_object({}) { |(key, item), result| result[key.to_s] = deep_stringify(item) }
+          when Array
+            value.map { |item| deep_stringify(item) }
+          else
+            value
+          end
         end
 
         def diagnostic(code, error)
