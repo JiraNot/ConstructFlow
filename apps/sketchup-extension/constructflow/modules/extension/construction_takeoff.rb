@@ -14,6 +14,7 @@ module JiraNot
           @structure_repository = Structure::Repository.new
           @surface_repository = Surface::Repository.new
           @roof_repository = Roof::Repository.new
+          @roof_edge_capability = Roof::EdgeHostCapability.new(repository: @roof_repository)
           @drainage_repository = Drainage::Repository.new
           @interior_repository = Interior::Repository.new
           @electrical_repository = Electrical::Repository.new
@@ -126,6 +127,17 @@ module JiraNot
           when 'roof.system'
             definition_items(object, @roof_repository.read_roof(object.entity)) do |definition|
               @roof_provider.roof_quantities(smart_object: object, definition: definition)
+            end
+          when 'roof.gutter'
+            definition_items(object, @roof_repository.read_gutter(object.entity)) do |definition|
+              roof_object = @runtime.smart_objects.fetch_by_id(definition.roof_object_id)
+              raise ArgumentError, "gutter roof host missing: #{definition.roof_object_id}" unless roof_object
+              @roof_provider.gutter_quantities(
+                smart_object: object,
+                definition: definition,
+                roof_object: roof_object,
+                edge_capability: @roof_edge_capability
+              )
             end
           when 'drainage.pipe_route'
             definition_items(object, @drainage_repository.read_pipe_route(object.entity)) do |definition|
