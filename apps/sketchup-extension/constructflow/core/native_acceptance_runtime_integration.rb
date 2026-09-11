@@ -93,8 +93,13 @@ module JiraNot
             ) do |_command|
               result = service.verify_reopen
               evidence = result['evidence'] || {}
+              warnings = []
+              warnings << result['message'] unless result['passed']
+              unless (result['presentation_differences'] || {}).empty?
+                warnings << 'native scene/tag presentation differs from the captured baseline'
+              end
               {
-                warnings: result['passed'] ? [] : [result['message']],
+                warnings: warnings,
                 events: [{
                   name: 'NativeAcceptanceReopenVerified',
                   payload: {
@@ -176,7 +181,10 @@ module JiraNot
           submenu.add_item('Verify Save/Reopen') do
             begin
               result = service.verify_reopen
-              UI.messagebox("Save/Reopen verification: #{result['status']}\n#{result['message']}")
+              scene_status = service.summary.dig('checkpoints', 'scene_tag_persistence', 'status')
+              UI.messagebox(
+                "Save/Reopen verification: #{result['status']}\n#{result['message']}\nScene/Tag persistence: #{scene_status}"
+              )
             rescue StandardError => error
               UI.messagebox("Save/Reopen verification failed:\n#{error.message}")
             end
