@@ -40,7 +40,9 @@ A green preflight does **not** pass any native-acceptance checkpoint. It only co
 2. Save the `.skp`.
 3. Close/reopen the model, or restart SketchUp and reopen it.
 4. Run `Verify Save/Reopen`.
-5. The checkpoint passes only if project ID, Smart Object IDs, baseline scenes and managed `CF-*` tags survive.
+5. The identity checkpoint passes only if project ID, Smart Object IDs, baseline scenes and managed `CF-*` tag names survive.
+
+The same baseline/reopen operation also carries the richer scene/tag presentation snapshot used by checkpoint 7 below.
 
 Do not accept a same-runtime `requires_reopen` result as evidence.
 
@@ -61,7 +63,7 @@ Record `undo_redo_semantic_geometry` only after observing this in SketchUp.
 
 After the acceptance baseline has been captured, copy/paste or Move+Copy a representative Smart Object in SketchUp.
 
-ConstructFlow now records this checkpoint automatically from the live native-copy observer path. A pass requires the native copy repair event to prove that:
+ConstructFlow records this checkpoint automatically from the live native-copy observer path. A pass requires the native copy repair event to prove that:
 
 - the copied object received a different Smart Object ID;
 - both source and copied IDs are live in the current Smart Object index;
@@ -96,15 +98,20 @@ Verify native input, inference, cancel/commit and Undo behavior. Record `interac
 
 ## 7. Scene / tag persistence
 
-Generate/refresh the representative issue-set scenes, save/reopen, and confirm:
+Before capturing the baseline, generate/refresh the representative issue-set scenes and leave both managed and unrelated user tags in the visibility/style state you expect to survive.
 
-- expected scene names remain;
-- managed drawing tags remain;
-- lifecycle/style tags remain;
-- top/parallel/view presentation remains appropriate;
-- unrelated user tags were not mutated.
+After the real save/reopen, running `Verify Save/Reopen` automatically evaluates `scene_tag_persistence` from the baseline/reopened native API snapshots. It compares:
 
-Record `scene_tag_persistence`.
+- managed ConstructFlow scene names and stored camera state;
+- parallel/perspective camera mode plus eye/target/up/view-height values when exposed by SketchUp;
+- ConstructFlow scene-presentation metadata (`active_drawing_tag`, managed drawing/style tags);
+- baseline tag visibility, color and line style when exposed by the API, including unrelated user tags that existed at capture time.
+
+Extra scenes/tags created after capture are allowed. A changed baseline user-tag visibility or managed scene camera state fails this checkpoint even when the simpler identity/name checkpoint still passes.
+
+Open `Show Native Acceptance Status` and confirm `scene_tag_persistence` is `passed`. If it fails, inspect `Runtime.native_acceptance.summary['checkpoints']['scene_tag_persistence']['evidence']['differences']`. Do **not** manually force this checkpoint to passed.
+
+A baseline created by an older build that lacks presentation-state evidence leaves this checkpoint pending; capture a fresh baseline before rerunning the native test.
 
 ## 8. Real LayOut / PDF
 
@@ -123,7 +130,7 @@ Record `layout_pdf_export` with SketchUp/LayOut version, template version/hash a
 
 ## Recording manual checkpoints
 
-For checkpoints without an objective runtime collector, use:
+For checkpoints without an objective runtime/snapshot collector, use:
 
 ```ruby
 JiraNot::ConstructFlow::Runtime.commands.execute(
@@ -137,7 +144,7 @@ JiraNot::ConstructFlow::Runtime.commands.execute(
 )
 ```
 
-Do not mark a checkpoint `passed` based only on source review or CI. `skipped` remains incomplete. `native_copy_identity` and `observer_new_open` are runtime-objective checkpoints and cannot be manually passed through this generic command.
+Do not mark a checkpoint `passed` based only on source review or CI. `skipped` remains incomplete. `native_copy_identity`, `observer_new_open` and `scene_tag_persistence` are objective checkpoints and cannot be manually passed through this generic command.
 
 ## Exit criterion
 

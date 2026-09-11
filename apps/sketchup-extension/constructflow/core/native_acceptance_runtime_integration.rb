@@ -4,7 +4,7 @@ module JiraNot
   module ConstructFlow
     module Core
       module NativeAcceptanceRuntimeIntegration
-        AUTOMATIC_CHECKPOINTS = %w[native_copy_identity observer_new_open].freeze
+        AUTOMATIC_CHECKPOINTS = %w[native_copy_identity observer_new_open scene_tag_persistence].freeze
 
         module_function
 
@@ -93,8 +93,13 @@ module JiraNot
             ) do |_command|
               result = service.verify_reopen
               evidence = result['evidence'] || {}
+              warnings = []
+              warnings << result['message'] unless result['passed']
+              unless (result['presentation_differences'] || {}).empty?
+                warnings << 'native scene/tag presentation differs from the captured baseline'
+              end
               {
-                warnings: result['passed'] ? [] : [result['message']],
+                warnings: warnings,
                 events: [{
                   name: 'NativeAcceptanceReopenVerified',
                   payload: {
@@ -102,6 +107,7 @@ module JiraNot
                     passed: result['passed'],
                     message: result['message'],
                     differences: result['differences'],
+                    presentation_differences: result['presentation_differences'],
                     baseline_fingerprint: evidence['baseline_fingerprint'],
                     current_fingerprint: evidence['current_fingerprint']
                   }
@@ -175,7 +181,10 @@ module JiraNot
           submenu.add_item('Verify Save/Reopen') do
             begin
               result = service.verify_reopen
-              UI.messagebox("Save/Reopen verification: #{result['status']}\n#{result['message']}")
+              scene_status = service.summary.dig('checkpoints', 'scene_tag_persistence', 'status')
+              UI.messagebox(
+                "Save/Reopen verification: #{result['status']}\n#{result['message']}\nScene/Tag persistence: #{scene_status}"
+              )
             rescue StandardError => error
               UI.messagebox("Save/Reopen verification failed:\n#{error.message}")
             end

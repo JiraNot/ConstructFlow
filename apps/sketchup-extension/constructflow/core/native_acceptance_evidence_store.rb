@@ -11,6 +11,7 @@ module JiraNot
         DICTIONARY = 'constructflow.native_acceptance'
         KEY = 'session_v1'
         SCHEMA_VERSION = 1
+        SCENE_PRESENTATION_DICTIONARY = 'constructflow.scene_presentation'
         REQUIRED_CHECKPOINTS = %w[
           save_reopen_identity
           undo_redo_semantic_geometry
@@ -53,6 +54,7 @@ module JiraNot
 
           current = snapshot_for(runtime)
           same_session = session['capture_session_token'].to_s == session_token.to_s
+          presentation_differences = {}
           result = if same_session
                      {
                        'status' => 'requires_reopen',
@@ -63,6 +65,7 @@ module JiraNot
                    else
                      differences = snapshot_differences(baseline, current)
                      passed = differences.empty?
+                     presentation_differences = presentation_snapshot_differences(baseline, current)
                      {
                        'status' => passed ? 'passed' : 'failed',
                        'passed' => passed,
@@ -76,7 +79,8 @@ module JiraNot
             'baseline_fingerprint' => session['baseline_fingerprint'],
             'current_fingerprint' => fingerprint(current),
             'current' => current,
-            'differences' => result['differences']
+            'differences' => result['differences'],
+            'presentation_differences' => presentation_differences
           }
           unless same_session
             session = record_checkpoint_in(
@@ -86,9 +90,10 @@ module JiraNot
               notes: result['message'],
               evidence: evidence
             )
+            session = record_scene_tag_checkpoint(session, baseline, current, presentation_differences)
             write(session)
           end
-          result.merge('evidence' => evidence).freeze
+          result.merge('presentation_differences' => presentation_differences, 'evidence' => evidence).freeze
         end
 
         def record_checkpoint(checkpoint_id:, status:, notes: '', evidence: {})
@@ -191,16 +196,51 @@ module JiraNot
           updated
         end
 
+        def record_scene_tag_checkpoint(session, baseline, current, differences)
+          return session unless presentation_baseline_ready?(baseline)
+
+          same_project = baseline['project_id'].to_s == current['project_id'].to_s &&
+                         baseline['model_path'].to_s == current['model_path'].to_s
+          passed = same_project && differences.empty?
+          message = if passed
+                      'managed scene camera/presentation state and baseline tag state survived reopen'
+                    elsif !same_project
+                      'scene/tag persistence cannot pass because the reopened project identity differs from baseline'
+                    else
+                      'managed scene/tag presentation differs from the captured native baseline'
+                    end
+          record_checkpoint_in(
+            session,
+            checkpoint_id: 'scene_tag_persistence',
+            status: passed ? 'passed' : 'failed',
+            notes: message,
+            evidence: {
+              'evidence_source' => 'native_reopen_snapshot',
+              'baseline_fingerprint' => fingerprint(presentation_subset(baseline)),
+              'current_fingerprint' => fingerprint(presentation_subset(current)),
+              'differences' => differences
+            }
+          )
+        end
+
+        def presentation_baseline_ready?(snapshot)
+          scenes = Array(snapshot['managed_scene_states'])
+          tags = Array(snapshot['tag_states'])
+          !scenes.empty? && tags.any? { |tag| tag['name'].to_s.start_with?('CF-') }
+        end
+
         def snapshot_for(runtime)
           model = runtime.active_model
+          pages = model && model.respond_to?(:pages) ? model.pages : nil
+          layers = model && model.respond_to?(:layers) ? model.layers : nil
           {
             'project_id' => runtime.project&.project_id.to_s,
             'model_path' => model_path(model),
             'smart_object_ids' => runtime.smart_objects.all.map { |object| object.id.to_s }.reject(&:empty?).uniq.sort,
-            'scene_names' => collection_names(model.respond_to?(:pages) ? model.pages : nil),
-            'managed_tag_names' => collection_names(model.respond_to?(:layers) ? model.layers : nil).select do |name|
-              name.start_with?('CF-')
-            end.sort
+            'scene_names' => collection_names(pages),
+            'managed_tag_names' => collection_names(layers).select { |name| name.start_with?('CF-') }.sort,
+            'managed_scene_states' => managed_scene_states(pages),
+            'tag_states' => tag_states(layers)
           }.freeze
         end
 
@@ -218,6 +258,15 @@ module JiraNot
           differences
         end
 
+        def presentation_snapshot_differences(baseline, current)
+          differences = {}
+          return differences unless presentation_baseline_ready?(baseline)
+
+          compare_named_states(differences, 'managed_scene_states', baseline, current)
+          compare_named_states(differences, 'tag_states', baseline, current)
+          differences
+        end
+
         def compare_set(differences, key, baseline, current, exact:)
           expected = Array(baseline[key]).map(&:to_s).uniq.sort
           actual = Array(current[key]).map(&:to_s).uniq.sort
@@ -228,21 +277,167 @@ module JiraNot
           differences[key] = { 'missing' => missing, 'extra' => extra }
         end
 
+        def compare_named_states(differences, key, baseline, current)
+          expected = state_index(baseline[key])
+          actual = state_index(current[key])
+          missing = expected.keys - actual.keys
+          changed = (expected.keys & actual.keys).each_with_object({}) do |name, values|
+            next if expected[name] == actual[name]
+
+            values[name] = { 'expected' => expected[name], 'actual' => actual[name] }
+          end
+          return if missing.empty? && changed.empty?
+
+          differences[key] = { 'missing' => missing.sort, 'changed' => changed }
+        end
+
+        def state_index(values)
+          Array(values).each_with_object({}) do |value, result|
+            next unless value.is_a?(Hash)
+            name = value['name'].to_s
+            next if name.empty?
+
+            result[name] = value
+          end
+        end
+
+        def presentation_subset(snapshot)
+          {
+            'managed_scene_states' => Array(snapshot['managed_scene_states']),
+            'tag_states' => Array(snapshot['tag_states'])
+          }
+        end
+
+        def managed_scene_states(collection)
+          enumerable_values(collection).filter_map do |page|
+            name = item_name(page)
+            active_tag = read_page_attribute(page, 'active_drawing_tag')
+            next unless name.start_with?('ConstructFlow -') || !active_tag.empty?
+
+            {
+              'name' => name,
+              'use_camera' => boolean_value(page, :use_camera?),
+              'camera' => camera_state(page.respond_to?(:camera) ? page.camera : nil),
+              'presentation' => {
+                'active_drawing_tag' => active_tag,
+                'managed_drawing_tags' => read_page_attribute(page, 'managed_drawing_tags'),
+                'managed_style_tags' => read_page_attribute(page, 'managed_style_tags')
+              }
+            }.freeze
+          end.sort_by { |state| state['name'] }.freeze
+        end
+
+        def tag_states(collection)
+          enumerable_values(collection).filter_map do |tag|
+            name = item_name(tag)
+            next if name.empty?
+
+            {
+              'name' => name,
+              'visible' => boolean_value(tag, :visible?),
+              'color' => color_state(tag.respond_to?(:color) ? tag.color : nil),
+              'line_style' => line_style_name(tag.respond_to?(:line_style) ? tag.line_style : nil)
+            }.freeze
+          end.sort_by { |state| state['name'] }.freeze
+        end
+
+        def camera_state(camera)
+          return {} unless camera
+
+          state = {}
+          state['perspective'] = boolean_value(camera, :perspective?) if camera.respond_to?(:perspective?)
+          state['eye'] = point_state(camera.eye) if camera.respond_to?(:eye)
+          state['target'] = point_state(camera.target) if camera.respond_to?(:target)
+          state['up'] = point_state(camera.up) if camera.respond_to?(:up)
+          state['height'] = numeric_state(camera.height) if camera.respond_to?(:height)
+          state.freeze
+        rescue StandardError
+          {}.freeze
+        end
+
+        def point_state(value)
+          values = if value.respond_to?(:to_a)
+                     value.to_a
+                   elsif value.respond_to?(:x) && value.respond_to?(:y) && value.respond_to?(:z)
+                     [value.x, value.y, value.z]
+                   else
+                     []
+                   end
+          values.first(3).map { |item| numeric_state(item) }.freeze
+        rescue StandardError
+          [].freeze
+        end
+
+        def color_state(color)
+          return [] unless color
+
+          values = if color.respond_to?(:to_a)
+                     color.to_a
+                   elsif color.respond_to?(:red) && color.respond_to?(:green) && color.respond_to?(:blue)
+                     [color.red, color.green, color.blue]
+                   else
+                     []
+                   end
+          values.map { |item| numeric_state(item) }.freeze
+        rescue StandardError
+          [].freeze
+        end
+
+        def line_style_name(line_style)
+          return '' if line_style.nil?
+          return line_style.name.to_s if line_style.respond_to?(:name)
+
+          line_style.to_s
+        rescue StandardError
+          ''
+        end
+
+        def read_page_attribute(page, key)
+          return '' unless page.respond_to?(:get_attribute)
+
+          page.get_attribute(SCENE_PRESENTATION_DICTIONARY, key, '').to_s
+        rescue StandardError
+          ''
+        end
+
+        def boolean_value(object, method_name)
+          return nil unless object.respond_to?(method_name)
+
+          !!object.public_send(method_name)
+        rescue StandardError
+          nil
+        end
+
+        def numeric_state(value)
+          Float(value).round(6)
+        rescue StandardError
+          value.to_s
+        end
+
         def model_path(model)
           return '' unless model && model.respond_to?(:path)
           model.path.to_s
         end
 
         def collection_names(collection)
+          enumerable_values(collection).map { |item| item_name(item) }.reject(&:empty?).uniq.sort
+        end
+
+        def enumerable_values(collection)
           return [] if collection.nil?
+          return collection.to_a if collection.respond_to?(:to_a)
 
           values = []
-          collection.each do |item|
-            name = item.respond_to?(:name) ? item.name : item.to_s
-            value = name.to_s
-            values << value unless value.empty?
-          end
-          values.uniq.sort
+          collection.each { |item| values << item } if collection.respond_to?(:each)
+          values
+        rescue StandardError
+          []
+        end
+
+        def item_name(item)
+          (item.respond_to?(:name) ? item.name : item.to_s).to_s
+        rescue StandardError
+          ''
         end
 
         def fingerprint(value)
