@@ -115,6 +115,7 @@ class ConstructionRainwaterPackageTest < Minitest::Test
       connectors: @connectors,
       capabilities: Class.new do
         def available?(_id) = false
+        def fetch(_id) = raise(KeyError, 'capability unavailable')
       end.new,
       active_model: @model
     )
@@ -255,7 +256,7 @@ class ConstructionRainwaterPackageTest < Minitest::Test
     end
 
     clear = gate.run(extension_id: 'ext-1', execution: execution, strict: true)
-    assert clear['publishable']
+    assert clear['publishable'], clear['issues'].inspect
     refute clear['issues'].any? { |issue| issue['rule_id'].start_with?('construction.rainwater.') }
   end
 
