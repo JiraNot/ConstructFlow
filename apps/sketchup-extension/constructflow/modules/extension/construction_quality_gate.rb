@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
+require_relative '../roof/rainwater_plan_application'
 require_relative '../roof/rainwater_package_integration'
+
+JiraNot::ConstructFlow::Roof::RainwaterPackageIntegration.install
 
 module JiraNot
   module ConstructFlow
