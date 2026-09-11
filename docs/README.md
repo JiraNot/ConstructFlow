@@ -54,9 +54,10 @@ No production module should introduce behavior that contradicts an approved spec
 42. `architecture/ROOF-RAINWATER-REGENERATION.md` — deterministic hosted gutter/outlet/downpipe propagation after Roof changes while preserving semantic identities.
 43. `architecture/ROOF-RAINWATER-CATCHMENT-PLANNING.md` — non-mutating catchment flow, outlet-count and reviewed outlet-layout planning from explicit hydraulic inputs.
 44. `architecture/ROOF-RAINWATER-CAPACITY-CATALOG.md` — verified versioned Library capacity evidence consumed by rainwater planning without hidden hydraulic defaults.
-45. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
-46. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
-47. `decisions/` — architecture decisions that explain or amend the baseline.
+45. `architecture/ROOF-RAINWATER-PLAN-APPLICATION.md` — explicit reviewed-plan mutation boundary for one hosted gutter with multiple semantic outlet connectors and safe Downpipe selection/regeneration.
+46. `architecture/QUANTITY-CONTRACT.md`, `DRAWING-STANDARD.md`, `TEST-STRATEGY.md`, `ACCEPTANCE-CRITERIA.md` — output and quality contracts.
+47. `modules/MODULE-SPEC-TEMPLATE.md` and module specs — module-level implementation requirements.
+48. `decisions/` — architecture decisions that explain or amend the baseline.
 
 ## Specification status vocabulary
 

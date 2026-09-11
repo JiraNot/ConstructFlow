@@ -28,9 +28,9 @@ module JiraNot
           hosted_gutters(roof_object).each do |gutter|
             definition = @repository.read_gutter(gutter.entity)
             raise ArgumentError, "gutter definition missing: #{gutter.id}" unless definition
-            if definition.outlet_connector_id.to_s.empty?
-              raise ArgumentError, "gutter outlet connector missing: #{gutter.id}"
-            end
+
+            outlets = active_outlets(gutter, definition)
+            raise ArgumentError, "gutter outlet connector missing: #{gutter.id}" if outlets.empty?
 
             # These calls deliberately raise when the persisted edge index is no
             # longer valid. Re-hosting to a different roof edge is a user intent
@@ -41,18 +41,37 @@ module JiraNot
               definition: definition,
               edge_capability: @edge_capability
             )
-            outlet_position = @edge_capability.point_on_edge_mm(
-              roof_object, definition.edge_index, definition.outlet_ratio
-            )
-            @runtime.connectors.update_connector(
-              definition.outlet_connector_id,
-              position_mm: outlet_position
-            )
+
+            outlet_positions = []
+            refreshed_downpipes = []
+            outlets.each do |outlet|
+              ratio = outlet_ratio(outlet, definition)
+              outlet_position = @edge_capability.point_on_edge_mm(
+                roof_object, definition.edge_index, ratio
+              )
+              properties = outlet.fetch('properties', {}).merge(
+                'gravity' => true,
+                'roof_object_id' => roof_object.id,
+                'outlet_ratio' => ratio
+              )
+              @runtime.connectors.update_connector(
+                outlet['id'],
+                position_mm: outlet_position,
+                properties: properties
+              )
+              outlet_positions << {
+                'connector_id' => outlet['id'],
+                'outlet_ratio' => ratio,
+                'position_mm' => outlet_position
+              }.freeze
+              refreshed_downpipes.concat(refresh_connected_downpipes(outlet['id']))
+            end
+
             @runtime.smart_objects.mark_dirty(gutter.entity, 'dirty_quantity', 'dirty_drawing')
             gutter_ids << gutter.id
-
-            refreshed_downpipes = refresh_connected_downpipes(definition.outlet_connector_id)
+            refreshed_downpipes = refreshed_downpipes.uniq
             downpipe_ids.concat(refreshed_downpipes)
+            primary = outlet_positions.find { |item| item['connector_id'].to_s == definition.outlet_connector_id.to_s } || outlet_positions.first
             events << {
               name: 'HostedGutterRegenerated',
               object_ids: [roof_object.id, gutter.id, *refreshed_downpipes].uniq,
@@ -60,8 +79,9 @@ module JiraNot
                 roof_id: roof_object.id,
                 gutter_id: gutter.id,
                 edge_index: definition.edge_index,
-                outlet_connector_id: definition.outlet_connector_id,
-                outlet_position_mm: outlet_position,
+                outlet_connector_id: primary['connector_id'],
+                outlet_position_mm: primary['position_mm'],
+                outlet_positions: outlet_positions,
                 downpipe_ids: refreshed_downpipes
               }
             }
@@ -91,6 +111,31 @@ module JiraNot
             definition = @repository.read_gutter(object.entity)
             definition && definition.roof_object_id.to_s == roof_object.id.to_s
           end
+        end
+
+        def active_outlets(gutter, definition)
+          values = @runtime.connectors.connectors_for(gutter.id).select do |connector|
+            connector['type'].to_s == 'roof.gutter_outlet' && connector['state'].to_s != 'disabled'
+          end
+          if values.empty? && !definition.outlet_connector_id.to_s.empty?
+            values = [@runtime.connectors.connector(definition.outlet_connector_id)]
+          end
+          values.sort_by do |connector|
+            properties = connector.fetch('properties', {})
+            index = properties['outlet_index'] || properties[:outlet_index]
+            [index.nil? ? 10_000 : Integer(index), connector['id'].to_s]
+          end.freeze
+        end
+
+        def outlet_ratio(connector, definition)
+          properties = connector.fetch('properties', {})
+          value = properties['outlet_ratio'] || properties[:outlet_ratio]
+          value = definition.outlet_ratio if value.nil? && connector['id'].to_s == definition.outlet_connector_id.to_s
+          raise ArgumentError, "gutter outlet ratio missing: #{connector['id']}" if value.nil?
+
+          ratio = Float(value)
+          raise ArgumentError, "invalid gutter outlet ratio: #{ratio}" unless ratio.between?(0.0, 1.0)
+          ratio
         end
 
         def refresh_connected_downpipes(outlet_connector_id)

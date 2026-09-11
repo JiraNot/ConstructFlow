@@ -108,9 +108,11 @@ These are layout suggestions only. Creating/moving gutters, connectors or downpi
 
 The safe workflow is:
 
-`Roof Smart Object → explicit rainfall/runoff/capacity evidence → PlanRoofRainwaterCatchment → human/company/code review → AddGutter / outlet placement → ConnectDownpipe → Roof rainwater regeneration`
+`Roof Smart Object → explicit rainfall/runoff/capacity evidence → PlanRoofRainwaterCatchment → human/company/code review → ApplyRoofRainwaterCatchmentPlan → ConnectDownpipe → Roof rainwater regeneration`
 
-Future automation may consume the plan through the same public command surface, but automatic construction-object mutation requires a separate explicit command/confirmation contract.
+`ApplyRoofRainwaterCatchmentPlan` is governed by `ROOF-RAINWATER-PLAN-APPLICATION.md`. It recomputes the reviewed plan against the current Roof semantic definition, requires explicit confirmation and profile evidence, and may create/update one hosted gutter with multiple semantic outlet connectors. It still does not invent a downstream destination.
+
+Automation and later AI may use the same public command surface, but planning itself remains mutation-free and hardware application remains a separate explicit command/confirmation boundary.
 
 ## Acceptance criteria
 
@@ -130,6 +132,7 @@ Future automation may consume the plan through the same public command surface, 
 - code/jurisdiction rainfall datasets;
 - full hydraulic gutter/downpipe profile sizing;
 - multiple catchment sub-basins/valleys;
-- automatic creation/repositioning of gutters/outlets;
+- automatic destination-network selection/connection;
+- destructive retirement of connected outlet/downpipe branches;
 - fitting/elbow fabrication LOD;
 - underground continuation sizing.
