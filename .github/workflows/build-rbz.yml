@@ -1,0 +1,38 @@
+name: Build SketchUp RBZ
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-rbz:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: false
+
+      - name: Build RBZ
+        run: bash scripts/build_rbz.sh dist/ConstructFlow.rbz
+
+      - name: Inspect package layout
+        run: |
+          unzip -t dist/ConstructFlow.rbz
+          echo '--- root ---'
+          unzip -Z1 dist/ConstructFlow.rbz | sed -n '1,40p'
+
+      - name: Upload RBZ artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: constructflow-rbz-${{ github.sha }}
+          path: dist/ConstructFlow.rbz
+          if-no-files-found: error
+          retention-days: 30
