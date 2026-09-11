@@ -30,9 +30,19 @@ module JiraNot
             ) do |command|
               input = command[:input] || {}
               result = service.capture_baseline(extension_id: input[:extension_id] || input['extension_id'])
+              baseline = result['baseline'] || {}
               {
-                events: [{ name: 'NativeAcceptanceBaselineCaptured', payload: { fingerprint: result['baseline_fingerprint'] } }],
-                result: result
+                events: [{
+                  name: 'NativeAcceptanceBaselineCaptured',
+                  payload: {
+                    fingerprint: result['baseline_fingerprint'],
+                    extension_id: result['extension_id'],
+                    model_path: baseline['model_path'],
+                    smart_object_count: Array(baseline['smart_object_ids']).length,
+                    scene_count: Array(baseline['scene_names']).length,
+                    managed_tag_count: Array(baseline['managed_tag_names']).length
+                  }
+                }]
               }
             end
           end
@@ -44,9 +54,20 @@ module JiraNot
               validator: ->(_command) { [] }
             ) do |_command|
               result = service.verify_reopen
+              evidence = result['evidence'] || {}
               {
-                events: [{ name: 'NativeAcceptanceReopenVerified', payload: { status: result['status'] } }],
-                result: result
+                warnings: result['passed'] ? [] : [result['message']],
+                events: [{
+                  name: 'NativeAcceptanceReopenVerified',
+                  payload: {
+                    status: result['status'],
+                    passed: result['passed'],
+                    message: result['message'],
+                    differences: result['differences'],
+                    baseline_fingerprint: evidence['baseline_fingerprint'],
+                    current_fingerprint: evidence['current_fingerprint']
+                  }
+                }]
               }
             end
           end
@@ -64,21 +85,25 @@ module JiraNot
               }
             ) do |command|
               input = command[:input] || {}
+              checkpoint_id = input[:checkpoint_id] || input['checkpoint_id']
+              status = input[:status] || input['status']
               result = service.record_checkpoint(
-                checkpoint_id: input[:checkpoint_id] || input['checkpoint_id'],
-                status: input[:status] || input['status'],
+                checkpoint_id: checkpoint_id,
+                status: status,
                 notes: input[:notes] || input['notes'] || '',
                 evidence: input[:evidence] || input['evidence'] || {}
               )
+              checkpoint = result.dig('checkpoints', checkpoint_id.to_s) || {}
               {
                 events: [{
                   name: 'NativeAcceptanceCheckpointRecorded',
                   payload: {
-                    checkpoint_id: input[:checkpoint_id] || input['checkpoint_id'],
-                    status: input[:status] || input['status']
+                    checkpoint_id: checkpoint_id.to_s,
+                    status: checkpoint['status'],
+                    notes: checkpoint['notes'],
+                    recorded_at: checkpoint['recorded_at']
                   }
-                }],
-                result: result
+                }]
               }
             end
           end
