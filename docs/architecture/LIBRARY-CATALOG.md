@@ -54,6 +54,20 @@ datasheet_ref?
 detail_refs[]
 ```
 
+Domain-specific verified engineering/specification evidence may be carried in versioned `metadata` when an accepted domain contract defines its keys and validation. Catalog presence by itself never upgrades unverified metadata to engineering approval.
+
+### Rainwater hydraulic capacity metadata
+
+`ROOF-RAINWATER-CAPACITY-CATALOG.md` defines the first domain-specific capacity profile convention. A Library asset in category `roof.rainwater_capacity` may expose reviewed hydraulic evidence under `metadata.hydraulic`, including:
+
+- `verification_status: verified`;
+- `basis_ref`;
+- positive `outlet_capacity_lps`;
+- optional `downpipe_diameter_mm`;
+- optional `gutter_profile_id`.
+
+Roof may consume this only through the public `library.catalog` capability. Library stores and versions the evidence but does not interpret hydraulic correctness.
+
 ## Placement
 
 A catalog asset can define host behavior.
@@ -172,6 +186,8 @@ When a newer catalog version exists, the project may:
 - update all compatible instances
 
 No silent destructive updates.
+
+Engineering/specification evidence used for calculation must preserve the exact asset version in the consuming result. A newer capacity/spec asset version must not silently rewrite an earlier calculation or issued package.
 
 ## Search and AI
 
