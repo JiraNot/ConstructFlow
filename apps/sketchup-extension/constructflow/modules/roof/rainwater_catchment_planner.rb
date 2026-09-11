@@ -19,8 +19,7 @@ module JiraNot
           raise ArgumentError, roof_definition.errors.join('; ') unless roof_definition.valid?
 
           intensity = positive_float(design_rainfall_mm_per_hr, 'design rainfall intensity')
-          coefficient = Float(runoff_coefficient)
-          raise ArgumentError, 'runoff coefficient must be greater than 0 and at most 1' unless coefficient.positive? && coefficient <= 1.0
+          coefficient = bounded_coefficient(runoff_coefficient)
           capacity = positive_float(outlet_capacity_lps, 'outlet capacity')
 
           area_m2 = roof_definition.plan_area_mm2 / 1_000_000.0
@@ -69,6 +68,18 @@ module JiraNot
           number = Float(value)
           raise ArgumentError, "#{label} must be greater than zero" unless number.positive?
           number
+        rescue TypeError, ArgumentError
+          raise ArgumentError, "#{label} must be greater than zero"
+        end
+
+        def bounded_coefficient(value)
+          coefficient = Float(value)
+          unless coefficient.positive? && coefficient <= 1.0
+            raise ArgumentError, 'runoff coefficient must be greater than 0 and at most 1'
+          end
+          coefficient
+        rescue TypeError, ArgumentError
+          raise ArgumentError, 'runoff coefficient must be greater than 0 and at most 1'
         end
 
         def low_eave_edge_indices(definition)
@@ -93,6 +104,8 @@ module JiraNot
 
           return [low_edge_indices.first, 'unique_low_eave'] if low_edge_indices.length == 1
           [nil, 'unresolved']
+        rescue TypeError, ArgumentError
+          raise ArgumentError, 'rainwater outlet edge index out of range'
         end
 
         def evenly_spaced_ratios(count)
