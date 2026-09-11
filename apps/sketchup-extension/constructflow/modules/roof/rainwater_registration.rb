@@ -23,10 +23,11 @@ module JiraNot
             input = command[:input]
             gutter = resolve_gutter(runtime, input)
             gutter_definition = repository.read_gutter(gutter.entity)
+            outlet_connector = selected_outlet_connector(runtime, gutter, gutter_definition, input)
             roof = runtime.smart_objects.fetch_by_id(gutter_definition.roof_object_id)
             service = runtime.capabilities.fetch(CAPABILITY)
             result = service.create(
-              start_connector_id: gutter_definition.outlet_connector_id,
+              start_connector_id: outlet_connector['id'],
               end_connector_id: value(input, :target_connector_id),
               route_nodes_mm: value(input, :route_nodes_mm),
               diameter_mm: value(input, :diameter_mm) || Drainage::DownpipeDefinition::DEFAULT_DIAMETER_MM,
@@ -53,6 +54,7 @@ module JiraNot
                   object_ids: affected,
                   payload: {
                     gutter_id: gutter.id,
+                    outlet_connector_id: outlet_connector['id'],
                     downpipe_id: downpipe.id,
                     target_connector_id: definition.end_connector_id,
                     connection_id: connection['id']
@@ -77,15 +79,14 @@ module JiraNot
           return ['roof gutter not found'] unless gutter
           definition = repository.read_gutter(gutter.entity)
           return ['gutter definition missing'] unless definition
-          errors << 'gutter outlet connector missing' if definition.outlet_connector_id.to_s.empty?
           errors << 'target_connector_id required' if value(input, :target_connector_id).to_s.empty?
           errors << 'drainage rainwater downpipe capability unavailable' unless runtime.capabilities.available?(CAPABILITY)
           return errors unless errors.empty?
 
-          start_connector = runtime.connectors.connector(definition.outlet_connector_id)
+          outlet_connector = selected_outlet_connector(runtime, gutter, definition, input)
           target_connector = runtime.connectors.connector(value(input, :target_connector_id))
           service_system = Drainage::RainwaterDownpipeService::SYSTEM
-          unless runtime.connectors.compatible?(start_connector['type'], target_connector['type'], system: service_system)
+          unless runtime.connectors.compatible?(outlet_connector['type'], target_connector['type'], system: service_system)
             errors << "incompatible rainwater destination: #{target_connector['type']}"
           end
           errors
@@ -93,6 +94,19 @@ module JiraNot
           ["rainwater connector not found: #{error.message}"]
         rescue StandardError => error
           [error.message]
+        end
+
+        def selected_outlet_connector(runtime, gutter, definition, input)
+          requested = value(input, :outlet_connector_id).to_s.strip
+          connector_id = requested.empty? ? definition.outlet_connector_id.to_s : requested
+          raise ArgumentError, 'gutter outlet connector missing' if connector_id.empty?
+
+          connector = runtime.connectors.connector(connector_id)
+          raise ArgumentError, 'selected outlet connector is not owned by gutter' unless connector['owner_object_id'].to_s == gutter.id.to_s
+          raise ArgumentError, 'selected connector is not a roof gutter outlet' unless connector['type'].to_s == 'roof.gutter_outlet'
+          raise ArgumentError, 'selected gutter outlet is disabled' if connector['state'].to_s == 'disabled'
+
+          connector
         end
 
         def resolve_gutter(runtime, input)
