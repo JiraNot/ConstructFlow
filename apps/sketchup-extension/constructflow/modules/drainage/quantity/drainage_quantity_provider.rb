@@ -41,6 +41,24 @@ module JiraNot
             )].freeze
           end
 
+          def downpipe_quantities(smart_object:, definition:)
+            [base_item(
+              smart_object: smart_object,
+              classification: 'drainage.rainwater.downpipe',
+              description: "Rainwater downpipe Ø#{definition.diameter_mm.round}",
+              measure: 'length',
+              value: definition.length_mm / 1000.0,
+              unit: 'm',
+              breakdown: {
+                diameter_mm: definition.diameter_mm,
+                material: definition.material,
+                route_strategy: definition.route_strategy,
+                vertical_length_m: definition.vertical_length_mm / 1000.0,
+                horizontal_length_m: definition.horizontal_length_mm / 1000.0
+              }
+            )].freeze
+          end
+
           private
 
           def base_item(smart_object:, classification:, description:, measure:, value:, unit:, breakdown:)

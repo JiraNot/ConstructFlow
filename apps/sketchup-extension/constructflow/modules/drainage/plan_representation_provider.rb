@@ -14,6 +14,8 @@ module JiraNot
             render_pipe_route(object, request)
           when 'drainage.manhole'
             render_manhole(object, request)
+          when 'drainage.downpipe'
+            render_downpipe(object, request)
           else
             raise ArgumentError, "unsupported drainage plan representation: #{object.type}"
           end
@@ -131,6 +133,59 @@ module JiraNot
           }
         end
 
+        def render_downpipe(object, request)
+          definition = @repository.read_downpipe(object.entity)
+          raise ArgumentError, "missing downpipe definition for #{object.id}" unless definition
+
+          profile = representation_profile(request)
+          nodes = definition.route_nodes_mm
+          anchor = nodes.first
+          midpoint = path_midpoint(nodes)
+          primitives = [
+            {
+              'type' => 'symbol',
+              'role' => 'downpipe_symbol',
+              'symbol' => 'DP',
+              'position_mm' => anchor,
+              'style_role' => 'construction_rainwater'
+            }
+          ]
+          if plan_path_visible?(nodes)
+            primitives << {
+              'type' => 'polyline',
+              'role' => 'downpipe_route',
+              'points_mm' => nodes,
+              'system' => 'rainwater',
+              'diameter_mm' => definition.diameter_mm,
+              'style_role' => pipe_style_role(profile, 'rainwater')
+            }
+          end
+
+          annotations = [annotation('downpipe_size', anchor, "DP Ø#{format_number(definition.diameter_mm)}")]
+          if profile != 'simple'
+            annotations << annotation('downpipe_material', midpoint, definition.material.to_s.upcase)
+          end
+          if profile == 'coordination'
+            annotations << annotation('route_strategy', midpoint, "ROUTE #{definition.route_strategy.to_s.upcase}")
+            annotations << annotation('connection_id', midpoint, "NET #{definition.connection_id}") if definition.connection_id
+          end
+
+          {
+            primitives: primitives,
+            annotations: annotations,
+            metadata: common_metadata(request).merge(
+              'representation_profile' => profile,
+              'system' => 'rainwater',
+              'route_strategy' => definition.route_strategy,
+              'length_mm' => definition.length_mm,
+              'vertical_length_mm' => definition.vertical_length_mm,
+              'horizontal_length_mm' => definition.horizontal_length_mm,
+              'start_connector_id' => definition.start_connector_id,
+              'end_connector_id' => definition.end_connector_id
+            )
+          }
+        end
+
         def representation_profile(request)
           lod = request['lod'].to_s
           style = request.dig('context', 'style_preset').to_s
@@ -162,6 +217,12 @@ module JiraNot
             'style_preset' => request.dig('context', 'style_preset'),
             'drawing_family' => 'plumbing_drainage_plan'
           }
+        end
+
+        def plan_path_visible?(nodes)
+          nodes.each_cons(2).any? do |a, b|
+            ((b[0] - a[0]).abs > 0.001) || ((b[1] - a[1]).abs > 0.001)
+          end
         end
 
         def path_midpoint(nodes)
