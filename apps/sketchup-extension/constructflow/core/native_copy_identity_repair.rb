@@ -12,6 +12,10 @@ module JiraNot
           @runtime = runtime
         end
 
+        def needs_repair?(entity)
+          duplicate_identity?(entity) || child_entities(entity).any? { |child| needs_repair?(child) }
+        end
+
         def repair_tree(entity)
           results = []
           repair_entity(entity, results)
@@ -24,6 +28,16 @@ module JiraNot
         def repair_tree_into(entity, results)
           repair_entity(entity, results)
           child_entities(entity).each { |child| repair_tree_into(child, results) }
+        end
+
+        def duplicate_identity?(entity)
+          object = @runtime.smart_objects.fetch(entity)
+          return false unless object
+
+          indexed = @runtime.smart_objects.fetch_by_id(object.id)
+          indexed && !indexed.entity.equal?(entity)
+        rescue StandardError
+          false
         end
 
         def repair_entity(entity, results)
