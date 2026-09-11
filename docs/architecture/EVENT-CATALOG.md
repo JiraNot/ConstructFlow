@@ -78,6 +78,17 @@ timestamp: <runtime timestamp>
 - `ValidationStateChanged`
 - `ScheduleDirty`
 
+### Native integration / acceptance evidence
+
+- `NativeCopyIdentityRepaired` — emitted only after a native SketchUp copy has been re-identified through the Core identity guard; payload contains the repaired source/new ID pairs.
+- `SketchupModelAttached` — emitted by the installed native AppObserver integration after Runtime has already attached to a native New/Open model; payload includes `source`, `transition`, model path, project ID and Smart Object count.
+- `NativeAcceptancePreflightCompleted`
+- `NativeAcceptanceBaselineCaptured`
+- `NativeAcceptanceReopenVerified`
+- `NativeAcceptanceCheckpointRecorded`
+
+`SketchupModelAttached` v1 is acceptance/runtime evidence, not a domain lifecycle event. The accepted source value for objective New/Open evidence is `app_observer`; transition is `new` or `open`. A subscriber must not infer that an arbitrary programmatic Runtime attachment satisfies native observer acceptance.
+
 ### Domain-specific coordination
 
 - `RoofBoundaryChanged`
