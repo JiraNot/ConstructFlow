@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../roof/rainwater_package_integration'
+
 module JiraNot
   module ConstructFlow
     module Extension
@@ -21,6 +23,7 @@ module JiraNot
           issues.concat(execution_issues(execution))
           issues.concat(source_state_issues(ids, strict: strict))
           issues.concat(structure_approval_issues(ids, strict: strict))
+          issues.concat(rainwater_issues(ids, strict: strict))
           issues.concat(drainage_completeness_issues(ids, execution, strict: strict))
           issues.concat(drainage_issues(ids))
           issues.concat(takeoff_issues(takeoff)) if takeoff
@@ -114,6 +117,14 @@ module JiraNot
               "structure approval check failed: #{error.message}"
             )
           end
+        end
+
+        def rainwater_issues(ids, strict:)
+          return [] unless defined?(Roof::RainwaterPackageAudit)
+          result = Roof::RainwaterPackageAudit.new(runtime: @runtime).run(object_ids: ids, strict: strict)
+          Array(result['issues'])
+        rescue StandardError => error
+          [issue('construction.rainwater.audit_failed', 'error', nil, "rainwater package audit failed: #{error.message}")]
         end
 
         def drainage_completeness_issues(ids, execution, strict:)
