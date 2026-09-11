@@ -4,7 +4,7 @@ module JiraNot
   module ConstructFlow
     module Core
       module NativeAcceptanceRuntimeIntegration
-        AUTOMATIC_CHECKPOINTS = %w[native_copy_identity observer_new_open].freeze
+        AUTOMATIC_CHECKPOINTS = %w[native_copy_identity observer_new_open scene_tag_persistence].freeze
 
         module_function
 
@@ -102,6 +102,7 @@ module JiraNot
                     passed: result['passed'],
                     message: result['message'],
                     differences: result['differences'],
+                    presentation_differences: result['presentation_differences'],
                     baseline_fingerprint: evidence['baseline_fingerprint'],
                     current_fingerprint: evidence['current_fingerprint']
                   }
