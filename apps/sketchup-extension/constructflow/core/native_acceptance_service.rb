@@ -16,13 +16,13 @@ module JiraNot
         def capture_baseline(extension_id: nil)
           store.capture_baseline(
             runtime: @runtime,
-            session_token: session_token,
+            session_token: current_session_marker,
             extension_id: extension_id
           )
         end
 
         def verify_reopen
-          store.verify_reopen(runtime: @runtime, session_token: session_token)
+          store.verify_reopen(runtime: @runtime, session_token: current_session_marker)
         end
 
         def record_checkpoint(checkpoint_id:, status:, notes: '', evidence: {})
@@ -39,6 +39,13 @@ module JiraNot
         end
 
         private
+
+        def current_session_marker
+          model = @runtime.active_model
+          raise ArgumentError, 'active SketchUp model required' unless model
+
+          "#{session_token}:#{model.object_id}"
+        end
 
         def store
           model = @runtime.active_model
