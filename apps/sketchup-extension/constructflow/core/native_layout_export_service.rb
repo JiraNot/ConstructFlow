@@ -31,10 +31,39 @@ module JiraNot
             pdf_path: pdf_path,
             template_path: resolved['template_path']
           )
-          result.merge('template_resolution' => resolved['trace']).freeze
+          completed = result.merge('template_resolution' => resolved['trace']).freeze
+          publish_native_export(
+            completed,
+            export_kind: 'preset',
+            skp_path: model_path,
+            template_resolution: resolved['trace']
+          )
+          completed
         end
 
         private
+
+        def publish_native_export(result, export_kind:, skp_path:, template_resolution:)
+          return unless @runtime.respond_to?(:events) && @runtime.events
+
+          @runtime.events.publish(
+            'NativeLayoutExportCompleted',
+            {
+              export_kind: export_kind,
+              native_backend: result['native_backend'].to_s,
+              skp_path: skp_path.to_s,
+              layout_path: result['layout_path'].to_s,
+              pdf_path: result['pdf_path'].to_s,
+              preset_id: result['preset_id'].to_s,
+              issue_set_id: '',
+              sheet_count: 1,
+              viewport_count: result['viewport_count'].to_i,
+              template_resolution: template_resolution || {}
+            },
+            source_module: 'constructflow.drawing',
+            project_id: @runtime.respond_to?(:project) ? @runtime.project&.project_id : nil
+          )
+        end
 
         def resolve_template(preset_id, explicit_path:, template_key:, template_version:, use_case:, scope_id:, verify_asset:, plan_options:)
           options = symbolize_keys(plan_options || {})
