@@ -83,31 +83,37 @@ module JiraNot
 
           profile = representation_profile(request)
           edge = roof_definition.edge_points_mm(definition.edge_index)
-          outlet = interpolate(edge[0], edge[1], definition.outlet_ratio)
+          outlets = active_outlets(object, definition, edge)
           primitives = [
             {
               'type' => 'polyline',
               'role' => 'gutter_path',
               'points_mm' => edge,
               'style_role' => 'roof_gutter'
-            },
-            {
+            }
+          ]
+          annotations = []
+          outlets.each_with_index do |outlet, index|
+            position = outlet.fetch('position_mm')
+            primitives << {
               'type' => 'symbol',
               'role' => 'gutter_outlet',
               'symbol' => 'GO',
-              'position_mm' => outlet,
-              'style_role' => 'roof_gutter'
+              'position_mm' => position,
+              'style_role' => 'roof_gutter',
+              'connector_id' => outlet['id']
             }
-          ]
-          annotations = [annotation('gutter_tag', outlet, 'GUTTER')]
+            annotations << annotation('gutter_tag', position, index.zero? ? 'GUTTER' : "OUT #{index + 1}")
+            if profile == 'coordination'
+              annotations << annotation('outlet_connector', position, "OUT #{outlet['id']}") unless outlet['id'].to_s.empty?
+            end
+          end
+          anchor = outlets.first ? outlets.first['position_mm'] : interpolate(edge[0], edge[1], definition.outlet_ratio)
           if profile != 'simple'
-            annotations << annotation('gutter_profile', outlet, definition.profile_id)
+            annotations << annotation('gutter_profile', anchor, definition.profile_id)
           end
           if profile == 'coordination'
-            annotations << annotation('roof_host', outlet, "ROOF #{definition.roof_object_id}")
-            if definition.outlet_connector_id && !definition.outlet_connector_id.empty?
-              annotations << annotation('outlet_connector', outlet, "OUT #{definition.outlet_connector_id}")
-            end
+            annotations << annotation('roof_host', anchor, "ROOF #{definition.roof_object_id}")
           end
 
           {
@@ -118,9 +124,47 @@ module JiraNot
               'roof_object_id' => definition.roof_object_id,
               'edge_index' => definition.edge_index,
               'profile_id' => definition.profile_id,
-              'outlet_ratio' => definition.outlet_ratio
+              'outlet_ratio' => definition.outlet_ratio,
+              'outlet_connector_ids' => outlets.map { |outlet| outlet['id'] }.reject(&:empty?).freeze,
+              'outlet_count' => outlets.length
             )
           }
+        end
+
+        def active_outlets(object, definition, edge)
+          connectors = if @runtime.respond_to?(:connectors)
+                         @runtime.connectors.connectors_for(object.id).select do |connector|
+                           connector['type'].to_s == 'roof.gutter_outlet' && connector['state'].to_s != 'disabled'
+                         end
+                       else
+                         []
+                       end
+          values = connectors.map do |connector|
+            properties = connector.fetch('properties', {})
+            ratio = properties['outlet_ratio'] || properties[:outlet_ratio]
+            ratio = definition.outlet_ratio if ratio.nil? && connector['id'].to_s == definition.outlet_connector_id.to_s
+            next if ratio.nil?
+            connector.merge('position_mm' => interpolate(edge[0], edge[1], Float(ratio)))
+          end.compact
+          if values.empty?
+            values = [{
+              'id' => definition.outlet_connector_id.to_s,
+              'position_mm' => interpolate(edge[0], edge[1], definition.outlet_ratio),
+              'properties' => { 'outlet_ratio' => definition.outlet_ratio }
+            }]
+          end
+          values.sort_by do |outlet|
+            properties = outlet.fetch('properties', {})
+            index = properties['outlet_index'] || properties[:outlet_index]
+            ratio = properties['outlet_ratio'] || properties[:outlet_ratio] || definition.outlet_ratio
+            [index.nil? ? 10_000 : Integer(index), Float(ratio), outlet['id'].to_s]
+          end.freeze
+        rescue StandardError
+          [{
+            'id' => definition.outlet_connector_id.to_s,
+            'position_mm' => interpolate(edge[0], edge[1], definition.outlet_ratio),
+            'properties' => { 'outlet_ratio' => definition.outlet_ratio }
+          }].freeze
         end
 
         def representation_profile(request)
