@@ -123,6 +123,25 @@ Coordinates/numeric camera state are normalized before fingerprinting so determi
 
 The generic checkpoint command must not manually mark `scene_tag_persistence` passed once this objective snapshot contract is available.
 
+### LayOut / PDF export
+
+`layout_pdf_export` is automatically passed only from a successful `NativeLayoutExportCompleted` event observed while the armed acceptance project is active.
+
+The event alone is not sufficient. The acceptance collector verifies that:
+
+- the reported native backend is exactly `layout_ruby_api`;
+- the source `.skp` path matches the captured acceptance baseline;
+- a `.layout` file exists at the returned output path and has non-zero size;
+- a `.pdf` file exists at the returned output path and has non-zero size;
+- template resolution identifies a non-empty template path;
+- the template file exists at that path.
+
+Both single-preset and issue-set native export services publish the same event only after their native adapters return successfully. Renderer-neutral plan creation, fake layout backends and CI-only tests do not satisfy the checkpoint.
+
+Stored evidence includes runtime event identity/time, active project/model identity, SketchUp application version when exposed, export kind, native backend, source/output paths and byte counts, sheet/viewport counts, issue-set/preset identity and the template-resolution trace (including version/hash evidence when available).
+
+This checkpoint proves that the real native boundary created actual `.layout` and PDF files from the acceptance project using an existing template. It is not a visual design approval of every printed sheet. A human may still inspect the PDF and record a failed/review note if its visual content is unacceptable, but a generic manual command cannot force `layout_pdf_export` to passed.
+
 ## Required checkpoints
 
 The v1 native acceptance gate requires all of the following to be `passed`:
@@ -134,7 +153,7 @@ The v1 native acceptance gate requires all of the following to be `passed`:
 - `migration_fixture` — supported migration fixtures load against real model attributes;
 - `interactive_tools` — representative Draw/Convert/drag-handle tools work in SketchUp;
 - `scene_tag_persistence` — generated scene camera/presentation metadata and baseline tag state survive a real save/reopen; automatically evaluated from the reopen snapshot;
-- `layout_pdf_export` — supported LayOut template/viewport creation, `.layout` save and PDF export work in the real application.
+- `layout_pdf_export` — native LayOut Ruby API export produces non-empty template-backed `.layout` and PDF outputs from the armed acceptance project; automatically recorded from native export evidence.
 
 The checkpoint list is intentionally explicit so `STATUS.md` can distinguish application completeness from native proof.
 
@@ -149,11 +168,11 @@ The Core runtime exposes:
 
 These commands are acceptance/evidence operations. They do not mutate domain geometry or construction lifecycle.
 
-Human/automation/AI callers may record a manual checkpoint only from actual evidence. An AI agent must not mark a native checkpoint passed solely because source code or unit tests suggest it should work. `native_copy_identity`, `observer_new_open` and `scene_tag_persistence` are reserved for objective native evidence when status is `passed`.
+Human/automation/AI callers may record a manual checkpoint only from actual evidence. An AI agent must not mark a native checkpoint passed solely because source code or unit tests suggest it should work. `native_copy_identity`, `observer_new_open`, `scene_tag_persistence` and `layout_pdf_export` are reserved for objective native evidence when status is `passed`.
 
 ## UI
 
-ConstructFlow may expose a `Native Acceptance` submenu containing preflight, baseline capture, reopen verification and status display actions. Manual checkpoint evidence can be recorded through the public command boundary or a later dedicated inspector. Objective copy/New/Open/reopen-presentation checkpoints update the same model-local status automatically when their real native evidence is observed.
+ConstructFlow may expose a `Native Acceptance` submenu containing preflight, baseline capture, reopen verification and status display actions. Manual checkpoint evidence can be recorded through the public command boundary or a later dedicated inspector. Objective copy/New/Open/reopen-presentation/LayOut-export checkpoints update the same model-local status automatically when their real native evidence is observed.
 
 ## Completion semantics
 
@@ -174,6 +193,8 @@ Completing this acceptance session is evidence for release/gate decisions only. 
 - AC-NATIVE-007: pure-Ruby CI/fake-native tests cannot by themselves set native checkpoints to passed in a real acceptance session.
 - AC-NATIVE-008: `native_copy_identity` passes automatically only from a live `NativeCopyIdentityRepaired` event whose source/new IDs both exist and differ on the armed acceptance project.
 - AC-NATIVE-009: `observer_new_open` passes automatically only after the installed native observer reports New Model followed by Open Model back to the armed saved acceptance project.
-- AC-NATIVE-010: the public generic checkpoint command rejects manual `passed` status for runtime-objective copy, New/Open observer and scene/tag persistence checkpoints.
+- AC-NATIVE-010: the public generic checkpoint command rejects manual `passed` status for runtime-objective copy, New/Open observer, scene/tag persistence and LayOut/PDF checkpoints.
 - AC-NATIVE-011: a real reopen with unchanged Smart Object/name identity but changed baseline tag visibility/style fails `scene_tag_persistence` without falsely failing `save_reopen_identity`.
 - AC-NATIVE-012: a real reopen with changed managed scene camera/presentation metadata fails `scene_tag_persistence` and records the changed scene evidence.
+- AC-NATIVE-013: `layout_pdf_export` passes only when the real `layout_ruby_api` backend reports successful export for the armed baseline `.skp`, and non-empty `.layout`, PDF and template files exist at the recorded paths.
+- AC-NATIVE-014: fake backend export, missing PDF, missing template or export from a different `.skp` cannot pass `layout_pdf_export`.
