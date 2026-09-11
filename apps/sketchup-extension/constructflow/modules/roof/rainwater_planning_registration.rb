@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'rainwater_capacity_profile_resolver'
+
 module JiraNot
   module ConstructFlow
     module Roof
