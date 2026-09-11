@@ -10,7 +10,7 @@ if [[ ! -f "$LOADER" || ! -d "$SRC_DIR/constructflow" ]]; then
   exit 1
 fi
 
-VERSION="$(ruby -e 'text = File.read(ARGV[0]); match = text.match(/VERSION\s*=\s*["'"']([^"'"']+)["'"']/); abort "VERSION not found" unless match; puts match[1]' "$LOADER")"
+VERSION="$(ruby -e "text = File.read(ARGV[0]); match = text.match(/VERSION\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"]/); abort('VERSION not found') unless match; puts match[1]" "$LOADER")"
 OUT_PATH="${1:-$ROOT_DIR/dist/ConstructFlow-${VERSION}.rbz}"
 mkdir -p "$(dirname "$OUT_PATH")"
 OUT_PATH="$(cd "$(dirname "$OUT_PATH")" && pwd)/$(basename "$OUT_PATH")"
