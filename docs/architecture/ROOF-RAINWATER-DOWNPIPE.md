@@ -83,7 +83,9 @@ Horizontal pipe minimum-slope rules do not apply to `drainage.downpipe`.
 
 ## Change propagation
 
-Creation dirties the downpipe quantity/drawing outputs and the source gutter/roof drawing and quantity context. A later gutter-host regeneration contract is responsible for moving the stable gutter outlet connector when its roof edge changes; downstream downpipe regeneration must be explicit and deterministic.
+Creation dirties the downpipe quantity/drawing outputs and the source gutter/roof drawing and quantity context.
+
+Later Roof boundary/slope/system changes follow the accepted `ROOF-RAINWATER-REGENERATION.md` contract: Roof rebuilds the hosted gutter, moves the same semantic outlet connector and delegates any connected Downpipe endpoint/geometry regeneration through the Drainage capability. Gutter, connector, Downpipe and network connection identities remain stable unless an explicit rehost/reconnect workflow changes them.
 
 ## Acceptance criteria
 
@@ -95,6 +97,7 @@ Creation dirties the downpipe quantity/drawing outputs and the source gutter/roo
 - AC-RWDP-006: Extension-generated roof rainwater can retain Extension provenance without Extension mutating Drainage internals.
 - AC-RWDP-007: a gutter outlet with an active downpipe cannot silently receive a second connection.
 - AC-RWDP-008: missing or incompatible destination is rejected; no discharge destination is guessed.
+- AC-RWDP-009: host Roof changes propagate through the stable gutter outlet/downpipe identities according to `ROOF-RAINWATER-REGENERATION.md`.
 
 ## Deferred
 
@@ -102,5 +105,4 @@ Creation dirties the downpipe quantity/drawing outputs and the source gutter/roo
 - automatic downpipe count/spacing;
 - trench/surface/site-outfall destination implementations;
 - automatic underground rainwater route continuation;
-- hosted-gutter regeneration and outlet propagation after roof boundary changes (separate contract);
 - manufacturer downpipe fittings/elbows and fabrication LOD.

@@ -69,6 +69,54 @@ module JiraNot
           raise
         end
 
+        # Re-anchors every active downpipe that starts at the supplied semantic
+        # connector after its owning Roof/Gutter moves. Smart Object and topology
+        # connection identities are preserved. Direct routes are deterministically
+        # regenerated; custom routes preserve their interior control nodes while
+        # their semantic endpoints follow the current connector positions.
+        def refresh_for_start_connector(start_connector_id:)
+          start_connector = connector!(start_connector_id, 'start')
+          connections = @runtime.connectors.connections_for_connector(start_connector['id']).select do |connection|
+            connection['system'].to_s == SYSTEM &&
+              connection.fetch('metadata', {})['route_kind'].to_s == 'downpipe'
+          end
+
+          updated_ids = []
+          connections.each do |connection|
+            route_id = connection.fetch('metadata', {})['route_object_id'].to_s
+            raise ArgumentError, 'downpipe connection route_object_id missing' if route_id.empty?
+
+            object = @runtime.smart_objects.fetch_by_id(route_id)
+            unless object && object.owner_module == 'constructflow.drainage' && object.type == 'drainage.downpipe'
+              raise ArgumentError, "downpipe object not found for connection #{connection['id']}"
+            end
+
+            definition = @repository.read_downpipe(object.entity)
+            raise ArgumentError, "downpipe definition missing: #{object.id}" unless definition
+            unless definition.connection_id.to_s == connection['id'].to_s
+              raise ArgumentError, "downpipe connection mismatch: #{object.id}"
+            end
+            unless definition.start_connector_id.to_s == start_connector['id'].to_s
+              raise ArgumentError, "connector #{start_connector['id']} is not the downpipe start endpoint"
+            end
+
+            end_connector = connector!(definition.end_connector_id, 'end')
+            updated_nodes = refreshed_nodes(definition, start_connector, end_connector)
+            updated_definition = definition.with(route_nodes_mm: updated_nodes)
+            raise ArgumentError, updated_definition.errors.join('; ') unless updated_definition.valid?
+
+            @geometry.rebuild_pipe!(object.entity, updated_definition)
+            @repository.write_downpipe(object.entity, updated_definition)
+            @runtime.smart_objects.mark_dirty(object.entity, 'dirty_quantity', 'dirty_drawing')
+            updated_ids << object.id
+          end
+
+          {
+            updated_object_ids: updated_ids.uniq.freeze,
+            warnings: [].freeze
+          }.freeze
+        end
+
         private
 
         def connector!(connector_id, label)
@@ -92,6 +140,19 @@ module JiraNot
           end
           raise ArgumentError, 'disabled gutter outlet cannot be connected' if start_connector['state'] == 'disabled'
           raise ArgumentError, 'disabled rainwater destination cannot be connected' if end_connector['state'] == 'disabled'
+        end
+
+        def refreshed_nodes(definition, start_connector, end_connector)
+          return normalize_or_derive_nodes(nil, start_connector, end_connector) if definition.route_strategy == 'direct'
+
+          start_point = required_position(start_connector, 'gutter outlet')
+          end_point = required_position(end_connector, 'rainwater destination')
+          existing = Array(definition.route_nodes_mm).map { |point| Array(point).dup }
+          raise ArgumentError, 'downpipe route requires at least two nodes' if existing.length < 2
+
+          existing[0] = start_point
+          existing[-1] = end_point
+          compact_adjacent(existing)
         end
 
         def normalize_or_derive_nodes(values, start_connector, end_connector)
