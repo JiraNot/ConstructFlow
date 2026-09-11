@@ -101,6 +101,8 @@ Every production command, smart-object type, quantity provider, drawing provider
 - Workflow: existing IDs in `WORKFLOW-REGISTRY.md`
 - Acceptance criterion: `AC-<DOMAIN>-###`
 
+Current high-level implementation state is summarized in `STATUS.md`. The application-level evidence boundary for the coordinated Extension construction package is recorded in `implementation/CONSTRUCTION-WORKFLOW-v1-EVIDENCE.md`; that proof is intentionally distinct from real SketchUp/LayOut native acceptance evidence.
+
 ## AI-agent rule
 
 Coding agents must read this file first. They must not invent a new cross-module contract when an existing contract can express the requirement. If a necessary contract is missing, the agent should add or propose the specification before coupling modules directly.
