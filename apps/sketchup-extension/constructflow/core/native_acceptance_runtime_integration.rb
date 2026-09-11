@@ -4,12 +4,16 @@ module JiraNot
   module ConstructFlow
     module Core
       module NativeAcceptanceRuntimeIntegration
+        AUTOMATIC_CHECKPOINTS = %w[native_copy_identity observer_new_open].freeze
+
         module_function
 
         def install(runtime)
           service = NativeAcceptanceService.new(runtime: runtime)
           install_runtime_accessor(runtime, service)
           register_commands(runtime, service)
+          collector = NativeAcceptanceAutoEvidence.new(runtime: runtime, service: service).install
+          install_collector_accessor(runtime, collector)
           install_menu(runtime, service)
           service
         end
@@ -19,6 +23,13 @@ module JiraNot
             attr_accessor :native_acceptance unless method_defined?(:native_acceptance)
           end
           runtime.native_acceptance = service
+        end
+
+        def install_collector_accessor(runtime, collector)
+          runtime.singleton_class.class_eval do
+            attr_accessor :native_acceptance_auto_evidence unless method_defined?(:native_acceptance_auto_evidence)
+          end
+          runtime.native_acceptance_auto_evidence = collector
         end
 
         def register_commands(runtime, service)
@@ -105,9 +116,14 @@ module JiraNot
               owner_module: 'constructflow.core',
               validator: lambda { |command|
                 input = command[:input] || {}
+                checkpoint_id = (input[:checkpoint_id] || input['checkpoint_id']).to_s
+                status = (input[:status] || input['status']).to_s
                 errors = []
-                errors << 'checkpoint_id required' if (input[:checkpoint_id] || input['checkpoint_id']).to_s.strip.empty?
-                errors << 'status required' if (input[:status] || input['status']).to_s.strip.empty?
+                errors << 'checkpoint_id required' if checkpoint_id.strip.empty?
+                errors << 'status required' if status.strip.empty?
+                if status == 'passed' && AUTOMATIC_CHECKPOINTS.include?(checkpoint_id)
+                  errors << "#{checkpoint_id} is passed only from native runtime evidence"
+                end
                 errors
               }
             ) do |command|
