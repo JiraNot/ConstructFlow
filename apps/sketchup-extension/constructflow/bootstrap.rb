@@ -38,6 +38,9 @@ require_relative 'core/native_layout_runtime_integration'
 require_relative 'core/native_acceptance_evidence_store'
 require_relative 'core/native_acceptance_service'
 require_relative 'core/native_acceptance_runtime_integration'
+require_relative 'core/native_copy_identity_repair'
+require_relative 'core/sketchup_native_copy_identity_observer'
+require_relative 'core/native_copy_identity_runtime_integration'
 require_relative 'modules/extension/execution_runner'
 require_relative 'modules/architecture/attachment_edge_resolver'
 require_relative 'modules/architecture/extension_command_registration'
@@ -119,6 +122,7 @@ JiraNot::ConstructFlow::Core::DrawingIssueSetRuntimeIntegration.install(JiraNot:
 JiraNot::ConstructFlow::Core::NativeLayoutRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::NativeLayoutIssueSetRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Core::NativeAcceptanceRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
+JiraNot::ConstructFlow::Core::NativeCopyIdentityRuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Electrical::Registration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Structure::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Roof::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
