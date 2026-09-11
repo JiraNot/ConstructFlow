@@ -82,20 +82,20 @@ module JiraNot
         end
 
         def onNewModel(model)
-          defer(model)
+          defer(model, 'new')
         end
 
         def onOpenModel(model)
-          defer(model)
+          defer(model, 'open')
         end
 
         private
 
-        def defer(model)
+        def defer(model, transition)
           if defined?(UI) && UI.respond_to?(:start_timer)
-            UI.start_timer(0, false) { @callback&.call(model) }
+            UI.start_timer(0, false) { @callback&.call(model, transition) }
           else
-            @callback&.call(model)
+            @callback&.call(model, transition)
           end
         end
       end
