@@ -44,6 +44,18 @@ module JiraNot
         end
       end
 
+      module RainwaterPackageIntegration
+        module_function
+
+        def install
+          return false unless defined?(RainwaterPlanApplier)
+          return true if RainwaterPlanApplier.ancestors.include?(RainwaterExtensionProvenancePatch)
+
+          RainwaterPlanApplier.prepend(RainwaterExtensionProvenancePatch)
+          true
+        end
+      end
+
       # Reviews only applied plan-managed rainwater outlets. It never invents a
       # target network and never mutates topology. Construction QA can therefore
       # block an incomplete package while Design/working views keep the issue as a
@@ -172,11 +184,4 @@ module JiraNot
   end
 end
 
-if defined?(JiraNot::ConstructFlow::Roof::RainwaterPlanApplier) &&
-   !JiraNot::ConstructFlow::Roof::RainwaterPlanApplier.ancestors.include?(
-     JiraNot::ConstructFlow::Roof::RainwaterExtensionProvenancePatch
-   )
-  JiraNot::ConstructFlow::Roof::RainwaterPlanApplier.prepend(
-    JiraNot::ConstructFlow::Roof::RainwaterExtensionProvenancePatch
-  )
-end
+JiraNot::ConstructFlow::Roof::RainwaterPackageIntegration.install
