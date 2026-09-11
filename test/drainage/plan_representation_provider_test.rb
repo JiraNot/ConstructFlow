@@ -3,6 +3,7 @@
 require 'minitest/autorun'
 require_relative '../../apps/sketchup-extension/constructflow/core/representation_registry'
 require_relative '../../apps/sketchup-extension/constructflow/modules/drainage/pipe_route_definition'
+require_relative '../../apps/sketchup-extension/constructflow/modules/drainage/downpipe_definition'
 require_relative '../../apps/sketchup-extension/constructflow/modules/drainage/manhole_definition'
 require_relative '../../apps/sketchup-extension/constructflow/modules/drainage/plan_representation_provider'
 
@@ -10,13 +11,15 @@ class DrainagePlanRepresentationProviderTest < Minitest::Test
   FakeObject = Struct.new(:id, :type, :entity)
 
   class FakeRepository
-    def initialize(pipe_route: nil, manhole: nil)
+    def initialize(pipe_route: nil, manhole: nil, downpipe: nil)
       @pipe_route = pipe_route
       @manhole = manhole
+      @downpipe = downpipe
     end
 
     def read_pipe_route(_entity) = @pipe_route
     def read_manhole(_entity) = @manhole
+    def read_downpipe(_entity) = @downpipe
   end
 
   def pipe_definition
@@ -29,9 +32,17 @@ class DrainagePlanRepresentationProviderTest < Minitest::Test
     )
   end
 
-  def provider_for(pipe_route: nil, manhole: nil)
+  def downpipe_definition
+    JiraNot::ConstructFlow::Drainage::DownpipeDefinition.new(
+      route_nodes_mm: [[1000, 2000, 3200], [1000, 2000, 0], [2500, 2000, 0]],
+      start_connector_id: 'gutter-outlet', end_connector_id: 'mh-in',
+      diameter_mm: 100, material: 'pvc', route_strategy: 'direct', connection_id: 'rw-net-1'
+    )
+  end
+
+  def provider_for(pipe_route: nil, manhole: nil, downpipe: nil)
     JiraNot::ConstructFlow::Drainage::PlanRepresentationProvider.new(
-      repository: FakeRepository.new(pipe_route: pipe_route, manhole: manhole)
+      repository: FakeRepository.new(pipe_route: pipe_route, manhole: manhole, downpipe: downpipe)
     )
   end
 
@@ -85,6 +96,42 @@ class DrainagePlanRepresentationProviderTest < Minitest::Test
     refute_nil slope
     assert_equal 'verify', slope['status']
     assert_equal false, payload[:metadata]['invert_known']
+  end
+
+  def test_downpipe_plan_uses_dp_symbol_without_fake_slope_annotation
+    provider = provider_for(downpipe: downpipe_definition)
+    object = FakeObject.new('dp-1', 'drainage.downpipe', Object.new)
+    construction = provider.render(
+      object: object,
+      request: { 'view' => 'rainwater_plan', 'scale' => '1:50', 'phase_view' => 'proposed', 'lod' => 'construction', 'context' => { 'style_preset' => 'plumbing.construction' } }
+    )
+    coordination = provider.render(
+      object: object,
+      request: { 'view' => 'rainwater_coordination', 'scale' => '1:50', 'phase_view' => 'coordination', 'lod' => 'coordination', 'context' => { 'style_preset' => 'plumbing.coordination' } }
+    )
+
+    assert_includes construction[:primitives].map { |item| item['role'] }, 'downpipe_symbol'
+    assert_includes construction[:primitives].map { |item| item['role'] }, 'downpipe_route'
+    assert_includes construction[:annotations].map { |item| item['role'] }, 'downpipe_size'
+    assert_includes construction[:annotations].map { |item| item['role'] }, 'downpipe_material'
+    refute construction[:annotations].any? { |item| item['role'].include?('slope') }
+    assert_includes coordination[:annotations].map { |item| item['role'] }, 'connection_id'
+    assert_equal 3200.0, coordination[:metadata]['vertical_length_mm']
+    assert_equal 1500.0, coordination[:metadata]['horizontal_length_mm']
+  end
+
+  def test_pure_vertical_downpipe_stays_symbolic_in_plan
+    definition = JiraNot::ConstructFlow::Drainage::DownpipeDefinition.new(
+      route_nodes_mm: [[0, 0, 3000], [0, 0, 0]],
+      start_connector_id: 'gutter-outlet', end_connector_id: 'target'
+    )
+    payload = provider_for(downpipe: definition).render(
+      object: FakeObject.new('dp-vertical', 'drainage.downpipe', Object.new),
+      request: { 'lod' => 'simple', 'context' => { 'style_preset' => 'plumbing.simple' } }
+    )
+
+    assert_equal ['downpipe_symbol'], payload[:primitives].map { |item| item['role'] }
+    assert_equal ['downpipe_size'], payload[:annotations].map { |item| item['role'] }
   end
 
   def test_manhole_detail_changes_by_profile
