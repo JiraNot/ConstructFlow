@@ -8,6 +8,7 @@ require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/interior/
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/electrical/device_definition')
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/electrical/repository')
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/electrical/quantity/electrical_quantity_provider')
+require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/drainage/downpipe_definition')
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/roof/geometry')
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/roof/plan_representation_provider')
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/roof/rainwater_catchment_planner')
@@ -223,21 +224,33 @@ class ConstructionRainwaterPackageTest < Minitest::Test
     unconnected = blocked['issues'].select { |issue| issue['rule_id'] == 'construction.rainwater.outlet_unconnected' }
     assert_equal 2, unconnected.length
 
+    drainage_repository = JiraNot::ConstructFlow::Drainage::Repository.new
     result[:outlet_connector_ids].each_with_index do |outlet_id, index|
+      outlet = @connectors.connector(outlet_id)
       target = @connectors.register_connector(
         owner_object_id: "mh-#{index + 1}", type: 'drainage.manhole_in', role: 'inlet',
         position_mm: [1000 + (index * 2000), 0, 0]
       )
+      downpipe_entity = FakeEntity.new
       downpipe = object(
         id: "dp-#{index + 1}", type: 'drainage.downpipe', owner: 'constructflow.drainage',
-        relationships: generated_from('ext-1')
+        entity: downpipe_entity, relationships: generated_from('ext-1')
       )
       @objects.seed(downpipe)
-      @connectors.register_connection(
+      connection = @connectors.register_connection(
         from_connector_id: outlet_id,
         to_connector_id: target['id'],
         system: 'drainage.rainwater',
         metadata: { route_object_id: downpipe.id, route_kind: 'downpipe' }
+      )
+      drainage_repository.write_downpipe(
+        downpipe_entity,
+        JiraNot::ConstructFlow::Drainage::DownpipeDefinition.new(
+          route_nodes_mm: [outlet.fetch('position_mm'), target.fetch('position_mm')],
+          start_connector_id: outlet_id,
+          end_connector_id: target['id'],
+          connection_id: connection['id']
+        )
       )
     end
 
