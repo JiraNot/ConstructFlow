@@ -131,6 +131,10 @@ module JiraNot
             definition_items(object, @drainage_repository.read_pipe_route(object.entity)) do |definition|
               @drainage_provider.pipe_quantities(smart_object: object, definition: definition)
             end
+          when 'drainage.downpipe'
+            definition_items(object, @drainage_repository.read_downpipe(object.entity)) do |definition|
+              @drainage_provider.downpipe_quantities(smart_object: object, definition: definition)
+            end
           when 'drainage.manhole'
             definition_items(object, @drainage_repository.read_manhole(object.entity)) do |definition|
               @drainage_provider.manhole_quantities(smart_object: object, definition: definition)
