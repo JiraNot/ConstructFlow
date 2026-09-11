@@ -136,9 +136,10 @@ module JiraNot
   end
 end
 
-unless JiraNot::ConstructFlow::Roof::Registration.singleton_class.ancestors.include?(
-  JiraNot::ConstructFlow::Roof::HostedRainwaterRegenerationPatch
-)
+if defined?(JiraNot::ConstructFlow::Roof::Registration) &&
+   !JiraNot::ConstructFlow::Roof::Registration.singleton_class.ancestors.include?(
+     JiraNot::ConstructFlow::Roof::HostedRainwaterRegenerationPatch
+   )
   JiraNot::ConstructFlow::Roof::Registration.singleton_class.prepend(
     JiraNot::ConstructFlow::Roof::HostedRainwaterRegenerationPatch
   )
