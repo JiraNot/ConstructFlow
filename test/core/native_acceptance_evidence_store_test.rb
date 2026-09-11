@@ -48,6 +48,13 @@ class NativeAcceptanceEvidenceStoreTest < Minitest::Test
     )
   end
 
+  def copy_acceptance_attributes(from:, to:)
+    dictionary = JiraNot::ConstructFlow::Core::NativeAcceptanceEvidenceStore::DICTIONARY
+    key = JiraNot::ConstructFlow::Core::NativeAcceptanceEvidenceStore::KEY
+    raw = from.get_attribute(dictionary, key, nil)
+    to.set_attribute(dictionary, key, raw)
+  end
+
   def test_capture_persists_deterministic_baseline_and_requires_real_session_change_before_verification
     current_runtime = runtime
     service = JiraNot::ConstructFlow::Core::NativeAcceptanceService.new(
@@ -84,6 +91,28 @@ class NativeAcceptanceEvidenceStoreTest < Minitest::Test
     assert result['passed']
     assert_empty result['differences']
     assert_equal 'passed', reopened.summary.dig('checkpoints', 'save_reopen_identity', 'status')
+  end
+
+  def test_same_sketchup_process_can_verify_after_model_object_is_reopened
+    current_runtime = runtime
+    service = JiraNot::ConstructFlow::Core::NativeAcceptanceService.new(
+      runtime: current_runtime,
+      session_token: 'runtime-a'
+    )
+    service.capture_baseline(extension_id: 'ext-1')
+
+    reopened_model = NativeAcceptanceModel.new(
+      path: '/projects/extension.skp',
+      pages: ['ConstructFlow - Architecture Plan - Construction', 'User Perspective'],
+      layers: ['CF-DRAWING-ARCHITECTURE-CONSTRUCTION', 'CF-STYLE-FOREGROUND-SOLID-STRONG', 'SITE-TREES']
+    )
+    copy_acceptance_attributes(from: current_runtime.active_model, to: reopened_model)
+    current_runtime.active_model = reopened_model
+
+    result = service.verify_reopen
+
+    assert_equal 'passed', result['status']
+    assert result['passed']
   end
 
   def test_reopen_verification_fails_when_a_smart_object_id_is_missing
