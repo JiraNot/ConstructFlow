@@ -14,6 +14,7 @@ module JiraNot
 
           register_plan(registry, 'drainage.pipe_route', provider)
           register_plan(registry, 'drainage.manhole', provider)
+          register_plan(registry, 'drainage.downpipe', provider)
           provider
         end
 
