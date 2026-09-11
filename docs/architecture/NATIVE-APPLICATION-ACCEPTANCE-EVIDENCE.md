@@ -47,7 +47,7 @@ It is not a second semantic model and does not duplicate domain definitions.
 
 `CaptureNativeAcceptanceBaseline` requires a saved `.skp` path. It records the current project ID, Smart Object ID set, scene names and managed tags plus a deterministic SHA-256 fingerprint.
 
-`VerifyNativeAcceptanceReopen` must not pass in the same ConstructFlow runtime session that captured the baseline. The operator must close/reopen the saved model or restart SketchUp so a different runtime session token is observed.
+`VerifyNativeAcceptanceReopen` must not pass against the same in-memory model session that captured the baseline. The acceptance service uses a process/runtime token plus the active SketchUp model object identity as a session marker. Closing/reopening the model inside the same SketchUp process produces a new model object marker; restarting SketchUp produces a new runtime token.
 
 After reopen the verification passes only when:
 
@@ -103,7 +103,7 @@ Completing this acceptance session is evidence for release/gate decisions only. 
 ## Acceptance criteria
 
 - AC-NATIVE-001: an unsaved model cannot capture a save/reopen baseline.
-- AC-NATIVE-002: save/reopen verification cannot pass in the same runtime session that captured the baseline.
+- AC-NATIVE-002: save/reopen verification cannot pass against the same in-memory model session that captured the baseline; a reopened model object or restarted runtime is required.
 - AC-NATIVE-003: after a real reopen, missing Smart Object IDs fail persistence verification.
 - AC-NATIVE-004: after a real reopen, missing baseline ConstructFlow scenes/tags fail persistence verification while unrelated new user scenes/tags are allowed.
 - AC-NATIVE-005: all required checkpoints must be explicitly passed before the native acceptance session reports complete.
