@@ -115,18 +115,22 @@ A baseline created by an older build that lacks presentation-state evidence leav
 
 ## 8. Real LayOut / PDF
 
-Using a supported company/template asset, exercise the native LayOut path:
+Keep the acceptance baseline active and use a supported **real `.layout` company/template asset**. Run the native issue-set or preset export path with both `.layout` and PDF destinations.
 
-- create/open the LayOut document;
-- create pages/viewports from the issue set;
-- bind SketchUp scenes;
-- verify viewport scale/render mode;
-- populate title block/revision placeholders;
-- save `.layout`;
-- export PDF;
-- inspect the resulting sheets visually.
+The native export must actually:
 
-Record `layout_pdf_export` with SketchUp/LayOut version, template version/hash and output paths.
+- create/open the LayOut document through the LayOut Ruby API;
+- create pages/viewports and bind the saved SketchUp scenes;
+- apply viewport scale/render mode;
+- populate title block/revision placeholders according to the selected template strategy;
+- save a non-empty `.layout` file;
+- export a non-empty `.pdf` file.
+
+ConstructFlow publishes `NativeLayoutExportCompleted` only after the native adapter returns. The acceptance collector then checks that the backend is `layout_ruby_api`, the exported source `.skp` is the armed baseline model, the template exists, and both output files exist with non-zero size. When all checks pass, `layout_pdf_export` is recorded automatically.
+
+Open `Show Native Acceptance Status` and confirm `layout_pdf_export` is `passed`. Evidence records output byte counts, sheet/viewport counts, template trace/version/hash when available, and runtime event identity. A fake backend, a different source `.skp`, a missing template or a missing/empty PDF cannot pass this checkpoint.
+
+Inspect the resulting PDF visually as a separate human sanity check. If a sheet is visually unacceptable, record a failed/review note and fix the drawing/template problem; do not force the objective checkpoint to passed manually.
 
 ## Recording manual checkpoints
 
@@ -144,7 +148,7 @@ JiraNot::ConstructFlow::Runtime.commands.execute(
 )
 ```
 
-Do not mark a checkpoint `passed` based only on source review or CI. `skipped` remains incomplete. `native_copy_identity`, `observer_new_open` and `scene_tag_persistence` are objective checkpoints and cannot be manually passed through this generic command.
+Do not mark a checkpoint `passed` based only on source review or CI. `skipped` remains incomplete. `native_copy_identity`, `observer_new_open`, `scene_tag_persistence` and `layout_pdf_export` are objective checkpoints and cannot be manually passed through this generic command.
 
 ## Exit criterion
 
