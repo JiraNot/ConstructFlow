@@ -93,6 +93,19 @@ module JiraNot
             @start_point = nil
           end
 
+          def getExtents
+            bounds = Geom::BoundingBox.new
+            bounds.add(@start_point) if @start_point
+            bounds.add(@input_point.position) if @input_point&.valid?
+            bounds
+          end
+
+          def deactivate(view)
+            @start_manhole = nil
+            @start_point = nil
+            view.invalidate if view
+          end
+
           def onCancel(_reason, _view)
             @runtime.active_model.select_tool(nil)
           end

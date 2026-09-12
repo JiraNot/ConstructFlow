@@ -82,6 +82,17 @@ module JiraNot
             UI.messagebox("ConstructFlow Door/Window error: #{e.message}")
           end
 
+          def getExtents
+            bounds = Geom::BoundingBox.new
+            bounds.add(@input_point.position) if @input_point&.valid?
+            bounds
+          end
+
+          def deactivate(view)
+            @hovered_opening = nil
+            view.invalidate if view
+          end
+
           def onCancel(_reason, _view)
             @runtime.active_model.select_tool(nil)
           end

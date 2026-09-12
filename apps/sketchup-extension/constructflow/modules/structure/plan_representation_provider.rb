@@ -11,6 +11,10 @@ module JiraNot
 
         def render(object:, request:)
           case object.type.to_s
+          when 'structure.grid'
+            render_grid(object, request)
+          when 'structure.beam'
+            render_beam(object, request)
           when 'structure.column'
             render_column(object, request)
           when 'structure.foundation'
@@ -23,6 +27,41 @@ module JiraNot
         end
 
         private
+
+        def render_grid(object, request)
+          definition = @repository.read_grid(object.entity)
+          raise ArgumentError, "missing grid definition for #{object.id}" unless definition
+
+          {
+            primitives: [{
+              'type' => 'line', 'role' => 'structural_grid', 'points_mm' => definition.path_mm,
+              'style_role' => 'structure_grid'
+            }],
+            annotations: [annotation('grid_name', definition.path_mm.first, definition.name)],
+            metadata: common_metadata(request).merge(
+              'representation_profile' => representation_profile(request), 'member_kind' => 'grid',
+              'grid_name' => definition.name, 'level_id' => definition.level_id
+            )
+          }
+        end
+
+        def render_beam(object, request)
+          definition = @repository.read_beam(object.entity)
+          raise ArgumentError, "missing beam definition for #{object.id}" unless definition
+
+          {
+            primitives: [{
+              'type' => 'line', 'role' => 'beam_axis', 'points_mm' => definition.path_mm,
+              'style_role' => 'structure_primary'
+            }],
+            annotations: [annotation('object_tag', definition.path_mm.first, 'B')],
+            metadata: common_metadata(request).merge(
+              'representation_profile' => representation_profile(request), 'member_kind' => 'beam',
+              'section_mm' => definition.section_mm, 'material' => definition.material,
+              'engineering_status' => definition.engineering_status
+            )
+          }
+        end
 
         def render_column(object, request)
           definition = @repository.read_column(object.entity)

@@ -90,4 +90,21 @@ class ConnectorRegistryTest < Minitest::Test
     end
     assert_match(/incompatible connectors/, error.message)
   end
+
+  def test_shared_mep_contract_requires_system_and_preserves_semantic_metadata
+    source = @registry.register_connector(owner_object_id: 'source', type: 'drainage.waste', role: 'outlet')
+    target = @registry.register_connector(owner_object_id: 'target', type: 'drainage.manhole_in', role: 'inlet')
+
+    error = assert_raises(ArgumentError) do
+      @registry.register_connection(from_connector_id: source['id'], to_connector_id: target['id'], system: '')
+    end
+    assert_match(/MEP system required/, error.message)
+
+    connection = @registry.register_connection(
+      from_connector_id: source['id'], to_connector_id: target['id'], system: 'drainage.waste',
+      metadata: { source_object_id: 'source', destination_object_id: 'target', flow: 1.25 }
+    )
+    assert_equal 'source', connection['metadata']['source_object_id']
+    assert_equal 1.25, connection['metadata']['flow']
+  end
 end

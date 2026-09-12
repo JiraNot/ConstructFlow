@@ -167,7 +167,16 @@ module JiraNot
         end
 
         def takeoff_issues(takeoff)
-          Array(takeoff && takeoff['coverage']).filter_map do |coverage|
+          issues = []
+          stale_ids = Array(takeoff && takeoff['stale_object_ids']).map(&:to_s).reject(&:empty?).uniq.sort
+          unless stale_ids.empty?
+            issues << issue(
+              'construction.takeoff.snapshot_stale', 'warning', nil,
+              "quantity snapshot was captured while objects were dirty: #{stale_ids.join(', ')}",
+              object_ids: stale_ids
+            )
+          end
+          issues.concat(Array(takeoff && takeoff['coverage']).filter_map do |coverage|
             status = coverage['status'].to_s
             next if %w[included unsupported_type].include?(status)
             severity = status == 'missing_definition' ? 'error' : 'warning'
@@ -176,7 +185,8 @@ module JiraNot
               @runtime.smart_objects.fetch_by_id(coverage['object_id'].to_s),
               "quantity coverage is #{status} for #{coverage['object_type']}"
             )
-          end
+          end)
+          issues
         end
 
         def issue(rule_id, severity, object, message, extra = {})

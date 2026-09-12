@@ -274,7 +274,7 @@ class StructureExtensionCommandRegistrationTest < Minitest::Test
     repository = FakeRepository.new
     runtime = FakeRuntime.new(smart_objects, Object.new, nil)
 
-    first = generate(runtime: runtime, geometry: geometry, repository: repository, intent_value: intent)
+    generate(runtime: runtime, geometry: geometry, repository: repository, intent_value: intent)
     foundation_ids = smart_objects.objects.select { |object| object.type == 'structure.foundation' }.map(&:id).sort
     second = generate(
       runtime: runtime,

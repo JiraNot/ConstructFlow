@@ -5,7 +5,7 @@ module JiraNot
     module Structure
       module RepresentationRegistration
         OWNER = 'constructflow.structure'
-        TYPES = %w[structure.column structure.foundation structure.rebar_set].freeze
+        TYPES = %w[structure.grid structure.beam structure.column structure.foundation structure.rebar_set].freeze
 
         module_function
 

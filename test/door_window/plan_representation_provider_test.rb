@@ -40,7 +40,7 @@ class DoorWindowPlanRepresentationProviderTest < Minitest::Test
     }
   end
 
-  def fixture(operation:, handing: 'left', category: 'door')
+  def fixture(operation:, handing: 'left', category: 'door', location_line: 'center')
     model = FakeAttributeCarrier.new
     type = JiraNot::ConstructFlow::DoorWindow::DoorWindowType.new(
       id: "type.#{operation}", name: "#{operation.capitalize} Type", category: category,
@@ -53,7 +53,8 @@ class DoorWindowPlanRepresentationProviderTest < Minitest::Test
     wall_repo.write(
       wall_entity,
       JiraNot::ConstructFlow::Architecture::WallDefinition.new(
-        path_mm: [[0, 0, 0], [4000, 0, 0]], thickness_mm: 150, height_mm: 2800
+        path_mm: [[0, 0, 0], [4000, 0, 0]], thickness_mm: 150, height_mm: 2800,
+        location_line: location_line
       )
     )
     wall = DoorWindowPlanObject.new('wall-1', 'architecture.wall', wall_entity, 'constructflow.architecture')
@@ -103,5 +104,14 @@ class DoorWindowPlanRepresentationProviderTest < Minitest::Test
     assert result[:annotations].any? { |item| item['role'] == 'opening_host' }
     assert result[:annotations].any? { |item| item['role'] == 'frame_material' }
     assert_equal 'sliding', result[:metadata]['operation']
+  end
+
+  def test_hosted_plan_geometry_uses_wall_location_line_centerline
+    provider, instance = fixture(operation: 'fixed', category: 'window', location_line: 'finish_face_exterior')
+    result = provider.render(object: instance, request: request('simple'))
+    span = result[:primitives].find { |item| item['role'] == 'door_window_opening_span' }
+
+    assert_equal [1000.0, -75.0, 0.0], span['points_mm'][0]
+    assert_equal [1900.0, -75.0, 0.0], span['points_mm'][1]
   end
 end

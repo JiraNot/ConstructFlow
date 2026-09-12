@@ -71,7 +71,8 @@ module JiraNot
         private
 
         def opening_geometry(opening, wall)
-          start_point, finish_point = wall.path_mm.each_cons(2).to_a.fetch(opening.segment_index)
+          path = wall.respond_to?(:centerline_path_mm) ? wall.centerline_path_mm : wall.path_mm
+          start_point, finish_point = path.each_cons(2).to_a.fetch(opening.segment_index)
           dx = finish_point[0] - start_point[0]
           dy = finish_point[1] - start_point[1]
           length = Math.sqrt((dx * dx) + (dy * dy))

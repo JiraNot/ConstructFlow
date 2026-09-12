@@ -7,7 +7,7 @@ require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/extension
 
 CurrentnessAuditObject = Struct.new(
   :id, :type, :owner_module, :created_phase, :removed_phase, :source_state,
-  :relationships, :updated_at,
+  :relationships, :updated_at, :dirty_flags,
   keyword_init: true
 )
 
@@ -84,5 +84,20 @@ class ConstructionCurrentnessAuditTest < Minitest::Test
     assert_equal 'current', result['status']
     assert result['publishable']
     assert_equal 64, result['scope_fingerprint'].length
+  end
+
+  def test_dirty_quantity_or_dependents_make_scope_stale
+    dirty_column = column
+    dirty_column.dirty_flags = ['dirty_quantity']
+    dirty_runtime = Struct.new(:smart_objects).new(CurrentnessAuditObjects.new([extension, dirty_column]))
+
+    result = JiraNot::ConstructFlow::Extension::ConstructionCurrentnessAudit.new(runtime: dirty_runtime).run(
+      extension_id: 'ext-1', takeoff: takeoff
+    )
+
+    assert_equal 'stale', result['status']
+    refute result['publishable']
+    assert_equal ['col-1'], result['dirty_quantity_object_ids']
+    assert result['issues'].any? { |issue| issue['rule_id'] == 'construction.takeoff.dirty_object' }
   end
 end

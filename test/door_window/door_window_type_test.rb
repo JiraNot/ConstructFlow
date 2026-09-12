@@ -86,6 +86,33 @@ class DoorWindowTypeTest < Minitest::Test
     )
   end
 
+  def test_instance_parameters_round_trip_and_drive_quantity_formula
+    entity = FakeEntity.new
+    repository = DoorWindow::InstanceRepository.new
+    definition = DoorWindow::InstanceDefinition.new(
+      type_id: 'W01', opening_object_id: 'cf_opening_1', parameters: { 'frame' => 75 }
+    )
+    repository.write(entity, definition)
+    restored = repository.read(entity)
+    assert_equal({ 'frame' => 75 }, restored.parameters)
+
+    smart_object = Core::SmartObject.new(
+      entity: entity, id: 'dw-1', type: 'door_window.instance', owner_module: 'constructflow.door_window',
+      schema_version: 1, display_name: 'Window', created_phase: Core::Phase::NEW_CONSTRUCTION,
+      removed_phase: nil, level_refs: [], status: 'active', relationships: [], geometry_refs: [],
+      catalog_ref: nil, source_state: 'confirmed', revision_meta: {}, created_at: nil, updated_at: nil,
+      dirty_flags: []
+    )
+    type = DoorWindow::DoorWindowType.new(
+      id: 'W01', category: 'window', operation: 'fixed', width_mm: 1000, height_mm: 2000, frame_width_mm: 50
+    )
+    items = DoorWindow::Quantity::DoorWindowQuantityProvider.new.quantities(
+      smart_object: smart_object, type: type, instance_parameters: restored.parameters
+    )
+    glazing = items.find { |item| item[:classification] == 'door_window.glazing.clear_area' }
+    assert_in_delta 1.5725, glazing[:value], 0.0001
+  end
+
   def test_quantity_provider_is_traceable
     entity = FakeEntity.new
     model = FakeModel.new([entity])
@@ -114,5 +141,18 @@ class DoorWindowTypeTest < Minitest::Test
     assert_in_delta 6.0, frame[:value], 0.0001
     assert_in_delta 1.87, glass[:value], 0.0001
     assert_equal 'new_construction', unit[:phase_scope]
+  end
+
+  def test_type_exposes_shared_parametric_resolution_for_instance_override
+    type = DoorWindow::DoorWindowType.new(
+      id: 'W-PARAM', category: 'window', operation: 'fixed', width_mm: 1000, height_mm: 2000,
+      frame_width_mm: 50
+    )
+
+    resolved = type.parametric_parameters(instance_parameters: { 'frame' => 75 })
+
+    assert_equal 850.0, resolved['clear_width']
+    assert_equal 1850.0, resolved['clear_height']
+    assert_equal 1_572_500.0, resolved['clear_area']
   end
 end

@@ -29,6 +29,14 @@ module JiraNot
           @store.read('project_id')
         end
 
+        def update_metadata!(name:, code: nil)
+          raise ArgumentError, 'project name required' if name.to_s.strip.empty?
+
+          @store.write('project_name', name.to_s.strip)
+          @store.write('project_code', code.to_s.strip)
+          to_h
+        end
+
         def project_name
           @store.read('project_name', 'Untitled Project')
         end

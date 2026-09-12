@@ -14,7 +14,7 @@ module JiraNot
           provides: %w[roof.generator roof.edge_host roof.quantity],
           objects: %w[roof.system roof.gutter],
           commands: %w[GenerateRoof ModifyRoofBoundary SetRoofSlope ChangeRoofSystem AddGutter],
-          events: %w[RoofGenerated RoofChanged GutterAdded GeometryChanged QuantityDirty DrawingDirty ValidationStateChanged],
+          events: %w[RoofGenerated RoofChanged GutterAdded HostedGutterRegenerated GeometryChanged QuantityDirty DrawingDirty ValidationStateChanged],
           providers: ['constructflow.roof.quantity'],
           validators: %w[roof.validity roof.gutter.validity]
         }.freeze
@@ -73,14 +73,17 @@ module JiraNot
               )
             end
             runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
+            supported_ids = reconcile_roof_supports(runtime, object, definition)
             issues = validator.validate_roof(definition)
 
             {
               created_object_ids: [object.id],
+              updated_object_ids: supported_ids,
               warnings: warning_messages(issues),
               events: [
                 { name: 'ObjectCreated', object_ids: [object.id], payload: { type: 'roof.system' } },
                 { name: 'RoofGenerated', object_ids: [object.id], payload: { covering_system: definition.covering_system } },
+                { name: 'RelationshipChanged', object_ids: [object.id, *supported_ids], payload: { kind: 'supported_by' } },
                 { name: 'GeometryChanged', object_ids: [object.id] },
                 { name: 'QuantityDirty', object_ids: [object.id] },
                 { name: 'DrawingDirty', object_ids: [object.id] },
@@ -276,12 +279,14 @@ module JiraNot
           geometry.rebuild_roof!(object.entity, updated)
           repository.write_roof(object.entity, updated)
           runtime.smart_objects.mark_dirty(object.entity, 'dirty_quantity', 'dirty_drawing', 'dirty_dependents')
+          supported_ids = reconcile_roof_supports(runtime, object, updated)
           issues = validator.validate_roof(updated)
           {
-            updated_object_ids: [object.id],
+            updated_object_ids: [object.id, *supported_ids],
             warnings: warning_messages(issues),
             events: [
               { name: 'RoofChanged', object_ids: [object.id], payload: { change: change } },
+              { name: 'RelationshipChanged', object_ids: [object.id, *supported_ids], payload: { kind: 'supported_by' } },
               { name: 'GeometryChanged', object_ids: [object.id] },
               { name: 'QuantityDirty', object_ids: [object.id] },
               { name: 'DrawingDirty', object_ids: [object.id] },
@@ -333,8 +338,115 @@ module JiraNot
           Array(issues).select { |issue| issue[:severity] == 'warning' }.map { |issue| issue[:message] }
         end
 
+        def reconcile_roof_supports(runtime, roof_object, roof_definition, tolerance_mm: 250.0)
+          manager = runtime.smart_objects
+          old_targets = manager.fetch(roof_object.entity).relationships.filter_map do |relationship|
+            next unless relationship['kind'].to_s == 'supported_by'
+
+            relationship['target_id'].to_s
+          end
+          old_targets.each do |target_id|
+            target = manager.fetch_by_id(target_id)
+            next unless target
+
+            manager.remove_relationship(target.entity, kind: 'supports', target_id: roof_object.id)
+          end
+          manager.remove_relationship(roof_object.entity, kind: 'supported_by')
+
+          boundary = Array(roof_definition.boundary_mm)
+          candidates = manager.all.select do |object|
+            %w[architecture.wall structure.beam structure.column].include?(object.type.to_s) && object.id != roof_object.id
+          end
+          supported = candidates.select do |object|
+            candidate_points = support_points(runtime, object)
+            candidate_points.any? { |point| point_near_boundary?(point, boundary, tolerance_mm) }
+          end.sort_by(&:id)
+          supported.each do |target|
+            manager.add_relationship(
+              roof_object.entity,
+              kind: 'supported_by', target_id: target.id, role: 'roof_support',
+              metadata: { 'tolerance_mm' => tolerance_mm }
+            )
+            manager.add_relationship(
+              target.entity,
+              kind: 'supports', target_id: roof_object.id, role: 'roof_support',
+              metadata: { 'tolerance_mm' => tolerance_mm }
+            )
+            manager.mark_dirty(target.entity, 'dirty_dependents', 'dirty_drawing')
+          end
+          supported.map(&:id).freeze
+        end
+
+        def support_points(runtime, object)
+          case object.type.to_s
+          when 'architecture.wall'
+            definition = Architecture::WallRepository.new.read(object.entity)
+            definition ? definition.centerline_path_mm : []
+          when 'structure.beam'
+            definition = Structure::Repository.new.read_beam(object.entity)
+            definition ? definition.path_mm : []
+          when 'structure.column'
+            definition = Structure::Repository.new.read_column(object.entity)
+            definition ? [definition.location_mm] : []
+          else
+            []
+          end
+        rescue StandardError
+          []
+        end
+
+        def point_near_boundary?(point, boundary, tolerance_mm)
+          Array(boundary).each_cons(2).any? { |first, second| point_to_segment_distance(point, first, second) <= tolerance_mm } ||
+            (boundary.length > 2 && point_to_segment_distance(point, boundary.last, boundary.first) <= tolerance_mm)
+        end
+
+        def point_to_segment_distance(point, first, second)
+          dx = second[0] - first[0]
+          dy = second[1] - first[1]
+          length_sq = (dx * dx) + (dy * dy)
+          return Math.sqrt(((point[0] - first[0])**2) + ((point[1] - first[1])**2)) if length_sq <= 0.001
+
+          ratio = [[((point[0] - first[0]) * dx + (point[1] - first[1]) * dy) / length_sq, 0.0].max, 1.0].min
+          projected = [first[0] + ratio * dx, first[1] + ratio * dy]
+          Math.sqrt(((point[0] - projected[0])**2) + ((point[1] - projected[1])**2))
+        end
+
         def install_ui(runtime)
           menu = runtime.menu.add_submenu('Roof')
+          menu.add_item('Draw Roof Footprint in Plan') do
+            values = UI.inputbox(
+              ['Roof form (lean_to/flat/gable/hip)', 'Slope (%)', 'Covering'],
+              ['lean_to', '5', 'metal_sheet'],
+              'ConstructFlow Plan Roof'
+            )
+            next unless values
+
+            runtime.active_model.select_tool(
+              Tools::BoundaryTool.new(
+                runtime: runtime,
+                roof_form: values[0],
+                slope_percent: Float(values[1]),
+                covering_system: values[2]
+              )
+            )
+          rescue ArgumentError => error
+            UI.messagebox(error.message)
+          end
+          menu.add_item('Edit Roof Footprint in Plan') do
+            runtime.plan_scenes.refresh_preset('architecture.construction') if runtime.respond_to?(:plan_scenes)
+            runtime.active_model.select_tool(
+              Architecture::Tools::BoundaryEditTool.new(
+                runtime: runtime,
+                object_type: 'roof.system',
+                repository: Repository.new,
+                command: 'ModifyRoofBoundary',
+                label: 'Roof',
+                read_method: :read_roof
+              )
+            )
+          rescue StandardError => error
+            UI.messagebox("ConstructFlow Roof edit error: #{error.message}")
+          end
           menu.add_item('Generate Roof from Selected Face') do
             face = runtime.active_model.selection.find { |entity| entity.is_a?(Sketchup::Face) }
             unless face

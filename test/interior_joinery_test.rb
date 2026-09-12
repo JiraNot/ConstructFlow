@@ -9,6 +9,7 @@ require File.join(INTERIOR_TEST_ROOT, 'joinery_part_generator')
 require File.join(INTERIOR_TEST_ROOT, 'repository')
 require File.join(INTERIOR_TEST_ROOT, 'validators', 'interior_validator')
 require File.join(INTERIOR_TEST_ROOT, 'quantity', 'interior_quantity_provider')
+require File.join(INTERIOR_TEST_ROOT, 'tools', 'cabinet_run_tool')
 
 class InteriorJoineryTest < Minitest::Test
   Interior = JiraNot::ConstructFlow::Interior
@@ -34,6 +35,27 @@ class InteriorJoineryTest < Minitest::Test
     assert_in_delta 600.0, split.modules.first['width_mm'], 0.001
     assert_in_delta split.usable_width_mm, split.module_width_sum_mm, 0.001
     assert split.valid?, split.errors.join(', ')
+  end
+
+  def test_parametric_instance_parameters_drive_joinery_dimensions_and_persist
+    definition = @definition.with(parameters: { 'top_filler' => 100, 'toe_kick' => 120 })
+
+    assert_in_delta 700.0, definition.usable_height_mm, 0.001
+    assert_in_delta 580.0, definition.opening_height_mm, 0.001
+    assert_equal({ 'top_filler' => 100, 'toe_kick' => 120 }, definition.to_h['parameters'])
+
+    restored = Interior::CabinetRunDefinition.from_h(definition.to_h)
+    assert_equal definition.to_h, restored.to_h
+  end
+
+  def test_plan_placement_reads_level_from_symbol_or_string_params
+    tool = Interior::Tools::CabinetRunTool.allocate
+
+    tool.instance_variable_set(:@params, { base_level_id: 'level.symbol' })
+    assert_equal 'level.symbol', tool.send(:placement_level_id)
+
+    tool.instance_variable_set(:@params, { 'level_id' => 'level.string' })
+    assert_equal 'level.string', tool.send(:placement_level_id)
   end
 
   def test_explicit_split_requires_exact_usable_width
@@ -156,5 +178,18 @@ class InteriorJoineryTest < Minitest::Test
 
     repository.clear_part_set(entity)
     assert_nil repository.read_part_set(entity)
+  end
+
+  def test_cabinet_run_exposes_shared_parametric_resolution
+    definition = Interior::CabinetRunDefinition.new(
+      origin_mm: [0, 0, 0], width_mm: 1200, height_mm: 2100, depth_mm: 600,
+      left_filler_mm: 50, right_filler_mm: 50, top_filler_mm: 100, toe_kick_mm: 100
+    )
+
+    resolved = definition.parametric_parameters
+
+    assert_equal 1100.0, resolved['usable_width']
+    assert_equal 2000.0, resolved['usable_height']
+    assert_equal 1900.0, resolved['opening_height']
   end
 end

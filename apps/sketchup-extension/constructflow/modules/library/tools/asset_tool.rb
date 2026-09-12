@@ -72,6 +72,18 @@ module JiraNot
             UI.messagebox("ConstructFlow Asset error: #{e.message}")
           end
 
+          def getExtents
+            bounds = Geom::BoundingBox.new
+            bounds.add(@start_point) if defined?(@start_point) && @start_point
+            bounds.add(@input_point.position) if @input_point&.valid?
+            bounds
+          end
+
+          def deactivate(view)
+            @start_point = nil if defined?(@start_point)
+            view.invalidate if view
+          end
+
           def onCancel(_reason, _view)
             @runtime.active_model.select_tool(nil)
           end

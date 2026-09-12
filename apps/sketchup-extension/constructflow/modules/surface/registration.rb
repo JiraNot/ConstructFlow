@@ -98,14 +98,18 @@ module JiraNot
             )
             geometry.rebuild_surface!(object.entity, updated)
             repository.write_surface(object.entity, updated)
-            runtime.smart_objects.mark_dirty(object.entity, 'dirty_quantity', 'dirty_drawing', 'dirty_layout')
+            dependents = reconcile_surface_dependents(runtime, repository, geometry, object, updated)
+            runtime.smart_objects.mark_dirty_with_dependents(
+              object.entity, 'dirty_quantity', 'dirty_drawing', 'dirty_layout'
+            )
+            affected = [object.id, *dependents].uniq
             {
-              updated_object_ids: [object.id],
+              updated_object_ids: affected,
               events: [
-                { name: 'SurfaceChanged', object_ids: [object.id], payload: { change: 'boundary' } },
-                { name: 'GeometryChanged', object_ids: [object.id] },
-                { name: 'QuantityDirty', object_ids: [object.id] },
-                { name: 'DrawingDirty', object_ids: [object.id] }
+                { name: 'SurfaceChanged', object_ids: affected, payload: { change: 'boundary', dependents: dependents } },
+                { name: 'GeometryChanged', object_ids: affected },
+                { name: 'QuantityDirty', object_ids: affected },
+                { name: 'DrawingDirty', object_ids: affected }
               ]
             }
           end
@@ -511,6 +515,50 @@ module JiraNot
           end
         end
 
+        def reconcile_surface_dependents(runtime, repository, geometry, surface_object, surface_definition)
+          runtime.smart_objects.all.filter_map do |dependent|
+            relationship = Array(dependent.relationships).find do |item|
+              item['kind'].to_s == 'host' && item['target_id'].to_s == surface_object.id.to_s
+            end
+            next unless relationship
+
+            case dependent.type.to_s
+            when 'surface.pattern'
+              pattern = repository.read_pattern(dependent.entity)
+              next unless pattern
+
+              preview = pattern.with(layout_state: 'preview')
+              geometry.rebuild_pattern!(dependent.entity, surface_definition: surface_definition, pattern_definition: preview)
+              repository.write_pattern(dependent.entity, preview)
+              repository.clear_layout(dependent.entity)
+            when 'surface.border'
+              border = repository.read_border(dependent.entity)
+              next unless border
+
+              geometry.rebuild_border!(
+                dependent.entity,
+                surface_definition: surface_definition,
+                border_definition: border
+              )
+            when 'surface.parking_layout'
+              # Parking geometry is intentionally kept as authored layout; its
+              # dependency is still invalidated for explicit regeneration.
+              next
+            else
+              next
+            end
+            runtime.smart_objects.mark_dirty(dependent.entity, 'dirty_quantity', 'dirty_drawing', 'dirty_layout')
+            dependent.id
+          rescue StandardError => error
+            runtime.diagnostics&.warn(
+              'surface_dependent_rebuild_failed', error.message, object_id: dependent.id,
+              surface_object_id: surface_object.id
+            )
+            runtime.smart_objects.mark_dirty(dependent.entity, 'dirty_quantity', 'dirty_drawing', 'dirty_layout')
+            dependent.id
+          end
+        end
+
         def surface_definition_from_input(input, runtime)
           level_id = input[:base_level_id] || input['base_level_id']
           elevation = if level_id && !level_id.to_s.empty?
@@ -685,6 +733,16 @@ module JiraNot
           return unless runtime.respond_to?(:menu) && runtime.menu
 
           menu = runtime.menu.add_submenu('Surface & Paving')
+          menu.add_item('Draw Surface Boundary in Plan') do
+            values = UI.inputbox(['Surface type', 'Base level ID (optional)'], ['paver', ''], 'ConstructFlow Plan Surface')
+            next unless values
+
+            runtime.active_model.select_tool(
+              Tools::BoundaryTool.new(runtime: runtime, surface_type: values[0], base_level_id: values[1])
+            )
+          rescue ArgumentError => error
+            UI.messagebox(error.message)
+          end
           menu.add_item('Create Surface from Selected Face') do
             face = runtime.active_model.selection.find { |entity| entity.is_a?(Sketchup::Face) }
             unless face

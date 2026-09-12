@@ -50,7 +50,7 @@ module JiraNot
             index = Integer(explicit_edge_index)
             raise ArgumentError, "attachment_edge_index #{index} is outside extension boundary" unless index.between?(0, edges.length - 1)
 
-            overlap = overlap_with_host(edges[index], host_definition.path_mm)
+            overlap = overlap_with_host(edges[index], host_definition.centerline_path_mm)
             if overlap < @min_overlap_mm
               raise ArgumentError,
                     "attachment_edge_index #{index} does not overlap attachment host #{host_id}"
@@ -64,7 +64,7 @@ module JiraNot
           end
 
           candidates = edges.each_with_index.filter_map do |edge, index|
-            overlap = overlap_with_host(edge, host_definition.path_mm)
+            overlap = overlap_with_host(edge, host_definition.centerline_path_mm)
             next if overlap < @min_overlap_mm
             [index, overlap]
           end

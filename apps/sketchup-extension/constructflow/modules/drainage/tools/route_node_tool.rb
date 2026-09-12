@@ -14,6 +14,7 @@ module JiraNot
             @repository = repository
             @picker = picker
             @input_point = Sketchup::InputPoint.new
+            @interaction = Core::PlanInteractionEngine.new
             @active_node_index = nil
             @preview_position_mm = nil
           end
@@ -29,7 +30,9 @@ module JiraNot
           def onMouseMove(_flags, x, y, view)
             @input_point.pick(view, x, y)
             if @active_node_index && @input_point.valid?
-              @preview_position_mm = Core::Units.point_to_mm(@input_point.position)
+              @preview_position_mm = snapped_point
+            elsif !@input_point.valid?
+              @preview_position_mm = nil
             end
             view.invalidate
           end
@@ -49,7 +52,7 @@ module JiraNot
             end
             @active_node_index = picked['node_index']
             @input_point.pick(view, x, y)
-            @preview_position_mm = Core::Units.point_to_mm(@input_point.position) if @input_point.valid?
+            @preview_position_mm = snapped_point if @input_point.valid?
             view.invalidate
           end
 
@@ -57,7 +60,7 @@ module JiraNot
             return unless @active_node_index
             @input_point.pick(view, x, y)
             if @input_point.valid?
-              position = Core::Units.point_to_mm(@input_point.position)
+              position = snapped_point
               result = @runtime.commands.execute(
                 'MoveDrainageRouteNode',
                 { object_id: @route_object_id, node_index: @active_node_index, position_mm: position, regrade: @regrade },
@@ -100,6 +103,15 @@ module JiraNot
             nil
           end
 
+          def getExtents
+            bounds = Geom::BoundingBox.new
+            definition = route_definition!
+            Array(definition&.route_nodes_mm).each { |point_mm| bounds.add(point(point_mm)) }
+            bounds
+          rescue StandardError
+            Geom::BoundingBox.new
+          end
+
           def onCancel(_reason, view)
             if @active_node_index
               @active_node_index = nil
@@ -108,6 +120,12 @@ module JiraNot
             else
               @runtime.active_model.select_tool(nil)
             end
+          end
+
+          def deactivate(view)
+            @active_node_index = nil
+            @preview_position_mm = nil
+            view.invalidate if view
           end
 
           private
@@ -123,6 +141,21 @@ module JiraNot
           def screen_xy(view, point_mm)
             screen = view.screen_coords(point(point_mm))
             [screen.x, screen.y]
+          end
+
+          def snapped_point
+            @interaction.snap(
+              Core::Units.point_to_mm(@input_point.position),
+              references: plan_references
+            )[:point_mm]
+          end
+
+          def plan_references
+            return [] unless defined?(Architecture::PlanReferenceCollector)
+
+            Architecture::PlanReferenceCollector.new(@runtime).paths
+          rescue StandardError
+            []
           end
 
           def point(values_mm)

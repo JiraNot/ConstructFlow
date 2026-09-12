@@ -13,7 +13,7 @@ module JiraNot
         def compatible?(smart_object)
           smart_object &&
             smart_object.owner_module == 'constructflow.structure' &&
-            %w[structure.column structure.foundation].include?(smart_object.type)
+            %w[structure.column structure.beam structure.foundation].include?(smart_object.type)
         end
 
         def bounding_box_mm(smart_object)
@@ -38,6 +38,8 @@ module JiraNot
           case smart_object.type
           when 'structure.column'
             @repository.read_column(smart_object.entity)
+          when 'structure.beam'
+            @repository.read_beam(smart_object.entity)
           when 'structure.foundation'
             @repository.read_foundation(smart_object.entity)
           end || raise(KeyError, 'structural definition missing')

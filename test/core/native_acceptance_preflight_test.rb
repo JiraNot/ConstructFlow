@@ -4,6 +4,7 @@ require_relative '../test_helper'
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/core/native_acceptance_preflight')
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/core/native_acceptance_evidence_store')
 require File.join(ROOT, 'apps/sketchup-extension/constructflow/core/native_acceptance_service')
+require File.join(ROOT, 'apps/sketchup-extension/constructflow/core/native_acceptance_runtime_integration')
 
 NativePreflightNamed = Struct.new(:name)
 NativePreflightProject = Struct.new(:project_id)
@@ -36,6 +37,30 @@ class NativePreflightObjects
 end
 
 NativePreflightRuntime = Struct.new(:active_model, :project, :smart_objects)
+
+class NativeAcceptanceCommandServiceStub
+  def preflight(extension_id: nil)
+    { 'ready' => true, 'extension_id' => extension_id.to_s, 'failed_checks' => [], 'warnings' => [], 'coverage' => {} }
+  end
+
+  def capture_baseline(extension_id: nil)
+    { 'extension_id' => extension_id.to_s, 'baseline_fingerprint' => 'baseline', 'baseline' => {} }
+  end
+
+  def verify_reopen
+    { 'status' => 'passed', 'passed' => true, 'message' => 'ok', 'differences' => {}, 'presentation_differences' => {} }
+  end
+
+  def verify_undo_redo
+    { 'status' => 'passed', 'passed' => true, 'message' => 'ok', 'differences' => {} }
+  end
+
+  def record_checkpoint(**_options)
+    { 'checkpoints' => {} }
+  end
+end
+
+NativeAcceptanceCommandRuntime = Struct.new(:commands)
 
 class NativeAcceptancePreflightTest < Minitest::Test
   def runtime(path: '/projects/native-acceptance.skp', pages: ['A-101'], layers: ['CF-DRAWING-ARCHITECTURE'])
@@ -71,6 +96,7 @@ class NativeAcceptancePreflightTest < Minitest::Test
 
     assert result['ready']
     assert_empty result['failed_checks']
+    refute_includes result['failed_checks'], 'undo_redo_api'
     assert result.dig('coverage', 'architecture')
     assert result.dig('coverage', 'structure')
     assert result.dig('coverage', 'roof')
@@ -125,5 +151,20 @@ class NativeAcceptancePreflightTest < Minitest::Test
     refute_empty result['warnings']
     assert_includes result['warnings'].first, 'structure'
     assert_equal false, result.dig('coverage', 'structure')
+  end
+
+  def test_native_probe_commands_do_not_open_modeling_operations
+    model = FakeModel.new
+    events = JiraNot::ConstructFlow::Core::EventBus.new
+    transactions = JiraNot::ConstructFlow::Core::TransactionManager.new(model: model)
+    commands = JiraNot::ConstructFlow::Core::CommandBus.new(event_bus: events, transaction_manager: transactions)
+    runtime = NativeAcceptanceCommandRuntime.new(commands)
+    service = NativeAcceptanceCommandServiceStub.new
+
+    JiraNot::ConstructFlow::Core::NativeAcceptanceRuntimeIntegration.send(:register_commands, runtime, service)
+    result = commands.execute('VerifyNativeAcceptanceUndoRedo')
+
+    assert_equal 'success', result[:status]
+    assert_empty model.operations
   end
 end

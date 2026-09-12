@@ -66,21 +66,22 @@ module JiraNot
             return result_for(status: 'rejected', command_id: command[:command_id], errors: validation_errors)
           end
 
-          raw_result = if registration.transaction && @transaction_manager
-                         @transaction_manager.run("ConstructFlow: #{registration.name}") do
-                           registration.handler.call(command)
-                         end
-                       else
-                         registration.handler.call(command)
-                       end
+          execute_body = lambda do
+            raw_result = registration.handler.call(command)
+            result = normalize_result(raw_result, command[:command_id])
+            return result unless result[:status] == 'success'
 
-          result = normalize_result(raw_result, command[:command_id])
-          return result unless result[:status] == 'success'
-
-          published_events = Array(result[:events]).map do |event_spec|
-            publish_event(event_spec, registration, command)
+            published_events = Array(result[:events]).map do |event_spec|
+              publish_event(event_spec, registration, command)
+            end
+            result.merge(events: published_events.freeze).freeze
           end
-          result.merge(events: published_events.freeze).freeze
+
+          if registration.transaction && @transaction_manager
+            @transaction_manager.run("ConstructFlow: #{registration.name}", &execute_body)
+          else
+            execute_body.call
+          end
         rescue StandardError => error
           @diagnostics&.error(
             'command_failed',

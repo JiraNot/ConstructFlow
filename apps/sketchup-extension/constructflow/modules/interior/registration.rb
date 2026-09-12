@@ -332,7 +332,8 @@ module JiraNot
             top_filler_mm: input[:top_filler_mm] || input['top_filler_mm'] || 0,
             carcass_material_id: input[:carcass_material_id] || input['carcass_material_id'] || 'board.hmr.18',
             front_gap_mm: input[:front_gap_mm] || input['front_gap_mm'] || 2,
-            host_object_id: input[:host_object_id] || input['host_object_id']
+            host_object_id: input[:host_object_id] || input['host_object_id'],
+            parameters: input[:parameters] || input['parameters'] || input[:parametric_parameters] || input['parametric_parameters'] || {}
           )
         end
 

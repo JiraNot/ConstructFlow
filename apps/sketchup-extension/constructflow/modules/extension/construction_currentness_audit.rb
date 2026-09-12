@@ -34,6 +34,11 @@ module JiraNot
           issues = []
           issues << issue('construction.takeoff.scope_missing', 'error', missing_takeoff_ids) unless missing_takeoff_ids.empty?
           issues << issue('construction.takeoff.scope_foreign', 'error', foreign_takeoff_ids) unless foreign_takeoff_ids.empty?
+          dirty_quantity_ids = current_scope.filter_map do |object|
+            flags = quantity_dirty_flags(object)
+            object.id.to_s if (flags & %w[dirty_quantity dirty_dependents]).any?
+          end.sort.freeze
+          issues << issue('construction.takeoff.dirty_object', 'error', dirty_quantity_ids) unless dirty_quantity_ids.empty?
           issues << issue('construction.drawing.stale_reference', 'error', drawing_stale_ids) unless drawing_stale_ids.empty?
           issues << issue('construction.drawing.foreign_reference', 'error', drawing_foreign_ids) unless drawing_foreign_ids.empty?
           issues << issue('construction.drawing.scope_mismatch', 'error', drawing_scope_mismatches) unless drawing_scope_mismatches.empty?
@@ -56,6 +61,7 @@ module JiraNot
             'takeoff_coverage_object_ids' => coverage_ids,
             'missing_takeoff_object_ids' => missing_takeoff_ids,
             'foreign_takeoff_object_ids' => foreign_takeoff_ids,
+            'dirty_quantity_object_ids' => dirty_quantity_ids,
             'drawing_checks' => drawing_checks,
             'issues' => issues.freeze
           }.freeze
@@ -129,6 +135,10 @@ module JiraNot
             ].join('|')
           end.join("\n")
           Digest::SHA256.hexdigest(payload)
+        end
+
+        def quantity_dirty_flags(object)
+          Array(object.respond_to?(:dirty_flags) ? object.dirty_flags : []).map(&:to_s)
         end
 
         def issue(rule_id, severity, values)

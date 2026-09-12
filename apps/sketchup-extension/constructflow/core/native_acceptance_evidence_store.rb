@@ -237,6 +237,7 @@ module JiraNot
             'project_id' => runtime.project&.project_id.to_s,
             'model_path' => model_path(model),
             'smart_object_ids' => runtime.smart_objects.all.map { |object| object.id.to_s }.reject(&:empty?).uniq.sort,
+            'smart_object_states' => smart_object_states(runtime),
             'scene_names' => collection_names(pages),
             'managed_tag_names' => collection_names(layers).select { |name| name.start_with?('CF-') }.sort,
             'managed_scene_states' => managed_scene_states(pages),
@@ -253,6 +254,7 @@ module JiraNot
             differences['model_path'] = { 'expected' => baseline['model_path'], 'actual' => current['model_path'] }
           end
           compare_set(differences, 'smart_object_ids', baseline, current, exact: true)
+          compare_set(differences, 'smart_object_states', baseline, current, exact: true)
           compare_set(differences, 'scene_names', baseline, current, exact: false)
           compare_set(differences, 'managed_tag_names', baseline, current, exact: false)
           differences
@@ -417,6 +419,61 @@ module JiraNot
         def model_path(model)
           return '' unless model && model.respond_to?(:path)
           model.path.to_s
+        end
+
+        def smart_object_states(runtime)
+          Array(runtime.smart_objects.all).filter_map do |object|
+            state = if object.respond_to?(:to_h)
+                      object.to_h.each_with_object({}) do |(key, value), values|
+                        values[key.to_s] = value
+                      end
+                    else
+                      { 'id' => object.respond_to?(:id) ? object.id.to_s : '' }
+                    end
+            state.delete(:created_at)
+            state.delete('created_at')
+            state.delete(:updated_at)
+            state.delete('updated_at')
+            state['domain_attributes'] = attribute_dictionaries(object.entity) if object.respond_to?(:entity)
+            state['id'] = object.id.to_s if object.respond_to?(:id)
+            state
+          end.sort_by { |state| state['id'].to_s }
+        end
+
+        def attribute_dictionaries(entity)
+          dictionaries = entity.respond_to?(:attribute_dictionaries) ? entity.attribute_dictionaries : nil
+          return {} unless dictionaries
+
+          enumerable_values(dictionaries).each_with_object({}) do |dictionary, result|
+            name = item_name(dictionary)
+            next if name.empty?
+
+            values = if dictionary.respond_to?(:each_pair)
+                       dictionary.each_pair.each_with_object({}) do |(key, value), hash|
+                         hash[key.to_s] = scrub_volatile(value)
+                       end
+                     else
+                       {}
+                     end
+            result[name] = values
+          end
+        rescue StandardError
+          {}
+        end
+
+        def scrub_volatile(value)
+          case value
+          when Hash
+            value.each_with_object({}) do |(key, item), result|
+              next if %w[created_at updated_at].include?(key.to_s)
+
+              result[key.to_s] = scrub_volatile(item)
+            end
+          when Array
+            value.map { |item| scrub_volatile(item) }
+          else
+            value
+          end
         end
 
         def collection_names(collection)

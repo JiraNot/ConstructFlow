@@ -15,14 +15,14 @@ module JiraNot
                     :board_thickness_mm, :back_thickness_mm, :toe_kick_mm,
                     :left_filler_mm, :right_filler_mm, :top_filler_mm,
                     :carcass_material_id, :front_gap_mm, :mode,
-                    :modules, :fronts, :drawer_sets, :host_object_id
+                    :modules, :fronts, :drawer_sets, :host_object_id, :parameters
 
         def initialize(origin_mm:, width_mm:, height_mm:, depth_mm:, angle_deg: 0,
                        board_thickness_mm: 18, back_thickness_mm: 9, toe_kick_mm: 100,
                        left_filler_mm: 0, right_filler_mm: 0, top_filler_mm: 0,
                        carcass_material_id: 'board.hmr.18', front_gap_mm: 2,
                        mode: 'design', modules: nil, fronts: [], drawer_sets: [],
-                       host_object_id: nil)
+                       host_object_id: nil, parameters: {})
           @origin_mm = normalize_point(origin_mm).freeze
           @angle_deg = Float(angle_deg)
           @width_mm = Float(width_mm)
@@ -38,6 +38,7 @@ module JiraNot
           @front_gap_mm = Float(front_gap_mm)
           @mode = mode.to_s
           @host_object_id = host_object_id&.to_s
+          @parameters = (parameters || {}).each_with_object({}) { |(key, value), result| result[key.to_s] = value }.freeze
           initial_modules = modules.nil? ? default_modules : modules
           @modules = normalize_records(initial_modules).freeze
           @fronts = normalize_records(fronts).freeze
@@ -70,15 +71,36 @@ module JiraNot
         end
 
         def usable_width_mm
-          width_mm - left_filler_mm - right_filler_mm
+          return width_mm - left_filler_mm - right_filler_mm if parameters.empty?
+
+          parametric_parameters(instance_parameters: parameters).fetch('usable_width')
         end
 
         def usable_height_mm
-          height_mm - top_filler_mm
+          return height_mm - top_filler_mm if parameters.empty?
+
+          parametric_parameters(instance_parameters: parameters).fetch('usable_height')
         end
 
         def opening_height_mm
-          [usable_height_mm - toe_kick_mm, 0.0].max
+          return [usable_height_mm - toe_kick_mm, 0.0].max if parameters.empty?
+
+          [parametric_parameters(instance_parameters: parameters).fetch('opening_height'), 0.0].max
+        end
+
+        def parametric_parameters(instance_parameters: {})
+          Core::ParametricObjectEngine.new(
+            type_parameters: {
+              'width' => width_mm, 'height' => height_mm, 'depth' => depth_mm,
+              'left_filler' => left_filler_mm, 'right_filler' => right_filler_mm,
+              'top_filler' => top_filler_mm, 'toe_kick' => toe_kick_mm
+            },
+            formulas: {
+              'usable_width' => 'width - left_filler - right_filler',
+              'usable_height' => 'height - top_filler',
+              'opening_height' => 'usable_height - toe_kick'
+            }
+          ).resolve(instance_parameters: instance_parameters)
         end
 
         def module_width_sum_mm
@@ -195,7 +217,7 @@ module JiraNot
                  top_filler_mm: self.top_filler_mm, carcass_material_id: self.carcass_material_id,
                  front_gap_mm: self.front_gap_mm, mode: self.mode, modules: self.modules,
                  fronts: self.fronts, drawer_sets: self.drawer_sets,
-                 host_object_id: self.host_object_id)
+                 host_object_id: self.host_object_id, parameters: self.parameters)
           self.class.new(
             origin_mm: origin_mm,
             angle_deg: angle_deg,
@@ -214,7 +236,8 @@ module JiraNot
             modules: modules,
             fronts: fronts,
             drawer_sets: drawer_sets,
-            host_object_id: host_object_id
+            host_object_id: host_object_id,
+            parameters: parameters
           )
         end
 
@@ -238,7 +261,8 @@ module JiraNot
             'modules' => modules,
             'fronts' => fronts,
             'drawer_sets' => drawer_sets,
-            'host_object_id' => host_object_id
+            'host_object_id' => host_object_id,
+            'parameters' => parameters
           }
         end
 
@@ -262,7 +286,8 @@ module JiraNot
             modules: data['modules'] || data[:modules],
             fronts: data['fronts'] || data[:fronts] || [],
             drawer_sets: data['drawer_sets'] || data[:drawer_sets] || [],
-            host_object_id: data['host_object_id'] || data[:host_object_id]
+            host_object_id: data['host_object_id'] || data[:host_object_id],
+            parameters: data['parameters'] || data[:parameters] || {}
           )
         end
 

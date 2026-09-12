@@ -12,6 +12,8 @@ module JiraNot
             @invert_in_mm = invert_in_mm
             @invert_out_mm = invert_out_mm
             @input_point = Sketchup::InputPoint.new
+            @interaction = Core::PlanInteractionEngine.new
+            @preview_position_mm = nil
           end
 
           def activate
@@ -20,13 +22,15 @@ module JiraNot
 
           def onMouseMove(_flags, x, y, view)
             @input_point.pick(view, x, y)
+            @preview_position_mm = @input_point.valid? ? snapped_point : nil
             view.invalidate
           end
 
           def draw(view)
             @input_point.draw(view) if @input_point.valid?
+            view.draw_points([point_from_mm(@preview_position_mm)], 8, 1, 'orange') if @preview_position_mm && view.respond_to?(:draw_points)
 
-            if @input_point.valid?
+            if @input_point.valid? && defined?(Core::GhostPreview)
               mesh = Core::GhostPreview.build_manhole_mesh(@input_point.position, @size_mm)
               if mesh
                 Core::GhostPreview.render_ghost(
@@ -39,6 +43,13 @@ module JiraNot
             end
           end
 
+          def getExtents
+            bounds = Geom::BoundingBox.new
+            bounds.add(point_from_mm(@preview_position_mm)) if @preview_position_mm
+            bounds.add(@input_point.position) if @input_point&.valid?
+            bounds
+          end
+
           def onLButtonDown(_flags, x, y, view)
             @input_point.pick(view, x, y)
             return unless @input_point.valid?
@@ -46,7 +57,7 @@ module JiraNot
             result = @runtime.commands.execute(
               'PlaceManhole',
               {
-                location_mm: Core::Units.point_to_mm(@input_point.position),
+                location_mm: @preview_position_mm || snapped_point,
                 size_mm: @size_mm,
                 cover_level_mm: @cover_level_mm,
                 invert_in_mm: @invert_in_mm,
@@ -67,6 +78,30 @@ module JiraNot
           def onCancel(_reason, _view)
             @runtime.active_model.select_tool(nil)
           end
+
+          def deactivate(view)
+            @preview_position_mm = nil
+            view.invalidate if view
+          end
+
+          private
+
+          def snapped_point
+            @interaction.snap(Core::Units.point_to_mm(@input_point.position), references: plan_references)[:point_mm]
+          end
+
+          def plan_references
+            return [] unless defined?(Architecture::PlanReferenceCollector)
+
+            Architecture::PlanReferenceCollector.new(@runtime).paths
+          rescue StandardError
+            []
+          end
+
+          def point_from_mm(point_mm)
+            values = Core::Units.point_from_mm(point_mm)
+            Geom::Point3d.new(*values)
+          end
         end
 
         class RelocateManholeTool
@@ -74,6 +109,8 @@ module JiraNot
             @runtime = runtime
             @manhole_object_id = manhole_object_id.to_s
             @input_point = Sketchup::InputPoint.new
+            @interaction = Core::PlanInteractionEngine.new
+            @preview_position_mm = nil
           end
 
           def activate
@@ -82,13 +119,15 @@ module JiraNot
 
           def onMouseMove(_flags, x, y, view)
             @input_point.pick(view, x, y)
+            @preview_position_mm = @input_point.valid? ? snapped_point : nil
             view.invalidate
           end
 
           def draw(view)
             @input_point.draw(view) if @input_point.valid?
+            view.draw_points([point_from_mm(@preview_position_mm)], 8, 1, 'orange') if @preview_position_mm && view.respond_to?(:draw_points)
 
-            if @input_point.valid?
+            if @input_point.valid? && defined?(Core::GhostPreview)
               mesh = Core::GhostPreview.build_manhole_mesh(@input_point.position, [600, 600])
               if mesh
                 Core::GhostPreview.render_ghost(
@@ -102,6 +141,13 @@ module JiraNot
             end
           end
 
+          def getExtents
+            bounds = Geom::BoundingBox.new
+            bounds.add(point_from_mm(@preview_position_mm)) if @preview_position_mm
+            bounds.add(@input_point.position) if @input_point&.valid?
+            bounds
+          end
+
           def onLButtonDown(_flags, x, y, view)
             @input_point.pick(view, x, y)
             return unless @input_point.valid?
@@ -110,7 +156,7 @@ module JiraNot
               'RelocateManhole',
               {
                 object_id: @manhole_object_id,
-                new_location_mm: Core::Units.point_to_mm(@input_point.position)
+                new_location_mm: @preview_position_mm || snapped_point
               },
               project_id: @runtime.project.project_id
             )
@@ -125,6 +171,30 @@ module JiraNot
 
           def onCancel(_reason, _view)
             @runtime.active_model.select_tool(nil)
+          end
+
+          def deactivate(view)
+            @preview_position_mm = nil
+            view.invalidate if view
+          end
+
+          private
+
+          def snapped_point
+            @interaction.snap(Core::Units.point_to_mm(@input_point.position), references: plan_references)[:point_mm]
+          end
+
+          def plan_references
+            return [] unless defined?(Architecture::PlanReferenceCollector)
+
+            Architecture::PlanReferenceCollector.new(@runtime).paths
+          rescue StandardError
+            []
+          end
+
+          def point_from_mm(point_mm)
+            values = Core::Units.point_from_mm(point_mm)
+            Geom::Point3d.new(*values)
           end
         end
       end

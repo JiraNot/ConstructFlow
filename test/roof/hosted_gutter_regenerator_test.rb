@@ -136,6 +136,7 @@ class HostedGutterRegeneratorTest < Minitest::Test
 
     assert_equal ['gutter-1'], result[:gutter_object_ids]
     assert_equal ['gutter-1'], result[:updated_object_ids]
+    assert_includes result[:events].map { |event| event[:name] }, 'GeometryChanged'
     assert_equal 1, geometry.rebuilt.length
     assert_equal gutter.entity, geometry.rebuilt.first[0]
     assert_equal outlet['id'], repository.read_gutter(gutter.entity).outlet_connector_id
@@ -153,6 +154,8 @@ class HostedGutterRegeneratorTest < Minitest::Test
     assert_equal [outlet['id']], provider.calls
     assert_equal ['dp-1'], result[:downpipe_object_ids]
     assert_equal %w[dp-1 gutter-1], result[:updated_object_ids].sort
+    geometry_events = result[:events].select { |event| event[:name] == 'GeometryChanged' }
+    assert_equal %w[dp-1 gutter-1], geometry_events.map { |event| event[:object_ids].first }.sort
     assert_equal [1000.0, 0.0, 3000.0], runtime.connectors.connector(outlet['id'])['position_mm']
   end
 

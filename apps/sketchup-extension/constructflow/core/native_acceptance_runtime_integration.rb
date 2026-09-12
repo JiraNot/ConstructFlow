@@ -4,7 +4,7 @@ module JiraNot
   module ConstructFlow
     module Core
       module NativeAcceptanceRuntimeIntegration
-        AUTOMATIC_CHECKPOINTS = %w[native_copy_identity observer_new_open scene_tag_persistence].freeze
+        AUTOMATIC_CHECKPOINTS = %w[undo_redo_semantic_geometry native_copy_identity observer_new_open scene_tag_persistence].freeze
 
         module_function
 
@@ -37,6 +37,7 @@ module JiraNot
             runtime.commands.register(
               'RunNativeAcceptancePreflight',
               owner_module: 'constructflow.core',
+              transaction: false,
               validator: ->(_command) { [] }
             ) do |command|
               input = command[:input] || {}
@@ -89,6 +90,7 @@ module JiraNot
             runtime.commands.register(
               'VerifyNativeAcceptanceReopen',
               owner_module: 'constructflow.core',
+              transaction: false,
               validator: ->(_command) { [] }
             ) do |_command|
               result = service.verify_reopen
@@ -110,6 +112,31 @@ module JiraNot
                     presentation_differences: result['presentation_differences'],
                     baseline_fingerprint: evidence['baseline_fingerprint'],
                     current_fingerprint: evidence['current_fingerprint']
+                  }
+                }]
+              }
+            end
+          end
+
+          unless runtime.commands.registered?('VerifyNativeAcceptanceUndoRedo')
+            runtime.commands.register(
+              'VerifyNativeAcceptanceUndoRedo',
+              owner_module: 'constructflow.core',
+              transaction: false,
+              validator: ->(_command) { [] }
+            ) do |_command|
+              result = service.verify_undo_redo
+              warnings = []
+              warnings << result['message'] unless result['passed']
+              {
+                warnings: warnings,
+                events: [{
+                  name: 'NativeAcceptanceUndoRedoVerified',
+                  payload: {
+                    status: result['status'],
+                    passed: result['passed'],
+                    message: result['message'],
+                    differences: result['differences']
                   }
                 }]
               }
@@ -187,6 +214,14 @@ module JiraNot
               )
             rescue StandardError => error
               UI.messagebox("Save/Reopen verification failed:\n#{error.message}")
+            end
+          end
+          submenu.add_item('Verify Undo/Redo Semantic Geometry') do
+            begin
+              result = service.verify_undo_redo
+              UI.messagebox("Undo/Redo verification: #{result['status']}\n#{result['message']}")
+            rescue StandardError => error
+              UI.messagebox("Undo/Redo verification failed:\n#{error.message}")
             end
           end
           submenu.add_item('Show Native Acceptance Status') do

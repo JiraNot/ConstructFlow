@@ -34,6 +34,20 @@ JiraNot::ConstructFlow::Runtime.commands.execute(
 
 A green preflight does **not** pass any native-acceptance checkpoint. It only confirms that the project is prepared enough to begin native verification.
 
+## 0. North-star Plan-driven workflow
+
+Run this short path before the broader checkpoints so the R1 interaction contract is observed end to end:
+
+1. Use `Extensions > ConstructFlow > Edit Project` to set a recognizable project name/code.
+2. Use `Create Level`, then `Show Levels` to confirm the persisted datum and elevation.
+3. Open `Architecture > Open Architecture Plan Editor`, select the created level, and draw a multi-segment Smart Wall.
+4. Hover/select the wall, drag an endpoint, and type `+500 mm` in the VCB. Confirm the temporary dimension and committed wall length.
+5. Use `T` to change wall thickness/type, then place an Opening and Door/Window on the same level.
+6. Confirm the 3D wall and hosted geometry update immediately, then refresh/reopen the Architecture plan and verify the same semantic IDs and positions.
+7. Run the representative downstream steps (rooms, floors/ceilings, structure, roof, drainage, schedules, BOQ and sheets) before recording the relevant checkpoints below.
+
+Record this workflow as native evidence only when each interaction is visibly performed in SketchUp; passing application tests alone is insufficient.
+
 ## 1. Save / close / reopen identity
 
 1. Open `Extensions > ConstructFlow > Native Acceptance > Capture Save/Reopen Baseline`.

@@ -59,6 +59,17 @@ module JiraNot
           clear_width_mm * clear_height_mm
         end
 
+        def parametric_parameters(instance_parameters: {})
+          Core::ParametricObjectEngine.new(
+            type_parameters: { 'width' => width_mm, 'height' => height_mm, 'frame' => frame_width_mm },
+            formulas: {
+              'clear_width' => 'width - (2 * frame)',
+              'clear_height' => 'height - (2 * frame)',
+              'clear_area' => 'clear_width * clear_height'
+            }
+          ).resolve(instance_parameters: instance_parameters)
+        end
+
         def frame_perimeter_mm
           2.0 * (width_mm + height_mm)
         end

@@ -102,7 +102,10 @@ module JiraNot
           ensure_model!
           from = connector(from_connector_id)
           to = connector(to_connector_id)
-          raise ArgumentError, 'cannot connect a connector to itself' if from['id'] == to['id']
+          semantic_errors = MepSemanticContract.validate_connection(
+            from_connector: from, to_connector: to, system: system, metadata: metadata
+          )
+          raise ArgumentError, semantic_errors.join('; ') unless semantic_errors.empty?
           unless compatible?(from['type'], to['type'], system: system)
             raise ArgumentError, "incompatible connectors: #{from['type']} → #{to['type']} for #{system}"
           end
@@ -121,7 +124,7 @@ module JiraNot
             'to_connector_id' => to['id'],
             'system' => system.to_s,
             'state' => 'active',
-            'metadata' => normalize_hash(metadata)
+            'metadata' => MepSemanticContract.normalize_metadata(metadata)
           }
           values = connections
           values[id] = record
