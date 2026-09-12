@@ -301,6 +301,15 @@ module JiraNot
             end
           },
 
+          'trigger_shortcut' => lambda { |runtime, p|
+            code = p['code'].to_s.strip.upcase
+            success = Core::ShortcutManager.execute(code, runtime)
+            unless success
+              HtmlDialogManager.toast("ไม่พบคีย์ลัด: #{code}", level: 'warning')
+            end
+            :no_state_push
+          },
+
           'delete_selected' => lambda { |runtime, _p|
             sel = runtime.active_model.selection
             if sel && sel.any?

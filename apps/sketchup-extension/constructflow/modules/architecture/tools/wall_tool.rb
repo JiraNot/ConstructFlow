@@ -284,6 +284,10 @@ module JiraNot
               view.invalidate
               return
             end
+            if defined?(Core::ShortcutManager) && Core::ShortcutManager.handle_key(key, @runtime, view)
+              return
+            end
+
             return unless key == 16 && !repeat # Shift
 
             @constraint_mode = @constraint_mode == :free ? :orthogonal : :free

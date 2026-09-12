@@ -2,6 +2,7 @@
 
 require_relative 'main'
 require_relative 'core/entity_guard'
+require_relative 'core/shortcut_manager'
 require_relative 'core/geometry_guard'
 require_relative 'core/representation_registry'
 require_relative 'core/representation_runtime_integration'

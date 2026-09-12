@@ -97,6 +97,10 @@ module JiraNot
               view&.invalidate
               return
             end
+
+            if defined?(Core::ShortcutManager) && Core::ShortcutManager.handle_key(key, @runtime, view)
+              return
+            end
           end
 
           def deactivate(view)

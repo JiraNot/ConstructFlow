@@ -54,7 +54,7 @@ module JiraNot
           place_manhole route_pipe place_panelboard route_conduit
           apply_surface place_cabinet place_wardrobe
           place_asset show_costing
-          zoom_selected flip_selected_wall delete_selected
+          zoom_selected flip_selected_wall delete_selected trigger_shortcut
         ].freeze
 
         def test_all_expected_actions_registered

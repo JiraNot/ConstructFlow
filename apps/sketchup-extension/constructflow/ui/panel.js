@@ -416,12 +416,48 @@ const CF = {
     });
   },
 
+  initShortcuts() {
+    let keyBuf = '';
+    let lastKeyTime = 0;
+
+    document.addEventListener('keydown', (e) => {
+      const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+      if (activeTag === 'input' || activeTag === 'select' || activeTag === 'textarea') {
+        if (e.target && e.target.id === 'tool-search' && e.key === 'Enter') {
+          const q = e.target.value.trim().toUpperCase();
+          if (q) {
+            CF.send('trigger_shortcut', { code: q });
+            e.preventDefault();
+          }
+        }
+        return;
+      }
+
+      const key = e.key;
+      if (/^[a-zA-Z]$/.test(key)) {
+        const now = Date.now();
+        if (now - lastKeyTime > 1000) {
+          keyBuf = '';
+        }
+        lastKeyTime = now;
+        keyBuf += key.toUpperCase();
+
+        const known = ['WA', 'WALL', 'CL', 'CO', 'COL', 'BM', 'BEAM', 'DR', 'DOOR', 'WN', 'WIN', 'OP', 'OPN', 'FL', 'CE', 'FD', 'GR', 'CN', 'PI', 'MH', 'CB', 'WR', 'CF', 'IN'];
+        if (known.includes(keyBuf)) {
+          CF.send('trigger_shortcut', { code: keyBuf });
+          keyBuf = '';
+        }
+      }
+    });
+  },
+
   init() {
     CF.initAccordion();
     CF.initPhasePills();
     CF.initCategoryTabs();
     CF.initSearch();
     CF.initBimActions();
+    CF.initShortcuts();
     CF.startPolling();
     CF._renderStatus();
 

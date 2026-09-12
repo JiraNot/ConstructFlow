@@ -3,6 +3,7 @@
 require_relative 'i18n'
 require_relative 'html_dialog'
 require_relative 'ghost_preview'
+require_relative 'shortcut_manager'
 require_relative '../modules/structure/tools/foundation_tool'
 require_relative '../modules/door_window/tools/door_window_tool'
 require_relative '../modules/interior/tools/wardrobe_tool'
@@ -28,8 +29,8 @@ module JiraNot
 
           # Single entry-point button — opens the modern floating panel
           cmd = UI::Command.new('ConstructFlow') { HtmlDialogManager.open_panel(runtime) }
-          cmd.tooltip     = 'เปิด/ปิดแผงควบคุม ConstructFlow'
-          cmd.status_bar_text = 'เปิดแผงควบคุม ConstructFlow BIM'
+          cmd.tooltip     = 'เปิด/ปิดแผงควบคุม ConstructFlow (CF)'
+          cmd.status_bar_text = 'เปิดแผงควบคุม ConstructFlow BIM [คีย์ลัด: CF]'
 
           # Try to use the inspector icon as the panel-launch button
           small = File.join(ICON_DIR, 'inspector.png')
@@ -45,39 +46,44 @@ module JiraNot
         def install_menus(runtime)
           main_menu = UI.menu('Extensions').add_submenu(I18n.t('menu.main'))
 
-          main_menu.add_item('🏗 เปิดแผง ConstructFlow') { HtmlDialogManager.open_panel(runtime) }
+          main_menu.add_item("🏗 เปิดแผง ConstructFlow\tCF") { ShortcutManager.execute('CF', runtime) }
           main_menu.add_separator
 
-          # Keep quick-access menu items for power users
+          # Quick-access menu items with standard Revit/AutoCAD shortcuts
           setup_menu = main_menu.add_submenu('⚙️ ตั้งค่าโครงการ')
-          setup_menu.add_item('Inspector สถานะโครงการ') { runtime.show_inspector }
+          setup_menu.add_item("Inspector สถานะโครงการ\tIN") { ShortcutManager.execute('IN', runtime) }
           setup_menu.add_item('กำหนดระดับชั้น (Level)')  { HtmlDialogManager.open_panel(runtime) }
           setup_menu.add_item('กำหนดเฟส (Phase)')        { HtmlDialogManager.open_panel(runtime) }
 
           struct_menu = main_menu.add_submenu('🏛 โครงสร้าง')
-          struct_menu.add_item('วางฐานราก')  { HtmlDialogManager.open_panel(runtime) }
-          struct_menu.add_item('วางเสาคสล.') { HtmlDialogManager.open_panel(runtime) }
+          struct_menu.add_item("วางเสาคสล. (Column)\tCL") { ShortcutManager.execute('CL', runtime) }
+          struct_menu.add_item("วาดคานโครงสร้าง (Beam)\tBM") { ShortcutManager.execute('BM', runtime) }
+          struct_menu.add_item("ลากเส้นกริด (Grid)\tGR") { ShortcutManager.execute('GR', runtime) }
+          struct_menu.add_item("วางฐานราก (Foundation)\tFD") { ShortcutManager.execute('FD', runtime) }
 
           arch_menu = main_menu.add_submenu('🧱 สถาปัตยกรรม')
-          arch_menu.add_item('วาดผนัง')             { HtmlDialogManager.open_panel(runtime) }
-          arch_menu.add_item('เจาะช่องเปิด')         { HtmlDialogManager.open_panel(runtime) }
-          arch_menu.add_item('ติดตั้งประตู/หน้าต่าง') { HtmlDialogManager.open_panel(runtime) }
-          arch_menu.add_item('สร้างหลังคา')           { HtmlDialogManager.open_panel(runtime) }
+          arch_menu.add_item("วาดผนัง (Wall)\tWA") { ShortcutManager.execute('WA', runtime) }
+          arch_menu.add_item("เจาะช่องเปิด (Opening)\tOP") { ShortcutManager.execute('OP', runtime) }
+          arch_menu.add_item("ติดตั้งประตู (Door)\tDR") { ShortcutManager.execute('DR', runtime) }
+          arch_menu.add_item("ติดตั้งหน้าต่าง (Window)\tWN") { ShortcutManager.execute('WN', runtime) }
+          arch_menu.add_item("สร้างแผ่นพื้น (Floor)\tFL") { ShortcutManager.execute('FL', runtime) }
+          arch_menu.add_item("สร้างฝ้าเพดาน (Ceiling)\tCE") { ShortcutManager.execute('CE', runtime) }
+          arch_menu.add_item('สร้างหลังคา') { HtmlDialogManager.open_panel(runtime) }
 
           mep_menu = main_menu.add_submenu('⚡ ระบบ MEP')
-          mep_menu.add_item('วางบ่อพักน้ำทิ้ง') { HtmlDialogManager.open_panel(runtime) }
-          mep_menu.add_item('วาดเส้นท่อ')         { HtmlDialogManager.open_panel(runtime) }
-          mep_menu.add_item('ติดตั้งตู้ไฟฟ้า')   { HtmlDialogManager.open_panel(runtime) }
-          mep_menu.add_item('เดินท่อร้อยสาย')     { HtmlDialogManager.open_panel(runtime) }
+          mep_menu.add_item("เดินท่อร้อยสาย (Conduit)\tCN") { ShortcutManager.execute('CN', runtime) }
+          mep_menu.add_item("วาดเส้นท่อระบายน้ำ (Pipe)\tPI") { ShortcutManager.execute('PI', runtime) }
+          mep_menu.add_item("วางบ่อพักน้ำทิ้ง (Manhole)\tMH") { ShortcutManager.execute('MH', runtime) }
+          mep_menu.add_item('ติดตั้งตู้ไฟฟ้า') { HtmlDialogManager.open_panel(runtime) }
 
           int_menu = main_menu.add_submenu('🛋 ภายในและตกแต่ง')
-          int_menu.add_item('ปูผิวพื้น')           { HtmlDialogManager.open_panel(runtime) }
-          int_menu.add_item('วางเคาน์เตอร์บิวท์อิน') { HtmlDialogManager.open_panel(runtime) }
-          int_menu.add_item('วางตู้เสื้อผ้า')      { HtmlDialogManager.open_panel(runtime) }
+          int_menu.add_item("วางเคาน์เตอร์บิวท์อิน (Cabinet)\tCB") { ShortcutManager.execute('CB', runtime) }
+          int_menu.add_item("วางตู้เสื้อผ้า (Wardrobe)\tWR") { ShortcutManager.execute('WR', runtime) }
+          int_menu.add_item('ปูผิวพื้น') { HtmlDialogManager.open_panel(runtime) }
 
           lib_menu = main_menu.add_submenu('📦 ไลบรารีและ BOQ')
-          lib_menu.add_item('วางครุภัณฑ์')   { HtmlDialogManager.open_panel(runtime) }
-          lib_menu.add_item('💰 สรุป BOQ') { HtmlDialogManager.open_panel(runtime) }
+          lib_menu.add_item('วางครุภัณฑ์') { HtmlDialogManager.open_panel(runtime) }
+          lib_menu.add_item('💰 สรุป BOQ')  { HtmlDialogManager.open_panel(runtime) }
         end
       end
     end
