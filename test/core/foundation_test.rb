@@ -101,6 +101,40 @@ class ProjectLevelTest < Minitest::Test
     assert_nil level.elevation_mm
     assert_equal 'verify_on_site', level.source_state
   end
+
+  def test_seed_default_level_when_project_has_none
+    # Simulates the attach_model auto-seed behavior from Runtime
+    model = FakeModel.new
+    project = JiraNot::ConstructFlow::Core::ProjectStore.new(model)
+    project.ensure_project!(name: 'New Build')
+    levels = JiraNot::ConstructFlow::Core::LevelRegistry.new(project_store: project)
+
+    # Brand-new project: no levels yet
+    assert_equal 0, levels.size
+
+    # Runtime would call seed_default_level! here
+    levels.register(id: 'level_ground_floor', name: 'Ground Floor', kind: 'floor',
+                    elevation_mm: 0.0, source_state: 'confirmed')
+
+    assert_equal 1, levels.size
+    ground = levels.fetch('level_ground_floor')
+    assert_equal 'Ground Floor', ground.name
+    assert_equal 'floor', ground.kind
+    assert_equal 0.0, ground.elevation_mm
+    assert_equal 'confirmed', ground.source_state
+
+    # Re-open model: level must be persisted
+    reopened_project = JiraNot::ConstructFlow::Core::ProjectStore.new(model)
+    reopened_levels = JiraNot::ConstructFlow::Core::LevelRegistry.new(project_store: reopened_project)
+    assert_equal 1, reopened_levels.size
+    assert_equal 'Ground Floor', reopened_levels.fetch('level_ground_floor').name
+
+    # Second seed attempt raises (idempotency guard via register)
+    assert_raises(ArgumentError) do
+      reopened_levels.register(id: 'level_ground_floor', name: 'Ground Floor', kind: 'floor',
+                               elevation_mm: 0.0, source_state: 'confirmed')
+    end
+  end
 end
 
 class CommandEventTest < Minitest::Test

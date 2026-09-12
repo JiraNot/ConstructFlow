@@ -211,12 +211,14 @@ module JiraNot
           @project = Core::ProjectStore.new(model, id_generator: @ids)
           @project.ensure_project!
           @levels = Core::LevelRegistry.new(project_store: @project)
+          seed_default_level! if @levels.size.zero?
           @smart_objects = Core::SmartObjectManager.new(model: model, levels: @levels, id_generator: @ids, diagnostics: @diagnostics)
           object_count = @smart_objects.scan!
           @connectors.attach_model(model)
           @commands.transaction_manager = Core::TransactionManager.new(model: model)
           @diagnostics.info('model_attached', 'ConstructFlow attached to SketchUp model', project_id: @project.project_id,
-                            smart_objects: object_count, connectors: @connectors.connector_count,
+                            smart_objects: object_count, levels: @levels.size,
+                            connectors: @connectors.connector_count,
                             connections: @connectors.connection_count)
         end
 
@@ -323,11 +325,34 @@ module JiraNot
 
         def show_inspector
           recent = @diagnostics.recent(5).map { |entry| "[#{entry.severity}] #{entry.code}: #{entry.message}" }
-          message = ['ConstructFlow Foundation', "Project: #{@project&.project_id || '-'}", "Working phase: #{@project&.working_phase || '-'}",
-                     "Modules: #{@modules.size}", "Capabilities: #{@capabilities.size}", "Levels: #{@levels&.size || 0}",
-                     "Smart objects: #{@smart_objects&.size || 0}", "Connectors: #{@connectors&.connector_count || 0}",
-                     "Connections: #{@connectors&.connection_count || 0}", '', 'Recent diagnostics:', *(recent.empty? ? ['(none)'] : recent)].join("\n")
-          UI.messagebox(message)
+          level_names = @levels ? @levels.map { |l| "  • #{l.name} (#{l.elevation_mm || 0} mm)" } : []
+          message = [
+            'ConstructFlow Foundation',
+            "Project: #{@project&.project_id || '-'}",
+            "Working phase: #{@project&.working_phase || '-'}",
+            "Modules: #{@modules.size}",
+            "Capabilities: #{@capabilities.size}",
+            "Levels: #{@levels&.size || 0}",
+            *level_names,
+            "Smart objects: #{@smart_objects&.size || 0}",
+            "Connectors: #{@connectors&.connector_count || 0}",
+            "Connections: #{@connectors&.connection_count || 0}",
+            '',
+            'Recent diagnostics:',
+            *(recent.empty? ? ['(none)'] : recent)
+          ].join("\n")
+          UI.messagebox(message, MB_OK)
+        end
+
+        def seed_default_level!
+          @levels.register(
+            id: 'level_ground_floor',
+            name: 'Ground Floor',
+            kind: 'floor',
+            elevation_mm: 0.0,
+            source_state: 'confirmed'
+          )
+          @diagnostics.info('level_seeded', 'Default Ground Floor level created', level_id: 'level_ground_floor')
         end
       end
     end
