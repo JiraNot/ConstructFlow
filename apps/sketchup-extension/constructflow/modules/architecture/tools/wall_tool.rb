@@ -222,7 +222,10 @@ module JiraNot
             end
 
             if @preview && view.respond_to?(:draw_text)
-              label = format('L %.0f mm%s  ΔX %.0f  ΔY %.0f', @preview[:length_mm], axis_label, @preview[:delta_x_mm], @preview[:delta_y_mm])
+              len_m = @preview[:length_mm] / 1000.0
+              dx_m  = @preview[:delta_x_mm] / 1000.0
+              dy_m  = @preview[:delta_y_mm] / 1000.0
+              label = format('L %.2f m%s  ΔX %.2f  ΔY %.2f', len_m, axis_label, dx_m, dy_m)
               # High-contrast text with dark shadow halo
               screen = view.respond_to?(:screen_coords) ? view.screen_coords(@hover_point) : @hover_point
               [-1, 1].each do |ox|

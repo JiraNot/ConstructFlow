@@ -224,13 +224,13 @@ module JiraNot
             if smart_obj.type == 'architecture.wall' && defined?(Architecture::WallRepository)
               definition = Architecture::WallRepository.new.read(entity)
               if definition
-                props['ความยาว (L)'] = "#{definition.length_mm.round} mm"
-                props['ความหนา (T)'] = "#{definition.thickness_mm.round} mm"
-                props['ความสูง (H)'] = "#{definition.height_mm.round} mm"
+                props['ความยาว (L)'] = "#{format('%.2f', definition.length_mm / 1000.0)} m"
+                props['ความหนา (T)'] = "#{format('%.2f', definition.thickness_mm / 1000.0)} m"
+                props['ความสูง (H)'] = "#{format('%.2f', definition.height_mm / 1000.0)} m"
                 area_sqm = (definition.length_mm * definition.height_mm) / 1_000_000.0
                 vol_cum  = (definition.length_mm * definition.height_mm * definition.thickness_mm) / 1_000_000_000.0
                 props['พื้นที่ (Area)'] = "#{area_sqm.round(2)} ตร.ม."
-                props['ปริมาตร (Vol)'] = "#{vol_cum.round(3)} คิว"
+                props['ปริมาตร (Vol)'] = "#{vol_cum.round(3)} คิว (m³)"
                 props['ทิศทาง'] = definition.orientation.to_s
               end
             end

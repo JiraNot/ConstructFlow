@@ -130,12 +130,17 @@ module JiraNot
             if parts.length >= 2
               w = Float(parts[0])
               d = Float(parts[1])
+              w = (w * 1000.0) if w < 10.0 # Support meters (e.g. 0.2, 0.2)
+              d = (d * 1000.0) if d < 10.0
               @section_mm = [w, d]
             elsif parts.length == 1
               val = Float(parts[0])
+              val = (val * 1000.0) if val < 10.0
               @section_mm = [val, val]
             end
-            Sketchup.set_status_text("กำหนดขนาดหน้าตัดเสา: #{@section_mm[0].to_i}x#{@section_mm[1].to_i} mm (คลิกเพื่อวาง)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+            w_m = format('%.2f m', @section_mm[0] / 1000.0)
+            d_m = format('%.2f m', @section_mm[1] / 1000.0)
+            Sketchup.set_status_text("กำหนดขนาดหน้าตัดเสา: #{w_m} x #{d_m} (คลิกเพื่อวาง)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
             view&.invalidate
           rescue StandardError => e
             UI.messagebox("Invalid section dimension: #{e.message}") if defined?(UI) && UI.respond_to?(:messagebox)

@@ -198,6 +198,8 @@ class PlanInteractionEngineTest < Minitest::Test
   end
 
   def test_parses_comma_formatted_distances
+    assert_equal 3500.0, @engine.numeric_distance_mm('3.5')
+    assert_equal 4000.0, @engine.numeric_distance_mm('4')
     assert_equal 3500.0, @engine.numeric_distance_mm('3,500 mm')
     assert_equal 10000.0, @engine.numeric_distance_mm('10,000')
   end

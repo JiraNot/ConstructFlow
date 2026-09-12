@@ -39,6 +39,7 @@ const CF = {
   /* ──────────────────────────────────────────────────────
      2. STATE — project info in status strip & inspector
      ────────────────────────────────────────────────────── */
+  _unit: 'm',
   _state: {
     project_id: '—',
     phase: 'new_construction',
@@ -189,11 +190,11 @@ const CF = {
 
     createLevel() {
       const name = gVal('level-name');
-      const elev = parseFloat(gVal('level-elev') || '0');
+      const elev = toMm(parseFloat(gVal('level-elev') || '0'));
       const kind = gVal('level-kind');
       if (!name.trim()) { CF.toast('กรุณาระบุชื่อระดับชั้น', 'warn'); return; }
       CF.send('create_level', { name, elevation_mm: elev, kind });
-      CF.toast(`สร้างระดับชั้น "${name}" (+${elev} mm)`, 'success');
+      CF.toast(`สร้างระดับชั้น "${name}" (+${(elev/1000).toFixed(2)} m)`, 'success');
     },
 
     setPhase() {
@@ -205,17 +206,17 @@ const CF = {
     // ── STRUCTURE ──
     placeFoundation() {
       const type    = gVal('fnd-type');
-      const w       = parseFloat(gVal('fnd-w') || '1000');
-      const l       = parseFloat(gVal('fnd-l') || '1000');
-      const d       = parseFloat(gVal('fnd-d') || '400');
+      const w       = toMm(parseFloat(gVal('fnd-w') || '1.0'));
+      const l       = toMm(parseFloat(gVal('fnd-l') || '1.0'));
+      const d       = toMm(parseFloat(gVal('fnd-d') || '0.4'));
       CF.send('place_foundation', { foundation_type: type, size_mm: [w, l, d] });
       CF.toast('เลือกตำแหน่งในโมเดลเพื่อวางฐานราก 🏗', 'info');
     },
 
     placeColumn() {
-      const w  = parseFloat(gVal('col-w')  || '200');
-      const d  = parseFloat(gVal('col-d')  || '200');
-      const h  = parseFloat(gVal('col-h')  || '2800');
+      const w  = toMm(parseFloat(gVal('col-w')  || '0.2'));
+      const d  = toMm(parseFloat(gVal('col-d')  || '0.2'));
+      const h  = toMm(parseFloat(gVal('col-h')  || '2.8'));
       const bl = gVal('col-base-level');
       const tl = gVal('col-top-level');
       CF.send('place_column', { section_mm: [w, d], height_mm: h, base_level_id: bl, top_level_id: tl });
@@ -224,17 +225,17 @@ const CF = {
 
     // ── ARCHITECTURE ──
     drawWall() {
-      const thick = parseFloat(gVal('wall-thick') || '100');
-      const ht    = parseFloat(gVal('wall-height') || '2800');
+      const thick = toMm(parseFloat(gVal('wall-thick') || '0.1'));
+      const ht    = toMm(parseFloat(gVal('wall-height') || '2.8'));
       const lvl   = gVal('wall-level');
       CF.send('draw_wall', { thickness_mm: thick, height_mm: ht, level_id: lvl });
       CF.toast('คลิกจุดเริ่มต้น → จุดสิ้นสุดเพื่อวาดผนัง', 'info');
     },
 
     cutOpening() {
-      const w    = parseFloat(gVal('op-w')    || '900');
-      const h    = parseFloat(gVal('op-h')    || '2050');
-      const sill = parseFloat(gVal('op-sill') || '0');
+      const w    = toMm(parseFloat(gVal('op-w')    || '0.9'));
+      const h    = toMm(parseFloat(gVal('op-h')    || '2.05'));
+      const sill = toMm(parseFloat(gVal('op-sill') || '0'));
       CF.send('cut_opening', { width_mm: w, height_mm: h, sill_mm: sill });
       CF.toast('คลิกที่ผนังเพื่อเจาะช่องเปิด', 'info');
     },
@@ -266,21 +267,21 @@ const CF = {
 
     // ── MEP ──
     placeManhole() {
-      const size     = parseFloat(gVal('mh-size') || '600');
+      const size     = toMm(parseFloat(gVal('mh-size') || '0.6'));
       const coverLvl = gVal('mh-cover');
       const invIn    = gVal('mh-invin');
       const invOut   = gVal('mh-invout');
       CF.send('place_manhole', {
         size_mm: [size, size],
-        cover_level_mm: coverLvl ? parseFloat(coverLvl) : null,
-        invert_in_mm:   invIn    ? parseFloat(invIn)    : null,
-        invert_out_mm:  invOut   ? parseFloat(invOut)   : null,
+        cover_level_mm: coverLvl ? toMm(parseFloat(coverLvl)) : null,
+        invert_in_mm:   invIn    ? toMm(parseFloat(invIn))    : null,
+        invert_out_mm:  invOut   ? toMm(parseFloat(invOut))   : null,
       });
       CF.toast('คลิกในโมเดลเพื่อวางบ่อพัก', 'info');
     },
 
     routePipe() {
-      const dia = parseFloat(gVal('pipe-dia') || '100');
+      const dia = toMm(parseFloat(gVal('pipe-dia') || '0.1'));
       const sys = gVal('pipe-sys');
       CF.send('route_pipe', { diameter_mm: dia, system: sys });
       CF.toast('วาดเส้นท่อในโมเดล (คลิกหลายจุด)', 'info');
@@ -302,7 +303,7 @@ const CF = {
     },
 
     routeConduit() {
-      const cz  = parseFloat(gVal('cond-cz')  || '2600');
+      const cz  = toMm(parseFloat(gVal('cond-cz')  || '2.6'));
       const stg = gVal('cond-stg');
       CF.send('route_conduit', { ceiling_z_mm: cz, strategy: stg });
       CF.toast('วาดเส้นท่อสายในโมเดล', 'info');
@@ -451,6 +452,59 @@ const CF = {
     });
   },
 
+  initUnitToggle() {
+    const btnM = el('unit-btn-m');
+    const btnMm = el('unit-btn-mm');
+    if (!btnM || !btnMm) return;
+
+    const idsToConvert = [
+      'level-elev', 'fnd-w', 'fnd-l', 'fnd-d',
+      'col-w', 'col-d', 'col-h', 'wall-thick', 'wall-height',
+      'op-w', 'op-h', 'op-sill', 'mh-size', 'mh-cover',
+      'mh-invin', 'mh-invout', 'pipe-dia', 'cond-cz',
+      'cab-w', 'cab-h', 'cab-d', 'ward-w', 'ward-h', 'ward-d'
+    ];
+
+    const setUnit = (newUnit) => {
+      if (CF._unit === newUnit) return;
+      const oldUnit = CF._unit;
+      CF._unit = newUnit;
+
+      btnM.classList.toggle('active', newUnit === 'm');
+      btnMm.classList.toggle('active', newUnit === 'mm');
+
+      // Convert all input values
+      idsToConvert.forEach(id => {
+        const input = el(id);
+        if (!input || input.value === '') return;
+        const val = parseFloat(input.value);
+        if (isNaN(val)) return;
+
+        if (newUnit === 'm') {
+          input.value = (val / 1000.0).toFixed(val % 1000 === 0 ? 2 : (val < 100 ? 3 : 2));
+          input.step = '0.05';
+        } else {
+          input.value = Math.round(val * 1000.0);
+          input.step = '10';
+        }
+      });
+
+      // Update unit labels
+      document.querySelectorAll('.unit-lbl').forEach(lbl => {
+        if (newUnit === 'm') {
+          lbl.textContent = lbl.textContent.replace('(มม.)', '(ม.)').replace('(mm)', '(ม.)');
+        } else {
+          lbl.textContent = lbl.textContent.replace('(ม.)', '(มม.)').replace('(m)', '(มม.)');
+        }
+      });
+
+      CF.toast(`สลับหน่วยวัดเป็น: ${newUnit === 'm' ? 'เมตร (Meters)' : 'มิลลิเมตร (Millimeters)'}`, 'info');
+    };
+
+    btnM.addEventListener('click', () => setUnit('m'));
+    btnMm.addEventListener('click', () => setUnit('mm'));
+  },
+
   initTooltips() {
     const tip = el('cf-tooltip');
     if (!tip) return;
@@ -543,6 +597,7 @@ const CF = {
     CF.initShortcuts();
     CF.initTooltips();
     CF.initHelpModal();
+    CF.initUnitToggle();
     CF.startPolling();
     CF._renderStatus();
 
@@ -561,6 +616,14 @@ const CF = {
 };
 
 /* ── Helpers ──────────────────────────────────────────────── */
+function toMm(val) {
+  if (isNaN(val)) return 0;
+  return CF._unit === 'm' ? val * 1000.0 : val;
+}
+function fromMm(val) {
+  if (isNaN(val)) return 0;
+  return CF._unit === 'm' ? val / 1000.0 : val;
+}
 function el(id)      { return document.getElementById(id); }
 function gVal(id)    { const e = el(id); return e ? e.value : ''; }
 function setVal(id, v) {
