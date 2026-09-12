@@ -186,4 +186,19 @@ class PlanInteractionEngineTest < Minitest::Test
     assert_equal 'invalid', invalid[:state]
     assert_equal ['outside host'], invalid[:errors]
   end
+
+  def test_supports_explicit_axis_lock_constraints
+    red = @engine.segment_preview([0, 0, 0], [500, 300, 0], mode: :red)
+    green = @engine.segment_preview([0, 0, 0], [500, 300, 0], mode: :green)
+    blue = @engine.segment_preview([0, 0, 0], [500, 300, 400], mode: :blue)
+
+    assert_equal [500.0, 0.0, 0.0], red[:finish_mm]
+    assert_equal [0.0, 300.0, 0.0], green[:finish_mm]
+    assert_equal [0.0, 0.0, 400.0], blue[:finish_mm]
+  end
+
+  def test_parses_comma_formatted_distances
+    assert_equal 3500.0, @engine.numeric_distance_mm('3,500 mm')
+    assert_equal 10000.0, @engine.numeric_distance_mm('10,000')
+  end
 end

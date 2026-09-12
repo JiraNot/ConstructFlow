@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../../../core/plan_interaction_engine"
+
 module JiraNot
   module ConstructFlow
     module Architecture
@@ -28,6 +30,7 @@ module JiraNot
             @origin_mm = nil
             @preview_definition = nil
             @numeric_length_mm = nil
+            @locked_axis = nil
           end
 
           def activate
@@ -224,6 +227,29 @@ module JiraNot
             @numeric_length_mm = typed_stretch_length(text)
             label = text.to_s.strip.start_with?('+', '-') ? 'relative' : 'absolute'
             Sketchup.set_status_text("ConstructFlow Plan Wall Edit: #{@numeric_length_mm.round(1)} mm (#{label})", SB_PROMPT)
+
+            if @wall && @action == :stretch && @endpoint_index
+              path = @definition.centerline_path_mm
+              anchor_index = @endpoint_index.zero? ? 1 : @endpoint_index - 1
+              anchor = path.fetch(anchor_index)
+              preview = @interaction.segment_preview(
+                anchor, path[@endpoint_index], mode: @constraint_mode, length_mm: @numeric_length_mm
+              )
+              new_location_pt = @definition.location_path_point_from_centerline(preview[:finish_mm], @endpoint_index)
+
+              result = @runtime.commands.execute(
+                'StretchWallEndpoint',
+                { object_id: @wall.id, endpoint_index: @endpoint_index, point_mm: new_location_pt },
+                project_id: @runtime.project.project_id
+              )
+              if result[:status] == 'success'
+                refresh_plan
+                Sketchup.set_status_text("ขยายผนังเป็น #{@numeric_length_mm.round(1)} mm สำเร็จ", SB_PROMPT)
+                clear_edit
+              else
+                UI.messagebox(Array(result[:errors]).join("\n"))
+              end
+            end
             view.invalidate
           rescue ArgumentError => error
             UI.messagebox(error.message)
@@ -246,6 +272,27 @@ module JiraNot
               else
                 UI.messagebox(Array(result[:errors]).join("\n"))
               end
+              view.invalidate
+              return
+            end
+            if (key == 39 || (defined?(VK_RIGHT) && key == VK_RIGHT)) && !repeat
+              @locked_axis = @locked_axis == :red ? nil : :red
+              Sketchup.set_status_text(@locked_axis ? '🔒 ล็อคแกนแดง X (Red Axis Locked)' : 'ปลดล็อคแกน', SB_PROMPT)
+              view.invalidate
+              return
+            elsif (key == 37 || (defined?(VK_LEFT) && key == VK_LEFT)) && !repeat
+              @locked_axis = @locked_axis == :green ? nil : :green
+              Sketchup.set_status_text(@locked_axis ? '🔒 ล็อคแกนเขียว Y (Green Axis Locked)' : 'ปลดล็อคแกน', SB_PROMPT)
+              view.invalidate
+              return
+            elsif (key == 38 || (defined?(VK_UP) && key == VK_UP)) && !repeat
+              @locked_axis = @locked_axis == :blue ? nil : :blue
+              Sketchup.set_status_text(@locked_axis ? '🔒 ล็อคแกนน้ำเงิน Z (Blue Axis Locked)' : 'ปลดล็อคแกน', SB_PROMPT)
+              view.invalidate
+              return
+            elsif (key == 40 || (defined?(VK_DOWN) && key == VK_DOWN)) && !repeat
+              @locked_axis = nil
+              Sketchup.set_status_text('ปลดล็อคแกน', SB_PROMPT)
               view.invalidate
               return
             end

@@ -61,6 +61,12 @@ module JiraNot
             else
               [start_point[0], finish_point[1], start_point[2]].freeze
             end
+          when :axis_x, :x, :red
+            [finish_point[0], start_point[1], start_point[2]].freeze
+          when :axis_y, :y, :green
+            [start_point[0], finish_point[1], start_point[2]].freeze
+          when :axis_z, :z, :blue
+            [start_point[0], start_point[1], finish_point[2]].freeze
           when :parallel, :perpendicular
             raise ArgumentError, "#{mode} constraint requires reference segment" unless @reference_segment
 
@@ -83,7 +89,7 @@ module JiraNot
           snapped = snap(finish_mm, references: references)
           @reference_segment = reference_segment && reference_segment.map { |point| normalize_point(point) }
           constrained = constrain_segment(start_mm, snapped[:point_mm], mode: mode)
-          constrained = constrain_length(start_mm, constrained, length_mm) unless length_mm.nil?
+          constrained = constrain_length(start_mm, constrained, length_mm, mode: mode) unless length_mm.nil?
           @reference_segment = nil
           dx = constrained[0] - Float(start_mm[0])
           dy = constrained[1] - Float(start_mm[1])
@@ -99,7 +105,7 @@ module JiraNot
         end
 
         def numeric_distance_mm(value)
-          text = value.to_s.strip.downcase
+          text = value.to_s.strip.downcase.delete(',')
           match = /\A([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(mm|cm|m|in|ft)?\z/.match(text)
           raise ArgumentError, "invalid numeric distance: #{value}" unless match
 
@@ -249,13 +255,20 @@ module JiraNot
           metadata
         end
 
-        def constrain_length(start_mm, finish_mm, length_mm)
+        def constrain_length(start_mm, finish_mm, length_mm, mode: :orthogonal)
           length = Float(length_mm)
           raise ArgumentError, 'segment length must be greater than zero' unless length.positive?
           dx = finish_mm[0] - start_mm[0]
           dy = finish_mm[1] - start_mm[1]
           current = Math.sqrt((dx * dx) + (dy * dy))
-          return finish_mm if current <= 0.001
+          if current <= 0.001
+            case mode.to_sym
+            when :axis_y, :y, :green
+              return [Float(start_mm[0]), start_mm[1] + length, Float(start_mm[2])].freeze
+            else
+              return [start_mm[0] + length, Float(start_mm[1]), Float(start_mm[2])].freeze
+            end
+          end
 
           [start_mm[0] + (dx * length / current), start_mm[1] + (dy * length / current), Float(start_mm[2])].freeze
         end
