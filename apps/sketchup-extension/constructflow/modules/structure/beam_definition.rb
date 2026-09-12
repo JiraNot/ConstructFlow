@@ -7,10 +7,11 @@ module JiraNot
         SCHEMA_VERSION = 1
 
         attr_reader :path_mm, :section_mm, :base_level_id, :base_offset_mm,
-                    :base_elevation_mm, :material, :engineering_status
+                    :base_elevation_mm, :material, :engineering_status, :anchor, :profile_code
 
         def initialize(path_mm:, section_mm: [200, 300], base_level_id: nil, base_offset_mm: 0,
-                       base_elevation_mm:, material: 'reinforced_concrete', engineering_status: 'preliminary')
+                       base_elevation_mm:, material: 'reinforced_concrete', engineering_status: 'preliminary',
+                       anchor: :top_center, profile_code: nil)
           @path_mm = normalize_path(path_mm).freeze
           @section_mm = normalize_section(section_mm).freeze
           @base_level_id = base_level_id&.to_s
@@ -18,6 +19,8 @@ module JiraNot
           @base_elevation_mm = Float(base_elevation_mm)
           @material = material.to_s
           @engineering_status = engineering_status.to_s
+          @anchor = (anchor || :top_center).to_sym
+          @profile_code = profile_code&.to_s
           freeze
         end
 
@@ -68,7 +71,9 @@ module JiraNot
             'schema_version' => SCHEMA_VERSION, 'path_mm' => path_mm, 'section_mm' => section_mm,
             'base_level_id' => base_level_id, 'base_offset_mm' => base_offset_mm,
             'base_elevation_mm' => base_elevation_mm, 'material' => material,
-            'engineering_status' => engineering_status
+            'engineering_status' => engineering_status,
+            'anchor' => anchor.to_s,
+            'profile_code' => profile_code
           }
         end
 
@@ -78,7 +83,9 @@ module JiraNot
               base_level_id: data['base_level_id'] || data[:base_level_id], base_offset_mm: data['base_offset_mm'] || data[:base_offset_mm] || 0,
               base_elevation_mm: data['base_elevation_mm'] || data[:base_elevation_mm] || 0,
               material: data['material'] || data[:material] || 'reinforced_concrete',
-              engineering_status: data['engineering_status'] || data[:engineering_status] || 'preliminary')
+              engineering_status: data['engineering_status'] || data[:engineering_status] || 'preliminary',
+              anchor: data['anchor'] || data[:anchor] || :top_center,
+              profile_code: data['profile_code'] || data[:profile_code])
         end
 
         private

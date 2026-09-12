@@ -183,6 +183,22 @@
         <button class="btn btn-primary" data-action="createLevel">➕ สร้างระดับชั้น</button>
       </div>
 
+            <!-- Laser Level Tool -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🔴</div>
+          <div>
+            <div class="tool-card-title">เลเซอร์วัดระดับ (Laser Level Tool)</div>
+            <div class="tool-card-sub">วัดความสูง Z เทียบระดับอ้างอิง Benchmark ±0.00 ม. [LS]</div>
+          </div>
+        </div>
+        <div class="laser-status-badge">
+          <div class="laser-pulse"></div>
+          <span>พร้อมฉายแสงเลเซอร์แนวนอนเพื่อตรวจระดับและเทียบความสูง</span>
+        </div>
+        <button class="btn btn-secondary" data-action="useLaserLevel" data-tip-title="🔴 เลเซอร์วัดระดับ (Laser Level)" data-tip-sc="LS" data-tip-desc="ฉายเส้นเลเซอร์แนวนอน วัดระดับ Z แบบ Realtime เทียบ Benchmark" data-tip-mouse="คลิกจุดแรก: กำหนดระดับ Benchmark | ขยับเมาส์: อ่านค่า ΔZ" data-tip-keys="Esc: ยกเลิก Benchmark / ออกจากเครื่องมือ">🔴 เปิดเลเซอร์วัดระดับ <span class="shortcut-badge">LS</span></button>
+      </div>
+
       <!-- Phase -->
       <div class="tool-card">
         <div class="tool-card-header">
@@ -262,22 +278,75 @@
         <div class="tool-card-header">
           <div class="tool-card-icon">🏛</div>
           <div>
-            <div class="tool-card-title">เสาคอนกรีต</div>
-            <div class="tool-card-sub">RC Column</div>
+            <div class="tool-card-title">เสาโครงสร้าง (RC & Steel Column)</div>
+            <div class="tool-card-sub">RC Column & มอก. Structural Steel [CL]</div>
           </div>
         </div>
+        <div class="field">
+          <label>หน้าตัดมาตรฐาน (มอก. / Thai Standard)</label>
+          <select id="col-preset">
+            <optgroup label="── เสา ค.ส.ล. (RC Column) ──">
+              <option value="RC-C-0.20x0.20" data-w="0.20" data-d="0.20" selected>เสา ค.ส.ล. C1 0.20 x 0.20 ม.</option>
+              <option value="RC-C-0.25x0.25" data-w="0.25" data-d="0.25">เสา ค.ส.ล. C2 0.25 x 0.25 ม.</option>
+              <option value="RC-C-0.30x0.30" data-w="0.30" data-d="0.30">เสา ค.ส.ล. C3 0.30 x 0.30 ม.</option>
+              <option value="RC-C-0.35x0.35" data-w="0.35" data-d="0.35">เสา ค.ส.ล. C4 0.35 x 0.35 ม.</option>
+              <option value="RC-C-0.40x0.40" data-w="0.40" data-d="0.40">เสา ค.ส.ล. C5 0.40 x 0.40 ม.</option>
+              <option value="RC-C-0.15x0.15" data-w="0.15" data-d="0.15">เสาเอ็น ค.ส.ล. 0.15 x 0.15 ม.</option>
+            </optgroup>
+            <optgroup label="── เหล็กกล่อง มอก. 107 (SHS Tube) ──">
+              <option value="SHS-100x100x3.2" data-w="0.10" data-d="0.10">เหล็กกล่อง 100x100x3.2 มม. (9.4 kg/m)</option>
+              <option value="SHS-125x125x4.5" data-w="0.125" data-d="0.125">เหล็กกล่อง 125x125x4.5 มม. (16.4 kg/m)</option>
+              <option value="SHS-150x150x4.5" data-w="0.15" data-d="0.15">เหล็กกล่อง 150x150x4.5 มม. (19.9 kg/m)</option>
+              <option value="SHS-200x200x4.5" data-w="0.20" data-d="0.20">เหล็กกล่อง 200x200x4.5 มม. (27.0 kg/m)</option>
+            </optgroup>
+            <optgroup label="── เหล็กเอชบีม มอก. 1227 (H-Beam) ──">
+              <option value="H-150x150" data-w="0.15" data-d="0.15">H 150x150x7x10 (31.5 kg/m)</option>
+              <option value="H-200x200" data-w="0.20" data-d="0.20">H 200x200x8x12 (49.9 kg/m)</option>
+              <option value="H-250x250" data-w="0.25" data-d="0.25">H 250x250x9x14 (72.4 kg/m)</option>
+              <option value="H-300x300" data-w="0.30" data-d="0.30">H 300x300x10x15 (94.0 kg/m)</option>
+            </optgroup>
+            <optgroup label="── ท่อกลม มอก. 107 (CHS Pipe) ──">
+              <option value="PIPE-3"" data-w="0.089" data-d="0.089">ท่อกลม 3" Ø89.1x3.2 มม. (6.78 kg/m)</option>
+              <option value="PIPE-4"" data-w="0.114" data-d="0.114">ท่อกลม 4" Ø114.3x3.5 มม. (9.56 kg/m)</option>
+              <option value="PIPE-5"" data-w="0.140" data-d="0.140">ท่อกลม 5" Ø139.8x4.0 มม. (13.4 kg/m)</option>
+              <option value="PIPE-6"" data-w="0.165" data-d="0.165">ท่อกลม 6" Ø165.2x4.5 มม. (17.8 kg/m)</option>
+            </optgroup>
+            <option value="custom">-- กำหนดขนาดเอง (Custom) --</option>
+          </select>
+        </div>
+
+        <!-- 9-Point Anchor Alignment -->
+        <div class="anchor-matrix-container">
+          <div class="anchor-matrix-label">
+            <strong>จุดอ้างอิงตำแหน่งเสา (Anchor)</strong>
+            <span id="col-anchor-lbl">ตรงกลาง (Center)</span>
+          </div>
+          <div class="anchor-grid-3x3" id="col-anchor-grid" data-target="col-anchor">
+            <button type="button" class="anchor-btn" data-anchor="top_left" title="บน-ซ้าย (Top-Left)"></button>
+            <button type="button" class="anchor-btn" data-anchor="top_center" title="บน-กลาง (Top-Center)"></button>
+            <button type="button" class="anchor-btn" data-anchor="top_right" title="บน-ขวา (Top-Right)"></button>
+            <button type="button" class="anchor-btn" data-anchor="middle_left" title="กลาง-ซ้าย (Middle-Left)"></button>
+            <button type="button" class="anchor-btn active" data-anchor="center" title="จุดศูนย์กลาง (Center)"></button>
+            <button type="button" class="anchor-btn" data-anchor="middle_right" title="กลาง-ขวา (Middle-Right)"></button>
+            <button type="button" class="anchor-btn" data-anchor="bottom_left" title="ล่าง-ซ้าย (Bottom-Left)"></button>
+            <button type="button" class="anchor-btn" data-anchor="bottom_center" title="ล่าง-กลาง (Bottom-Center)"></button>
+            <button type="button" class="anchor-btn" data-anchor="bottom_right" title="ล่าง-ขวา (Bottom-Right)"></button>
+          </div>
+          <input type="hidden" id="col-anchor" value="center">
+        </div>
+
         <div class="field-row cols-3">
           <div class="field">
             <label class="unit-lbl">กว้าง (ม.)</label>
-            <input type="number" id="col-w" value="200" step="25">
+            <input type="number" id="col-w" value="0.20" step="0.05">
           </div>
           <div class="field">
             <label class="unit-lbl">ลึก (ม.)</label>
-            <input type="number" id="col-d" value="200" step="25">
+            <input type="number" id="col-d" value="0.20" step="0.05">
           </div>
           <div class="field">
             <label class="unit-lbl">สูง (ม.)</label>
-            <input type="number" id="col-h" value="2800" step="100">
+            <input type="number" id="col-h" value="2.80" step="0.10">
           </div>
         </div>
         <div class="field-row cols-2">
@@ -294,7 +363,7 @@
             </select>
           </div>
         </div>
-        <button class="btn btn-primary" data-action="placeColumn" data-tip-title="🏛 เสาคอนกรีต (RC Column)" data-tip-sc="CL" data-tip-desc="วางเสาโครงสร้างอิงระดับชั้นฐานและยอดเสา" data-tip-mouse="เลื่อนเมาส์ชี้ตำแหน่ง ➔ คลิกเพื่อวางเสา" data-tip-keys="R: หมุนหน้าตัด 90° | พิมพ์ตัวเลข: กำหนดขนาดเสา (เช่น 400, 400)">🏛 วางเสา <span class="shortcut-badge">CL</span></button>
+        <button class="btn btn-primary" data-action="placeColumn" data-tip-title="🏛 เสาโครงสร้าง (RC & Steel Column)" data-tip-sc="CL" data-tip-desc="วางเสาโครงสร้างอิงระดับชั้นฐาน-ยอด พร้อมล็อก 9-Point Anchor" data-tip-mouse="เลื่อนเมาส์ชี้ตำแหน่ง ➔ คลิกเพื่อวางเสา" data-tip-keys="R: หมุนหน้าตัด 90° | พิมพ์ตัวเลข: กำหนดขนาดเสา (เช่น 0.4, 0.4)">🏛 วางเสา <span class="shortcut-badge">CL</span></button>
       </div>
 
       <!-- Beam -->
@@ -302,10 +371,72 @@
         <div class="tool-card-header">
           <div class="tool-card-icon">🏗</div>
           <div>
-            <div class="tool-card-title">คานโครงสร้าง</div>
-            <div class="tool-card-sub">Structural Beam [BM]</div>
+            <div class="tool-card-title">คานโครงสร้าง (Structural Beam)</div>
+            <div class="tool-card-sub">RC Beam & มอก. Steel [BM]</div>
           </div>
         </div>
+        <div class="field">
+          <label>หน้าตัดมาตรฐาน (มอก. / Thai Standard)</label>
+          <select id="bm-preset">
+            <optgroup label="── คาน ค.ส.ล. (RC Beam) ──">
+              <option value="RC-B-0.20x0.40" data-w="0.20" data-d="0.40" selected>คาน ค.ส.ล. B2 0.20 x 0.40 ม.</option>
+              <option value="RC-B-0.15x0.30" data-w="0.15" data-d="0.30">คาน ค.ส.ล. B1 0.15 x 0.30 ม.</option>
+              <option value="RC-B-0.20x0.50" data-w="0.20" data-d="0.50">คาน ค.ส.ล. B3 0.20 x 0.50 ม.</option>
+              <option value="RC-B-0.25x0.50" data-w="0.25" data-d="0.50">คาน ค.ส.ล. B4 0.25 x 0.50 ม.</option>
+              <option value="RC-B-0.25x0.60" data-w="0.25" data-d="0.60">คาน ค.ส.ล. B5 0.25 x 0.60 ม.</option>
+              <option value="RC-B-0.30x0.60" data-w="0.30" data-d="0.60">คาน ค.ส.ล. B6 0.30 x 0.60 ม.</option>
+              <option value="RC-GB-0.20x0.40" data-w="0.20" data-d="0.40">คานคอดิน GB 0.20 x 0.40 ม.</option>
+              <option value="RC-GB-0.20x0.50" data-w="0.20" data-d="0.50">คานคอดิน GB 0.20 x 0.50 ม.</option>
+            </optgroup>
+            <optgroup label="── ไวด์แฟลงจ์ มอก. 1227 (Wide Flange) ──">
+              <option value="WF-150x75" data-w="0.075" data-d="0.15">WF 150x75x5x7 (14.0 kg/m)</option>
+              <option value="WF-200x100" data-w="0.10" data-d="0.20">WF 200x100x5.5x8 (21.3 kg/m)</option>
+              <option value="WF-250x125" data-w="0.125" data-d="0.25">WF 250x125x6x9 (29.6 kg/m)</option>
+              <option value="WF-300x150" data-w="0.15" data-d="0.30">WF 300x150x6.5x9 (36.7 kg/m)</option>
+              <option value="WF-350x175" data-w="0.175" data-d="0.35">WF 350x175x7x11 (49.4 kg/m)</option>
+              <option value="WF-400x200" data-w="0.20" data-d="0.40">WF 400x200x8x13 (66.0 kg/m)</option>
+            </optgroup>
+            <optgroup label="── แป/จันทันตัวซี มอก. 1228 (Lip C) ──">
+              <option value="C-75x45x15x2.3" data-w="0.045" data-d="0.075">แปตัวซี C 75x45x15x2.3 มม. (2.87 kg/m)</option>
+              <option value="C-100x50x20x3.2" data-w="0.05" data-d="0.10">จันทันซี C 100x50x20x3.2 มม. (5.06 kg/m)</option>
+              <option value="C-125x50x20x3.2" data-w="0.05" data-d="0.125">จันทันซี C 125x50x20x3.2 มม. (5.69 kg/m)</option>
+              <option value="C-150x50x20x3.2" data-w="0.05" data-d="0.15">จันทันซี C 150x50x20x3.2 มม. (6.32 kg/m)</option>
+              <option value="C-150x65x20x3.2" data-w="0.065" data-d="0.15">จันทันซี C 150x65x20x3.2 มม. (7.07 kg/m)</option>
+            </optgroup>
+            <optgroup label="── เหล็กกล่องแบน มอก. 107 (RHS) ──">
+              <option value="RHS-100x50x3.2" data-w="0.05" data-d="0.10">กล่องแบน RHS 100x50x3.2 มม. (6.89 kg/m)</option>
+              <option value="RHS-125x75x3.2" data-w="0.075" data-d="0.125">กล่องแบน RHS 125x75x3.2 มม. (9.40 kg/m)</option>
+              <option value="RHS-150x50x3.2" data-w="0.05" data-d="0.15">กล่องแบน RHS 150x50x3.2 มม. (9.40 kg/m)</option>
+              <option value="RHS-150x75x4.5" data-w="0.075" data-d="0.15">กล่องแบน RHS 150x75x4.5 มม. (14.8 kg/m)</option>
+            </optgroup>
+            <optgroup label="── เหล็กรางน้ำ มอก. 1227 (Channel) ──">
+              <option value="CH-100x50x5x7.5" data-w="0.05" data-d="0.10">รางน้ำ CH 100x50x5x7.5 (9.36 kg/m)</option>
+              <option value="CH-150x75x6.5x10" data-w="0.075" data-d="0.15">รางน้ำ CH 150x75x6.5x10 (18.6 kg/m)</option>
+            </optgroup>
+            <option value="custom">-- กำหนดขนาดเอง (Custom) --</option>
+          </select>
+        </div>
+
+        <!-- 9-Point Anchor Alignment -->
+        <div class="anchor-matrix-container">
+          <div class="anchor-matrix-label">
+            <strong>จุดอ้างอิงหลังคาน (Top Anchor)</strong>
+            <span id="bm-anchor-lbl">หลังคานแนวกึ่งกลาง (Top-Center)</span>
+          </div>
+          <div class="anchor-grid-3x3" id="bm-anchor-grid" data-target="bm-anchor">
+            <button type="button" class="anchor-btn" data-anchor="top_left" title="หลังคานริมซ้าย (Top-Left)"></button>
+            <button type="button" class="anchor-btn active" data-anchor="top_center" title="หลังคานกึ่งกลาง (Top-Center: เสมอระดับพื้น)"></button>
+            <button type="button" class="anchor-btn" data-anchor="top_right" title="หลังคานริมขวา (Top-Right)"></button>
+            <button type="button" class="anchor-btn" data-anchor="middle_left" title="กึ่งกลางริมซ้าย (Middle-Left)"></button>
+            <button type="button" class="anchor-btn" data-anchor="center" title="ศูนย์กลางคาน (Center)"></button>
+            <button type="button" class="anchor-btn" data-anchor="middle_right" title="กึ่งกลางริมขวา (Middle-Right)"></button>
+            <button type="button" class="anchor-btn" data-anchor="bottom_left" title="ท้องคานริมซ้าย (Bottom-Left)"></button>
+            <button type="button" class="anchor-btn" data-anchor="bottom_center" title="ท้องคานกึ่งกลาง (Bottom-Center)"></button>
+            <button type="button" class="anchor-btn" data-anchor="bottom_right" title="ท้องคานริมขวา (Bottom-Right)"></button>
+          </div>
+          <input type="hidden" id="bm-anchor" value="top_center">
+        </div>
+
         <div class="field-row cols-2">
           <div class="field">
             <label class="unit-lbl">กว้าง (ม.)</label>
@@ -322,7 +453,7 @@
             <option value="">-- อัตโนมัติ (Active Level) --</option>
           </select>
         </div>
-        <button class="btn btn-primary" data-action="drawBeam" data-tip-title="🏗 วาดคานโครงสร้าง (Structural Beam)" data-tip-sc="BM" data-tip-desc="วาดแนวคานเชื่อมต่อระหว่างเสาหรือกริด" data-tip-mouse="คลิกจุดเริ่ม ➔ เลื่อนเมาส์ ➔ คลิกจุดจบ" data-tip-keys="ลูกศร: ล็อกแกน | ตัวเลข: กำหนดความยาว">🏗 เริ่มวาดคาน <span class="shortcut-badge">BM</span></button>
+        <button class="btn btn-primary" data-action="drawBeam" data-tip-title="🏗 วาดคานโครงสร้าง (Structural Beam)" data-tip-sc="BM" data-tip-desc="วาดแนวคานเชื่อมต่อระหว่างเสาหรือกริด พร้อมระบบล็อกแนวเสมอระดับพื้น" data-tip-mouse="คลิกจุดเริ่ม ➔ เลื่อนเมาส์ ➔ คลิกจุดจบ" data-tip-keys="ลูกศร: ล็อกแกน | ตัวเลข: กำหนดความยาว">🏗 เริ่มวาดคาน <span class="shortcut-badge">BM</span></button>
       </div>
 
       <!-- Grid -->
@@ -584,6 +715,139 @@
           </select>
         </div>
         <button class="btn btn-primary" data-action="drawCeiling" data-tip-title="☁️ วาดฝ้าเพดาน (Ceiling)" data-tip-sc="CE" data-tip-desc="วาดระนาบฝ้าเพดานพร้อมโครงคร่าว C-Line" data-tip-mouse="คลิกจุดขอบเขตห้องเพื่อสร้างแนวฝ้า" data-tip-keys="Esc: ยกเลิก">☁️ วาดฝ้าเพดาน <span class="shortcut-badge">CE</span></button>
+      </div>
+
+          <!-- Profile Sweep / Molding (ProfileBuilder Replacement) -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">➰</div>
+          <div>
+            <div class="tool-card-title">บัวสถาปัตย์ / ราวมือจับ (Profile Sweep)</div>
+            <div class="tool-card-sub">บัวพื้น, บัวฝ้า, ซับวงกบ, ราวมือจับ [PF]</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>รูปแบบหน้าตัดบัว (Profile Preset)</label>
+          <select id="sweep-profile">
+            <optgroup label="── บัวเชิงผนัง (Skirting) ──">
+              <option value="SKIRT-100x15" data-anchor="bottom_left" selected>บัวพื้นไม้สำเร็จรูป 4" (100x15 มม.)</option>
+              <option value="SKIRT-75x12" data-anchor="bottom_left">บัวพื้น PVC 3" (75x12 มม.)</option>
+              <option value="SKIRT-100x20" data-anchor="bottom_left">บัวพื้นไม้เนื้อแข็ง 4" (100x20 มม.)</option>
+            </optgroup>
+            <optgroup label="── บัวฝ้าเพดาน (Cornice) ──">
+              <option value="CORNICE-75x75" data-anchor="top_left">บัวฝ้าเพดานยิปซัม 3" (75x75 มม.)</option>
+              <option value="CORNICE-100x100" data-anchor="top_left">บัวฝ้าคลาสสิก 4" (100x100 มม.)</option>
+            </optgroup>
+            <optgroup label="── ซับวงกบประตู-หน้าต่าง (Casing) ──">
+              <option value="CASING-50x15" data-anchor="middle_left">ซับวงกบ 2" (50x15 มม.)</option>
+              <option value="CASING-70x20" data-anchor="middle_left">ซับวงกบโมเดิร์น 3" (70x20 มม.)</option>
+            </optgroup>
+            <optgroup label="── บัวกันกระแทก & ราวมือจับ (Rails) ──">
+              <option value="CHAIR-60x25" data-anchor="middle_left">บัวผนัง Chair Rail (60x25 มม.)</option>
+              <option value="HANDRAIL-75x40" data-anchor="bottom_center">ราวมือจับบันไดหลังเต่า (75x40 มม.)</option>
+              <option value="HANDRAIL-50x50" data-anchor="bottom_center">ราวมือจับกลมสแตนเลส (Ø50 มม.)</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <!-- 9-Point Anchor Alignment for Sweep -->
+        <div class="anchor-matrix-container">
+          <div class="anchor-matrix-label">
+            <strong>จุดอ้างอิงหน้าตัด (Sweep Anchor)</strong>
+            <span id="sweep-anchor-lbl">ล่าง-ซ้าย (Bottom-Left)</span>
+          </div>
+          <div class="anchor-grid-3x3" id="sweep-anchor-grid" data-target="sweep-anchor">
+            <button type="button" class="anchor-btn" data-anchor="top_left" title="บน-ซ้าย (Top-Left: สำหรับบัวฝ้า)"></button>
+            <button type="button" class="anchor-btn" data-anchor="top_center" title="บน-กลาง (Top-Center)"></button>
+            <button type="button" class="anchor-btn" data-anchor="top_right" title="บน-ขวา (Top-Right)"></button>
+            <button type="button" class="anchor-btn" data-anchor="middle_left" title="กลาง-ซ้าย (Middle-Left: ซับวงกบ)"></button>
+            <button type="button" class="anchor-btn" data-anchor="center" title="จุดกึ่งกลาง (Center)"></button>
+            <button type="button" class="anchor-btn" data-anchor="middle_right" title="กลาง-ขวา (Middle-Right)"></button>
+            <button type="button" class="anchor-btn active" data-anchor="bottom_left" title="ล่าง-ซ้าย (Bottom-Left: สำหรับบัวพื้น)"></button>
+            <button type="button" class="anchor-btn" data-anchor="bottom_center" title="ล่าง-กลาง (Bottom-Center: ราวมือจับ)"></button>
+            <button type="button" class="anchor-btn" data-anchor="bottom_right" title="ล่าง-ขวา (Bottom-Right)"></button>
+          </div>
+          <input type="hidden" id="sweep-anchor" value="bottom_left">
+        </div>
+
+        <div class="field">
+          <label>วัสดุ (Material)</label>
+          <select id="sweep-mat">
+            <option value="wood">ไม้ธรรมชาติ / ไม้สังเคราะห์ WPC</option>
+            <option value="pvc">ไวนิล PVC สีขาว</option>
+            <option value="plaster">ยิปซัม / ปูนปั้น</option>
+            <option value="aluminum">อลูมิเนียมอบสี</option>
+            <option value="steel">สแตนเลสสตีล Hairline</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" data-action="drawProfileSweep" data-tip-title="➰ กวาดหน้าตัดบัว (Profile Sweep)" data-tip-sc="PF" data-tip-desc="วาดแนวบัวพื้น บัวฝ้า ซับวงกบ หรือราวมือจับ ต่อเนื่องหลายจุดพร้อมเข้ามุม 45°" data-tip-mouse="คลิกต่อจุดตามแนวผนัง ➔ ดับเบิ้ลคลิกเพื่อจบงาน" data-tip-keys="Backspace: ถอยหลัง 1 จุด | Esc: ยกเลิก">➰ ลากเส้นกวาดบัว / ราวมือจับ <span class="shortcut-badge">PF</span></button>
+      </div>
+
+      <!-- Floor Paving Pattern Generator (SDM_FloorGenerator Replacement) -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🟫</div>
+          <div>
+            <div class="tool-card-title">ปูกระเบื้องลายพื้น 3D (Paving Generator)</div>
+            <div class="tool-card-sub">Herringbone, Running Bond, Grid Tiles [PV]</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>ลวดลายการปู (Pattern)</label>
+          <select id="pave-pattern">
+            <option value="grid">ตารางหมากรุก (Grid / Stack Bond)</option>
+            <option value="running_bond_half" selected>สลับกึ่งกลาง 1/2 (Running Bond 1/2)</option>
+            <option value="running_bond_third">สลับ 1/3 แผ่น (Running Bond 1/3)</option>
+            <option value="herringbone_90">ก้างปลาฉาก 90° (Herringbone)</option>
+            <option value="herringbone_45">ก้างปลาทแยง 45° (Herringbone 45°)</option>
+            <option value="chevron">เชฟรอน (Chevron V-Pattern)</option>
+          </select>
+        </div>
+        <div class="field-row cols-3">
+          <div class="field">
+            <label class="unit-lbl">กว้างแผ่น (ม.)</label>
+            <input type="number" id="pave-w" value="0.60" step="0.05">
+          </div>
+          <div class="field">
+            <label class="unit-lbl">ยาวแผ่น (ม.)</label>
+            <input type="number" id="pave-l" value="0.60" step="0.05">
+          </div>
+          <div class="field">
+            <label class="unit-lbl">ร่องยาแนว (ม.)</label>
+            <input type="number" id="pave-joint" value="0.002" step="0.001">
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="generatePaving" data-tip-title="🟫 ปูกระเบื้องลายพื้น 3D (Paving Generator)" data-tip-sc="PV" data-tip-desc="สร้างแผ่นกระเบื้อง 3D ลายก้างปลาหรือสลับแผ่นบนผิว Face ที่เลือก" data-tip-mouse="คลิกเลือก Face ผิวพื้น ➔ กดปุ่มเพื่อปูกระเบื้อง">🟫 สร้างลายกระเบื้องพื้น 3D <span class="shortcut-badge">PV</span></button>
+      </div>
+
+      <!-- Face Cladding & Component Array (curic_face_array Replacement) -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">📐</div>
+          <div>
+            <div class="tool-card-title">วางแผ่นหลังคา / ระแนงบน Face (Cladding Array)</div>
+            <div class="tool-card-sub">เมทัลชีท, ระแนงไม้เทียม, แผ่นฝ้า [CA]</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>ประเภทชิ้นงาน (Element Type)</label>
+          <select id="clad-type">
+            <option value="metal_sheet_roof">แผ่นหลังคาเมทัลชีท ลอน 760</option>
+            <option value="louver_slats">ระแนงไม้เทียมบังแดด (Wood Louver)</option>
+            <option value="ceiling_tbar">แผ่นฝ้าทีบาร์ 0.60 x 0.60 ม.</option>
+          </select>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label class="unit-lbl">ระยะห่าง / กว้าง (ม.)</label>
+            <input type="number" id="clad-spacing" value="0.76" step="0.05">
+          </div>
+          <div class="field">
+            <label class="unit-lbl">ระยะยื่นชาย (ม.)</label>
+            <input type="number" id="clad-overhang" value="0.10" step="0.05">
+          </div>
+        </div>
+        <button class="btn btn-secondary" data-action="arrayOnFace" data-tip-title="📐 อาร์เรย์บนผิว (Cladding Array)" data-tip-sc="CA" data-tip-desc="วางแผ่นหลังคาหรือระแนงกระจายตัวเต็มพื้นที่ Face ที่ลาดเอียง" data-tip-mouse="คลิกเลือก Face หลังคา/ผนัง ➔ กดปุ่ม">📐 วางชิ้นงานกระจายบน Face <span class="shortcut-badge">CA</span></button>
       </div>
 
     </div>
@@ -915,7 +1179,7 @@
      FOOTER
 ════════════════════════════════════════════════════════════ -->
 <div id="panel-footer">
-  <span class="footer-version">ConstructFlow v0.14.0</span>
+  <span class="footer-version">ConstructFlow v0.15.0</span>
   <div class="footer-actions">
     <button class="btn btn-secondary btn-sm" data-action="showInspector">🔍 Inspector</button>
     <button class="btn btn-secondary btn-sm" data-action="showCosting">💰 BOQ</button>

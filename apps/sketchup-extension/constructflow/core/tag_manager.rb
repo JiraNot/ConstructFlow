@@ -12,6 +12,7 @@ module JiraNot
           'architecture.wall'    => 'CF_Architecture_Wall',
           'architecture.floor'   => 'CF_Architecture_Floor',
           'architecture.ceiling' => 'CF_Architecture_Ceiling',
+          'architecture.profile_sweep' => 'CF_Architecture_Molding',
           'architecture.roof'    => 'CF_Architecture_Roof',
           'opening.door_window'  => 'CF_Architecture_DoorWindow',
           'opening.window'       => 'CF_Architecture_Window',

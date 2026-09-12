@@ -239,22 +239,56 @@ const CF = {
       CF.toast('เลือกตำแหน่งในโมเดลเพื่อวางฐานราก 🏗', 'info');
     },
 
+    useLaserLevel() {
+      CF.send('use_laser_level', {});
+      CF.toast('เปิดเลเซอร์วัดระดับ [LS] 🔴 คลิกจุดอ้างอิง Benchmark', 'info');
+    },
+
     placeColumn() {
+      const preset = gVal('col-preset') || 'RC-C-0.20x0.20';
       const w  = toMm(parseFloat(gVal('col-w')  || '0.2'));
       const d  = toMm(parseFloat(gVal('col-d')  || '0.2'));
       const h  = toMm(parseFloat(gVal('col-h')  || '2.8'));
       const bl = gVal('col-base-level');
       const tl = gVal('col-top-level');
-      CF.send('place_column', { section_mm: [w, d], height_mm: h, base_level_id: bl, top_level_id: tl });
-      CF.toast('คลิกในโมเดลเพื่อวางเสา 🏛', 'info');
+      const anchor = gVal('col-anchor') || 'center';
+      CF.send('place_column', { section_mm: [w, d], height_mm: h, base_level_id: bl, top_level_id: tl, anchor: anchor, profile_code: preset });
+      CF.toast('คลิกในโมเดลเพื่อวางเสา [CL] 🏛', 'info');
     },
 
     drawBeam() {
+      const preset = gVal('bm-preset') || 'RC-B-0.20x0.40';
       const w  = toMm(parseFloat(gVal('bm-w') || '0.2'));
       const d  = toMm(parseFloat(gVal('bm-d') || '0.4'));
       const lvl = gVal('bm-level') || '';
-      CF.send('draw_beam', { section_mm: [w, d], level_id: lvl });
+      const anchor = gVal('bm-anchor') || 'top_center';
+      CF.send('draw_beam', { section_mm: [w, d], level_id: lvl, anchor: anchor, profile_code: preset });
       CF.toast('คลิกในโมเดลเพื่อเริ่มวาดแนวคาน [BM] 🏗', 'info');
+    },
+
+    drawProfileSweep() {
+      const code   = gVal('sweep-profile') || 'SKIRT-100x15';
+      const anchor = gVal('sweep-anchor') || 'bottom_left';
+      const mat    = gVal('sweep-mat') || 'wood';
+      CF.send('draw_profile_sweep', { profile_code: code, anchor: anchor, material: mat });
+      CF.toast('คลิกลากเส้นแนวบัวสถาปัตย์ [PF] ➰ ดับเบิ้ลคลิกเพื่อจบงาน', 'info');
+    },
+
+    generatePaving() {
+      const pat   = gVal('pave-pattern') || 'running_bond_half';
+      const w     = parseFloat(gVal('pave-w') || '0.6');
+      const l     = parseFloat(gVal('pave-l') || '0.6');
+      const joint = parseFloat(gVal('pave-joint') || '0.002');
+      CF.send('generate_paving', { pattern: pat, width_m: w, length_m: l, joint_m: joint });
+      CF.toast('สร้างลวดลายกระเบื้อง 3D บน Face สำเร็จ 🟫', 'success');
+    },
+
+    arrayOnFace() {
+      const elem    = gVal('clad-type') || 'metal_sheet_roof';
+      const spacing = parseFloat(gVal('clad-spacing') || '0.76');
+      const ovh     = parseFloat(gVal('clad-overhang') || '0.10');
+      CF.send('array_on_face', { element_type: elem, spacing_m: spacing, overhang_m: ovh });
+      CF.toast('วางชิ้นงานกระจายตัวบนผิวเรียบร้อย 📐', 'success');
     },
 
     drawGrid() {
@@ -763,7 +797,79 @@ const CF = {
       }
     });
   },
+
+  initAnchorMatrix() {
+    document.querySelectorAll('.anchor-grid-3x3').forEach(grid => {
+      grid.addEventListener('click', (e) => {
+        const btn = e.target.closest('.anchor-btn');
+        if (!btn) return;
+        const targetId = grid.dataset.target;
+        const anchorVal = btn.dataset.anchor;
+        grid.querySelectorAll('.anchor-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const hiddenInput = document.getElementById(targetId);
+        if (hiddenInput) hiddenInput.value = anchorVal;
+        const lbl = document.getElementById(targetId + '-lbl');
+        if (lbl && btn.title) lbl.textContent = btn.title.split(':')[0] || btn.title;
+      });
+    });
+  },
+
+  initPresets() {
+    const colPreset = document.getElementById('col-preset');
+    if (colPreset) {
+      colPreset.addEventListener('change', () => {
+        const opt = colPreset.selectedOptions[0];
+        if (opt && opt.dataset.w) {
+          const wInput = document.getElementById('col-w');
+          const dInput = document.getElementById('col-d');
+          if (wInput) wInput.value = opt.dataset.w;
+          if (dInput) dInput.value = opt.dataset.d;
+        }
+      });
+    }
+
+    const bmPreset = document.getElementById('bm-preset');
+    if (bmPreset) {
+      bmPreset.addEventListener('change', () => {
+        const opt = bmPreset.selectedOptions[0];
+        if (opt && opt.dataset.w) {
+          const wInput = document.getElementById('bm-w');
+          const dInput = document.getElementById('bm-d');
+          if (wInput) wInput.value = opt.dataset.w;
+          if (dInput) dInput.value = opt.dataset.d;
+        }
+      });
+    }
+
+    const sweepProfile = document.getElementById('sweep-profile');
+    if (sweepProfile) {
+      sweepProfile.addEventListener('change', () => {
+        const opt = sweepProfile.selectedOptions[0];
+        if (opt && opt.dataset.anchor) {
+          const anchor = opt.dataset.anchor;
+          const hidden = document.getElementById('sweep-anchor');
+          if (hidden) hidden.value = anchor;
+          const grid = document.getElementById('sweep-anchor-grid');
+          if (grid) {
+            grid.querySelectorAll('.anchor-btn').forEach(b => {
+              if (b.dataset.anchor === anchor) {
+                b.classList.add('active');
+                const lbl = document.getElementById('sweep-anchor-lbl');
+                if (lbl && b.title) lbl.textContent = b.title.split(':')[0] || b.title;
+              } else {
+                b.classList.remove('active');
+              }
+            });
+          }
+        }
+      });
+    }
+  },
+
   init() {
+    CF.initAnchorMatrix();
+    CF.initPresets();
     CF.initAccordion();
     CF.initPhasePills();
     CF.initCategoryTabs();

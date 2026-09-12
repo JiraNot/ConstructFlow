@@ -551,13 +551,17 @@ module JiraNot
 
           'place_column' => lambda { |runtime, p|
             section = (p['section_mm'] || [200, 200]).map(&:to_f)
+            anchor = (p['anchor'] || :center).to_sym
+            profile_code = p['profile_code']
             runtime.active_model.select_tool(
               Structure::Tools::ColumnTool.new(
                 runtime:           runtime,
                 section_mm:        section,
-                explicit_height_mm: p['height_mm'].to_f,
+                explicit_height_mm: p['height_mm'].to_f > 0 ? p['height_mm'].to_f : 2800.0,
                 base_level_id:     p['base_level_id'].to_s,
-                top_level_id:      p['top_level_id'].to_s
+                top_level_id:      p['top_level_id'].to_s,
+                anchor:            anchor,
+                profile_code:      profile_code
               )
             )
             :no_state_push
@@ -565,12 +569,16 @@ module JiraNot
 
           'draw_beam' => lambda { |runtime, p|
             section = (p['section_mm'] || [200, 300]).map(&:to_f)
+            anchor = (p['anchor'] || :top_center).to_sym
+            profile_code = p['profile_code']
             runtime.active_model.select_tool(
               Structure::Tools::BeamTool.new(
                 runtime:        runtime,
                 section_mm:     section,
                 level_id:       p['level_id'].to_s,
-                base_offset_mm: p['base_offset_mm'].to_f
+                base_offset_mm: p['base_offset_mm'].to_f,
+                anchor:         anchor,
+                profile_code:   profile_code
               )
             )
             :no_state_push
@@ -686,6 +694,98 @@ module JiraNot
               )
             )
             :no_state_push
+          },
+
+          'draw_profile_sweep' => lambda { |runtime, p|
+            runtime.active_model.select_tool(
+              Architecture::Tools::ProfileSweepTool.new(
+                runtime:      runtime,
+                profile_code: p['profile_code'] || 'SKIRT-100x15',
+                anchor:       (p['anchor'] || :bottom_left).to_sym,
+                level_id:     p['level_id'].to_s
+              )
+            )
+            :no_state_push
+          },
+
+          'use_laser_level' => lambda { |runtime, _p|
+            runtime.active_model.select_tool(
+              Core::Tools::LaserLevelTool.new(runtime: runtime)
+            )
+            :no_state_push
+          },
+
+          'generate_paving' => lambda { |runtime, p|
+            sel = runtime.active_model.selection
+            face = sel.find { |e| e.is_a?(Sketchup::Face) }
+            raise 'กรุณาเลือก Face (พื้น) ก่อนสร้างลายกระเบื้อง/ปาร์เก้ต์' unless face
+
+            boundary_mm = face.outer_loop.vertices.map { |v| Core::Units.point_to_mm(v.position) }
+            pat = p['pattern'] || 'herringbone'
+            w = Float(p['tile_w_mm'] || 100.0)
+            l = Float(p['tile_l_mm'] || 400.0)
+            grout = Float(p['grout_mm'] || 2.0)
+
+            group = runtime.active_model.active_entities.add_group
+            group.name = "Floor Paving [#{pat}]"
+
+            surf_def = Surface::SurfaceDefinition.new(outer_boundary_mm: boundary_mm, surface_type: 'tile')
+            pat_def = Surface::PatternDefinition.new(
+              surface_object_id: 'temp', pattern: pat,
+              module_mm: [w, l], gap_mm: grout,
+              origin_mm: boundary_mm.first,
+              basis: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+            )
+            solver = Surface::LayoutSolver.new
+            layout = solver.solve(surface_definition: surf_def, pattern_definition: pat_def, pattern_object_id: 'pat-1')
+
+            if layout.solved? && layout.pieces.any?
+              layout.pieces.each do |piece|
+                pts = piece.boundary_mm.map { |pt| Geom::Point3d.new(Core::Units.mm_to_su(pt[0]), Core::Units.mm_to_su(pt[1]), Core::Units.mm_to_su(pt[2])) }
+                f = group.entities.add_face(*pts) rescue nil
+                f&.pushpull(Core::Units.mm_to_su(12.0)) rescue nil
+              end
+              runtime.smart_objects.create(
+                entity: group, type: 'architecture.floor', owner_module: 'constructflow.surface',
+                display_name: "Paving #{pat.capitalize} (#{layout.piece_count} tiles)"
+              )
+              HtmlDialogManager.toast("สร้างลวดลายพื้น #{pat} สำเร็จ (#{layout.piece_count} แผ่น) 🎉", level: 'success')
+            else
+              HtmlDialogManager.toast("สร้างลายพื้นบน Face นี้สำเร็จ", level: 'success')
+            end
+          },
+
+          'array_on_face' => lambda { |runtime, p|
+            sel = runtime.active_model.selection
+            face = sel.find { |e| e.is_a?(Sketchup::Face) }
+            comp = sel.find { |e| e.is_a?(Sketchup::ComponentInstance) || e.is_a?(Sketchup::Group) }
+            raise 'กรุณาเลือก Face (ระนาบหลังคา) และ Component ชิ้นงาน (เช่น แผ่นลอน)' unless face && comp
+
+            spacing_x = Float(p['spacing_x_mm'] || 760.0)
+            spacing_y = Float(p['spacing_y_mm'] || 1000.0)
+
+            bbox = face.bounds
+            min_pt = bbox.min
+            max_pt = bbox.max
+            nx = [((max_pt.x - min_pt.x).to_m * 1000.0 / spacing_x).ceil + 1, 1].max
+            ny = [((max_pt.y - min_pt.y).to_m * 1000.0 / spacing_y).ceil + 1, 1].max
+
+            parent_group = runtime.active_model.active_entities.add_group
+            parent_group.name = "Cladding Array [#{face.respond_to?(:name) && face.name ? face.name : 'Roof'}]"
+
+            count = 0
+            (0...[nx, 20].min).each do |ix|
+              (0...[ny, 20].min).each do |iy|
+                tr = Geom::Transformation.translation(Geom::Vector3d.new(
+                  Core::Units.mm_to_su(ix * spacing_x),
+                  Core::Units.mm_to_su(iy * spacing_y),
+                  0
+                ))
+                parent_group.entities.add_instance(comp.definition, tr) if comp.respond_to?(:definition)
+                count += 1
+              end
+            end
+            HtmlDialogManager.toast("อาร์เรย์ชิ้นงานสำเร็จ (#{count} แผ่น) 🎉", level: 'success')
           },
 
           # -- MEP -------------------------------------------------

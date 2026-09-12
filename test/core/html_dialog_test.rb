@@ -51,7 +51,7 @@ module JiraNot
           create_level set_phase
           place_foundation place_column draw_beam draw_grid
           draw_wall cut_opening place_door_window create_roof add_gutter
-          draw_floor draw_ceiling
+          draw_floor draw_ceiling draw_profile_sweep use_laser_level generate_paving array_on_face
           place_manhole route_pipe place_panelboard route_conduit
           apply_surface place_cabinet place_wardrobe
           place_asset show_costing get_boq_data

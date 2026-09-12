@@ -6,9 +6,11 @@ module JiraNot
       module Tools
         class ColumnTool
           def initialize(runtime:, section_mm:, base_level_id:, top_level_id:,
-                         base_offset_mm: 0, top_offset_mm: 0, explicit_height_mm: 2800)
+                         base_offset_mm: 0, top_offset_mm: 0, explicit_height_mm: 2800, anchor: :center, profile_code: nil)
             @runtime = runtime
             @section_mm = section_mm
+            @anchor = (anchor || :center).to_sym
+            @profile_code = profile_code&.to_s
             @base_level_id = base_level_id.to_s
             @top_level_id = top_level_id.to_s
             @base_offset_mm = Float(base_offset_mm)

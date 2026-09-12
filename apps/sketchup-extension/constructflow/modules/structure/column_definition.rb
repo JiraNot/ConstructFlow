@@ -11,12 +11,12 @@ module JiraNot
         attr_reader :location_mm, :section_mm, :base_level_id, :top_level_id,
                     :base_offset_mm, :top_offset_mm, :base_elevation_mm,
                     :top_elevation_mm, :material, :section_type,
-                    :engineering_status
+                    :engineering_status, :anchor, :profile_code
 
         def initialize(location_mm:, section_mm: [200, 200], base_level_id: nil,
                        top_level_id: nil, base_offset_mm: 0, top_offset_mm: 0,
                        base_elevation_mm:, top_elevation_mm:, material: 'reinforced_concrete',
-                       section_type: 'rectangular', engineering_status: 'preliminary')
+                       section_type: 'rectangular', engineering_status: 'preliminary', anchor: :center, profile_code: nil)
           @location_mm = normalize_point(location_mm).freeze
           @section_mm = normalize_section(section_mm).freeze
           @base_level_id = base_level_id&.to_s
@@ -28,6 +28,8 @@ module JiraNot
           @material = material.to_s
           @section_type = section_type.to_s
           @engineering_status = engineering_status.to_s
+          @anchor = (anchor || :center).to_sym
+          @profile_code = profile_code&.to_s
           freeze
         end
 
@@ -111,7 +113,9 @@ module JiraNot
             'top_elevation_mm' => top_elevation_mm,
             'material' => material,
             'section_type' => section_type,
-            'engineering_status' => engineering_status
+            'engineering_status' => engineering_status,
+            'anchor' => anchor.to_s,
+            'profile_code' => profile_code
           }
         end
 

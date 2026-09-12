@@ -26,11 +26,16 @@ module JiraNot
           half_d = depth / 2.0
           z = definition.base_elevation_mm
 
+          anchor = definition.respond_to?(:anchor) ? definition.anchor : :center
+          offset = Core::StructuralProfileCatalog.anchor_offset(anchor, width, depth) rescue [0.0, 0.0]
+          cx = x - offset[0]
+          cy = y - offset[1]
+
           face = entities.add_face(
-            point([x - half_w, y - half_d, z]),
-            point([x + half_w, y - half_d, z]),
-            point([x + half_w, y + half_d, z]),
-            point([x - half_w, y + half_d, z])
+            point([cx - half_w, cy - half_d, z]),
+            point([cx + half_w, cy - half_d, z]),
+            point([cx + half_w, cy + half_d, z]),
+            point([cx - half_w, cy + half_d, z])
           )
           raise 'failed to create structural column face' unless face
 

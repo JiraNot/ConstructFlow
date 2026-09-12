@@ -7,9 +7,11 @@ module JiraNot
     module Structure
       module Tools
         class BeamTool
-          def initialize(runtime:, section_mm: [200, 300], level_id: nil, base_offset_mm: 0)
+          def initialize(runtime:, section_mm: [200, 300], level_id: nil, base_offset_mm: 0, anchor: :top_center, profile_code: nil)
             @runtime = runtime
             @section_mm = section_mm
+            @anchor = (anchor || :top_center).to_sym
+            @profile_code = profile_code&.to_s
             @level_id = level_id.to_s.strip
             @level_id = nil if @level_id.empty?
             @base_offset_mm = Float(base_offset_mm)
@@ -239,7 +241,8 @@ module JiraNot
             result = @runtime.commands.execute(
               'CreateBeam',
               { path_mm: [start_pt, end_pt], section_mm: @section_mm,
-                base_level_id: @level_id, base_offset_mm: @base_offset_mm },
+                base_level_id: @level_id, base_offset_mm: @base_offset_mm,
+                anchor: @anchor, profile_code: @profile_code },
               project_id: @runtime.project.project_id
             )
             if result[:status] == 'success'

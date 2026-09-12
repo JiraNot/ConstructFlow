@@ -505,7 +505,9 @@ module JiraNot
             top_elevation_mm: top_elevation,
             material: input[:material] || input['material'] || 'reinforced_concrete',
             section_type: input[:section_type] || input['section_type'] || 'rectangular',
-            engineering_status: input[:engineering_status] || input['engineering_status'] || 'preliminary'
+            engineering_status: input[:engineering_status] || input['engineering_status'] || 'preliminary',
+            anchor: input[:anchor] || input['anchor'] || :center,
+            profile_code: input[:profile_code] || input['profile_code']
           )
         end
 
@@ -573,7 +575,9 @@ module JiraNot
             base_offset_mm: offset_mm,
             base_elevation_mm: base_elevation,
             material: input[:material] || input['material'] || 'reinforced_concrete',
-            engineering_status: input[:engineering_status] || input['engineering_status'] || 'preliminary'
+            engineering_status: input[:engineering_status] || input['engineering_status'] || 'preliminary',
+            anchor: input[:anchor] || input['anchor'] || :top_center,
+            profile_code: input[:profile_code] || input['profile_code']
           )
         end
 
