@@ -17,7 +17,7 @@ module JiraNot
           end
 
           def activate
-            Sketchup.set_status_text('ConstructFlow Drainage: click to place manhole. Esc to finish.', SB_PROMPT)
+            Sketchup.set_status_text('ConstructFlow บ่อพักน้ำทิ้ง: คลิกตำแหน่งเพื่อวางบ่อพัก (Esc เพื่อยกเลิก)', SB_PROMPT)
           end
 
           def onMouseMove(_flags, x, y, view)
@@ -28,12 +28,25 @@ module JiraNot
 
           def draw(view)
             @input_point.draw(view) if @input_point.valid?
-            view.draw_points([point_from_mm(@preview_position_mm)], 8, 1, 'orange') if @preview_position_mm
+            view.draw_points([point_from_mm(@preview_position_mm)], 8, 1, 'orange') if @preview_position_mm && view.respond_to?(:draw_points)
+
+            if @input_point.valid? && defined?(Core::GhostPreview)
+              mesh = Core::GhostPreview.build_manhole_mesh(@input_point.position, @size_mm)
+              if mesh
+                Core::GhostPreview.render_ghost(
+                  view,
+                  mesh,
+                  face_color: [149, 165, 166, 80],
+                  line_color: [127, 140, 141]
+                )
+              end
+            end
           end
 
           def getExtents
             bounds = Geom::BoundingBox.new
             bounds.add(point_from_mm(@preview_position_mm)) if @preview_position_mm
+            bounds.add(@input_point.position) if @input_point&.valid?
             bounds
           end
 
@@ -112,12 +125,26 @@ module JiraNot
 
           def draw(view)
             @input_point.draw(view) if @input_point.valid?
-            view.draw_points([point_from_mm(@preview_position_mm)], 8, 1, 'orange') if @preview_position_mm
+            view.draw_points([point_from_mm(@preview_position_mm)], 8, 1, 'orange') if @preview_position_mm && view.respond_to?(:draw_points)
+
+            if @input_point.valid? && defined?(Core::GhostPreview)
+              mesh = Core::GhostPreview.build_manhole_mesh(@input_point.position, [600, 600])
+              if mesh
+                Core::GhostPreview.render_ghost(
+                  view,
+                  mesh,
+                  face_color: [243, 156, 18, 80],
+                  line_color: [211, 84, 0],
+                  label: 'ย้ายตำแหน่งบ่อพักน้ำทิ้ง'
+                )
+              end
+            end
           end
 
           def getExtents
             bounds = Geom::BoundingBox.new
             bounds.add(point_from_mm(@preview_position_mm)) if @preview_position_mm
+            bounds.add(@input_point.position) if @input_point&.valid?
             bounds
           end
 

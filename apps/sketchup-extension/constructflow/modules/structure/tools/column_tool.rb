@@ -24,7 +24,7 @@ module JiraNot
           end
 
           def activate
-            Sketchup.set_status_text('ConstructFlow Structure: click column center. Esc to finish.', SB_PROMPT)
+            Sketchup.set_status_text('ConstructFlow เสาโครงสร้าง: คลิกตำแหน่งกึ่งกลางเพื่อวางเสา (Esc เพื่อยกเลิก)', SB_PROMPT)
           end
 
           def onMouseMove(_flags, x, y, view)
@@ -41,10 +41,23 @@ module JiraNot
 
           def draw(view)
             @input_point.draw(view) if @input_point.valid?
-            if @hover_mm
+            if @hover_mm && view.respond_to?(:draw_points)
               x, y, z = Core::Units.point_from_mm(@hover_mm)
-              view.draw_points([Geom::Point3d.new(x, y, z)], 10, 1, 'orange')
-              view.draw_text(Geom::Point3d.new(x, y, z), 'Column snap')
+              pt = Geom::Point3d.new(x, y, z)
+              view.draw_points([pt], 10, 1, 'orange')
+              view.draw_text(pt, 'Column snap') if view.respond_to?(:draw_text)
+            end
+
+            if @input_point.valid? && defined?(Core::GhostPreview)
+              mesh = Core::GhostPreview.build_column_mesh(@input_point.position, @section_mm, @explicit_height_mm)
+              if mesh
+                Core::GhostPreview.render_ghost(
+                  view,
+                  mesh,
+                  face_color: [26, 188, 156, 80],
+                  line_color: [22, 160, 133]
+                )
+              end
             end
           end
 
@@ -54,6 +67,7 @@ module JiraNot
               values = Core::Units.point_from_mm(@hover_mm)
               bounds.add(Geom::Point3d.new(*values))
             end
+            bounds.add(@input_point.position) if @input_point&.valid?
             bounds
           end
 

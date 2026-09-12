@@ -16,6 +16,7 @@ module JiraNot
 
           register_plan(runtime, planner)
           register_alternatives(runtime, planner)
+          register_auto_route_solver(runtime)
           register_create(runtime, planner, repository, geometry, validator)
           register_route_edits(runtime, edit_service, repository, geometry, validator)
           register_intermediate_manhole(runtime, intermediate_service)
@@ -180,6 +181,56 @@ module JiraNot
             start_invert_mm: plan.start_invert_mm, end_invert_mm: plan.end_invert_mm, material: value(input, :material) || 'pvc',
             route_strategy: plan.mode, display_name: value(input, :display_name), created_phase: value(input, :created_phase), source_state: value(input, :source_state)
           }
+        end
+
+        def register_auto_route_solver(runtime)
+          return if runtime.commands.registered?('SolveAutoRoute')
+
+          runtime.commands.register('SolveAutoRoute', owner_module: 'constructflow.drainage', transaction: false) do |command|
+            input = command[:input]
+            start_pt = value(input, :start_point)
+            end_pt = value(input, :end_point)
+            start_conn_id = value(input, :start_connector_id)
+            end_conn_id = value(input, :end_connector_id)
+
+            if start_conn_id && start_pt.nil?
+              start_pt = runtime.connectors.connector(start_conn_id.to_s)['position_mm']
+            end
+            if end_conn_id && end_pt.nil?
+              end_pt = runtime.connectors.connector(end_conn_id.to_s)['position_mm']
+            end
+
+            raise ArgumentError, 'start_point or start_connector_id required' unless start_pt
+            raise ArgumentError, 'end_point or end_connector_id required' unless end_pt
+
+            obstacles = Array(value(input, :obstacles)).dup
+            if obstacles.empty? && runtime.capabilities.available?('structure.coordination')
+              coord = runtime.capabilities.fetch('structure.coordination')
+              runtime.smart_objects.all.each do |obj|
+                if coord.compatible?(obj)
+                  box = coord.bounding_box_mm(obj)
+                  obstacles << box if box
+                end
+              end
+            end
+
+            solver = AutoRouteSolver.new(
+              clearance_mm: value(input, :clearance_mm) || 300.0,
+              min_slope_percent: value(input, :min_slope_percent) || 1.0
+            )
+
+            result = solver.solve(
+              start_point: start_pt,
+              end_point: end_pt,
+              start_invert_mm: value(input, :start_invert_mm),
+              end_invert_mm: value(input, :end_invert_mm),
+              obstacles: obstacles
+            )
+
+            {
+              events: [{ name: 'AutoRouteSolved', payload: result }]
+            }
+          end
         end
 
         def value(input, key)

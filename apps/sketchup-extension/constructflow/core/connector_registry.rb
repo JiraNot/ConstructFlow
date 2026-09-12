@@ -77,6 +77,10 @@ module JiraNot
                     .map { |item| deep_freeze(item.dup) }.freeze
         end
 
+        def all_connectors
+          connectors.values.map { |item| deep_freeze(item.dup) }.freeze
+        end
+
         def update_connector(connector_id, position_mm: :__unchanged__, direction: :__unchanged__,
                              properties: :__unchanged__, state: :__unchanged__, nominal_size_mm: :__unchanged__)
           values = connectors

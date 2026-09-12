@@ -51,6 +51,37 @@ module JiraNot
           Core::AttributeStore.new(model).write_json(CONTROLS_KEY, values, dictionary: DICTIONARY)
           relation.freeze
         end
+
+        CONDUIT_KEY = 'conduit_definition'
+        PANELBOARDS_KEY = 'panelboards'
+
+        def read_conduit(entity)
+          payload = Core::AttributeStore.new(entity).read_json(CONDUIT_KEY, nil, dictionary: DICTIONARY)
+          payload ? ConduitRouteDefinition.from_h(payload) : nil
+        end
+
+        def write_conduit(entity, definition)
+          raise ArgumentError, 'ConduitRouteDefinition required' unless definition.is_a?(ConduitRouteDefinition)
+          Core::AttributeStore.new(entity).write_json(CONDUIT_KEY, definition.to_h, dictionary: DICTIONARY)
+          definition
+        end
+
+        def panelboards(model)
+          raw = Core::AttributeStore.new(model).read_json(PANELBOARDS_KEY, {}, dictionary: DICTIONARY) || {}
+          raw.each_with_object({}) { |(id, value), result| result[id.to_s] = PanelboardDefinition.from_h(value) }
+        end
+
+        def panelboard(model, id)
+          panelboards(model)[id.to_s]
+        end
+
+        def write_panelboard(model, definition)
+          raise ArgumentError, 'PanelboardDefinition required' unless definition.is_a?(PanelboardDefinition)
+          values = panelboards(model).transform_values(&:to_h)
+          values[definition.id] = definition.to_h
+          Core::AttributeStore.new(model).write_json(PANELBOARDS_KEY, values, dictionary: DICTIONARY)
+          definition
+        end
       end
     end
   end

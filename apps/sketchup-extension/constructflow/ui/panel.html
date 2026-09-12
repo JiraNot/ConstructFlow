@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConstructFlow</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     HEADER
+════════════════════════════════════════════════════════════ -->
+<div id="panel-header">
+  <div class="header-brand">
+    <div class="header-logo">🏗</div>
+    <div>
+      <div class="header-title">ConstructFlow</div>
+      <div class="header-sub">BIM Extension สำหรับ SketchUp</div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS STRIP -->
+<div id="status-strip">
+  <div class="status-dot"></div>
+  <span class="status-badge">📁 <span id="status-project">—</span></span>
+  <span class="status-badge">🔧 <span id="status-phase">—</span></span>
+  <span class="status-badge">🧩 <span id="status-objects">0 obj</span></span>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCROLLABLE BODY
+════════════════════════════════════════════════════════════ -->
+<div id="panel-body">
+
+  <!-- ────────────────────────────────────────────────────────
+       SECTION 1 — ตั้งค่าโครงการ
+  ──────────────────────────────────────────────────────────── -->
+  <div class="section" id="sec-1">
+    <div class="section-header">
+      <div class="section-step">1</div>
+      <div class="section-icon">⚙️</div>
+      <div style="flex:1">
+        <div class="section-label">ตั้งค่าโครงการ</div>
+        <div class="section-desc">Inspector · ระดับชั้น · เฟสการก่อสร้าง</div>
+      </div>
+      <div class="section-chevron">▼</div>
+    </div>
+    <div class="section-body">
+
+      <!-- Inspector -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🔍</div>
+          <div>
+            <div class="tool-card-title">ตรวจสอบสถานะโครงการ</div>
+            <div class="tool-card-sub">ดูข้อมูล Smart Objects, Levels, Connectors</div>
+          </div>
+        </div>
+        <div class="info-grid">
+          <div class="info-cell">
+            <div class="info-label">รหัสโครงการ</div>
+            <div class="info-value" id="info-project">—</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">เฟสปัจจุบัน</div>
+            <div class="info-value" id="info-phase">—</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Smart Objects</div>
+            <div class="info-value" id="info-objects">0</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Levels</div>
+            <div class="info-value" id="info-levels">0</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Connectors</div>
+            <div class="info-value" id="info-connectors">0</div>
+          </div>
+          <div class="info-cell">
+            <div class="info-label">Modules</div>
+            <div class="info-value" id="info-modules">0</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary" data-action="showInspector">🔍 ดูบันทึก Diagnostics</button>
+      </div>
+
+      <!-- Level -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">📐</div>
+          <div>
+            <div class="tool-card-title">กำหนดระดับชั้นอาคาร</div>
+            <div class="tool-card-sub">Level · ระดับความสูง mm</div>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>ชื่อระดับชั้น</label>
+            <input type="text" id="level-name" value="First Floor" placeholder="เช่น Ground Floor">
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>ระดับสูง (mm)</label>
+            <input type="number" id="level-elev" value="3000" step="100">
+          </div>
+          <div class="field">
+            <label>ประเภท</label>
+            <select id="level-kind">
+              <option value="floor">floor (พื้น)</option>
+              <option value="roof">roof (ดาดฟ้า)</option>
+              <option value="ceiling">ceiling (ฝ้าเพดาน)</option>
+              <option value="custom">custom</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="createLevel">➕ สร้างระดับชั้น</button>
+      </div>
+
+      <!-- Phase -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🔄</div>
+          <div>
+            <div class="tool-card-title">กำหนดเฟสการทำงาน</div>
+            <div class="tool-card-sub">Construction Phase</div>
+          </div>
+        </div>
+        <div class="phase-pills">
+          <div class="pill" data-phase="existing">ของเดิม</div>
+          <div class="pill" data-phase="demolition">รื้อถอน</div>
+          <div class="pill active-pill" data-phase="new_construction">ก่อสร้างใหม่</div>
+        </div>
+        <button class="btn btn-primary" data-action="setPhase">✅ ตั้งค่าเฟส</button>
+      </div>
+
+    </div><!-- /section-body -->
+  </div><!-- /section 1 -->
+
+  <!-- ────────────────────────────────────────────────────────
+       SECTION 2 — โครงสร้าง
+  ──────────────────────────────────────────────────────────── -->
+  <div class="section" id="sec-2">
+    <div class="section-header">
+      <div class="section-step">2</div>
+      <div class="section-icon">🏛</div>
+      <div style="flex:1">
+        <div class="section-label">โครงสร้าง</div>
+        <div class="section-desc">ฐานราก (Foundation) · เสาคอนกรีต (Column)</div>
+      </div>
+      <div class="section-chevron">▼</div>
+    </div>
+    <div class="section-body">
+
+      <div class="tip-box">💡 กด "วาง" แล้วคลิกในโมเดล — ghost preview จะปรากฏขณะขยับเมาส์</div>
+
+      <!-- Foundation -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🟫</div>
+          <div>
+            <div class="tool-card-title">ฐานราก</div>
+            <div class="tool-card-sub">Foundation Footing</div>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>ชนิดฐานราก</label>
+            <select id="fnd-type">
+              <option value="spread_footing">Spread Footing (แผ่)</option>
+              <option value="strip_footing">Strip Footing (แนวยาว)</option>
+              <option value="pile_cap">Pile Cap (เสาเข็ม)</option>
+              <option value="raft">Raft Foundation (แพ)</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row cols-3">
+          <div class="field">
+            <label>กว้าง W (mm)</label>
+            <input type="number" id="fnd-w" value="1000" step="50">
+          </div>
+          <div class="field">
+            <label>ยาว L (mm)</label>
+            <input type="number" id="fnd-l" value="1000" step="50">
+          </div>
+          <div class="field">
+            <label>หนา D (mm)</label>
+            <input type="number" id="fnd-d" value="400" step="50">
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="placeFoundation">🟫 วางฐานราก</button>
+      </div>
+
+      <!-- Column -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🏛</div>
+          <div>
+            <div class="tool-card-title">เสาคอนกรีต</div>
+            <div class="tool-card-sub">RC Column</div>
+          </div>
+        </div>
+        <div class="field-row cols-3">
+          <div class="field">
+            <label>กว้าง (mm)</label>
+            <input type="number" id="col-w" value="200" step="25">
+          </div>
+          <div class="field">
+            <label>ลึก (mm)</label>
+            <input type="number" id="col-d" value="200" step="25">
+          </div>
+          <div class="field">
+            <label>สูง (mm)</label>
+            <input type="number" id="col-h" value="2800" step="100">
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>Base Level ID</label>
+            <input type="text" id="col-base-level" placeholder="เว้นว่างได้">
+          </div>
+          <div class="field">
+            <label>Top Level ID</label>
+            <input type="text" id="col-top-level" placeholder="เว้นว่างได้">
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="placeColumn">🏛 วางเสา</button>
+      </div>
+
+    </div>
+  </div><!-- /section 2 -->
+
+  <!-- ────────────────────────────────────────────────────────
+       SECTION 3 — สถาปัตยกรรม
+  ──────────────────────────────────────────────────────────── -->
+  <div class="section" id="sec-3">
+    <div class="section-header">
+      <div class="section-step">3</div>
+      <div class="section-icon">🧱</div>
+      <div style="flex:1">
+        <div class="section-label">สถาปัตยกรรม</div>
+        <div class="section-desc">ผนัง · ช่องเปิด · ประตู-หน้าต่าง · หลังคา</div>
+      </div>
+      <div class="section-chevron">▼</div>
+    </div>
+    <div class="section-body">
+
+      <div class="tip-box">💡 วาดผนังก่อน → เจาะช่องเปิด → ติดตั้งประตู/หน้าต่าง → สร้างหลังคา</div>
+
+      <!-- Wall -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🧱</div>
+          <div>
+            <div class="tool-card-title">วาดผนัง</div>
+            <div class="tool-card-sub">Smart Wall (มี ghost preview)</div>
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>หนา (mm)</label>
+            <input type="number" id="wall-thick" value="100" step="25">
+          </div>
+          <div class="field">
+            <label>สูง (mm)</label>
+            <input type="number" id="wall-height" value="2800" step="100">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Base Level ID</label>
+            <input type="text" id="wall-level" placeholder="เว้นว่างได้">
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="drawWall">🧱 เริ่มวาดผนัง</button>
+      </div>
+
+      <!-- Opening -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🔲</div>
+          <div>
+            <div class="tool-card-title">เจาะช่องเปิด</div>
+            <div class="tool-card-sub">Wall Opening (คลิกที่ผนัง)</div>
+          </div>
+        </div>
+        <div class="field-row cols-3">
+          <div class="field">
+            <label>กว้าง (mm)</label>
+            <input type="number" id="op-w" value="900" step="50">
+          </div>
+          <div class="field">
+            <label>สูง (mm)</label>
+            <input type="number" id="op-h" value="2050" step="50">
+          </div>
+          <div class="field">
+            <label>Sill (mm)</label>
+            <input type="number" id="op-sill" value="0" step="50">
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="cutOpening">🔲 เจาะช่องเปิด</button>
+      </div>
+
+      <!-- Door / Window -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🚪</div>
+          <div>
+            <div class="tool-card-title">ติดตั้งประตู / หน้าต่าง</div>
+            <div class="tool-card-sub">Door &amp; Window</div>
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>หมวดหมู่</label>
+            <select id="dw-cat">
+              <option value="door">🚪 ประตู (Door)</option>
+              <option value="window">🪟 หน้าต่าง (Window)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>การเปิด</label>
+            <select id="dw-op">
+              <option value="swing">Swing (บานพับ)</option>
+              <option value="sliding">Sliding (บานเลื่อน)</option>
+              <option value="fixed">Fixed (บานตาย)</option>
+              <option value="folding">Folding (บานพับซ้อน)</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>วัสดุกรอบ</label>
+            <select id="dw-frame">
+              <option value="aluminium">อลูมิเนียม</option>
+              <option value="upvc">uPVC</option>
+              <option value="wood">ไม้</option>
+              <option value="steel">เหล็ก</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>รูปแบบบาน</label>
+            <select id="dw-panel">
+              <option value="glazed">กระจก (Glazed)</option>
+              <option value="solid">ทึบ (Solid)</option>
+              <option value="louvre">เกล็ด (Louvre)</option>
+              <option value="panel">บานกรอบ (Panel)</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="placeDoorWindow">🚪 ติดตั้งประตู/หน้าต่าง</button>
+      </div>
+
+      <!-- Roof -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🏠</div>
+          <div>
+            <div class="tool-card-title">สร้างหลังคา</div>
+            <div class="tool-card-sub">เลือก Face ก่อนกด "สร้างหลังคา"</div>
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>วัสดุมุง</label>
+            <select id="roof-mat">
+              <option value="metal_sheet">เมทัลชีท</option>
+              <option value="tile">กระเบื้อง</option>
+              <option value="shingle">แอสฟัลต์ชิงเกิล</option>
+              <option value="concrete">คอนกรีต (ดาดฟ้า)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>ความลาดชัน (%)</label>
+            <input type="number" id="roof-slope" value="10" step="1" min="0" max="100">
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>ทิศทาง X</label>
+            <input type="number" id="roof-sx" value="0" step="0.1">
+          </div>
+          <div class="field">
+            <label>ทิศทาง Y</label>
+            <input type="number" id="roof-sy" value="1" step="0.1">
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="createRoof">🏠 สร้างหลังคา</button>
+      </div>
+
+      <!-- Gutter -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🌧</div>
+          <div>
+            <div class="tool-card-title">ติดตั้งรางน้ำฝน</div>
+            <div class="tool-card-sub">เลือก Roof object ก่อน</div>
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>ขอบชายคา (Index)</label>
+            <input type="number" id="gutter-edge" value="0" step="1" min="0">
+          </div>
+          <div class="field">
+            <label>Outlet Ratio (0–1)</label>
+            <input type="number" id="gutter-outlet" value="1.0" step="0.1" min="0" max="1">
+          </div>
+        </div>
+        <button class="btn btn-secondary" data-action="addGutter">🌧 ติดตั้งรางน้ำฝน</button>
+      </div>
+
+    </div>
+  </div><!-- /section 3 -->
+
+  <!-- ────────────────────────────────────────────────────────
+       SECTION 4 — MEP
+  ──────────────────────────────────────────────────────────── -->
+  <div class="section" id="sec-4">
+    <div class="section-header">
+      <div class="section-step">4</div>
+      <div class="section-icon">⚙️</div>
+      <div style="flex:1">
+        <div class="section-label">ระบบ MEP</div>
+        <div class="section-desc">สุขาภิบาล · ท่อระบายน้ำ · ไฟฟ้ากำลัง</div>
+      </div>
+      <div class="section-chevron">▼</div>
+    </div>
+    <div class="section-body">
+
+      <div class="tip-box">💡 วางบ่อพักน้ำทิ้งก่อน → วาดเส้นท่อ → ติดตั้งตู้ไฟ → เดินสายไฟ</div>
+
+      <!-- Manhole -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🔵</div>
+          <div>
+            <div class="tool-card-title">บ่อพักน้ำทิ้ง</div>
+            <div class="tool-card-sub">Drainage Manhole</div>
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>ขนาดบ่อ (mm)</label>
+            <input type="number" id="mh-size" value="600" step="100">
+          </div>
+          <div class="field">
+            <label>ระดับฝา mm</label>
+            <input type="number" id="mh-cover" placeholder="ตามพื้นที่">
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>Invert In (mm)</label>
+            <input type="number" id="mh-invin" placeholder="เว้นว่างได้">
+          </div>
+          <div class="field">
+            <label>Invert Out (mm)</label>
+            <input type="number" id="mh-invout" placeholder="เว้นว่างได้">
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="placeManhole">🔵 วางบ่อพัก</button>
+      </div>
+
+      <!-- Pipe -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🔧</div>
+          <div>
+            <div class="tool-card-title">เส้นท่อระบายน้ำ</div>
+            <div class="tool-card-sub">Drainage Pipe Route</div>
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>เส้นผ่าศูนย์กลาง (mm)</label>
+            <input type="number" id="pipe-dia" value="100" step="25">
+          </div>
+          <div class="field">
+            <label>ระบบท่อ</label>
+            <select id="pipe-sys">
+              <option value="waste">Waste (น้ำเสีย)</option>
+              <option value="storm">Storm (น้ำฝน)</option>
+              <option value="soil">Soil (อุจจาระ)</option>
+              <option value="vent">Vent (ระบายอากาศ)</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="routePipe">🔧 วาดเส้นท่อ</button>
+      </div>
+
+      <!-- Panelboard -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">⚡</div>
+          <div>
+            <div class="tool-card-title">ตู้ควบคุมไฟฟ้า</div>
+            <div class="tool-card-sub">Distribution Board</div>
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>รหัสตู้ไฟ</label>
+            <input type="text" id="pb-name" value="DB-1" placeholder="DB-1">
+          </div>
+          <div class="field">
+            <label>ระบบเฟส</label>
+            <select id="pb-phase">
+              <option value="1P2W">1 Phase 2W (230V)</option>
+              <option value="3P4W">3 Phase 4W (380V)</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row cols-3">
+          <div class="field">
+            <label>แรงดัน (V)</label>
+            <input type="number" id="pb-volt" value="230">
+          </div>
+          <div class="field">
+            <label>Main (A)</label>
+            <input type="number" id="pb-main" value="50">
+          </div>
+          <div class="field">
+            <label>Bus (A)</label>
+            <input type="number" id="pb-bus" value="100">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>จำนวนวงจร</label>
+            <input type="number" id="pb-ccts" value="24" step="4">
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="placePanelboard">⚡ ติดตั้งตู้ไฟ</button>
+      </div>
+
+      <!-- Conduit -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">〰</div>
+          <div>
+            <div class="tool-card-title">ท่อร้อยสายไฟ</div>
+            <div class="tool-card-sub">Conduit Route (เดินผ่านฝ้าเพดาน)</div>
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>ระดับฝ้า Z (mm)</label>
+            <input type="number" id="cond-cz" value="2600" step="100">
+          </div>
+          <div class="field">
+            <label>กลยุทธ์เดินสาย</label>
+            <select id="cond-stg">
+              <option value="ceiling_first">Ceiling First (ฝ้าเพดานก่อน)</option>
+              <option value="floor_first">Floor First (พื้นก่อน)</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="routeConduit">〰 วาดเส้นท่อสาย</button>
+      </div>
+
+    </div>
+  </div><!-- /section 4 -->
+
+  <!-- ────────────────────────────────────────────────────────
+       SECTION 5 — ภายใน & ตกแต่ง
+  ──────────────────────────────────────────────────────────── -->
+  <div class="section" id="sec-5">
+    <div class="section-header">
+      <div class="section-step">5</div>
+      <div class="section-icon">🛋</div>
+      <div style="flex:1">
+        <div class="section-label">ภายใน &amp; ตกแต่ง</div>
+        <div class="section-desc">ผิวพื้น · เคาน์เตอร์ · ตู้เสื้อผ้า</div>
+      </div>
+      <div class="section-chevron">▼</div>
+    </div>
+    <div class="section-body">
+
+      <!-- Surface -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🟦</div>
+          <div>
+            <div class="tool-card-title">ปูผิวพื้น</div>
+            <div class="tool-card-sub">เลือก Face แล้วกด "ปูผิว"</div>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>ชนิดผิวพื้น</label>
+            <select id="surf-type">
+              <option value="paver">กระเบื้องปูพื้น (Paver)</option>
+              <option value="tile">กระเบื้องเซรามิค (Tile)</option>
+              <option value="timber">ไม้ปาร์เก้ (Timber)</option>
+              <option value="screed">คอนกรีตขัดมัน (Screed)</option>
+              <option value="carpet">พรมปู (Carpet)</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="applySurface">🟦 ปูผิวพื้น</button>
+      </div>
+
+      <!-- Cabinet -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🍳</div>
+          <div>
+            <div class="tool-card-title">เคาน์เตอร์บิวท์อิน</div>
+            <div class="tool-card-sub">Kitchen / Cabinet Run</div>
+          </div>
+        </div>
+        <div class="field-row cols-3">
+          <div class="field">
+            <label>กว้าง (mm)</label>
+            <input type="number" id="cab-w" value="1800" step="100">
+          </div>
+          <div class="field">
+            <label>สูง (mm)</label>
+            <input type="number" id="cab-h" value="850" step="50">
+          </div>
+          <div class="field">
+            <label>ลึก (mm)</label>
+            <input type="number" id="cab-d" value="600" step="50">
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>จำนวนช่อง</label>
+            <input type="number" id="cab-mods" value="3" step="1" min="1">
+          </div>
+          <div class="field">
+            <label>วัสดุโครงตู้</label>
+            <input type="text" id="cab-mat" value="board.hmr.18">
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="placeCabinet">🍳 วางเคาน์เตอร์</button>
+      </div>
+
+      <!-- Wardrobe -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">👗</div>
+          <div>
+            <div class="tool-card-title">ตู้เสื้อผ้าบิวท์อิน</div>
+            <div class="tool-card-sub">Built-in Wardrobe</div>
+          </div>
+        </div>
+        <div class="field-row cols-3">
+          <div class="field">
+            <label>กว้าง (mm)</label>
+            <input type="number" id="wd-w" value="1800" step="100">
+          </div>
+          <div class="field">
+            <label>สูง (mm)</label>
+            <input type="number" id="wd-h" value="2400" step="100">
+          </div>
+          <div class="field">
+            <label>ลึก (mm)</label>
+            <input type="number" id="wd-d" value="600" step="50">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>ชนิดหน้าบาน</label>
+            <select id="wd-door">
+              <option value="hinged">บานพับ (Hinged)</option>
+              <option value="sliding">บานเลื่อน (Sliding)</option>
+              <option value="folding">บานพับซ้อน (Folding)</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="placeWardrobe">👗 วางตู้เสื้อผ้า</button>
+      </div>
+
+    </div>
+  </div><!-- /section 5 -->
+
+  <!-- ────────────────────────────────────────────────────────
+       SECTION 6 — ไลบรารี & BOQ
+  ──────────────────────────────────────────────────────────── -->
+  <div class="section" id="sec-6">
+    <div class="section-header">
+      <div class="section-step">6</div>
+      <div class="section-icon">📦</div>
+      <div style="flex:1">
+        <div class="section-label">ไลบรารี &amp; BOQ</div>
+        <div class="section-desc">ครุภัณฑ์ · ประมาณราคา</div>
+      </div>
+      <div class="section-chevron">▼</div>
+    </div>
+    <div class="section-body">
+
+      <!-- Asset -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">🪑</div>
+          <div>
+            <div class="tool-card-title">วางครุภัณฑ์ / เฟอร์นิเจอร์</div>
+            <div class="tool-card-sub">Library Asset Placement</div>
+          </div>
+        </div>
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>Asset ID</label>
+            <input type="text" id="asset-id" value="chair.office.mesh" placeholder="chair.office.mesh">
+          </div>
+          <div class="field">
+            <label>มุมหมุน (°)</label>
+            <input type="number" id="asset-rot" value="0" step="15">
+          </div>
+        </div>
+        <button class="btn btn-primary" data-action="placeAsset">🪑 วางครุภัณฑ์</button>
+      </div>
+
+      <!-- Costing -->
+      <div class="tool-card">
+        <div class="tool-card-header">
+          <div class="tool-card-icon">💰</div>
+          <div>
+            <div class="tool-card-title">สรุปปริมาณงาน BOQ</div>
+            <div class="tool-card-sub">Bill of Quantities &amp; Cost Estimate</div>
+          </div>
+        </div>
+        <div class="tip-box">
+          ✅ ครอบคลุมทุกหมวด: โครงสร้าง · สถาปัตย์ · MEP · ตกแต่ง · ครุภัณฑ์
+        </div>
+        <button class="btn btn-success" data-action="showCosting">💰 ดูสรุป BOQ &amp; ราคา</button>
+      </div>
+
+    </div>
+  </div><!-- /section 6 -->
+
+  <div style="height: 10px;"></div><!-- bottom padding -->
+
+</div><!-- /panel-body -->
+
+<!-- ═══════════════════════════════════════════════════════════
+     FOOTER
+════════════════════════════════════════════════════════════ -->
+<div id="panel-footer">
+  <span class="footer-version">ConstructFlow v0.14.0</span>
+  <div class="footer-actions">
+    <button class="btn btn-secondary btn-sm" data-action="showInspector">🔍 Inspector</button>
+    <button class="btn btn-secondary btn-sm" data-action="showCosting">💰 BOQ</button>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div id="toast-container"></div>
+
+<script src="panel.js"></script>
+</body>
+</html>

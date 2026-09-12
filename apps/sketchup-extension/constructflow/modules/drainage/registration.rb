@@ -547,6 +547,8 @@ module JiraNot
         end
 
         def install_ui(runtime)
+          return unless runtime.respond_to?(:menu) && runtime.menu
+
           menu = runtime.menu.add_submenu('Drainage')
           menu.add_item('Place Manhole') do
             values = UI.inputbox(

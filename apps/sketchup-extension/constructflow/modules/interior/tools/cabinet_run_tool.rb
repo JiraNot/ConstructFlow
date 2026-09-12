@@ -14,7 +14,7 @@ module JiraNot
           end
 
           def activate
-            Sketchup.set_status_text('ConstructFlow Interior: click cabinet run origin. Esc to cancel.', SB_PROMPT)
+            Sketchup.set_status_text('ConstructFlow ตู้บิวท์อิน: คลิกจุดเริ่มต้นเพื่อวางแนวเคาน์เตอร์ (Esc เพื่อยกเลิก)', SB_PROMPT)
           end
 
           def onMouseMove(_flags, x, y, view)
@@ -32,14 +32,31 @@ module JiraNot
 
           def draw(view)
             @input_point.draw(view) if @input_point.valid?
-            return unless @preview_point_mm
+            view.draw_points([point_from_mm(@preview_point_mm)], 8, 1, 'orange') if @preview_point_mm && view.respond_to?(:draw_points)
 
-            view.draw_points([point_from_mm(@preview_point_mm)], 8, 1, 'orange')
+            if @input_point.valid? && defined?(Core::GhostPreview)
+              mesh = Core::GhostPreview.build_cabinet_mesh(
+                @input_point.position,
+                @params[:width_mm] || 1800.0,
+                @params[:height_mm] || 850.0,
+                @params[:depth_mm] || 600.0,
+                @params[:module_count] || 3
+              )
+              if mesh
+                Core::GhostPreview.render_ghost(
+                  view,
+                  mesh,
+                  face_color: [230, 126, 34, 75],
+                  line_color: [211, 84, 0]
+                )
+              end
+            end
           end
 
           def getExtents
             bounds = Geom::BoundingBox.new
             bounds.add(point_from_mm(@preview_point_mm)) if @preview_point_mm
+            bounds.add(@input_point.position) if @input_point&.valid?
             bounds
           end
 

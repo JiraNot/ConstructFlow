@@ -21,6 +21,20 @@ require_relative 'core/capability_registry'
 require_relative 'core/connector_registry'
 require_relative 'core/mep_semantic_contract'
 require_relative 'core/sketchup_app_observer'
+require_relative 'core/drawing_sheet_spec'
+require_relative 'core/drawing_intent_registry'
+require_relative 'core/elevation_generator'
+require_relative 'core/section_generator'
+require_relative 'core/detail_callout_definition'
+require_relative 'core/door_window_schedule_generator'
+require_relative 'core/joinery_shop_drawing_generator'
+require_relative 'core/qa/validator_registry'
+require_relative 'core/qa/revision_tracker'
+require_relative 'core/qa/site_verification_definition'
+require_relative 'core/qa/stale_audit_service'
+require_relative 'core/i18n'
+require_relative 'core/html_dialog'
+require_relative 'core/toolbar'
 require_relative 'core/plan_interaction_engine'
 require_relative 'core/plan_level_context'
 require_relative 'core/plan_selection_filter'
@@ -133,8 +147,16 @@ require_relative 'modules/surface/registration'
 require_relative 'modules/surface/layout_registration'
 
 require_relative 'modules/interior/cabinet_run_definition'
+require_relative 'modules/interior/countertop_definition'
+require_relative 'modules/interior/wardrobe_definition'
+require_relative 'modules/interior/false_ceiling_definition'
+require_relative 'modules/interior/wall_paneling_definition'
 require_relative 'modules/interior/joinery_part_set_definition'
 require_relative 'modules/interior/joinery_part_generator'
+require_relative 'modules/interior/nesting_result_definition'
+require_relative 'modules/interior/sheet_nesting_engine'
+require_relative 'modules/interior/cut_list_exporter'
+require_relative 'modules/interior/cnc_operation_generator'
 require_relative 'modules/interior/repository'
 require_relative 'modules/interior/geometry'
 require_relative 'modules/interior/validators/interior_validator'
@@ -147,6 +169,9 @@ require_relative 'modules/library/project_asset_snapshot'
 require_relative 'modules/library/catalog_store'
 require_relative 'modules/library/placed_asset_definition'
 require_relative 'modules/library/placed_asset_repository'
+require_relative 'modules/library/compatibility_engine'
+require_relative 'modules/library/variant_matrix'
+require_relative 'modules/library/lod_manager'
 require_relative 'modules/library/geometry'
 require_relative 'modules/library/catalog_capability'
 require_relative 'modules/library/registration'
@@ -159,6 +184,29 @@ require_relative 'modules/drainage/quantity/drainage_quantity_provider'
 require_relative 'modules/drainage/geometry'
 require_relative 'modules/drainage/tools/manhole_tool'
 require_relative 'modules/drainage/registration'
+
+require_relative 'modules/electrical/cable_definition'
+require_relative 'modules/electrical/circuit_definition'
+require_relative 'modules/electrical/conduit_route_definition'
+require_relative 'modules/electrical/conduit_route_solver'
+require_relative 'modules/electrical/conduit_sizing_engine'
+require_relative 'modules/electrical/device_definition'
+require_relative 'modules/electrical/panelboard_definition'
+require_relative 'modules/electrical/voltage_drop_calculator'
+require_relative 'modules/electrical/repository'
+require_relative 'modules/electrical/geometry'
+require_relative 'modules/electrical/quantity/electrical_quantity_provider'
+require_relative 'modules/electrical/registration'
+
+require_relative 'modules/costing/rate_item'
+require_relative 'modules/costing/rate_library'
+require_relative 'modules/costing/cost_estimate_line'
+require_relative 'modules/costing/cost_estimate'
+require_relative 'modules/costing/costing_engine'
+require_relative 'modules/costing/estimate_snapshot'
+require_relative 'modules/costing/boq_exporter'
+require_relative 'modules/costing/repository'
+require_relative 'modules/costing/registration'
 
 module JiraNot
   module ConstructFlow
@@ -208,12 +256,14 @@ module JiraNot
           @project = Core::ProjectStore.new(model, id_generator: @ids)
           @project.ensure_project!
           @levels = Core::LevelRegistry.new(project_store: @project)
+          seed_default_level! if @levels.size.zero?
           @smart_objects = Core::SmartObjectManager.new(model: model, levels: @levels, id_generator: @ids, diagnostics: @diagnostics)
           object_count = @smart_objects.scan!
           @connectors.attach_model(model)
           @commands.transaction_manager = Core::TransactionManager.new(model: model)
           @diagnostics.info('model_attached', 'ConstructFlow attached to SketchUp model', project_id: @project.project_id,
-                            smart_objects: object_count, connectors: @connectors.connector_count,
+                            smart_objects: object_count, levels: @levels.size,
+                            connectors: @connectors.connector_count,
                             connections: @connectors.connection_count)
         end
 
@@ -384,6 +434,7 @@ module JiraNot
             end
             UI.messagebox(levels.empty? ? 'No ConstructFlow levels defined.' : levels.join("\n"))
           end
+          Core::Toolbar.install(self)
         end
 
         def install_builtin_modules
@@ -398,15 +449,40 @@ module JiraNot
           Interior::Registration.install(self)
           Library::Registration.install(self)
           Drainage::Registration.install(self)
+          Electrical::Registration.install(self)
+          Costing::Registration.install(self)
         end
 
         def show_inspector
           recent = @diagnostics.recent(5).map { |entry| "[#{entry.severity}] #{entry.code}: #{entry.message}" }
-          message = ['ConstructFlow Foundation', "Project: #{@project&.project_id || '-'}", "Working phase: #{@project&.working_phase || '-'}",
-                     "Modules: #{@modules.size}", "Capabilities: #{@capabilities.size}", "Levels: #{@levels&.size || 0}",
-                     "Smart objects: #{@smart_objects&.size || 0}", "Connectors: #{@connectors&.connector_count || 0}",
-                     "Connections: #{@connectors&.connection_count || 0}", '', 'Recent diagnostics:', *(recent.empty? ? ['(none)'] : recent)].join("\n")
-          UI.messagebox(message)
+          level_names = @levels ? @levels.map { |l| "  • #{l.name} (#{l.elevation_mm || 0} mm)" } : []
+          message = [
+            'ConstructFlow - ตรวจสอบสถานะโครงการ',
+            "รหัสโครงการ: #{@project&.project_id || '-'}",
+            "ระยะเวลาก่อสร้าง (Phase): #{@project&.working_phase || '-'}",
+            "โมดูลที่ติดตั้ง: #{@modules.size}",
+            "ความสามารถระบบ: #{@capabilities.size}",
+            "ระดับชั้นอาคาร (Levels): #{@levels&.size || 0}",
+            *level_names,
+            "วัตถุอัจฉริยะ (Smart Objects): #{@smart_objects&.size || 0}",
+            "จุดเชื่อมต่อ (Connectors): #{@connectors&.connector_count || 0}",
+            "เส้นทางเชื่อมต่อ (Connections): #{@connectors&.connection_count || 0}",
+            '',
+            'บันทึกการทำงานล่าสุด:',
+            *(recent.empty? ? ['(ไม่มีบันทึก)'] : recent)
+          ].join("\n")
+          UI.messagebox(message, MB_OK)
+        end
+
+        def seed_default_level!
+          @levels.register(
+            id: 'level_ground_floor',
+            name: 'Ground Floor',
+            kind: 'floor',
+            elevation_mm: 0.0,
+            source_state: 'confirmed'
+          )
+          @diagnostics.info('level_seeded', 'Default Ground Floor level created', level_id: 'level_ground_floor')
         end
       end
     end

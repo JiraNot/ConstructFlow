@@ -23,7 +23,99 @@ module JiraNot
           group
         end
 
+        def create_countertop_group(model, definition)
+          group = model.active_entities.add_group
+          group.name = "ConstructFlow Countertop #{definition.material_id}"
+          rebuild_countertop!(group, definition)
+          group
+        end
+
+        def rebuild_countertop!(group, definition)
+          raise ArgumentError, definition.errors.join('; ') unless definition.valid?
+          entities = group.entities
+          entities.clear!
+          l = definition.effective_length_mm
+          d = definition.effective_depth_mm
+          t = definition.thickness_mm
+          draw_simple_box(entities, [0, 0, 0], l, d, t)
+          definition.cutouts.each do |c|
+            entities.add_line(point([c[:offset_x_mm], c[:offset_y_mm], t]), point([c[:offset_x_mm] + c[:width_mm], c[:offset_y_mm], t]))
+          end
+          group
+        end
+
+        def create_wardrobe_group(model, definition)
+          group = model.active_entities.add_group
+          group.name = "ConstructFlow Wardrobe #{definition.door_type}"
+          rebuild_wardrobe!(group, definition)
+          group
+        end
+
+        def rebuild_wardrobe!(group, definition)
+          raise ArgumentError, definition.errors.join('; ') unless definition.valid?
+          entities = group.entities
+          entities.clear!
+          draw_simple_box(entities, definition.origin_mm, definition.width_mm, definition.depth_mm, definition.height_mm)
+          group
+        end
+
+        def create_false_ceiling_group(model, definition)
+          group = model.active_entities.add_group
+          group.name = "ConstructFlow False Ceiling #{definition.ceiling_type}"
+          rebuild_false_ceiling!(group, definition)
+          group
+        end
+
+        def rebuild_false_ceiling!(group, definition)
+          raise ArgumentError, definition.errors.join('; ') unless definition.valid?
+          entities = group.entities
+          entities.clear!
+          z = definition.elevation_z_mm
+          pts = definition.boundary_nodes_mm
+          pts.each_with_index do |p1, i|
+            p2 = pts[(i + 1) % pts.length]
+            entities.add_line(point([p1[0], p1[1], z]), point([p2[0], p2[1], z]))
+          end
+          group
+        end
+
+        def create_wall_paneling_group(model, definition)
+          group = model.active_entities.add_group
+          group.name = "ConstructFlow Wall Paneling #{definition.style}"
+          rebuild_wall_paneling!(group, definition)
+          group
+        end
+
+        def rebuild_wall_paneling!(group, definition)
+          raise ArgumentError, definition.errors.join('; ') unless definition.valid?
+          entities = group.entities
+          entities.clear!
+          l = definition.wall_length_mm
+          h = definition.wall_height_mm
+          entities.add_line(point([0, 0, 0]), point([l, 0, 0]))
+          entities.add_line(point([l, 0, 0]), point([l, 0, h]))
+          entities.add_line(point([l, 0, h]), point([0, 0, h]))
+          entities.add_line(point([0, 0, h]), point([0, 0, 0]))
+          group
+        end
+
         private
+
+        def draw_simple_box(entities, origin, w, d, h)
+          ox, oy, oz = origin
+          corners = [
+            [ox, oy, oz], [ox + w, oy, oz], [ox + w, oy + d, oz], [ox, oy + d, oz],
+            [ox, oy, oz + h], [ox + w, oy, oz + h], [ox + w, oy + d, oz + h], [ox, oy + d, oz + h]
+          ]
+          edges = [
+            [0, 1], [1, 2], [2, 3], [3, 0],
+            [4, 5], [5, 6], [6, 7], [7, 4],
+            [0, 4], [1, 5], [2, 6], [3, 7]
+          ]
+          edges.each do |a, b|
+            entities.add_line(point(corners[a]), point(corners[b]))
+          end
+        end
 
         def draw_box(entities, definition)
           x0 = 0.0

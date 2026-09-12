@@ -73,6 +73,64 @@ module JiraNot
           !start_invert_mm.nil? && !end_invert_mm.nil?
         end
 
+        def effective_nodes_with_inverts
+          return route_nodes_mm if start_invert_mm.nil? || end_invert_mm.nil?
+          z_vals = route_nodes_mm.map { |pt| pt[2] }
+          return route_nodes_mm if (z_vals.max - z_vals.min).abs > 0.001
+
+          total_h = horizontal_length_mm
+          return route_nodes_mm if total_h <= 0.001
+
+          travelled = 0.0
+          route_nodes_mm.each_with_index.map do |point, idx|
+            if idx.zero?
+              [point[0], point[1], start_invert_mm]
+            elsif idx == route_nodes_mm.length - 1
+              [point[0], point[1], end_invert_mm]
+            else
+              prev = route_nodes_mm[idx - 1]
+              dx = point[0] - prev[0]
+              dy = point[1] - prev[1]
+              travelled += Math.sqrt((dx * dx) + (dy * dy))
+              frac = travelled / total_h
+              inv = start_invert_mm - ((start_invert_mm - end_invert_mm) * frac)
+              [point[0], point[1], inv]
+            end
+          end
+        end
+
+        def segment_slopes
+          nodes = effective_nodes_with_inverts
+          nodes.each_cons(2).map.with_index do |(a, b), index|
+            dx = b[0] - a[0]
+            dy = b[1] - a[1]
+            h = Math.sqrt((dx * dx) + (dy * dy))
+            fall = a[2] - b[2]
+            ratio = h > 0.001 ? fall / h : 0.0
+            percent = ratio * 100.0
+            {
+              index: index,
+              start_node: a,
+              end_node: b,
+              horizontal_length_mm: h,
+              fall_mm: fall,
+              slope_ratio: ratio,
+              slope_percent: percent,
+              reverse_slope: percent.negative?,
+              steep_slope: percent > 10.0,
+              excessive_fall: fall > 500.0
+            }.freeze
+          end.freeze
+        end
+
+        def has_reverse_slope?
+          segment_slopes.any? { |s| s[:reverse_slope] }
+        end
+
+        def backdrop_candidates
+          segment_slopes.select { |s| s[:steep_slope] || s[:excessive_fall] }
+        end
+
         def with(system: self.system, diameter_mm: self.diameter_mm,
                  route_nodes_mm: self.route_nodes_mm,
                  start_connector_id: self.start_connector_id,

@@ -4,7 +4,7 @@ module JiraNot
   module ConstructFlow
     module Surface
       class LayoutSolver
-        SUPPORTED_PATTERNS = %w[grid running_bond diagonal].freeze
+        SUPPORTED_PATTERNS = %w[grid running_bond diagonal herringbone basket_weave chevron].freeze
         MAX_CANDIDATE_CELLS = 20_000
         EPSILON = 1.0e-6
         AREA_EPSILON = 0.01
@@ -34,42 +34,43 @@ module JiraNot
           min_u, min_v, max_u, max_v = bounds(outer_local)
           width = pattern_definition.module_mm[0]
           height = pattern_definition.module_mm[1]
-          step_u = width + pattern_definition.joint_mm
-          step_v = height + pattern_definition.joint_mm
-          col_min = (min_u / step_u).floor - 1
-          col_max = (max_u / step_u).ceil + 1
-          row_min = (min_v / step_v).floor - 1
-          row_max = (max_v / step_v).ceil + 1
-          candidate_count = (col_max - col_min + 1) * (row_max - row_min + 1)
-          if candidate_count > MAX_CANDIDATE_CELLS
-            return PavingLayoutDefinition.new(
-              surface_object_id: pattern_definition.surface_object_id,
-              pattern_object_id: pattern_object_id,
-              pattern: pattern_definition.pattern,
-              status: 'failed',
-              warnings: ["layout requires #{candidate_count} candidate cells; maximum is #{MAX_CANDIDATE_CELLS}"]
-            )
-          end
+          joint = pattern_definition.joint_mm
 
-          pieces = []
-          row_min.upto(row_max) do |row|
-            row_shift = running_bond_shift(pattern_definition.pattern, row, step_u)
-            col_min.upto(col_max) do |column|
-              u0 = (column * step_u) + row_shift
-              v0 = row * step_v
-              rect = [u0, v0, u0 + width, v0 + height]
-              piece = solve_piece(
-                rect: rect,
-                row: row,
-                column: column,
-                outer_triangles: outer_triangles,
-                hole_triangles: hole_triangles,
-                pattern_definition: pattern_definition,
-                basis: basis
-              )
-              pieces << piece if piece
-            end
-          end
+          pieces = case pattern_definition.pattern
+                   when 'basket_weave'
+                     solve_basket_weave(
+                       bounds: [min_u, min_v, max_u, max_v],
+                       width: width,
+                       height: height,
+                       joint: joint,
+                       outer_triangles: outer_triangles,
+                       hole_triangles: hole_triangles,
+                       pattern_definition: pattern_definition,
+                       basis: basis
+                     )
+                   when 'herringbone'
+                     solve_herringbone(
+                       bounds: [min_u, min_v, max_u, max_v],
+                       width: width,
+                       height: height,
+                       joint: joint,
+                       outer_triangles: outer_triangles,
+                       hole_triangles: hole_triangles,
+                       pattern_definition: pattern_definition,
+                       basis: basis
+                     )
+                   else
+                     solve_grid_like(
+                       bounds: [min_u, min_v, max_u, max_v],
+                       width: width,
+                       height: height,
+                       joint: joint,
+                       outer_triangles: outer_triangles,
+                       hole_triangles: hole_triangles,
+                       pattern_definition: pattern_definition,
+                       basis: basis
+                     )
+                   end
 
           warnings = []
           violations = pieces.count { |piece| piece['minimum_cut_violation'] }
@@ -95,8 +96,167 @@ module JiraNot
 
         private
 
+        def solve_grid_like(bounds:, width:, height:, joint:, outer_triangles:, hole_triangles:,
+                            pattern_definition:, basis:)
+          min_u, min_v, max_u, max_v = bounds
+          step_u = width + joint
+          step_v = height + joint
+          col_min = (min_u / step_u).floor - 1
+          col_max = (max_u / step_u).ceil + 1
+          row_min = (min_v / step_v).floor - 2
+          row_max = (max_v / step_v).ceil + 2
+          candidate_count = (col_max - col_min + 1) * (row_max - row_min + 1)
+          if candidate_count > MAX_CANDIDATE_CELLS
+            raise StandardError, "layout requires #{candidate_count} candidate cells; maximum is #{MAX_CANDIDATE_CELLS}"
+          end
+
+          pieces = []
+          row_min.upto(row_max) do |row|
+            col_min.upto(col_max) do |column|
+              u_shift, v_shift = grid_shifts(pattern_definition.pattern, row, column, step_u, height)
+              u0 = (column * step_u) + u_shift
+              v0 = (row * step_v) + v_shift
+              rect = [u0, v0, u0 + width, v0 + height]
+              piece = solve_piece(
+                rect: rect,
+                row: row,
+                column: column,
+                outer_triangles: outer_triangles,
+                hole_triangles: hole_triangles,
+                pattern_definition: pattern_definition,
+                basis: basis
+              )
+              pieces << piece if piece
+            end
+          end
+          pieces
+        end
+
+        def solve_basket_weave(bounds:, width:, height:, joint:, outer_triangles:, hole_triangles:,
+                               pattern_definition:, basis:)
+          min_u, min_v, max_u, max_v = bounds
+          k = [(width / height).round, 1].max
+          step_u = width + joint
+          step_v = (k * height) + ((k - 1) * joint) + joint
+          col_min = (min_u / step_u).floor - 1
+          col_max = (max_u / step_u).ceil + 1
+          row_min = (min_v / step_v).floor - 1
+          row_max = (max_v / step_v).ceil + 1
+          candidate_count = (col_max - col_min + 1) * (row_max - row_min + 1) * k
+          if candidate_count > MAX_CANDIDATE_CELLS
+            raise StandardError, "layout requires #{candidate_count} candidate cells; maximum is #{MAX_CANDIDATE_CELLS}"
+          end
+
+          pieces = []
+          row_min.upto(row_max) do |row|
+            col_min.upto(col_max) do |column|
+              u0 = column * step_u
+              v0 = row * step_v
+              if (row + column).even?
+                k.times do |m|
+                  u = u0
+                  v = v0 + (m * (height + joint))
+                  rect = [u, v, u + width, v + height]
+                  piece = solve_piece(
+                    rect: rect,
+                    row: row,
+                    column: column,
+                    id_suffix: "_h#{m}",
+                    outer_triangles: outer_triangles,
+                    hole_triangles: hole_triangles,
+                    pattern_definition: pattern_definition,
+                    basis: basis
+                  )
+                  pieces << piece if piece
+                end
+              else
+                k.times do |m|
+                  u = u0 + (m * (height + joint))
+                  v = v0
+                  rect = [u, v, u + height, v + width]
+                  piece = solve_piece(
+                    rect: rect,
+                    row: row,
+                    column: column,
+                    id_suffix: "_v#{m}",
+                    outer_triangles: outer_triangles,
+                    hole_triangles: hole_triangles,
+                    pattern_definition: pattern_definition,
+                    basis: basis
+                  )
+                  pieces << piece if piece
+                end
+              end
+            end
+          end
+          pieces
+        end
+
+        def solve_herringbone(bounds:, width:, height:, joint:, outer_triangles:, hole_triangles:,
+                              pattern_definition:, basis:)
+          min_u, min_v, max_u, max_v = bounds
+          l_prime = width + joint
+          w_prime = height + joint
+          v1 = [l_prime + w_prime, w_prime - l_prime]
+          v2 = [w_prime, w_prime]
+
+          corners = [
+            [min_u, min_v],
+            [max_u, min_v],
+            [max_u, max_v],
+            [min_u, max_v]
+          ]
+          is = corners.map { |u, v| (u - v) / (2.0 * l_prime) }
+          js = corners.map { |u, v| (((l_prime - w_prime) * u) + ((l_prime + w_prime) * v)) / (2.0 * l_prime * w_prime) }
+
+          i_min = is.min.floor - 2
+          i_max = is.max.ceil + 2
+          j_min = js.min.floor - 2
+          j_max = js.max.ceil + 2
+
+          candidate_count = (i_max - i_min + 1) * (j_max - j_min + 1) * 2
+          if candidate_count > MAX_CANDIDATE_CELLS
+            raise StandardError, "layout requires #{candidate_count} candidate cells; maximum is #{MAX_CANDIDATE_CELLS}"
+          end
+
+          pieces = []
+          i_min.upto(i_max) do |i|
+            j_min.upto(j_max) do |j|
+              ox = (i * v1[0]) + (j * v2[0])
+              oy = (i * v1[1]) + (j * v2[1])
+
+              rect_h = [ox, oy, ox + width, oy + height]
+              piece_h = solve_piece(
+                rect: rect_h,
+                row: i,
+                column: j,
+                id_suffix: '_h',
+                outer_triangles: outer_triangles,
+                hole_triangles: hole_triangles,
+                pattern_definition: pattern_definition,
+                basis: basis
+              )
+              pieces << piece_h if piece_h
+
+              rect_v = [ox + l_prime, oy + w_prime - l_prime, ox + l_prime + height, oy + w_prime - l_prime + width]
+              piece_v = solve_piece(
+                rect: rect_v,
+                row: i,
+                column: j,
+                id_suffix: '_v',
+                outer_triangles: outer_triangles,
+                hole_triangles: hole_triangles,
+                pattern_definition: pattern_definition,
+                basis: basis
+              )
+              pieces << piece_v if piece_v
+            end
+          end
+          pieces
+        end
+
         def solve_piece(rect:, row:, column:, outer_triangles:, hole_triangles:,
-                        pattern_definition:, basis:)
+                        pattern_definition:, basis:, id_suffix: nil)
           outer_fragments = outer_triangles.filter_map do |triangle|
             clipped = clip_polygon_to_rect(triangle, rect)
             clipped if polygon_area(clipped) > AREA_EPSILON
@@ -125,8 +285,10 @@ module JiraNot
             [rect[0], rect[3]]
           ]
 
+          piece_id = id_suffix ? "piece_r#{row}_c#{column}#{id_suffix}" : "piece_r#{row}_c#{column}"
+
           {
-            'id' => "piece_r#{row}_c#{column}",
+            'id' => piece_id,
             'row' => row,
             'column' => column,
             'classification' => full ? 'full' : 'cut',
@@ -142,8 +304,22 @@ module JiraNot
           }
         end
 
-        def running_bond_shift(pattern, row, step_u)
-          pattern == 'running_bond' && row.odd? ? step_u / 2.0 : 0.0
+        def grid_shifts(pattern, row, column, step_u, height)
+          case pattern
+          when 'running_bond'
+            [row.odd? ? step_u / 2.0 : 0.0, 0.0]
+          when 'chevron'
+            [0.0, chevron_v_shift(column, height, 2)]
+          else
+            [0.0, 0.0]
+          end
+        end
+
+        def chevron_v_shift(column, height, k = 2)
+          period = 2 * k
+          phase = column % period
+          step_idx = phase < k ? phase : (period - 1 - phase)
+          step_idx * (height / 2.0)
         end
 
         def to_local_loop(loop, origin, basis)

@@ -37,6 +37,32 @@ module JiraNot
           def draw(view)
             @input_point.draw(view) if @input_point.valid?
             draw_host_highlight(view)
+
+            if @preview && @preview_host && @preview[:state] == 'valid' && defined?(Core::GhostPreview)
+              wall_def = @host_capability.definition(@preview_host) rescue nil
+              if wall_def && @preview_placement
+                mesh = Core::GhostPreview.build_opening_mesh(
+                  wall_def,
+                  @preview_placement[:segment_index],
+                  @preview_placement[:distance_along_mm],
+                  @width_mm,
+                  @height_mm,
+                  @sill_mm
+                ) rescue nil
+                if mesh
+                  Core::GhostPreview.render_ghost(
+                    view,
+                    mesh,
+                    face_color: [231, 76, 60, 100],
+                    line_color: [192, 57, 43]
+                  )
+                end
+              end
+            elsif @input_point.valid? && view.respond_to?(:draw_text)
+              screen = view.respond_to?(:screen_coords) ? view.screen_coords(@input_point.position) : @input_point.position
+              view.draw_text(screen, "ช่องเปิด #{@width_mm.to_i}x#{@height_mm.to_i} mm")
+            end
+
             if @preview
               label = @preview[:state] == 'valid' ? 'Opening valid' : @preview[:state] == 'invalid' ? @preview[:errors].first : 'Select Smart Wall'
               view.draw_text(@input_point.position, label) if @input_point.valid?
@@ -65,6 +91,7 @@ module JiraNot
 
             point_mm = snapped_host_point(host)
             placement = @host_capability.locate(host, point_mm)
+            @preview_placement = placement
             start_offset = placement[:distance_along_mm] - (@width_mm / 2.0)
 
             input = {
@@ -132,6 +159,7 @@ module JiraNot
 
             point_mm = snapped_host_point(host)
             placement = @host_capability.locate(host, point_mm)
+            @preview_placement = placement
             descriptor = {
               segment_index: placement[:segment_index],
               start_offset_mm: placement[:distance_along_mm] - (@width_mm / 2.0),

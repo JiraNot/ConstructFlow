@@ -13,8 +13,8 @@ module JiraNot
           optional_capabilities: %w[drainage.network structure.coordination],
           provides: %w[surface.boundary surface.quantity],
           objects: %w[surface.boundary surface.border surface.pattern surface.parking_layout],
-          commands: %w[CreateSurfaceBoundary ModifySurfaceBoundary AddPavingBorder SetPavingPattern SetPavingOrigin SetPavingDirection CreateParkingLayout LockPavingLayout],
-          events: %w[SurfaceCreated SurfaceChanged BorderAdded PatternChanged ParkingLayoutCreated LayoutLocked GeometryChanged QuantityDirty DrawingDirty ValidationStateChanged],
+          commands: %w[CreateSurfaceBoundary ModifySurfaceBoundary AddPavingBorder SetPavingPattern SetPavingOrigin SetPavingDirection CreateParkingLayout LockPavingLayout SetSurfaceLevels SetDrainToTarget ApplySurfaceAssembly AddControlJoint AddTreePit CreatePathBasedPaving],
+          events: %w[SurfaceCreated SurfaceChanged BorderAdded PatternChanged ParkingLayoutCreated LayoutLocked GeometryChanged QuantityDirty DrawingDirty ValidationStateChanged SurfaceLevelsChanged DrainTargetSet SurfaceAssemblyApplied ControlJointAdded TreePitAdded PathSurfaceCreated],
           providers: ['constructflow.surface.quantity'],
           validators: %w[surface.boundary.validity surface.pattern.validity surface.border.validity surface.parking.validity]
         }.freeze
@@ -41,6 +41,12 @@ module JiraNot
           register_pattern_control(runtime, repository, geometry, validator, 'SetPavingDirection', :direction)
           register_lock_pattern(runtime, repository, geometry, validator)
           register_parking(runtime, repository, geometry, validator)
+          register_surface_levels(runtime, repository, geometry, validator)
+          register_drain_to_target(runtime, repository, geometry, validator)
+          register_apply_assembly(runtime, repository, geometry, validator)
+          register_add_control_joint(runtime, repository, geometry, validator)
+          register_add_tree_pit(runtime, repository, geometry, validator)
+          register_create_path_surface(runtime, repository, geometry, validator)
           install_ui(runtime)
         end
 
@@ -303,6 +309,212 @@ module JiraNot
           end
         end
 
+        def register_surface_levels(runtime, repository, geometry, validator)
+          runtime.commands.register(
+            'SetSurfaceLevels',
+            owner_module: 'constructflow.surface'
+          ) do |command|
+            input = command[:input]
+            surface = resolve_surface(input, runtime)
+            current = repository.read_surface(surface.entity)
+            slope_def = if input[:slope_definition].is_a?(SlopeDefinition)
+                          input[:slope_definition]
+                        elsif input[:slope_definition].is_a?(Hash)
+                          SlopeDefinition.from_h(input[:slope_definition])
+                        else
+                          SlopeDefinition.new(
+                            slope_mode: input[:slope_mode] || 'planar',
+                            control_points: input[:control_points] || [],
+                            slope_percentage: input[:slope_percentage] || 1.0,
+                            slope_direction_deg: input[:slope_direction_deg] || 0.0
+                          )
+                        end
+            updated = current.with(slope_definition: slope_def)
+            repository.write_surface(surface.entity, updated)
+            repository.write_slope(surface.entity, slope_def)
+            runtime.smart_objects.mark_dirty(surface.entity, 'dirty_quantity', 'dirty_drawing')
+            {
+              updated_object_ids: [surface.id],
+              events: [
+                { name: 'SurfaceLevelsChanged', object_ids: [surface.id] },
+                { name: 'QuantityDirty', object_ids: [surface.id] },
+                { name: 'DrawingDirty', object_ids: [surface.id] }
+              ]
+            }
+          end
+        end
+
+        def register_drain_to_target(runtime, repository, geometry, validator)
+          runtime.commands.register(
+            'SetDrainToTarget',
+            owner_module: 'constructflow.surface'
+          ) do |command|
+            input = command[:input]
+            surface = resolve_surface(input, runtime)
+            current = repository.read_surface(surface.entity)
+            drain_id = (input[:drain_target_id] || input['drain_target_id']).to_s
+            slope_pct = Float(input[:slope_percentage] || input['slope_percentage'] || 1.5)
+            slope_def = SlopeDefinition.new(
+              slope_mode: 'drain_to',
+              drain_target_id: drain_id,
+              slope_percentage: slope_pct,
+              target_point_mm: input[:target_point_mm] || input['target_point_mm'],
+              target_elevation_mm: Float(input[:target_elevation_mm] || input['target_elevation_mm'] || 0.0)
+            )
+            updated = current.with(drain_target_id: drain_id, slope_definition: slope_def)
+            repository.write_surface(surface.entity, updated)
+            repository.write_slope(surface.entity, slope_def)
+            runtime.smart_objects.mark_dirty(surface.entity, 'dirty_quantity', 'dirty_drawing')
+            {
+              updated_object_ids: [surface.id],
+              events: [
+                { name: 'DrainTargetSet', object_ids: [surface.id], payload: { drain_target_id: drain_id } },
+                { name: 'SurfaceLevelsChanged', object_ids: [surface.id] },
+                { name: 'QuantityDirty', object_ids: [surface.id] },
+                { name: 'DrawingDirty', object_ids: [surface.id] }
+              ]
+            }
+          end
+        end
+
+        def register_apply_assembly(runtime, repository, geometry, validator)
+          runtime.commands.register(
+            'ApplySurfaceAssembly',
+            owner_module: 'constructflow.surface'
+          ) do |command|
+            input = command[:input]
+            surface = resolve_surface(input, runtime)
+            current = repository.read_surface(surface.entity)
+            assembly = if input[:assembly].is_a?(SurfaceAssemblyDefinition)
+                         input[:assembly]
+                       else
+                         SurfaceAssemblyDefinition.from_h(input[:assembly] || input)
+                       end
+            updated = current.with(assembly_id: assembly.id)
+            repository.write_surface(surface.entity, updated)
+            repository.write_assembly(surface.entity, assembly)
+            runtime.smart_objects.mark_dirty(surface.entity, 'dirty_quantity', 'dirty_drawing')
+            {
+              updated_object_ids: [surface.id],
+              events: [
+                { name: 'SurfaceAssemblyApplied', object_ids: [surface.id], payload: { assembly_id: assembly.id } },
+                { name: 'QuantityDirty', object_ids: [surface.id] },
+                { name: 'DrawingDirty', object_ids: [surface.id] }
+              ]
+            }
+          end
+        end
+
+        def register_add_control_joint(runtime, repository, geometry, validator)
+          runtime.commands.register(
+            'AddControlJoint',
+            owner_module: 'constructflow.surface'
+          ) do |command|
+            input = command[:input]
+            surface = resolve_surface(input, runtime)
+            joint_def = ControlJointDefinition.new(
+              surface_object_id: surface.id,
+              start_point_mm: input[:start_point_mm] || input['start_point_mm'],
+              end_point_mm: input[:end_point_mm] || input['end_point_mm'],
+              width_mm: input[:width_mm] || input['width_mm'] || 10.0,
+              depth_mm: input[:depth_mm] || input['depth_mm'] || 25.0,
+              material_id: input[:material_id] || input['material_id'] || 'sealant',
+              joint_type: input[:joint_type] || input['joint_type'] || 'expansion'
+            )
+            existing = repository.read_control_joints(surface.entity)
+            updated_joints = existing + [joint_def]
+            repository.write_control_joints(surface.entity, updated_joints)
+            runtime.smart_objects.mark_dirty(surface.entity, 'dirty_quantity', 'dirty_drawing')
+            {
+              updated_object_ids: [surface.id],
+              events: [
+                { name: 'ControlJointAdded', object_ids: [surface.id], payload: { joint_count: updated_joints.length } },
+                { name: 'QuantityDirty', object_ids: [surface.id] },
+                { name: 'DrawingDirty', object_ids: [surface.id] }
+              ]
+            }
+          end
+        end
+
+        def register_add_tree_pit(runtime, repository, geometry, validator)
+          runtime.commands.register(
+            'AddTreePit',
+            owner_module: 'constructflow.surface'
+          ) do |command|
+            input = command[:input]
+            surface = resolve_surface(input, runtime)
+            current = repository.read_surface(surface.entity)
+            pit_def = TreePitDefinition.new(
+              surface_object_id: surface.id,
+              shape: input[:shape] || input['shape'] || 'square',
+              center_point_mm: input[:center_point_mm] || input['center_point_mm'] || [0, 0, 0],
+              width_mm: input[:width_mm] || input['width_mm'] || 1000.0,
+              length_mm: input[:length_mm] || input['length_mm'] || 1000.0,
+              radius_mm: input[:radius_mm] || input['radius_mm'] || 500.0,
+              depth_mm: input[:depth_mm] || input['depth_mm'] || 800.0,
+              grille: input.fetch(:grille, input.fetch('grille', true)),
+              grille_material_id: input[:grille_material_id] || input['grille_material_id'] || 'cast_iron'
+            )
+            existing_pits = repository.read_tree_pits(surface.entity)
+            repository.write_tree_pits(surface.entity, existing_pits + [pit_def])
+
+            hole_loop = pit_def.to_hole_loop
+            updated_surface = current.with(holes_mm: current.holes_mm + [hole_loop])
+            repository.write_surface(surface.entity, updated_surface)
+
+            runtime.smart_objects.mark_dirty(surface.entity, 'dirty_quantity', 'dirty_drawing')
+            {
+              updated_object_ids: [surface.id],
+              events: [
+                { name: 'TreePitAdded', object_ids: [surface.id] },
+                { name: 'SurfaceChanged', object_ids: [surface.id] },
+                { name: 'GeometryChanged', object_ids: [surface.id] },
+                { name: 'QuantityDirty', object_ids: [surface.id] },
+                { name: 'DrawingDirty', object_ids: [surface.id] }
+              ]
+            }
+          end
+        end
+
+        def register_create_path_surface(runtime, repository, geometry, validator)
+          runtime.commands.register(
+            'CreatePathBasedPaving',
+            owner_module: 'constructflow.surface'
+          ) do |command|
+            input = command[:input]
+            path_def = PathSurfaceDefinition.new(
+              centerline_mm: input[:centerline_mm] || input['centerline_mm'],
+              width_mm: input[:width_mm] || input['width_mm'] || 1200.0,
+              surface_type: input[:surface_type] || input['surface_type'] || 'paver',
+              base_elevation_mm: input[:base_elevation_mm] || input['base_elevation_mm'] || 0.0
+            )
+            surface_def = path_def.to_surface_definition
+            group = geometry.create_surface_group(runtime.active_model, surface_def)
+            object = runtime.smart_objects.create(
+              entity: group,
+              type: 'surface.boundary',
+              owner_module: 'constructflow.surface',
+              display_name: input[:display_name] || input['display_name'] || 'Path Surface',
+              created_phase: input[:created_phase] || input['created_phase'] || runtime.project.working_phase,
+              source_state: input[:source_state] || input['source_state'] || 'confirmed'
+            )
+            repository.write_surface(group, surface_def)
+            repository.write_path(group, path_def)
+            runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
+            {
+              created_object_ids: [object.id],
+              events: [
+                { name: 'ObjectCreated', object_ids: [object.id], payload: { type: 'surface.boundary' } },
+                { name: 'PathSurfaceCreated', object_ids: [object.id] },
+                { name: 'SurfaceCreated', object_ids: [object.id], payload: { surface_type: surface_def.surface_type } },
+                { name: 'GeometryChanged', object_ids: [object.id] },
+                { name: 'QuantityDirty', object_ids: [object.id] },
+                { name: 'DrawingDirty', object_ids: [object.id] }
+              ]
+            }
+          end
+        end
+
         def reconcile_surface_dependents(runtime, repository, geometry, surface_object, surface_definition)
           runtime.smart_objects.all.filter_map do |dependent|
             relationship = Array(dependent.relationships).find do |item|
@@ -518,6 +730,8 @@ module JiraNot
         end
 
         def install_ui(runtime)
+          return unless runtime.respond_to?(:menu) && runtime.menu
+
           menu = runtime.menu.add_submenu('Surface & Paving')
           menu.add_item('Draw Surface Boundary in Plan') do
             values = UI.inputbox(['Surface type', 'Base level ID (optional)'], ['paver', ''], 'ConstructFlow Plan Surface')

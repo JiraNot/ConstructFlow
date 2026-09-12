@@ -24,7 +24,7 @@ module JiraNot
           end
 
           def activate
-            Sketchup.status_text = 'ConstructFlow Plan Wall: click start/end. Shift toggles free mode; Esc cancels.'
+            Sketchup.status_text = 'ConstructFlow ผนังอัจฉริยะ (Plan Wall): คลิกจุดเริ่มต้น/สิ้นสุด. Shift สลับโหมดแกนตรง; Esc เพื่อยกเลิก'
           end
 
           def onMouseMove(_flags, x, y, view)
@@ -84,14 +84,28 @@ module JiraNot
             return unless @hover_point
 
             unless @start_point
-              view.draw_points([@hover_point], 8, 1, 'cyan')
-              view.draw_text(@hover_point, 'Click to start Smart Wall')
+              view.draw_points([@hover_point], 8, 1, 'cyan') if view.respond_to?(:draw_points)
+              view.draw_text(@hover_point, 'Click to start Smart Wall') if view.respond_to?(:draw_text)
               return
             end
 
+            start_pt = point_from_mm(@start_point)
+            if defined?(Core::GhostPreview)
+              mesh = Core::GhostPreview.build_wall_mesh(start_pt, @hover_point, @thickness_mm, @height_mm)
+              if mesh
+                Core::GhostPreview.render_ghost(
+                  view,
+                  mesh,
+                  face_color: [52, 152, 219, 75],
+                  line_color: [41, 128, 185],
+                  centerlines: mesh[:centerlines]
+                )
+              end
+            end
+
             view.line_width = 2
-            view.draw(GL_LINES, [point_from_mm(@start_point), @hover_point])
-            if @preview
+            view.draw(GL_LINES, [start_pt, @hover_point])
+            if @preview && view.respond_to?(:draw_text)
               label = format('L %.0f mm  ΔX %.0f  ΔY %.0f', @preview[:length_mm], @preview[:delta_x_mm], @preview[:delta_y_mm])
               view.draw_text(@hover_point, label)
             end

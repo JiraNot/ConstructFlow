@@ -39,6 +39,23 @@ module JiraNot
                 format('route slope %.3f%% is below configured %.3f%%', slope, MIN_SLOPE_PERCENT)
               )
             end
+
+            definition.segment_slopes.each do |seg|
+              if seg[:reverse_slope] && !slope.negative?
+                issues << issue(
+                  'drainage.route.segment_reverse_slope',
+                  'error',
+                  format('segment %d has reverse slope %.3f%% (water trap risk)', seg[:index], seg[:slope_percent])
+                )
+              elsif seg[:steep_slope] || seg[:excessive_fall]
+                issues << issue(
+                  'drainage.route.backdrop_required',
+                  'warning',
+                  format('segment %d has steep drop (%.1fmm / %.1f%%); backdrop drop recommended', seg[:index], seg[:fall_mm], seg[:slope_percent])
+                )
+              end
+            end
+
             issues.freeze
           end
 

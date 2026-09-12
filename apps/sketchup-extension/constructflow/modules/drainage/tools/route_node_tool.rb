@@ -85,6 +85,20 @@ module JiraNot
             end
             view.draw_points(points, 9, 1, 'orange') unless points.empty?
             @input_point.draw(view) if @active_node_index && @input_point.valid?
+
+            if @active_node_index && @preview_position_mm
+              nodes = definition.route_nodes_mm
+              prev_mm = nodes[@active_node_index - 1]
+              next_mm = nodes[@active_node_index + 1]
+              if prev_mm
+                mesh1 = Core::GhostPreview.build_pipe_mesh(point(prev_mm), point(@preview_position_mm))
+                Core::GhostPreview.render_ghost(view, mesh1, face_color: [243, 156, 18, 80], line_color: [230, 126, 34]) if mesh1
+              end
+              if next_mm
+                mesh2 = Core::GhostPreview.build_pipe_mesh(point(@preview_position_mm), point(next_mm))
+                Core::GhostPreview.render_ghost(view, mesh2, face_color: [243, 156, 18, 80], line_color: [230, 126, 34]) if mesh2
+              end
+            end
           rescue StandardError
             nil
           end
