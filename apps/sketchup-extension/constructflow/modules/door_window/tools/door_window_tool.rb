@@ -16,6 +16,7 @@ module JiraNot
             @panel_style = panel_style.to_s
             @input_point = Sketchup::InputPoint.new
             @hovered_opening = nil
+            @flip_swing = false
           end
 
           def activate
@@ -88,8 +89,19 @@ module JiraNot
             bounds
           end
 
+          def onKeyDown(key, repeat, _flags, view)
+            if (key == 32 || key == 70 || key == 102) && !repeat # Spacebar or F: Toggle swing
+              @operation = @operation.include?('left') ? @operation.gsub('left', 'right') : (@operation.include?('right') ? @operation.gsub('right', 'left') : (@operation == 'swing' ? 'swing_left' : 'swing'))
+              @flip_swing = !@flip_swing
+              Sketchup.set_status_text("สลับทิศทางบานเปิด: #{@operation}", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+              view&.invalidate
+              return
+            end
+          end
+
           def deactivate(view)
             @hovered_opening = nil
+            @flip_swing = false
             view.invalidate if view
           end
 

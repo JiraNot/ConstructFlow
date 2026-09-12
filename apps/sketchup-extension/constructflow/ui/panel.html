@@ -34,6 +34,43 @@
 ════════════════════════════════════════════════════════════ -->
 <div id="panel-body">
 
+  <!-- QUICK SEARCH BAR -->
+  <div class="search-bar-wrap">
+    <input type="text" id="tool-search" placeholder="🔍 ค้นหาเครื่องมือ (เช่น ผนัง, เสา, คาน, BOQ)...">
+  </div>
+
+  <!-- CATEGORY TABS -->
+  <div class="category-tabs">
+    <button class="cat-tab active" data-cat="all">ทั้งหมด</button>
+    <button class="cat-tab" data-cat="sec-1">⚙️ โปรเจกต์</button>
+    <button class="cat-tab" data-cat="sec-2">🏛 โครงสร้าง</button>
+    <button class="cat-tab" data-cat="sec-3">🧱 สถาปัตย์</button>
+    <button class="cat-tab" data-cat="sec-4">⚡ MEP</button>
+    <button class="cat-tab" data-cat="sec-5">🛋 ตกแต่ง</button>
+  </div>
+
+  <!-- TWO-WAY BIM SMART PROPERTY INSPECTOR -->
+  <div id="bim-inspector-card" class="bim-card">
+    <div class="bim-card-header">
+      <div class="bim-card-badge" id="bim-type-badge">📦 ชิ้นงาน BIM</div>
+      <div class="bim-card-id" id="bim-id-badge">—</div>
+    </div>
+    <div id="bim-empty-notice" class="bim-empty">
+      💡 คลิกเลือก Smart Object ในโมเดล 3D เพื่อตรวจสอบขนาดและแก้ไขด่วน
+    </div>
+    <div id="bim-data-wrap" style="display:none;">
+      <div class="bim-title" id="bim-name">Smart Object</div>
+      <div class="bim-props-grid" id="bim-props">
+        <!-- Filled dynamically -->
+      </div>
+      <div class="bim-actions">
+        <button class="btn btn-sm btn-secondary" id="btn-zoom-selected">🔍 โฟกัส (Zoom)</button>
+        <button class="btn btn-sm btn-secondary" id="btn-flip-selected">🔄 สลับด้าน (Flip)</button>
+        <button class="btn btn-sm btn-danger" id="btn-delete-selected">🗑 ลบชิ้นงาน</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ────────────────────────────────────────────────────────
        SECTION 1 — ตั้งค่าโครงการ
   ──────────────────────────────────────────────────────────── -->
@@ -219,12 +256,16 @@
         </div>
         <div class="field-row cols-2">
           <div class="field">
-            <label>Base Level ID</label>
-            <input type="text" id="col-base-level" placeholder="เว้นว่างได้">
+            <label>Base Level</label>
+            <select id="col-base-level" class="level-select">
+              <option value="">-- เลือกระดับชั้น (Auto) --</option>
+            </select>
           </div>
           <div class="field">
-            <label>Top Level ID</label>
-            <input type="text" id="col-top-level" placeholder="เว้นว่างได้">
+            <label>Top Level</label>
+            <select id="col-top-level" class="level-select">
+              <option value="">-- เลือกระดับชั้น (Auto) --</option>
+            </select>
           </div>
         </div>
         <button class="btn btn-primary" data-action="placeColumn">🏛 วางเสา</button>
@@ -271,8 +312,10 @@
         </div>
         <div class="field-row">
           <div class="field">
-            <label>Base Level ID</label>
-            <input type="text" id="wall-level" placeholder="เว้นว่างได้">
+            <label>Base Level (ระดับชั้น)</label>
+            <select id="wall-level" class="level-select">
+              <option value="">-- เลือกระดับชั้น (Auto) --</option>
+            </select>
           </div>
         </div>
         <button class="btn btn-primary" data-action="drawWall">🧱 เริ่มวาดผนัง</button>

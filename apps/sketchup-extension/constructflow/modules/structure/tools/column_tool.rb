@@ -21,6 +21,7 @@ module JiraNot
             @selection_filter = Core::PlanSelectionFilter.new(object_types: ['structure.column'])
             @references = Architecture::PlanReferenceCollector.new(runtime)
             @hover_mm = nil
+            @rotation_deg = 0.0
           end
 
           def activate
@@ -106,8 +107,39 @@ module JiraNot
             @runtime.active_model.select_tool(nil)
           end
 
+          def enableVCB?
+            true
+          end
+
+          def onKeyDown(key, repeat, _flags, view)
+            if (key == 82 || key == 114) && !repeat # R key: Rotate section 90 degrees
+              @section_mm = [@section_mm[1], @section_mm[0]]
+              @rotation_deg = (@rotation_deg || 0.0) + 90.0
+              Sketchup.set_status_text("ConstructFlow เสาโครงสร้าง: หมุนเสา 90° ขนาด #{@section_mm[0].to_i}x#{@section_mm[1].to_i} mm (R เพื่อหมุนต่อ)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+              view&.invalidate
+              return
+            end
+          end
+
+          def onUserText(text, view)
+            parts = text.to_s.strip.split(/[,xX*]/).map(&:strip).reject(&:empty?)
+            if parts.length >= 2
+              w = Float(parts[0])
+              d = Float(parts[1])
+              @section_mm = [w, d]
+            elsif parts.length == 1
+              val = Float(parts[0])
+              @section_mm = [val, val]
+            end
+            Sketchup.set_status_text("กำหนดขนาดหน้าตัดเสา: #{@section_mm[0].to_i}x#{@section_mm[1].to_i} mm (คลิกเพื่อวาง)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+            view&.invalidate
+          rescue StandardError => e
+            UI.messagebox("Invalid section dimension: #{e.message}") if defined?(UI) && UI.respond_to?(:messagebox)
+          end
+
           def deactivate(view)
             @hover_mm = nil
+            @rotation_deg = 0.0
             view.invalidate if view
           end
         end

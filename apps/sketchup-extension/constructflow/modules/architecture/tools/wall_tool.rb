@@ -23,6 +23,9 @@ module JiraNot
             @input_point = Sketchup::InputPoint.new
             @start_input_point = nil
             @start_point = nil
+            @first_point = nil
+            @history = []
+            @closing_loop = false
             @hover_point = nil
             @numeric_length_mm = nil
             @preview = nil
@@ -32,6 +35,9 @@ module JiraNot
             @locked_axis = nil
             @numeric_length_mm = nil
             @start_point = nil
+            @first_point = nil
+            @history = []
+            @closing_loop = false
             @start_input_point = nil
             @hover_point = nil
             @preview = nil
@@ -50,6 +56,19 @@ module JiraNot
             if @input_point.valid?
               point_mm = @plane.project(Core::Units.point_to_mm(@input_point.position))
               if @start_point
+                # Auto-close loop detection if near first point
+                if @history.length >= 2 && @first_point
+                  dist_to_first = Math.sqrt((point_mm[0] - @first_point[0])**2 + (point_mm[1] - @first_point[1])**2)
+                  if dist_to_first <= (@interaction.snap_tolerance_mm * 1.5)
+                    point_mm = @first_point
+                    @closing_loop = true
+                  else
+                    @closing_loop = false
+                  end
+                else
+                  @closing_loop = false
+                end
+
                 mode = current_constraint_mode
                 preview = @interaction.segment_preview(
                   @start_point, point_mm, mode: mode, references: plan_references,
@@ -88,25 +107,47 @@ module JiraNot
             end
 
             if @start_point.nil?
-              @start_point = @interaction.snap(
+              snapped_pt = @interaction.snap(
                 @plane.project(Core::Units.point_to_mm(@input_point.position)), references: plan_references
               )[:point_mm]
+              @start_point = snapped_pt
+              @first_point = snapped_pt
+              @history = []
+              @closing_loop = false
               @start_input_point = Sketchup::InputPoint.new(@input_point.position)
-              Sketchup.status_text = 'ConstructFlow Plan Wall: คลิกจุดปลาย หรือ พิมพ์ความยาวใน VCB แล้วกด Enter (ลูกศร ซ้าย/ขวา เพื่อล็อคแกน)'
+              Sketchup.status_text = 'ConstructFlow Plan Wall: คลิกจุดปลาย หรือ พิมพ์ความยาวใน VCB แล้วกด Enter (Backspace: ย้อนจุด, ลูกศร: ล็อคแกน)'
               view.invalidate
               return
             end
 
-            finish = @interaction.segment_preview(
-              @start_point,
-              @plane.project(Core::Units.point_to_mm(@input_point.position)),
-              mode: current_constraint_mode, references: plan_references, length_mm: @numeric_length_mm
-            )[:finish_mm]
+            finish = if @closing_loop && @first_point
+                       @first_point
+                     else
+                       @interaction.segment_preview(
+                         @start_point,
+                         @plane.project(Core::Units.point_to_mm(@input_point.position)),
+                         mode: current_constraint_mode, references: plan_references, length_mm: @numeric_length_mm
+                       )[:finish_mm]
+                     end
+
             if create_wall(@start_point, finish)
-              @start_point = finish
-              @start_input_point = Sketchup::InputPoint.new(point_from_mm(finish))
-              @numeric_length_mm = nil
-              @preview = nil
+              @history << { start: @start_point, finish: finish }
+              if @closing_loop
+                # Loop successfully closed! Reset tool state
+                @start_point = nil
+                @first_point = nil
+                @start_input_point = nil
+                @history = []
+                @closing_loop = false
+                @numeric_length_mm = nil
+                @preview = nil
+                Sketchup.status_text = '🎉 ปิดลูปห้องและสร้างผนังสำเร็จ (Room Loop Closed)! คลิกเพื่อเริ่มแนวผนังใหม่'
+              else
+                @start_point = finish
+                @start_input_point = Sketchup::InputPoint.new(point_from_mm(finish))
+                @numeric_length_mm = nil
+                @preview = nil
+              end
             end
             view.invalidate
           end
@@ -174,9 +215,22 @@ module JiraNot
             view.draw(GL_LINES, [start_pt, @hover_point])
             @input_point.draw(view) if @input_point&.valid?
 
+            if @closing_loop && @first_point && view.respond_to?(:draw_points)
+              first_pt = point_from_mm(@first_point)
+              view.draw_points([first_pt], 14, 2, 'gold')
+              view.draw_text(first_pt, ' 🔒 คลิกเพื่อปิดลูปห้อง (Close Loop)') if view.respond_to?(:draw_text)
+            end
+
             if @preview && view.respond_to?(:draw_text)
               label = format('L %.0f mm%s  ΔX %.0f  ΔY %.0f', @preview[:length_mm], axis_label, @preview[:delta_x_mm], @preview[:delta_y_mm])
-              view.draw_text(@hover_point, label)
+              # High-contrast text with dark shadow halo
+              screen = view.respond_to?(:screen_coords) ? view.screen_coords(@hover_point) : @hover_point
+              [-1, 1].each do |ox|
+                [-1, 1].each do |oy|
+                  view.draw_text(Geom::Point3d.new(screen.x + ox, screen.y + oy, 0), label, color: 'black') rescue nil
+                end
+              end
+              view.draw_text(screen, label, color: 'white') rescue nil
             end
           end
 
@@ -187,6 +241,24 @@ module JiraNot
           end
 
           def onKeyDown(key, repeat, _flags, view)
+            if key == 8 && !repeat # Backspace: Undo last point
+              if @history.any?
+                last_seg = @history.pop
+                @start_point = last_seg[:start]
+                @start_input_point = Sketchup::InputPoint.new(point_from_mm(@start_point))
+                if @history.empty?
+                  @first_point = nil
+                  @start_point = nil
+                  @start_input_point = nil
+                end
+                @closing_loop = false
+                @numeric_length_mm = nil
+                @preview = nil
+                Sketchup.status_text = 'ConstructFlow Plan Wall: ย้อนกลับ 1 จุด (Undid last point)'
+                view&.invalidate
+                return
+              end
+            end
             if (key == 39 || (defined?(VK_RIGHT) && key == VK_RIGHT)) && !repeat
               @locked_axis = @locked_axis == :red ? nil : :red
               msg = @locked_axis ? '🔒 ล็อคแกนแดง X (Red Axis Locked)' : 'ปลดล็อคแกน (Axis Unlocked)'
@@ -260,6 +332,9 @@ module JiraNot
 
           def onCancel(_reason, view)
             @start_point = nil
+            @first_point = nil
+            @history = []
+            @closing_loop = false
             @start_input_point = nil
             @hover_point = nil
             @preview = nil
@@ -270,6 +345,9 @@ module JiraNot
 
           def deactivate(view)
             @start_point = nil
+            @first_point = nil
+            @history = []
+            @closing_loop = false
             @start_input_point = nil
             @hover_point = nil
             @preview = nil

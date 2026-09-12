@@ -28,6 +28,7 @@ const CF = {
     try {
       const data = typeof payloadStr === 'string' ? JSON.parse(payloadStr) : payloadStr;
       if (data.type === 'state') CF._applyState(data);
+      if (data.type === 'selection') CF._renderSelection(data.selected);
       if (data.type === 'toast') CF.toast(data.message, data.level || 'info');
       if (data.type === 'error') CF.toast('⚠️ ' + data.message, 'error');
     } catch (e) {
@@ -51,6 +52,63 @@ const CF = {
     Object.assign(CF._state, data.state || {});
     CF._renderStatus();
     CF._renderInspector();
+    if (CF._state.levels_list) {
+      CF._populateLevels(CF._state.levels_list);
+    }
+  },
+
+  _populateLevels(levelsList) {
+    if (!Array.isArray(levelsList)) return;
+    document.querySelectorAll('.level-select').forEach(sel => {
+      const currentVal = sel.value;
+      sel.innerHTML = '<option value="">-- เลือกระดับชั้น (Auto) --</option>';
+      levelsList.forEach(lvl => {
+        const opt = document.createElement('option');
+        opt.value = lvl.id;
+        const elev = lvl.elevation_m !== undefined ? ` (${lvl.elevation_m >= 0 ? '+' : ''}${lvl.elevation_m.toFixed(2)} ม.)` : '';
+        opt.textContent = `${lvl.name || lvl.id}${elev}`;
+        sel.appendChild(opt);
+      });
+      if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) {
+        sel.value = currentVal;
+      }
+    });
+  },
+
+  _renderSelection(selected) {
+    const emptyNotice = el('bim-empty-notice');
+    const dataWrap = el('bim-data-wrap');
+    if (!emptyNotice || !dataWrap) return;
+
+    if (!selected) {
+      emptyNotice.style.display = 'block';
+      dataWrap.style.display = 'none';
+      el('bim-type-badge').textContent = '📦 ชิ้นงาน BIM';
+      el('bim-id-badge').textContent = '—';
+      return;
+    }
+
+    emptyNotice.style.display = 'none';
+    dataWrap.style.display = 'block';
+    el('bim-type-badge').textContent = selected.badge || selected.type;
+    el('bim-id-badge').textContent = '#' + selected.id;
+    el('bim-name').textContent = selected.name || selected.type;
+
+    const propsGrid = el('bim-props');
+    propsGrid.innerHTML = '';
+    if (selected.properties && typeof selected.properties === 'object') {
+      for (const [key, val] of Object.entries(selected.properties)) {
+        const cell = document.createElement('div');
+        cell.className = 'bim-prop-cell';
+        cell.innerHTML = `<span class="bim-prop-label">${key}</span><span class="bim-prop-val">${val}</span>`;
+        propsGrid.appendChild(cell);
+      }
+    }
+
+    const flipBtn = el('btn-flip-selected');
+    if (flipBtn) {
+      flipBtn.style.display = selected.type === 'architecture.wall' ? 'inline-flex' : 'none';
+    }
   },
 
   _renderStatus() {
@@ -304,9 +362,66 @@ const CF = {
   /* ──────────────────────────────────────────────────────
      8. INIT
      ────────────────────────────────────────────────────── */
+  initCategoryTabs() {
+    document.querySelectorAll('.cat-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const cat = tab.dataset.cat;
+        document.querySelectorAll('.section').forEach(s => {
+          if (cat === 'all') {
+            s.style.display = '';
+          } else if (s.id === cat) {
+            s.style.display = '';
+            s.classList.add('active');
+          } else {
+            s.style.display = 'none';
+          }
+        });
+      });
+    });
+  },
+
+  initSearch() {
+    const searchInput = el('tool-search');
+    if (!searchInput) return;
+    searchInput.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      document.querySelectorAll('.tool-card').forEach(card => {
+        const text = card.textContent.toLowerCase();
+        if (!q || text.includes(q)) {
+          card.style.display = '';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+      if (q) {
+        document.querySelectorAll('.section').forEach(s => {
+          s.style.display = '';
+          s.classList.add('active');
+        });
+      }
+    });
+  },
+
+  initBimActions() {
+    el('btn-zoom-selected')?.addEventListener('click', () => {
+      CF.send('zoom_selected', {});
+    });
+    el('btn-flip-selected')?.addEventListener('click', () => {
+      CF.send('flip_selected_wall', {});
+    });
+    el('btn-delete-selected')?.addEventListener('click', () => {
+      CF.send('delete_selected', {});
+    });
+  },
+
   init() {
     CF.initAccordion();
     CF.initPhasePills();
+    CF.initCategoryTabs();
+    CF.initSearch();
+    CF.initBimActions();
     CF.startPolling();
     CF._renderStatus();
 

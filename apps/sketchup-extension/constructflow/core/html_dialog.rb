@@ -30,8 +30,12 @@ module JiraNot
           register_callbacks(@dialog, runtime)
           @dialog.set_file(File.join(UI_DIR, 'panel.html'))
           @dialog.show
+          setup_selection_observer(runtime)
           # Push initial state after the dialog has had a moment to render
-          @dialog.add_action_callback('panel_ready') { push_state(runtime) }
+          @dialog.add_action_callback('panel_ready') do
+            push_state(runtime)
+            push_selection(runtime)
+          end
         end
 
         def close_panel
@@ -52,6 +56,51 @@ module JiraNot
           @dialog.execute_script("CF.receive(#{payload.to_json})")
         rescue StandardError => e
           warn "[ConstructFlow] push_state error: #{e.message}"
+        end
+
+        # Push selected object info → JS
+        def push_selection(runtime)
+          return unless @dialog&.visible?
+
+          selected_info = nil
+          if defined?(runtime.active_model) && runtime.active_model
+            sel = runtime.active_model.selection
+            if sel && sel.length == 1
+              entity = sel.first
+              smart_obj = (Core::RepresentationObjectResolver.resolve(runtime, entity) rescue nil)
+              if smart_obj
+                selected_info = serialize_smart_object(runtime, smart_obj, entity)
+              end
+            end
+          end
+
+          payload = { type: 'selection', selected: selected_info }.to_json
+          @dialog.execute_script("CF.receive(#{payload.to_json})")
+        rescue StandardError => e
+          warn "[ConstructFlow] push_selection error: #{e.message}"
+        end
+
+        def setup_selection_observer(runtime)
+          return unless defined?(Sketchup::SelectionObserver)
+          return unless runtime.respond_to?(:active_model) && runtime.active_model
+
+          @selection_observer ||= Class.new(Sketchup::SelectionObserver) do
+            def initialize(mgr, rt)
+              @mgr = mgr
+              @rt = rt
+            end
+
+            def onSelectionBulkChange(_selection)
+              @mgr.push_selection(@rt)
+            end
+
+            def onSelectionCleared(_selection)
+              @mgr.push_selection(@rt)
+            end
+          end.new(self, runtime)
+
+          runtime.active_model.selection.remove_observer(@selection_observer) rescue nil
+          runtime.active_model.selection.add_observer(@selection_observer) rescue nil
         end
 
         # Send a toast notification → JS
@@ -123,13 +172,85 @@ module JiraNot
         end
 
         private_class_method def build_state(runtime)
+          levels_list = begin
+            if runtime.respond_to?(:levels) && runtime.levels
+              levs = runtime.levels.respond_to?(:values) ? runtime.levels.values : runtime.levels.to_a
+              levs.map do |l|
+                elev_mm = (l.respond_to?(:elevation_mm) ? l.elevation_mm : 0).to_f
+                {
+                  id:           (l.respond_to?(:id) ? l.id : (l.respond_to?(:name) ? l.name : '')).to_s,
+                  name:         (l.respond_to?(:name) ? l.name : '').to_s,
+                  elevation_mm: elev_mm,
+                  elevation_m:  (elev_mm / 1000.0).round(2),
+                  kind:         (l.respond_to?(:kind) ? l.kind : 'floor').to_s
+                }
+              end
+            else
+              []
+            end
+          rescue StandardError
+            []
+          end
+
           {
             project_id:    runtime.project&.project_id || '—',
             phase:         runtime.project&.working_phase || 'new_construction',
             levels:        runtime.levels&.size || 0,
+            levels_list:   levels_list,
             smart_objects: runtime.smart_objects&.size || 0,
             connectors:    runtime.connectors&.connector_count || 0,
             modules:       runtime.modules&.size || 0
+          }
+        end
+
+        private_class_method def serialize_smart_object(runtime, smart_obj, entity)
+          type_labels = {
+            'architecture.wall'     => '🧱 ผนังอัจฉริยะ (Smart Wall)',
+            'structure.column'      => '🏛 เสาคอนกรีต (RC Column)',
+            'structure.beam'        => '🏗 คานโครงสร้าง (Beam)',
+            'structure.foundation'  => '🟫 ฐานราก (Foundation)',
+            'structure.grid'        => '📐 เส้นกริด (Grid)',
+            'door_window.instance'  => '🚪 ประตู/หน้าต่าง (Door/Window)',
+            'opening.wall_opening'  => '🔲 ช่องเปิดผนัง (Opening)',
+            'drainage.manhole'      => '⚪ บ่อพัก (Manhole)',
+            'drainage.pipe_route'   => '🔵 ท่อระบายน้ำ (Pipe)',
+            'electrical.conduit_route' => '⚡ ท่อร้อยสายไฟ (Conduit)',
+            'interior.cabinet_run'  => '🛋 ตู้เคาน์เตอร์ (Cabinet)',
+            'interior.wardrobe'     => '🚪 ตู้เสื้อผ้า (Wardrobe)'
+          }
+
+          props = {}
+          begin
+            if smart_obj.type == 'architecture.wall' && defined?(Architecture::WallRepository)
+              definition = Architecture::WallRepository.new.read(entity)
+              if definition
+                props['ความยาว (L)'] = "#{definition.length_mm.round} mm"
+                props['ความหนา (T)'] = "#{definition.thickness_mm.round} mm"
+                props['ความสูง (H)'] = "#{definition.height_mm.round} mm"
+                area_sqm = (definition.length_mm * definition.height_mm) / 1_000_000.0
+                vol_cum  = (definition.length_mm * definition.height_mm * definition.thickness_mm) / 1_000_000_000.0
+                props['พื้นที่ (Area)'] = "#{area_sqm.round(2)} ตร.ม."
+                props['ปริมาตร (Vol)'] = "#{vol_cum.round(3)} คิว"
+                props['ทิศทาง'] = definition.orientation.to_s
+              end
+            end
+          rescue StandardError
+            nil
+          end
+
+          level_id = smart_obj.level_refs&.first if smart_obj.respond_to?(:level_refs)
+          if level_id.is_a?(Hash)
+            level_id = level_id[:level_id] || level_id['level_id']
+          end
+
+          {
+            id:         smart_obj.id.to_s,
+            type:       smart_obj.type.to_s,
+            badge:      type_labels[smart_obj.type.to_s] || "📦 #{smart_obj.type}",
+            name:       smart_obj.display_name.to_s.empty? ? (type_labels[smart_obj.type.to_s] || smart_obj.type) : smart_obj.display_name,
+            level_id:   level_id.to_s,
+            phase:      smart_obj.created_phase.to_s,
+            properties: props
           }
         end
 
@@ -155,6 +276,44 @@ module JiraNot
 
           'get_state' => lambda { |_runtime, _p|
             nil # state is pushed automatically after dispatch
+          },
+
+          'zoom_selected' => lambda { |runtime, _p|
+            sel = runtime.active_model.selection
+            if sel && sel.any?
+              runtime.active_model.active_view.zoom(sel.to_a) rescue nil
+            end
+            :no_state_push
+          },
+
+          'flip_selected_wall' => lambda { |runtime, _p|
+            sel = runtime.active_model.selection
+            target = sel.filter_map { |e| Core::RepresentationObjectResolver.resolve(runtime, e) rescue nil }
+                        .find { |o| o.type == 'architecture.wall' }
+            raise 'กรุณาเลือกผนังในโมเดลก่อนสลับด้าน' unless target
+
+            result = runtime.commands.execute('FlipWallOrientation', { object_id: target.id }, project_id: runtime.project.project_id)
+            if result[:status] == 'success'
+              HtmlDialogManager.toast('สลับด้านผนังสำเร็จ', level: 'success')
+              HtmlDialogManager.push_selection(runtime)
+            else
+              HtmlDialogManager.toast(result[:errors].join(', '), level: 'error')
+            end
+          },
+
+          'delete_selected' => lambda { |runtime, _p|
+            sel = runtime.active_model.selection
+            if sel && sel.any?
+              entities = sel.to_a
+              entities.each do |e|
+                runtime.smart_objects.delete(e) rescue nil
+                e.erase! if e.valid? rescue nil
+              end
+              HtmlDialogManager.toast('ลบชิ้นงานสำเร็จ', level: 'success')
+              HtmlDialogManager.push_selection(runtime)
+            else
+              raise 'กรุณาเลือกชิ้นงานก่อนลบ'
+            end
           },
 
           # -- Setup -----------------------------------------------

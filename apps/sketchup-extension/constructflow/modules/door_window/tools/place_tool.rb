@@ -30,6 +30,7 @@ module JiraNot
             @selection_filter = Core::PlanSelectionFilter.new(object_types: ['architecture.wall'], level_id: @level_id)
             @interaction = Core::PlanInteractionEngine.new
             @preview = nil
+            @flip_swing = false
           end
 
           def activate
@@ -115,8 +116,21 @@ module JiraNot
             @runtime.active_model.select_tool(nil)
           end
 
+          def onKeyDown(key, repeat, _flags, view)
+            if (key == 32 || key == 70 || key == 102) && !repeat # Spacebar or F: Toggle handing/swing
+              current_hand = @input[:handing].to_s
+              new_hand = current_hand == 'flipped' ? 'default' : 'flipped'
+              @input[:handing] = new_hand
+              @flip_swing = (new_hand == 'flipped')
+              Sketchup.set_status_text("สลับทิศทางบานเปิด: #{new_hand == 'flipped' ? 'บานกลับทิศ (Flipped)' : 'บานปกติ (Default)'}", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+              view&.invalidate
+              return
+            end
+          end
+
           def deactivate(view)
             @preview = nil
+            @flip_swing = false
             @preview_host = nil
             view.invalidate if view
           end
