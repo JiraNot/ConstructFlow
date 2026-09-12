@@ -8,6 +8,15 @@ class StructureDomainTest < Minitest::Test
     keyword_init: true
   )
 
+  ColumnScheduleRuntime = Struct.new(:active_model, :smart_objects, :commands, :project)
+  ColumnScheduleProject = Struct.new(:project_id)
+  ColumnScheduleCommands = Struct.new(:calls) do
+    def execute(name, input, project_id:)
+      calls << { name: name, input: input, project_id: project_id }
+      { status: 'success' }
+    end
+  end
+
   def column_definition
     JiraNot::ConstructFlow::Structure::ColumnDefinition.new(
       location_mm: [1000, 2000, 0],
@@ -50,6 +59,24 @@ class StructureDomainTest < Minitest::Test
     assert_equal [1100.0, 2150.0, 3000.0], box[:max]
     assert capability.intersects_box?(object, min: [1000, 1900, -100], max: [1200, 2200, 100])
     refute capability.intersects_box?(object, min: [5000, 5000, 0], max: [6000, 6000, 1000])
+  end
+
+  def test_coordination_capability_exposes_beam_bounds
+    entity = FakeEntity.new
+    repository = JiraNot::ConstructFlow::Structure::Repository.new
+    repository.write_beam(entity, JiraNot::ConstructFlow::Structure::BeamDefinition.new(
+      path_mm: [[0, 0, 1000], [4000, 3000, 1000]], section_mm: [200, 300], base_elevation_mm: 1000
+    ))
+    object = SmartObjectStub.new(
+      id: 'cf_beam_1', entity: entity,
+      owner_module: 'constructflow.structure', type: 'structure.beam'
+    )
+    capability = JiraNot::ConstructFlow::Structure::CoordinationCapability.new(repository: repository)
+
+    box = capability.bounding_box_mm(object)
+    assert_equal [-100.0, -100.0, 1000.0], box[:min]
+    assert_equal [4100.0, 3100.0, 1300.0], box[:max]
+    assert capability.intersects_box?(object, min: [3900, 2900, 1200], max: [4200, 3200, 1400])
   end
 
   def test_foundation_volume_formwork_and_support_reference
@@ -118,5 +145,24 @@ class StructureDomainTest < Minitest::Test
     refute_nil notice
     assert_equal 'info', notice[:severity]
     assert_match(/not engineering approval/, notice[:message])
+  end
+
+  def test_column_schedule_delegates_metadata_edit_and_protects_calculated_fields
+    entity = FakeEntity.new
+    repository = JiraNot::ConstructFlow::Structure::Repository.new
+    repository.write_column(entity, column_definition)
+    manager = JiraNot::ConstructFlow::Core::SmartObjectManager.new(model: FakeModel.new)
+    object = manager.create(entity: entity, type: 'structure.column', owner_module: 'constructflow.structure')
+    commands = ColumnScheduleCommands.new([])
+    runtime = ColumnScheduleRuntime.new(FakeModel.new, manager, commands, ColumnScheduleProject.new('project-1'))
+    editor = JiraNot::ConstructFlow::Structure::Registration.column_schedule_editor(runtime)
+    row = editor.rows([object]).first
+
+    assert_in_delta 3.0, row['values']['height_m'], 0.001
+    assert_raises(ArgumentError) { editor.edit(row: row, field_id: 'volume_m3', value: 2) }
+    updated = editor.edit(row: row, field_id: 'material', value: 'steel')
+
+    assert_equal 'steel', updated['values']['material']
+    assert_equal 'EditColumnSchedule', commands.calls.first[:name]
   end
 end

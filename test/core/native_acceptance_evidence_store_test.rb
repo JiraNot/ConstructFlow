@@ -7,9 +7,15 @@ require File.join(ROOT, 'apps/sketchup-extension/constructflow/core/native_accep
 NativeAcceptanceNamed = Struct.new(:name)
 NativeAcceptanceObject = Struct.new(:id)
 NativeAcceptanceProject = Struct.new(:project_id)
+NativeAcceptanceStateObject = Struct.new(:id, :value) do
+  def to_h
+    { id: id, value: value }
+  end
+end
 
 class NativeAcceptanceModel < FakeModel
   attr_accessor :path
+  attr_accessor :undo_action, :redo_action
   attr_reader :pages, :layers
 
   def initialize(path:, pages: [], layers: [])
@@ -17,6 +23,16 @@ class NativeAcceptanceModel < FakeModel
     @path = path
     @pages = pages.map { |name| NativeAcceptanceNamed.new(name) }
     @layers = layers.map { |name| NativeAcceptanceNamed.new(name) }
+  end
+
+  def undo
+    undo_action&.call
+    true
+  end
+
+  def redo
+    redo_action&.call
+    true
   end
 end
 
@@ -184,5 +200,36 @@ class NativeAcceptanceEvidenceStoreTest < Minitest::Test
 
     error = assert_raises(ArgumentError) { service.capture_baseline }
     assert_includes error.message, 'save the SketchUp model'
+  end
+
+  def test_undo_redo_probe_verifies_semantic_state_round_trip
+    model = NativeAcceptanceModel.new(path: '/projects/undo-redo.skp', pages: ['ConstructFlow - Plan'], layers: ['CF-DRAWING-PLAN'])
+    object = NativeAcceptanceStateObject.new('wall-1', 'baseline')
+    current = NativeAcceptanceRuntime.new(model, NativeAcceptanceProject.new('project-undo'), NativeAcceptanceSmartObjects.new([]))
+    current.smart_objects.objects = [object]
+    service = JiraNot::ConstructFlow::Core::NativeAcceptanceService.new(runtime: current, session_token: 'undo-a')
+    service.capture_baseline
+
+    object.value = 'edited'
+    model.undo_action = -> { object.value = 'baseline' }
+    model.redo_action = -> { object.value = 'edited' }
+
+    result = service.verify_undo_redo
+
+    assert_equal 'passed', result['status']
+    assert result['passed']
+    assert_equal 'passed', service.summary.dig('checkpoints', 'undo_redo_semantic_geometry', 'status')
+  end
+
+  def test_undo_redo_probe_requires_a_mutation_after_baseline
+    current_runtime = runtime
+    service = JiraNot::ConstructFlow::Core::NativeAcceptanceService.new(runtime: current_runtime, session_token: 'undo-a')
+    service.capture_baseline
+
+    result = service.verify_undo_redo
+
+    assert_equal 'requires_probe', result['status']
+    refute result['passed']
+    assert_equal 'pending', service.summary.dig('checkpoints', 'undo_redo_semantic_geometry', 'status')
   end
 end

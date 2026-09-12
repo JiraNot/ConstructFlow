@@ -79,7 +79,8 @@ module JiraNot
         end
 
         def opening_plan_points(definition, wall)
-          segment = wall.path_mm.each_cons(2).to_a.fetch(definition.segment_index)
+          path = wall.respond_to?(:centerline_path_mm) ? wall.centerline_path_mm : wall.path_mm
+          segment = path.each_cons(2).to_a.fetch(definition.segment_index)
           start_point, finish_point = segment
           dx = finish_point[0] - start_point[0]
           dy = finish_point[1] - start_point[1]

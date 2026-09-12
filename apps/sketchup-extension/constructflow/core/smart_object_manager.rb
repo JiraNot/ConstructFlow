@@ -158,6 +158,25 @@ module JiraNot
           fetch(entity)
         end
 
+        def update_status(entity, status)
+          fetch_required(entity)
+          value = status.to_s.strip
+          raise ArgumentError, 'smart object status required' if value.empty?
+
+          store = AttributeStore.new(entity)
+          store.write('status', value)
+          touch(store)
+          fetch(entity)
+        end
+
+        def update_revision_meta(entity, revision_meta)
+          fetch_required(entity)
+          store = AttributeStore.new(entity)
+          store.write_json('revision_meta', revision_meta || {})
+          touch(store)
+          fetch(entity)
+        end
+
         def update_relationships(entity, relationships)
           fetch_required(entity)
           store = AttributeStore.new(entity)
@@ -205,6 +224,42 @@ module JiraNot
           store.write_json('dirty_flags', updated)
           touch(store)
           fetch(entity)
+        end
+
+        # Marks an object and every semantic object that depends on it through
+        # a relationship target. Host changes therefore invalidate hosted
+        # openings/infill and generated downstream objects consistently.
+        def mark_dirty_with_dependents(entity, *flags)
+          root = fetch_required(entity)
+          ids = dependent_ids(root.id)
+          ids.each do |object_id|
+            dependent = fetch_by_id(object_id)
+            mark_dirty(dependent.entity, *flags) if dependent
+          end
+          ids.freeze
+        end
+
+        def dependent_ids(object_id)
+          target_id = object_id.respond_to?(:id) ? object_id.id.to_s : object_id.to_s
+          reverse = Hash.new { |hash, key| hash[key] = [] }
+          all.each do |object|
+            Array(object.relationships).each do |relationship|
+              target = relationship['target_id'] || relationship[:target_id]
+              reverse[target.to_s] << object.id if target
+            end
+          end
+          result = []
+          queue = [target_id]
+          visited = {}
+          until queue.empty?
+            current = queue.shift
+            next if visited[current]
+
+            visited[current] = true
+            result << current
+            reverse[current].sort.each { |dependent| queue << dependent unless visited[dependent] }
+          end
+          result
         end
 
         def clear_dirty(entity, *flags)

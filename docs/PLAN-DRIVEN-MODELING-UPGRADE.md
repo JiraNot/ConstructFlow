@@ -36,6 +36,10 @@ A Smart Object remains the source of truth. Plan, 3D, elevation, section, schedu
 
 Plan views are not only drawing output. They are production editors.
 
+The R1 foundation treats the active level and plan interaction rules as shared editing context across architectural draw/edit, hosted opening/door-window, structural, and surface/paving plan tools. This keeps cursor projection, snap selection, and committed geometry on one semantic editing plane; implementation evidence is tracked separately in `docs/STATUS.md` so this Master Plan remains the target contract rather than a transient changelog.
+
+The native ConstructFlow menu also exposes `Edit Project`, `Create Level`, `Edit Level`, and `Show Levels`, so the Plan Editor workflow can establish project metadata, inspect/revise persisted datums, and draw on a storey rather than relying on an API-only setup path. Project edits use the core command/transaction boundary and emit `ProjectChanged`; existing level-dependent Smart Objects then follow the same `LevelChanged` reconciliation path.
+
 Users should be able to create and modify at least the following directly from plan:
 
 - walls
@@ -459,6 +463,7 @@ Schedules should become bidirectional model views rather than output-only report
 
 ### Initial schedules
 
+- smart wall
 - door
 - window
 - room
@@ -760,6 +765,8 @@ The system should deterministically reconcile or flag:
 - drawing currentness
 
 Passing this scenario smoothly is a stronger product milestone than claiming broad Revit feature parity.
+
+Evidence boundary: application tests and native-tool contracts may prove the deterministic Smart Object chain, command validation, dependency invalidation, plan refresh requests and package integrity. They do not substitute for the native gate: the same scenario must still be exercised in a supported SketchUp/LayOut environment to prove interactive picking, visible 3D updates, real save/close/reopen persistence, native Undo/Redo, scenes/styles/sections and sheet/PDF output.
 
 ## 26. Explicit non-goals for this upgrade
 

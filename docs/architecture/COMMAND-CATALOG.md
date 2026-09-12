@@ -63,6 +63,14 @@ Extension orchestration follows the same rule. `GenerateOrUpdateArchitectureFrom
 
 ## Core command families
 
+### Native acceptance evidence
+
+- `RunNativeAcceptancePreflight`
+- `CaptureNativeAcceptanceBaseline`
+- `VerifyNativeAcceptanceReopen`
+- `VerifyNativeAcceptanceUndoRedo`
+- `RecordNativeAcceptanceCheckpoint`
+
 ### Project / lifecycle
 
 - `CreateProject`
@@ -87,13 +95,31 @@ Extension orchestration follows the same rule. `GenerateOrUpdateArchitectureFrom
 
 - `CreateWall`
 - `ModifyWallPath`
+- `MoveWall`
+- `MoveWallSegment`
+- `CopyWall`
+- `StretchWallEndpoint`
 - `ChangeWallType`
+- `ChangeWallConstraints`
+- `FlipWallOrientation`
+- `CreateFloor`
+- `ModifyFloorBoundary`
+- `CreateRoom`
+- `DetectRoomsFromWalls`
+- `ModifyRoomBoundary`
+- `EditRoomSchedule`
+- `CreateCeiling`
+- `ModifyCeilingBoundary`
 - `GenerateOrUpdateArchitectureFromExtension`
 - `CreateOpening`
 - `ModifyOpening`
+- `MarkUnresolvedOpeningHosts`
+- `ResolveOpeningHost`
 - `GenerateOrUpdateOpeningFromExtension`
 - `AttachOpeningInfill`
 - `CreateDoorWindow`
+- `PlaceDoorWindowOnWall`
+- `EditDoorWindowSchedule`
 - `SwapDoorWindowType`
 - `GenerateOrUpdateDoorWindowFromExtension`
 - `ApplyDecorativeWallSystem`
@@ -116,7 +142,12 @@ Extension orchestration follows the same rule. `GenerateOrUpdateArchitectureFrom
 ### Structure
 
 - `CreateStructuralGrid`
+- `ModifyStructuralGrid`
+- `CreateBeam`
+- `ModifyBeamPath`
+- `EditBeamSchedule`
 - `CreateColumn`
+- `EditColumnSchedule`
 - `GenerateFoundation`
 - `CreatePileGroup`
 - `ConnectGroundBeam`
@@ -191,6 +222,10 @@ Extension orchestration follows the same rule. `GenerateOrUpdateArchitectureFrom
 - `GenerateSchedule`
 - `RunValidation`
 - `AcceptScenarioOption`
+
+`GenerateSchedule` and schedule editing use the shared `Core::ScheduleDefinition` / `Core::ScheduleEditor` contract. Rows retain Smart Object IDs; editable instance/type fields delegate to domain commands, while calculated fields remain read-only.
+
+Door/window schedule instance edits delegate to `ModifyDoorWindowInstance`, which persists handing/schedule-mark changes and emits drawing, quantity and schedule invalidation for the same Smart Object.
 
 ## Required command semantics examples
 

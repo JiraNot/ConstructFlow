@@ -161,6 +161,26 @@ class ConstructionWorkflowTest < Minitest::Test
     assert_equal 'error', issue['severity']
   end
 
+  def test_quality_gate_surfaces_stale_takeoff_snapshot_without_blocking_settlement
+    extension = object(id: 'ext-1', type: 'extension.zone', owner: 'constructflow.extension')
+    runtime = Struct.new(:smart_objects).new(ConstructionWorkflowObjects.new([extension]))
+    execution = { 'status' => 'success', 'steps' => [], 'dirty_domains' => [] }
+    takeoff = {
+      'coverage' => [{ 'object_id' => 'ext-1', 'object_type' => 'extension.zone', 'status' => 'included' }],
+      'current' => false,
+      'stale_object_ids' => ['ext-1']
+    }
+
+    result = JiraNot::ConstructFlow::Extension::ConstructionQualityGate.new(runtime: runtime).run(
+      extension_id: 'ext-1', execution: execution, takeoff: takeoff, strict: true
+    )
+
+    assert result['publishable']
+    warning = result['issues'].find { |value| value['rule_id'] == 'construction.takeoff.snapshot_stale' }
+    refute_nil warning
+    assert_equal 'warning', warning['severity']
+  end
+
   def test_strict_quality_gate_blocks_unresolved_enabled_drainage
     extension = object(id: 'ext-1', type: 'extension.zone', owner: 'constructflow.extension')
     runtime = Struct.new(:smart_objects).new(ConstructionWorkflowObjects.new([extension]))

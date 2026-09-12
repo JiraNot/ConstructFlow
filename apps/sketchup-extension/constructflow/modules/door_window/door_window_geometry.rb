@@ -4,26 +4,28 @@ module JiraNot
   module ConstructFlow
     module DoorWindow
       class DoorWindowGeometry
-        def create_group(model, opening_object:, type:, opening_host_capability:)
+        def create_group(model, opening_object:, type:, opening_host_capability:, instance_parameters: {})
           group = model.active_entities.add_group
           group.name = "ConstructFlow #{type.category.capitalize}"
           rebuild!(
             group,
             opening_object: opening_object,
             type: type,
-            opening_host_capability: opening_host_capability
+            opening_host_capability: opening_host_capability,
+            instance_parameters: instance_parameters
           )
           group
         end
 
-        def rebuild!(group, opening_object:, type:, opening_host_capability:)
+        def rebuild!(group, opening_object:, type:, opening_host_capability:, instance_parameters: {})
           raise ArgumentError, type.errors.join('; ') unless type.valid?
 
           entities = group.entities
           entities.clear!
           frame = opening_host_capability.frame_points(opening_object)
           add_rectangle(entities, frame)
-          inner = inset_frame(frame, type.frame_width_mm)
+          parameters = type.parametric_parameters(instance_parameters: instance_parameters)
+          inner = inset_frame(frame, parameters.fetch('frame'))
           add_rectangle(entities, inner) if inner
           add_panels(entities, inner || frame, type)
           group

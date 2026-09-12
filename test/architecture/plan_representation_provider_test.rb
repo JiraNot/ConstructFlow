@@ -90,4 +90,64 @@ class ArchitecturePlanRepresentationProviderTest < Minitest::Test
     assert result[:annotations].any? { |item| item['role'] == 'infill' }
     assert_equal 'architecture_plan', result[:metadata]['drawing_family']
   end
+
+  def test_floor_plan_representation_keeps_boundary_and_holes_semantic
+    entity = FakeAttributeCarrier.new
+    repository = JiraNot::ConstructFlow::Architecture::FloorRepository.new
+    repository.write(
+      entity,
+      JiraNot::ConstructFlow::Architecture::FloorDefinition.new(
+        boundary_mm: [[0, 0, 0], [4000, 0, 0], [4000, 3000, 0], [0, 3000, 0]],
+        holes_mm: [[[1000, 1000, 0], [2000, 1000, 0], [2000, 2000, 0], [1000, 2000, 0]]],
+        thickness_mm: 150
+      )
+    )
+    object = ArchitecturePlanObject.new('floor-1', 'architecture.floor', entity, 'constructflow.architecture')
+    provider = JiraNot::ConstructFlow::Architecture::PlanRepresentationProvider.new
+
+    result = provider.render(object: object, request: request('construction'))
+
+    assert_equal 2, result[:primitives].length
+    assert_equal 'floor_boundary', result[:primitives][0]['role']
+    assert_equal 'floor_hole', result[:primitives][1]['role']
+    assert_equal [0.0, 0.0, 0.0], result[:primitives][0]['points_mm'].first
+    assert_in_delta 11_000_000.0, result[:metadata]['area_mm2'], 0.001
+  end
+
+  def test_room_plan_representation_contains_editable_boundary_and_tag
+    entity = FakeAttributeCarrier.new
+    JiraNot::ConstructFlow::Architecture::RoomRepository.new.write(
+      entity,
+      JiraNot::ConstructFlow::Architecture::RoomDefinition.new(
+        boundary_mm: [[0, 0, 0], [3000, 0, 0], [3000, 2500, 0], [0, 2500, 0]],
+        name: 'Kitchen', number: 'K-01', program: 'kitchen'
+      )
+    )
+    object = ArchitecturePlanObject.new('room-1', 'architecture.room', entity, 'constructflow.architecture')
+    provider = JiraNot::ConstructFlow::Architecture::PlanRepresentationProvider.new
+
+    result = provider.render(object: object, request: request('construction'))
+
+    assert_equal 'room_boundary', result[:primitives].first['role']
+    assert_equal 'K-01 Kitchen', result[:annotations].first['text']
+    assert_in_delta 7_500_000.0, result[:metadata]['area_mm2'], 0.001
+  end
+
+  def test_ceiling_plan_representation_is_reflected_ceiling_boundary
+    entity = FakeAttributeCarrier.new
+    JiraNot::ConstructFlow::Architecture::CeilingRepository.new.write(
+      entity,
+      JiraNot::ConstructFlow::Architecture::CeilingDefinition.new(
+        boundary_mm: [[0, 0, 2700], [3000, 0, 2700], [3000, 2500, 2700], [0, 2500, 2700]], height_mm: 2700
+      )
+    )
+    object = ArchitecturePlanObject.new('ceiling-1', 'architecture.ceiling', entity, 'constructflow.architecture')
+    provider = JiraNot::ConstructFlow::Architecture::PlanRepresentationProvider.new
+
+    result = provider.render(object: object, request: request('construction'))
+
+    assert_equal 'ceiling_boundary', result[:primitives].first['role']
+    assert_equal 'RCP', result[:annotations].first['text']
+    assert_in_delta 7_500_000.0, result[:metadata]['area_mm2'], 0.001
+  end
 end

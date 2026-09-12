@@ -8,7 +8,8 @@ module JiraNot
           PROVIDER_ID = 'constructflow.door_window.quantity'
           FORMULA_VERSION = 1
 
-          def quantities(smart_object:, type:)
+          def quantities(smart_object:, type:, instance_parameters: {})
+            parameters = type.parametric_parameters(instance_parameters: instance_parameters)
             items = [
               item(
                 smart_object: smart_object,
@@ -50,12 +51,12 @@ module JiraNot
                 classification: 'door_window.glazing.clear_area',
                 description: 'Clear glazing area',
                 measure: 'area',
-                value: type.clear_area_mm2 / 1_000_000.0,
+                value: parameters.fetch('clear_area') / 1_000_000.0,
                 unit: 'm2',
                 breakdown: {
                   type_id: type.id,
-                  clear_width_mm: type.clear_width_mm,
-                  clear_height_mm: type.clear_height_mm
+                  clear_width_mm: parameters.fetch('clear_width'),
+                  clear_height_mm: parameters.fetch('clear_height')
                 }
               )
             end

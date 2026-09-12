@@ -140,7 +140,10 @@ module JiraNot
 
         def takeoff_fingerprint(takeoff)
           rows = Array(takeoff && takeoff['coverage']).map do |entry|
-            [entry['object_id'], entry['object_type'], entry['source_module'], entry['status'], entry['item_count']].map(&:to_s).join('|')
+            [
+              entry['object_id'], entry['object_type'], entry['source_module'], entry['status'], entry['item_count'],
+              entry['current'], Array(entry['dirty_flags']).map(&:to_s).sort.join(',')
+            ].map(&:to_s).join('|')
           end.sort
           totals = Array(takeoff && takeoff['totals']).map do |entry|
             [

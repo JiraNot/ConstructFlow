@@ -22,10 +22,30 @@ require File.join(CORE, 'module_registry')
 require File.join(CORE, 'module_loader')
 require File.join(CORE, 'capability_registry')
 require File.join(CORE, 'connector_registry')
+require File.join(CORE, 'mep_semantic_contract')
+require File.join(CORE, 'representation_object_resolver')
+require File.join(CORE, 'plan_level_context')
+require File.join(CORE, 'plan_selection_filter')
+require File.join(CORE, 'parametric_object_engine')
+require File.join(CORE, 'constraint_engine')
+require File.join(CORE, 'schedule_editor')
 
 ARCH = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'architecture')
 require File.join(ARCH, 'wall_definition')
 require File.join(ARCH, 'wall_repository')
+require File.join(ARCH, 'wall_join_engine')
+require File.join(ARCH, 'floor_definition')
+require File.join(ARCH, 'floor_repository')
+require File.join(ARCH, 'quantity', 'floor_quantity_provider')
+require File.join(ARCH, 'room_definition')
+require File.join(ARCH, 'room_repository')
+require File.join(ARCH, 'room_enclosure_detector')
+require File.join(ARCH, 'plan_reference_collector')
+require File.join(ARCH, 'documentation_representation_provider')
+require File.join(ARCH, 'quantity', 'room_quantity_provider')
+require File.join(ARCH, 'ceiling_definition')
+require File.join(ARCH, 'ceiling_repository')
+require File.join(ARCH, 'quantity', 'ceiling_quantity_provider')
 require File.join(ARCH, 'validators', 'wall_validator')
 require File.join(ARCH, 'quantity', 'wall_quantity_provider')
 require File.join(ARCH, 'wall_host_capability')
@@ -70,12 +90,17 @@ require File.join(ROOF, 'quantity', 'roof_quantity_provider')
 
 STRUCTURE = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'structure')
 require File.join(STRUCTURE, 'column_definition')
+require File.join(STRUCTURE, 'grid_definition')
+require File.join(STRUCTURE, 'beam_definition')
 require File.join(STRUCTURE, 'foundation_definition')
 require File.join(STRUCTURE, 'rebar_set_definition')
 require File.join(STRUCTURE, 'repository')
+require File.join(STRUCTURE, 'grid_geometry')
+require File.join(STRUCTURE, 'beam_geometry')
 require File.join(STRUCTURE, 'coordination_capability')
 require File.join(STRUCTURE, 'validators', 'structure_validator')
 require File.join(STRUCTURE, 'quantity', 'structure_quantity_provider')
+require File.join(STRUCTURE, 'registration')
 
 SURFACE = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'surface')
 require File.join(SURFACE, 'surface_definition')
@@ -139,6 +164,14 @@ class FakeModel < FakeAttributeCarrier
 
   def abort_operation
     @operations << [:abort]
+    true
+  end
+
+  def undo
+    true
+  end
+
+  def redo
     true
   end
 end

@@ -89,6 +89,9 @@ module JiraNot
 
           affected = (gutter_ids + downpipe_ids).uniq
           unless affected.empty?
+            events.concat(affected.map do |object_id|
+              { name: 'GeometryChanged', object_ids: [object_id], payload: { reason: 'hosted_roof_reconciled' } }
+            end)
             events << { name: 'QuantityDirty', object_ids: affected }
             events << { name: 'DrawingDirty', object_ids: affected }
           end

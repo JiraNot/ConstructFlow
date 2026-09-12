@@ -19,15 +19,47 @@ require_relative 'core/module_registry'
 require_relative 'core/module_loader'
 require_relative 'core/capability_registry'
 require_relative 'core/connector_registry'
+require_relative 'core/mep_semantic_contract'
 require_relative 'core/sketchup_app_observer'
+require_relative 'core/plan_interaction_engine'
+require_relative 'core/plan_level_context'
+require_relative 'core/plan_selection_filter'
+require_relative 'core/representation_object_resolver'
+require_relative 'core/parametric_object_engine'
+require_relative 'core/constraint_engine'
+require_relative 'core/schedule_editor'
 
 require_relative 'modules/architecture/wall_definition'
 require_relative 'modules/architecture/wall_repository'
+require_relative 'modules/architecture/wall_join_engine'
+require_relative 'modules/architecture/floor_definition'
+require_relative 'modules/architecture/floor_repository'
+require_relative 'modules/architecture/floor_geometry'
+require_relative 'modules/architecture/floor_validator'
+require_relative 'modules/architecture/room_definition'
+require_relative 'modules/architecture/room_repository'
+require_relative 'modules/architecture/room_geometry'
+require_relative 'modules/architecture/room_validator'
+require_relative 'modules/architecture/room_enclosure_detector'
+require_relative 'modules/architecture/plan_reference_collector'
+require_relative 'modules/architecture/documentation_representation_provider'
+require_relative 'modules/architecture/ceiling_definition'
+require_relative 'modules/architecture/ceiling_repository'
+require_relative 'modules/architecture/ceiling_geometry'
+require_relative 'modules/architecture/ceiling_validator'
+require_relative 'modules/architecture/tools/floor_tool'
+require_relative 'modules/architecture/tools/room_tool'
+require_relative 'modules/architecture/tools/ceiling_tool'
+require_relative 'modules/architecture/tools/boundary_edit_tool'
 require_relative 'modules/architecture/validators/wall_validator'
 require_relative 'modules/architecture/quantity/wall_quantity_provider'
+require_relative 'modules/architecture/quantity/floor_quantity_provider'
+require_relative 'modules/architecture/quantity/room_quantity_provider'
+require_relative 'modules/architecture/quantity/ceiling_quantity_provider'
 require_relative 'modules/architecture/wall_geometry'
 require_relative 'modules/architecture/wall_host_capability'
 require_relative 'modules/architecture/tools/wall_tool'
+require_relative 'modules/architecture/tools/wall_edit_tool'
 require_relative 'modules/architecture/registration'
 
 require_relative 'modules/opening/opening_definition'
@@ -37,6 +69,7 @@ require_relative 'modules/opening/quantity/opening_quantity_provider'
 require_relative 'modules/opening/opening_geometry'
 require_relative 'modules/opening/opening_infill_host_capability'
 require_relative 'modules/opening/tools/opening_tool'
+require_relative 'modules/opening/tools/opening_edit_tool'
 require_relative 'modules/opening/registration'
 
 require_relative 'modules/door_window/door_window_type'
@@ -46,6 +79,7 @@ require_relative 'modules/door_window/instance_repository'
 require_relative 'modules/door_window/validators/door_window_validator'
 require_relative 'modules/door_window/quantity/door_window_quantity_provider'
 require_relative 'modules/door_window/door_window_geometry'
+require_relative 'modules/door_window/tools/place_tool'
 require_relative 'modules/door_window/registration'
 
 require_relative 'modules/extension/extension_definition'
@@ -64,17 +98,24 @@ require_relative 'modules/roof/geometry'
 require_relative 'modules/roof/edge_host_capability'
 require_relative 'modules/roof/validators/roof_validator'
 require_relative 'modules/roof/quantity/roof_quantity_provider'
+require_relative 'modules/roof/tools/boundary_tool'
 require_relative 'modules/roof/registration'
 
 require_relative 'modules/structure/column_definition'
+require_relative 'modules/structure/grid_definition'
+require_relative 'modules/structure/beam_definition'
 require_relative 'modules/structure/foundation_definition'
 require_relative 'modules/structure/rebar_set_definition'
 require_relative 'modules/structure/repository'
+require_relative 'modules/structure/grid_geometry'
+require_relative 'modules/structure/beam_geometry'
 require_relative 'modules/structure/geometry'
 require_relative 'modules/structure/coordination_capability'
 require_relative 'modules/structure/validators/structure_validator'
 require_relative 'modules/structure/quantity/structure_quantity_provider'
 require_relative 'modules/structure/tools/column_tool'
+require_relative 'modules/structure/tools/grid_tool'
+require_relative 'modules/structure/tools/beam_tool'
 require_relative 'modules/structure/registration'
 
 require_relative 'modules/surface/surface_definition'
@@ -87,6 +128,7 @@ require_relative 'modules/surface/repository'
 require_relative 'modules/surface/geometry'
 require_relative 'modules/surface/validators/surface_validator'
 require_relative 'modules/surface/quantity/surface_quantity_provider'
+require_relative 'modules/surface/tools/boundary_tool'
 require_relative 'modules/surface/registration'
 require_relative 'modules/surface/layout_registration'
 
@@ -125,8 +167,8 @@ module JiraNot
         id: 'constructflow.core', name: 'ConstructFlow Core', version: '0.1.0', schema_version: 1,
         requires: [], optional_capabilities: [],
         provides: %w[core.smart_objects core.commands core.events core.levels core.capabilities core.connectors],
-        objects: [], commands: %w[SetWorkingPhase CreateLevel ModifyLevel DemolishObject ConvertSelectionToSmartObject],
-        events: %w[WorkingPhaseChanged LevelCreated LevelChanged ObjectCreated ObjectConverted ObjectDemolished ObjectPhaseChanged],
+        objects: [], commands: %w[SetWorkingPhase UpdateProjectMetadata CreateLevel ModifyLevel DemolishObject ConvertSelectionToSmartObject],
+        events: %w[WorkingPhaseChanged ProjectChanged LevelCreated LevelChanged ObjectCreated ObjectConverted ObjectDemolished ObjectPhaseChanged],
         providers: [], validators: []
       }.freeze
 
@@ -186,6 +228,18 @@ module JiraNot
             previous = @project.working_phase
             @project.working_phase = phase
             { events: [{ name: 'WorkingPhaseChanged', payload: { previous: previous, current: phase.to_s } }] }
+          end
+
+          @commands.register('UpdateProjectMetadata', owner_module: 'constructflow.core', validator: lambda { |command|
+            name = command[:input][:name] || command[:input]['name']
+            name.to_s.strip.empty? ? ['project name required'] : []
+          }) do |command|
+            input = command[:input]
+            project = @project.update_metadata!(
+              name: input[:name] || input['name'],
+              code: input.key?(:code) ? input[:code] : input['code']
+            )
+            { events: [{ name: 'ProjectChanged', payload: { project: project } }] }
           end
 
           @commands.register('CreateLevel', owner_module: 'constructflow.core', validator: lambda { |command|
@@ -258,6 +312,78 @@ module JiraNot
         def install_ui_entry
           @menu = UI.menu('Extensions').add_submenu('ConstructFlow')
           @menu.add_item('Foundation Inspector') { show_inspector }
+          @menu.add_item('Edit Project') do
+            values = UI.inputbox(
+              ['Project name', 'Project code'],
+              [@project.project_name, @project.project_code.to_s],
+              'ConstructFlow Edit Project'
+            )
+            next unless values
+
+            result = @commands.execute(
+              'UpdateProjectMetadata',
+              { name: values[0], code: values[1] },
+              project_id: @project.project_id
+            )
+            if result[:status] == 'success'
+              UI.messagebox("Project #{values[0]} updated.")
+            else
+              UI.messagebox(Array(result[:errors]).join("\n"))
+            end
+          rescue ArgumentError => error
+            UI.messagebox("ConstructFlow Project error: #{error.message}")
+          end
+          @menu.add_item('Create Level') do
+            values = UI.inputbox(
+              ['Level ID', 'Level name', 'Elevation (mm)', 'Kind'],
+              ['', '', '0', 'FFL'],
+              'ConstructFlow Create Level'
+            )
+            next unless values
+
+            result = @commands.execute(
+              'CreateLevel',
+              { id: values[0].to_s.strip, name: values[1].to_s.strip,
+                elevation_mm: Float(values[2]), kind: values[3].to_s.strip },
+              project_id: @project.project_id
+            )
+            if result[:status] == 'success'
+              UI.messagebox("Level #{values[0]} created.")
+            else
+              UI.messagebox(Array(result[:errors]).join("\n"))
+            end
+          rescue ArgumentError => error
+            UI.messagebox("ConstructFlow Level error: #{error.message}")
+          end
+          @menu.add_item('Edit Level') do
+            values = UI.inputbox(
+              ['Level ID', 'Level name', 'Elevation (mm)', 'Kind'],
+              ['', '', '0', 'FFL'],
+              'ConstructFlow Edit Level'
+            )
+            next unless values
+
+            result = @commands.execute(
+              'ModifyLevel',
+              { id: values[0].to_s.strip, name: values[1].to_s.strip,
+                elevation_mm: Float(values[2]), kind: values[3].to_s.strip },
+              project_id: @project.project_id
+            )
+            if result[:status] == 'success'
+              UI.messagebox("Level #{values[0]} updated.")
+            else
+              UI.messagebox(Array(result[:errors]).join("\n"))
+            end
+          rescue ArgumentError => error
+            UI.messagebox("ConstructFlow Level error: #{error.message}")
+          end
+          @menu.add_item('Show Levels') do
+            levels = @levels.each.map do |level|
+              elevation = level.elevation_mm.nil? ? 'unknown elevation' : "#{level.elevation_mm} mm"
+              "#{level.id} — #{level.name} — #{elevation}"
+            end
+            UI.messagebox(levels.empty? ? 'No ConstructFlow levels defined.' : levels.join("\n"))
+          end
         end
 
         def install_builtin_modules

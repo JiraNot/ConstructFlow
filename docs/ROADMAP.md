@@ -263,6 +263,7 @@ Deliverables:
 
 Initial editable schedules:
 
+- Smart Wall
 - door
 - window
 - room

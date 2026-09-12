@@ -20,6 +20,11 @@ module JiraNot
 
           model_path = model.respond_to?(:path) ? model.path.to_s : ''
           checks << check('saved_model', !model_path.empty?, 'model has a saved .skp path')
+          checks << check(
+            'undo_redo_api',
+            model.respond_to?(:undo) && model.respond_to?(:redo),
+            'native model exposes Undo and Redo operations'
+          )
 
           project_id = @runtime.project&.project_id.to_s
           checks << check('project_id', !project_id.empty?, 'ConstructFlow project identity is initialized')

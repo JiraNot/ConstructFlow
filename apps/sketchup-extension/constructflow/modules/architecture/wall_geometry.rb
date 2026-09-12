@@ -16,7 +16,12 @@ module JiraNot
 
           entities = group.entities
           entities.clear!
-          definition.path_mm.each_cons(2).with_index do |(start_mm, finish_mm), segment_index|
+          if Array(openings).empty?
+            add_polyline_wall(entities, definition.centerline_path_mm, definition.thickness_mm, definition.height_mm)
+            return group
+          end
+
+          definition.centerline_path_mm.each_cons(2).with_index do |(start_mm, finish_mm), segment_index|
             segment_openings = Array(openings).select do |opening|
               Integer(opening['segment_index'] || opening[:segment_index] || 0) == segment_index
             end
@@ -32,7 +37,78 @@ module JiraNot
           group
         end
 
+        # Builds one continuous wall prism for a polyline. Segment-by-segment
+        # rectangles are retained for hosted openings, where the cells are
+        # needed to form the cutout; ordinary walls use this joined outline so
+        # corners do not overlap or leave visible seams.
+        def outline_points_mm(path_mm:, thickness_mm:)
+          path = Array(path_mm)
+          raise ArgumentError, 'wall path requires at least two points' if path.length < 2
+
+          half = Float(thickness_mm) / 2.0
+          left = offset_polyline(path, half)
+          right = offset_polyline(path, -half)
+          (left + right.reverse).map(&:freeze).freeze
+        end
+
         private
+
+        def add_polyline_wall(entities, path_mm, thickness_mm, height_mm)
+          face = entities.add_face(outline_points_mm(path_mm: path_mm, thickness_mm: thickness_mm).map { |value| point_mm(value) })
+          raise 'failed to create joined wall face' unless face
+
+          face.reverse! if face.normal.z < 0
+          face.pushpull(Core::Units.mm_to_su(height_mm))
+        end
+
+        def offset_polyline(path, offset)
+          points = path.map { |value| Array(value).first(3).map { |item| Float(item) } }
+          points.each_index.map do |index|
+            if index.zero? || index == points.length - 1
+              a = points[[index - 1, 0].max]
+              b = points[[index + 1, points.length - 1].min]
+              nx, ny = normal_for(a, b)
+              [points[index][0] + nx * offset, points[index][1] + ny * offset, points[index][2]]
+            else
+              previous = points[index - 1]
+              current = points[index]
+              following = points[index + 1]
+              first_normal = normal_for(previous, current)
+              second_normal = normal_for(current, following)
+              intersection = line_intersection(
+                [previous[0] + first_normal[0] * offset, previous[1] + first_normal[1] * offset],
+                [current[0] + first_normal[0] * offset, current[1] + first_normal[1] * offset],
+                [current[0] + second_normal[0] * offset, current[1] + second_normal[1] * offset],
+                [following[0] + second_normal[0] * offset, following[1] + second_normal[1] * offset]
+              )
+              if intersection
+                [intersection[0], intersection[1], current[2]]
+              else
+                average_normal = normal_for(previous, following)
+                [current[0] + average_normal[0] * offset, current[1] + average_normal[1] * offset, current[2]]
+              end
+            end
+          end
+        end
+
+        def normal_for(first, second)
+          dx = second[0] - first[0]
+          dy = second[1] - first[1]
+          length = Math.sqrt((dx * dx) + (dy * dy))
+          return [0.0, 1.0] if length <= 0.001
+
+          [-dy / length, dx / length]
+        end
+
+        def line_intersection(first_a, first_b, second_a, second_b)
+          denominator = ((first_b[0] - first_a[0]) * (second_b[1] - second_a[1])) -
+                        ((first_b[1] - first_a[1]) * (second_b[0] - second_a[0]))
+          return nil if denominator.abs <= 0.000001
+
+          ratio = (((second_a[0] - first_a[0]) * (second_b[1] - second_a[1])) -
+                   ((second_a[1] - first_a[1]) * (second_b[0] - second_a[0]))) / denominator
+          [first_a[0] + ratio * (first_b[0] - first_a[0]), first_a[1] + ratio * (first_b[1] - first_a[1])]
+        end
 
         def add_segment(entities, start_mm, finish_mm, thickness_mm, height_mm, openings)
           if openings.empty?

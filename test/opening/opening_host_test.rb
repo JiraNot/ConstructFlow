@@ -141,6 +141,26 @@ class OpeningHostTest < Minitest::Test
     assert_includes outside, 'opening extends above wall height'
   end
 
+  def test_opening_reconciliation_can_validate_against_a_proposed_wall_definition
+    descriptor = {
+      opening_id: 'cf_opening_1',
+      segment_index: 0,
+      start_offset_mm: 4200,
+      width_mm: 700,
+      height_mm: 2100,
+      sill_mm: 0
+    }
+    @host.attach_opening(@wall_object, opening_id: descriptor[:opening_id], descriptor: descriptor)
+
+    proposed = Architecture::WallDefinition.new(
+      path_mm: [[0, 0, 0], [4500, 0, 0]], thickness_mm: 100, height_mm: 2800
+    )
+    errors = @host.validate_opening(@wall_object, descriptor, wall_definition: proposed)
+
+    assert_includes errors, 'opening extends beyond wall segment'
+    assert_equal 5000.0, @wall_repository.read(@wall_entity).path_mm.last.first
+  end
+
   def test_opening_repository_owns_domain_namespace
     entity = FakeEntity.new
     repository = Opening::OpeningRepository.new

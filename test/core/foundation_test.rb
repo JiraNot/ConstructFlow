@@ -90,6 +90,37 @@ class ProjectLevelTest < Minitest::Test
     assert_equal 'measured', reopened_levels.fetch('GL').source_state
   end
 
+  def test_project_metadata_update_preserves_project_identity
+    model = FakeModel.new
+    project = JiraNot::ConstructFlow::Core::ProjectStore.new(model)
+    id = project.ensure_project!
+
+    updated = project.update_metadata!(name: 'House A', code: 'A-01')
+
+    assert_equal id, updated[:id]
+    assert_equal 'House A', updated[:name]
+    assert_equal 'A-01', updated[:code]
+    assert_equal id, project.project_id
+  end
+
+  def test_project_metadata_command_is_registered_in_core_manifest
+    source = File.read(File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'main.rb'))
+
+    assert_includes source, 'UpdateProjectMetadata'
+    assert_includes source, 'ProjectChanged'
+  end
+
+  def test_level_ids_are_returned_in_elevation_order
+    model = FakeModel.new
+    project = JiraNot::ConstructFlow::Core::ProjectStore.new(model)
+    project.ensure_project!
+    levels = JiraNot::ConstructFlow::Core::LevelRegistry.new(project_store: project)
+    levels.register(id: 'L2', name: 'Upper', kind: 'FFL', elevation_mm: 3200)
+    levels.register(id: 'L1', name: 'Ground', kind: 'FFL', elevation_mm: 0)
+
+    assert_equal %w[L1 L2], levels.ids
+  end
+
   def test_unknown_level_can_have_nil_elevation
     model = FakeModel.new
     project = JiraNot::ConstructFlow::Core::ProjectStore.new(model)
@@ -127,7 +158,7 @@ class CommandEventTest < Minitest::Test
 
   def test_successful_command_commits_then_publishes_event
     received = []
-    @events.subscribe('ObjectUpdated') { |event| received << event }
+    @events.subscribe('ObjectUpdated') { |event| received << [event, @model.operations.dup] }
     @commands.register('Example') do |_command|
       { updated_object_ids: ['cf_1'], events: [{ name: 'ObjectUpdated', object_ids: ['cf_1'] }] }
     end
@@ -138,7 +169,42 @@ class CommandEventTest < Minitest::Test
     assert_equal :start, @model.operations[0][0]
     assert_equal :commit, @model.operations[1][0]
     assert_equal 1, received.length
-    refute_nil received.first[:caused_by_command_id]
+    refute_nil received.first[0][:caused_by_command_id]
+    assert_equal :start, received.first[1][0][0]
+    assert_equal 1, received.first[1].length
+  end
+
+  def test_nested_command_uses_the_outer_native_operation
+    received = []
+    @events.subscribe('InnerChanged') { |event| received << event }
+    @commands.register('Inner') do |_command|
+      { events: [{ name: 'InnerChanged' }] }
+    end
+    @commands.register('Outer') do |_command|
+      inner = @commands.execute('Inner')
+      raise inner[:errors].join(', ') unless inner[:status] == 'success'
+
+      { events: [{ name: 'OuterChanged' }] }
+    end
+
+    result = @commands.execute('Outer')
+
+    assert_equal 'success', result[:status]
+    assert_equal 1, @model.operations.count { |operation| operation.first == :start }
+    assert_equal 1, @model.operations.count { |operation| operation.first == :commit }
+    assert_equal 1, received.length
+  end
+
+  def test_nested_transaction_failure_can_be_handled_without_aborting_outer_operation
+    @transactions.run('Outer') do
+      assert_raises(RuntimeError) do
+        @transactions.run('Inner') { raise 'inner failure' }
+      end
+    end
+
+    assert_equal 1, @model.operations.count { |operation| operation.first == :start }
+    assert_equal 1, @model.operations.count { |operation| operation.first == :commit }
+    assert_equal 0, @model.operations.count { |operation| operation.first == :abort }
   end
 
   def test_handler_failure_aborts_transaction

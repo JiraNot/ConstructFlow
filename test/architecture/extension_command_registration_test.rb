@@ -76,6 +76,11 @@ class ArchitectureExtensionCommandRegistrationTest < Minitest::Test
       true
     end
 
+    def mark_dirty_with_dependents(entity, *flags)
+      mark_dirty(entity, *flags)
+      [@by_entity.fetch(entity).id]
+    end
+
     def erase!(entity)
       object = @by_entity.delete(entity)
       raise KeyError, 'unknown fake wall' unless object

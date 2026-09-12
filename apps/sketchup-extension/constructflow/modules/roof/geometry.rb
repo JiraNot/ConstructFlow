@@ -16,9 +16,14 @@ module JiraNot
 
           entities = group.entities
           entities.clear!
-          points = definition.sloped_points_mm.map { |value| point(value) }
-          face = entities.add_face(points)
-          raise 'failed to create roof face' unless face
+          faces = definition.facets_mm.map do |facet|
+            face = entities.add_face(facet.map { |value| point(value) })
+            raise 'failed to create roof face' unless face
+
+            face.reverse! if face.normal.z < 0
+            face
+          end
+          raise 'failed to create roof faces' if faces.empty?
 
           group
         end

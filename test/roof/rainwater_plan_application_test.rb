@@ -270,7 +270,7 @@ class RainwaterPlanApplicationTest < Minitest::Test
   end
 
   def test_application_command_requires_confirmation_and_explicit_profile_for_manual_capacity
-    runtime, repository, _geometry, roof = setup_fixture
+    runtime, _repository, _geometry, roof = setup_fixture
     JiraNot::ConstructFlow::Roof::RainwaterPlanApplicationRegistration.install(runtime)
 
     rejected = runtime.commands.execute(

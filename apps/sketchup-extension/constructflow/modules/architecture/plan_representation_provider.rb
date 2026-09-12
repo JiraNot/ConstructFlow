@@ -9,6 +9,9 @@ module JiraNot
         end
 
         def render(object:, request:)
+          return render_floor(object, request) if object.type.to_s == 'architecture.floor'
+          return render_room(object, request) if object.type.to_s == 'architecture.room'
+          return render_ceiling(object, request) if object.type.to_s == 'architecture.ceiling'
           raise ArgumentError, "unsupported architecture plan representation: #{object.type}" unless object.type.to_s == 'architecture.wall'
           definition = @repository.read(object.entity)
           raise ArgumentError, "missing wall definition for #{object.id}" unless definition
@@ -18,7 +21,7 @@ module JiraNot
             {
               'type' => 'polyline',
               'role' => 'wall_centerline',
-              'points_mm' => definition.path_mm,
+              'points_mm' => definition.centerline_path_mm,
               'style_role' => 'architecture_wall'
             }
           ]
@@ -26,7 +29,7 @@ module JiraNot
             primitives.concat(offset_wall_lines(definition))
           end
 
-          center = path_midpoint(definition.path_mm)
+          center = path_midpoint(definition.centerline_path_mm)
           annotations = [annotation('wall_tag', center, 'WALL')]
           if profile != 'simple'
             annotations << annotation('wall_type', center, definition.wall_type_id)
@@ -55,10 +58,86 @@ module JiraNot
 
         private
 
+        def render_floor(object, request)
+          definition = FloorRepository.new.read(object.entity)
+          raise ArgumentError, "missing floor definition for #{object.id}" unless definition
+
+          center = floor_center(definition.boundary_mm)
+          primitives = [
+            {
+              'type' => 'closed_polyline',
+              'role' => 'floor_boundary',
+              'points_mm' => close_loop(definition.boundary_mm),
+              'style_role' => 'architecture_floor'
+            }
+          ]
+          definition.holes_mm.each do |loop|
+            primitives << {
+              'type' => 'closed_polyline',
+              'role' => 'floor_hole',
+              'points_mm' => close_loop(loop),
+              'style_role' => 'architecture_floor_hole'
+            }
+          end
+          {
+            primitives: primitives,
+            annotations: [annotation('floor_tag', center, 'FLOOR')],
+            metadata: common_metadata(request).merge(
+              'representation_profile' => representation_profile(request),
+              'area_mm2' => definition.net_area_mm2,
+              'thickness_mm' => definition.thickness_mm,
+              'level_id' => definition.level_id
+            )
+          }
+        end
+
+        def render_room(object, request)
+          definition = RoomRepository.new.read(object.entity)
+          raise ArgumentError, "missing room definition for #{object.id}" unless definition
+
+          center = floor_center(definition.boundary_mm)
+          label = [definition.number, definition.name].reject(&:empty?).join(' ')
+          label = 'ROOM' if label.empty?
+          {
+            primitives: [{
+              'type' => 'closed_polyline', 'role' => 'room_boundary',
+              'points_mm' => close_loop(definition.boundary_mm), 'style_role' => 'architecture_room'
+            }],
+            annotations: [annotation('room_tag', center, label)],
+            metadata: common_metadata(request).merge(
+              'representation_profile' => representation_profile(request),
+              'area_mm2' => definition.area_mm2,
+              'perimeter_mm' => definition.perimeter_mm,
+              'level_id' => definition.level_id,
+              'program' => definition.program
+            )
+          }
+        end
+
+        def render_ceiling(object, request)
+          definition = CeilingRepository.new.read(object.entity)
+          raise ArgumentError, "missing ceiling definition for #{object.id}" unless definition
+
+          center = floor_center(definition.boundary_mm)
+          {
+            primitives: [{
+              'type' => 'closed_polyline', 'role' => 'ceiling_boundary',
+              'points_mm' => close_loop(definition.boundary_mm), 'style_role' => 'architecture_ceiling'
+            }],
+            annotations: [annotation('ceiling_tag', center, 'RCP')],
+            metadata: common_metadata(request).merge(
+              'representation_profile' => representation_profile(request),
+              'area_mm2' => definition.net_area_mm2,
+              'height_mm' => definition.height_mm,
+              'level_id' => definition.level_id
+            )
+          }
+        end
+
         def offset_wall_lines(definition)
           half = definition.thickness_mm / 2.0
           lines = []
-          definition.path_mm.each_cons(2) do |a, b|
+          definition.centerline_path_mm.each_cons(2) do |a, b|
             dx = b[0] - a[0]
             dy = b[1] - a[1]
             length = Math.sqrt((dx * dx) + (dy * dy))
@@ -75,6 +154,22 @@ module JiraNot
             }
           end
           lines
+        end
+
+        def close_loop(loop)
+          points = Array(loop)
+          return points if points.empty? || points.first == points.last
+
+          points + [points.first]
+        end
+
+        def floor_center(points)
+          values = Array(points)
+          return [0.0, 0.0, 0.0] if values.empty?
+
+          xs = values.map { |point| point[0] }
+          ys = values.map { |point| point[1] }
+          [(xs.min + xs.max) / 2.0, (ys.min + ys.max) / 2.0, values.first[2]]
         end
 
         def representation_profile(request)

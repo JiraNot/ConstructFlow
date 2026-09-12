@@ -14,7 +14,22 @@ module JiraNot
             end
           end
 
+          install_geometry_refresh_subscription(runtime)
           install_menu(runtime)
+        end
+
+        def install_geometry_refresh_subscription(runtime)
+          return unless runtime.respond_to?(:events)
+          return if runtime.instance_variable_defined?(:@plan_scene_geometry_subscription)
+
+          runtime.events.subscribe('GeometryChanged', owner: 'constructflow.core.plan_scene') do |_event|
+            next unless runtime.respond_to?(:plan_scenes)
+
+            runtime.plan_scenes.refresh_preset('architecture.construction')
+          rescue StandardError => error
+            runtime.diagnostics&.warn('plan_scene_refresh_failed', error.message)
+          end
+          runtime.instance_variable_set(:@plan_scene_geometry_subscription, true)
         end
 
         def install_menu(runtime)

@@ -5,7 +5,7 @@ module JiraNot
     module Roof
       class RoofDefinition
         SCHEMA_VERSION = 1
-        FORMS = %w[lean_to flat].freeze
+        FORMS = %w[lean_to flat gable hip].freeze
         COVERINGS = %w[generic metal_sheet tile polycarbonate glass].freeze
 
         attr_reader :boundary_mm, :roof_form, :slope_percent, :slope_direction_xy,
@@ -54,15 +54,46 @@ module JiraNot
         end
 
         def roof_area_mm2
+          return facets_mm.sum { |facet| polygon_area_3d_mm2(facet) } if %w[gable hip].include?(roof_form)
+
           plan_area_mm2 * Math.sqrt(1.0 + ((slope_percent / 100.0)**2))
         end
 
         def sloped_points_mm
+          return rectangular_eave_points_mm if %w[gable hip].include?(roof_form) && rectangular_boundary?
+
           min_projection = boundary_mm.map { |point| projection(point) }.min || 0.0
           boundary_mm.map do |point|
             rise = (projection(point) - min_projection) * (slope_percent / 100.0)
             [point[0], point[1], low_elevation_mm + rise].freeze
           end.freeze
+        end
+
+        # Returns the roof surface as planar facets so non-planar forms do not
+        # rely on SketchUp accepting one non-planar polygon face.
+        def facets_mm
+          return [sloped_points_mm] unless rectangular_boundary? && %w[gable hip].include?(roof_form)
+
+          x_min, x_max = boundary_mm.map { |point| point[0] }.minmax
+          y_min, y_max = boundary_mm.map { |point| point[1] }.minmax
+          z = low_elevation_mm
+          if roof_form == 'gable'
+            ridge_y = (y_min + y_max) / 2.0
+            ridge_z = z + ((y_max - y_min).abs / 2.0) * slope_percent / 100.0
+            [
+              [[x_min, y_min, z], [x_max, y_min, z], [x_max, ridge_y, ridge_z], [x_min, ridge_y, ridge_z]],
+              [[x_min, ridge_y, ridge_z], [x_max, ridge_y, ridge_z], [x_max, y_max, z], [x_min, y_max, z]]
+            ].map { |facet| facet.map(&:freeze).freeze }.freeze
+          else
+            center = [(x_min + x_max) / 2.0, (y_min + y_max) / 2.0, z +
+              [x_max - x_min, y_max - y_min].min.abs / 2.0 * slope_percent / 100.0]
+            [
+              [[x_min, y_min, z], [x_max, y_min, z], center],
+              [[x_max, y_min, z], [x_max, y_max, z], center],
+              [[x_max, y_max, z], [x_min, y_max, z], center],
+              [[x_min, y_max, z], [x_min, y_min, z], center]
+            ].map { |facet| facet.map(&:freeze).freeze }.freeze
+          end
         end
 
         def perimeter_mm
@@ -160,11 +191,40 @@ module JiraNot
           (point[0] * slope_direction_xy[0]) + (point[1] * slope_direction_xy[1])
         end
 
+        def rectangular_boundary?
+          return false unless boundary_mm.length == 4
+
+          xs = boundary_mm.map { |point| point[0] }.uniq
+          ys = boundary_mm.map { |point| point[1] }.uniq
+          xs.length == 2 && ys.length == 2
+        end
+
+        def rectangular_eave_points_mm
+          x_min, x_max = boundary_mm.map { |point| point[0] }.minmax
+          y_min, y_max = boundary_mm.map { |point| point[1] }.minmax
+          [[x_min, y_min, low_elevation_mm], [x_max, y_min, low_elevation_mm],
+           [x_max, y_max, low_elevation_mm], [x_min, y_max, low_elevation_mm]].map(&:freeze).freeze
+        end
+
         def distance(a, b)
           dx = b[0] - a[0]
           dy = b[1] - a[1]
           dz = b[2] - a[2]
           Math.sqrt((dx * dx) + (dy * dy) + (dz * dz))
+        end
+
+        def polygon_area_3d_mm2(points)
+          first = points.first
+          points.drop(1).each_cons(2).sum do |a, b|
+            u = [a[0] - first[0], a[1] - first[1], a[2] - first[2]]
+            v = [b[0] - first[0], b[1] - first[1], b[2] - first[2]]
+            cross = [
+              (u[1] * v[2]) - (u[2] * v[1]),
+              (u[2] * v[0]) - (u[0] * v[2]),
+              (u[0] * v[1]) - (u[1] * v[0])
+            ]
+            Math.sqrt(cross.sum { |value| value * value }) / 2.0
+          end
         end
       end
     end

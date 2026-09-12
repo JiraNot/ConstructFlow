@@ -66,6 +66,17 @@ module JiraNot
           }.freeze
         end
 
+        def plan_reference_points_mm
+          half_x = section_mm[0] / 2.0
+          half_y = section_mm[1] / 2.0
+          x, y, z = location_mm
+          [
+            [x, y, z],
+            [x - half_x, y, z], [x + half_x, y, z],
+            [x, y - half_y, z], [x, y + half_y, z]
+          ].map(&:freeze).freeze
+        end
+
         def with(location_mm: self.location_mm, section_mm: self.section_mm,
                  base_level_id: self.base_level_id, top_level_id: self.top_level_id,
                  base_offset_mm: self.base_offset_mm, top_offset_mm: self.top_offset_mm,

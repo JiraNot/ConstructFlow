@@ -11,7 +11,7 @@ require File.join(ROOT, 'apps/sketchup-extension/constructflow/modules/extension
 
 ConstructionArchitectureTakeoffObject = Struct.new(
   :id, :type, :owner_module, :entity, :created_phase, :removed_phase, :source_state, :relationships,
-  keyword_init: true
+  :dirty_flags, keyword_init: true
 )
 
 class ConstructionArchitectureTakeoffObjects
@@ -63,11 +63,28 @@ class ConstructionArchitectureTakeoffTest < Minitest::Test
     assert_in_delta 12.0, totals['architecture.wall.gross_area']['value'], 0.0001
     assert_in_delta 1.2, totals['architecture.wall.volume']['value'], 0.0001
     assert_equal ['wall-1'], totals['architecture.wall.gross_area']['source_object_ids']
+    assert_equal true, takeoff['current']
+    assert_equal [], takeoff['stale_object_ids']
+  end
+
+  def test_takeoff_marks_quantity_snapshot_stale_when_object_or_dependency_is_dirty
+    extension_entity = FakeEntity.new
+    extension = build_object('ext-1', 'extension.zone', 'constructflow.extension', extension_entity, [], ['dirty_dependents'])
+    JiraNot::ConstructFlow::Extension::Repository.new.write(extension_entity, JiraNot::ConstructFlow::Extension::ExtensionDefinition.new(
+      boundary_mm: [[0, 0, 0], [4000, 0, 0], [4000, 3000, 0], [0, 3000, 0]], program: 'kitchen', mode: 'construction'
+    ))
+
+    runtime = Struct.new(:smart_objects).new(ConstructionArchitectureTakeoffObjects.new([extension]))
+    takeoff = JiraNot::ConstructFlow::Extension::ConstructionTakeoff.new(runtime: runtime).build('ext-1')
+
+    refute takeoff['current']
+    assert_equal ['ext-1'], takeoff['stale_object_ids']
+    assert_equal ['dirty_dependents'], takeoff['coverage'].first['dirty_flags']
   end
 
   private
 
-  def build_object(id, type, owner, entity, relationships)
+  def build_object(id, type, owner, entity, relationships, dirty_flags = [])
     ConstructionArchitectureTakeoffObject.new(
       id: id,
       type: type,
@@ -76,7 +93,8 @@ class ConstructionArchitectureTakeoffTest < Minitest::Test
       created_phase: JiraNot::ConstructFlow::Core::Phase::NEW_CONSTRUCTION,
       removed_phase: nil,
       source_state: 'confirmed',
-      relationships: relationships
+      relationships: relationships,
+      dirty_flags: dirty_flags
     )
   end
 end

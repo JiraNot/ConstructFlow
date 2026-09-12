@@ -101,6 +101,10 @@ module JiraNot
           each.map(&:to_h)
         end
 
+        def ids
+          each.map(&:id).freeze
+        end
+
         private
 
         def normalize_id(value)

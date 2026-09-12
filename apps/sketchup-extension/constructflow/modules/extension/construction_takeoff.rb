@@ -4,6 +4,8 @@ module JiraNot
   module ConstructFlow
     module Extension
       class ConstructionTakeoff
+        QUANTITY_STALE_FLAGS = %w[dirty_quantity dirty_dependents].freeze
+
         def initialize(runtime:)
           @runtime = runtime
           @extension_repository = Repository.new
@@ -20,6 +22,9 @@ module JiraNot
           @electrical_repository = Electrical::Repository.new
           @extension_provider = Quantity::ExtensionQuantityProvider.new
           @architecture_provider = Architecture::Quantity::WallQuantityProvider.new
+          @floor_provider = Architecture::Quantity::FloorQuantityProvider.new
+          @room_provider = Architecture::Quantity::RoomQuantityProvider.new
+          @ceiling_provider = Architecture::Quantity::CeilingQuantityProvider.new
           @opening_provider = Opening::Quantity::OpeningQuantityProvider.new
           @door_window_provider = DoorWindow::Quantity::DoorWindowQuantityProvider.new
           @structure_provider = Structure::Quantity::StructureQuantityProvider.new
@@ -39,13 +44,16 @@ module JiraNot
           coverage = []
           objects.each do |object|
             object_items, status = quantities_for(object)
+            dirty_flags = quantity_dirty_flags(object)
             items.concat(object_items)
             coverage << {
               'object_id' => object.id,
               'object_type' => object.type,
               'source_module' => object.owner_module,
               'status' => status,
-              'item_count' => object_items.length
+              'item_count' => object_items.length,
+              'dirty_flags' => dirty_flags,
+              'current' => (dirty_flags & QUANTITY_STALE_FLAGS).empty?
             }.freeze
           end
           groups = items.group_by { |item| [item[:phase_scope].to_s, item[:classification].to_s, item[:unit].to_s] }
@@ -66,7 +74,11 @@ module JiraNot
             'item_count' => items.length,
             'items' => items.freeze,
             'totals' => totals.freeze,
-            'coverage' => coverage.freeze
+            'coverage' => coverage.freeze,
+            'current' => coverage.all? { |entry| entry['current'] == true },
+            'stale_object_ids' => coverage.filter_map do |entry|
+              entry['object_id'] if entry['current'] == false
+            end.sort.freeze
           }.freeze
         end
 
@@ -98,6 +110,18 @@ module JiraNot
             definition_items(object, @architecture_repository.read(object.entity)) do |definition|
               @architecture_provider.quantities(smart_object: object, definition: definition)
             end
+          when 'architecture.floor'
+            definition_items(object, Architecture::FloorRepository.new.read(object.entity)) do |definition|
+              @floor_provider.quantities(smart_object: object, definition: definition)
+            end
+          when 'architecture.room'
+            definition_items(object, Architecture::RoomRepository.new.read(object.entity)) do |definition|
+              @room_provider.quantities(smart_object: object, definition: definition)
+            end
+          when 'architecture.ceiling'
+            definition_items(object, Architecture::CeilingRepository.new.read(object.entity)) do |definition|
+              @ceiling_provider.quantities(smart_object: object, definition: definition)
+            end
           when 'opening.rectangular'
             definition_items(object, @opening_repository.read(object.entity)) do |definition|
               host = @runtime.smart_objects.fetch_by_id(definition.host_object_id)
@@ -106,11 +130,15 @@ module JiraNot
           when 'door_window.instance'
             definition_items(object, @door_window_repository.read(object.entity)) do |definition|
               type = @door_window_types.fetch(definition.type_id)
-              @door_window_provider.quantities(smart_object: object, type: type)
+              @door_window_provider.quantities(smart_object: object, type: type, instance_parameters: definition.parameters)
             end
           when 'structure.column'
             definition_items(object, @structure_repository.read_column(object.entity)) do |definition|
               @structure_provider.column_quantities(smart_object: object, definition: definition)
+            end
+          when 'structure.beam'
+            definition_items(object, @structure_repository.read_beam(object.entity)) do |definition|
+              @structure_provider.beam_quantities(smart_object: object, definition: definition)
             end
           when 'structure.foundation'
             definition_items(object, @structure_repository.read_foundation(object.entity)) do |definition|
@@ -171,6 +199,10 @@ module JiraNot
         def definition_items(_object, definition)
           return [[], 'missing_definition'] unless definition
           [Array(yield(definition)), 'included']
+        end
+
+        def quantity_dirty_flags(object)
+          Array(object.respond_to?(:dirty_flags) ? object.dirty_flags : []).map(&:to_s).uniq.sort.freeze
         end
       end
     end

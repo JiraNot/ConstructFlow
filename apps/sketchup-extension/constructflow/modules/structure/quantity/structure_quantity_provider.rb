@@ -63,6 +63,36 @@ module JiraNot
             ].freeze
           end
 
+          def beam_quantities(smart_object:, definition:)
+            width, depth = definition.section_mm
+            side_area_mm2 = (2.0 * (width + depth)) * definition.length_mm
+            material = definition.material
+            [
+              item(
+                smart_object: smart_object,
+                classification: "structure.beam.#{material}",
+                description: "Structural beam #{material.tr('_', ' ')}",
+                measure: 'volume',
+                value: definition.volume_mm3 / 1_000_000_000.0,
+                unit: 'm3',
+                breakdown: {
+                  section_mm: definition.section_mm,
+                  length_mm: definition.length_mm,
+                  engineering_status: definition.engineering_status
+                }
+              ),
+              item(
+                smart_object: smart_object,
+                classification: 'structure.beam.formwork',
+                description: 'Structural beam side formwork',
+                measure: 'area',
+                value: side_area_mm2 / 1_000_000.0,
+                unit: 'm2',
+                breakdown: { excludes_top_bottom: true }
+              )
+            ].freeze
+          end
+
           def rebar_quantities(smart_object:, definition:)
             [
               item(

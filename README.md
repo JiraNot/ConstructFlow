@@ -10,7 +10,7 @@ ConstructFlow is not intended to be a collection of disconnected SketchUp tools.
 
 Core workflow:
 
-`Sketch → Convert → Generate → Connect → Modify → Propagate → Check → Takeoff → Document`
+`Draw → Select → Move → Stretch → Host → Join → Align → Type → Instance → Schedule → Document`
 
 Core lifecycle:
 
@@ -18,7 +18,9 @@ Core lifecycle:
 
 ## Status
 
-The repository is in the architecture and foundation stage. The first implementation milestone is to establish the modular kernel, shared contracts, SketchUp extension shell, module SDK, and domain specifications before implementing production generators.
+The current implementation priority is **R0 Native Reliability → R1 Plan Editor + Smart Wall 2.0**. The plan-driven upgrade is being built on the modular kernel and shared Smart Object graph so plan edits, 3D geometry, hosted relationships, schedules, quantities and documentation remain synchronized. The full product scope remains intact; Extension, Drainage, Paving, Landscape, Joinery, BOQ, QA and AI are sequenced onto the same interaction and parametric foundation rather than removed.
+
+See the [Master Upgrade Plan](docs/PLAN-DRIVEN-MODELING-UPGRADE.md), [Roadmap](docs/ROADMAP.md) and [implementation status](docs/STATUS.md) for the authoritative sequence and evidence boundary.
 
 ## Initial domain scope
 

@@ -98,7 +98,9 @@ module JiraNot
               geometry.rebuild!(existing.entity, definition, openings: openings)
               repository.write(existing.entity, definition)
               runtime.smart_objects.update_level_refs(existing.entity, current_level_refs)
-              runtime.smart_objects.mark_dirty(existing.entity, 'dirty_quantity', 'dirty_drawing')
+              runtime.smart_objects.mark_dirty_with_dependents(
+                existing.entity, 'dirty_quantity', 'dirty_drawing'
+              )
               updated_ids << existing.id
               events << {
                 name: 'GeometryChanged', object_ids: [existing.id],
@@ -127,7 +129,9 @@ module JiraNot
                 role: RELATION_ROLE,
                 metadata: { 'slot' => slot, 'domain' => 'architecture' }
               )
-              runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
+              runtime.smart_objects.mark_dirty_with_dependents(
+                group, 'dirty_quantity', 'dirty_drawing'
+              )
               created_ids << object.id
               events << {
                 name: 'ObjectCreated', object_ids: [object.id],
@@ -146,6 +150,8 @@ module JiraNot
               payload: { source: extension_id, slot: slot, removed: true, reason: 'source_intent_reconciled' }
             }
           end
+
+          Registration.reconcile_wall_joins(runtime, repository) if defined?(Registration)
 
           touched_ids = (created_ids + updated_ids + removed_ids).uniq
           events << { name: 'QuantityDirty', object_ids: touched_ids } unless touched_ids.empty?

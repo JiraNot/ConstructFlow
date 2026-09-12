@@ -32,7 +32,7 @@ module JiraNot
           px, py, = Array(point_mm).map { |value| Float(value) }
           best = nil
 
-          wall.path_mm.each_cons(2).with_index do |(start_point, finish_point), index|
+          wall.centerline_path_mm.each_cons(2).with_index do |(start_point, finish_point), index|
             sx, sy = start_point[0], start_point[1]
             fx, fy = finish_point[0], finish_point[1]
             dx = fx - sx
@@ -58,12 +58,12 @@ module JiraNot
           best || raise(ArgumentError, 'wall has no valid host segment')
         end
 
-        def validate_opening(host_object, descriptor)
-          wall = definition(host_object)
+        def validate_opening(host_object, descriptor, wall_definition: nil)
+          wall = wall_definition || definition(host_object)
           data = normalize_descriptor(descriptor)
           errors = []
           segment_index = data['segment_index']
-          segment = wall.path_mm.each_cons(2).to_a[segment_index]
+          segment = wall.centerline_path_mm.each_cons(2).to_a[segment_index]
           return ['opening references invalid wall segment'] unless segment
 
           length = segment_length_mm(*segment)
@@ -123,7 +123,7 @@ module JiraNot
         def opening_frame_points(host_object, descriptor)
           wall = definition(host_object)
           data = normalize_descriptor(descriptor)
-          start_point, finish_point = wall.path_mm.each_cons(2).to_a.fetch(data['segment_index'])
+          start_point, finish_point = wall.centerline_path_mm.each_cons(2).to_a.fetch(data['segment_index'])
           dx = finish_point[0] - start_point[0]
           dy = finish_point[1] - start_point[1]
           length = Math.sqrt((dx * dx) + (dy * dy))

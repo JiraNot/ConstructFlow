@@ -4,6 +4,10 @@ module JiraNot
   module ConstructFlow
     module Structure
       class Geometry
+        def rebuild_beam!(group, definition)
+          BeamGeometry.new.rebuild!(group, definition)
+        end
+
         def create_column_group(model, definition)
           group = model.active_entities.add_group
           group.name = 'ConstructFlow Structural Column'

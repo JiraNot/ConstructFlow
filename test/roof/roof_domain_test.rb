@@ -37,6 +37,20 @@ class RoofDomainTest < Minitest::Test
     assert_in_delta 2.0, definition.slope_percent, 0.001
   end
 
+  def test_gable_and_hip_roofs_expose_deterministic_planar_facets
+    gable = roof_definition.with(roof_form: 'gable')
+    hip = roof_definition.with(roof_form: 'hip')
+
+    assert gable.valid?
+    assert hip.valid?
+    assert_equal 2, gable.facets_mm.length
+    assert_equal 4, hip.facets_mm.length
+    assert gable.facets_mm.flatten(1).all? { |point| point.length == 3 }
+    assert hip.facets_mm.flatten(1).all? { |point| point.length == 3 }
+    assert_operator gable.roof_area_mm2, :>, gable.plan_area_mm2
+    assert_operator hip.roof_area_mm2, :>, hip.plan_area_mm2
+  end
+
   def test_repository_and_edge_capability_round_trip
     entity = FakeEntity.new
     repository = JiraNot::ConstructFlow::Roof::Repository.new
