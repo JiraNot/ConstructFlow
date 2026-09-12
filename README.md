@@ -18,7 +18,7 @@ Core lifecycle:
 
 ## Status
 
-The repository is in the architecture and foundation stage. The first implementation milestone is to establish the modular kernel, shared contracts, SketchUp extension shell, module SDK, and domain specifications before implementing production generators.
+ConstructFlow has completed its modular kernel, shared contracts, domain module foundations, and an end-to-end **Construction Workflow v1** application vertical slice verified by pure-Ruby CI. The repository also includes a deterministic SketchUp RBZ packaging tool, automated CI build workflow, and an observer-driven native acceptance harness. Live desktop verification inside supported SketchUp/LayOut environments is defined in `docs/implementation/NATIVE-APPLICATION-ACCEPTANCE-RUNBOOK.md`.
 
 ## Initial domain scope
 

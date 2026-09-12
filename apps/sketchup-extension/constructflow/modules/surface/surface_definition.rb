@@ -8,11 +8,11 @@ module JiraNot
         SURFACE_TYPES = %w[tile paver stamped_concrete stone deck concrete generic].freeze
 
         attr_reader :outer_boundary_mm, :holes_mm, :surface_type, :base_level_id,
-                    :base_elevation_mm, :assembly_id, :drain_target_id
+                    :base_elevation_mm, :assembly_id, :drain_target_id, :slope_definition
 
         def initialize(outer_boundary_mm:, holes_mm: [], surface_type: 'generic',
                        base_level_id: nil, base_elevation_mm: 0,
-                       assembly_id: nil, drain_target_id: nil)
+                       assembly_id: nil, drain_target_id: nil, slope_definition: nil)
           @outer_boundary_mm = normalize_loop(outer_boundary_mm).freeze
           @holes_mm = Array(holes_mm).map { |loop| normalize_loop(loop).freeze }.freeze
           @surface_type = surface_type.to_s
@@ -20,6 +20,11 @@ module JiraNot
           @base_elevation_mm = Float(base_elevation_mm)
           @assembly_id = assembly_id&.to_s
           @drain_target_id = drain_target_id&.to_s
+          @slope_definition = if slope_definition.is_a?(Hash)
+                                SlopeDefinition.from_h(slope_definition)
+                              else
+                                slope_definition
+                              end
           freeze
         end
 
@@ -88,7 +93,7 @@ module JiraNot
         def with(outer_boundary_mm: self.outer_boundary_mm, holes_mm: self.holes_mm,
                  surface_type: self.surface_type, base_level_id: self.base_level_id,
                  base_elevation_mm: self.base_elevation_mm, assembly_id: self.assembly_id,
-                 drain_target_id: self.drain_target_id)
+                 drain_target_id: self.drain_target_id, slope_definition: self.slope_definition)
           self.class.new(
             outer_boundary_mm: outer_boundary_mm,
             holes_mm: holes_mm,
@@ -96,7 +101,8 @@ module JiraNot
             base_level_id: base_level_id,
             base_elevation_mm: base_elevation_mm,
             assembly_id: assembly_id,
-            drain_target_id: drain_target_id
+            drain_target_id: drain_target_id,
+            slope_definition: slope_definition
           )
         end
 
@@ -109,7 +115,8 @@ module JiraNot
             'base_level_id' => base_level_id,
             'base_elevation_mm' => base_elevation_mm,
             'assembly_id' => assembly_id,
-            'drain_target_id' => drain_target_id
+            'drain_target_id' => drain_target_id,
+            'slope_definition' => slope_definition&.to_h
           }
         end
 
@@ -122,7 +129,8 @@ module JiraNot
             base_level_id: data['base_level_id'] || data[:base_level_id],
             base_elevation_mm: data['base_elevation_mm'] || data[:base_elevation_mm] || 0,
             assembly_id: data['assembly_id'] || data[:assembly_id],
-            drain_target_id: data['drain_target_id'] || data[:drain_target_id]
+            drain_target_id: data['drain_target_id'] || data[:drain_target_id],
+            slope_definition: data['slope_definition'] || data[:slope_definition]
           )
         end
 

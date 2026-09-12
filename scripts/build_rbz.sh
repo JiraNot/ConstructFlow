@@ -37,7 +37,7 @@ if [[ "${ROOT_ENTRIES[*]}" != "${EXPECTED[*]}" ]]; then
   exit 1
 fi
 
-if ! unzip -Z1 "$OUT_PATH" | grep -qx 'constructflow/bootstrap.rb'; then
+if ! unzip -Z1 "$OUT_PATH" | grep -x 'constructflow/bootstrap.rb' >/dev/null; then
   echo "RBZ is missing constructflow/bootstrap.rb" >&2
   exit 1
 fi

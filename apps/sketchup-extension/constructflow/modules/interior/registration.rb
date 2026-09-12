@@ -12,9 +12,9 @@ module JiraNot
           requires: ['constructflow.core'],
           optional_capabilities: %w[architecture.wall_host plumbing.network drainage.network electrical.network],
           provides: %w[interior.joinery interior.quantity],
-          objects: %w[interior.cabinet_run],
-          commands: %w[CreateCabinetRun SplitCabinetModule AssignCabinetFront AddDrawerSet GenerateJoineryParts],
-          events: %w[CabinetRunCreated CabinetModulesChanged CabinetFrontChanged DrawerSetChanged JoineryPartsGenerated GeometryChanged QuantityDirty DrawingDirty ValidationStateChanged],
+          objects: %w[interior.cabinet_run interior.countertop interior.wardrobe interior.false_ceiling interior.wall_paneling],
+          commands: %w[CreateCabinetRun SplitCabinetModule AssignCabinetFront AddDrawerSet GenerateJoineryParts CreateCountertop CreateWardrobe CreateFalseCeiling CreateWallPaneling GenerateSheetNesting ExportCutList GenerateCncOperations],
+          events: %w[CabinetRunCreated CabinetModulesChanged CabinetFrontChanged DrawerSetChanged JoineryPartsGenerated CountertopCreated WardrobeCreated FalseCeilingCreated WallPanelingCreated SheetNestingGenerated CutListExported CncOperationsGenerated GeometryChanged QuantityDirty DrawingDirty ValidationStateChanged],
           providers: ['constructflow.interior.quantity'],
           validators: %w[interior.cabinet.validity interior.parts.validity]
         }.freeze
@@ -47,6 +47,13 @@ module JiraNot
           register_front(runtime, repository, geometry, validator)
           register_drawers(runtime, repository, geometry, validator)
           register_generate_parts(runtime, repository, validator, part_generator)
+          register_sheet_nesting(runtime, repository)
+          register_export_cut_list(runtime, repository)
+          register_cnc_operations(runtime, repository)
+          register_countertop(runtime, repository, geometry)
+          register_wardrobe(runtime, repository, geometry)
+          register_false_ceiling(runtime, repository, geometry)
+          register_wall_paneling(runtime, repository, geometry)
           install_ui(runtime)
         end
 
@@ -220,6 +227,96 @@ module JiraNot
           end
         end
 
+        def register_sheet_nesting(runtime, repository)
+          runtime.commands.register(
+            'GenerateSheetNesting',
+            owner_module: 'constructflow.interior'
+          ) do |command|
+            cabinet = resolve_cabinet(command[:input], runtime)
+            raise ArgumentError, 'cabinet run not found' unless cabinet
+            part_set = repository.read_part_set(cabinet.entity)
+            raise ArgumentError, 'part set missing; generate parts first' unless part_set
+
+            input = command[:input]
+            engine = SheetNestingEngine.new
+            sheet_w = input[:sheet_width_mm] || input['sheet_width_mm'] || NestingResultDefinition::DEFAULT_SHEET_WIDTH_MM
+            sheet_l = input[:sheet_length_mm] || input['sheet_length_mm'] || NestingResultDefinition::DEFAULT_SHEET_LENGTH_MM
+            kerf = input[:saw_kerf_mm] || input['saw_kerf_mm'] || NestingResultDefinition::DEFAULT_SAW_KERF_MM
+            margin = input[:trim_margin_mm] || input['trim_margin_mm'] || NestingResultDefinition::DEFAULT_TRIM_MARGIN_MM
+
+            result = engine.nest(
+              cabinet_object_id: cabinet.id,
+              part_set: part_set,
+              sheet_width_mm: sheet_w,
+              sheet_length_mm: sheet_l,
+              saw_kerf_mm: kerf,
+              trim_margin_mm: margin
+            )
+            repository.write_nesting_result(cabinet.entity, result)
+            {
+              updated_object_ids: [cabinet.id],
+              events: [
+                {
+                  name: 'SheetNestingGenerated',
+                  object_ids: [cabinet.id],
+                  payload: result.to_h
+                }
+              ]
+            }
+          end
+        end
+
+        def register_export_cut_list(runtime, repository)
+          runtime.commands.register(
+            'ExportCutList',
+            owner_module: 'constructflow.interior'
+          ) do |command|
+            cabinet = resolve_cabinet(command[:input], runtime)
+            raise ArgumentError, 'cabinet run not found' unless cabinet
+            part_set = repository.read_part_set(cabinet.entity)
+            raise ArgumentError, 'part set missing; generate parts first' unless part_set
+
+            exporter = CutListExporter.new
+            cut_list = exporter.export(part_set)
+            {
+              updated_object_ids: [cabinet.id],
+              events: [
+                {
+                  name: 'CutListExported',
+                  object_ids: [cabinet.id],
+                  payload: cut_list
+                }
+              ]
+            }
+          end
+        end
+
+        def register_cnc_operations(runtime, repository)
+          runtime.commands.register(
+            'GenerateCncOperations',
+            owner_module: 'constructflow.interior'
+          ) do |command|
+            cabinet = resolve_cabinet(command[:input], runtime)
+            raise ArgumentError, 'cabinet run not found' unless cabinet
+            part_set = repository.read_part_set(cabinet.entity)
+            raise ArgumentError, 'part set missing; generate parts first' unless part_set
+            current = repository.read_cabinet_run(cabinet.entity)
+
+            generator = CncOperationGenerator.new
+            ops = generator.generate(part_set, cabinet_definition: current)
+            {
+              updated_object_ids: [cabinet.id],
+              events: [
+                {
+                  name: 'CncOperationsGenerated',
+                  object_ids: [cabinet.id],
+                  payload: ops
+                }
+              ]
+            }
+          end
+        end
+
         def definition_from_input(input)
           CabinetRunDefinition.new(
             origin_mm: input[:origin_mm] || input['origin_mm'] || [0, 0, 0],
@@ -331,6 +428,8 @@ module JiraNot
         end
 
         def install_ui(runtime)
+          return unless runtime.respond_to?(:menu) && runtime.menu
+
           menu = runtime.menu.add_submenu('Interior & Joinery')
           menu.add_item('Place Cabinet Run') do
             values = UI.inputbox(
@@ -437,6 +536,172 @@ module JiraNot
         rescue StandardError => error
           UI.messagebox("ConstructFlow Interior error: #{error.message}")
           nil
+        end
+
+        def register_countertop(runtime, repository, geometry)
+          runtime.commands.register('CreateCountertop', owner_module: 'constructflow.interior') do |command|
+            input = command[:input]
+            definition = CountertopDefinition.new(
+              cabinet_run_id: value(input, :cabinet_run_id),
+              length_mm: value(input, :length_mm) || 2000.0,
+              depth_mm: value(input, :depth_mm) || 600.0,
+              thickness_mm: value(input, :thickness_mm) || CountertopDefinition::DEFAULT_THICKNESS_MM,
+              front_overhang_mm: value(input, :front_overhang_mm) || CountertopDefinition::DEFAULT_FRONT_OVERHANG_MM,
+              back_overhang_mm: value(input, :back_overhang_mm) || 0.0,
+              left_overhang_mm: value(input, :left_overhang_mm) || 15.0,
+              right_overhang_mm: value(input, :right_overhang_mm) || 15.0,
+              material_id: value(input, :material_id) || 'quartz',
+              splashback_height_mm: value(input, :splashback_height_mm) || 100.0,
+              waterfall_left: value(input, :waterfall_left) == true,
+              waterfall_right: value(input, :waterfall_right) == true,
+              cutouts: value(input, :cutouts) || []
+            )
+
+            group = geometry.create_countertop_group(runtime.active_model, definition)
+            object = runtime.smart_objects.create(
+              entity: group,
+              type: 'interior.countertop',
+              owner_module: 'constructflow.interior',
+              display_name: value(input, :display_name) || "Countertop #{definition.material_id}",
+              created_phase: value(input, :created_phase) || runtime.project.working_phase,
+              source_state: value(input, :source_state) || 'confirmed'
+            )
+            definition = definition.with(id: object.id)
+            repository.write_countertop(group, definition)
+            runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
+
+            {
+              created_object_ids: [object.id],
+              events: [
+                { name: 'ObjectCreated', object_ids: [object.id], payload: { type: 'interior.countertop' } },
+                { name: 'CountertopCreated', object_ids: [object.id], payload: definition.to_h },
+                { name: 'GeometryChanged', object_ids: [object.id] },
+                { name: 'QuantityDirty', object_ids: [object.id] }
+              ]
+            }
+          end
+        end
+
+        def register_wardrobe(runtime, repository, geometry)
+          runtime.commands.register('CreateWardrobe', owner_module: 'constructflow.interior') do |command|
+            input = command[:input]
+            definition = WardrobeDefinition.new(
+              origin_mm: value(input, :origin_mm) || [0, 0, 0],
+              angle_deg: value(input, :angle_deg) || 0,
+              width_mm: value(input, :width_mm) || 1800.0,
+              height_mm: value(input, :height_mm) || 2400.0,
+              depth_mm: value(input, :depth_mm) || WardrobeDefinition::DEFAULT_DEPTH_MM,
+              door_type: value(input, :door_type) || 'hinged',
+              sliding_track_setback_mm: value(input, :sliding_track_setback_mm) || WardrobeDefinition::DEFAULT_SLIDING_TRACK_SETBACK_MM,
+              plinth_height_mm: value(input, :plinth_height_mm) || 80.0,
+              board_thickness_mm: value(input, :board_thickness_mm) || 18.0,
+              sections: value(input, :sections) || []
+            )
+
+            group = geometry.create_wardrobe_group(runtime.active_model, definition)
+            object = runtime.smart_objects.create(
+              entity: group,
+              type: 'interior.wardrobe',
+              owner_module: 'constructflow.interior',
+              display_name: value(input, :display_name) || "Wardrobe #{definition.door_type}",
+              created_phase: value(input, :created_phase) || runtime.project.working_phase,
+              source_state: value(input, :source_state) || 'confirmed'
+            )
+            definition = definition.with(id: object.id)
+            repository.write_wardrobe(group, definition)
+            runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
+
+            {
+              created_object_ids: [object.id],
+              events: [
+                { name: 'ObjectCreated', object_ids: [object.id], payload: { type: 'interior.wardrobe' } },
+                { name: 'WardrobeCreated', object_ids: [object.id], payload: definition.to_h },
+                { name: 'GeometryChanged', object_ids: [object.id] },
+                { name: 'QuantityDirty', object_ids: [object.id] }
+              ]
+            }
+          end
+        end
+
+        def register_false_ceiling(runtime, repository, geometry)
+          runtime.commands.register('CreateFalseCeiling', owner_module: 'constructflow.interior') do |command|
+            input = command[:input]
+            definition = FalseCeilingDefinition.new(
+              boundary_nodes_mm: value(input, :boundary_nodes_mm) || [[0, 0, 0], [4000, 0, 0], [4000, 4000, 0], [0, 4000, 0]],
+              ceiling_type: value(input, :ceiling_type) || 'flat_gypsum',
+              elevation_z_mm: value(input, :elevation_z_mm) || 2600.0,
+              plenum_depth_mm: value(input, :plenum_depth_mm) || 200.0,
+              perimeter_gap_mm: value(input, :perimeter_gap_mm) || 15.0,
+              cove_trough: value(input, :cove_trough)
+            )
+
+            group = geometry.create_false_ceiling_group(runtime.active_model, definition)
+            object = runtime.smart_objects.create(
+              entity: group,
+              type: 'interior.false_ceiling',
+              owner_module: 'constructflow.interior',
+              display_name: value(input, :display_name) || "Ceiling #{definition.ceiling_type}",
+              created_phase: value(input, :created_phase) || runtime.project.working_phase,
+              source_state: value(input, :source_state) || 'confirmed'
+            )
+            definition = definition.with(id: object.id)
+            repository.write_false_ceiling(group, definition)
+            runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
+
+            {
+              created_object_ids: [object.id],
+              events: [
+                { name: 'ObjectCreated', object_ids: [object.id], payload: { type: 'interior.false_ceiling' } },
+                { name: 'FalseCeilingCreated', object_ids: [object.id], payload: definition.to_h },
+                { name: 'GeometryChanged', object_ids: [object.id] },
+                { name: 'QuantityDirty', object_ids: [object.id] }
+              ]
+            }
+          end
+        end
+
+        def register_wall_paneling(runtime, repository, geometry)
+          runtime.commands.register('CreateWallPaneling', owner_module: 'constructflow.interior') do |command|
+            input = command[:input]
+            definition = WallPanelingDefinition.new(
+              wall_length_mm: value(input, :wall_length_mm) || 3000.0,
+              wall_height_mm: value(input, :wall_height_mm) || 2600.0,
+              style: value(input, :style) || 'slat_fluted',
+              slat_width_mm: value(input, :slat_width_mm) || 35.0,
+              slat_gap_mm: value(input, :slat_gap_mm) || 15.0,
+              slat_depth_mm: value(input, :slat_depth_mm) || 15.0,
+              dado_rail_height_mm: value(input, :dado_rail_height_mm) || 1000.0,
+              skirting_height_mm: value(input, :skirting_height_mm) || 100.0,
+              divisions_count: value(input, :divisions_count)
+            )
+
+            group = geometry.create_wall_paneling_group(runtime.active_model, definition)
+            object = runtime.smart_objects.create(
+              entity: group,
+              type: 'interior.wall_paneling',
+              owner_module: 'constructflow.interior',
+              display_name: value(input, :display_name) || "Wall Paneling #{definition.style}",
+              created_phase: value(input, :created_phase) || runtime.project.working_phase,
+              source_state: value(input, :source_state) || 'confirmed'
+            )
+            definition = definition.with(id: object.id)
+            repository.write_wall_paneling(group, definition)
+            runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
+
+            {
+              created_object_ids: [object.id],
+              events: [
+                { name: 'ObjectCreated', object_ids: [object.id], payload: { type: 'interior.wall_paneling' } },
+                { name: 'WallPanelingCreated', object_ids: [object.id], payload: definition.to_h },
+                { name: 'GeometryChanged', object_ids: [object.id] },
+                { name: 'QuantityDirty', object_ids: [object.id] }
+              ]
+            }
+          end
+        end
+
+        def value(input, key)
+          input[key] || input[key.to_s]
         end
       end
     end

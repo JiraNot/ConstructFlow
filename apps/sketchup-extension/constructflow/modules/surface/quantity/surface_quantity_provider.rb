@@ -153,6 +153,102 @@ module JiraNot
             )].freeze
           end
 
+          def assembly_quantities(smart_object:, assembly_definition:, surface_definition:)
+            items = []
+            net_area_m2 = surface_definition.net_area_mm2 / 1_000_000.0
+
+            assembly_definition.layers.each_with_index do |layer, index|
+              layer_name = layer['name']
+              thickness_mm = layer['thickness_mm']
+              material_id = layer['material_id']
+              owned = layer['owned_by_surface']
+
+              if owned
+                volume_m3 = (surface_definition.net_area_mm2 * thickness_mm) / 1_000_000_000.0
+                items << item(
+                  smart_object: smart_object,
+                  classification: "surface.assembly.layer.#{index + 1}.area",
+                  description: "Assembly layer #{layer_name} area",
+                  measure: 'area',
+                  value: net_area_m2,
+                  unit: 'm2',
+                  breakdown: {
+                    layer_index: index,
+                    layer_name: layer_name,
+                    thickness_mm: thickness_mm,
+                    material_id: material_id,
+                    owned_by_surface: true
+                  }
+                )
+                items << item(
+                  smart_object: smart_object,
+                  classification: "surface.assembly.layer.#{index + 1}.volume",
+                  description: "Assembly layer #{layer_name} volume",
+                  measure: 'volume',
+                  value: volume_m3,
+                  unit: 'm3',
+                  breakdown: {
+                    layer_index: index,
+                    layer_name: layer_name,
+                    thickness_mm: thickness_mm,
+                    material_id: material_id,
+                    owned_by_surface: true
+                  }
+                )
+              else
+                items << item(
+                  smart_object: smart_object,
+                  classification: "surface.assembly.layer.#{index + 1}.structural_ref",
+                  description: "Assembly layer #{layer_name} (structural reference)",
+                  measure: 'reference',
+                  value: 0.0,
+                  unit: 'ref',
+                  breakdown: {
+                    layer_index: index,
+                    layer_name: layer_name,
+                    thickness_mm: thickness_mm,
+                    material_id: material_id,
+                    owned_by_surface: false,
+                    note: 'owned by structural slab; excluded from surface BOQ to prevent duplicate quantities'
+                  }
+                )
+              end
+            end
+            items.freeze
+          end
+
+          def control_joint_quantities(smart_object:, definitions:)
+            joints = Array(definitions)
+            total_len_m = joints.sum(&:length_mm) / 1000.0
+            [
+              item(
+                smart_object: smart_object,
+                classification: 'surface.control_joint.length',
+                description: 'Surface control / expansion joint length',
+                measure: 'length',
+                value: total_len_m,
+                unit: 'm',
+                breakdown: { joint_count: joints.length }
+              )
+            ].freeze
+          end
+
+          def tree_pit_quantities(smart_object:, definitions:)
+            pits = Array(definitions)
+            grille_count = pits.count(&:grille)
+            [
+              item(
+                smart_object: smart_object,
+                classification: 'surface.tree_pit.count',
+                description: 'Tree pit cutouts',
+                measure: 'count',
+                value: pits.length,
+                unit: 'pcs',
+                breakdown: { grille_count: grille_count }
+              )
+            ].freeze
+          end
+
           private
 
           def item(smart_object:, classification:, description:, measure:, value:, unit:, breakdown:)

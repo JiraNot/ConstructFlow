@@ -109,7 +109,7 @@ class SurfaceLayoutSolverTest < Minitest::Test
   end
 
   def test_unsupported_pattern_is_explicit_not_fake_solved
-    layout = solve(square_surface(1000), pattern_for('herringbone', module_mm: [200, 100]))
+    layout = solve(square_surface(1000), pattern_for('modular', module_mm: [200, 100]))
 
     refute layout.solved?
     assert_equal 'unsupported', layout.status

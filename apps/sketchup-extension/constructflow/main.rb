@@ -20,6 +20,17 @@ require_relative 'core/module_loader'
 require_relative 'core/capability_registry'
 require_relative 'core/connector_registry'
 require_relative 'core/sketchup_app_observer'
+require_relative 'core/drawing_sheet_spec'
+require_relative 'core/drawing_intent_registry'
+require_relative 'core/elevation_generator'
+require_relative 'core/section_generator'
+require_relative 'core/detail_callout_definition'
+require_relative 'core/door_window_schedule_generator'
+require_relative 'core/joinery_shop_drawing_generator'
+require_relative 'core/qa/validator_registry'
+require_relative 'core/qa/revision_tracker'
+require_relative 'core/qa/site_verification_definition'
+require_relative 'core/qa/stale_audit_service'
 
 require_relative 'modules/architecture/wall_definition'
 require_relative 'modules/architecture/wall_repository'
@@ -91,8 +102,16 @@ require_relative 'modules/surface/registration'
 require_relative 'modules/surface/layout_registration'
 
 require_relative 'modules/interior/cabinet_run_definition'
+require_relative 'modules/interior/countertop_definition'
+require_relative 'modules/interior/wardrobe_definition'
+require_relative 'modules/interior/false_ceiling_definition'
+require_relative 'modules/interior/wall_paneling_definition'
 require_relative 'modules/interior/joinery_part_set_definition'
 require_relative 'modules/interior/joinery_part_generator'
+require_relative 'modules/interior/nesting_result_definition'
+require_relative 'modules/interior/sheet_nesting_engine'
+require_relative 'modules/interior/cut_list_exporter'
+require_relative 'modules/interior/cnc_operation_generator'
 require_relative 'modules/interior/repository'
 require_relative 'modules/interior/geometry'
 require_relative 'modules/interior/validators/interior_validator'
@@ -105,6 +124,9 @@ require_relative 'modules/library/project_asset_snapshot'
 require_relative 'modules/library/catalog_store'
 require_relative 'modules/library/placed_asset_definition'
 require_relative 'modules/library/placed_asset_repository'
+require_relative 'modules/library/compatibility_engine'
+require_relative 'modules/library/variant_matrix'
+require_relative 'modules/library/lod_manager'
 require_relative 'modules/library/geometry'
 require_relative 'modules/library/catalog_capability'
 require_relative 'modules/library/registration'
@@ -117,6 +139,29 @@ require_relative 'modules/drainage/quantity/drainage_quantity_provider'
 require_relative 'modules/drainage/geometry'
 require_relative 'modules/drainage/tools/manhole_tool'
 require_relative 'modules/drainage/registration'
+
+require_relative 'modules/electrical/cable_definition'
+require_relative 'modules/electrical/circuit_definition'
+require_relative 'modules/electrical/conduit_route_definition'
+require_relative 'modules/electrical/conduit_route_solver'
+require_relative 'modules/electrical/conduit_sizing_engine'
+require_relative 'modules/electrical/device_definition'
+require_relative 'modules/electrical/panelboard_definition'
+require_relative 'modules/electrical/voltage_drop_calculator'
+require_relative 'modules/electrical/repository'
+require_relative 'modules/electrical/geometry'
+require_relative 'modules/electrical/quantity/electrical_quantity_provider'
+require_relative 'modules/electrical/registration'
+
+require_relative 'modules/costing/rate_item'
+require_relative 'modules/costing/rate_library'
+require_relative 'modules/costing/cost_estimate_line'
+require_relative 'modules/costing/cost_estimate'
+require_relative 'modules/costing/costing_engine'
+require_relative 'modules/costing/estimate_snapshot'
+require_relative 'modules/costing/boq_exporter'
+require_relative 'modules/costing/repository'
+require_relative 'modules/costing/registration'
 
 module JiraNot
   module ConstructFlow
@@ -272,6 +317,8 @@ module JiraNot
           Interior::Registration.install(self)
           Library::Registration.install(self)
           Drainage::Registration.install(self)
+          Electrical::Registration.install(self)
+          Costing::Registration.install(self)
         end
 
         def show_inspector

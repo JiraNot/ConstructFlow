@@ -35,6 +35,68 @@ module JiraNot
           true
         end
 
+        NESTING_RESULT_KEY = 'nesting_result_definition'
+
+        def read_nesting_result(entity)
+          payload = read(entity, NESTING_RESULT_KEY)
+          payload ? NestingResultDefinition.from_h(payload) : nil
+        end
+
+        def write_nesting_result(entity, definition)
+          raise ArgumentError, 'NestingResultDefinition required' unless definition.is_a?(NestingResultDefinition)
+          write(entity, NESTING_RESULT_KEY, definition.to_h)
+          definition
+        end
+
+        COUNTERTOP_KEY = 'countertop_definition'
+        WARDROBE_KEY = 'wardrobe_definition'
+        FALSE_CEILING_KEY = 'false_ceiling_definition'
+        WALL_PANELING_KEY = 'wall_paneling_definition'
+
+        def read_countertop(entity)
+          payload = read(entity, COUNTERTOP_KEY)
+          payload ? CountertopDefinition.from_h(payload) : nil
+        end
+
+        def write_countertop(entity, definition)
+          raise ArgumentError, 'CountertopDefinition required' unless definition.is_a?(CountertopDefinition)
+          write(entity, COUNTERTOP_KEY, definition.to_h)
+          definition
+        end
+
+        def read_wardrobe(entity)
+          payload = read(entity, WARDROBE_KEY)
+          payload ? WardrobeDefinition.from_h(payload) : nil
+        end
+
+        def write_wardrobe(entity, definition)
+          raise ArgumentError, 'WardrobeDefinition required' unless definition.is_a?(WardrobeDefinition)
+          write(entity, WARDROBE_KEY, definition.to_h)
+          definition
+        end
+
+        def read_false_ceiling(entity)
+          payload = read(entity, FALSE_CEILING_KEY)
+          payload ? FalseCeilingDefinition.from_h(payload) : nil
+        end
+
+        def write_false_ceiling(entity, definition)
+          raise ArgumentError, 'FalseCeilingDefinition required' unless definition.is_a?(FalseCeilingDefinition)
+          write(entity, FALSE_CEILING_KEY, definition.to_h)
+          definition
+        end
+
+        def read_wall_paneling(entity)
+          payload = read(entity, WALL_PANELING_KEY)
+          payload ? WallPanelingDefinition.from_h(payload) : nil
+        end
+
+        def write_wall_paneling(entity, definition)
+          raise ArgumentError, 'WallPanelingDefinition required' unless definition.is_a?(WallPanelingDefinition)
+          write(entity, WALL_PANELING_KEY, definition.to_h)
+          definition
+        end
+
         private
 
         def read(entity, key)

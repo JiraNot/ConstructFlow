@@ -23,6 +23,24 @@ module JiraNot
           group
         end
 
+        def create_conduit_group(model, definition)
+          raise ArgumentError, definition.errors.join('; ') unless definition.valid?
+          group = model.active_entities.add_group
+          group.name = "ConstructFlow Conduit #{definition.nominal_size_mm}mm"
+          rebuild_conduit!(group, definition)
+          group
+        end
+
+        def rebuild_conduit!(group, definition)
+          raise ArgumentError, definition.errors.join('; ') unless definition.valid?
+          entities = group.entities
+          entities.clear!
+          definition.route_nodes_mm.each_cons(2) do |a, b|
+            entities.add_line(point(a), point(b))
+          end
+          group
+        end
+
         private
 
         def draw_cross(entities, center)

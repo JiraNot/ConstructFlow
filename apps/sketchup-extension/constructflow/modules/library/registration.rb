@@ -13,8 +13,8 @@ module JiraNot
           optional_capabilities: %w[architecture.wall_host opening.infill_host roof.edge_host interior.joinery],
           provides: %w[library.catalog],
           objects: %w[library.fixed_asset],
-          commands: %w[CreateLibraryFolder RegisterCatalogAsset AddToProjectLibrary PinAssetVersion PlaceCatalogAsset SwapCatalogAsset ReplaceCatalogConstruction],
-          events: %w[LibraryFolderCreated CatalogAssetRegistered ProjectAssetSnapshotted CatalogAssetPlaced CatalogAssetSwapped CatalogConstructionReplaced QuantityDirty DrawingDirty],
+          commands: %w[CreateLibraryFolder RegisterCatalogAsset AddToProjectLibrary PinAssetVersion PlaceCatalogAsset SwapCatalogAsset ReplaceCatalogConstruction EvaluateAssetCompatibility SwitchAssetLod ResolveAssetVariant],
+          events: %w[LibraryFolderCreated CatalogAssetRegistered ProjectAssetSnapshotted CatalogAssetPlaced CatalogAssetSwapped CatalogConstructionReplaced AssetCompatibilityEvaluated AssetLodSwitched AssetVariantResolved QuantityDirty DrawingDirty],
           providers: ['constructflow.library.catalog'],
           validators: []
         }.freeze
@@ -40,6 +40,9 @@ module JiraNot
           register_place(runtime, placed_repository, geometry)
           register_swap(runtime, placed_repository, geometry)
           register_replace(runtime, placed_repository, geometry)
+          register_compatibility(runtime, placed_repository)
+          register_switch_lod(runtime, placed_repository)
+          register_resolve_variant(runtime)
           install_ui(runtime, placed_repository)
         end
 
@@ -241,6 +244,100 @@ module JiraNot
           end
         end
 
+        def register_compatibility(runtime, repository)
+          runtime.commands.register(
+            'EvaluateAssetCompatibility',
+            owner_module: 'constructflow.library'
+          ) do |command|
+            input = command[:input]
+            catalog = store(runtime)
+
+            source_asset = if input[:object_id] || input['object_id']
+                             obj = resolve_fixed_asset(input, runtime)
+                             raise ArgumentError, 'object not found' unless obj
+                             placed = repository.read(obj.entity)
+                             catalog.asset(placed.asset_id, version: placed.asset_version)
+                           else
+                             catalog.asset(input[:source_asset_id] || input['source_asset_id'], version: input[:source_version] || input['source_version'])
+                           end
+
+            candidate_asset = catalog.asset(input[:candidate_asset_id] || input['candidate_asset_id'], version: input[:candidate_version] || input['candidate_version'])
+
+            engine = CompatibilityEngine.new
+            evaluation = engine.evaluate(source_asset: source_asset, candidate_asset: candidate_asset)
+
+            {
+              events: [
+                {
+                  name: 'AssetCompatibilityEvaluated',
+                  payload: evaluation
+                }
+              ]
+            }
+          end
+        end
+
+        def register_switch_lod(runtime, repository)
+          runtime.commands.register(
+            'SwitchAssetLod',
+            owner_module: 'constructflow.library'
+          ) do |command|
+            input = command[:input]
+            object = resolve_fixed_asset(input, runtime)
+            raise ArgumentError, 'fixed asset not found' unless object
+            current = repository.read(object.entity)
+            raise ArgumentError, 'placed asset definition missing' unless current
+
+            catalog = store(runtime)
+            asset_def = catalog.asset(current.asset_id, version: current.asset_version)
+            target_lod = input[:target_lod] || input['target_lod'] || 'design'
+
+            manager = LodManager.new
+            updated = manager.switch_lod(placed_asset: current, target_lod: target_lod, catalog_asset: asset_def)
+            repository.write(object.entity, updated)
+            runtime.smart_objects.mark_dirty(object.entity, 'dirty_drawing')
+
+            {
+              updated_object_ids: [object.id],
+              events: [
+                {
+                  name: 'AssetLodSwitched',
+                  object_ids: [object.id],
+                  payload: { object_id: object.id, lod_key: updated.lod_key }
+                },
+                { name: 'DrawingDirty', object_ids: [object.id] }
+              ]
+            }
+          end
+        end
+
+        def register_resolve_variant(runtime)
+          runtime.commands.register(
+            'ResolveAssetVariant',
+            owner_module: 'constructflow.library'
+          ) do |command|
+            input = command[:input]
+            catalog = store(runtime)
+            asset = catalog.asset(input[:asset_id] || input['asset_id'], version: input[:version] || input['version'])
+
+            matrix_data = asset.metadata['variant_matrix']
+            raise ArgumentError, 'asset has no variant matrix defined' unless matrix_data
+
+            matrix = VariantMatrix.from_h(matrix_data)
+            options = input[:options] || input['options'] || {}
+            resolved = matrix.resolve(options)
+
+            {
+              events: [
+                {
+                  name: 'AssetVariantResolved',
+                  payload: { asset_id: asset.asset_id, requested_options: options, resolved_variant: resolved }
+                }
+              ]
+            }
+          end
+        end
+
         def create_fixed_asset(runtime, repository, geometry, input)
           catalog = store(runtime)
           asset = catalog.asset(input[:asset_id] || input['asset_id'], version: input[:version] || input['version'])
@@ -267,7 +364,7 @@ module JiraNot
             source_state: input[:source_state] || input['source_state'] || 'confirmed'
           )
           repository.write(group, definition)
-          catalog.record_placement(snapshot.snapshot_id, object_id: object.id)
+          catalog.record_placement(snapshot_id: snapshot.snapshot_id, object_id: object.id)
           [object, definition, asset]
         end
 
@@ -361,6 +458,8 @@ module JiraNot
         end
 
         def install_ui(runtime, repository)
+          return unless runtime.respond_to?(:menu) && runtime.menu
+
           menu = runtime.menu.add_submenu('Catalog Library')
           menu.add_item('Library Summary') do
             catalog = store(runtime)

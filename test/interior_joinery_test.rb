@@ -2,7 +2,7 @@
 
 require_relative 'test_helper'
 
-INTERIOR_TEST_ROOT = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'interior')
+INTERIOR_TEST_ROOT ||= File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'interior')
 require File.join(INTERIOR_TEST_ROOT, 'cabinet_run_definition')
 require File.join(INTERIOR_TEST_ROOT, 'joinery_part_set_definition')
 require File.join(INTERIOR_TEST_ROOT, 'joinery_part_generator')
