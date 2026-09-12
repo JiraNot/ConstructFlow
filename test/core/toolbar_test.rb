@@ -42,11 +42,7 @@ class ToolbarI18nTest < Minitest::Test
     end
   end
 
-  def test_toolbar_construction_order_and_separators
-    # Mock UI environment
-    mock_items = []
-    mock_separators = 0
-
+  def test_toolbar_panel_launch_button
     fake_command_class = Class.new do
       attr_accessor :name, :tooltip, :status_bar_text, :small_icon, :large_icon
       def initialize(name, &block)
@@ -83,39 +79,17 @@ class ToolbarI18nTest < Minitest::Test
       fake_runtime = build_test_runtime
       toolbar = JiraNot::ConstructFlow::Core::Toolbar.install_toolbar(fake_runtime)
 
-      # 19 tools must be present
-      assert_equal 19, toolbar.items.size
-      # 5 separators dividing the 6 workflow groups
-      assert_equal 5, toolbar.separators
+      # 1 launcher button for the modern floating panel
+      assert_equal 1, toolbar.items.size
+      launcher = toolbar.items.first
+      assert_equal 'ConstructFlow', launcher.name
+      assert_includes launcher.tooltip, 'แผงควบคุม ConstructFlow'
+      assert_includes launcher.status_bar_text, 'ConstructFlow'
 
-      # Verify exact workflow sequence
-      assert_includes toolbar.items[0].tooltip, '1.0' # inspector
-      assert_includes toolbar.items[1].tooltip, '1.1' # level
-      assert_includes toolbar.items[2].tooltip, '1.2' # phase
-      assert_includes toolbar.items[3].tooltip, '2.1' # foundation
-      assert_includes toolbar.items[4].tooltip, '2.2' # column
-      assert_includes toolbar.items[5].tooltip, '3.1' # wall
-      assert_includes toolbar.items[6].tooltip, '3.2' # opening
-      assert_includes toolbar.items[7].tooltip, '3.3' # door_window
-      assert_includes toolbar.items[8].tooltip, '3.4' # roof
-      assert_includes toolbar.items[9].tooltip, '3.5' # gutter
-      assert_includes toolbar.items[10].tooltip, '4.1' # manhole
-      assert_includes toolbar.items[11].tooltip, '4.2' # pipe
-      assert_includes toolbar.items[12].tooltip, '4.3' # panelboard
-      assert_includes toolbar.items[13].tooltip, '4.4' # cable
-      assert_includes toolbar.items[14].tooltip, '5.1' # surface
-      assert_includes toolbar.items[15].tooltip, '5.2' # cabinet
-      assert_includes toolbar.items[16].tooltip, '5.3' # wardrobe
-      assert_includes toolbar.items[17].tooltip, '6.1' # asset
-      assert_includes toolbar.items[18].tooltip, '6.2' # costing
-
-      # Verify icons were assigned to every command
-      toolbar.items.each do |item|
-        refute_nil item.small_icon
-        refute_nil item.large_icon
-        assert File.exist?(item.small_icon)
-        assert File.exist?(item.large_icon)
-      end
+      refute_nil launcher.small_icon
+      refute_nil launcher.large_icon
+      assert File.exist?(launcher.small_icon)
+      assert File.exist?(launcher.large_icon)
     ensure
       Object.send(:remove_const, :UI) if Object.const_defined?(:UI)
       Object.const_set(:UI, original_ui) if original_ui

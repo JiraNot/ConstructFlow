@@ -32,6 +32,7 @@ require_relative 'core/qa/revision_tracker'
 require_relative 'core/qa/site_verification_definition'
 require_relative 'core/qa/stale_audit_service'
 require_relative 'core/i18n'
+require_relative 'core/html_dialog'
 require_relative 'core/toolbar'
 
 require_relative 'modules/architecture/wall_definition'
