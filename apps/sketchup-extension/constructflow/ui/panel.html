@@ -19,6 +19,7 @@
       <div class="header-sub">BIM Extension สำหรับ SketchUp</div>
     </div>
   </div>
+  <button id="btn-help-modal" class="header-help-btn" title="ดูคู่มือคีย์ลัดและวิธีใช้งาน (Shortcuts & Help)">❓ คู่มือคีย์ลัด</button>
 </div>
 
 <!-- STATUS STRIP -->
@@ -228,7 +229,7 @@
             <input type="number" id="fnd-d" value="400" step="50">
           </div>
         </div>
-        <button class="btn btn-primary" data-action="placeFoundation">🟫 วางฐานราก <span class="shortcut-badge">FD</span></button>
+        <button class="btn btn-primary" data-action="placeFoundation" data-tip-title="🟫 ฐานรากโครงสร้าง (Foundation)" data-tip-sc="FD" data-tip-desc="วางฐานรากแผ่อิงระดับชั้น" data-tip-mouse="คลิกตำแหน่งเพื่อวางฐานราก" data-tip-keys="Esc: ยกเลิก">🟫 วางฐานราก <span class="shortcut-badge">FD</span></button>
       </div>
 
       <!-- Column -->
@@ -268,7 +269,7 @@
             </select>
           </div>
         </div>
-        <button class="btn btn-primary" data-action="placeColumn">🏛 วางเสา <span class="shortcut-badge">CL</span></button>
+        <button class="btn btn-primary" data-action="placeColumn" data-tip-title="🏛 เสาคอนกรีต (RC Column)" data-tip-sc="CL" data-tip-desc="วางเสาโครงสร้างอิงระดับชั้นฐานและยอดเสา" data-tip-mouse="เลื่อนเมาส์ชี้ตำแหน่ง ➔ คลิกเพื่อวางเสา" data-tip-keys="R: หมุนหน้าตัด 90° | พิมพ์ตัวเลข: กำหนดขนาดเสา (เช่น 400, 400)">🏛 วางเสา <span class="shortcut-badge">CL</span></button>
       </div>
 
     </div>
@@ -318,7 +319,7 @@
             </select>
           </div>
         </div>
-        <button class="btn btn-primary" data-action="drawWall">🧱 เริ่มวาดผนัง <span class="shortcut-badge">WA</span></button>
+        <button class="btn btn-primary" data-action="drawWall" data-tip-title="🧱 วาดผนังอัจฉริยะ (Smart Wall)" data-tip-sc="WA" data-tip-desc="วาดผนังในแปลน เชื่อมต่อมุมและปิดห้องอัตโนมัติ" data-tip-mouse="คลิกจุดแรก ➔ เลื่อนเมาส์ ➔ คลิกจุดจบ (คลิกจุดแรกเพื่อปิดห้อง)" data-tip-keys="ลูกศร: ล็อกแกน | พิมพ์ตัวเลข: กำหนดความยาว | Backspace: ย้อน 1 จุด">🧱 เริ่มวาดผนัง <span class="shortcut-badge">WA</span></button>
       </div>
 
       <!-- Opening -->
@@ -344,7 +345,7 @@
             <input type="number" id="op-sill" value="0" step="50">
           </div>
         </div>
-        <button class="btn btn-primary" data-action="cutOpening">🔲 เจาะช่องเปิด <span class="shortcut-badge">OP</span></button>
+        <button class="btn btn-primary" data-action="cutOpening" data-tip-title="🔲 เจาะช่องเปิดผนัง (Wall Opening)" data-tip-sc="OP" data-tip-desc="เจาะช่องเปิดบนผนังเพื่อเตรียมติดตั้งประตู/หน้าต่าง" data-tip-mouse="เลื่อนชี้บนระนาบผนัง ➔ คลิกตำแหน่งที่ต้องการเจาะ" data-tip-keys="Esc: ยกเลิก">🔲 เจาะช่องเปิด <span class="shortcut-badge">OP</span></button>
       </div>
 
       <!-- Door / Window -->
@@ -394,7 +395,7 @@
             </select>
           </div>
         </div>
-        <button class="btn btn-primary" data-action="placeDoorWindow">🚪 ติดตั้งประตู/หน้าต่าง <span class="shortcut-badge">DR / WN</span></button>
+        <button class="btn btn-primary" data-action="placeDoorWindow" data-tip-title="🚪 ติดตั้งประตู / หน้าต่าง" data-tip-sc="DR / WN" data-tip-desc="ติดตั้งบานประตูหรือหน้าต่างลงในช่องเปิดผนัง" data-tip-mouse="เลื่อนชี้ที่ช่องเปิด (Opening) ➔ คลิกเพื่อติดตั้ง" data-tip-keys="Spacebar หรือ F: สลับทิศทางบานเปิด">🚪 ติดตั้งประตู/หน้าต่าง <span class="shortcut-badge">DR / WN</span></button>
       </div>
 
       <!-- Roof -->
@@ -505,7 +506,7 @@
             <input type="number" id="mh-invout" placeholder="เว้นว่างได้">
           </div>
         </div>
-        <button class="btn btn-primary" data-action="placeManhole">🔵 วางบ่อพัก <span class="shortcut-badge">MH</span></button>
+        <button class="btn btn-primary" data-action="placeManhole" data-tip-title="🔵 บ่อพักน้ำทิ้ง (Manhole)" data-tip-sc="MH" data-tip-desc="วางบ่อพักคอนกรีตสำเร็จรูปสำหรับระบบระบายน้ำ" data-tip-mouse="คลิกเพื่อวางตำแหน่งบ่อพัก" data-tip-keys="Esc: ยกเลิก">🔵 วางบ่อพัก <span class="shortcut-badge">MH</span></button>
       </div>
 
       <!-- Pipe -->
@@ -532,7 +533,7 @@
             </select>
           </div>
         </div>
-        <button class="btn btn-primary" data-action="routePipe">🔧 วาดเส้นท่อ <span class="shortcut-badge">PI</span></button>
+        <button class="btn btn-primary" data-action="routePipe" data-tip-title="🔧 ท่อระบายน้ำ (Drainage Pipe)" data-tip-sc="PI" data-tip-desc="เดินแนวท่อระบายน้ำพร้อมสโลปความลาดเอียง" data-tip-mouse="คลิกบ่อพักต้นทาง ➔ คลิกบ่อพักปลายทาง" data-tip-keys="Esc: ยกเลิก">🔧 วาดเส้นท่อ <span class="shortcut-badge">PI</span></button>
       </div>
 
       <!-- Panelboard -->
@@ -602,7 +603,7 @@
             </select>
           </div>
         </div>
-        <button class="btn btn-primary" data-action="routeConduit">〰 วาดเส้นท่อสาย <span class="shortcut-badge">CN</span></button>
+        <button class="btn btn-primary" data-action="routeConduit" data-tip-title="〰 ท่อร้อยสายไฟ (Conduit)" data-tip-sc="CN" data-tip-desc="เดินแนวท่อร้อยสายไฟระดับใต้ฝ้าเพดานหรือฝังผนัง" data-tip-mouse="คลิกจุดเริ่มต้น ➔ ลากคลิกตามแนวท่อ" data-tip-keys="ลูกศร: ล็อกแกน | พิมพ์ตัวเลข: กำหนดความยาว">〰 วาดเส้นท่อสาย <span class="shortcut-badge">CN</span></button>
       </div>
 
     </div>
@@ -644,7 +645,7 @@
             </select>
           </div>
         </div>
-        <button class="btn btn-primary" data-action="applySurface">🟦 ปูผิวพื้น <span class="shortcut-badge">FL</span></button>
+        <button class="btn btn-primary" data-action="applySurface" data-tip-title="🟦 ปูผิวพื้น (Floor Surface)" data-tip-sc="FL" data-tip-desc="ปูผิววัสดุกระเบื้อง ไม้ หรือหิน บนระนาบพื้น" data-tip-mouse="เลือก Face แล้วคลิกปูผิว" data-tip-keys="Esc: ยกเลิก">🟦 ปูผิวพื้น <span class="shortcut-badge">FL</span></button>
       </div>
 
       <!-- Cabinet -->
@@ -680,7 +681,7 @@
             <input type="text" id="cab-mat" value="board.hmr.18">
           </div>
         </div>
-        <button class="btn btn-primary" data-action="placeCabinet">🍳 วางเคาน์เตอร์ <span class="shortcut-badge">CB</span></button>
+        <button class="btn btn-primary" data-action="placeCabinet" data-tip-title="🍳 เคาน์เตอร์บิวท์อิน (Cabinet)" data-tip-sc="CB" data-tip-desc="วางชุดเคาน์เตอร์ครัวและตู้บิวท์อิน" data-tip-mouse="คลิกเพื่อวางตำแหน่งเคาน์เตอร์" data-tip-keys="Esc: ยกเลิก">🍳 วางเคาน์เตอร์ <span class="shortcut-badge">CB</span></button>
       </div>
 
       <!-- Wardrobe -->
@@ -716,7 +717,7 @@
             </select>
           </div>
         </div>
-        <button class="btn btn-primary" data-action="placeWardrobe">👗 วางตู้เสื้อผ้า <span class="shortcut-badge">WR</span></button>
+        <button class="btn btn-primary" data-action="placeWardrobe" data-tip-title="👗 ตู้เสื้อผ้า (Wardrobe)" data-tip-sc="WR" data-tip-desc="วางตู้เสื้อผ้าสำเร็จรูปสำหรับห้องนอน" data-tip-mouse="คลิกเพื่อวางตำแหน่งตู้เสื้อผ้า" data-tip-keys="Esc: ยกเลิก">👗 วางตู้เสื้อผ้า <span class="shortcut-badge">WR</span></button>
       </div>
 
     </div>
@@ -796,5 +797,101 @@
 <div id="toast-container"></div>
 
 <script src="panel.js"></script>
+
+<!-- FLOATING RICH TOOLTIP -->
+<div id="cf-tooltip" class="cf-tooltip" style="display:none;"></div>
+
+<!-- HELP & SHORTCUT CHEAT SHEET MODAL -->
+<div id="help-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">📖 คู่มือการใช้งาน &amp; คีย์ลัด (Help &amp; Shortcuts)</div>
+      <button id="btn-close-help" class="btn-close-modal">✕</button>
+    </div>
+    <div class="modal-tabs">
+      <button class="modal-tab active" data-tab="help-shortcuts">⌨️ คีย์ลัดด่วน (Revit/CAD)</button>
+      <button class="modal-tab" data-tab="help-viewport">🎮 การควบคุม 3D Viewport</button>
+      <button class="modal-tab" data-tab="help-tips">💡 ทริค &amp; เทคนิค</button>
+    </div>
+    <div class="modal-content">
+      <!-- Tab 1: Shortcuts Table -->
+      <div id="tab-help-shortcuts" class="modal-tab-pane active">
+        <table class="help-table">
+          <thead>
+            <tr><th>คีย์ลัด</th><th>คำสั่ง</th><th>หมวดหมู่</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="shortcut-badge">WA</span></td><td>ผนังอัจฉริยะ (Smart Wall)</td><td>🧱 สถาปัตย์</td></tr>
+            <tr><td><span class="shortcut-badge">CL / CO</span></td><td>เสาคสล. (RC Column)</td><td>🏛 โครงสร้าง</td></tr>
+            <tr><td><span class="shortcut-badge">BM</span></td><td>คานโครงสร้าง (Beam)</td><td>🏛 โครงสร้าง</td></tr>
+            <tr><td><span class="shortcut-badge">DR</span></td><td>ติดตั้งประตู (Door)</td><td>🧱 สถาปัตย์</td></tr>
+            <tr><td><span class="shortcut-badge">WN</span></td><td>ติดตั้งหน้าต่าง (Window)</td><td>🧱 สถาปัตย์</td></tr>
+            <tr><td><span class="shortcut-badge">OP</span></td><td>เจาะช่องเปิด (Opening)</td><td>🧱 สถาปัตย์</td></tr>
+            <tr><td><span class="shortcut-badge">FL</span></td><td>สร้างแผ่นพื้น (Floor)</td><td>🧱 สถาปัตย์</td></tr>
+            <tr><td><span class="shortcut-badge">CE</span></td><td>ฝ้าเพดาน (Ceiling)</td><td>🧱 สถาปัตย์</td></tr>
+            <tr><td><span class="shortcut-badge">FD</span></td><td>วางฐานราก (Foundation)</td><td>🏛 โครงสร้าง</td></tr>
+            <tr><td><span class="shortcut-badge">GR</span></td><td>ลากเส้นกริด (Grid)</td><td>🏛 โครงสร้าง</td></tr>
+            <tr><td><span class="shortcut-badge">CN</span></td><td>ท่อร้อยสายไฟ (Conduit)</td><td>⚡ MEP</td></tr>
+            <tr><td><span class="shortcut-badge">PI</span></td><td>ท่อระบายน้ำ (Pipe)</td><td>⚡ MEP</td></tr>
+            <tr><td><span class="shortcut-badge">MH</span></td><td>บ่อพักน้ำทิ้ง (Manhole)</td><td>⚡ MEP</td></tr>
+            <tr><td><span class="shortcut-badge">CB</span></td><td>เคาน์เตอร์บิวท์อิน (Cabinet)</td><td>🛋 ตกแต่ง</td></tr>
+            <tr><td><span class="shortcut-badge">WR</span></td><td>ตู้เสื้อผ้า (Wardrobe)</td><td>🛋 ตกแต่ง</td></tr>
+            <tr><td><span class="shortcut-badge">CF</span></td><td>เปิด/ปิดแผง ConstructFlow</td><td>ทั่วไป</td></tr>
+            <tr><td><span class="shortcut-badge">IN</span></td><td>BIM Property Inspector</td><td>ทั่วไป</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tab 2: Viewport Controls -->
+      <div id="tab-help-viewport" class="modal-tab-pane">
+        <div class="help-section">
+          <div class="help-item-title">📏 การพิมพ์ตัวเลขกำหนดขนาด (VCB / Measurements)</div>
+          <div class="help-item-desc">ขณะลากเส้น สามารถพิมพ์ตัวเลขความยาว (เช่น <code>3500</code> หรือ <code>3.5m</code>) แล้วกด Enter ได้ทันที หรือในเสาพิมพ์ขนาดหน้าตัด (เช่น <code>400, 400</code>)</div>
+        </div>
+        <div class="help-section">
+          <div class="help-item-title">⌨️ การล็อกแกนด้วยปุ่มลูกศร (Arrow Keys)</div>
+          <div class="help-item-desc">
+            • ➡️ <strong>ลูกศรขวา</strong>: ล็อกแกนสีแดง (Red Axis / X)<br>
+            • ⬅️ <strong>ลูกศรซ้าย</strong>: ล็อกแกนสีเขียว (Green Axis / Y)<br>
+            • ⬆️ <strong>ลูกศรขึ้น</strong>: ล็อกแกนสีน้ำเงิน (Blue Axis / Z)<br>
+            • ⬇️ <strong>ลูกศรลง</strong>: ปลดล็อกแกน (Free / Smart Snap)
+          </div>
+        </div>
+        <div class="help-section">
+          <div class="help-item-title">⌫ ย้อนกลับจุดวาด (Backspace)</div>
+          <div class="help-item-desc">ขณะวาดผนังต่อเนื่อง หากวางจุดผิด กดปุ่ม <code>Backspace</code> เพื่อถอยกลับทีละจุดได้โดยไม่ต้องเริ่มใหม่</div>
+        </div>
+        <div class="help-section">
+          <div class="help-item-title">🔄 หมุนเสา 90° (ปุ่ม R)</div>
+          <div class="help-item-desc">ขณะวางเสา กดปุ่ม <code>R</code> เพื่อหมุนสลับทิศทางหน้าตัด 90 องศาทันที</div>
+        </div>
+        <div class="help-section">
+          <div class="help-item-title">🚪 สลับทิศบานเปิด (Spacebar / F)</div>
+          <div class="help-item-desc">ขณะติดตั้งประตูหรือหน้าต่าง กดปุ่ม <code>Spacebar</code> หรือ <code>F</code> เพื่อสลับทิศทางการเปิด</div>
+        </div>
+        <div class="help-section">
+          <div class="help-item-title">🔲 ปิดห้องอัตโนมัติ (Auto-Close Loop)</div>
+          <div class="help-item-desc">เมื่อวาดผนังกลับมาใกล้จุดเริ่มต้น จะมีป้ายสีทองขึ้นเตือน เมื่อคลิกจะสร้างผนังชิ้นสุดท้ายและจบคำสั่งให้ทันที</div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Pro Tips -->
+      <div id="tab-help-tips" class="modal-tab-pane">
+        <div class="help-section">
+          <div class="help-item-title">⚡ สลับเครื่องมือได้ทุกขณะ</div>
+          <div class="help-item-desc">ขณะกำลังวาดผนังอยู่ สามารถพิมพ์ <code>CL</code> เพื่อสลับไปวางเสา หรือพิมพ์ <code>BM</code> เพื่อวาดคานได้ทันทีโดยไม่ต้องกดปุ่มอื่นก่อน</div>
+        </div>
+        <div class="help-section">
+          <div class="help-item-title">🔍 ช่องค้นหาอัจฉริยะ</div>
+          <div class="help-item-desc">พิมพ์คีย์ลัด เช่น <code>WA</code> หรือ <code>CL</code> ในช่องค้นหาด้านบน แล้วกด Enter จะเข้าสู่เครื่องมือนั้นทันที</div>
+        </div>
+        <div class="help-section">
+          <div class="help-item-title">📊 คลิกชิ้นงานเพื่อดูคุณสมบัติ BIM</div>
+          <div class="help-item-desc">คลิกเลือกชิ้นงานในโมเดล 3D แผงด้านบนจะแสดงข้อมูลความยาว ความหนา พื้นที่ ปริมาตรคิว พร้อมปุ่มซูมและสลับด้านทันที</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>

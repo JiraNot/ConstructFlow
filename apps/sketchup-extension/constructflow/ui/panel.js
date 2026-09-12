@@ -451,6 +451,89 @@ const CF = {
     });
   },
 
+  initTooltips() {
+    const tip = el('cf-tooltip');
+    if (!tip) return;
+
+    document.querySelectorAll('[data-tip-title]').forEach(elem => {
+      elem.addEventListener('mouseenter', (e) => {
+        const title = elem.getAttribute('data-tip-title') || '';
+        const sc = elem.getAttribute('data-tip-sc') || '';
+        const desc = elem.getAttribute('data-tip-desc') || '';
+        const mouse = elem.getAttribute('data-tip-mouse') || '';
+        const keys = elem.getAttribute('data-tip-keys') || '';
+
+        let html = `<div class="cf-tooltip-title"><span>${title}</span>${sc ? `<span class="shortcut-badge">${sc}</span>` : ''}</div>`;
+        if (desc) html += `<div class="cf-tooltip-desc">${desc}</div>`;
+        if (mouse) html += `<div class="cf-tooltip-row"><span>🖱️</span><span>${mouse}</span></div>`;
+        if (keys) html += `<div class="cf-tooltip-row"><span>⌨️</span><span>${keys}</span></div>`;
+
+        tip.innerHTML = html;
+        tip.style.display = 'block';
+        positionTooltip(e);
+      });
+
+      elem.addEventListener('mousemove', positionTooltip);
+
+      elem.addEventListener('mouseleave', () => {
+        tip.style.display = 'none';
+      });
+    });
+
+    function positionTooltip(e) {
+      if (tip.style.display === 'none') return;
+      const x = e.clientX + 12;
+      const y = e.clientY + 12;
+      const rect = tip.getBoundingClientRect();
+      const maxX = window.innerWidth - rect.width - 10;
+      const maxY = window.innerHeight - rect.height - 10;
+
+      tip.style.left = Math.min(x, Math.max(10, maxX)) + 'px';
+      tip.style.top = Math.min(y, Math.max(10, maxY)) + 'px';
+    }
+  },
+
+  initHelpModal() {
+    const modal = el('help-modal');
+    const openBtn = el('btn-help-modal');
+    const closeBtn = el('btn-close-help');
+    if (!modal) return;
+
+    const toggleModal = (show) => {
+      modal.style.display = show ? 'flex' : 'none';
+    };
+
+    openBtn?.addEventListener('click', () => toggleModal(true));
+    closeBtn?.addEventListener('click', () => toggleModal(false));
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) toggleModal(false);
+    });
+
+    // Tab switching inside modal
+    modal.querySelectorAll('.modal-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        modal.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+        modal.querySelectorAll('.modal-tab-pane').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        const targetId = `tab-${tab.dataset.tab}`;
+        el(targetId)?.classList.add('active');
+      });
+    });
+
+    // '?' key toggles help modal
+    document.addEventListener('keydown', (e) => {
+      const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+      if (activeTag === 'input' || activeTag === 'select' || activeTag === 'textarea') return;
+      if (e.key === '?' || e.key === 'F1') {
+        toggleModal(modal.style.display === 'none');
+        e.preventDefault();
+      } else if (e.key === 'Escape' && modal.style.display !== 'none') {
+        toggleModal(false);
+        e.preventDefault();
+      }
+    });
+  },
   init() {
     CF.initAccordion();
     CF.initPhasePills();
@@ -458,6 +541,8 @@ const CF = {
     CF.initSearch();
     CF.initBimActions();
     CF.initShortcuts();
+    CF.initTooltips();
+    CF.initHelpModal();
     CF.startPolling();
     CF._renderStatus();
 

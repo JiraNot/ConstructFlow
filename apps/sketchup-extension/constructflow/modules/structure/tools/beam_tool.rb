@@ -31,7 +31,7 @@ module JiraNot
             @start_mm = nil
             @start_input_point = nil
             @finish_mm = nil
-            Sketchup.set_status_text('ConstructFlow คานโครงสร้าง (Structural Beam): คลิกจุดเริ่ม/ปลาย. ลูกศรเพื่อล็อคแกน; พิมพ์ระยะใน VCB. Esc เพื่อยกเลิก', (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+            Sketchup.set_status_text('ConstructFlow คาน [BM]: คลิกจุดเริ่มต้น ➔ จุดสิ้นสุด • [ลูกศร: ล็อกแกน | VCB: พิมพ์ความยาว | Esc: ยกเลิก]', (defined?(SB_PROMPT) ? SB_PROMPT : nil))
             Sketchup.set_status_text('ความยาวคาน (Length)', SB_VCB_LABEL) if defined?(SB_VCB_LABEL)
             Sketchup.set_status_text('', SB_VCB_VALUE) if defined?(SB_VCB_VALUE)
           end

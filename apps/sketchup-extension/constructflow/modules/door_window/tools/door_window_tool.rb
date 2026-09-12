@@ -21,8 +21,8 @@ module JiraNot
 
           def activate
             Sketchup.set_status_text(
-              "ConstructFlow ติดตั้ง#{@category == 'door' ? 'ประตู' : 'หน้าต่าง'}: เลื่อนเมาส์ชี้ที่ช่องเปิด (Opening) แล้วคลิกเพื่อติดตั้ง • Esc เพื่อยกเลิก",
-              SB_PROMPT
+              "ConstructFlow ติดตั้ง#{@category == 'door' ? 'ประตู [DR]' : 'หน้าต่าง [WN]'}: เลื่อนชี้ช่องเปิดแล้วคลิก • [Spacebar/F: พลิกบานเปิด | Esc: ยกเลิก]",
+              (defined?(SB_PROMPT) ? SB_PROMPT : nil)
             )
           end
 

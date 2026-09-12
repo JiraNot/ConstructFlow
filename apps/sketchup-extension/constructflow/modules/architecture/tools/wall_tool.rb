@@ -41,7 +41,7 @@ module JiraNot
             @start_input_point = nil
             @hover_point = nil
             @preview = nil
-            Sketchup.status_text = 'ConstructFlow ผนังอัจฉริยะ (Plan Wall): คลิกจุดเริ่มต้น/สิ้นสุด. ลูกศร ซ้าย/ขวา/ขึ้น เพื่อล็อคแกน เขียว/แดง/น้ำเงิน, ลูกศรลง ปลดล็อค; Shift สลับโหมดแกนตรง; พิมพ์ระยะใน VCB'
+            Sketchup.set_status_text('ConstructFlow ผนัง [WA]: คลิกจุดแรก ➔ จุดถัดไป • [ลูกศร: ล็อกแกน | VCB: พิมพ์ความยาว | Backspace: ย้อน 1 จุด | คลิกจุดแรก: ปิดห้อง]', (defined?(SB_PROMPT) ? SB_PROMPT : nil))
             Sketchup.set_status_text('ความยาว (Length)', SB_VCB_LABEL) if defined?(SB_VCB_LABEL)
             Sketchup.set_status_text('', SB_VCB_VALUE) if defined?(SB_VCB_VALUE)
           end

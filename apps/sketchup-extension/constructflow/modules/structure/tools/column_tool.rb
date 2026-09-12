@@ -25,7 +25,7 @@ module JiraNot
           end
 
           def activate
-            Sketchup.set_status_text('ConstructFlow เสาโครงสร้าง: คลิกตำแหน่งกึ่งกลางเพื่อวางเสา (Esc เพื่อยกเลิก)', SB_PROMPT)
+            Sketchup.set_status_text('ConstructFlow เสา [CL]: คลิกตำแหน่งกึ่งกลางเพื่อวางเสา • [R: หมุน 90° | VCB: พิมพ์ขนาด เช่น 400,400 | ลูกศร: ล็อกแกน | Esc: ยกเลิก]', (defined?(SB_PROMPT) ? SB_PROMPT : nil))
           end
 
           def onMouseMove(_flags, x, y, view)
