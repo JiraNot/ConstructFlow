@@ -16,7 +16,7 @@ module JiraNot
 
           def activate
             Sketchup.set_status_text(
-              'ConstructFlow Opening: click a Smart Wall to place opening. Esc to cancel.',
+              'ConstructFlow ช่องเปิดผนัง: คลิกบนผนังอัจฉริยะเพื่อเจาะช่องเปิด (Esc เพื่อยกเลิก)',
               SB_PROMPT
             )
           end

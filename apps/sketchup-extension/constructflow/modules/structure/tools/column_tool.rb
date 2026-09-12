@@ -18,7 +18,7 @@ module JiraNot
           end
 
           def activate
-            Sketchup.set_status_text('ConstructFlow Structure: click column center. Esc to finish.', SB_PROMPT)
+            Sketchup.set_status_text('ConstructFlow เสาโครงสร้าง: คลิกตำแหน่งกึ่งกลางเพื่อวางเสา (Esc เพื่อยกเลิก)', SB_PROMPT)
           end
 
           def onMouseMove(_flags, x, y, view)

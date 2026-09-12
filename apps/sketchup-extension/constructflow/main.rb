@@ -31,6 +31,8 @@ require_relative 'core/qa/validator_registry'
 require_relative 'core/qa/revision_tracker'
 require_relative 'core/qa/site_verification_definition'
 require_relative 'core/qa/stale_audit_service'
+require_relative 'core/i18n'
+require_relative 'core/toolbar'
 
 require_relative 'modules/architecture/wall_definition'
 require_relative 'modules/architecture/wall_repository'
@@ -303,8 +305,7 @@ module JiraNot
         end
 
         def install_ui_entry
-          @menu = UI.menu('Extensions').add_submenu('ConstructFlow')
-          @menu.add_item('Foundation Inspector') { show_inspector }
+          Core::Toolbar.install(self)
         end
 
         def install_builtin_modules
@@ -327,19 +328,19 @@ module JiraNot
           recent = @diagnostics.recent(5).map { |entry| "[#{entry.severity}] #{entry.code}: #{entry.message}" }
           level_names = @levels ? @levels.map { |l| "  • #{l.name} (#{l.elevation_mm || 0} mm)" } : []
           message = [
-            'ConstructFlow Foundation',
-            "Project: #{@project&.project_id || '-'}",
-            "Working phase: #{@project&.working_phase || '-'}",
-            "Modules: #{@modules.size}",
-            "Capabilities: #{@capabilities.size}",
-            "Levels: #{@levels&.size || 0}",
+            'ConstructFlow - ตรวจสอบสถานะโครงการ',
+            "รหัสโครงการ: #{@project&.project_id || '-'}",
+            "ระยะเวลาก่อสร้าง (Phase): #{@project&.working_phase || '-'}",
+            "โมดูลที่ติดตั้ง: #{@modules.size}",
+            "ความสามารถระบบ: #{@capabilities.size}",
+            "ระดับชั้นอาคาร (Levels): #{@levels&.size || 0}",
             *level_names,
-            "Smart objects: #{@smart_objects&.size || 0}",
-            "Connectors: #{@connectors&.connector_count || 0}",
-            "Connections: #{@connectors&.connection_count || 0}",
+            "วัตถุอัจฉริยะ (Smart Objects): #{@smart_objects&.size || 0}",
+            "จุดเชื่อมต่อ (Connectors): #{@connectors&.connector_count || 0}",
+            "เส้นทางเชื่อมต่อ (Connections): #{@connectors&.connection_count || 0}",
             '',
-            'Recent diagnostics:',
-            *(recent.empty? ? ['(none)'] : recent)
+            'บันทึกการทำงานล่าสุด:',
+            *(recent.empty? ? ['(ไม่มีบันทึก)'] : recent)
           ].join("\n")
           UI.messagebox(message, MB_OK)
         end

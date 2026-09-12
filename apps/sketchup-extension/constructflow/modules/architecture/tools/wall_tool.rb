@@ -17,7 +17,7 @@ module JiraNot
           end
 
           def activate
-            Sketchup.status_text = 'ConstructFlow Wall: click start point, then end point.'
+            Sketchup.status_text = 'ConstructFlow ผนังอัจฉริยะ: คลิกจุดเริ่มต้น จากนั้นคลิกจุดสิ้นสุด (Esc เพื่อยกเลิก)'
           end
 
           def onMouseMove(_flags, x, y, view)

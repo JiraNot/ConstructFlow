@@ -12,7 +12,7 @@ module JiraNot
           end
 
           def activate
-            Sketchup.set_status_text('ConstructFlow Interior: click cabinet run origin. Esc to cancel.', SB_PROMPT)
+            Sketchup.set_status_text('ConstructFlow ตู้บิวท์อิน: คลิกจุดเริ่มต้นเพื่อวางแนวเคาน์เตอร์ (Esc เพื่อยกเลิก)', SB_PROMPT)
           end
 
           def onMouseMove(_flags, x, y, view)

@@ -15,7 +15,7 @@ module JiraNot
           end
 
           def activate
-            Sketchup.set_status_text('ConstructFlow Drainage: click to place manhole. Esc to finish.', SB_PROMPT)
+            Sketchup.set_status_text('ConstructFlow บ่อพักน้ำทิ้ง: คลิกตำแหน่งเพื่อวางบ่อพัก (Esc เพื่อยกเลิก)', SB_PROMPT)
           end
 
           def onMouseMove(_flags, x, y, view)

@@ -22,6 +22,8 @@ require File.join(CORE, 'module_registry')
 require File.join(CORE, 'module_loader')
 require File.join(CORE, 'capability_registry')
 require File.join(CORE, 'connector_registry')
+require File.join(CORE, 'i18n')
+require File.join(CORE, 'toolbar')
 
 ARCH = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'architecture')
 require File.join(ARCH, 'wall_definition')
