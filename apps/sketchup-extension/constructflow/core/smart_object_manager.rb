@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'time'
+require_relative 'tag_manager'
 
 module JiraNot
   module ConstructFlow
@@ -53,6 +54,7 @@ module JiraNot
           store.write('created_at', timestamp)
           store.write('updated_at', timestamp)
 
+          TagManager.assign_tag(@model, entity, type)
           @index[object_id] = entity
           fetch(entity)
         end

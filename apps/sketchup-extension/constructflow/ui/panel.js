@@ -110,6 +110,32 @@ const CF = {
     if (flipBtn) {
       flipBtn.style.display = selected.type === 'architecture.wall' ? 'inline-flex' : 'none';
     }
+
+    const wallEditor = el('bim-wall-editor');
+    if (wallEditor) {
+      if (selected && selected.type === 'architecture.wall') {
+        wallEditor.style.display = 'block';
+        if (selected.properties) {
+          for (const [k, v] of Object.entries(selected.properties)) {
+            const kl = k.toLowerCase();
+            const num = parseFloat(v);
+            if (!isNaN(num)) {
+              if (kl.includes('หนา') || kl.includes('thick')) {
+                const mVal = num > 5 ? num / 1000.0 : num;
+                const thickInput = el('bim-wall-thick');
+                if (thickInput) thickInput.value = mVal.toFixed(2);
+              } else if (kl.includes('สูง') || kl.includes('height')) {
+                const mVal = num > 50 ? num / 1000.0 : num;
+                const hInput = el('bim-wall-h');
+                if (hInput) hInput.value = mVal.toFixed(2);
+              }
+            }
+          }
+        }
+      } else {
+        wallEditor.style.display = 'none';
+      }
+    }
   },
 
   _renderStatus() {
@@ -223,6 +249,21 @@ const CF = {
       CF.toast('คลิกในโมเดลเพื่อวางเสา 🏛', 'info');
     },
 
+    drawBeam() {
+      const w  = toMm(parseFloat(gVal('bm-w') || '0.2'));
+      const d  = toMm(parseFloat(gVal('bm-d') || '0.4'));
+      const lvl = gVal('bm-level') || '';
+      CF.send('draw_beam', { section_mm: [w, d], level_id: lvl });
+      CF.toast('คลิกในโมเดลเพื่อเริ่มวาดแนวคาน [BM] 🏗', 'info');
+    },
+
+    drawGrid() {
+      const name = gVal('gr-name') || 'Grid';
+      const lvl = gVal('gr-level') || '';
+      CF.send('draw_grid', { name: name, level_id: lvl });
+      CF.toast(`คลิกในโมเดลเพื่อลากเส้นกริด "${name}" [GR] 📐`, 'info');
+    },
+
     // ── ARCHITECTURE ──
     drawWall() {
       const thick = toMm(parseFloat(gVal('wall-thick') || '0.1'));
@@ -263,6 +304,32 @@ const CF = {
       const outlet = parseFloat(gVal('gutter-outlet') || '1.0');
       CF.send('add_gutter', { edge_index: edge, outlet_ratio: outlet });
       CF.toast('เลือก Roof object แล้วกดอีกครั้ง', 'info');
+    },
+
+    drawFloor() {
+      const thick = toMm(parseFloat(gVal('fl-thick') || '0.1'));
+      const lvl = gVal('fl-level') || '';
+      CF.send('draw_floor', { thickness_mm: thick, level_id: lvl });
+      CF.toast('คลิกกำหนดจุดขอบเขตพื้น [FL] 🟦', 'info');
+    },
+
+    drawCeiling() {
+      const h = toMm(parseFloat(gVal('ce-h') || '2.6'));
+      const thick = toMm(parseFloat(gVal('ce-thick') || '0.012'));
+      const lvl = gVal('ce-level') || '';
+      CF.send('draw_ceiling', { height_mm: h, thickness_mm: thick, level_id: lvl });
+      CF.toast('คลิกกำหนดแนวฝ้าเพดาน [CE] ☁️', 'info');
+    },
+
+    applyWallChanges() {
+      const thick = toMm(parseFloat(el('bim-wall-thick')?.value || '0.1'));
+      const h = toMm(parseFloat(el('bim-wall-h')?.value || '2.8'));
+      CF.send('update_selected_wall', { thickness_mm: thick, height_mm: h });
+    },
+
+    editWallPath() {
+      CF.send('edit_selected_wall', {});
+      CF.toast('เข้าสู่โหมดดัดแนวผนังใน Viewport [WallEditTool] ✏️', 'info');
     },
 
     // ── MEP ──
@@ -415,6 +482,114 @@ const CF = {
     el('btn-delete-selected')?.addEventListener('click', () => {
       CF.send('delete_selected', {});
     });
+    el('btn-apply-wall')?.addEventListener('click', () => {
+      CF.actions.applyWallChanges();
+    });
+    el('btn-edit-wall-path')?.addEventListener('click', () => {
+      CF.actions.editWallPath();
+    });
+
+    // BOQ Modal wiring
+    el('btn-close-boq')?.addEventListener('click', () => CF.closeBOQModal());
+    el('btn-close-boq-foot')?.addEventListener('click', () => CF.closeBOQModal());
+    el('btn-export-boq-csv')?.addEventListener('click', () => CF.exportBOQToCSV());
+    el('btn-boq')?.addEventListener('click', () => {
+      CF.send('show_costing', {});
+    });
+  },
+
+  openBOQModal() {
+    const modal = el('boq-modal');
+    if (modal) modal.style.display = 'flex';
+  },
+
+  closeBOQModal() {
+    const modal = el('boq-modal');
+    if (modal) modal.style.display = 'none';
+  },
+
+  renderBOQ(boqData) {
+    if (!boqData) return;
+    window._lastBOQData = boqData;
+    const gTotal = el('boq-grand-total');
+    if (gTotal) {
+      gTotal.textContent = '฿' + (boqData.grand_total || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    const strCat = (boqData.categories || []).find(c => c.name.includes('Structure') || c.name.includes('โครงสร้าง'));
+    const arcCat = (boqData.categories || []).find(c => c.name.includes('Architecture') || c.name.includes('สถาปัตยกรรม'));
+    const mepCat = (boqData.categories || []).find(c => c.name.includes('MEP') || c.name.includes('สุขาภิบาล'));
+
+    if (strCat && el('boq-str-total')) el('boq-str-total').textContent = '฿' + (strCat.subtotal || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (arcCat && el('boq-arc-total')) el('boq-arc-total').textContent = '฿' + (arcCat.subtotal || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (mepCat && el('boq-mep-total')) el('boq-mep-total').textContent = '฿' + (mepCat.subtotal || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const tbody = el('boq-table-body');
+    if (tbody) {
+      tbody.innerHTML = '';
+      (boqData.categories || []).forEach(cat => {
+        const catRow = document.createElement('tr');
+        catRow.className = 'boq-cat-row';
+        catRow.innerHTML = `
+          <td colspan="6" style="font-weight: 700; background: rgba(56, 189, 248, 0.12); color: #38bdf8; padding: 8px 12px;">${cat.name}</td>
+          <td style="font-weight: 700; background: rgba(56, 189, 248, 0.12); text-align: right; color: #38bdf8; padding: 8px 12px; font-family: monospace;">฿${(cat.subtotal || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        `;
+        tbody.appendChild(catRow);
+
+        (cat.items || []).forEach(item => {
+          const row = document.createElement('tr');
+          row.className = 'boq-item-row';
+          row.innerHTML = `
+            <td style="font-family: monospace; font-size: 11px; color: #94a3b8;">${item.code}</td>
+            <td style="font-weight: 500;">${item.name}</td>
+            <td style="text-align: right; font-family: monospace;">${item.qty.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td style="text-align: center; color: #94a3b8;">${item.unit}</td>
+            <td style="text-align: right; font-family: monospace;">${item.mat_rate.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td style="text-align: right; font-family: monospace;">${item.lab_rate.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td style="text-align: right; font-weight: 600; font-family: monospace; color: #f8fafc;">฿${item.total.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          `;
+          tbody.appendChild(row);
+        });
+      });
+    }
+  },
+
+  exportBOQToCSV() {
+    const data = window._lastBOQData;
+    if (!data || !data.categories) {
+      CF.toast('ไม่พบข้อมูล BOQ สำหรับส่งออก', 'warn');
+      return;
+    }
+    let csvContent = "\uFEFF";
+    csvContent += "รหัส,หมวดหมู่,รายการงาน,ปริมาณ,หน่วย,ค่าวัสดุต่อหน่วย(บาท),ค่าแรงต่อหน่วย(บาท),รวมเงิน(บาท)\n";
+
+    data.categories.forEach(cat => {
+      (cat.items || []).forEach(item => {
+        const row = [
+          `"${item.code}"`,
+          `"${cat.name}"`,
+          `"${item.name}"`,
+          item.qty,
+          `"${item.unit}"`,
+          item.mat_rate,
+          item.lab_rate,
+          item.total
+        ];
+        csvContent += row.join(",") + "\n";
+      });
+    });
+
+    csvContent += `\n"","","ราคารวมทั้งโครงการ (Grand Total)","","","","",${data.grand_total}\n`;
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `ConstructFlow_BOQ_${data.project_id || 'Project'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    CF.toast('📥 ส่งออกไฟล์ BOQ CSV สำเร็จ (พร้อมเปิดใน Excel)', 'success');
   },
 
   initShortcuts() {
@@ -635,3 +810,9 @@ function setVal(id, v) {
 
 /* ── Bootstrap ───────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => CF.init());
+
+window.ConstructFlowUI = {
+  renderBOQ: (data) => CF.renderBOQ(data),
+  openBOQModal: () => CF.openBOQModal(),
+  closeBOQModal: () => CF.closeBOQModal()
+};

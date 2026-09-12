@@ -49,15 +49,18 @@ module JiraNot
         EXPECTED_ACTIONS = %w[
           show_inspector get_state
           create_level set_phase
-          place_foundation place_column
+          place_foundation place_column draw_beam draw_grid
           draw_wall cut_opening place_door_window create_roof add_gutter
+          draw_floor draw_ceiling
           place_manhole route_pipe place_panelboard route_conduit
           apply_surface place_cabinet place_wardrobe
-          place_asset show_costing
+          place_asset show_costing get_boq_data
           zoom_selected flip_selected_wall delete_selected trigger_shortcut
+          update_selected_wall edit_selected_wall
         ].freeze
 
         def test_all_expected_actions_registered
+          
           EXPECTED_ACTIONS.each do |action|
             assert HtmlDialogManager::ACTIONS.key?(action),
                    "Action '#{action}' not found in ACTIONS table"

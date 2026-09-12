@@ -22,6 +22,7 @@ module JiraNot
             @start_mm = nil
             @finish_mm = nil
             @locked_axis = nil
+            @active_snap = nil
             @numeric_length_mm = nil
           end
 
@@ -45,7 +46,8 @@ module JiraNot
 
             if @input_point.valid?
               point = @plane.project(Core::Units.point_to_mm(@input_point.position))
-              snapped = @interaction.snap(point, references: @references.paths(level_id: @level_id))[:point_mm]
+              snap_result = @interaction.snap(point, references: @references.paths(level_id: @level_id))
+              snapped = snap_result[:point_mm]
               if @start_mm
                 mode = current_constraint_mode
                 preview = @interaction.segment_preview(
@@ -53,12 +55,14 @@ module JiraNot
                   length_mm: @numeric_length_mm
                 )
                 @finish_mm = preview[:finish_mm]
+                @active_snap = preview[:snap]
                 if defined?(SB_VCB_LABEL)
                   Sketchup.set_status_text('ความยาวคาน (Length)', SB_VCB_LABEL)
                   Sketchup.set_status_text(format('%.1f mm', preview[:length_mm]), SB_VCB_VALUE)
                 end
               else
                 @finish_mm = snapped
+                @active_snap = snap_result
                 if defined?(SB_VCB_LABEL)
                   Sketchup.set_status_text('ความยาวคาน (Length)', SB_VCB_LABEL)
                   Sketchup.set_status_text('', SB_VCB_VALUE)
@@ -185,6 +189,10 @@ module JiraNot
             view.drawing_color = color
             view.draw(GL_LINES, [start_pt, finish_pt])
             @input_point.draw(view) if @input_point&.valid?
+
+            if defined?(Core::ViewportSnapHelper) && finish_pt
+              Core::ViewportSnapHelper.draw_snap_glyph(view, finish_pt, @active_snap)
+            end
 
             if view.respond_to?(:draw_text)
               len = Math.sqrt((dx * dx) + (dy * dy))

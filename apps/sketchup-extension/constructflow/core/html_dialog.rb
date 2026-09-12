@@ -257,6 +257,153 @@ module JiraNot
         # ── Action Dispatch Table ────────────────────────────────
         # Each lambda receives (runtime, params) and returns a result.
         # Return :no_state_push if you don't want a state refresh after.
+        def self.generate_boq_data(runtime)
+          objects = begin
+            runtime.smart_objects.all
+          rescue StandardError
+            []
+          end
+
+          structure_vol = 0.0
+          structure_formwork = 0.0
+          column_count = 0
+          beam_count = 0
+          foundation_count = 0
+
+          wall_area = 0.0
+          wall_vol = 0.0
+          floor_area = 0.0
+          ceiling_area = 0.0
+          door_window_count = 0
+
+          conduit_len = 0.0
+          pipe_len = 0.0
+          manhole_count = 0
+          panel_count = 0
+
+          wall_repo = defined?(Architecture::WallRepository) ? Architecture::WallRepository.new : nil
+
+          objects.each do |obj|
+            case obj.type
+            when 'structure.column'
+              column_count += 1
+              structure_vol += 0.12
+              structure_formwork += 2.4
+            when 'structure.beam'
+              beam_count += 1
+              structure_vol += 0.32
+              structure_formwork += 4.0
+            when 'structure.foundation'
+              foundation_count += 1
+              structure_vol += 0.5
+            when 'architecture.wall'
+              if wall_repo && obj.entity
+                def_wall = wall_repo.read(obj.entity) rescue nil
+                if def_wall
+                  wall_area += (def_wall.gross_area_mm2 rescue 0) / 1_000_000.0
+                  wall_vol += (def_wall.volume_mm3 rescue 0) / 1_000_000_000.0
+                else
+                  wall_area += 12.0
+                  wall_vol += 1.2
+                end
+              else
+                wall_area += 12.0
+                wall_vol += 1.2
+              end
+            when 'architecture.floor'
+              floor_area += 25.0
+            when 'architecture.ceiling'
+              ceiling_area += 25.0
+            when 'opening.door_window', 'opening.door', 'opening.window'
+              door_window_count += 1
+            when 'mep.conduit'
+              conduit_len += 15.0
+            when 'mep.pipe'
+              pipe_len += 12.0
+            when 'mep.manhole'
+              manhole_count += 1
+            when 'mep.panelboard'
+              panel_count += 1
+            end
+          end
+
+          structure_items = []
+          arch_items = []
+          mep_items = []
+
+          # Structure items
+          if foundation_count > 0 || objects.empty?
+            qty = foundation_count > 0 ? (foundation_count * 0.5).round(2) : 2.5
+            structure_items << { code: 'STR-01', name: 'คอนกรีตฐานราก 240 ksc', unit: 'ลบ.ม.', qty: qty, mat_rate: 2100.0, lab_rate: 450.0, total: (qty * 2550.0).round(2) }
+          end
+          if column_count > 0 || objects.empty?
+            qty = column_count > 0 ? (column_count * 0.12).round(2) : 1.2
+            structure_items << { code: 'STR-02', name: 'คอนกรีตเสาโครงสร้าง 240 ksc', unit: 'ลบ.ม.', qty: qty, mat_rate: 2250.0, lab_rate: 550.0, total: (qty * 2800.0).round(2) }
+          end
+          if beam_count > 0 || objects.empty?
+            qty = beam_count > 0 ? (beam_count * 0.32).round(2) : 2.8
+            structure_items << { code: 'STR-03', name: 'คอนกรีตคานโครงสร้าง 240 ksc', unit: 'ลบ.ม.', qty: qty, mat_rate: 2250.0, lab_rate: 520.0, total: (qty * 2770.0).round(2) }
+          end
+          if structure_formwork > 0 || objects.empty?
+            qty = structure_formwork > 0 ? structure_formwork.round(2) : 35.0
+            structure_items << { code: 'STR-04', name: 'ไม้แบบหล่อโครงสร้าง + ค้ำยัน', unit: 'ตร.ม.', qty: qty, mat_rate: 280.0, lab_rate: 150.0, total: (qty * 430.0).round(2) }
+          end
+
+          # Architecture items
+          if wall_area > 0 || objects.empty?
+            qty = wall_area > 0 ? wall_area.round(2) : 48.0
+            arch_items << { code: 'ARC-01', name: 'ผนังก่ออิฐมวลเบาหนา 7.5 ซม.', unit: 'ตร.ม.', qty: qty, mat_rate: 260.0, lab_rate: 120.0, total: (qty * 380.0).round(2) }
+            arch_items << { code: 'ARC-02', name: 'ฉาบปูนเรียบภายใน-ภายนอก 2 ด้าน', unit: 'ตร.ม.', qty: (qty * 2).round(2), mat_rate: 120.0, lab_rate: 110.0, total: ((qty * 2) * 230.0).round(2) }
+          end
+          if floor_area > 0 || objects.empty?
+            qty = floor_area > 0 ? floor_area.round(2) : 60.0
+            arch_items << { code: 'ARC-03', name: 'พื้นคอนกรีตเสริมเหล็กหล่อในที่ / สำเร็จรูป', unit: 'ตร.ม.', qty: qty, mat_rate: 350.0, lab_rate: 120.0, total: (qty * 470.0).round(2) }
+          end
+          if ceiling_area > 0 || objects.empty?
+            qty = ceiling_area > 0 ? ceiling_area.round(2) : 55.0
+            arch_items << { code: 'ARC-04', name: 'ฝ้าเพดานยิปซัมบอร์ด 9 มม. ฉาบเรียบโครง C-Line', unit: 'ตร.ม.', qty: qty, mat_rate: 220.0, lab_rate: 130.0, total: (qty * 350.0).round(2) }
+          end
+          if door_window_count > 0 || objects.empty?
+            qty = door_window_count > 0 ? door_window_count : 4
+            arch_items << { code: 'ARC-05', name: 'ชุดประตู-หน้าต่างอลูมิเนียมพร้อมกระจก', unit: 'ชุด', qty: qty, mat_rate: 3800.0, lab_rate: 600.0, total: (qty * 4400.0).round(2) }
+          end
+
+          # MEP items
+          if pipe_len > 0 || objects.empty?
+            qty = pipe_len > 0 ? pipe_len.round(2) : 24.0
+            mep_items << { code: 'MEP-01', name: 'ท่อระบายน้ำ PVC ชั้น 8.5 ขนาด 4 นิ้ว', unit: 'ม.', qty: qty, mat_rate: 180.0, lab_rate: 90.0, total: (qty * 270.0).round(2) }
+          end
+          if manhole_count > 0 || objects.empty?
+            qty = manhole_count > 0 ? manhole_count : 3
+            mep_items << { code: 'MEP-02', name: 'บ่อพักคอนกรีตสำเร็จรูปพร้อมฝาปิด', unit: 'บ่อ', qty: qty, mat_rate: 850.0, lab_rate: 350.0, total: (qty * 1200.0).round(2) }
+          end
+          if conduit_len > 0 || objects.empty?
+            qty = conduit_len > 0 ? conduit_len.round(2) : 45.0
+            mep_items << { code: 'MEP-03', name: 'ท่อร้อยสายไฟ uPVC/EMT พร้อมสาย THW', unit: 'ม.', qty: qty, mat_rate: 95.0, lab_rate: 75.0, total: (qty * 170.0).round(2) }
+          end
+          if panel_count > 0 || objects.empty?
+            qty = panel_count > 0 ? panel_count : 1
+            mep_items << { code: 'MEP-04', name: 'ตู้ควบคุมไฟฟ้าหลัก Consumer Unit 8 ช่อง', unit: 'ตู้', qty: qty, mat_rate: 4500.0, lab_rate: 1200.0, total: (qty * 5700.0).round(2) }
+          end
+
+          str_subtotal = structure_items.sum { |i| i[:total] }.round(2)
+          arc_subtotal = arch_items.sum { |i| i[:total] }.round(2)
+          mep_subtotal = mep_items.sum { |i| i[:total] }.round(2)
+          grand_total = (str_subtotal + arc_subtotal + mep_subtotal).round(2)
+
+          {
+            project_id: (runtime.project&.project_id rescue 'PROJ-DEMO'),
+            phase: (runtime.project&.working_phase rescue 'new_construction'),
+            currency: 'THB',
+            grand_total: grand_total,
+            categories: [
+              { name: '1. หมวดงานโครงสร้าง (Structure)', subtotal: str_subtotal, items: structure_items },
+              { name: '2. หมวดงานสถาปัตยกรรม (Architecture)', subtotal: arc_subtotal, items: arch_items },
+              { name: '3. หมวดงานระบบสุขาภิบาลและไฟฟ้า (MEP)', subtotal: mep_subtotal, items: mep_items }
+            ]
+          }
+        end
+
         ACTIONS = {
           # -- Inspector -------------------------------------------
           'show_inspector' => lambda { |runtime, _p|
@@ -325,6 +472,45 @@ module JiraNot
             end
           },
 
+          'update_selected_wall' => lambda { |runtime, p|
+            sel = runtime.active_model.selection
+            target = sel.filter_map { |e| Core::RepresentationObjectResolver.resolve(runtime, e) rescue nil }
+                        .find { |o| o.type == 'architecture.wall' }
+            raise 'กรุณาเลือกผนังในโมเดลก่อนแก้ไข' unless target
+
+            repo = Architecture::WallRepository.new
+            definition = repo.read(target.entity)
+            raise 'ไม่พบข้อมูลความกว้าง/ความสูงของผนังนี้' unless definition
+
+            new_thickness = p['thickness_mm'] ? p['thickness_mm'].to_f : definition.thickness_mm
+            new_height = p['height_mm'] ? p['height_mm'].to_f : definition.height_mm
+            raise 'ความหนาผนังต้องมากกว่า 0' unless new_thickness.positive?
+            raise 'ความสูงผนังต้องมากกว่า 0' unless new_height.positive?
+
+            updated_def = definition.with(
+              thickness_mm: new_thickness,
+              height_mm: new_height
+            )
+            repo.write(target.entity, updated_def)
+            openings = repo.host_openings(target.entity) rescue []
+            Architecture::WallGeometry.new.rebuild!(target.entity, updated_def, openings: openings)
+            runtime.smart_objects.mark_dirty_with_dependents(target.entity, 'dirty_quantity', 'dirty_drawing')
+            HtmlDialogManager.toast('อัปเดตขนาดผนังสำเร็จ', level: 'success')
+          },
+
+          'edit_selected_wall' => lambda { |runtime, _p|
+            runtime.active_model.select_tool(
+              Architecture::Tools::WallEditTool.new(runtime: runtime)
+            )
+            :no_state_push
+          },
+
+          'get_boq_data' => lambda { |runtime, _p|
+            boq = HtmlDialogManager.generate_boq_data(runtime)
+            HtmlDialogManager.execute_script("ConstructFlowUI.renderBOQ(#{boq.to_json});")
+            :no_state_push
+          },
+
           # -- Setup -----------------------------------------------
           'create_level' => lambda { |runtime, p|
             name  = p['name'].to_s.strip
@@ -372,6 +558,31 @@ module JiraNot
                 explicit_height_mm: p['height_mm'].to_f,
                 base_level_id:     p['base_level_id'].to_s,
                 top_level_id:      p['top_level_id'].to_s
+              )
+            )
+            :no_state_push
+          },
+
+          'draw_beam' => lambda { |runtime, p|
+            section = (p['section_mm'] || [200, 300]).map(&:to_f)
+            runtime.active_model.select_tool(
+              Structure::Tools::BeamTool.new(
+                runtime:        runtime,
+                section_mm:     section,
+                level_id:       p['level_id'].to_s,
+                base_offset_mm: p['base_offset_mm'].to_f
+              )
+            )
+            :no_state_push
+          },
+
+          'draw_grid' => lambda { |runtime, p|
+            runtime.active_model.select_tool(
+              Structure::Tools::GridTool.new(
+                runtime:   runtime,
+                name:      p['name'] || 'Grid',
+                level_id:  p['level_id'].to_s,
+                offset_mm: p['offset_mm'].to_f
               )
             )
             :no_state_push
@@ -449,6 +660,32 @@ module JiraNot
             )
             msg = result[:status] == 'success' ? 'ติดตั้งรางน้ำฝนสำเร็จ' : result[:errors].join(', ')
             HtmlDialogManager.toast(msg, level: result[:status] == 'success' ? 'success' : 'error')
+          },
+
+          'draw_floor' => lambda { |runtime, p|
+            thickness = p['thickness_mm'].to_f > 0 ? p['thickness_mm'].to_f : 100.0
+            runtime.active_model.select_tool(
+              Architecture::Tools::FloorTool.new(
+                runtime:      runtime,
+                thickness_mm: thickness,
+                level_id:     p['level_id'].to_s
+              )
+            )
+            :no_state_push
+          },
+
+          'draw_ceiling' => lambda { |runtime, p|
+            height = p['height_mm'].to_f > 0 ? p['height_mm'].to_f : 2600.0
+            thickness = p['thickness_mm'].to_f > 0 ? p['thickness_mm'].to_f : 12.0
+            runtime.active_model.select_tool(
+              Architecture::Tools::CeilingTool.new(
+                runtime:      runtime,
+                height_mm:    height,
+                thickness_mm: thickness,
+                level_id:     p['level_id'].to_s
+              )
+            )
+            :no_state_push
           },
 
           # -- MEP -------------------------------------------------
@@ -568,23 +805,8 @@ module JiraNot
           },
 
           'show_costing' => lambda { |runtime, _p|
-            obj_count = runtime.smart_objects.size rescue 0
-            lvl_count = runtime.levels.size rescue 0
-            lines = [
-              "รหัสโครงการ: #{runtime.project&.project_id || '—'}",
-              "เฟส: #{runtime.project&.working_phase || 'new_construction'}",
-              "จำนวนชั้น: #{lvl_count}",
-              "Smart Objects: #{obj_count}",
-              '',
-              '✓ โครงสร้าง (ฐานราก, เสา)',
-              '✓ สถาปัตยกรรม (ผนัง, หลังคา)',
-              '✓ MEP (สุขาภิบาล, ไฟฟ้า)',
-              '✓ ตกแต่ง (ตู้บิวท์อิน, ตู้เสื้อผ้า)',
-              '✓ ครุภัณฑ์',
-              '',
-              'พร้อมสำหรับ BOQ'
-            ].join("\n")
-            UI.messagebox(lines)
+            boq = HtmlDialogManager.generate_boq_data(runtime)
+            HtmlDialogManager.execute_script("ConstructFlowUI.renderBOQ(#{boq.to_json}); ConstructFlowUI.openBOQModal();")
             :no_state_push
           }
         }.freeze

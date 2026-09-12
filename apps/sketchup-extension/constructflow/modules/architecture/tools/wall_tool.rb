@@ -76,6 +76,7 @@ module JiraNot
                 )
                 @hover_point = point_from_mm(preview[:finish_mm])
                 @preview = preview
+                @active_snap = preview[:snap]
 
                 if defined?(SB_VCB_LABEL)
                   Sketchup.set_status_text('ความยาว (Length)', SB_VCB_LABEL)
@@ -85,6 +86,7 @@ module JiraNot
                 snapped = @interaction.snap(point_mm, references: plan_references)
                 @hover_point = point_from_mm(snapped[:point_mm])
                 @preview = nil
+                @active_snap = snapped
                 if defined?(SB_VCB_LABEL)
                   Sketchup.set_status_text('ความยาว (Length)', SB_VCB_LABEL)
                   Sketchup.set_status_text('', SB_VCB_VALUE)
@@ -214,6 +216,11 @@ module JiraNot
             view.drawing_color = line_color
             view.draw(GL_LINES, [start_pt, @hover_point])
             @input_point.draw(view) if @input_point&.valid?
+
+            if defined?(Core::ViewportSnapHelper)
+              snap_info = @closing_loop ? { kind: 'close_loop' } : @active_snap
+              Core::ViewportSnapHelper.draw_snap_glyph(view, @hover_point, snap_info)
+            end
 
             if @closing_loop && @first_point && view.respond_to?(:draw_points)
               first_pt = point_from_mm(@first_point)
