@@ -413,7 +413,7 @@ module JiraNot
             )
             repository.write(group, definition)
             runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository)
+            reconcile_wall_joins(runtime, repository, geometry: geometry)
 
             {
               created_object_ids: [smart_object.id],
@@ -445,7 +445,7 @@ module JiraNot
             repository.write(smart_object.entity, updated)
             runtime.smart_objects.update_level_refs(smart_object.entity, level_refs_for_definition(updated))
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository)
+            reconcile_wall_joins(runtime, repository, geometry: geometry)
 
             {
               updated_object_ids: [smart_object.id],
@@ -470,7 +470,7 @@ module JiraNot
             geometry.rebuild!(smart_object.entity, updated, openings: repository.host_openings(smart_object.entity))
             repository.write(smart_object.entity, updated)
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository)
+            reconcile_wall_joins(runtime, repository, geometry: geometry)
             wall_geometry_changed_result(smart_object)
           end
 
@@ -494,7 +494,7 @@ module JiraNot
             repository.write(smart_object.entity, updated)
             runtime.smart_objects.update_level_refs(smart_object.entity, level_refs_for_definition(updated))
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository)
+            reconcile_wall_joins(runtime, repository, geometry: geometry)
             wall_geometry_changed_result(smart_object)
           end
 
@@ -521,7 +521,7 @@ module JiraNot
             )
             repository.write(group, definition)
             runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository)
+            reconcile_wall_joins(runtime, repository, geometry: geometry)
             {
               created_object_ids: [object.id],
               warnings: ['hosted openings are not copied; place new openings on the copied wall'],
@@ -551,7 +551,7 @@ module JiraNot
             geometry.rebuild!(smart_object.entity, updated, openings: repository.host_openings(smart_object.entity))
             repository.write(smart_object.entity, updated)
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository)
+            reconcile_wall_joins(runtime, repository, geometry: geometry)
             wall_geometry_changed_result(smart_object)
           end
 
@@ -586,7 +586,7 @@ module JiraNot
             repository.write(smart_object.entity, updated)
             runtime.smart_objects.update_level_refs(smart_object.entity, level_refs_for_definition(updated))
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository)
+            reconcile_wall_joins(runtime, repository, geometry: geometry)
 
             {
               updated_object_ids: [smart_object.id],
@@ -617,7 +617,7 @@ module JiraNot
             repository.write(smart_object.entity, updated)
             runtime.smart_objects.update_level_refs(smart_object.entity, level_refs_for_definition(updated))
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository)
+            reconcile_wall_joins(runtime, repository, geometry: geometry)
 
             {
               updated_object_ids: [smart_object.id],
@@ -644,7 +644,7 @@ module JiraNot
             repository.write(smart_object.entity, updated)
             runtime.smart_objects.update_level_refs(smart_object.entity, level_refs_for_definition(updated))
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository)
+            reconcile_wall_joins(runtime, repository, geometry: geometry)
             {
               updated_object_ids: [smart_object.id],
               events: [
@@ -941,7 +941,7 @@ module JiraNot
         # This is intentionally a metadata reconciliation step: WallGeometry
         # can consume the stable, symmetric join records without each command
         # having to guess which neighboring walls were affected.
-        def reconcile_wall_joins(runtime, repository, tolerance_mm: 1.0)
+        def reconcile_wall_joins(runtime, repository, geometry: nil, tolerance_mm: 1.0)
           walls = runtime.smart_objects.all
                         .select { |object| object.type == 'architecture.wall' && object.owner_module == MANIFEST[:id] }
                         .sort_by(&:id)
@@ -962,6 +962,21 @@ module JiraNot
               style ||= reverse && reverse['allow'] == false ? 'disallow' : (reverse && reverse['style'])
               style ||= join[:style]
               resolved = engine.resolve(wall_a: definition, wall_b: other_definition, style: style, tolerance_mm: tolerance_mm)
+
+              # Find vector pointing away from join point into the other wall
+              other_path = other_definition.respond_to?(:centerline_path_mm) ? other_definition.centerline_path_mm : other_definition.path_mm
+              j_pt = resolved[:point_mm]
+              other_vec = nil
+              if other_path && other_path.length >= 2 && j_pt
+                d_start = Math.sqrt(((other_path.first[0] - j_pt[0])**2) + ((other_path.first[1] - j_pt[1])**2))
+                d_end = Math.sqrt(((other_path.last[0] - j_pt[0])**2) + ((other_path.last[1] - j_pt[1])**2))
+                if d_start <= (tolerance_mm * 2.0)
+                  other_vec = [other_path[1][0] - other_path[0][0], other_path[1][1] - other_path[0][1], 0.0]
+                elsif d_end <= (tolerance_mm * 2.0)
+                  other_vec = [other_path[-2][0] - other_path[-1][0], other_path[-2][1] - other_path[-1][1], 0.0]
+                end
+              end
+
               {
                 'node_index' => nearest_node_index(definition, join[:point_mm]),
                 'segment_index' => join[:segment_index],
@@ -970,7 +985,9 @@ module JiraNot
                 'allow' => resolved[:resolved],
                 'related_wall_id' => other_object.id.to_s,
                 'angle_deg' => resolved[:angle_deg],
-                'point_mm' => resolved[:point_mm]
+                'point_mm' => resolved[:point_mm],
+                'other_vector' => other_vec,
+                'other_thickness_mm' => other_definition.thickness_mm
               }
             end
 
@@ -978,6 +995,10 @@ module JiraNot
 
             updated = definition.with(joins: joins)
             repository.write(object.entity, updated)
+            if geometry && object.entity.respond_to?(:entities)
+              openings = repository.host_openings(object.entity) rescue []
+              geometry.rebuild!(object.entity, updated, openings: openings) rescue nil
+            end
             mark_dirty_with_dependents(runtime, object.entity, 'dirty_drawing')
             changed_ids << object.id
           end

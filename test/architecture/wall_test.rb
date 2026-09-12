@@ -552,4 +552,46 @@ class WallQuantityProviderTest < Minitest::Test
     assert items.all? { |item| item[:phase_scope] == 'demolition' }
     assert items.all? { |item| item[:confidence] == 'measured' }
   end
+
+  def test_wall_corner_miter_geometry_at_l_join
+    geom = JiraNot::ConstructFlow::Architecture::WallGeometry.new
+    thickness = 100.0
+    join_w1 = {
+      'node_index' => 1,
+      'type' => 'L',
+      'style' => 'miter',
+      'allow' => true,
+      'other_vector' => [0.0, 2000.0, 0.0],
+      'other_thickness_mm' => thickness
+    }
+    join_w2 = {
+      'node_index' => 0,
+      'type' => 'L',
+      'style' => 'miter',
+      'allow' => true,
+      'other_vector' => [-3000.0, 0.0, 0.0],
+      'other_thickness_mm' => thickness
+    }
+
+    pts1 = geom.outline_points_mm(path_mm: [[0, 0, 0], [3000, 0, 0]], thickness_mm: thickness, joins: [join_w1])
+    pts2 = geom.outline_points_mm(path_mm: [[3000, 0, 0], [3000, 2000, 0]], thickness_mm: thickness, joins: [join_w2])
+
+    outer_w1 = pts1.find { |p| p[0] > 3000.0 }
+    inner_w1 = pts1.find { |p| p[0] < 3000.0 && p[0] > 2000.0 }
+    refute_nil outer_w1
+    refute_nil inner_w1
+    assert_in_delta 3050.0, outer_w1[0], 0.1
+    assert_in_delta(-50.0, outer_w1[1], 0.1)
+    assert_in_delta 2950.0, inner_w1[0], 0.1
+    assert_in_delta 50.0, inner_w1[1], 0.1
+
+    outer_w2 = pts2.find { |p| p[0] > 3000.0 && p[1] < 100.0 }
+    inner_w2 = pts2.find { |p| p[0] < 3000.0 && p[1] < 100.0 }
+    refute_nil outer_w2
+    refute_nil inner_w2
+    assert_in_delta 3050.0, outer_w2[0], 0.1
+    assert_in_delta(-50.0, outer_w2[1], 0.1)
+    assert_in_delta 2950.0, inner_w2[0], 0.1
+    assert_in_delta 50.0, inner_w2[1], 0.1
+  end
 end

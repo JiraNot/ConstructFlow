@@ -17,7 +17,7 @@ module JiraNot
           entities = group.entities
           entities.clear!
           if Array(openings).empty?
-            add_polyline_wall(entities, definition.centerline_path_mm, definition.thickness_mm, definition.height_mm)
+            add_polyline_wall(entities, definition.centerline_path_mm, definition.thickness_mm, definition.height_mm, joins: definition.joins)
             return group
           end
 
@@ -41,34 +41,79 @@ module JiraNot
         # rectangles are retained for hosted openings, where the cells are
         # needed to form the cutout; ordinary walls use this joined outline so
         # corners do not overlap or leave visible seams.
-        def outline_points_mm(path_mm:, thickness_mm:)
+        def outline_points_mm(path_mm:, thickness_mm:, joins: [])
           path = Array(path_mm)
           raise ArgumentError, 'wall path requires at least two points' if path.length < 2
 
           half = Float(thickness_mm) / 2.0
-          left = offset_polyline(path, half)
-          right = offset_polyline(path, -half)
+          left = offset_polyline(path, half, joins: joins, thickness_mm: thickness_mm)
+          right = offset_polyline(path, -half, joins: joins, thickness_mm: thickness_mm)
           (left + right.reverse).map(&:freeze).freeze
         end
 
         private
 
-        def add_polyline_wall(entities, path_mm, thickness_mm, height_mm)
-          face = entities.add_face(outline_points_mm(path_mm: path_mm, thickness_mm: thickness_mm).map { |value| point_mm(value) })
+        def add_polyline_wall(entities, path_mm, thickness_mm, height_mm, joins: [])
+          face = entities.add_face(outline_points_mm(path_mm: path_mm, thickness_mm: thickness_mm, joins: joins).map { |value| point_mm(value) })
           raise 'failed to create joined wall face' unless face
 
           face.reverse! if face.normal.z < 0
           face.pushpull(Core::Units.mm_to_su(height_mm))
         end
 
-        def offset_polyline(path, offset)
+        def offset_polyline(path, offset, joins: [], thickness_mm: 100.0)
           points = path.map { |value| Array(value).first(3).map { |item| Float(item) } }
           points.each_index.map do |index|
-            if index.zero? || index == points.length - 1
-              a = points[[index - 1, 0].max]
-              b = points[[index + 1, points.length - 1].min]
-              nx, ny = normal_for(a, b)
-              [points[index][0] + nx * offset, points[index][1] + ny * offset, points[index][2]]
+            if index.zero?
+              join = Array(joins).find { |j| (j['node_index'] || j[:node_index]) == 0 && (j['style'] || j[:style]) != 'disallow' && (j['allow'] != false && j[:allow] != false) }
+              vec = join ? (join['other_vector'] || join[:other_vector]) : nil
+              style = join ? (join['style'] || join[:style]) : nil
+              type = join ? (join['type'] || join[:type]) : nil
+              other_thick = join ? (join['other_thickness_mm'] || join[:other_thickness_mm]) : nil
+
+              if vec && (style == 'miter' || type == 'L')
+                v1 = [points[1][0] - points[0][0], points[1][1] - points[0][1], 0.0]
+                miter_offset_point(points[0], v1, vec, offset, thickness_mm)
+              elsif type == 'T' && style == 'butt' && other_thick
+                nx, ny = normal_for(points[0], points[1])
+                dx = points[1][0] - points[0][0]
+                dy = points[1][1] - points[0][1]
+                len = Math.sqrt(dx * dx + dy * dy)
+                shift = (len > 0.001) ? (other_thick.to_f / 2.0) : 0.0
+                ux = (len > 0.001) ? (dx / len) : 0.0
+                uy = (len > 0.001) ? (dy / len) : 0.0
+                [points[0][0] + (ux * shift) + (nx * offset), points[0][1] + (uy * shift) + (ny * offset), points[0][2]]
+              else
+                a = points[0]
+                b = points[[1, points.length - 1].min]
+                nx, ny = normal_for(a, b)
+                [points[index][0] + nx * offset, points[index][1] + ny * offset, points[index][2]]
+              end
+            elsif index == points.length - 1
+              join = Array(joins).find { |j| (j['node_index'] || j[:node_index]) == index && (j['style'] || j[:style]) != 'disallow' && (j['allow'] != false && j[:allow] != false) }
+              vec = join ? (join['other_vector'] || join[:other_vector]) : nil
+              style = join ? (join['style'] || join[:style]) : nil
+              type = join ? (join['type'] || join[:type]) : nil
+              other_thick = join ? (join['other_thickness_mm'] || join[:other_thickness_mm]) : nil
+
+              if vec && (style == 'miter' || type == 'L')
+                v1 = [points[index - 1][0] - points[index][0], points[index - 1][1] - points[index][1], 0.0]
+                miter_offset_point(points[index], v1, vec, offset, thickness_mm)
+              elsif type == 'T' && style == 'butt' && other_thick
+                nx, ny = normal_for(points[index - 1], points[index])
+                dx = points[index - 1][0] - points[index][0]
+                dy = points[index - 1][1] - points[index][1]
+                len = Math.sqrt(dx * dx + dy * dy)
+                shift = (len > 0.001) ? (other_thick.to_f / 2.0) : 0.0
+                ux = (len > 0.001) ? (dx / len) : 0.0
+                uy = (len > 0.001) ? (dy / len) : 0.0
+                [points[index][0] + (ux * shift) + (nx * offset), points[index][1] + (uy * shift) + (ny * offset), points[index][2]]
+              else
+                a = points[[index - 1, 0].max]
+                b = points[index]
+                nx, ny = normal_for(a, b)
+                [points[index][0] + nx * offset, points[index][1] + ny * offset, points[index][2]]
+              end
             else
               previous = points[index - 1]
               current = points[index]
@@ -89,6 +134,31 @@ module JiraNot
               end
             end
           end
+        end
+
+        def miter_offset_point(p0, v1, v2, offset, thickness_mm)
+          len1 = Math.sqrt(v1[0]**2 + v1[1]**2)
+          len2 = Math.sqrt(v2[0]**2 + v2[1]**2)
+          return [p0[0], p0[1], p0[2]] if len1 <= 0.001 || len2 <= 0.001
+
+          u1 = [v1[0] / len1, v1[1] / len1]
+          u2 = [v2[0] / len2, v2[1] / len2]
+          n1 = [-u1[1], u1[0]]
+
+          cross = (u1[0] * u2[1]) - (u1[1] * u2[0])
+          if cross.abs <= 0.01
+            return [p0[0] + (n1[0] * offset), p0[1] + (n1[1] * offset), p0[2]]
+          end
+
+          p_off = [n1[0] * offset, n1[1] * offset]
+          p_off_cross_u1 = (p_off[0] * u1[1]) - (p_off[1] * u1[0])
+          s = p_off_cross_u1 / (-cross)
+
+          max_s = thickness_mm.to_f * 2.5
+          s = s.clamp(-max_s, max_s)
+
+          m = [u1[0] + u2[0], u1[1] + u2[1]]
+          [p0[0] + (s * m[0]), p0[1] + (s * m[1]), p0[2]]
         end
 
         def normal_for(first, second)

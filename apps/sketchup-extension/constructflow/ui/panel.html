@@ -41,6 +41,75 @@
 ════════════════════════════════════════════════════════════ -->
 <div id="panel-body">
 
+  <!-- QUICK BIM RIBBON (ONE-CLICK TOOL BAR) -->
+  <div class="quick-ribbon-wrap">
+    <div class="quick-ribbon-header">
+      <div class="quick-ribbon-title">⚡ แท่นเครื่องมือด่วน (Quick BIM Tools)</div>
+      <div class="quick-ribbon-sub">คลิกเดียวเพื่อเริ่มใช้งานทันที</div>
+    </div>
+    <div class="quick-ribbon-grid">
+      <button class="ribbon-btn" data-action="drawWall" data-tool-name="วาดผนัง [WA]" title="วาดผนัง (WA)">
+        <span class="ribbon-icon">🧱</span>
+        <span class="ribbon-lbl">ผนัง</span>
+        <span class="ribbon-badge">WA</span>
+      </button>
+      <button class="ribbon-btn" data-action="placeColumn" data-tool-name="วางเสา [CL]" title="วางเสา (CL)">
+        <span class="ribbon-icon">🏛</span>
+        <span class="ribbon-lbl">เสา</span>
+        <span class="ribbon-badge">CL</span>
+      </button>
+      <button class="ribbon-btn" data-action="drawBeam" data-tool-name="วาดคาน [BM]" title="วาดคาน (BM)">
+        <span class="ribbon-icon">🏗</span>
+        <span class="ribbon-lbl">คาน</span>
+        <span class="ribbon-badge">BM</span>
+      </button>
+      <button class="ribbon-btn" data-action="insertDoor" data-tool-name="ติดตั้งประตู [DR]" title="ประตู (DR)">
+        <span class="ribbon-icon">🚪</span>
+        <span class="ribbon-lbl">ประตู</span>
+        <span class="ribbon-badge">DR</span>
+      </button>
+      <button class="ribbon-btn" data-action="insertWindow" data-tool-name="ติดตั้งหน้าต่าง [WN]" title="หน้าต่าง (WN)">
+        <span class="ribbon-icon">🪟</span>
+        <span class="ribbon-lbl">หน้าต่าง</span>
+        <span class="ribbon-badge">WN</span>
+      </button>
+      <button class="ribbon-btn" data-action="drawFloor" data-tool-name="วาดพื้น [FL]" title="วาดพื้น (FL)">
+        <span class="ribbon-icon">🟦</span>
+        <span class="ribbon-lbl">พื้น</span>
+        <span class="ribbon-badge">FL</span>
+      </button>
+      <button class="ribbon-btn" data-action="drawCeiling" data-tool-name="วาดฝ้าเพดาน [CE]" title="วาดฝ้าเพดาน (CE)">
+        <span class="ribbon-icon">☁️</span>
+        <span class="ribbon-lbl">ฝ้า</span>
+        <span class="ribbon-badge">CE</span>
+      </button>
+      <button class="ribbon-btn" data-action="drawProfileSweep" data-tool-name="กวาดบัว / ราวมือจับ [PF]" title="กวาดบัว / ราวมือจับ (PF)">
+        <span class="ribbon-icon">➰</span>
+        <span class="ribbon-lbl">บัว/ราว</span>
+        <span class="ribbon-badge">PF</span>
+      </button>
+      <button class="ribbon-btn" data-action="useLaserLevel" data-tool-name="เลเซอร์วัดระดับ [LS]" title="เลเซอร์วัดระดับ (LS)">
+        <span class="ribbon-icon">🔴</span>
+        <span class="ribbon-lbl">เลเซอร์</span>
+        <span class="ribbon-badge">LS</span>
+      </button>
+      <button class="ribbon-btn" data-action="exportBoq" data-tool-name="สรุป BOQ & ต้นทุน" title="สรุปปริมาณและราคาก่อสร้าง">
+        <span class="ribbon-icon">💰</span>
+        <span class="ribbon-lbl">BOQ</span>
+        <span class="ribbon-badge">COST</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ACTIVE TOOL FLOATING BANNER -->
+  <div id="active-tool-banner">
+    <div class="active-tool-info">
+      <div class="active-tool-dot"></div>
+      <span id="active-tool-text">กำลังใช้งาน: —</span>
+    </div>
+    <button type="button" class="active-tool-cancel-btn" id="btn-cancel-tool">✕ ออกจากเครื่องมือ (Esc)</button>
+  </div>
+
   <!-- QUICK SEARCH BAR -->
   <div class="search-bar-wrap">
     <input type="text" id="tool-search" placeholder="🔍 ค้นหาเครื่องมือ (เช่น ผนัง, เสา, คาน, BOQ)...">
@@ -282,6 +351,16 @@
             <div class="tool-card-sub">RC Column & มอก. Structural Steel [CL]</div>
           </div>
         </div>
+                <div class="quick-pill-container">
+          <div class="quick-pill-row">
+            <span class="pill-title">ขนาดเสาเร็ว:</span>
+            <button type="button" class="col-pill preset-pill active" data-w="0.20" data-d="0.20" data-preset="RC-C-0.20x0.20">C1 (20x20)</button>
+            <button type="button" class="col-pill preset-pill" data-w="0.25" data-d="0.25" data-preset="RC-C-0.25x0.25">C2 (25x25)</button>
+            <button type="button" class="col-pill preset-pill" data-w="0.30" data-d="0.30" data-preset="RC-C-0.30x0.30">C3 (30x30)</button>
+            <button type="button" class="col-pill preset-pill" data-w="0.10" data-d="0.10" data-preset="SHS-100x100x3.2">กล่อง 100</button>
+            <button type="button" class="col-pill preset-pill" data-w="0.20" data-d="0.20" data-preset="H-200x200">H-200</button>
+          </div>
+        </div>
         <div class="field">
           <label>หน้าตัดมาตรฐาน (มอก. / Thai Standard)</label>
           <select id="col-preset">
@@ -373,6 +452,16 @@
           <div>
             <div class="tool-card-title">คานโครงสร้าง (Structural Beam)</div>
             <div class="tool-card-sub">RC Beam & มอก. Steel [BM]</div>
+          </div>
+        </div>
+                <div class="quick-pill-container">
+          <div class="quick-pill-row">
+            <span class="pill-title">ขนาดคานเร็ว:</span>
+            <button type="button" class="bm-pill preset-pill active" data-w="0.20" data-d="0.40" data-preset="RC-B-0.20x0.40">B1 (20x40)</button>
+            <button type="button" class="bm-pill preset-pill" data-w="0.20" data-d="0.50" data-preset="RC-B-0.20x0.50">B2 (20x50)</button>
+            <button type="button" class="bm-pill preset-pill" data-w="0.25" data-d="0.50" data-preset="RC-B-0.25x0.50">B3 (25x50)</button>
+            <button type="button" class="bm-pill preset-pill" data-w="0.20" data-d="0.40" data-preset="RC-GB-0.20x0.40">GB คอดิน</button>
+            <button type="button" class="bm-pill preset-pill" data-w="0.10" data-d="0.20" data-preset="WF-200x100">WF-200</button>
           </div>
         </div>
         <div class="field">

@@ -867,7 +867,105 @@ const CF = {
     }
   },
 
+
+  initQuickRibbon() {
+    const banner = document.getElementById('active-tool-banner');
+    const bannerText = document.getElementById('active-tool-text');
+    const cancelBtn = document.getElementById('btn-cancel-tool');
+
+    document.querySelectorAll('.ribbon-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const toolName = btn.dataset.toolName || btn.title || 'เครื่องมือ';
+        document.querySelectorAll('.ribbon-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        if (banner && bannerText) {
+          bannerText.textContent = `กำลังใช้งาน: ${toolName} • คลิกในโมเดลเพื่อทำงาน`;
+          banner.style.display = 'flex';
+        }
+      });
+    });
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        document.querySelectorAll('.ribbon-btn').forEach(b => b.classList.remove('active'));
+        if (banner) banner.style.display = 'none';
+        CF.toast('ยกเลิกเครื่องมือแล้ว (Switched to Select Tool)', 'info');
+      });
+    }
+
+    // Esc key resets active banner
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.ribbon-btn').forEach(b => b.classList.remove('active'));
+        if (banner) banner.style.display = 'none';
+      }
+    });
+  },
+
+  initQuickPills() {
+    // Generic preset pills with data-target & data-val
+    document.querySelectorAll('.preset-pill[data-target]').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const targetId = pill.dataset.target;
+        const val = pill.dataset.val;
+        const input = document.getElementById(targetId);
+        if (input) input.value = val;
+
+        const row = pill.closest('.quick-pill-row');
+        if (row) {
+          row.querySelectorAll('.preset-pill').forEach(p => p.classList.remove('active'));
+          pill.classList.add('active');
+        }
+      });
+    });
+
+    // Column quick pills
+    document.querySelectorAll('.col-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const w = pill.dataset.w;
+        const d = pill.dataset.d;
+        const preset = pill.dataset.preset;
+        const wInput = document.getElementById('col-w');
+        const dInput = document.getElementById('col-d');
+        const presetSelect = document.getElementById('col-preset');
+        if (wInput) wInput.value = w;
+        if (dInput) dInput.value = d;
+        if (presetSelect) presetSelect.value = preset;
+
+        const row = pill.closest('.quick-pill-row');
+        if (row) {
+          row.querySelectorAll('.col-pill').forEach(p => p.classList.remove('active'));
+          pill.classList.add('active');
+        }
+      });
+    });
+
+    // Beam quick pills
+    document.querySelectorAll('.bm-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        const w = pill.dataset.w;
+        const d = pill.dataset.d;
+        const preset = pill.dataset.preset;
+        const wInput = document.getElementById('bm-w');
+        const dInput = document.getElementById('bm-d');
+        const presetSelect = document.getElementById('bm-preset');
+        if (wInput) wInput.value = w;
+        if (dInput) dInput.value = d;
+        if (presetSelect) presetSelect.value = preset;
+
+        const row = pill.closest('.quick-pill-row');
+        if (row) {
+          row.querySelectorAll('.bm-pill').forEach(p => p.classList.remove('active'));
+          pill.classList.add('active');
+        }
+      });
+    });
+  },
+
   init() {
+    CF.initQuickRibbon();
+    CF.initQuickPills();
     CF.initAnchorMatrix();
     CF.initPresets();
     CF.initAccordion();
