@@ -25,6 +25,18 @@ module JiraNot
 
           def draw(view)
             @input_point.draw(view) if @input_point.valid?
+
+            if @input_point.valid?
+              mesh = Core::GhostPreview.build_manhole_mesh(@input_point.position, @size_mm)
+              if mesh
+                Core::GhostPreview.render_ghost(
+                  view,
+                  mesh,
+                  face_color: [149, 165, 166, 80],
+                  line_color: [127, 140, 141]
+                )
+              end
+            end
           end
 
           def onLButtonDown(_flags, x, y, view)
@@ -75,6 +87,19 @@ module JiraNot
 
           def draw(view)
             @input_point.draw(view) if @input_point.valid?
+
+            if @input_point.valid?
+              mesh = Core::GhostPreview.build_manhole_mesh(@input_point.position, [600, 600])
+              if mesh
+                Core::GhostPreview.render_ghost(
+                  view,
+                  mesh,
+                  face_color: [243, 156, 18, 80],
+                  line_color: [211, 84, 0],
+                  label: 'ย้ายตำแหน่งบ่อพักน้ำทิ้ง'
+                )
+              end
+            end
           end
 
           def onLButtonDown(_flags, x, y, view)

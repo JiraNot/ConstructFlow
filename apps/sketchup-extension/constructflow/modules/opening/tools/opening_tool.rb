@@ -27,11 +27,42 @@ module JiraNot
 
           def onMouseMove(_flags, x, y, view)
             @input_point.pick(view, x, y)
+            @hovered_host = pick_host(view, x, y)
+            @hovered_placement = nil
+            if @hovered_host && @input_point.valid?
+              point_mm = Core::Units.point_to_mm(@input_point.position)
+              @hovered_placement = @host_capability.locate(@hovered_host, point_mm) rescue nil
+            end
             view.invalidate
           end
 
           def draw(view)
             @input_point.draw(view) if @input_point.valid?
+
+            if @hovered_host && @hovered_placement
+              wall_def = @host_capability.definition(@hovered_host) rescue nil
+              if wall_def
+                mesh = Core::GhostPreview.build_opening_mesh(
+                  wall_def,
+                  @hovered_placement[:segment_index],
+                  @hovered_placement[:distance_along_mm],
+                  @width_mm,
+                  @height_mm,
+                  @sill_mm
+                )
+                if mesh
+                  Core::GhostPreview.render_ghost(
+                    view,
+                    mesh,
+                    face_color: [231, 76, 60, 100],
+                    line_color: [192, 57, 43]
+                  )
+                end
+              end
+            elsif @input_point.valid? && view.respond_to?(:draw_text)
+              screen = view.respond_to?(:screen_coords) ? view.screen_coords(@input_point.position) : @input_point.position
+              view.draw_text(screen, "ช่องเปิด #{@width_mm.to_i}x#{@height_mm.to_i} mm (ชี้ที่ผนังอัจฉริยะเพื่อกำหนดตำแหน่ง)")
+            end
           end
 
           def onLButtonDown(_flags, x, y, view)

@@ -28,6 +28,18 @@ module JiraNot
 
           def draw(view)
             @input_point.draw(view) if @input_point.valid?
+
+            if @input_point.valid?
+              mesh = Core::GhostPreview.build_column_mesh(@input_point.position, @section_mm, @explicit_height_mm)
+              if mesh
+                Core::GhostPreview.render_ghost(
+                  view,
+                  mesh,
+                  face_color: [26, 188, 156, 80],
+                  line_color: [22, 160, 133]
+                )
+              end
+            end
           end
 
           def onLButtonDown(_flags, x, y, view)

@@ -1,6 +1,13 @@
 # frozen_string_literal: true
 
 require_relative 'i18n'
+require_relative 'ghost_preview'
+require_relative '../modules/structure/tools/foundation_tool'
+require_relative '../modules/door_window/tools/door_window_tool'
+require_relative '../modules/interior/tools/wardrobe_tool'
+require_relative '../modules/library/tools/asset_tool'
+require_relative '../modules/drainage/tools/pipe_tool'
+require_relative '../modules/electrical/tools/conduit_tool'
 
 module JiraNot
   module ConstructFlow
@@ -155,46 +162,20 @@ module JiraNot
         end
 
         def prompt_foundation(runtime)
-          column = runtime.active_model.selection
-                          .filter_map { |e| runtime.smart_objects.fetch(e) }
-                          .find { |o| o.type == 'structure.column' }
-          if column
-            values = UI.inputbox(
-              ['ชนิดฐานราก', 'ความกว้าง W mm', 'ความยาว L mm', 'ความหนา D mm'],
-              ['spread_footing', '1000', '1000', '400'],
-              'ConstructFlow: สร้างฐานรากใต้เสา'
-            )
-            return unless values
+          values = UI.inputbox(
+            ['ชนิดฐานราก', 'ความกว้าง W mm', 'ความยาว L mm', 'ความหนา D mm'],
+            ['spread_footing', '1000', '1000', '400'],
+            'ConstructFlow: กำหนดขนาดฐานรากก่อนวาง'
+          )
+          return unless values
 
-            result = runtime.commands.execute(
-              'GenerateFoundation',
-              {
-                column_object_id: column.id,
-                foundation_type: values[0].to_s,
-                size_mm: [Float(values[1]), Float(values[2]), Float(values[3])]
-              },
-              project_id: runtime.project.project_id
+          runtime.active_model.select_tool(
+            Structure::Tools::FoundationTool.new(
+              runtime: runtime,
+              size_mm: [Float(values[1]), Float(values[2]), Float(values[3])],
+              foundation_type: values[0].to_s
             )
-            UI.messagebox(result[:status] == 'success' ? 'สร้างฐานรากเรียบร้อย' : result[:errors].join("\n"))
-          else
-            values = UI.inputbox(
-              ['ชนิดฐานราก', 'ความกว้าง W mm', 'ความยาว L mm', 'ความหนา D mm', 'พิกัด X mm', 'พิกัด Y mm', 'ระดับ Z mm'],
-              ['spread_footing', '1000', '1000', '400', '0', '0', '0'],
-              'ConstructFlow: สร้างฐานราก (ระบุพิกัด)'
-            )
-            return unless values
-
-            result = runtime.commands.execute(
-              'CreateFoundation',
-              {
-                foundation_type: values[0].to_s,
-                size_mm: [Float(values[1]), Float(values[2]), Float(values[3])],
-                location_mm: [Float(values[4]), Float(values[5]), Float(values[6])]
-              },
-              project_id: runtime.project.project_id
-            )
-            UI.messagebox(result[:status] == 'success' ? 'สร้างฐานรากเรียบร้อย' : result[:errors].join("\n"))
-          end
+          )
         rescue StandardError => e
           UI.messagebox("เกิดข้อผิดพลาด: #{e.message}")
         end
@@ -261,33 +242,22 @@ module JiraNot
         end
 
         def prompt_door_window(runtime)
-          opening = runtime.active_model.selection
-                           .filter_map { |e| runtime.smart_objects.fetch(e) }
-                           .find { |o| o.type == 'opening.aperture' }
-          unless opening
-            UI.messagebox('กรุณาคลิกเลือกวัตถุช่องเปิด (Opening) บนผนังก่อน เพื่อติดตั้งประตูหรือหน้าต่าง')
-            return
-          end
-
           values = UI.inputbox(
             ['หมวดหมู่ (door หรือ window)', 'การเปิด (swing / sliding / fixed)', 'วัสดุกรอบเฟรม', 'รูปแบบบาน'],
             ['door', 'swing', 'aluminium', 'glazed'],
-            'ConstructFlow: ติดตั้งประตู/หน้าต่าง'
+            'ConstructFlow: เลือกรูปแบบประตู/หน้าต่างก่อนติดตั้ง'
           )
           return unless values
 
-          result = runtime.commands.execute(
-            'CreateDoorWindow',
-            {
-              opening_object_id: opening.id,
+          runtime.active_model.select_tool(
+            DoorWindow::Tools::DoorWindowTool.new(
+              runtime: runtime,
               category: values[0].to_s,
               operation: values[1].to_s,
               frame_material: values[2].to_s,
               panel_style: values[3].to_s
-            },
-            project_id: runtime.project.project_id
+            )
           )
-          UI.messagebox(result[:status] == 'success' ? 'ติดตั้งประตู/หน้าต่างสำเร็จ' : result[:errors].join("\n"))
         rescue StandardError => e
           UI.messagebox("เกิดข้อผิดพลาด: #{e.message}")
         end
@@ -370,22 +340,20 @@ module JiraNot
         end
 
         def prompt_pipe_route(runtime)
-          manholes = runtime.active_model.selection
-                            .filter_map { |e| runtime.smart_objects.fetch(e) }
-                            .select { |o| o.type == 'drainage.manhole' }
-          if manholes.size == 2
-            upstream, downstream = manholes
-            start_id = runtime.connectors.connectors_for(upstream.id).find { |item| item['role'] == 'outlet' }&.dig('id')
-            end_id = runtime.connectors.connectors_for(downstream.id).find { |item| item['role'] == 'inlet' }&.dig('id')
-            result = runtime.commands.execute(
-              'CreatePipeRoute',
-              { start_connector_id: start_id, end_connector_id: end_id, system: 'waste' },
-              project_id: runtime.project.project_id
+          values = UI.inputbox(
+            ['ขนาดเส้นผ่านศูนย์กลางท่อ (mm)', 'ระบบท่อ (waste / storm / soil)'],
+            ['100', 'waste'],
+            'ConstructFlow: กำหนดขนาดท่อระบายน้ำ'
+          )
+          return unless values
+
+          runtime.active_model.select_tool(
+            Drainage::Tools::PipeTool.new(
+              runtime: runtime,
+              diameter_mm: Float(values[0]),
+              system: values[1].to_s
             )
-            UI.messagebox(result[:status] == 'success' ? 'เชื่อมต่อท่อระบายน้ำสำเร็จ' : result[:errors].join("\n"))
-          else
-            UI.messagebox('กรุณาเลือกบ่อพักน้ำทิ้ง (Manhole) 2 บ่อในแบบ (ต้นทาง และ ปลายทาง) เพื่อเชื่อมต่อท่อ')
-          end
+          )
         rescue StandardError => e
           UI.messagebox("เกิดข้อผิดพลาด: #{e.message}")
         end
@@ -418,25 +386,19 @@ module JiraNot
 
         def prompt_cable_conduit(runtime)
           values = UI.inputbox(
-            ['จุดเริ่มต้น X,Y,Z (mm)', 'จุดสิ้นสุด X,Y,Z (mm)', 'กลยุทธ์ (ceiling_first / floor_first)', 'ระดับฝ้า Ceiling Z (mm)'],
-            ['0,0,1000', '3000,0,1000', 'ceiling_first', '2600'],
-            'ConstructFlow: เดินท่อร้อยสายไฟฟ้า'
+            ['ระดับฝ้าเพดาน Ceiling Z (mm)', 'กลยุทธ์เดินสาย (ceiling_first / floor_first)'],
+            ['2600', 'ceiling_first'],
+            'ConstructFlow: กำหนดระดับท่อร้อยสายไฟฟ้า'
           )
           return unless values
 
-          start_pt = values[0].split(',').map { |v| Float(v.strip) }
-          end_pt = values[1].split(',').map { |v| Float(v.strip) }
-          runtime.commands.execute(
-            'CreateConduitRoute',
-            {
-              start_point: start_pt,
-              end_point: end_pt,
-              strategy: values[2].to_s,
-              ceiling_z_mm: Float(values[3])
-            },
-            project_id: runtime.project.project_id
+          runtime.active_model.select_tool(
+            Electrical::Tools::ConduitTool.new(
+              runtime: runtime,
+              ceiling_z_mm: Float(values[0]),
+              strategy: values[1].to_s
+            )
           )
-          UI.messagebox('สร้างแนวท่อร้อยสายไฟฟ้าสำเร็จ')
         rescue StandardError => e
           UI.messagebox("เกิดข้อผิดพลาด: #{e.message}")
         end
@@ -491,21 +453,19 @@ module JiraNot
           values = UI.inputbox(
             ['ความกว้างตู้ (mm)', 'ความสูงตู้ (mm)', 'ความลึกตู้ (mm)', 'ชนิดหน้าบาน (hinged / sliding)'],
             ['1800', '2400', '600', 'hinged'],
-            'ConstructFlow: สร้างตู้เสื้อผ้าบิวท์อิน'
+            'ConstructFlow: กำหนดขนาดตู้เสื้อผ้าก่อนวาง'
           )
           return unless values
 
-          result = runtime.commands.execute(
-            'CreateWardrobe',
-            {
+          runtime.active_model.select_tool(
+            Interior::Tools::WardrobeTool.new(
+              runtime: runtime,
               width_mm: Float(values[0]),
               height_mm: Float(values[1]),
               depth_mm: Float(values[2]),
               door_type: values[3].to_s
-            },
-            project_id: runtime.project.project_id
+            )
           )
-          UI.messagebox(result[:status] == 'success' ? 'สร้างตู้เสื้อผ้าสำเร็จ' : result[:errors].join("\n"))
         rescue StandardError => e
           UI.messagebox("เกิดข้อผิดพลาด: #{e.message}")
         end
@@ -514,20 +474,17 @@ module JiraNot
           values = UI.inputbox(
             ['รหัสครุภัณฑ์ Asset ID', 'มุมหมุน Rotation (องศา)'],
             ['chair.office.mesh', '0'],
-            'ConstructFlow: วางครุภัณฑ์สำเร็จรูป'
+            'ConstructFlow: เลือกครุภัณฑ์ก่อนวาง'
           )
           return unless values
 
-          result = runtime.commands.execute(
-            'PlaceCatalogAsset',
-            {
+          runtime.active_model.select_tool(
+            Library::Tools::AssetTool.new(
+              runtime: runtime,
               asset_id: values[0].to_s.strip,
-              location_mm: [0, 0, 0],
               rotation_deg: Float(values[1])
-            },
-            project_id: runtime.project.project_id
+            )
           )
-          UI.messagebox(result[:status] == 'success' ? 'วางครุภัณฑ์สำเร็จ' : result[:errors].join("\n"))
         rescue StandardError => e
           UI.messagebox("เกิดข้อผิดพลาด: #{e.message}")
         end

@@ -43,10 +43,23 @@ module JiraNot
           end
 
           def draw(view)
-            return unless @start_point && @hover_point
+            @input_point.draw(view) if @input_point.valid?
 
-            view.line_width = 2
-            view.draw(GL_LINES, [@start_point, @hover_point])
+            if @start_point && @hover_point
+              mesh = Core::GhostPreview.build_wall_mesh(@start_point, @hover_point, @thickness_mm, @height_mm)
+              if mesh
+                Core::GhostPreview.render_ghost(
+                  view,
+                  mesh,
+                  face_color: [52, 152, 219, 75],
+                  line_color: [41, 128, 185],
+                  centerlines: mesh[:centerlines]
+                )
+              end
+            elsif @hover_point && view.respond_to?(:draw_text)
+              screen = view.respond_to?(:screen_coords) ? view.screen_coords(@hover_point) : @hover_point
+              view.draw_text(screen, "คลิกเพื่อเริ่มแนวกำแพง (หนา #{@thickness_mm.to_i} mm | สูง #{@height_mm.to_i} mm)")
+            end
           end
 
           def onCancel(_reason, view)
