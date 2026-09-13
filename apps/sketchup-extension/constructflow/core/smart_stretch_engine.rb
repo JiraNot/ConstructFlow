@@ -29,15 +29,15 @@ module JiraNot
 
         def initialize(entity, options = {})
           @entity = entity
-          raw_w = options[:target_width_m] || options[:target_width_mm] || options['target_width_mm']
-          raw_h = options[:target_height_m] || options[:target_height_mm] || options['target_height_mm']
-          raw_d = options[:target_depth_m] || options[:target_depth_mm] || options['target_depth_mm']
+          raw_w = (options[:target_width_m] ? options[:target_width_m].to_f * 1000.0 : nil) || options[:target_width_mm] || options['target_width_mm']
+          raw_h = (options[:target_height_m] ? options[:target_height_m].to_f * 1000.0 : nil) || options[:target_height_mm] || options['target_height_mm']
+          raw_d = (options[:target_depth_m] ? options[:target_depth_m].to_f * 1000.0 : nil) || options[:target_depth_mm] || options['target_depth_mm']
 
-          raw_dw = options[:delta_width_m] || options[:delta_width_mm] || options['delta_width_mm']
-          raw_dh = options[:delta_height_m] || options[:delta_height_mm] || options['delta_height_mm']
-          raw_dd = options[:delta_depth_m] || options[:delta_depth_mm] || options['delta_depth_mm']
+          raw_dw = (options[:delta_width_m] ? options[:delta_width_m].to_f * 1000.0 : nil) || options[:delta_width_mm] || options['delta_width_mm']
+          raw_dh = (options[:delta_height_m] ? options[:delta_height_m].to_f * 1000.0 : nil) || options[:delta_height_mm] || options['delta_height_mm']
+          raw_dd = (options[:delta_depth_m] ? options[:delta_depth_m].to_f * 1000.0 : nil) || options[:delta_depth_mm] || options['delta_depth_mm']
 
-          raw_margin = options[:frame_margin_m] || options[:margin_x_mm] || options[:frame_margin_mm] || options['frame_margin_mm']
+          raw_margin = (options[:frame_margin_m] ? options[:frame_margin_m].to_f * 1000.0 : nil) || options[:margin_x_mm] || options[:frame_margin_mm] || options['frame_margin_mm']
 
           @target_width_mm = normalize_dim(raw_w)
           @target_height_mm = normalize_dim(raw_h)

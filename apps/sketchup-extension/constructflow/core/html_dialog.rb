@@ -48,6 +48,64 @@ module JiraNot
         end
 
         # Push current project state → JS
+        
+        def handle_update_property(payload, runtime)
+          entity_id = payload['entity_id'].to_s
+          prop_key = payload['property'].to_s
+          new_val_m = payload['value'].to_f
+          
+          model = Sketchup.active_model
+          entity = model.selection.find { |e| e.persistent_id.to_s == entity_id || e.entityID.to_s == entity_id }
+          return unless entity
+          
+          smart_obj = runtime.smart_object_manager.get(entity)
+          return unless smart_obj
+          
+          model.start_operation("Update Parametric Dimension", true)
+          
+          bounds = local_bounds(entity)
+          cur_w = Core::Units.su_to_mm(bounds.width)
+          cur_d = Core::Units.su_to_mm(bounds.depth)
+          cur_h = Core::Units.su_to_mm(bounds.height)
+          
+          target_w = cur_w
+          target_d = cur_d
+          target_h = cur_h
+          
+          new_val_mm = new_val_m * 1000.0
+          
+          if prop_key.include?('ความกว้าง') || prop_key.include?('ความยาว') || prop_key.include?('W') || prop_key.include?('L') || prop_key.include?('Width')
+            target_w = new_val_mm
+          elsif prop_key.include?('ความหนา') || prop_key.include?('ลึก') || prop_key.include?('D') || prop_key.include?('Depth')
+            target_d = new_val_mm
+          elsif prop_key.include?('ความสูง') || prop_key.include?('H') || prop_key.include?('Height')
+            target_h = new_val_mm
+          end
+          
+          if (target_w - cur_w).abs > 0.1 || (target_d - cur_d).abs > 0.1 || (target_h - cur_h).abs > 0.1
+            options = {
+              target_width_mm: target_w,
+              target_depth_mm: target_d,
+              target_height_mm: target_h
+            }
+            engine = Core::SmartStretchEngine.new(entity, options)
+            engine.execute(model)
+          end
+          
+          model.commit_operation
+          
+          # Refresh inspector to show new bounds
+          push_selection(runtime)
+        end
+        
+        def local_bounds(ent)
+          if ent.is_a?(Sketchup::ComponentInstance) || ent.class.name.end_with?('ComponentInstance')
+            ent.definition.bounds rescue ent.bounds
+          else
+            ent.bounds
+          end
+        end
+
         def push_state(runtime)
           return unless @dialog&.visible?
 
@@ -70,11 +128,19 @@ module JiraNot
               smart_obj = (Core::RepresentationObjectResolver.resolve(runtime, entity) rescue nil)
               if smart_obj
                 selected_info = serialize_smart_object(runtime, smart_obj, entity)
+              elsif entity.is_a?(Sketchup::ComponentInstance)
+                selected_info = {
+                  'is_unregistered_component' => true,
+                  'entity_id' => entity.persistent_id,
+                  'type' => "sketchup.component",
+                  'name' => entity.definition.name
+                }
               end
             end
           end
 
-          payload = { type: 'selection', selected: selected_info }.to_json
+          hud_data = (Core::TakeoffHUDService.compute(runtime) rescue nil)
+          payload = { type: 'selection', selected: selected_info, takeoff_hud: hud_data }.to_json
           @dialog.execute_script("CF.receive(#{payload.to_json})")
         rescue StandardError => e
           warn "[ConstructFlow] push_selection error: #{e.message}"
@@ -469,6 +535,11 @@ module JiraNot
         end
 
         ACTIONS = {
+          'update_property' => lambda { |runtime, p|
+            handle_update_property(p, runtime)
+            :no_state_push
+          },
+
           # -- Inspector -------------------------------------------
           'show_inspector' => lambda { |runtime, _p|
             recent = runtime.diagnostics.recent(5).map { |e| "[#{e.severity}] #{e.code}: #{e.message}" }
@@ -510,6 +581,135 @@ module JiraNot
             else
               HtmlDialogManager.toast(result[:errors].join(', '), level: 'error')
             end
+          },
+
+
+          'save_catalog_asset' => lambda { |runtime, p|
+            entity_id = p['entity_id'].to_i
+            entity = runtime.active_model.find_entity_by_persistent_id(entity_id)
+            raise 'ไม่พบ Component ที่เลือก' unless entity && entity.is_a?(Sketchup::ComponentInstance)
+            
+            require_relative '../modules/library/catalog_asset_definition'
+            require_relative '../modules/library/catalog_store'
+            
+            asset_def = Library::CatalogAssetDefinition.new(
+              asset_id: "custom.window.#{Time.now.to_i}",
+              version: '1',
+              name: entity.definition.name,
+              asset_class: 'parametric_asset',
+              category: 'window',
+              owner_module: 'constructflow.door_window',
+              quantity_unit: 'pcs',
+              placement_command: 'PlaceDoorWindowOnWall',
+              lod: { 'high' => { 'type' => 'component', 'id' => entity.definition.name } }
+            )
+            
+            store = Library::CatalogStore.new(runtime.active_model)
+            store.register_asset(asset_def)
+            
+            obj_id = SecureRandom.uuid
+            runtime.smart_objects.register(
+              entity, 
+              id: obj_id, 
+              owner_module: 'constructflow.door_window', 
+              type: 'door_window.instance'
+            )
+            
+            entity.set_attribute('ConstructFlow', 'type_id', asset_def.asset_id)
+            
+            HtmlDialogManager.toast("บันทึก #{entity.definition.name} ลง Catalog เรียบร้อย", level: 'success')
+            HtmlDialogManager.push_selection(runtime)
+            :no_state_push
+          },
+
+          'toggle_lod' => lambda { |runtime, p|
+            object_id = p['object_id']
+            smart_obj = runtime.smart_objects.fetch_by_id(object_id)
+            raise 'ไม่พบชิ้นงาน' unless smart_obj
+            
+            entity = smart_obj.entity
+            current_lod = entity.get_attribute('ConstructFlow', 'current_lod', 'low')
+            new_lod = current_lod == 'low' ? 'high' : 'low'
+            entity.set_attribute('ConstructFlow', 'current_lod', new_lod)
+            
+            type_id = entity.get_attribute('ConstructFlow', 'type_id')
+            if type_id
+              # Rebuild via SmartStretchEngine if possible, or just notify
+              # For Phase 9 demo, we change the material or visibility of internal groups
+              # A robust solution swaps the definition.
+              # Here we just mark it dirty and invalidate.
+              HtmlDialogManager.toast("สลับ LOD เป็น #{new_lod.upcase} เรียบร้อย", level: 'success')
+              runtime.active_model.active_view.invalidate
+            end
+            
+            HtmlDialogManager.push_selection(runtime)
+            :no_state_push
+          },
+
+          'dispatch_ai_command' => lambda { |runtime, p|
+            begin
+              cmd_id = p['command_id']
+              cmd_name = p['command_name']
+              params = p['params'] || {}
+              
+              # Execute command in ConstructFlow runtime
+              # Needs project_id if it's a mutating command
+              if params['project_id'].nil?
+                params['project_id'] = runtime.project.project_id
+              end
+              
+              result = runtime.commands.execute(cmd_name, params)
+              
+              # Send reply back to JS
+              status = result[:status]
+              payload = result.reject { |k, v| k == :status || k == :errors }
+              errors = result[:errors] || []
+              
+              js = "window.ConstructFlowAI.reply(#{cmd_id.to_json}, #{status.to_json}, #{payload.to_json}, #{errors.to_json})"
+              HtmlDialogManager.instance_variable_get(:@dialog)&.execute_script(js)
+            rescue StandardError => e
+              js = "window.ConstructFlowAI.reply(#{cmd_id.to_json}, 'error', {}, [#{e.message.to_json}])"
+              HtmlDialogManager.instance_variable_get(:@dialog)&.execute_script(js)
+            end
+            
+            # Since AI commands often modify the model, update selection
+            HtmlDialogManager.push_selection(runtime)
+            :no_state_push
+          },
+                    'generate_extension_scenes' => lambda { |runtime, _p|
+            res = Core::Tools::ExtensionSceneGenerator.generate(runtime)
+            if res[:status] == 'success'
+              HtmlDialogManager.toast("สร้าง #{res[:created_count]} Scenes สำหรับ LayOut เรียบร้อยแล้ว", level: 'success')
+            else
+              HtmlDialogManager.toast("เกิดข้อผิดพลาด: #{res[:message]}", level: 'error')
+            end
+            :no_state_push
+          },
+
+          'auto_dimension' => lambda { |runtime, _p|
+            res = Core::Tools::AutoDimensionEngine.generate(runtime)
+            if res[:status] == 'success'
+              HtmlDialogManager.toast(res[:message], level: 'success')
+            elsif res[:status] == 'warning'
+              HtmlDialogManager.toast(res[:message], level: 'warning')
+            else
+              HtmlDialogManager.toast("เกิดข้อผิดพลาด: #{res[:message]}", level: 'error')
+            end
+            :no_state_push
+          },
+
+          'activate_spot_elevation' => lambda { |runtime, _p|
+            tool = Core::Tools::SpotElevationTool.new(runtime)
+            runtime.active_model.select_tool(tool)
+            HtmlDialogManager.toast('เปิดเครื่องมือปักหมุดระดับ (Spot Elevation) แล้ว • คลิกบนพื้นผิว', level: 'info')
+            :no_state_push
+          },
+
+          'fetch_takeoff_hud' => lambda { |runtime, _p|
+            hud = Core::TakeoffHUDService.compute(runtime)
+            js = "window.ConstructFlowUI && window.ConstructFlowUI.renderTakeoffHUD(#{hud.to_json})"
+            HtmlDialogManager.instance_variable_get(:@dialog)&.execute_script(js)
+            :no_state_push
           },
 
           'trigger_shortcut' => lambda { |runtime, p|
@@ -677,7 +877,7 @@ module JiraNot
 
           'draw_roof_framing' => lambda { |runtime, _p|
             runtime.active_model.select_tool(
-              Architecture::Tools::RoofFramingTool.new(runtime: runtime)
+              (Architecture::Tools::RoofFramingTool.new(runtime: runtime) rescue Architecture::Tools::RoofFramingTool.new)
             )
             :no_state_push
           },
@@ -689,7 +889,7 @@ module JiraNot
 
           'draw_curtain_wall' => lambda { |runtime, _p|
             runtime.active_model.select_tool(
-              Architecture::Tools::CurtainWallTool.new(runtime: runtime)
+              (Architecture::Tools::CurtainWallTool.new(runtime: runtime) rescue Architecture::Tools::CurtainWallTool.new)
             )
             :no_state_push
           },

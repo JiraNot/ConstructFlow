@@ -149,4 +149,4 @@ JiraNot::ConstructFlow::Drainage::RouteNodeUiRegistration.install(JiraNot::Const
 JiraNot::ConstructFlow::Drainage::RepresentationRegistration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::RuntimeIntegration.install(JiraNot::ConstructFlow::Runtime)
 JiraNot::ConstructFlow::Extension::ConstructionIntentRegistration.install(JiraNot::ConstructFlow::Runtime)
-JiraNot::ConstructFlow::Extension::ConstructionWorkflowRegistration.install(JiraNot::ConstructFlow::Runtime)
+require_relative "real_project_generator"

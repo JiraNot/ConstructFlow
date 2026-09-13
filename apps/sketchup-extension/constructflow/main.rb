@@ -2,6 +2,7 @@
 
 require 'sketchup.rb'
 
+require_relative 'modules/door_window/hole_puncher_service'
 require_relative 'core/id_generator'
 require_relative 'core/diagnostic_log'
 require_relative 'core/attribute_store'
@@ -34,6 +35,10 @@ require_relative 'core/qa/site_verification_definition'
 require_relative 'core/qa/stale_audit_service'
 require_relative 'core/i18n'
 require_relative 'core/html_dialog'
+require_relative 'core/tools/extension_scene_generator'
+require_relative 'core/tools/auto_dimension_engine'
+require_relative 'core/tools/spot_elevation_tool'
+require_relative 'core/takeoff_hud_service'
 require_relative 'core/toolbar'
 require_relative 'core/plan_interaction_engine'
 require_relative 'core/plan_level_context'
@@ -290,6 +295,7 @@ module JiraNot
           @smart_objects = Core::SmartObjectManager.new(model: model, levels: @levels, id_generator: @ids, diagnostics: @diagnostics)
           object_count = @smart_objects.scan!
           @connectors.attach_model(model)
+          model.add_observer(DoorWindow::ComponentDropObserver.new(self))
           @commands.transaction_manager = Core::TransactionManager.new(model: model)
           @diagnostics.info('model_attached', 'ConstructFlow attached to SketchUp model', project_id: @project.project_id,
                             smart_objects: object_count, levels: @levels.size,

@@ -36,10 +36,10 @@ module JiraNot
           p2 = verts[2].position
 
           v_u = (p1 - p0)
-          v_u.normalize!
+          v_u.respond_to?(:normalize!) ? v_u.normalize! : (v_u.respond_to?(:normalize) ? v_u.normalize : v_u)
           norm = face.normal
           v_v = norm * v_u
-          v_v.normalize!
+          v_v.respond_to?(:normalize!) ? v_v.normalize! : (v_v.respond_to?(:normalize) ? v_v.normalize : v_v)
 
           raw_uv = verts.map do |v|
             vec = v.position - p0

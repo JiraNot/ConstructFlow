@@ -28,7 +28,10 @@ const CF = {
     try {
       const data = typeof payloadStr === 'string' ? JSON.parse(payloadStr) : payloadStr;
       if (data.type === 'state') CF._applyState(data);
-      if (data.type === 'selection') CF._renderSelection(data.selected);
+      if (data.type === 'selection') {
+        CF._renderSelection(data.selected);
+        if (data.takeoff_hud) CF.renderTakeoffHUD(data.takeoff_hud);
+      }
       if (data.type === 'toast') CF.toast(data.message, data.level || 'info');
       if (data.type === 'error') CF.toast('⚠️ ' + data.message, 'error');
     } catch (e) {
@@ -76,6 +79,38 @@ const CF = {
     });
   },
 
+  switchToTab(mode) {
+    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.workspace-pane').forEach(p => p.classList.remove('active'));
+    const tab = document.querySelector(`.mode-tab[data-mode="${mode}"]`);
+    const pane = el(`pane-${mode}`);
+    if (tab) tab.classList.add('active');
+    if (pane) pane.classList.add('active');
+  },
+
+  initMainModeTabs() {
+    document.querySelectorAll('.mode-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const mode = tab.dataset.mode;
+        CF.switchToTab(mode);
+      });
+    });
+  },
+
+  renderTakeoffHUD(hud) {
+    if (!hud) return;
+    const badge = el('hud-scope-badge');
+    if (badge) {
+      badge.textContent = hud.is_all_model ? 'ทั้งโครงการ' : `เลือกไว้ ${hud.selection_count} ชิ้น`;
+    }
+    setVal('hud-concrete', hud.concrete_m3 !== undefined ? hud.concrete_m3.toFixed(2) : '0.00');
+    setVal('hud-formwork', hud.formwork_m2 !== undefined ? hud.formwork_m2.toFixed(2) : '0.00');
+    setVal('hud-wall', hud.wall_net_m2 !== undefined ? hud.wall_net_m2.toFixed(2) : '0.00');
+    setVal('hud-tile', hud.tile_floor_m2 !== undefined ? hud.tile_floor_m2.toFixed(2) : '0.00');
+    setVal('hud-skirting', hud.skirting_m !== undefined ? hud.skirting_m.toFixed(2) : '0.00');
+    setVal('hud-paint', hud.paint_m2 !== undefined ? hud.paint_m2.toFixed(2) : '0.00');
+  },
+
   _renderSelection(selected) {
     const emptyNotice = el('bim-empty-notice');
     const dataWrap = el('bim-data-wrap');
@@ -86,6 +121,8 @@ const CF = {
       dataWrap.style.display = 'none';
       el('bim-type-badge').textContent = '📦 ชิ้นงาน BIM';
       el('bim-id-badge').textContent = '—';
+      const dot = el('inspector-indicator');
+      if (dot) dot.style.display = 'none';
       return;
     }
 
@@ -94,6 +131,8 @@ const CF = {
     el('bim-type-badge').textContent = selected.badge || selected.type;
     el('bim-id-badge').textContent = '#' + selected.id;
     el('bim-name').textContent = selected.name || selected.type;
+    const dot = el('inspector-indicator');
+    if (dot) dot.style.display = 'inline-block';
 
     const propsGrid = el('bim-props');
     propsGrid.innerHTML = '';
@@ -101,7 +140,33 @@ const CF = {
       for (const [key, val] of Object.entries(selected.properties)) {
         const cell = document.createElement('div');
         cell.className = 'bim-prop-cell';
-        cell.innerHTML = `<span class="bim-prop-label">${key}</span><span class="bim-prop-val">${val}</span>`;
+        
+        const isEditable = key.includes('(W)') || key.includes('(L)') || key.includes('(H)') || key.includes('ความสูง') || key.includes('ความหนา') || key.includes('ความกว้าง') || key.includes('ความยาว');
+        
+        if (isEditable) {
+           const rawVal = String(val).replace(/[^0-9.]/g, '');
+           cell.innerHTML = `<span class="bim-prop-label">${key}</span>
+                             <input type="number" step="0.01" class="bim-prop-input" data-key="${key}" data-id="${selected.id}" value="${rawVal}" style="width: 60px; text-align: right; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 2px 4px; font-family: 'Sarabun', sans-serif;">
+                             <span class="bim-prop-unit" style="margin-left: 4px; color: #aaa;">m</span>`;
+           
+           const input = cell.querySelector('input');
+           input.addEventListener('change', (e) => {
+              const newVal = e.target.value;
+              if (typeof sketchup !== 'undefined') {
+                 sketchup.dispatch(JSON.stringify({
+                    action: 'update_property',
+                    params: {
+                      entity_id: selected.id,
+                      property: key,
+                      value: newVal
+                    }
+                 }));
+              }
+           });
+        } else {
+           cell.innerHTML = `<span class="bim-prop-label">${key}</span><span class="bim-prop-val">${val}</span>`;
+        }
+        
         propsGrid.appendChild(cell);
       }
     }
@@ -393,6 +458,21 @@ const CF = {
     stretchByArea() {
       CF.send('stretch_by_area', {});
       CF.toast('เลือก Face เพื่อยืด/ปรับขนาดตามพื้นที่เป้าหมาย [SA] 📏', 'info');
+    },
+
+    generateExtensionScenes() {
+      CF.send('generate_extension_scenes', {});
+      CF.toast('กำลังสร้าง 5 Scenes แปลน-รูปด้าน-รูปตัด สำหรับ LayOut 📑', 'info');
+    },
+
+    autoDimension() {
+      CF.send('auto_dimension', {});
+      CF.toast('กำลังดึงเส้นบอกระยะอัตโนมัติ (Auto-Dimension) 📏', 'info');
+    },
+
+    activateSpotElevation() {
+      CF.send('activate_spot_elevation', {});
+      CF.toast('เลือกเครื่องมือปักหมุดระดับแล้ว คลิกบนพื้นผิว 🎯', 'info');
     },
 
     exportBoqCsv() {
@@ -1035,10 +1115,52 @@ const CF = {
   },
 
 
+
+  showContextualDrawer(action, toolTitle) {
+    const drawer = el('contextual-tool-drawer');
+    const drawerTitle = el('drawer-tool-title');
+    if (!drawer) return;
+
+    const drawerMap = {
+      'drawWall': { id: 'drawer-wall', title: '🧱 ตั้งค่าผนัง (Wall Settings)' },
+      'placeColumn': { id: 'drawer-column', title: '🏛 ตั้งค่าเสา (Column Settings)' },
+      'drawBeam': { id: 'drawer-beam', title: '🏗 ตั้งค่าคาน (Beam Settings)' },
+      'placeDoorWindow': { id: 'drawer-door-window', title: '🚪 ตั้งค่าประตู-หน้าต่าง (Door/Window)' },
+      'drawRoof': { id: 'drawer-roof', title: '🏠 ตั้งค่าหลังคา (Roof Settings)' },
+      'drawRevitAutoRoof': { id: 'drawer-roof', title: '🏠 ตั้งค่าหลังคา Auto Revit' },
+      'generateHipGableRoof': { id: 'drawer-roof', title: '🏠 ตั้งค่าหลังคาจั่ว/ปั้นหยา' },
+      'drawFloor': { id: 'drawer-floor', title: '🟦 ตั้งค่าพื้น (Floor Settings)' },
+      'drawStructuralFloor': { id: 'drawer-floor', title: '🟦 ตั้งค่าพื้นโครงสร้าง (Slab Settings)' },
+      'drawCeiling': { id: 'drawer-ceiling', title: '☁️ ตั้งค่าฝ้าเพดาน (Ceiling Settings)' },
+      'profileSweep': { id: 'drawer-sweep', title: '➰ ตั้งค่าบัว/โปรไฟล์ (Profile Sweep)' },
+    };
+
+    const target = drawerMap[action];
+    if (target) {
+      document.querySelectorAll('.drawer-panel').forEach(p => p.style.display = 'none');
+      const panel = el(target.id);
+      if (panel) panel.style.display = 'block';
+      if (drawerTitle) drawerTitle.textContent = target.title || `⚙️ ${toolTitle}`;
+      drawer.style.display = 'block';
+      drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+      drawer.style.display = 'none';
+    }
+  },
+
+  hideContextualDrawer() {
+    const drawer = el('contextual-tool-drawer');
+    if (drawer) drawer.style.display = 'none';
+    const banner = el('active-tool-banner');
+    if (banner) banner.style.display = 'none';
+    document.querySelectorAll('.ribbon-btn').forEach(b => b.classList.remove('active'));
+  },
+
   initQuickRibbon() {
     const banner = document.getElementById('active-tool-banner');
     const bannerText = document.getElementById('active-tool-text');
     const cancelBtn = document.getElementById('btn-cancel-tool');
+    const closeDrawerBtn = document.getElementById('btn-close-drawer');
 
     // Ribbon category tabs switcher
     const ribbonTabs = document.querySelectorAll('.ribbon-tab');
@@ -1062,6 +1184,7 @@ const CF = {
 
     document.querySelectorAll('.ribbon-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
+        const action = btn.dataset.action;
         const toolName = btn.dataset.toolName || btn.title || 'เครื่องมือ';
         document.querySelectorAll('.ribbon-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
@@ -1070,26 +1193,77 @@ const CF = {
           bannerText.textContent = `กำลังใช้งาน: ${toolName} • คลิกในโมเดลเพื่อทำงาน`;
           banner.style.display = 'flex';
         }
+
+        CF.showContextualDrawer(action, toolName);
       });
     });
 
+    if (closeDrawerBtn) {
+      closeDrawerBtn.addEventListener('click', () => {
+        const drawer = el('contextual-tool-drawer');
+        if (drawer) drawer.style.display = 'none';
+      });
+    }
+
     if (cancelBtn) {
       cancelBtn.addEventListener('click', () => {
-        document.querySelectorAll('.ribbon-btn').forEach(b => b.classList.remove('active'));
-        if (banner) banner.style.display = 'none';
+        CF.hideContextualDrawer();
         CF.toast('ยกเลิกเครื่องมือแล้ว (Switched to Select Tool)', 'info');
       });
     }
 
-    // Esc key resets active banner
+    // Esc key resets active banner and drawer
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        document.querySelectorAll('.ribbon-btn').forEach(b => b.classList.remove('active'));
-        if (banner) banner.style.display = 'none';
+        CF.hideContextualDrawer();
       }
     });
   },
 
+
+
+  // --- AI MCP WebSocket Bridge ---
+  initWebSocket() {
+    this.ws = new WebSocket('ws://localhost:8765');
+    this.ws.onopen = () => {
+      console.log('[ConstructFlow] Connected to MCP WebSocket Server');
+      CF._renderStatus(); // Will update connection status icon if we add one
+    };
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'execute_command') {
+          // Pass the command to Ruby
+          CF.send('dispatch_ai_command', {
+            command_id: data.command_id, // so we can reply
+            command_name: data.command_name,
+            params: data.params || {}
+          });
+        }
+      } catch (err) {
+        console.error('WebSocket parse error', err);
+      }
+    };
+    this.ws.onclose = () => {
+      // Reconnect after 3 seconds
+      setTimeout(() => CF.initWebSocket(), 3000);
+    };
+    this.ws.onerror = (err) => {
+      // Handled by onclose
+    };
+  },
+  
+  sendWebSocketReply(command_id, status, payload, errors) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'command_result',
+        command_id: command_id,
+        status: status,
+        payload: payload,
+        errors: errors
+      }));
+    }
+  },
   initQuickPills() {
     // Generic preset pills with data-target & data-val
     document.querySelectorAll('.preset-pill[data-target]').forEach(pill => {
@@ -1097,7 +1271,16 @@ const CF = {
         const targetId = pill.dataset.target;
         const val = pill.dataset.val;
         const input = document.getElementById(targetId);
-        if (input) input.value = val;
+        if (input) {
+          input.value = val;
+          input.dispatchEvent(new Event('change'));
+        }
+
+        // Material preset for roof
+        if (pill.dataset.mat) {
+          const matSel = document.getElementById('roof-mat');
+          if (matSel) matSel.value = pill.dataset.mat;
+        }
 
         const row = pill.closest('.quick-pill-row');
         if (row) {
@@ -1148,9 +1331,34 @@ const CF = {
         }
       });
     });
+
+    // Two-way sync: when user manually types into input, sync active pill
+    const inputsToSync = ['wall-thick', 'wall-height', 'col-h', 'fl-thick', 'ce-h', 'roof-slope'];
+    inputsToSync.forEach(id => {
+      const inp = document.getElementById(id);
+      if (!inp) return;
+      inp.addEventListener('input', () => {
+        const val = parseFloat(inp.value);
+        const pills = document.querySelectorAll(`.preset-pill[data-target="${id}"]`);
+        let matched = false;
+        pills.forEach(p => {
+          if (parseFloat(p.dataset.val) === val) {
+            p.classList.add('active');
+            matched = true;
+          } else {
+            p.classList.remove('active');
+          }
+        });
+        if (!matched) {
+          pills.forEach(p => p.classList.remove('active'));
+        }
+      });
+    });
   },
 
   init() {
+    CF.initMainModeTabs();
+    CF.initWebSocket();
     CF.initQuickRibbon();
     CF.initQuickPills();
     CF.initAnchorMatrix();
@@ -1171,6 +1379,17 @@ const CF = {
     document.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', () => {
         const action = btn.dataset.action;
+        const toolName = btn.dataset.toolName || btn.title || action;
+        
+        // Show banner & drawer for tools
+        const banner = el('active-tool-banner');
+        const bannerText = el('active-tool-text');
+        if (banner && bannerText && btn.dataset.toolName) {
+          bannerText.textContent = `กำลังใช้งาน: ${toolName} • คลิกในโมเดลเพื่อทำงาน`;
+          banner.style.display = 'flex';
+        }
+        CF.showContextualDrawer(action, toolName);
+
         if (typeof CF.actions[action] === 'function') {
           CF.actions[action]();
         } else {
@@ -1202,8 +1421,13 @@ function setVal(id, v) {
 /* ── Bootstrap ───────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => CF.init());
 
+
+window.ConstructFlowAI = {
+  reply: (command_id, status, payload, errors) => CF.sendWebSocketReply(command_id, status, payload, errors)
+};
 window.ConstructFlowUI = {
   renderBOQ: (data) => CF.renderBOQ(data),
   openBOQModal: () => CF.openBOQModal(),
-  closeBOQModal: () => CF.closeBOQModal()
+  closeBOQModal: () => CF.closeBOQModal(),
+  renderTakeoffHUD: (data) => CF.renderTakeoffHUD(data)
 };

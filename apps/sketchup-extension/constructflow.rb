@@ -7,7 +7,7 @@ module JiraNot
   module ConstructFlow
     EXTENSION_ID = 'constructflow'
     EXTENSION_NAME = 'ConstructFlow'
-    VERSION = '0.16.0'
+    VERSION = '0.18.0'
 
     unless file_loaded?(__FILE__)
       extension = SketchupExtension.new(EXTENSION_NAME, 'constructflow/bootstrap')

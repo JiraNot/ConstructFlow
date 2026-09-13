@@ -23,6 +23,10 @@ module JiraNot
             view.invalidate if view
           end
 
+          def enableVCB?
+            true
+          end
+
           def getExtents
             bb = Geom::BoundingBox.new
             if @selected_entity&.bounds
