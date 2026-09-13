@@ -70,8 +70,13 @@ module JiraNot
             )
 
             model.start_operation('Modify Curtain Wall', true)
+        begin
             geom = CurtainWallGeometry.new(new_def)
             geom.rebuild(group, new_def)
+        rescue => e
+          model.abort_operation if model.respond_to?(:abort_operation)
+          raise e
+        end
             model.commit_operation
             true
           end
@@ -143,6 +148,7 @@ module JiraNot
             boundary = face.outer_loop.vertices.map { |v| v.position.to_a.map { |coord| coord.to_mm } }
 
             model.start_operation('Generate Curtain Wall', true)
+        begin
 
             definition = CurtainWallDefinition.new(
               boundary_mm: boundary,
@@ -160,6 +166,10 @@ module JiraNot
             geom = CurtainWallGeometry.new(definition)
             group = geom.generate(model.active_entities)
 
+        rescue => e
+          model.abort_operation if model.respond_to?(:abort_operation)
+          raise e
+        end
             model.commit_operation
           end
         end

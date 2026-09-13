@@ -5,7 +5,8 @@ module JiraNot
     module Architecture
       module Tools
         class StairTool
-          def initialize
+          def initialize(runtime: nil)
+            @runtime = runtime
             @state = :start
             @start_point = nil
             @direction = nil
@@ -81,6 +82,7 @@ module JiraNot
           def create_stair(view)
             model = Sketchup.active_model
             model.start_operation('Create Staircase', true)
+        begin
             
             def_params = {
               start_point: @start_point.to_a,
@@ -93,8 +95,22 @@ module JiraNot
             group = geom.generate(model.active_entities)
             
             repo = StairRepository.new
-            repo.save(group, definition)
+                        repo.save(group, definition)
             
+            if @runtime && @runtime.respond_to?(:smart_objects)
+              @runtime.smart_objects.create(
+                entity: group,
+                type: 'architecture.stair',
+                owner_module: 'constructflow.architecture',
+                display_name: 'Staircase',
+                created_phase: @runtime.project.working_phase
+              )
+            end
+            
+        rescue => e
+          model.abort_operation if model.respond_to?(:abort_operation)
+          raise e
+        end
             model.commit_operation
           end
         end

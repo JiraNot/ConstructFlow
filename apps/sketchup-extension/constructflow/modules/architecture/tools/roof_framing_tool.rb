@@ -60,8 +60,13 @@ module JiraNot
             )
 
             model.start_operation('Modify Roof Steel Framing', true)
+        begin
             geom = RoofFramingGeometry.new(new_def)
             geom.rebuild(group, new_def)
+        rescue => e
+          model.abort_operation if model.respond_to?(:abort_operation)
+          raise e
+        end
             model.commit_operation
             true
           end
@@ -128,6 +133,7 @@ module JiraNot
             roof_type = results[4].to_sym
 
             model.start_operation('Generate Roof Framing', true)
+        begin
             
             boundary = face.outer_loop.vertices.map { |v| v.position.to_a.map { |coord| coord.to_mm } }
             
@@ -143,6 +149,10 @@ module JiraNot
             geom = RoofFramingGeometry.new(definition)
             group = geom.generate(model.active_entities)
             
+        rescue => e
+          model.abort_operation if model.respond_to?(:abort_operation)
+          raise e
+        end
             model.commit_operation
           end
         end

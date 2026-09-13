@@ -55,6 +55,7 @@ module JiraNot
 
             model = Sketchup.active_model
             model.start_operation('Generate Grid Framing', true)
+        begin
 
             definition = GridFramingDefinition.new(
               origin_point: [origin.x.to_mm, origin.y.to_mm, origin.z.to_mm],
@@ -68,6 +69,10 @@ module JiraNot
             geom = GridFramingGeometry.new(definition)
             group = geom.generate(model.active_entities)
 
+        rescue => e
+          model.abort_operation if model.respond_to?(:abort_operation)
+          raise e
+        end
             model.commit_operation
           end
         end

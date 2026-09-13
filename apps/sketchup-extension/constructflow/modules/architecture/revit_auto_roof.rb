@@ -112,6 +112,7 @@ module JiraNot
           return nil if boundary_points_m.nil? || boundary_points_m.length < 3
 
           model.start_operation('Revit Auto Roof by Footprint', true) if model.respond_to?(:start_operation)
+        begin
           roof_group = model.active_entities.add_group
           roof_group.name = "ConstructFlow Revit Roof (#{@form.capitalize})"
 
@@ -140,6 +141,10 @@ module JiraNot
             build_gable_wall_attachments(entities, boundary_points_m, base_z_m, ridge_info)
           end
 
+        rescue => e
+          model.abort_operation if model.respond_to?(:abort_operation)
+          raise e
+        end
           model.commit_operation if model.respond_to?(:commit_operation)
           roof_group
         end

@@ -221,18 +221,53 @@ module JiraNot
 
           props = {}
           begin
-            if smart_obj.type == 'architecture.wall' && defined?(Architecture::WallRepository)
-              definition = Architecture::WallRepository.new.read(entity)
-              if definition
-                props['ความยาว (L)'] = "#{format('%.2f', definition.length_mm / 1000.0)} m"
-                props['ความหนา (T)'] = "#{format('%.2f', definition.thickness_mm / 1000.0)} m"
-                props['ความสูง (H)'] = "#{format('%.2f', definition.height_mm / 1000.0)} m"
-                area_sqm = (definition.length_mm * definition.height_mm) / 1_000_000.0
-                vol_cum  = (definition.length_mm * definition.height_mm * definition.thickness_mm) / 1_000_000_000.0
-                props['พื้นที่ (Area)'] = "#{area_sqm.round(2)} ตร.ม."
-                props['ปริมาตร (Vol)'] = "#{vol_cum.round(3)} คิว (m³)"
-                props['ทิศทาง'] = definition.orientation.to_s
+            case smart_obj.type
+            when 'architecture.wall'
+              if defined?(Architecture::WallRepository)
+                definition = Architecture::WallRepository.new.read(entity)
+                if definition
+                  props['ความยาว (L)'] = "#{format('%.2f', definition.length_mm / 1000.0)} m"
+                  props['ความหนา (T)'] = "#{format('%.2f', definition.thickness_mm / 1000.0)} m"
+                  props['ความสูง (H)'] = "#{format('%.2f', definition.height_mm / 1000.0)} m"
+                  area_sqm = (definition.length_mm * definition.height_mm) / 1_000_000.0
+                  vol_cum  = (definition.length_mm * definition.height_mm * definition.thickness_mm) / 1_000_000_000.0
+                  props['พื้นที่ (Area)'] = "#{area_sqm.round(2)} ตร.ม."
+                  props['ปริมาตร (Vol)'] = "#{vol_cum.round(3)} คิว (m³)"
+                  props['ทิศทาง'] = definition.orientation.to_s
+                end
               end
+            when 'structure.beam'
+              if defined?(Structure::Repository)
+                definition = Structure::Repository.new.read_beam(entity)
+                if definition
+                  props['หน้าตัด (Section)'] = definition.section_mm.map { |v| format('%.1f', v) }.join('x') + ' mm'
+                  props['ความยาว (L)'] = "#{format('%.2f', definition.length_mm / 1000.0)} m"
+                  props['ปริมาตร (Vol)'] = "#{format('%.3f', definition.volume_mm3 / 1_000_000_000.0)} คิว (m³)"
+                  props['วัสดุ'] = definition.material.to_s
+                end
+              end
+            when 'structure.column'
+              if defined?(Structure::Repository)
+                definition = Structure::Repository.new.read_column(entity)
+                if definition
+                  props['หน้าตัด (Section)'] = definition.section_mm.map { |v| format('%.1f', v) }.join('x') + ' mm'
+                  props['ความสูง (H)'] = "#{format('%.2f', definition.height_mm / 1000.0)} m"
+                  props['ปริมาตร (Vol)'] = "#{format('%.3f', definition.volume_mm3 / 1_000_000_000.0)} คิว (m³)"
+                  props['วัสดุ'] = definition.material.to_s
+                end
+              end
+            when 'architecture.stair'
+              if defined?(Architecture::StairRepository)
+                definition = Architecture::StairRepository.new.read(entity)
+                if definition
+                  w = definition.stair_width || definition.stair_width_mm || 0.0
+                  props['ความกว้าง'] = "#{format('%.2f', w / 1000.0)} m"
+                end
+              end
+            when 'architecture.roof_framing'
+              props['ชนิดโครงสร้าง'] = 'โครงหลังคา'
+            when 'architecture.roof'
+              props['ชนิดโครงสร้าง'] = 'หลังคาหลัก'
             end
           rescue StandardError
             nil
@@ -264,7 +299,9 @@ module JiraNot
             []
           end
 
-          structure_vol = 0.0
+          foundation_vol = 0.0
+          column_vol = 0.0
+          beam_vol = 0.0
           structure_formwork = 0.0
           column_count = 0
           beam_count = 0
@@ -282,36 +319,63 @@ module JiraNot
           panel_count = 0
 
           wall_repo = defined?(Architecture::WallRepository) ? Architecture::WallRepository.new : nil
+          struct_repo = defined?(Structure::Repository) ? Structure::Repository.new : nil
 
           objects.each do |obj|
             case obj.type
             when 'structure.column'
               column_count += 1
-              structure_vol += 0.12
-              structure_formwork += 2.4
+              if struct_repo && obj.entity
+                def_col = struct_repo.read_column(obj.entity) rescue nil
+                if def_col
+                  column_vol += def_col.volume_mm3 / 1_000_000_000.0
+                  perim = (def_col.section_mm[0] * 2 + def_col.section_mm[1] * 2)
+                  structure_formwork += (perim * def_col.height_mm) / 1_000_000.0
+                else
+                  column_vol += 0.12
+                  structure_formwork += 2.4
+                end
+              end
             when 'structure.beam'
               beam_count += 1
-              structure_vol += 0.32
-              structure_formwork += 4.0
+              if struct_repo && obj.entity
+                def_beam = struct_repo.read_beam(obj.entity) rescue nil
+                if def_beam
+                  beam_vol += def_beam.volume_mm3 / 1_000_000_000.0
+                  perim = def_beam.section_mm[0] + (def_beam.section_mm[1] * 2) # bottom + 2 sides
+                  structure_formwork += (perim * def_beam.length_mm) / 1_000_000.0
+                else
+                  beam_vol += 0.32
+                  structure_formwork += 4.0
+                end
+              end
             when 'structure.foundation'
               foundation_count += 1
-              structure_vol += 0.5
+              if struct_repo && obj.entity
+                def_fd = struct_repo.read_foundation(obj.entity) rescue nil
+                if def_fd
+                  foundation_vol += (def_fd.size_mm[0] * def_fd.size_mm[1] * def_fd.size_mm[2]) / 1_000_000_000.0
+                  structure_formwork += ((def_fd.size_mm[0]*2 + def_fd.size_mm[1]*2) * def_fd.size_mm[2]) / 1_000_000.0
+                else
+                  foundation_vol += 0.5
+                end
+              end
             when 'architecture.wall'
               if wall_repo && obj.entity
                 def_wall = wall_repo.read(obj.entity) rescue nil
                 if def_wall
                   wall_area += (def_wall.gross_area_mm2 rescue 0) / 1_000_000.0
                   wall_vol += (def_wall.volume_mm3 rescue 0) / 1_000_000_000.0
-                else
-                  wall_area += 12.0
-                  wall_vol += 1.2
                 end
-              else
-                wall_area += 12.0
-                wall_vol += 1.2
               end
             when 'architecture.floor'
-              floor_area += 25.0
+              if obj.entity.respond_to?(:volume)
+                v = obj.entity.volume * (0.0254 ** 3) # in^3 to m^3
+                # guess area from volume assuming 150mm thick
+                floor_area += (v / 0.15) if v > 0
+              else
+                floor_area += 25.0
+              end
             when 'architecture.ceiling'
               ceiling_area += 25.0
             when 'opening.door_window', 'opening.door', 'opening.window'
@@ -332,16 +396,16 @@ module JiraNot
           mep_items = []
 
           # Structure items
-          if foundation_count > 0 || objects.empty?
-            qty = foundation_count > 0 ? (foundation_count * 0.5).round(2) : 2.5
+          if foundation_vol > 0 || objects.empty?
+            qty = foundation_vol > 0 ? foundation_vol.round(2) : 2.5
             structure_items << { code: 'STR-01', name: 'คอนกรีตฐานราก 240 ksc', unit: 'ลบ.ม.', qty: qty, mat_rate: 2100.0, lab_rate: 450.0, total: (qty * 2550.0).round(2) }
           end
-          if column_count > 0 || objects.empty?
-            qty = column_count > 0 ? (column_count * 0.12).round(2) : 1.2
+          if column_vol > 0 || objects.empty?
+            qty = column_vol > 0 ? column_vol.round(2) : 1.2
             structure_items << { code: 'STR-02', name: 'คอนกรีตเสาโครงสร้าง 240 ksc', unit: 'ลบ.ม.', qty: qty, mat_rate: 2250.0, lab_rate: 550.0, total: (qty * 2800.0).round(2) }
           end
-          if beam_count > 0 || objects.empty?
-            qty = beam_count > 0 ? (beam_count * 0.32).round(2) : 2.8
+          if beam_vol > 0 || objects.empty?
+            qty = beam_vol > 0 ? beam_vol.round(2) : 2.8
             structure_items << { code: 'STR-03', name: 'คอนกรีตคานโครงสร้าง 240 ksc', unit: 'ลบ.ม.', qty: qty, mat_rate: 2250.0, lab_rate: 520.0, total: (qty * 2770.0).round(2) }
           end
           if structure_formwork > 0 || objects.empty?
@@ -606,14 +670,14 @@ module JiraNot
 
           'draw_stair' => lambda { |runtime, _p|
             runtime.active_model.select_tool(
-              Architecture::Tools::StairTool.new
+              Architecture::Tools::StairTool.new(runtime: runtime)
             )
             :no_state_push
           },
 
           'draw_roof_framing' => lambda { |runtime, _p|
             runtime.active_model.select_tool(
-              Architecture::Tools::RoofFramingTool.new
+              Architecture::Tools::RoofFramingTool.new(runtime: runtime)
             )
             :no_state_push
           },
@@ -625,7 +689,7 @@ module JiraNot
 
           'draw_curtain_wall' => lambda { |runtime, _p|
             runtime.active_model.select_tool(
-              Architecture::Tools::CurtainWallTool.new
+              Architecture::Tools::CurtainWallTool.new(runtime: runtime)
             )
             :no_state_push
           },
@@ -701,7 +765,7 @@ module JiraNot
 
           'export_boq_csv' => lambda { |runtime, _p|
             boq = generate_boq_data(runtime)
-            csv_lines = ['หมวดงาน,รหัส,รายการ,ปริมาณ,หน่วย,ค่าวัสดุต่อหน่วย,ค่าแรงต่อหน่วย,ราคารวม (บาท)']
+            csv_lines = ["\xEF\xBB\xBFหมวดงาน,รหัส,รายการ,ปริมาณ,หน่วย,ค่าวัสดุต่อหน่วย,ค่าแรงต่อหน่วย,ราคารวม (บาท)"]
             boq[:categories].each do |cat|
               csv_lines << "#{cat[:name]},,,,,,,#{cat[:subtotal]}"
               cat[:items].each do |item|

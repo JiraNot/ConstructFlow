@@ -83,6 +83,7 @@ module JiraNot
 
           # 3. Create group
           model.start_operation('Generate Hip/Gable Roof', true) if model.respond_to?(:start_operation)
+        begin
           roof_group = model.active_entities.add_group
           roof_group.name = "ConstructFlow Roof (#{@form.capitalize})"
 
@@ -118,6 +119,10 @@ module JiraNot
             build_fascia_boards(entities, eave_boundary_mm, base_z_mm)
           end
 
+        rescue => e
+          model.abort_operation if model.respond_to?(:abort_operation)
+          raise e
+        end
           model.commit_operation if model.respond_to?(:commit_operation)
           roof_group
         end

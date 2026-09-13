@@ -57,13 +57,16 @@ module JiraNot
           return nil if val.nil?
           f = val.to_f
           return nil if f == 0.0
-          # If under 20.0, value was provided in meters (e.g. 1.2 m -> 1200 mm)
-          f.abs < 20.0 ? (f * 1000.0) : f
+          f
         end
 
         def execute(model = nil)
           model ||= Sketchup.active_model if defined?(Sketchup) && Sketchup.respond_to?(:active_model)
           model.start_operation('Smart Non-Distort Stretch', true) if model&.respond_to?(:start_operation)
+
+          if @entity.respond_to?(:make_unique) && (@entity.is_a?(Sketchup::ComponentInstance) || @entity.class.name.end_with?('ComponentInstance'))
+            @entity.make_unique
+          end
 
           # Get bounds in local coordinates
           bounds = local_bounds(@entity)
@@ -101,6 +104,7 @@ module JiraNot
           if entities
             transform_entities_9slice(
               entities,
+              Geom::Transformation.new,
               min_x_su, max_x_su, min_y_su, max_y_su, min_z_su, max_z_su,
               delta_w_su, delta_d_su, delta_h_su,
               margin_x_su, margin_y_su, margin_z_su
@@ -126,7 +130,6 @@ module JiraNot
           return 0.0 if delta.abs < 0.0001
 
           span = max_val - min_val
-          # If object is narrower than double margin, scale uniformly
           if span <= (margin * 2.0)
             return span > 0.0001 ? ((coord - min_val) / span) * delta : 0.0
           end
@@ -144,9 +147,8 @@ module JiraNot
           end
         end
 
-        def transform_entities_9slice(entities, min_x, max_x, min_y, max_y, min_z, max_z,
+        def transform_entities_9slice(entities, accum_trans, min_x, max_x, min_y, max_y, min_z, max_z,
                                       delta_w, delta_d, delta_h, margin_x, margin_y, margin_z)
-          # 1. Collect all unique vertices directly inside these entities
           edges = []
           nested_instances = []
 
@@ -162,11 +164,12 @@ module JiraNot
           if !vertices.empty?
             vectors = []
             valid_verts = []
+            inv_trans = accum_trans.inverse
 
             vertices.each do |v|
-              pos = v.position
+              pos_in_parent = v.position.transform(accum_trans)
               dx, dy, dz = compute_displacement_3d(
-                pos.x, pos.y, pos.z,
+                pos_in_parent.x, pos_in_parent.y, pos_in_parent.z,
                 min_x, max_x, min_y, max_y, min_z, max_z,
                 delta_w, delta_d, delta_h,
                 margin_x, margin_y, margin_z
@@ -174,15 +177,16 @@ module JiraNot
 
               if dx.abs > 0.00001 || dy.abs > 0.00001 || dz.abs > 0.00001
                 valid_verts << v
-                vectors << Geom::Vector3d.new(dx, dy, dz)
+                vec_in_parent = Geom::Vector3d.new(dx, dy, dz)
+                vec_local = vec_in_parent.transform(inv_trans)
+                vectors << vec_local
               end
             end
 
             if !valid_verts.empty? && entities.respond_to?(:transform_by_vectors)
               begin
                 entities.transform_by_vectors(valid_verts, vectors)
-              rescue StandardError => e
-                # Fallback: update positions manually if mock or API variance
+              rescue StandardError
                 valid_verts.each_with_index do |v, idx|
                   vec = vectors[idx]
                   if v.respond_to?(:position=)
@@ -193,22 +197,52 @@ module JiraNot
             end
           end
 
-          # 2. Transform nested sub-components (knobs, hinges, handles) rigidly
           nested_instances.each do |sub_inst|
-            sub_bounds = sub_inst.bounds rescue nil
-            if sub_bounds
-              center = sub_bounds.center
+            sub_bounds = local_bounds(sub_inst)
+            next unless sub_bounds
+
+            corners_local = [
+              Geom::Point3d.new(sub_bounds.min.x, sub_bounds.min.y, sub_bounds.min.z),
+              Geom::Point3d.new(sub_bounds.max.x, sub_bounds.max.y, sub_bounds.max.z)
+            ]
+            
+            # Use transformation directly if it exists, else use empty transform to prevent crashes
+            inst_trans = sub_inst.respond_to?(:transformation) ? sub_inst.transformation : Geom::Transformation.new
+            world_trans = accum_trans * inst_trans
+            
+            corners_parent = corners_local.map { |c| c.transform(world_trans) }
+            temp_bb = Geom::BoundingBox.new
+            corners_parent.each { |c| temp_bb.add(c) }
+
+            span_x = temp_bb.width
+            span_y = temp_bb.height
+            span_z = temp_bb.depth
+
+            is_large = false
+            is_large = true if delta_w.abs > 0.0001 && span_x > (margin_x * 2.0)
+            is_large = true if delta_d.abs > 0.0001 && span_y > (margin_y * 2.0)
+            is_large = true if delta_h.abs > 0.0001 && span_z > (margin_z * 2.0)
+
+            if is_large
+              if sub_inst.respond_to?(:make_unique) && (sub_inst.is_a?(Sketchup::ComponentInstance) || sub_inst.class.name.end_with?('ComponentInstance'))
+                sub_inst.make_unique
+              end
+              sub_ents = entity_entities(sub_inst)
+              transform_entities_9slice(sub_ents, world_trans, min_x, max_x, min_y, max_y, min_z, max_z, delta_w, delta_d, delta_h, margin_x, margin_y, margin_z)
+            else
+              center_in_parent = temp_bb.center
               dx, dy, dz = compute_displacement_3d(
-                center.x, center.y, center.z,
+                center_in_parent.x, center_in_parent.y, center_in_parent.z,
                 min_x, max_x, min_y, max_y, min_z, max_z,
                 delta_w, delta_d, delta_h,
                 margin_x, margin_y, margin_z
               )
 
               if dx.abs > 0.0001 || dy.abs > 0.0001 || dz.abs > 0.0001
-                vec = Geom::Vector3d.new(dx, dy, dz)
+                vec_in_parent = Geom::Vector3d.new(dx, dy, dz)
+                vec_in_sub_parent = vec_in_parent.transform(accum_trans.inverse)
                 if sub_inst.respond_to?(:transform!)
-                  trans = Geom::Transformation.translation(vec) rescue nil
+                  trans = Geom::Transformation.translation(vec_in_sub_parent) rescue nil
                   sub_inst.transform!(trans) if trans
                 end
               end
