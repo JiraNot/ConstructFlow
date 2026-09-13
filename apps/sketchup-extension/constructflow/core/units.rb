@@ -43,6 +43,14 @@ module JiraNot
           Float(value_su) * MM_PER_INCH
         end
 
+        def m_to_su(value_m)
+          mm_to_su(Float(value_m) * 1000.0)
+        end
+
+        def su_to_m(value_su)
+          Float(su_to_mm(value_su)) / 1000.0
+        end
+
         def point_to_mm(point)
           [su_to_mm(point.x), su_to_mm(point.y), su_to_mm(point.z)]
         end

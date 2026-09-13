@@ -266,7 +266,91 @@ const CF = {
       CF.toast('คลิกในโมเดลเพื่อเริ่มวาดแนวคาน [BM] 🏗', 'info');
     },
 
-    drawProfileSweep() {
+    generateFloorPaving() {
+      this.generatePaving();
+    },
+
+    smartStretch() {
+      const wStr = prompt("ความกว้างเป้าหมาย (เมตร m เช่น 1.20) หรือเว้นว่างหากไม่ต้องการเปลี่ยน:", "");
+      const hStr = prompt("ความสูงเป้าหมาย (เมตร m เช่น 2.20) หรือเว้นว่างหากไม่ต้องการเปลี่ยน:", "");
+      const marginStr = prompt("ขนาดขอบเฟรมที่ไม่ให้เพี้ยน (เมตร m เช่น 0.05 หรือ 5 ซม.):", "0.05");
+
+      const w = wStr ? parseFloat(wStr) : null;
+      const h = hStr ? parseFloat(hStr) : null;
+      const margin = marginStr ? parseFloat(marginStr) : 0.05;
+
+      if (!w && !h) {
+        CF.toast('ยกเลิก: ไม่ได้ระบุขนาดที่ต้องการยืด', 'warn');
+        return;
+      }
+
+      CF.send('smart_stretch', {
+        target_width_m: w,
+        target_height_m: h,
+        frame_margin_m: margin
+      });
+      CF.toast('กำลังยืดขยายขนาดวัตถุโดยรักษาขอบเฟรม ↔️', 'info');
+    },
+
+    drawRevitAutoRoof() {
+      const form = prompt("เลือกรูปแบบหลังคา Auto แบบ Revit (Revit Roof by Footprint):\n1 = hip (ปั้นหยา)\n2 = gable (จั่ว + ปิดผนังหน้าจั่วอัตโนมัติ)\n3 = shed (เพิงแหงน)\n4 = flat (ดาดฟ้า)", "hip");
+      if (!form) return;
+      let formName = "hip";
+      if (form === "2" || form.toLowerCase() === "gable") formName = "gable";
+      else if (form === "3" || form.toLowerCase() === "shed" || form.toLowerCase() === "lean_to") formName = "shed";
+      else if (form === "4" || form.toLowerCase() === "flat") formName = "flat";
+
+      const slope = parseFloat(prompt("องศาความชันหลังคา (Slope องศา deg):", "30") || "30");
+      const overhang = parseFloat(prompt("ระยะยื่นชายคา (เมตร m เช่น 0.80):", "0.80") || "0.80");
+      const thick = parseFloat(prompt("ความหนาแผ่นมุง/โครงสร้าง (เมตร m เช่น 0.15):", "0.15") || "0.15");
+      const fasciaH = parseFloat(prompt("ความสูงไม้เชิงชาย (เมตร m เช่น 0.20):", "0.20") || "0.20");
+      const attach = confirm("ต้องการแนบหัวผนังติดใต้หลังคาและปิดหน้าจั่วอัตโนมัติ (Attach Walls to Roof แบบ Revit) หรือไม่?");
+
+      CF.send('revit_auto_roof', {
+        form: formName,
+        slope_deg: slope,
+        overhang_m: overhang,
+        thickness_m: thick,
+        fascia_height_m: fasciaH,
+        attach_walls: attach
+      });
+      CF.toast('กำลังประมวลผลสร้างหลังคา Auto แบบ Revit 🏠', 'info');
+    },
+
+    generateHipGableRoof() {
+      const form = prompt("เลือกรูปแบบหลังคา:\n1 = hip (ปั้นหยา)\n2 = gable (จั่ว)\n3 = lean_to (เพิงแหงน)", "hip");
+      if (!form) return;
+      let formName = "hip";
+      if (form === "2" || form.toLowerCase() === "gable") formName = "gable";
+      else if (form === "3" || form.toLowerCase() === "lean_to") formName = "lean_to";
+
+      const slope = parseFloat(prompt("ความลาดชันหลังคา (องศา Deg):", "30") || "30");
+      const overhang = parseFloat(prompt("ระยะยื่นชายคา (เมตร m เช่น 0.80):", "0.80") || "0.80");
+      const fasciaH = parseFloat(prompt("ความสูงไม้เชิงชาย (เมตร m เช่น 0.20):", "0.20") || "0.20");
+      const thick = parseFloat(prompt("ความหนาแผ่นมุง (เมตร m เช่น 0.035):", "0.035") || "0.035");
+
+      CF.send('generate_hip_gable_roof', {
+        form: formName,
+        slope_deg: slope,
+        overhang_m: overhang,
+        fascia_height_m: fasciaH,
+        thickness_m: thick
+      });
+      CF.toast('เลือก Face หรืออาคาร แล้วกำลังสร้างหลังคา 🏠', 'info');
+    },
+
+    saveCustomProfile() {
+      CF.send('save_custom_profile', {});
+      CF.toast('เลือก Face หน้าตัด แล้วกดบันทึกโปรไฟล์ [NP] 📐', 'info');
+    },
+
+    sweepOnSelection() {
+      const code = gVal('sweep-profile') || 'SKIRT-100x15';
+      CF.send('sweep_on_selection', { profile_code: code });
+      CF.toast('กำลังกวาดโปรไฟล์ตามแนวเส้นที่เลือก [PS] ➰', 'info');
+    },
+
+        drawProfileSweep() {
       const code   = gVal('sweep-profile') || 'SKIRT-100x15';
       const anchor = gVal('sweep-anchor') || 'bottom_left';
       const mat    = gVal('sweep-mat') || 'wood';
@@ -291,7 +375,62 @@ const CF = {
       CF.toast('วางชิ้นงานกระจายตัวบนผิวเรียบร้อย 📐', 'success');
     },
 
-    drawGrid() {
+    detectRooms() {
+      CF.send('detect_rooms', {});
+      CF.toast('กำลังตรวจหาห้องอัตโนมัติจากแนวผนัง [RM] 🚪', 'info');
+    },
+
+    assignRebar() {
+      CF.send('assign_rebar', {});
+      CF.toast('เลือกเสา คาน หรือฐานราก เพื่อใส่เหล็กเสริม 3D [RB] 🏗️', 'info');
+    },
+
+    showBbs() {
+      CF.send('show_bbs', {});
+      CF.toast('เปิดตารางดัดเหล็ก Bar Bending Schedule [BBS] 📋', 'info');
+    },
+
+    stretchByArea() {
+      CF.send('stretch_by_area', {});
+      CF.toast('เลือก Face เพื่อยืด/ปรับขนาดตามพื้นที่เป้าหมาย [SA] 📏', 'info');
+    },
+
+    exportBoqCsv() {
+      CF.send('export_boq_csv', {});
+      CF.toast('กำลังส่งออกไฟล์ BOQ เป็น CSV 📊', 'success');
+    },
+
+        drawCurtainWall() {
+      CF.send('draw_curtain_wall', {});
+      CF.toast('คลิกเลือก Face เพื่อสร้างผนังกระจก / ระแนงบังแดด [CW] 🪟', 'info');
+    },
+
+    modifyCurtainWall() {
+      CF.send('modify_curtain_wall', {});
+      CF.toast('เลือกผนังกระจกหรือระแนงเพื่อแก้ไขพารามิเตอร์ [MCW] 📐', 'info');
+    },
+
+        drawGridFraming() {
+      CF.send('draw_grid_framing', {});
+      CF.toast('คลิกตำแหน่งเริ่มวางระบบกริดเสา-คานอัตโนมัติ [GF] 📐', 'info');
+    },
+
+    drawStair() {
+      CF.send('draw_stair', {});
+      CF.toast('คลิกจุดเริ่มและทิศทางเพื่อสร้างบันได 3D [ST] 🪜', 'info');
+    },
+
+    drawRoofFraming() {
+      CF.send('draw_roof_framing', {});
+      CF.toast('คลิกเลือก Face ผิวหลังคาเพื่อสร้างโครงสร้างเหล็ก [RF] 🏠', 'info');
+    },
+
+    modifyRoofFraming() {
+      CF.send('modify_roof_framing', {});
+      CF.toast('เลือกโครงเหล็กหลังคาเพื่อแก้ไขพารามิเตอร์ [MRF] 🛠', 'info');
+    },
+
+        drawGrid() {
       const name = gVal('gr-name') || 'Grid';
       const lvl = gVal('gr-level') || '';
       CF.send('draw_grid', { name: name, level_id: lvl });
@@ -497,6 +636,34 @@ const CF = {
           card.style.display = 'none';
         }
       });
+      // Also filter ribbon buttons and blocks in real-time
+      document.querySelectorAll('.ribbon-group-block').forEach(block => {
+        let hasMatch = false;
+        block.querySelectorAll('.ribbon-btn').forEach(btn => {
+          const btnText = (btn.textContent + ' ' + (btn.title || '') + ' ' + (btn.dataset.toolName || '')).toLowerCase();
+          if (!q || btnText.includes(q)) {
+            btn.style.display = '';
+            hasMatch = true;
+          } else {
+            btn.style.display = 'none';
+          }
+        });
+        if (!q) {
+          const activeTab = document.querySelector('.ribbon-tab.active')?.dataset.tab || 'all';
+          if (activeTab === 'all' || block.dataset.category === activeTab) {
+            block.classList.remove('hidden');
+          } else {
+            block.classList.add('hidden');
+          }
+        } else {
+          if (hasMatch) {
+            block.classList.remove('hidden');
+          } else {
+            block.classList.add('hidden');
+          }
+        }
+      });
+
       if (q) {
         document.querySelectorAll('.section').forEach(s => {
           s.style.display = '';
@@ -872,6 +1039,26 @@ const CF = {
     const banner = document.getElementById('active-tool-banner');
     const bannerText = document.getElementById('active-tool-text');
     const cancelBtn = document.getElementById('btn-cancel-tool');
+
+    // Ribbon category tabs switcher
+    const ribbonTabs = document.querySelectorAll('.ribbon-tab');
+    const groupBlocks = document.querySelectorAll('.ribbon-group-block');
+
+    ribbonTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const cat = tab.dataset.tab;
+        ribbonTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        groupBlocks.forEach(block => {
+          if (cat === 'all' || block.dataset.category === cat) {
+            block.classList.remove('hidden');
+          } else {
+            block.classList.add('hidden');
+          }
+        });
+      });
+    });
 
     document.querySelectorAll('.ribbon-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {

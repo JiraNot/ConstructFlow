@@ -597,6 +597,130 @@ module JiraNot
           },
 
           # -- Architecture ----------------------------------------
+                    'draw_grid_framing' => lambda { |runtime, _p|
+            runtime.active_model.select_tool(
+              Architecture::Tools::GridFramingTool.new(runtime: runtime)
+            )
+            :no_state_push
+          },
+
+          'draw_stair' => lambda { |runtime, _p|
+            runtime.active_model.select_tool(
+              Architecture::Tools::StairTool.new
+            )
+            :no_state_push
+          },
+
+          'draw_roof_framing' => lambda { |runtime, _p|
+            runtime.active_model.select_tool(
+              Architecture::Tools::RoofFramingTool.new
+            )
+            :no_state_push
+          },
+
+          'modify_roof_framing' => lambda { |runtime, _p|
+            Architecture::Tools::RoofFramingTool.modify_selected(runtime.active_model)
+            :no_state_push
+          },
+
+          'draw_curtain_wall' => lambda { |runtime, _p|
+            runtime.active_model.select_tool(
+              Architecture::Tools::CurtainWallTool.new
+            )
+            :no_state_push
+          },
+
+          'modify_curtain_wall' => lambda { |runtime, _p|
+            Architecture::Tools::CurtainWallTool.modify_selected(runtime.active_model)
+            :no_state_push
+          },
+
+          'stretch_by_area' => lambda { |runtime, _p|
+            runtime.active_model.select_tool(
+              Architecture::Tools::StretchByAreaTool.new
+            )
+            :no_state_push
+          },
+
+          'detect_rooms' => lambda { |runtime, p|
+            res = runtime.commands.execute(
+              'DetectRoomsFromWalls',
+              { name_prefix: p['prefix'] || 'Room', program: p['program'] || 'generic' },
+              project_id: runtime.project.project_id
+            )
+            count = res[:created_object_ids]&.length || 0
+            UI.messagebox("ตรวจพบและสร้างห้องอัตโนมัติสำเร็จ: #{count} ห้อง พร้อมคำนวณพื้นที่และเส้นรอบรูป")
+            :no_state_push
+          },
+
+          'assign_rebar' => lambda { |runtime, p|
+            host = runtime.active_model.selection.filter_map { |entity| runtime.smart_objects.fetch(entity) }
+                          .find { |object| %w[structure.column structure.foundation structure.beam].include?(object.type) }
+            unless host
+              UI.messagebox('กรุณาคลิกเลือกวัตถุโครงสร้าง (เสา / คาน / ฐานราก) ก่อนใส่เหล็กเสริม')
+              return :no_state_push
+            end
+
+            dia = (p['diameter_mm'] || 16.0).to_f
+            count = (p['bar_count'] || 4).to_i
+            cover = (p['cover_mm'] || 40.0).to_f
+            role = (p['role'] || 'main_bottom').to_s
+
+            input = {
+              host_object_id: host.id,
+              diameter_mm: dia,
+              bar_count: count,
+              role: role,
+              cover_mm: cover
+            }
+            res = runtime.commands.execute('AssignRebarSet', input, project_id: runtime.project.project_id)
+            if res[:status] == 'success'
+              UI.messagebox("ใส่เหล็กเสริม 3D (DB#{dia.round} x #{count} เส้น) ใน #{host.display_name} สำเร็จ!\nสร้างโครงปลอกและตะแกรงอัตโนมัติ")
+            else
+              UI.messagebox("เกิดข้อผิดพลาด: #{res[:errors]&.join(', ')}")
+            end
+            :no_state_push
+          },
+
+          'show_bbs' => lambda { |runtime, _p|
+            rebar_objects = runtime.smart_objects.all.select { |o| o.type == 'structure.rebar_set' }
+            repo = Structure::Repository.new
+            total_wt = 0.0
+            rows = []
+            rebar_objects.each do |obj|
+              def_rb = repo.read_rebar_set(obj.entity)
+              next unless def_rb
+              wt = def_rb.total_mass_kg
+              total_wt += wt
+              rows << "#{obj.display_name}: #{def_rb.bar_count}xDB#{def_rb.diameter_mm.round} L=#{(def_rb.total_length_mm/1000.0).round(2)}m = #{wt.round(2)} kg"
+            end
+            msg = rows.empty? ? "ยังไม่มีรายการเหล็กเสริมในโมเดล (ใช้ปุ่ม [RB] เพื่อสร้างเหล็กเสริม 3D)" : "รายการตารางดัดเหล็ก (Bar Bending Schedule - BBS):\n\n" + rows.join("\n") + "\n\nน้ำหนักเหล็กรวม: #{total_wt.round(2)} kg (#{(total_wt/1000.0).round(3)} ตัน)"
+            UI.messagebox(msg)
+            :no_state_push
+          },
+
+          'export_boq_csv' => lambda { |runtime, _p|
+            boq = generate_boq_data(runtime)
+            csv_lines = ['หมวดงาน,รหัส,รายการ,ปริมาณ,หน่วย,ค่าวัสดุต่อหน่วย,ค่าแรงต่อหน่วย,ราคารวม (บาท)']
+            boq[:categories].each do |cat|
+              csv_lines << "#{cat[:name]},,,,,,,#{cat[:subtotal]}"
+              cat[:items].each do |item|
+                csv_lines << "#{cat[:name]},#{item[:code]},#{item[:name]},#{item[:qty]},#{item[:unit]},#{item[:mat_rate]},#{item[:lab_rate]},#{item[:total]}"
+              end
+            end
+            csv_lines << "รวมเงินทั้งสิ้น (Grand Total),,,,,,,#{boq[:grand_total]}"
+            
+            # Save dialog
+            path = UI.savepanel('ส่งออก BOQ เป็นไฟล์ CSV', '', 'ConstructFlow_BOQ.csv')
+            if path
+              File.write(path, csv_lines.join("\n"), encoding: 'UTF-8')
+              UI.messagebox("ส่งออก BOQ เรียบร้อย:\n#{path}")
+            end
+            :no_state_push
+          },
+
+
+
           'draw_wall' => lambda { |runtime, p|
             runtime.active_model.select_tool(
               Architecture::Tools::WallTool.new(
@@ -755,38 +879,218 @@ module JiraNot
             end
           },
 
-          'array_on_face' => lambda { |runtime, p|
+                    'array_on_face' => lambda { |runtime, p|
             sel = runtime.active_model.selection
             face = sel.find { |e| e.is_a?(Sketchup::Face) }
             comp = sel.find { |e| e.is_a?(Sketchup::ComponentInstance) || e.is_a?(Sketchup::Group) }
-            raise 'กรุณาเลือก Face (ระนาบหลังคา) และ Component ชิ้นงาน (เช่น แผ่นลอน)' unless face && comp
+            
+            unless face
+              UI.messagebox('กรุณาเลือก Face (ระนาบหลังคา) ก่อนทำการกระจายแผ่นลอน/กระเบื้อง [Array On Face]')
+              return :no_state_push
+            end
 
-            spacing_x = Float(p['spacing_x_mm'] || 760.0)
-            spacing_y = Float(p['spacing_y_mm'] || 1000.0)
+            elem_type = p['element_type'] || 'metal_sheet_roof'
+            spacing_x = Float(p['spacing_m'] || 0.76) * 1000.0 # 760mm width default for metal sheet
+            spacing_y = Float(p['spacing_y_m'] || 1.0) * 1000.0
+            overhang  = Float(p['overhang_m'] || 0.1) * 1000.0
 
-            bbox = face.bounds
-            min_pt = bbox.min
-            max_pt = bbox.max
-            nx = [((max_pt.x - min_pt.x).to_m * 1000.0 / spacing_x).ceil + 1, 1].max
-            ny = [((max_pt.y - min_pt.y).to_m * 1000.0 / spacing_y).ceil + 1, 1].max
+            # Calculate Face local coordinate axes (slope and cross-slope vectors)
+            norm = face.normal
+            # Slope vector down the roof plane
+            z_axis = Geom::Vector3d.new(0, 0, 1)
+            v_ridge = norm * z_axis # Horizontal vector along ridge/eaves
+            if v_ridge.length < 0.001
+              v_ridge = Geom::Vector3d.new(1, 0, 0)
+              v_slope = Geom::Vector3d.new(0, 1, 0)
+            else
+              v_ridge.normalize!
+              v_slope = norm * v_ridge
+              v_slope.normalize!
+              v_slope.reverse! if v_slope.z > 0 # Point downwards along slope
+            end
 
+            # Project face vertices into local (u=cross-slope, v=down-slope) coordinates
+            pts = face.outer_loop.vertices.map(&:position)
+            p0 = pts.first
+
+            u_vals = pts.map { |pt| (pt - p0) % v_ridge }
+            v_vals = pts.map { |pt| (pt - p0) % v_slope }
+
+            min_u = u_vals.min - overhang.mm
+            max_u = u_vals.max + overhang.mm
+            min_v = v_vals.min - overhang.mm
+            max_v = v_vals.max + overhang.mm
+
+            span_u = max_u - min_u
+            span_v = max_v - min_v
+
+            num_cols = [(span_u / spacing_x.mm).ceil, 1].max
+            num_rows = [(span_v / spacing_y.mm).ceil, 1].max
+
+            runtime.active_model.start_operation('Array Roof Sheets On Face', true)
             parent_group = runtime.active_model.active_entities.add_group
-            parent_group.name = "Cladding Array [#{face.respond_to?(:name) && face.name ? face.name : 'Roof'}]"
+            parent_group.name = "Roof Array [#{elem_type}]"
 
             count = 0
-            (0...[nx, 20].min).each do |ix|
-              (0...[ny, 20].min).each do |iy|
-                tr = Geom::Transformation.translation(Geom::Vector3d.new(
-                  Core::Units.mm_to_su(ix * spacing_x),
-                  Core::Units.mm_to_su(iy * spacing_y),
-                  0
-                ))
-                parent_group.entities.add_instance(comp.definition, tr) if comp.respond_to?(:definition)
+            (0...num_cols).each do |c|
+              (0...num_rows).each do |r|
+                pt_local = p0 + (v_ridge * (min_u + c * spacing_x.mm)) + (v_slope * (min_v + r * spacing_y.mm)) + (norm * 10.mm)
+                
+                if comp && comp.respond_to?(:definition)
+                  tr = Geom::Transformation.new(pt_local, norm)
+                  parent_group.entities.add_instance(comp.definition, tr)
+                else
+                  # Built-in parametric 3D corrugated metal sheet panel with ribs
+                  sheet_grp = parent_group.entities.add_group
+                  sw = spacing_x.mm
+                  sl = spacing_y.mm
+                  sh = 25.0.mm # Rib height
+
+                  p_a = pt_local
+                  p_b = pt_local + (v_ridge * sw)
+                  p_c = pt_local + (v_ridge * sw) + (v_slope * sl)
+                  p_d = pt_local + (v_slope * sl)
+
+                  s_face = sheet_grp.entities.add_face(p_a, p_b, p_c, p_d) rescue nil
+                  s_face.pushpull(-5.mm) if s_face
+
+                  # Add 3D trapezoidal ribs along slope
+                  (1..3).each do |k|
+                    rib_u = (k.to_f / 4.0) * sw
+                    p_r1 = pt_local + (v_ridge * rib_u)
+                    p_r2 = p_r1 + (v_slope * sl)
+                    rib = sheet_grp.entities.add_group
+                    rf_pts = [
+                      p_r1 - (v_ridge * 15.mm),
+                      p_r1 + (v_ridge * 15.mm),
+                      p_r1 + (v_ridge * 10.mm) + (norm * sh),
+                      p_r1 - (v_ridge * 10.mm) + (norm * sh)
+                    ]
+                    rf = rib.entities.add_face(rf_pts) rescue nil
+                    rf.pushpull(-sl) if rf
+                  end
+                end
                 count += 1
               end
             end
-            HtmlDialogManager.toast("อาร์เรย์ชิ้นงานสำเร็จ (#{count} แผ่น) 🎉", level: 'success')
+            runtime.active_model.commit_operation
+            UI.messagebox("สร้างแผ่นหลังคา 3D กระจายตัวบน Face สำเร็จ: #{count} แผ่น 🎉\n(คำนวณตามองศาลาดเอียงหลังคาเรียบร้อย)")
+            :no_state_push
           },
+
+          'save_custom_profile' => lambda { |runtime, p|
+            face = runtime.active_model.selection.find { |e| e.is_a?(Sketchup::Face) }
+            unless face
+              UI.messagebox('กรุณาเลือก Face หน้าตัดก่อนทำการบันทึกเป็นโปรไฟล์')
+              return :no_state_push
+            end
+            code = (p['code'] || "CUST-#{Time.now.to_i}").to_s
+            name = (p['name'] || "Custom Profile #{code}").to_s
+            anchor = (p['anchor'] || :bottom_left).to_sym
+
+            extracted = Core::CustomProfileStore.extract_profile_from_face(face, anchor: anchor)
+            if extracted
+              Core::CustomProfileStore.add_profile(code, name, extracted[:points_mm], extracted[:width_mm], extracted[:depth_mm])
+              UI.messagebox("บันทึกหน้าตัดโปรไฟล์ '#{name}' (#{code}) สำเร็จ!\nขนาด: #{extracted[:width_mm]} x #{extracted[:depth_mm]} mm")
+            else
+              UI.messagebox('ไม่สามารถสกัดจุดหน้าตัดจาก Face ที่เลือกได้')
+            end
+            :no_state_push
+          },
+
+          'smart_stretch' => lambda { |runtime, p|
+            ent = runtime.active_model.selection.find { |e| e.is_a?(Sketchup::Group) || e.is_a?(Sketchup::ComponentInstance) }
+            unless ent
+              UI.messagebox('กรุณาเลือก Group หรือ Component (ประตู/หน้าต่าง/ตู้) ก่อนยืดสเกล')
+              return :no_state_push
+            end
+
+            opts = {
+              target_width_mm: p['target_width_mm']&.to_f,
+              target_height_mm: p['target_height_mm']&.to_f,
+              target_depth_mm: p['target_depth_mm']&.to_f,
+              delta_width_mm: p['delta_width_mm']&.to_f,
+              delta_height_mm: p['delta_height_mm']&.to_f,
+              frame_margin_mm: (p['frame_margin_mm'] || 50.0).to_f
+            }
+
+            Core::SmartStretchEngine.new(ent, opts).execute(runtime.active_model)
+            UI.messagebox("ยืดขยายขนาดสำเร็จโดยขอบเฟรมไม่เพี้ยน!\nกว้างเป้าหมาย: #{p['target_width_m'] || p['target_width_mm'] || 'คงเดิม'} ม. | สูงเป้าหมาย: #{p['target_height_m'] || p['target_height_mm'] || 'คงเดิม'} ม.")
+            :no_state_push
+          },
+
+          'revit_auto_roof' => lambda { |runtime, p|
+            form = (p['form'] || 'hip').to_s
+            slope = (p['slope_deg'] || 30.0).to_f
+            overhang = (p['overhang_m'] || 0.80).to_f
+            thickness = (p['thickness_m'] || 0.15).to_f
+            fascia_h = (p['fascia_height_m'] || 0.20).to_f
+            attach_walls = p['attach_walls'].nil? ? true : (p['attach_walls'] == true || p['attach_walls'] == 'true')
+
+            options = {
+              form: form,
+              slope_deg: slope,
+              overhang_m: overhang,
+              thickness_m: thickness,
+              fascia_height_m: fascia_h,
+              attach_walls: attach_walls
+            }
+
+            roof = Architecture::RevitAutoRoof.generate_from_selection(runtime.active_model, options)
+            if roof
+              form_th = case form
+                        when 'hip' then 'ปั้นหยา'
+                        when 'gable' then 'จั่ว'
+                        when 'shed' then 'เพิงแหงน'
+                        else 'ดาดฟ้า'
+                        end
+              msg = "สร้างหลังคา Auto แบบ Revit (#{form_th}) สำเร็จ!\nความลาดชัน: #{slope}° | ชายคายื่น: #{overhang} ม. | หนา: #{thickness} ม."
+              msg += "\nแนบหัวผนังและปิดหน้าจั่วอัตโนมัติ (Attached Walls to Roof)" if attach_walls
+              UI.messagebox(msg)
+            end
+            :no_state_push
+          },
+
+          'generate_hip_gable_roof' => lambda { |runtime, p|
+            form = (p['form'] || 'hip').to_s
+            slope = (p['slope_deg'] || 30.0).to_f
+            overhang = (p['overhang_mm'] || 800.0).to_f
+            thickness = (p['thickness_mm'] || 35.0).to_f
+            fascia_h = (p['fascia_height_mm'] || 200.0).to_f
+            fascia_t = (p['fascia_thickness_mm'] || 25.0).to_f
+
+            roof_grp = Architecture::HipGableRoofGenerator.generate_from_selection(
+              runtime.active_model,
+              form: form,
+              slope_deg: slope,
+              overhang_mm: overhang,
+              thickness_mm: thickness,
+              fascia_height_mm: fascia_h,
+              fascia_thickness_mm: fascia_t
+            )
+            if roof_grp
+              form_th = form == 'hip' ? 'ปั้นหยา' : (form == 'gable' ? 'จั่ว' : 'เพิงแหงน')
+              UI.messagebox("สร้างหลังคา#{form_th}พร้อมเชิงชายสำเร็จ!\nความลาดชัน: #{slope}° | ชายคายื่น: #{overhang < 20 ? overhang : overhang/1000.0} ม. | เชิงชาย: #{fascia_h < 20 ? fascia_h : fascia_h/1000.0} ม.")
+            end
+            :no_state_push
+          },
+
+          'sweep_on_selection' => lambda { |runtime, p|
+            edges = runtime.active_model.selection.select { |e| e.is_a?(Sketchup::Edge) }
+            if edges.empty?
+              UI.messagebox('กรุณาเลือกเส้น (Edges/Curve) ในโมเดลก่อนทำการกวาดโปรไฟล์')
+              return :no_state_push
+            end
+            code = p['profile_code'] || 'SKIRT-100x15'
+            res = Core::CustomProfileStore.sweep_along_edges(edges, code, runtime.active_model)
+            if res
+              UI.messagebox("กวาดโปรไฟล์ #{code} ตามแนวเส้นสำเร็จ!")
+            else
+              UI.messagebox('ไม่สามารถกวาดโปรไฟล์ตามเส้นที่เลือกได้')
+            end
+            :no_state_push
+          },
+
 
           # -- MEP -------------------------------------------------
           'place_manhole' => lambda { |runtime, p|

@@ -41,63 +41,203 @@
 ════════════════════════════════════════════════════════════ -->
 <div id="panel-body">
 
-  <!-- QUICK BIM RIBBON (ONE-CLICK TOOL BAR) -->
+  <!-- QUICK BIM RIBBON (CATEGORIZED QUICK TOOLS) -->
   <div class="quick-ribbon-wrap">
     <div class="quick-ribbon-header">
-      <div class="quick-ribbon-title">⚡ แท่นเครื่องมือด่วน (Quick BIM Tools)</div>
-      <div class="quick-ribbon-sub">คลิกเดียวเพื่อเริ่มใช้งานทันที</div>
+      <div class="quick-ribbon-title">⚡ แท่นเครื่องมือด่วน (Quick BIM Ribbon)</div>
+      <div class="quick-ribbon-sub">จัดหมวดหมู่ • คลิกเดียวพร้อมใช้</div>
     </div>
-    <div class="quick-ribbon-grid">
-      <button class="ribbon-btn" data-action="drawWall" data-tool-name="วาดผนัง [WA]" title="วาดผนัง (WA)">
-        <span class="ribbon-icon">🧱</span>
-        <span class="ribbon-lbl">ผนัง</span>
-        <span class="ribbon-badge">WA</span>
-      </button>
-      <button class="ribbon-btn" data-action="placeColumn" data-tool-name="วางเสา [CL]" title="วางเสา (CL)">
-        <span class="ribbon-icon">🏛</span>
-        <span class="ribbon-lbl">เสา</span>
-        <span class="ribbon-badge">CL</span>
-      </button>
-      <button class="ribbon-btn" data-action="drawBeam" data-tool-name="วาดคาน [BM]" title="วาดคาน (BM)">
-        <span class="ribbon-icon">🏗</span>
-        <span class="ribbon-lbl">คาน</span>
-        <span class="ribbon-badge">BM</span>
-      </button>
-      <button class="ribbon-btn" data-action="insertDoor" data-tool-name="ติดตั้งประตู [DR]" title="ประตู (DR)">
-        <span class="ribbon-icon">🚪</span>
-        <span class="ribbon-lbl">ประตู</span>
-        <span class="ribbon-badge">DR</span>
-      </button>
-      <button class="ribbon-btn" data-action="insertWindow" data-tool-name="ติดตั้งหน้าต่าง [WN]" title="หน้าต่าง (WN)">
-        <span class="ribbon-icon">🪟</span>
-        <span class="ribbon-lbl">หน้าต่าง</span>
-        <span class="ribbon-badge">WN</span>
-      </button>
-      <button class="ribbon-btn" data-action="drawFloor" data-tool-name="วาดพื้น [FL]" title="วาดพื้น (FL)">
-        <span class="ribbon-icon">🟦</span>
-        <span class="ribbon-lbl">พื้น</span>
-        <span class="ribbon-badge">FL</span>
-      </button>
-      <button class="ribbon-btn" data-action="drawCeiling" data-tool-name="วาดฝ้าเพดาน [CE]" title="วาดฝ้าเพดาน (CE)">
-        <span class="ribbon-icon">☁️</span>
-        <span class="ribbon-lbl">ฝ้า</span>
-        <span class="ribbon-badge">CE</span>
-      </button>
-      <button class="ribbon-btn" data-action="drawProfileSweep" data-tool-name="กวาดบัว / ราวมือจับ [PF]" title="กวาดบัว / ราวมือจับ (PF)">
-        <span class="ribbon-icon">➰</span>
-        <span class="ribbon-lbl">บัว/ราว</span>
-        <span class="ribbon-badge">PF</span>
-      </button>
-      <button class="ribbon-btn" data-action="useLaserLevel" data-tool-name="เลเซอร์วัดระดับ [LS]" title="เลเซอร์วัดระดับ (LS)">
-        <span class="ribbon-icon">🔴</span>
-        <span class="ribbon-lbl">เลเซอร์</span>
-        <span class="ribbon-badge">LS</span>
-      </button>
-      <button class="ribbon-btn" data-action="exportBoq" data-tool-name="สรุป BOQ & ต้นทุน" title="สรุปปริมาณและราคาก่อสร้าง">
-        <span class="ribbon-icon">💰</span>
-        <span class="ribbon-lbl">BOQ</span>
-        <span class="ribbon-badge">COST</span>
-      </button>
+
+    <!-- CATEGORY FILTER TABS -->
+    <div class="quick-ribbon-tabs" id="ribbon-tabs">
+      <button type="button" class="ribbon-tab active" data-tab="all">🌟 ทั้งหมด</button>
+      <button type="button" class="ribbon-tab" data-tab="str">🏗️ โครงสร้าง</button>
+      <button type="button" class="ribbon-tab" data-tab="arch">🏠 สถาปัตย์</button>
+      <button type="button" class="ribbon-tab" data-tab="prof">📐 โปรไฟล์/บัว</button>
+      <button type="button" class="ribbon-tab" data-tab="tools">🛠️ ช่าง & ถอดแบบ</button>
+    </div>
+
+    <!-- CATEGORY GROUPS -->
+    <div class="quick-ribbon-categories" id="ribbon-categories">
+      <!-- 1. STRUCTURE -->
+      <div class="ribbon-group-block" data-category="str">
+        <div class="ribbon-group-header">
+          <span class="ribbon-group-badge str">STR</span>
+          <span class="ribbon-group-title">🏗️ งานโครงสร้าง (Structure & Framing)</span>
+        </div>
+        <div class="quick-ribbon-grid">
+          <button class="ribbon-btn" data-action="drawGridFraming" data-tool-name="กริดโครงสร้าง [GF]" title="กริดเสา-คาน (GF)">
+            <span class="ribbon-icon">📐</span>
+            <span class="ribbon-lbl">กริดเสา-คาน</span>
+            <span class="ribbon-badge">GF</span>
+          </button>
+          <button class="ribbon-btn" data-action="placeColumn" data-tool-name="วางเสา [CL]" title="วางเสา (CL)">
+            <span class="ribbon-icon">🏛</span>
+            <span class="ribbon-lbl">วางเสา</span>
+            <span class="ribbon-badge">CL</span>
+          </button>
+          <button class="ribbon-btn" data-action="drawBeam" data-tool-name="วาดคาน [BM]" title="วาดคาน (BM)">
+            <span class="ribbon-icon">🏗</span>
+            <span class="ribbon-lbl">วาดคาน</span>
+            <span class="ribbon-badge">BM</span>
+          </button>
+          <button class="ribbon-btn" data-action="drawRoofFraming" data-tool-name="โครงหลังคา [RF]" title="โครงหลังคาเหล็ก (RF)">
+            <span class="ribbon-icon">🏠</span>
+            <span class="ribbon-lbl">โครงหลังคา</span>
+            <span class="ribbon-badge">RF</span>
+          </button>
+          <button class="ribbon-btn" data-action="modifyRoofFraming" data-tool-name="แก้ไขโครงหลังคา [MRF]" title="ตั้งค่า/แก้ไขโครงหลังคา">
+            <span class="ribbon-icon">🛠</span>
+            <span class="ribbon-lbl">แก้โครงหลังคา</span>
+            <span class="ribbon-badge">MRF</span>
+          </button>
+          <button class="ribbon-btn" data-action="assignRebar" data-tool-name="เหล็กเสริม 3D [RB]" title="สร้างเหล็กเสริม 3D (RB)">
+            <span class="ribbon-icon">🏗️</span>
+            <span class="ribbon-lbl">เหล็กเสริม 3D</span>
+            <span class="ribbon-badge">RB</span>
+          </button>
+          <button class="ribbon-btn" data-action="showBbs" data-tool-name="ตารางดัดเหล็ก [BBS]" title="ตารางดัดเหล็ก BBS">
+            <span class="ribbon-icon">📋</span>
+            <span class="ribbon-lbl">ตาราง BBS</span>
+            <span class="ribbon-badge">BBS</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. ARCHITECTURE -->
+      <div class="ribbon-group-block" data-category="arch">
+        <div class="ribbon-group-header">
+          <span class="ribbon-group-badge arch">ARCH</span>
+          <span class="ribbon-group-title">🏠 งานสถาปัตย์ (Architecture & Envelope)</span>
+        </div>
+        <div class="quick-ribbon-grid">
+          <button class="ribbon-btn" data-action="drawWall" data-tool-name="วาดผนัง [WA]" title="วาดผนัง (WA)">
+            <span class="ribbon-icon">🧱</span>
+            <span class="ribbon-lbl">วาดผนัง</span>
+            <span class="ribbon-badge">WA</span>
+          </button>
+          <button class="ribbon-btn" data-action="drawFloor" data-tool-name="วาดพื้น [FL]" title="วาดพื้น (FL)">
+            <span class="ribbon-icon">🟦</span>
+            <span class="ribbon-lbl">วาดพื้น</span>
+            <span class="ribbon-badge">FL</span>
+          </button>
+          <button class="ribbon-btn" data-action="generateFloorPaving" data-tool-name="ปูกระเบื้อง [PV]" title="ปูกระเบื้อง/ลวดลายพื้น (PV)">
+            <span class="ribbon-icon">🔲</span>
+            <span class="ribbon-lbl">ปูกระเบื้อง</span>
+            <span class="ribbon-badge">PV</span>
+          </button>
+          <button class="ribbon-btn" data-action="drawCeiling" data-tool-name="วาดฝ้าเพดาน [CE]" title="วาดฝ้าเพดาน (CE)">
+            <span class="ribbon-icon">☁️</span>
+            <span class="ribbon-lbl">วาดฝ้า</span>
+            <span class="ribbon-badge">CE</span>
+          </button>
+          <button class="ribbon-btn" data-action="drawStair" data-tool-name="สร้างบันได [ST]" title="สร้างบันได (ST)">
+            <span class="ribbon-icon">🪜</span>
+            <span class="ribbon-lbl">สร้างบันได</span>
+            <span class="ribbon-badge">ST</span>
+          </button>
+          <button class="ribbon-btn" data-action="drawCurtainWall" data-tool-name="ผนังกระจก/ระแนง [CW]" title="ผนังกระจก/ระแนง (CW)">
+            <span class="ribbon-icon">🪟</span>
+            <span class="ribbon-lbl">กระจก/ระแนง</span>
+            <span class="ribbon-badge">CW</span>
+          </button>
+          <button class="ribbon-btn" data-action="modifyCurtainWall" data-tool-name="แก้ไขผนังกระจก [MCW]" title="แก้ไขแผงกระจก/ระแนง">
+            <span class="ribbon-icon">📐</span>
+            <span class="ribbon-lbl">แก้กระจก</span>
+            <span class="ribbon-badge">MCW</span>
+          </button>
+          <button class="ribbon-btn" data-action="insertDoor" data-tool-name="ติดตั้งประตู [DR]" title="ติดตั้งประตู (DR)">
+            <span class="ribbon-icon">🚪</span>
+            <span class="ribbon-lbl">ประตู</span>
+            <span class="ribbon-badge">DR</span>
+          </button>
+          <button class="ribbon-btn" data-action="insertWindow" data-tool-name="ติดตั้งหน้าต่าง [WN]" title="ติดตั้งหน้าต่าง (WN)">
+            <span class="ribbon-icon">🪟</span>
+            <span class="ribbon-lbl">หน้าต่าง</span>
+            <span class="ribbon-badge">WN</span>
+          </button>
+          <button class="ribbon-btn" data-action="detectRooms" data-tool-name="ตรวจหาห้อง [RM]" title="ตรวจหาห้องอัตโนมัติ (RM)">
+            <span class="ribbon-icon">🚪</span>
+            <span class="ribbon-lbl">ตรวจหาห้อง</span>
+            <span class="ribbon-badge">RM</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 3. PROFILES -->
+      <div class="ribbon-group-block" data-category="prof">
+        <div class="ribbon-group-header">
+          <span class="ribbon-group-badge prof">PROF</span>
+          <span class="ribbon-group-title">📐 บัว & หน้าตัดโปรไฟล์ (Profiles & Moldings)</span>
+        </div>
+        <div class="quick-ribbon-grid">
+          <button class="ribbon-btn" data-action="saveCustomProfile" data-tool-name="บันทึกหน้าตัด [NP]" title="บันทึก Face เป็นโปรไฟล์ใหม่ (NP)">
+            <span class="ribbon-icon">📐</span>
+            <span class="ribbon-lbl">บันทึกหน้าตัด</span>
+            <span class="ribbon-badge">NP</span>
+          </button>
+          <button class="ribbon-btn" data-action="drawProfileSweep" data-tool-name="กวาดบัว / ราวมือจับ [PF]" title="กวาดบัว / ราวมือจับ (PF)">
+            <span class="ribbon-icon">➰</span>
+            <span class="ribbon-lbl">กวาดบัว/ราว</span>
+            <span class="ribbon-badge">PF</span>
+          </button>
+          <button class="ribbon-btn" data-action="sweepOnSelection" data-tool-name="กวาดบัวตามเส้น [PS]" title="กวาดโปรไฟล์ตามเส้นที่เลือก (PS)">
+            <span class="ribbon-icon">➰</span>
+            <span class="ribbon-lbl">กวาดตามเส้น</span>
+            <span class="ribbon-badge">PS</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 4. TOOLS & TAKEOFF -->
+      <div class="ribbon-group-block" data-category="tools">
+        <div class="ribbon-group-header">
+          <span class="ribbon-group-badge tools">TOOLS</span>
+          <span class="ribbon-group-title">🛠️ ช่าง & ถอดแบบ (BIM Tools & Takeoff)</span>
+        </div>
+        <div class="quick-ribbon-grid">
+                    <button class="ribbon-btn" data-action="drawRevitAutoRoof" data-tool-name="หลังคา Auto Revit [AR]" title="สร้างหลังคา Auto แบบ Revit (Roof by Footprint) พร้อมแนบหัวผนังปิดจั่ว">
+            <span class="ribbon-icon">🏠</span>
+            <span class="ribbon-lbl">หลังคา Revit</span>
+            <span class="ribbon-badge">AR</span>
+          </button>
+          <button class="ribbon-btn" data-action="generateHipGableRoof" data-tool-name="ปั้นหลังคาปั้นหยา/จั่ว [RF2]" title="สร้างหลังคาปั้นหยา/จั่ว พร้อมเชิงชาย 1-Click">
+            <span class="ribbon-icon">🏠</span>
+            <span class="ribbon-lbl">หลังคาจั่ว/ปั้นหยา</span>
+            <span class="ribbon-badge">RF2</span>
+          </button>
+                    <button class="ribbon-btn" data-action="smartStretch" data-tool-name="ยืดขอบไม่เพี้ยน [SS]" title="ยืด/ย่อสเกลประตู หน้าต่าง ตู้ โดยขอบเฟรมไม่เพี้ยน (9-Slice Smart Stretch)">
+            <span class="ribbon-icon">↔️</span>
+            <span class="ribbon-lbl">ยืดขอบไม่เพี้ยน</span>
+            <span class="ribbon-badge">SS</span>
+          </button>
+          <button class="ribbon-btn" data-action="stretchByArea" data-tool-name="ยืดตามพื้นที่ [SA]" title="ยืดขยายตามพื้นที่เป้าหมาย ตร.ม.">
+            <span class="ribbon-icon">📏</span>
+            <span class="ribbon-lbl">ยืดตามพื้นที่</span>
+            <span class="ribbon-badge">SA</span>
+          </button>
+          <button class="ribbon-btn" data-action="useLaserLevel" data-tool-name="เลเซอร์วัดระดับ [LS]" title="เลเซอร์วัดระดับ (LS)">
+            <span class="ribbon-icon">🔴</span>
+            <span class="ribbon-lbl">เลเซอร์</span>
+            <span class="ribbon-badge">LS</span>
+          </button>
+          <button class="ribbon-btn" data-action="arrayOnFace" data-tool-name="อาร์เรย์ลาดเอียง [AF]" title="อาร์เรย์แผ่นลอน/วัสดุตามความลาดเอียง">
+            <span class="ribbon-icon">📐</span>
+            <span class="ribbon-lbl">อาร์เรย์เอียง</span>
+            <span class="ribbon-badge">AF</span>
+          </button>
+          <button class="ribbon-btn" data-action="exportBoq" data-tool-name="สรุป BOQ & ต้นทุน" title="สรุปปริมาณและราคาก่อสร้าง">
+            <span class="ribbon-icon">💰</span>
+            <span class="ribbon-lbl">สรุป BOQ</span>
+            <span class="ribbon-badge">COST</span>
+          </button>
+          <button class="ribbon-btn" data-action="exportBoqCsv" data-tool-name="ส่งออก BOQ CSV" title="ส่งออกข้อมูล BOQ เป็น CSV">
+            <span class="ribbon-icon">📊</span>
+            <span class="ribbon-lbl">ส่งออก CSV</span>
+            <span class="ribbon-badge">CSV</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1268,7 +1408,7 @@
      FOOTER
 ════════════════════════════════════════════════════════════ -->
 <div id="panel-footer">
-  <span class="footer-version">ConstructFlow v0.15.0</span>
+  <span class="footer-version">ConstructFlow v0.16.0</span>
   <div class="footer-actions">
     <button class="btn btn-secondary btn-sm" data-action="showInspector">🔍 Inspector</button>
     <button class="btn btn-secondary btn-sm" data-action="showCosting">💰 BOQ</button>

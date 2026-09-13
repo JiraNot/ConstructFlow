@@ -413,7 +413,7 @@ module JiraNot
             )
             repository.write(group, definition)
             runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository, geometry: geometry)
+            reconcile_wall_joins(runtime, repository, geometry: geometry, tolerance_mm: 50.0)
 
             {
               created_object_ids: [smart_object.id],
@@ -445,7 +445,7 @@ module JiraNot
             repository.write(smart_object.entity, updated)
             runtime.smart_objects.update_level_refs(smart_object.entity, level_refs_for_definition(updated))
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository, geometry: geometry)
+            reconcile_wall_joins(runtime, repository, geometry: geometry, tolerance_mm: 50.0)
 
             {
               updated_object_ids: [smart_object.id],
@@ -470,7 +470,7 @@ module JiraNot
             geometry.rebuild!(smart_object.entity, updated, openings: repository.host_openings(smart_object.entity))
             repository.write(smart_object.entity, updated)
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository, geometry: geometry)
+            reconcile_wall_joins(runtime, repository, geometry: geometry, tolerance_mm: 50.0)
             wall_geometry_changed_result(smart_object)
           end
 
@@ -494,7 +494,7 @@ module JiraNot
             repository.write(smart_object.entity, updated)
             runtime.smart_objects.update_level_refs(smart_object.entity, level_refs_for_definition(updated))
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository, geometry: geometry)
+            reconcile_wall_joins(runtime, repository, geometry: geometry, tolerance_mm: 50.0)
             wall_geometry_changed_result(smart_object)
           end
 
@@ -521,7 +521,7 @@ module JiraNot
             )
             repository.write(group, definition)
             runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository, geometry: geometry)
+            reconcile_wall_joins(runtime, repository, geometry: geometry, tolerance_mm: 50.0)
             {
               created_object_ids: [object.id],
               warnings: ['hosted openings are not copied; place new openings on the copied wall'],
@@ -551,7 +551,7 @@ module JiraNot
             geometry.rebuild!(smart_object.entity, updated, openings: repository.host_openings(smart_object.entity))
             repository.write(smart_object.entity, updated)
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository, geometry: geometry)
+            reconcile_wall_joins(runtime, repository, geometry: geometry, tolerance_mm: 50.0)
             wall_geometry_changed_result(smart_object)
           end
 
@@ -586,7 +586,7 @@ module JiraNot
             repository.write(smart_object.entity, updated)
             runtime.smart_objects.update_level_refs(smart_object.entity, level_refs_for_definition(updated))
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository, geometry: geometry)
+            reconcile_wall_joins(runtime, repository, geometry: geometry, tolerance_mm: 50.0)
 
             {
               updated_object_ids: [smart_object.id],
@@ -617,7 +617,7 @@ module JiraNot
             repository.write(smart_object.entity, updated)
             runtime.smart_objects.update_level_refs(smart_object.entity, level_refs_for_definition(updated))
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository, geometry: geometry)
+            reconcile_wall_joins(runtime, repository, geometry: geometry, tolerance_mm: 50.0)
 
             {
               updated_object_ids: [smart_object.id],
@@ -644,7 +644,7 @@ module JiraNot
             repository.write(smart_object.entity, updated)
             runtime.smart_objects.update_level_refs(smart_object.entity, level_refs_for_definition(updated))
             mark_dirty_with_dependents(runtime, smart_object.entity, 'dirty_quantity', 'dirty_drawing')
-            reconcile_wall_joins(runtime, repository, geometry: geometry)
+            reconcile_wall_joins(runtime, repository, geometry: geometry, tolerance_mm: 50.0)
             {
               updated_object_ids: [smart_object.id],
               events: [
@@ -941,7 +941,7 @@ module JiraNot
         # This is intentionally a metadata reconciliation step: WallGeometry
         # can consume the stable, symmetric join records without each command
         # having to guess which neighboring walls were affected.
-        def reconcile_wall_joins(runtime, repository, geometry: nil, tolerance_mm: 1.0)
+        def reconcile_wall_joins(runtime, repository, geometry: nil, tolerance_mm: 50.0)
           walls = runtime.smart_objects.all
                         .select { |object| object.type == 'architecture.wall' && object.owner_module == MANIFEST[:id] }
                         .sort_by(&:id)
@@ -1491,6 +1491,109 @@ module JiraNot
 
         def install_ui(runtime)
           architecture_menu = runtime.menu.add_submenu('Architecture')
+          architecture_menu.add_item('Draw Roof Framing') do
+            runtime.active_model.select_tool(Tools::RoofFramingTool.new)
+          end
+
+          architecture_menu.add_item('Modify Steel Roof Framing') do
+            Tools::RoofFramingTool.modify_selected(runtime.active_model)
+          end
+
+          architecture_menu.add_item('Draw Structural Grid Framing') do
+            runtime.active_model.select_tool(Tools::GridFramingTool.new(runtime: runtime))
+          end
+
+          architecture_menu.add_item('Draw Curtain Wall & Lattice') do
+            runtime.active_model.select_tool(Tools::CurtainWallTool.new)
+          end
+
+          architecture_menu.add_item('Modify Curtain Wall & Lattice') do
+            Tools::CurtainWallTool.modify_selected(runtime.active_model)
+          end
+
+          architecture_menu.add_item('Revit-Style Auto Roof (Roof by Footprint) [AR]') do
+            runtime.active_model.select_tool(Tools::RevitAutoRoofTool.new(runtime: runtime))
+          end
+
+          architecture_menu.add_item('Generate Hip/Gable Roof') do
+            prompts = ['รูปแบบหลังคา (Form):', 'ความลาดชัน (องศา Deg):', 'ระยะยื่นชายคา (เมตร m):', 'ความสูงไม้เชิงชาย (เมตร m):', 'ความหนาแผ่นมุง (เมตร m):']
+            defaults = ['hip', '30.0', '0.80', '0.20', '0.035']
+            list = ['hip|gable|lean_to', '', '', '', '']
+            input = UI.inputbox(prompts, defaults, list, 'ConstructFlow - สร้างหลังคาปั้นหยา/จั่ว')
+            if input
+              Architecture::HipGableRoofGenerator.generate_from_selection(
+                runtime.active_model,
+                form: input[0].to_s,
+                slope_deg: input[1].to_f,
+                overhang_mm: input[2].to_f,
+                fascia_height_mm: input[3].to_f,
+                thickness_mm: input[4].to_f
+              )
+            end
+          end
+
+          architecture_menu.add_item('Non-Distort Smart Stretch (9-Slice) [SS]') do
+            runtime.active_model.select_tool(Tools::SmartStretchTool.new(runtime: runtime))
+          end
+
+          architecture_menu.add_item('Stretch by Target Area') do
+            runtime.active_model.select_tool(Tools::StretchByAreaTool.new)
+          end
+
+          architecture_menu.add_item('Save Selected Face as Profile') do
+            face = runtime.active_model.selection.find { |e| e.is_a?(Sketchup::Face) }
+            unless face
+              UI.messagebox('กรุณาเลือก Face หน้าตัด 2D ก่อนบันทึกเป็นโปรไฟล์')
+              next
+            end
+            prompts = ['ชื่อหน้าตัดโปรไฟล์ (Profile Name):', 'รหัสโปรไฟล์ (Profile Code):', 'จุดยึด (Anchor Point):']
+            defaults = ['บัวผนังที่วาดใหม่', 'CUST-01', 'bottom_left']
+            list = ['', '', 'bottom_left|bottom_center|bottom_right|center|top_left|top_center|top_right']
+            results = UI.inputbox(prompts, defaults, list, 'บันทึกหน้าตัดโปรไฟล์ [Custom Profile]')
+            if results
+              name = results[0]
+              code = results[1]
+              anchor = results[2].to_sym
+              extracted = Core::CustomProfileStore.extract_profile_from_face(face, anchor: anchor)
+              if extracted
+                Core::CustomProfileStore.add_profile(code, name, extracted[:points_mm], extracted[:width_mm], extracted[:depth_mm])
+                UI.messagebox("บันทึกหน้าตัดโปรไฟล์ '#{name}' (#{code}) สำเร็จ!\nขนาด: #{extracted[:width_mm]} x #{extracted[:depth_mm]} mm")
+              else
+                UI.messagebox('ไม่สามารถสกัดจุดหน้าตัดจาก Face ที่เลือกได้')
+              end
+            end
+          end
+
+          architecture_menu.add_item('Sweep Profile Along Selected Edges') do
+            edges = runtime.active_model.selection.select { |e| e.is_a?(Sketchup::Edge) }
+            if edges.empty?
+              UI.messagebox('กรุณาเลือกเส้น (Edges/Curve) ที่ต้องการกวาดบัว/โปรไฟล์ตามแนวเส้น')
+              next
+            end
+            all_profiles = Core::StructuralProfileCatalog::PROFILES.keys
+            prompts = ['เลือกโปรไฟล์ (Profile Code):']
+            defaults = ['SKIRT-100x15']
+            list = [all_profiles.join('|')]
+            results = UI.inputbox(prompts, defaults, list, 'กวาดบัวตามแนวเส้นที่เลือก [Sweep Along Edges]')
+            if results
+              code = results[0]
+              res = Core::CustomProfileStore.sweep_along_edges(edges, code, runtime.active_model)
+              if res
+                UI.messagebox("กวาดโปรไฟล์ #{code} ตามแนวเส้นสำเร็จ!")
+              else
+                UI.messagebox('ไม่สามารถสร้างแนวบัวตามเส้นที่เลือกได้')
+              end
+            end
+          end
+
+
+
+
+
+          architecture_menu.add_item('Draw Staircase') do
+            runtime.active_model.select_tool(Tools::StairTool.new)
+          end
+
           architecture_menu.add_item('Draw Smart Wall') do
             values = UI.inputbox(
               ['Thickness (mm)', 'Height (mm)', 'Base level ID (optional)'],

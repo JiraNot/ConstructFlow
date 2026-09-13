@@ -76,6 +76,36 @@ require_relative 'modules/architecture/tools/wall_tool'
 require_relative 'modules/architecture/tools/wall_edit_tool'
 require_relative 'modules/architecture/registration'
 
+# BIM Suite Extensions (Stair, Roof Framing, Grid Framing)
+require_relative 'modules/architecture/stair_definition'
+require_relative 'modules/architecture/stair_validator'
+require_relative 'modules/architecture/stair_geometry'
+require_relative 'modules/architecture/stair_repository'
+require_relative 'modules/architecture/tools/stair_tool'
+
+require_relative 'modules/architecture/roof_framing_definition'
+require_relative 'modules/architecture/roof_framing_geometry'
+require_relative 'modules/architecture/roof_framing_repository'
+require_relative 'modules/architecture/tools/roof_framing_tool'
+
+require_relative 'modules/architecture/grid_framing_definition'
+require_relative 'modules/architecture/grid_framing_geometry'
+require_relative 'modules/architecture/grid_framing_repository'
+require_relative 'modules/architecture/tools/grid_framing_tool'
+require_relative 'modules/architecture/curtain_wall_definition'
+require_relative 'modules/architecture/curtain_wall_geometry'
+require_relative 'modules/architecture/curtain_wall_repository'
+require_relative 'modules/architecture/tools/curtain_wall_tool'
+require_relative 'modules/architecture/stretch_by_target_area'
+require_relative 'modules/architecture/tools/stretch_by_area_tool'
+require_relative 'modules/architecture/tools/smart_stretch_tool'
+require_relative 'modules/architecture/hip_gable_roof_generator'
+require_relative 'modules/architecture/revit_auto_roof'
+require_relative 'modules/architecture/tools/revit_auto_roof_tool'
+
+
+
+
 require_relative 'modules/opening/opening_definition'
 require_relative 'modules/opening/opening_repository'
 require_relative 'modules/opening/validators/opening_validator'

@@ -139,9 +139,22 @@ module JiraNot
 
         ALL_PROFILES = (RC_BEAMS + RC_COLUMNS + WIDE_FLANGE + STEEL_SHS + STEEL_RHS + STEEL_C_LIP + STEEL_CHANNEL + STEEL_PIPE + MOLDINGS).freeze
 
-        def self.find_profile(code)
-          ALL_PROFILES.find { |p| p[:code] == code.to_s.strip }
+        @custom_profiles = {}
+
+        def self.register_custom_profile(code, hash)
+          @custom_profiles ||= {}
+          @custom_profiles[code.to_s.strip] = hash
         end
+
+        def self.custom_profiles
+          @custom_profiles ||= {}
+        end
+
+        def self.find_profile(code)
+          c = code.to_s.strip
+          (@custom_profiles && @custom_profiles[c]) || ALL_PROFILES.find { |p| p[:code] == c }
+        end
+
 
         def self.profiles_by_category(category)
           ALL_PROFILES.select { |p| p[:category] == category.to_sym }
