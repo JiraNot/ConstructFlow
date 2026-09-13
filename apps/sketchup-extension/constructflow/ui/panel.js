@@ -1431,3 +1431,37 @@ window.ConstructFlowUI = {
   closeBOQModal: () => CF.closeBOQModal(),
   renderTakeoffHUD: (data) => CF.renderTakeoffHUD(data)
 };
+
+
+  // ── 1-CLICK EXTENSION PRESETS (V1.0.0) ──
+  document.querySelectorAll('.btn-preset-build').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const presetId = this.getAttribute('data-preset-id');
+      if (presetId) {
+        CF.toast('กำลังสร้างโมเดล ' + presetId + ' ...', 'info');
+        CF.send('create_extension_preset', { preset_id: presetId, x: 0, y: 0, z: 0 });
+      }
+    });
+  });
+
+  // ── THAI BOQ EXCEL EXPORT (V1.0.0) ──
+  const btnExportThaiBoq = document.getElementById('btn-export-thai-boq');
+  if (btnExportThaiBoq) {
+    btnExportThaiBoq.addEventListener('click', function() {
+      const factorF = parseFloat(document.getElementById('factor-f-select')?.value || '0.12');
+      CF.toast('กำลังจัดทำใบเสนอราคา BOQ (Excel CSV) ...', 'info');
+      CF.send('export_thai_boq_excel', { factor_f: factorF });
+    });
+  }
+
+  // ── THAI A3 DRAWING SHEETS GENERATION (V1.0.0) ──
+  const btnGenA3 = document.getElementById('btn-generate-a3-sheets');
+  if (btnGenA3) {
+    btnGenA3.addEventListener('click', function() {
+      const projName = document.getElementById('tb-project-name')?.value || 'โครงการต่อเติมบ้านพักอาศัย';
+      const ownerName = document.getElementById('tb-owner-name')?.value || 'เจ้าของอาคาร';
+      CF.toast('กำลังตั้งค่า 6 Scenes และเตรียมแบบ A3 ...', 'info');
+      CF.send('generate_a3_drawing_sheets', { project_name: projName, owner_name: ownerName });
+    });
+  }

@@ -73,6 +73,74 @@
       <div class="quick-ribbon-sub">จัดหมวดหมู่ • คลิกเดียวพร้อมใช้</div>
     </div>
 
+    
+    <!-- ═══════════════════════════════════════════════════════
+         1-CLICK THAI EXTENSION PRESETS (NEW IN V1.0.0)
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="presets-section">
+      <div class="presets-header">
+        <div class="presets-title">🏗️ พรีเซ็ตงานต่อเติมสำเร็จรูป 1-Click (Extension Presets)</div>
+        <div class="presets-sub">สร้างโมเดล 3D ครบทุกองค์ประกอบ (ฐานราก-เสา-คาน-ผนัง-หลังคา-ประตูหน้าต่าง) ในคลิกเดียว</div>
+      </div>
+      <div class="presets-grid">
+        <!-- Preset 1: Carport -->
+        <div class="preset-card" data-preset="carport_standard">
+          <div class="preset-card-top">
+            <span class="preset-badge">จอดรถ 2 คัน</span>
+            <span class="preset-icon">🚗</span>
+          </div>
+          <div class="preset-title">โรงจอดรถมาตรฐาน (Carport)</div>
+          <div class="preset-specs">5.00 x 5.50 ม. • เสาเหล็ก 125 มม. • เมทัลชีท PU • รางน้ำสแตนเลส</div>
+          <div class="preset-price-tag">งบประมาณ ~ ฿151,200</div>
+          <button class="btn btn-primary btn-preset-build" data-preset-id="carport_standard">
+            🏗️ วางโรงจอดรถทันที
+          </button>
+        </div>
+
+        <!-- Preset 2: Thai Kitchen -->
+        <div class="preset-card" data-preset="thai_kitchen">
+          <div class="preset-card-top">
+            <span class="preset-badge badge-kitchen">ครัวไทยโปร่ง</span>
+            <span class="preset-icon">🍳</span>
+          </div>
+          <div class="preset-title">ครัวไทยหลังบ้านระบายอากาศ</div>
+          <div class="preset-specs">2.50 x 5.00 ม. • ผนังมวลเบา • เคาน์เตอร์ ค.ส.ล. ตัว L • กระเบื้อง R10</div>
+          <div class="preset-price-tag">งบประมาณ ~ ฿220,640</div>
+          <button class="btn btn-primary btn-preset-build" data-preset-id="thai_kitchen">
+            🏗️ วางครัวไทยทันที
+          </button>
+        </div>
+
+        <!-- Preset 3: Garden Terrace -->
+        <div class="preset-card" data-preset="garden_terrace">
+          <div class="preset-card-top">
+            <span class="preset-badge badge-terrace">เฉลียงพักผ่อน</span>
+            <span class="preset-icon">🌿</span>
+          </div>
+          <div class="preset-title">เทอเรสพักผ่อน & ระแนงไม้ WPC</div>
+          <div class="preset-specs">3.00 x 4.00 ม. • ไม้เทียม WPC • บันได 2 ขั้น • ระแนงไม้สัก • กันสาดโพลีฯ</div>
+          <div class="preset-price-tag">งบประมาณ ~ ฿118,720</div>
+          <button class="btn btn-primary btn-preset-build" data-preset-id="garden_terrace">
+            🏗️ วางเทอเรสทันที
+          </button>
+        </div>
+
+        <!-- Preset 4: Multipurpose Suite -->
+        <div class="preset-card" data-preset="multipurpose_suite">
+          <div class="preset-card-top">
+            <span class="preset-badge badge-suite">ห้องอเนกประสงค์</span>
+            <span class="preset-icon">🏢</span>
+          </div>
+          <div class="preset-title">ห้องอเนกประสงค์ / โฮมออฟฟิศ</div>
+          <div class="preset-specs">4.00 x 6.00 ม. • เสา-คาน ค.ส.ล. • บานเลื่อน 2.0x2.2ม. • เชิงชายโมเดิร์น</div>
+          <div class="preset-price-tag">งบประมาณ ~ ฿350,560</div>
+          <button class="btn btn-primary btn-preset-build" data-preset-id="multipurpose_suite">
+            🏗️ วางห้องอเนกประสงค์ทันที
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- CATEGORY FILTER TABS -->
     <div class="quick-ribbon-tabs" id="ribbon-tabs">
       <button type="button" class="ribbon-tab active" data-tab="all">🌟 ทั้งหมด</button>
@@ -1585,7 +1653,7 @@
      FOOTER
 ════════════════════════════════════════════════════════════ -->
 <div id="panel-footer">
-  <span class="footer-version">ConstructFlow v0.18.0</span>
+  <span class="footer-version">ConstructFlow v1.0.0 Full Release</span>
   <div class="footer-actions">
     <button class="btn btn-secondary btn-sm" data-action="showInspector">🔍 Inspector</button>
     <button class="btn btn-secondary btn-sm" data-action="showCosting">💰 BOQ</button>
@@ -1775,6 +1843,30 @@
   ═══════════════════════════════════════════════════════════ -->
 
 <div class="workspace-pane" id="pane-takeoff">
+    <!-- THAI COST DATABASE & FACTOR F (NEW V1.0.0) -->
+    <div class="tool-card" style="margin-top: 12px;">
+      <div class="tool-card-header">
+        <div class="tool-card-icon">🇹🇭</div>
+        <div>
+          <div class="tool-card-title">ฐานข้อมูลราคาก่อสร้างมาตรฐานไทย & Factor F</div>
+          <div class="tool-card-sub">คำนวณแยกค่าวัสดุ + ค่าแรง + ค่าอำนวยการและกำไร (Factor F)</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+        <label style="font-size: 11.5px; color: #94a3b8;">อัตรา Factor F:</label>
+        <select id="factor-f-select" class="tool-input" style="flex: 1; padding: 4px 8px;">
+          <option value="0.10">10% (งานขนาดกลาง / ผู้รับเหมาช่วง)</option>
+          <option value="0.12" selected>12% (งานต่อเติมบ้านทั่วไป - มาตรฐาน)</option>
+          <option value="0.15">15% (งานขนาดเล็ก / เก็บรายละเอียดสูง)</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 10px;">
+        <button class="btn btn-primary" id="btn-export-thai-boq" style="flex: 2; background: linear-gradient(135deg, #10b981, #059669); border-color: #059669;">
+          📊 ส่งออกใบเสนอราคา BOQ (Excel / CSV)
+        </button>
+      </div>
+    </div>
+
     <div class="pane-header-title">
       <div class="title-main">📊 ถอดปริมาณและประเมินราคา (Quantity Takeoff & Costing)</div>
       <div class="title-sub">คำนวณปริมาตรคอนกรีต ไม้แบบ พื้นที่ผิว และสรุปราคา BOQ มาตรฐาน วสท.</div>
@@ -1842,6 +1934,32 @@
 </div>
 
 <div class="workspace-pane" id="pane-layout">
+    <!-- THAI A3 DRAWING SHEET CONTROLS (NEW V1.0.0) -->
+    <div class="tool-card" style="margin-top: 12px;">
+      <div class="tool-card-header">
+        <div class="tool-card-icon">📐</div>
+        <div>
+          <div class="tool-card-title">ชุดแบบก่อสร้างมาตรฐาน A3 (Thai A3 Drawing Set)</div>
+          <div class="tool-card-sub">กำหนดข้อมูล Title Block และเชื่อมโยง 6 Scenes ส่งตรงเข้า LayOut A3</div>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+        <div>
+          <label style="font-size: 10.5px; color: #94a3b8;">ชื่อโครงการ (Project):</label>
+          <input type="text" id="tb-project-name" class="tool-input" value="โครงการต่อเติมบ้านพักอาศัย" style="width: 100%; padding: 4px 6px;">
+        </div>
+        <div>
+          <label style="font-size: 10.5px; color: #94a3b8;">เจ้าของอาคาร (Owner):</label>
+          <input type="text" id="tb-owner-name" class="tool-input" value="เจ้าของโครงการ" style="width: 100%; padding: 4px 6px;">
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 10px;">
+        <button class="btn btn-primary" id="btn-generate-a3-sheets" style="flex: 2; background: linear-gradient(135deg, #3b82f6, #1d4ed8); border-color: #1d4ed8;">
+          📄 สร้าง 6 Scenes & ชุดแบบ A3 ทันที
+        </button>
+      </div>
+    </div>
+
     <div class="pane-header-title">
       <div class="title-main">📑 ออกแบบก่อสร้างส่ง LayOut (Extension & Drawing Suite)</div>
       <div class="title-sub">จัดทำแบบแปลน รูปด้าน รูปตัด ดึง Dimension และปักหมุดระดับในคลิกเดียว</div>
@@ -2092,338 +2210,6 @@
       </div>
     </div>
   </div>
-
-  <!-- ═══════════════════════════════════════════════════════
-       WORKSPACE 2: 📦 ตรวจสอบ & แก้ไข (INSPECTOR & LEVELS)
-  ═══════════════════════════════════════════════════════════ -->
-  <div class="workspace-pane" id="pane-inspector">
-    <div class="pane-header-title">
-      <div class="title-main">📦 ตรวจสอบ & ปรับแต่งชิ้นงาน (BIM Inspector)</div>
-      <div class="title-sub">คลิกเลือกชิ้นงานในโมเดล 3D เพื่อตรวจสอบขนาดและแก้ไขสด (2-Way Live Edit)</div>
-    </div>
-
-    <!-- TWO-WAY BIM SMART PROPERTY INSPECTOR -->
-  <div id="bim-inspector-card" class="bim-card">
-    <div class="bim-card-header">
-      <div class="bim-card-badge" id="bim-type-badge">📦 ชิ้นงาน BIM</div>
-      <div class="bim-card-id" id="bim-id-badge">—</div>
-    </div>
-    <div id="bim-empty-notice" class="bim-empty">
-      💡 คลิกเลือก Smart Object ในโมเดล 3D เพื่อตรวจสอบขนาดและแก้ไขด่วน
-    </div>
-    <div id="bim-data-wrap" style="display:none;">
-      <div class="bim-title" id="bim-name">Smart Object</div>
-      <div class="bim-props-grid" id="bim-props">
-        <!-- Filled dynamically -->
-      </div>
-      <!-- Wall Dimension Editor (Shown when wall selected) -->
-      <div id="bim-wall-editor" style="display:none; margin: 8px 0; padding: 8px; background: rgba(30, 41, 59, 0.6); border-radius: var(--radius-sm); border: 1px solid var(--border);">
-        <div style="font-size: 11px; font-weight: 600; color: #93c5fd; margin-bottom: 6px;">📐 ปรับขนาดผนัง (Edit Wall)</div>
-        <div class="field-row cols-2" style="margin-bottom: 6px;">
-          <div class="field">
-            <label class="unit-lbl">หนา (ม.)</label>
-            <input type="number" id="bim-wall-thick" step="0.01" value="0.10">
-          </div>
-          <div class="field">
-            <label class="unit-lbl">สูง (ม.)</label>
-            <input type="number" id="bim-wall-h" step="0.05" value="2.80">
-          </div>
-        </div>
-        <div style="display: flex; gap: 6px;">
-          <button class="btn btn-sm btn-primary" id="btn-apply-wall" style="flex: 1;">💾 บันทึกขนาด (Apply)</button>
-          <button class="btn btn-sm btn-secondary" id="btn-edit-wall-path" style="flex: 1;">✏️ ดัดแนว (Path)</button>
-        </div>
-      </div>
-
-      <div class="bim-actions">
-        <button class="btn btn-sm btn-secondary" id="btn-zoom-selected">🔍 โฟกัส (Zoom)</button>
-        <button class="btn btn-sm btn-secondary" id="btn-flip-selected">🔄 สลับด้าน (Flip)</button>
-        <button class="btn btn-sm btn-danger" id="btn-delete-selected">🗑 ลบชิ้นงาน</button>
-      </div>
-    </div>
-  </div>
-
-    <div class="sections-container" style="margin-top: 15px;">
-      <!-- ────────────────────────────────────────────────────────
-       SECTION 1 — ตั้งค่าโครงการ
-  ──────────────────────────────────────────────────────────── -->
-  <div class="section" id="sec-1">
-    <div class="section-header">
-      <div class="section-step">1</div>
-      <div class="section-icon">⚙️</div>
-      <div style="flex:1">
-        <div class="section-label">ตั้งค่าโครงการ</div>
-        <div class="section-desc">Inspector · ระดับชั้น · เฟสการก่อสร้าง</div>
-      </div>
-      <div class="section-chevron">▼</div>
-    </div>
-    <div class="section-body">
-
-      <!-- Inspector -->
-      <div class="tool-card">
-        <div class="tool-card-header">
-          <div class="tool-card-icon">🔍</div>
-          <div>
-            <div class="tool-card-title">ตรวจสอบสถานะโครงการ</div>
-            <div class="tool-card-sub">ดูข้อมูล Smart Objects, Levels, Connectors</div>
-          </div>
-        </div>
-        <div class="info-grid">
-          <div class="info-cell">
-            <div class="info-label">รหัสโครงการ</div>
-            <div class="info-value" id="info-project">—</div>
-          </div>
-          <div class="info-cell">
-            <div class="info-label">เฟสปัจจุบัน</div>
-            <div class="info-value" id="info-phase">—</div>
-          </div>
-          <div class="info-cell">
-            <div class="info-label">Smart Objects</div>
-            <div class="info-value" id="info-objects">0</div>
-          </div>
-          <div class="info-cell">
-            <div class="info-label">Levels</div>
-            <div class="info-value" id="info-levels">0</div>
-          </div>
-          <div class="info-cell">
-            <div class="info-label">Connectors</div>
-            <div class="info-value" id="info-connectors">0</div>
-          </div>
-          <div class="info-cell">
-            <div class="info-label">Modules</div>
-            <div class="info-value" id="info-modules">0</div>
-          </div>
-        </div>
-        <button class="btn btn-secondary" data-action="showInspector">🔍 ดูบันทึก Diagnostics</button>
-      </div>
-
-      <!-- Level -->
-      <div class="tool-card">
-        <div class="tool-card-header">
-          <div class="tool-card-icon">📐</div>
-          <div>
-            <div class="tool-card-title">กำหนดระดับชั้นอาคาร</div>
-            <div class="tool-card-sub">Level · ระดับความสูง (เมตร / m)</div>
-          </div>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label>ชื่อระดับชั้น</label>
-            <input type="text" id="level-name" value="First Floor" placeholder="เช่น Ground Floor">
-          </div>
-        </div>
-        <div class="field-row cols-2">
-          <div class="field">
-            <label class="unit-lbl">ระดับสูง (ม.)</label>
-            <input type="number" id="level-elev" value="3000" step="100">
-          </div>
-          <div class="field">
-            <label>ประเภท</label>
-            <select id="level-kind">
-              <option value="floor">floor (พื้น)</option>
-              <option value="roof">roof (ดาดฟ้า)</option>
-              <option value="ceiling">ceiling (ฝ้าเพดาน)</option>
-              <option value="custom">custom</option>
-            </select>
-          </div>
-        </div>
-        <button class="btn btn-primary" data-action="createLevel">➕ สร้างระดับชั้น</button>
-      </div>
-
-            <!-- Laser Level Tool -->
-      <div class="tool-card">
-        <div class="tool-card-header">
-          <div class="tool-card-icon">🔴</div>
-          <div>
-            <div class="tool-card-title">เลเซอร์วัดระดับ (Laser Level Tool)</div>
-            <div class="tool-card-sub">วัดความสูง Z เทียบระดับอ้างอิง Benchmark ±0.00 ม. [LS]</div>
-          </div>
-        </div>
-        <div class="laser-status-badge">
-          <div class="laser-pulse"></div>
-          <span>พร้อมฉายแสงเลเซอร์แนวนอนเพื่อตรวจระดับและเทียบความสูง</span>
-        </div>
-        <button class="btn btn-secondary" data-action="useLaserLevel" data-tip-title="🔴 เลเซอร์วัดระดับ (Laser Level)" data-tip-sc="LS" data-tip-desc="ฉายเส้นเลเซอร์แนวนอน วัดระดับ Z แบบ Realtime เทียบ Benchmark" data-tip-mouse="คลิกจุดแรก: กำหนดระดับ Benchmark | ขยับเมาส์: อ่านค่า ΔZ" data-tip-keys="Esc: ยกเลิก Benchmark / ออกจากเครื่องมือ">🔴 เปิดเลเซอร์วัดระดับ <span class="shortcut-badge">LS</span></button>
-      </div>
-
-      <!-- Phase -->
-      <div class="tool-card">
-        <div class="tool-card-header">
-          <div class="tool-card-icon">🔄</div>
-          <div>
-            <div class="tool-card-title">กำหนดเฟสการทำงาน</div>
-            <div class="tool-card-sub">Construction Phase</div>
-          </div>
-        </div>
-        <div class="phase-pills">
-          <div class="pill" data-phase="existing">ของเดิม</div>
-          <div class="pill" data-phase="demolition">รื้อถอน</div>
-          <div class="pill active-pill" data-phase="new_construction">ก่อสร้างใหม่</div>
-        </div>
-        <button class="btn btn-primary" data-action="setPhase">✅ ตั้งค่าเฟส</button>
-      </div>
-
-    </div><!-- /section-body -->
-  </div><!-- /section 1 -->
-
-  
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════
-       WORKSPACE 3: 📊 ถอดปริมาณ & ราคาก่อสร้าง (TAKEOFF & BOQ)
-  ═══════════════════════════════════════════════════════════ -->
-  <div class="workspace-pane" id="pane-takeoff">
-    <div class="pane-header-title">
-      <div class="title-main">📊 ถอดปริมาณและประเมินราคา (Quantity Takeoff & Costing)</div>
-      <div class="title-sub">คำนวณปริมาตรคอนกรีต ไม้แบบ พื้นที่ผิว และสรุปราคา BOQ มาตรฐาน วสท.</div>
-    </div>
-
-    <!-- INSTANT TAKEOFF HUD CARD -->
-  <div id="takeoff-hud-card" class="takeoff-hud-card">
-    <div class="takeoff-hud-header">
-      <div class="takeoff-hud-title">⚡ ถอดปริมาณด่วน (Takeoff HUD)</div>
-      <span class="takeoff-hud-badge" id="hud-scope-badge">ทั้งโครงการ</span>
-    </div>
-    <div class="takeoff-hud-grid">
-      <div class="hud-item">
-        <div class="hud-lbl">คอนกรีตรวม</div>
-        <div class="hud-val highlight" id="hud-concrete">0.00 <span class="hud-unit">คิว</span></div>
-      </div>
-      <div class="hud-item">
-        <div class="hud-lbl">ไม้แบบรวม</div>
-        <div class="hud-val" id="hud-formwork">0.00 <span class="hud-unit">ตร.ม.</span></div>
-      </div>
-      <div class="hud-item">
-        <div class="hud-lbl">ผิวผนังสุทธิ</div>
-        <div class="hud-val" id="hud-wall">0.00 <span class="hud-unit">ตร.ม.</span></div>
-      </div>
-      <div class="hud-item">
-        <div class="hud-lbl">พื้น/กระเบื้อง</div>
-        <div class="hud-val" id="hud-tile">0.00 <span class="hud-unit">ตร.ม.</span></div>
-      </div>
-      <div class="hud-item">
-        <div class="hud-lbl">บัวเชิงผนัง</div>
-        <div class="hud-val" id="hud-skirting">0.00 <span class="hud-unit">ม.</span></div>
-      </div>
-      <div class="hud-item">
-        <div class="hud-lbl">งานทาสี 2 ด้าน</div>
-        <div class="hud-val" id="hud-paint">0.00 <span class="hud-unit">ตร.ม.</span></div>
-      </div>
-    </div>
-
-    <!-- BOQ ACTIONS CARD -->
-    <div class="tool-card" style="margin-top: 12px;">
-      <div class="tool-card-header">
-        <div class="tool-card-icon">💰</div>
-        <div>
-          <div class="tool-card-title">รายงานและส่งออก BOQ (Costing Reports)</div>
-          <div class="tool-card-sub">ออกตารางประเมินราคาทั้งโครงการ พร้อมสูตรคำนวณ</div>
-        </div>
-      </div>
-      <div style="display: flex; gap: 8px; margin-top: 10px;">
-        <button class="btn btn-primary" data-action="exportBoq" style="flex: 2;">
-          💰 สรุป BOQ & ต้นทุน
-        </button>
-        <button class="btn btn-secondary" data-action="exportBoqCsv" style="flex: 1.5;">
-          📊 ส่งออก CSV (Excel)
-        </button>
-        <button class="btn btn-secondary" data-action="showBbs" style="flex: 1;">
-          📋 ตารางดัดเหล็ก BBS
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════
-       WORKSPACE 4: 📑 แบบก่อสร้าง & LAYOUT (EXTENSION SUITE)
-  ═══════════════════════════════════════════════════════════ -->
-  <div class="workspace-pane" id="pane-layout">
-    <div class="pane-header-title">
-      <div class="title-main">📑 ออกแบบก่อสร้างส่ง LayOut (Extension & Drawing Suite)</div>
-      <div class="title-sub">จัดทำแบบแปลน รูปด้าน รูปตัด ดึง Dimension และปักหมุดระดับในคลิกเดียว</div>
-    </div>
-
-    <!-- 1-CLICK SCENE GENERATOR -->
-    <div class="tool-card">
-      <div class="tool-card-header">
-        <div class="tool-card-icon">📑</div>
-        <div>
-          <div class="tool-card-title">สร้าง 5 Scenes สำหรับ LayOut (1-Click Setup)</div>
-          <div class="tool-card-sub">สร้างแปลนสถาปัตย์ แปลนโครงสร้าง แปลนหลังคา รูปด้าน และรูปตัด A</div>
-        </div>
-      </div>
-      <p style="font-size: 11.5px; color: #94a3b8; margin: 8px 0;">
-        ระบบจะจัดมุมมองกล้องเป็น <b>Parallel Projection</b> (ฉายขนาน) พร้อมตั้งค่า Style ลายเส้นแบบพิมพ์เขียวให้อัตโนมัติ พร้อมนำไปวาง Viewport ใน LayOut ได้ทันที
-      </p>
-      <button class="btn btn-primary" data-action="generateExtensionScenes" style="width: 100%;">
-        📑 สร้าง 5 Scenes ส่งเข้า LayOut เดี๋ยวนี้
-      </button>
-    </div>
-
-    <!-- AUTO DIMENSION & SPOT LEVEL -->
-    <div class="tool-card" style="margin-top: 12px;">
-      <div class="tool-card-header">
-        <div class="tool-card-icon">📏</div>
-        <div>
-          <div class="tool-card-title">เครื่องมือบอกระยะและระดับความสูง (Annotation Tools)</div>
-          <div class="tool-card-sub">เส้นบอกขนาดและป้ายระดับมาตรฐานแบบสถาปัตย์ไทย</div>
-        </div>
-      </div>
-      <div class="quick-ribbon-grid" style="margin-top: 10px;">
-        <button class="ribbon-btn" data-action="autoDimension" data-tool-name="ดึงระยะ Auto [DIM]" title="ดึงเส้นบอกระยะเสา ผนัง และระยะรวมอัตโนมัติ">
-          <span class="ribbon-icon">📏</span>
-          <span class="ribbon-lbl">ดึงระยะ Auto</span>
-          <span class="ribbon-badge">DIM</span>
-        </button>
-        <button class="ribbon-btn" data-action="activateSpotElevation" data-tool-name="ปักหมุดระดับ [LVL]" title="คลิกปักหมุดสัญลักษณ์ระดับบนพื้นผิว (▼ FL. / ▼ GL. / ▼ BEAM)">
-          <span class="ribbon-icon">🎯</span>
-          <span class="ribbon-lbl">ปักหมุดระดับ</span>
-          <span class="ribbon-badge">LVL</span>
-        </button>
-        <button class="ribbon-btn" data-action="useLaserLevel" data-tool-name="เลเซอร์วัดระดับ [LS]" title="เลเซอร์วัดระดับและหาระยะต่างระดับ">
-          <span class="ribbon-icon">🔴</span>
-          <span class="ribbon-lbl">เลเซอร์วัดระดับ</span>
-          <span class="ribbon-badge">LS</span>
-        </button>
-        <button class="ribbon-btn" data-action="smartStretch" data-tool-name="ยืดขอบไม่เพี้ยน [SS]" title="ยืด/ย่อสเกลประตู หน้าต่าง ตู้ โดยขอบเฟรมไม่เพี้ยน (9-Slice)">
-          <span class="ribbon-icon">↔️</span>
-          <span class="ribbon-lbl">ยืดขอบไม่เพี้ยน</span>
-          <span class="ribbon-badge">SS</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- ROOF TOOLS FOR EXTENSIONS -->
-    <div class="tool-card" style="margin-top: 12px;">
-      <div class="tool-card-header">
-        <div class="tool-card-icon">🏠</div>
-        <div>
-          <div class="tool-card-title">หลังคาและกันสาดงานต่อเติม (Roofing & Canopy)</div>
-          <div class="tool-card-sub">ปั้นหลังคาโรงรถ หลังคาครัว พร้อมเชิงชายและรางน้ำ</div>
-        </div>
-      </div>
-      <div class="quick-ribbon-grid" style="margin-top: 10px;">
-        <button class="ribbon-btn" data-action="drawRevitAutoRoof" data-tool-name="หลังคา Auto Revit [AR]" title="สร้างหลังคา Auto แบบ Revit พร้อมแนบหัวผนังปิดจั่ว">
-          <span class="ribbon-icon">🏠</span>
-          <span class="ribbon-lbl">หลังคา Auto Revit</span>
-          <span class="ribbon-badge">AR</span>
-        </button>
-        <button class="ribbon-btn" data-action="generateHipGableRoof" data-tool-name="ปั้นหลังคาจั่ว/ปั้นหยา [RF2]" title="สร้างหลังคาปั้นหยา/จั่ว พร้อมเชิงชาย 1-Click">
-          <span class="ribbon-icon">🏠</span>
-          <span class="ribbon-lbl">หลังคาจั่ว/ปั้นหยา</span>
-          <span class="ribbon-badge">RF2</span>
-        </button>
-        <button class="ribbon-btn" data-action="stretchByArea" data-tool-name="ยืดตามพื้นที่ [SA]" title="ยืดขยายตามพื้นที่เป้าหมาย ตร.ม.">
-          <span class="ribbon-icon">📐</span>
-          <span class="ribbon-lbl">ยืดตามพื้นที่</span>
-          <span class="ribbon-badge">SA</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-</div>
 
 <script src="panel.js"></script>
 </body>

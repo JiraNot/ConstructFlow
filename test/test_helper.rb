@@ -237,6 +237,10 @@ class FakeFace
   def erase!
     true
   end
+
+  def pushpull(*_args)
+    true
+  end
 end
 
 class FakeEdge

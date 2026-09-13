@@ -9,14 +9,15 @@ end
 
 module UI
   class << self
-    attr_accessor :scheduled_callbacks
+    attr_accessor :scheduled_callbacks unless method_defined?(:scheduled_callbacks=)
 
-    def start_timer(_delay, _repeat, &callback)
+    alias_method :orig_start_timer, :start_timer if method_defined?(:start_timer)
+    def start_timer(_delay, _repeat = false, &callback)
       self.scheduled_callbacks ||= []
       scheduled_callbacks << callback
     end
   end
-end unless defined?(UI)
+end
 
 require File.join(__dir__, '../../apps/sketchup-extension/constructflow/core/sketchup_app_observer')
 

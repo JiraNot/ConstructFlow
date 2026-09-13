@@ -2,6 +2,11 @@
 
 require 'json'
 require_relative 'i18n'
+require_relative '../modules/extension/extension_presets_catalog'
+require_relative '../modules/extension/extension_presets_builder'
+require_relative 'costing/thai_cost_database'
+require_relative 'costing/boq_excel_exporter'
+require_relative 'layout/thai_a3_drawing_sheet_service'
 
 module JiraNot
   module ConstructFlow
@@ -1469,6 +1474,91 @@ module JiraNot
                 rotation_deg: p['rotation_deg'].to_f
               )
             )
+            :no_state_push
+          },
+
+          'create_extension_preset' => lambda { |runtime, p|
+            preset_id = p['preset_id'].to_s.strip
+            raise 'กรุณาระบุพรีเซ็ตที่ต้องการสร้าง' if preset_id.empty?
+
+            preset = Extension::ExtensionPresetsCatalog.find(preset_id)
+            raise "ไม่พบข้อมูลพรีเซ็ต: #{preset_id}" unless preset
+
+            grp = Extension::ExtensionPresetsBuilder.build_preset(
+              preset_id,
+              [p['x'] || 0, p['y'] || 0, p['z'] || 0],
+              runtime.active_model
+            )
+            if grp
+              HtmlDialogManager.toast("สร้าง #{preset[:title_th]} เรียบร้อยแล้ว", level: 'success')
+              if runtime.respond_to?(:active_model) && runtime.active_model.respond_to?(:selection)
+                runtime.active_model.selection.clear rescue nil
+                runtime.active_model.selection.add(grp) rescue nil
+              end
+            else
+              HtmlDialogManager.toast("ไม่สามารถสร้างโมเดลพรีเซ็ตได้", level: 'error')
+            end
+            :no_state_push
+          },
+
+          'export_thai_boq_excel' => lambda { |runtime, p|
+            cost_db = Costing::ThaiCostDatabase.new
+            hud = Core::TakeoffHUDService.compute(runtime) rescue {}
+            conc_m3 = Float(hud[:concrete_m3] || 8.5)
+            form_m2 = Float(hud[:formwork_m2] || 24.0)
+            wall_m2 = Float(hud[:wall_area_m2] || 45.0)
+            tile_m2 = Float(hud[:tile_area_m2] || 20.0)
+            rebar_kg = (conc_m3 * 90.0).round(2)
+
+            factor_f = Float(p['factor_f'] || 0.12)
+            lines = [
+              cost_db.calculate_line_total(:concrete_ready_mix_240ksc, conc_m3, factor_f),
+              cost_db.calculate_line_total(:rebar_db12, rebar_kg * 0.6, factor_f),
+              cost_db.calculate_line_total(:rebar_rb9, rebar_kg * 0.4, factor_f),
+              cost_db.calculate_line_total(:formwork_wood, form_m2, factor_f),
+              cost_db.calculate_line_total(:aac_block_75, wall_m2, factor_f),
+              cost_db.calculate_line_total(:plastering_smooth, wall_m2 * 2.0, factor_f),
+              cost_db.calculate_line_total(:ceramic_tile_60x60, tile_m2, factor_f),
+              cost_db.calculate_line_total(:metalsheet_snaplock_pu, 28.0, factor_f),
+              cost_db.calculate_line_total(:sliding_door_20x22, 1.0, factor_f),
+              cost_db.calculate_line_total(:acrylic_paint, wall_m2 * 2.0, factor_f)
+            ].compact
+
+            user_profile = ENV['USERPROFILE'] || 'C:/Users/Dulla'
+            desktop_dir = File.join(user_profile, 'Desktop')
+            timestamp = Time.now.strftime('%Y%m%d_%H%M%S')
+            file_path = File.join(desktop_dir, "ConstructFlow_BOQ_#{timestamp}.csv")
+
+            metadata = {
+              project_name: p['project_name'] || "โครงการต่อเติมที่พักอาศัยมาตรฐาน",
+              owner_name: p['owner_name'] || "เจ้าของอาคาร",
+              factor_f: factor_f,
+              date: Time.now.strftime('%d/%m/%Y')
+            }
+
+            Costing::BoqExcelExporter.export_to_csv(lines, metadata, file_path)
+            HtmlDialogManager.toast("ส่งออก BOQ (Excel CSV) สำเร็จ: #{File.basename(file_path)}", level: 'success')
+            if defined?(UI) && UI.respond_to?(:openURL)
+              clean_fpath = file_path.gsub('\\', '/')
+              UI.openURL("file:///#{clean_fpath}") rescue nil
+            end
+            :no_state_push
+          },
+
+          'generate_a3_drawing_sheets' => lambda { |runtime, p|
+            res = Core::Tools::ExtensionSceneGenerator.generate(runtime)
+            metadata = {
+              project_name: p['project_name'] || 'โครงการต่อเติมที่พักอาศัย',
+              owner_name: p['owner_name'] || 'เจ้าของอาคาร',
+              designer: p['designer'] || 'ConstructFlow Team',
+              scale: p['scale'] || '1:75'
+            }
+            user_profile = ENV['USERPROFILE'] || 'C:/Users/Dulla'
+            desktop_dir = File.join(user_profile, 'Desktop')
+            manifest_path = File.join(desktop_dir, 'ConstructFlow_LayOut_A3_Manifest.json')
+            Layout::ThaiA3DrawingSheetService.export_manifest_json(manifest_path, metadata)
+
+            HtmlDialogManager.toast("สร้าง Scenes และชุดแบบ LayOut A3 สำเร็จ (บันทึกข้อมูลบน Desktop)", level: 'success')
             :no_state_push
           },
 
