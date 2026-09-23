@@ -6,13 +6,22 @@ class NativeToolContractTest < Minitest::Test
   ROOT = File.expand_path('../..', __dir__)
   TOOLS_ROOT = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules')
 
+  # Source assertions are checkout-agnostic: accept LF or CRLF line endings.
+  def self.read_source(path)
+    File.read(path).gsub("\r\n", "\n")
+  end
+
+  def read_source(path)
+    self.class.read_source(path)
+  end
+
   def test_tools_with_numeric_text_input_enable_sketchup_vcb
     tool_files = Dir[File.join(TOOLS_ROOT, '**', 'tools', '*.rb')]
     numeric_tools = tool_files.select { |path| File.read(path).include?('def onUserText') }
 
     refute_empty numeric_tools
     numeric_tools.each do |path|
-      source = File.read(path)
+      source = read_source(path)
       assert_includes source, 'def enableVCB?', path
     end
   end
@@ -23,7 +32,7 @@ class NativeToolContractTest < Minitest::Test
 
     refute_empty draw_tools
     draw_tools.each do |path|
-      assert_includes File.read(path), 'def getExtents', path
+      assert_includes read_source(path), 'def getExtents', path
     end
   end
 
@@ -33,12 +42,12 @@ class NativeToolContractTest < Minitest::Test
 
     refute_empty draw_tools
     draw_tools.each do |path|
-      assert_includes File.read(path), 'def deactivate(view)', path
+      assert_includes read_source(path), 'def deactivate(view)', path
     end
   end
 
   def test_wall_draw_clears_preview_when_a_click_has_no_valid_input_point
-    source = File.read(File.join(TOOLS_ROOT, 'architecture', 'tools', 'wall_tool.rb'))
+    source = read_source(File.join(TOOLS_ROOT, 'architecture', 'tools', 'wall_tool.rb'))
     assert_includes source, 'unless @input_point.valid?'
     assert_includes source, '@hover_point = nil'
     assert_includes source, '@preview = nil'
@@ -46,7 +55,7 @@ class NativeToolContractTest < Minitest::Test
     assert_includes source, "view.draw_text(@hover_point, 'Click to start Smart Wall')"
     assert_includes source, 'return unless key == 16 && !repeat # Shift'
     %w[floor_tool room_tool ceiling_tool].each do |tool_name|
-      tool_source = File.read(File.join(TOOLS_ROOT, 'architecture', 'tools', "#{tool_name}.rb"))
+      tool_source = read_source(File.join(TOOLS_ROOT, 'architecture', 'tools', "#{tool_name}.rb"))
       assert_includes tool_source, '@plane.project(Core::Units.point_to_mm(@input_point.position))', tool_name
     end
   end
@@ -74,14 +83,14 @@ class NativeToolContractTest < Minitest::Test
 
     lifecycle_tools.each do |path|
       assert File.file?(path), path
-      assert_includes File.read(path), 'def deactivate(view)', path
+      assert_includes read_source(path), 'def deactivate(view)', path
     end
   end
 
   def test_hosted_plan_tools_accept_and_apply_an_active_level
-    opening_tool = File.read(File.join(TOOLS_ROOT, 'opening', 'tools', 'opening_tool.rb'))
-    door_window_tool = File.read(File.join(TOOLS_ROOT, 'door_window', 'tools', 'place_tool.rb'))
-    registration = File.read(File.join(TOOLS_ROOT, 'architecture', 'registration.rb'))
+    opening_tool = read_source(File.join(TOOLS_ROOT, 'opening', 'tools', 'opening_tool.rb'))
+    door_window_tool = read_source(File.join(TOOLS_ROOT, 'door_window', 'tools', 'place_tool.rb'))
+    registration = read_source(File.join(TOOLS_ROOT, 'architecture', 'registration.rb'))
 
     assert_includes opening_tool, 'level_id: nil'
     assert_includes opening_tool, "PlanSelectionFilter.new(object_types: ['architecture.wall'], level_id: @level_id)"
@@ -91,7 +100,7 @@ class NativeToolContractTest < Minitest::Test
     assert_includes door_window_tool, 'point_mm = placement_point_mm(target)'
     assert_includes door_window_tool, 'def host_wall_for(target)'
     assert_includes door_window_tool, "Sketchup.set_status_text('Pick a valid ConstructFlow plan point.', SB_PROMPT)"
-    wall_edit_tool = File.read(File.join(TOOLS_ROOT, 'architecture', 'tools', 'wall_edit_tool.rb'))
+    wall_edit_tool = read_source(File.join(TOOLS_ROOT, 'architecture', 'tools', 'wall_edit_tool.rb'))
     assert_includes wall_edit_tool, 'level_id: nil'
     assert_includes wall_edit_tool, "PlanSelectionFilter.new(object_types: ['architecture.wall'], level_id: @active_level_id)"
     assert_includes wall_edit_tool, 'return unless key == 16 && !repeat'
@@ -105,7 +114,7 @@ class NativeToolContractTest < Minitest::Test
     assert_includes wall_edit_tool, '@plane = Core::PlanLevelContext.new(@runtime, @level_id)'
     assert_includes wall_edit_tool, '@hover_definition = @hover_wall && WallRepository.new.read(@hover_wall.entity)'
     assert_includes wall_edit_tool, "label = @copy_mode ? 'Click Smart Wall to copy' : 'Click Smart Wall to edit'"
-    boundary_tool = File.read(File.join(TOOLS_ROOT, 'architecture', 'tools', 'boundary_edit_tool.rb'))
+    boundary_tool = read_source(File.join(TOOLS_ROOT, 'architecture', 'tools', 'boundary_edit_tool.rb'))
     assert_includes boundary_tool, 'level_id: nil'
     assert_includes boundary_tool, 'level_id: @active_level_id'
     assert_includes boundary_tool, 'PlanSelectionFilter.new(object_types: [@object_type], level_id: @active_level_id)'
@@ -113,8 +122,8 @@ class NativeToolContractTest < Minitest::Test
     assert_includes boundary_tool, '@plane = Core::PlanLevelContext.new(@runtime, @level_id)'
     assert_includes boundary_tool, '@hover_definition = @hover_object && @repository.public_send(@read_method, @hover_object.entity)'
     assert_includes boundary_tool, 'view.draw_text(points[points.length / 2], "Click #{@label} to edit")'
-    opening_edit_tool = File.read(File.join(TOOLS_ROOT, 'opening', 'tools', 'opening_edit_tool.rb'))
-    opening_registration = File.read(File.join(TOOLS_ROOT, 'opening', 'registration.rb'))
+    opening_edit_tool = read_source(File.join(TOOLS_ROOT, 'opening', 'tools', 'opening_edit_tool.rb'))
+    opening_registration = read_source(File.join(TOOLS_ROOT, 'opening', 'registration.rb'))
     assert_includes opening_edit_tool, 'level_id: nil'
     assert_includes opening_edit_tool, "PlanSelectionFilter.new(object_types: ['architecture.wall'], level_id: @active_level_id)"
     assert_includes opening_edit_tool, 'def level_compatible_opening?(object)'
@@ -127,7 +136,7 @@ class NativeToolContractTest < Minitest::Test
     assert_includes opening_registration, 'level_error = host_level_error(input, replacement)'
     assert_includes opening_registration, 'level_error = host_level_error(input, host)'
     assert_includes door_window_tool, '@input[:level_id] = @level_id if @level_id'
-    door_window_registration = File.read(File.join(TOOLS_ROOT, 'door_window', 'registration.rb'))
+    door_window_registration = read_source(File.join(TOOLS_ROOT, 'door_window', 'registration.rb'))
     assert_includes door_window_registration, 'host Smart Wall is not on the requested plan level'
     assert_includes door_window_registration, 'def opening_host_level_error(input, opening, runtime)'
     assert_includes door_window_registration, 'Opening host wall is not on the requested plan level'
@@ -138,10 +147,10 @@ class NativeToolContractTest < Minitest::Test
     assert_includes registration, "command: 'ModifyFloorBoundary', label: 'Floor', level_id: values[0]"
     assert_includes registration, "command: 'ModifyRoomBoundary', label: 'Room', level_id: values[0]"
     assert_includes registration, "command: 'ModifyCeilingBoundary', label: 'Ceiling', level_id: values[0]"
-    architecture_source = File.read(File.join(TOOLS_ROOT, 'architecture', 'registration.rb'))
+    architecture_source = read_source(File.join(TOOLS_ROOT, 'architecture', 'registration.rb'))
     assert_includes architecture_source, "id: 'architecture.wall.schedule'"
     assert_includes architecture_source, "'EditWallSchedule'"
-    runtime_source = File.read(File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'main.rb'))
+    runtime_source = read_source(File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'main.rb'))
     assert_includes runtime_source, "@menu.add_item('Create Level')"
     assert_includes runtime_source, "@commands.execute(\n              'CreateLevel'"
     assert_includes runtime_source, "@menu.add_item('Edit Level')"
@@ -159,7 +168,7 @@ class NativeToolContractTest < Minitest::Test
       'opening/tools/opening_edit_tool.rb' => '@plane.project(Core::Units.point_to_mm(@input_point.position))',
       'door_window/tools/place_tool.rb' => '@plane.project(Core::Units.point_to_mm(@input_point.position))'
     }.each do |relative_path, contract|
-      assert_includes File.read(File.join(TOOLS_ROOT, relative_path)), contract, relative_path
+      assert_includes read_source(File.join(TOOLS_ROOT, relative_path)), contract, relative_path
     end
   end
 end

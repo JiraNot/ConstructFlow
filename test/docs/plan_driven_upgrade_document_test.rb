@@ -6,10 +6,11 @@ class PlanDrivenUpgradeDocumentTest < Minitest::Test
   ROOT = File.expand_path('../..', __dir__)
 
   def setup
-    @plan = File.read(File.join(ROOT, 'docs', 'PLAN-DRIVEN-MODELING-UPGRADE.md'))
-    @roadmap = File.read(File.join(ROOT, 'docs', 'ROADMAP.md'))
-    @readme = File.read(File.join(ROOT, 'README.md'))
-    @entrypoint = File.read(File.join(ROOT, 'docs', 'IMPLEMENTATION-ENTRYPOINT.md'))
+    # Normalize CRLF/CR line endings so content assertions are checkout-agnostic
+    @plan = File.read(File.join(ROOT, 'docs', 'PLAN-DRIVEN-MODELING-UPGRADE.md')).gsub("\r\n", "\n")
+    @roadmap = File.read(File.join(ROOT, 'docs', 'ROADMAP.md')).gsub("\r\n", "\n")
+    @readme = File.read(File.join(ROOT, 'README.md')).gsub("\r\n", "\n")
+    @entrypoint = File.read(File.join(ROOT, 'docs', 'IMPLEMENTATION-ENTRYPOINT.md')).gsub("\r\n", "\n")
   end
 
   def test_master_plan_keeps_the_declared_upgrade_tracks_and_north_star
