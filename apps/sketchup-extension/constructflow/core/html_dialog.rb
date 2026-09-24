@@ -1021,7 +1021,10 @@ module JiraNot
                 category:       p['category'].to_s,
                 operation:      p['operation'].to_s,
                 frame_material: p['frame_material'].to_s,
-                panel_style:    p['panel_style'].to_s
+                panel_style:    p['panel_style'].to_s,
+                frame_depth_mm: p['frame_depth_mm'],
+                leaf_thickness_mm: p['leaf_thickness_mm'],
+                mullion_width_mm: p['mullion_width_mm']
               )
             )
             :no_state_push
