@@ -159,13 +159,18 @@ class NativeToolContractTest < Minitest::Test
       File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'core', 'core_commands.rb')
     ]
     runtime_source = runtime_files.map { |path| read_source(path) }.join("\n")
-    assert_includes runtime_source, "menu.add_item('Create Level')"
+    assert_includes runtime_source, "menu.add_item('📐 สร้างระดับชั้น (Level)')"
     assert_includes runtime_source, "execute(\n            'CreateLevel'"
-    assert_includes runtime_source, "menu.add_item('Edit Level')"
+    assert_includes runtime_source, "menu.add_item('📏 แก้ไขระดับชั้น (Level)')"
     assert_includes runtime_source, "execute(\n            'ModifyLevel'"
-    assert_includes runtime_source, "menu.add_item('Show Levels')"
-    assert_includes runtime_source, "menu.add_item('Edit Project')"
+    assert_includes runtime_source, "menu.add_item('🗂 แสดงระดับชั้นทั้งหมด')"
+    assert_includes runtime_source, "menu.add_item('📋 ตั้งค่าโครงการ')"
     assert_includes runtime_source, "'UpdateProjectMetadata'"
+
+    # Single-menu contract: exactly one place may create the ConstructFlow
+    # submenu (Core::UiEntry). Duplicates used to spawn parallel menus.
+    assert_equal 1, runtime_source.scan("add_submenu('ConstructFlow')").size,
+                 'the ConstructFlow submenu must be created exactly once'
 
     {
       'surface/tools/boundary_tool.rb' => '@plane.project(Core::Units.point_to_mm(@input_point.position))',

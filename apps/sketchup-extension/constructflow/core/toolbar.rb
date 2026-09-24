@@ -19,9 +19,13 @@ module JiraNot
 
         module_function
 
-        def install(runtime)
+        # Installs the launcher toolbar and attaches every domain submenu
+        # into the ONE ConstructFlow menu created by Core::UiEntry.
+        def install(runtime, main_menu)
           install_toolbar(runtime) if defined?(UI) && defined?(UI::Toolbar)
-          install_menus(runtime)   if defined?(UI) && UI.respond_to?(:menu)
+          return unless defined?(UI) && UI.respond_to?(:menu)
+
+          install_domain_menus(runtime, main_menu)
         end
 
         def install_toolbar(runtime)
@@ -43,18 +47,9 @@ module JiraNot
           tb
         end
 
-        def install_menus(runtime)
-          main_menu = UI.menu('Extensions').add_submenu(I18n.t('menu.main'))
-
-          main_menu.add_item("🏗 เปิดแผง ConstructFlow\tCF") { ShortcutManager.execute('CF', runtime) }
-          main_menu.add_separator
-
-          # Quick-access menu items with standard Revit/AutoCAD shortcuts
-          setup_menu = main_menu.add_submenu('⚙️ ตั้งค่าโครงการ')
-          setup_menu.add_item("Inspector สถานะโครงการ\tIN") { ShortcutManager.execute('IN', runtime) }
-          setup_menu.add_item('กำหนดระดับชั้น (Level)')  { HtmlDialogManager.open_panel(runtime) }
-          setup_menu.add_item('กำหนดเฟส (Phase)')        { HtmlDialogManager.open_panel(runtime) }
-
+        def install_domain_menus(runtime, main_menu)
+          # Quick-access items (panel/inspector/project/levels) live in
+          # Core::UiEntry; only the domain workspaces are added here.
           struct_menu = main_menu.add_submenu('🏛 โครงสร้าง')
           struct_menu.add_item("วางเสาคสล. (Column)\tCL") { ShortcutManager.execute('CL', runtime) }
           struct_menu.add_item("วาดคานโครงสร้าง (Beam)\tBM") { ShortcutManager.execute('BM', runtime) }

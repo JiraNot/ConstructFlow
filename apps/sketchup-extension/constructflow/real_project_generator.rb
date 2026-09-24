@@ -607,34 +607,8 @@ module JiraNot
   end
 end
 
-if defined?(UI)
-  UI.menu('Extensions').add_item('🏗️ ConstructFlow: สร้างและบันทึกโมเดลจริง (.SKP)') do
-    JiraNot::ConstructFlow::RealProjectGenerator.generate_and_save!
-    UI.messagebox("ConstructFlow: อัปเดตโมเดลสถาปัตย์สมบูรณ์และบันทึกไฟล์ .SKP สำเร็จเรียบร้อยบน Desktop!")
-  end
-
-  # Optional one-shot auto-generate when SketchUp opens.
-  # Disabled by default: the legacy timer wiped and regenerated the active
-  # model on every startup. Set CONSTRUCTFLOW_AUTO_PROJECT=1 to opt in.
-  if ENV['CONSTRUCTFLOW_AUTO_PROJECT'] == '1'
-    $cf_gen_timer = UI.start_timer(1.0, true) do
-    model = Sketchup.active_model
-    if model && model.active_entities
-      log_path = File.join(Core::Paths.user_output_dir, 'constructflow_skp_status.txt')
-      status = File.exist?(log_path) ? File.read(log_path) : ''
-      unless status.include?('SUCCESS_PREMIUM')
-        begin
-          success = JiraNot::ConstructFlow::RealProjectGenerator.generate_and_save!
-          UI.stop_timer($cf_gen_timer) if success
-        rescue => e
-          warn("ConstructFlow auto-generate failed: #{e.class}: #{e.message}")
-          UI.stop_timer($cf_gen_timer)
-        end
-      else
-        UI.stop_timer($cf_gen_timer)
-      end
-    end
-    end
-  end
-end
+# The "สร้างโมเดลตัวอย่าง .SKP" menu item lives in Core::UiEntry (single
+# ConstructFlow menu). The legacy startup timer was removed entirely: it
+# wiped and regenerated the active model every second until a status file
+# appeared, which made SketchUp feel like nothing could be drawn.
 
