@@ -34,6 +34,10 @@ const CF = {
       }
       if (data.type === 'toast') CF.toast(data.message, data.level || 'info');
       if (data.type === 'error') CF.toast('⚠️ ' + data.message, 'error');
+      if (data.type === 'door_window_catalog') {
+        CF._dwCatalog = Array.isArray(data.items) ? data.items : [];
+        CF.renderDoorWindowGallery();
+      }
     } catch (e) {
       console.error('[CF receive error]', e);
     }
@@ -540,6 +544,13 @@ const CF = {
       const frame = gVal('dw-frame');
       const panel = gVal('dw-panel');
       const payload = { category: cat, operation: op, frame_material: frame, panel_style: panel };
+      const sel = CF._dwSelection;
+      if (sel) {
+        payload.type_id = sel.id;
+        payload.type_name = sel.name;
+        payload.width_mm = sel.width_mm;
+        payload.height_mm = sel.height_mm;
+      }
       const depth   = parseFloat(gVal('dw-depth') || '0');
       const leaf    = parseFloat(gVal('dw-leaf') || '0');
       const mullion = parseFloat(gVal('dw-mullion') || '0');
@@ -1125,6 +1136,135 @@ const CF = {
 
 
 
+  /* ── DOOR/WINDOW CATALOG GALLERY ───────────────────────── */
+  _dwCatalog: [],
+  _dwSelection: null,
+  _dwCatFilter: 'all',
+
+  initDoorWindowGallery() {
+    const search = el('dw-gallery-search');
+    if (search) {
+      search.addEventListener('input', () => CF.renderDoorWindowGallery());
+    }
+    document.querySelectorAll('.dw-cat-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('.dw-cat-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        CF._dwCatFilter = chip.dataset.cat || 'all';
+        CF.renderDoorWindowGallery();
+      });
+    });
+  },
+
+  _dwMatchesFilter(item) {
+    const cat = CF._dwCatFilter;
+    if (cat === 'all') return true;
+    if (cat === 'door') return item.category === 'door';
+    if (cat === 'window') return item.category === 'window';
+    if (cat === 'sliding') return item.operation === 'sliding';
+    if (cat === 'swing') return ['swing', 'swing_double', 'swing_double_ego', 'casement'].includes(item.operation);
+    if (cat === 'special') return ['louver', 'shutter', 'pivot', 'awning', 'hopper'].includes(item.operation);
+    if (cat === 'storefront') return String(item.id).startsWith('SF');
+    return true;
+  },
+
+  renderDoorWindowGallery() {
+    const grid = el('dw-gallery-grid');
+    if (!grid) return;
+    const term = (gVal('dw-gallery-search') || '').trim().toLowerCase();
+    const items = CF._dwCatalog.filter(item => {
+      if (!CF._dwMatchesFilter(item)) return false;
+      if (!term) return true;
+      const hay = [item.id, item.name, item.operation, item.panel_style,
+        `${item.width_mm}x${item.height_mm}`,
+        `${(item.width_mm / 1000).toFixed(1)}x${(item.height_mm / 1000).toFixed(1)}`].join(' ').toLowerCase();
+      return hay.includes(term);
+    });
+
+    const count = el('dw-gallery-count');
+    if (count) count.textContent = items.length;
+
+    if (!items.length) {
+      grid.innerHTML = '<div class="dw-gallery-empty">ไม่พบแบบที่ค้นหา</div>';
+      return;
+    }
+
+    grid.innerHTML = items.map(item => `
+      <div class="dw-card${CF._dwSelection && CF._dwSelection.id === item.id ? ' selected' : ''}" data-dw-id="${item.id}" title="${item.name} — ${item.width_mm}x${item.height_mm} มม. (${item.operation})">
+        ${CF.dwSymbolSvg(item)}
+        <div class="dw-card-name">${item.name}</div>
+        <div class="dw-card-size">${item.width_mm} × ${item.height_mm} มม.</div>
+      </div>`).join('');
+
+    grid.querySelectorAll('.dw-card').forEach(card => {
+      card.addEventListener('click', () => CF.selectDoorWindowCatalog(card.dataset.dwId));
+    });
+  },
+
+  dwSymbolSvg(item) {
+    const S = 'stroke="#fb923c" stroke-width="3" fill="none" stroke-linecap="round"';
+    const F = 'stroke="#fb923c" stroke-width="2.5" fill="none" stroke-linejoin="round"';
+    const box = `<rect x="12" y="8" width="76" height="44" ${F}/>`;
+    const op = item.operation;
+    let inner = '';
+    if (op === 'swing') {
+      inner = `<line x1="88" y1="52" x2="12" y2="8" ${S}/>`;
+    } else if (op === 'swing_double' || op === 'casement') {
+      inner = `<path d="M 50 8 L 14 50 Z M 50 8 L 86 50 Z" ${F}/>`;
+    } else if (op === 'swing_double_ego') {
+      inner = `<line x1="50" y1="8" x2="12" y2="52" ${S}/><line x1="50" y1="8" x2="88" y2="52" ${S}/>`;
+    } else if (op === 'sliding') {
+      inner = `<line x1="18" y1="30" x2="82" y2="30" ${S}/><path d="M 26 22 L 14 30 L 26 38" ${S}/><path d="M 74 22 L 86 30 L 74 38" ${S}/>`;
+    } else if (op === 'awning') {
+      inner = `<path d="M 12 10 L 50 34 L 88 10" ${S}/>`;
+    } else if (op === 'hopper') {
+      inner = `<path d="M 12 50 L 50 26 L 88 50" ${S}/>`;
+    } else if (op === 'pivot') {
+      inner = `<line x1="20" y1="48" x2="80" y2="12" ${S}/><circle cx="50" cy="30" r="4" fill="#fb923c"/>`;
+    } else if (op === 'louver') {
+      inner = [16, 26, 36, 46].map(y => `<line x1="16" y1="${y}" x2="84" y2="${y}" ${S}/>`).join('');
+    } else if (op === 'shutter') {
+      inner = [14, 21, 28, 35, 42, 49].map(y => `<line x1="14" y1="${y}" x2="86" y2="${y}" stroke="#fb923c" stroke-width="2" fill="none"/>`).join('');
+    } else {
+      inner = `<line x1="12" y1="8" x2="88" y2="52" stroke="#fb923c" stroke-width="2" opacity="0.55"/>`;
+    }
+    return `<svg viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">${box}${inner}</svg>`;
+  },
+
+  selectDoorWindowCatalog(id) {
+    const item = CF._dwCatalog.find(entry => entry.id === id);
+    if (!item) return;
+    CF._dwSelection = item;
+
+    setVal('dw-cat', item.category);
+    setVal('dw-op', item.operation);
+    setVal('dw-panel', item.panel_style);
+    setVal('dw-frame', item.frame_material === 'steel' ? 'steel' : 'aluminum');
+    setVal('dw-depth', item.frame_depth_mm || 100);
+    setVal('dw-leaf', item.leaf_thickness_mm || 40);
+    setVal('dw-mullion', item.mullion_width_mm || 0);
+
+    document.querySelectorAll('.dw-card').forEach(card => {
+      card.classList.toggle('selected', card.dataset.dwId === id);
+    });
+
+    let bar = el('dw-selected-bar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'dw-selected-bar';
+      bar.className = 'dw-selected-bar';
+      el('dw-gallery-grid').parentNode.insertBefore(bar, el('dw-gallery-grid').nextSibling);
+    }
+    bar.innerHTML = `<span>✓ ${item.name} (${item.id})</span><button type="button" class="dw-clear">✕ ยกเลิก</button>`;
+    bar.querySelector('.dw-clear').addEventListener('click', () => {
+      CF._dwSelection = null;
+      bar.remove();
+      document.querySelectorAll('.dw-card.selected').forEach(c => c.classList.remove('selected'));
+    });
+
+    CF.toast(`เลือกแบบ ${item.name} — ขนาด ${item.width_mm}x${item.height_mm} มม.`, 'info');
+  },
+
   showContextualDrawer(action, toolTitle) {
     const drawer = el('contextual-tool-drawer');
     const drawerTitle = el('drawer-tool-title');
@@ -1380,6 +1520,7 @@ const CF = {
     CF.initWebSocket();
     CF.initQuickRibbon();
     CF.initQuickPills();
+    CF.initDoorWindowGallery();
     CF.initAnchorMatrix();
     CF.initPresets();
     CF.initAccordion();

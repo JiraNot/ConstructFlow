@@ -4,6 +4,7 @@ require 'json'
 require_relative 'i18n'
 require_relative '../modules/extension/extension_presets_catalog'
 require_relative '../modules/extension/extension_presets_builder'
+require_relative '../modules/door_window/catalog'
 require_relative 'costing/thai_cost_database'
 require_relative 'costing/boq_excel_exporter'
 require_relative 'layout/thai_a3_drawing_sheet_service'
@@ -40,6 +41,7 @@ module JiraNot
           @dialog.add_action_callback('panel_ready') do
             push_state(runtime)
             push_selection(runtime)
+            push_door_window_catalog
           end
         end
 
@@ -182,6 +184,30 @@ module JiraNot
           @dialog.execute_script("CF.receive(#{payload.to_json})")
         rescue StandardError
           nil
+        end
+
+        # Push the ready-made door/window catalog → JS gallery. The catalog
+        # is pure data, so it ships once per panel open (no model access).
+        def push_door_window_catalog
+          return unless @dialog&.visible?
+
+          items = DoorWindow::Catalog.all.map do |entry|
+            {
+              'id' => entry[:id], 'name' => entry[:name], 'category' => entry[:category],
+              'operation' => entry[:operation], 'width_mm' => entry[:width_mm],
+              'height_mm' => entry[:height_mm], 'panel_style' => entry[:panel_style],
+              'roles' => entry[:roles] || [],
+              'frame_material' => entry[:frame] || 'aluminium',
+              'frame_width_mm' => entry[:frame] == 'steel' ? 60.0 : 45.0,
+              'frame_depth_mm' => entry[:depth] || 100,
+              'leaf_thickness_mm' => entry[:leaf] || 40,
+              'mullion_width_mm' => entry[:mullion] || 0
+            }
+          end
+          payload = { type: 'door_window_catalog', items: items }.to_json
+          @dialog.execute_script("CF.receive(#{payload.to_json})")
+        rescue StandardError => e
+          warn "[ConstructFlow] push_door_window_catalog error: #{e.message}"
         end
 
         # ── Private Helpers ──────────────────────────────────────
@@ -1024,7 +1050,11 @@ module JiraNot
                 panel_style:    p['panel_style'].to_s,
                 frame_depth_mm: p['frame_depth_mm'],
                 leaf_thickness_mm: p['leaf_thickness_mm'],
-                mullion_width_mm: p['mullion_width_mm']
+                mullion_width_mm: p['mullion_width_mm'],
+                type_id:        p['type_id'],
+                type_name:      p['type_name'],
+                width_mm:       p['width_mm'],
+                height_mm:      p['height_mm']
               )
             )
             :no_state_push

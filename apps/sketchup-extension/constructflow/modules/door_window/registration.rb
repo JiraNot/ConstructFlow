@@ -646,9 +646,26 @@ module JiraNot
 
         def preview_type(input, registry, opening_dimensions)
           type_id = input[:type_id] || input['type_id']
+          catalog_type = catalog_type_for(type_id, input)
+          return catalog_type if catalog_type
           return registry.fetch(type_id) if type_id && registry.registered?(type_id)
 
           build_type(input, opening_dimensions, type_id: type_id)
+        end
+
+        # Gallery placements reference a catalog id; resolve the full catalog
+        # spec (construction parameters included) with any dimension
+        # overrides from the payload.
+        def catalog_type_for(type_id, input)
+          return nil if type_id.to_s.strip.empty?
+          return nil unless DoorWindow::Catalog.find(type_id)
+
+          overrides = {}
+          width = input[:width_mm] || input['width_mm']
+          height = input[:height_mm] || input['height_mm']
+          overrides[:width_mm] = Float(width) if width
+          overrides[:height_mm] = Float(height) if height
+          DoorWindow::Catalog.build_type(type_id, **overrides)
         end
 
         def resolve_or_register_type(input, registry, opening_dimensions)

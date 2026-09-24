@@ -480,6 +480,24 @@
 
       <!-- 4. DRAWER: DOOR & WINDOW (ประตู/หน้าต่าง) -->
       <div class="drawer-panel" id="drawer-door-window" style="display:none;">
+        <div class="dw-gallery">
+          <div class="dw-gallery-head">
+            <span class="drawer-label">🗂 แกลเลอรีแบบสำเร็จรูป (<span id="dw-gallery-count">0</span> แบบ)</span>
+            <input type="search" id="dw-gallery-search" class="dw-gallery-search" placeholder="🔍 ค้นหาแบบ/รหัส/ขนาด...">
+          </div>
+          <div class="dw-gallery-cats" id="dw-gallery-cats">
+            <button type="button" class="dw-cat-chip active" data-cat="all">ทั้งหมด</button>
+            <button type="button" class="dw-cat-chip" data-cat="door">ประตู</button>
+            <button type="button" class="dw-cat-chip" data-cat="window">หน้าต่าง</button>
+            <button type="button" class="dw-cat-chip" data-cat="sliding">บานเลื่อน</button>
+            <button type="button" class="dw-cat-chip" data-cat="swing">บานเปิด/บานคู่</button>
+            <button type="button" class="dw-cat-chip" data-cat="special">พิเศษ (เกล็ด/ม้วน/หมุน)</button>
+            <button type="button" class="dw-cat-chip" data-cat="storefront">Storefront</button>
+          </div>
+          <div class="dw-gallery-grid" id="dw-gallery-grid">
+            <div class="dw-gallery-empty">กำลังโหลดแคตตาล็อก...</div>
+          </div>
+        </div>
         <div class="drawer-row">
           <span class="drawer-label">🚪 ขนาดประตูสำเร็จรูป:</span>
           <div class="quick-pill-row">

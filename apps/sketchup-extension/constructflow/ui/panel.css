@@ -2009,3 +2009,158 @@ select option { background: var(--bg-card); }
   font-size: 11px;
   font-weight: 600;
 }
+
+/* ── DOOR/WINDOW CATALOG GALLERY ─────────────────────────── */
+.dw-gallery {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.45);
+  padding: 8px;
+  margin-bottom: 10px;
+}
+
+.dw-gallery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.dw-gallery-search {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 5px 8px;
+  outline: none;
+}
+
+.dw-gallery-search:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.dw-gallery-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.dw-cat-chip {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dw-cat-chip:hover {
+  border-color: #38bdf8;
+  color: #f1f5f9;
+}
+
+.dw-cat-chip.active {
+  background: rgba(14, 165, 233, 0.2);
+  border-color: #0ea5e9;
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.dw-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.dw-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 4px 5px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.dw-card:hover {
+  border-color: #38bdf8;
+  background: rgba(51, 65, 85, 0.6);
+  transform: translateY(-1px);
+}
+
+.dw-card.selected {
+  border-color: #0ea5e9;
+  background: rgba(14, 165, 233, 0.14);
+  box-shadow: 0 0 8px rgba(14, 165, 233, 0.3);
+}
+
+.dw-card svg {
+  width: 100%;
+  height: 44px;
+  display: block;
+  margin: 0 auto 3px;
+}
+
+.dw-card .dw-card-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dw-card .dw-card-size {
+  font-size: 9.5px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.dw-gallery-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 18px 0;
+}
+
+.dw-selected-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  font-size: 11px;
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.dw-selected-bar .dw-clear {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.dw-selected-bar .dw-clear:hover {
+  color: #f87171;
+}

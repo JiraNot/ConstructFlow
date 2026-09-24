@@ -9,7 +9,8 @@ module JiraNot
       module Tools
         class DoorWindowTool
           def initialize(runtime:, category: 'door', operation: 'swing', frame_material: 'aluminium', panel_style: 'glazed',
-                         frame_depth_mm: nil, leaf_thickness_mm: nil, mullion_width_mm: nil)
+                         frame_depth_mm: nil, leaf_thickness_mm: nil, mullion_width_mm: nil,
+                         type_id: nil, type_name: nil, width_mm: nil, height_mm: nil)
             @runtime = runtime
             @category = category.to_s
             @operation = operation.to_s
@@ -18,6 +19,10 @@ module JiraNot
             @frame_depth_mm = frame_depth_mm
             @leaf_thickness_mm = leaf_thickness_mm
             @mullion_width_mm = mullion_width_mm
+            @type_id = type_id
+            @type_name = type_name
+            @width_mm = width_mm
+            @height_mm = height_mm
             @input_point = Sketchup::InputPoint.new
             @hovered_opening = nil
             @flip_swing = false
@@ -76,6 +81,10 @@ module JiraNot
             payload[:frame_depth_mm] = Float(@frame_depth_mm) if @frame_depth_mm
             payload[:leaf_thickness_mm] = Float(@leaf_thickness_mm) if @leaf_thickness_mm
             payload[:mullion_width_mm] = Float(@mullion_width_mm) if @mullion_width_mm
+            payload[:type_id] = @type_id if @type_id
+            payload[:type_name] = @type_name if @type_name
+            payload[:width_mm] = Float(@width_mm) if @width_mm
+            payload[:height_mm] = Float(@height_mm) if @height_mm
 
             result = @runtime.commands.execute('CreateDoorWindow', payload, project_id: @runtime.project.project_id)
 
