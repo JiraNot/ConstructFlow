@@ -38,6 +38,10 @@ const CF = {
         CF._dwCatalog = Array.isArray(data.items) ? data.items : [];
         CF.renderDoorWindowGallery();
       }
+      if (data.type === 'door_window_favorites') {
+        CF._dwFavorites = Array.isArray(data.items) ? data.items : [];
+        CF.renderDoorWindowGallery();
+      }
     } catch (e) {
       console.error('[CF receive error]', e);
     }
@@ -550,6 +554,7 @@ const CF = {
         payload.type_name = sel.name;
         payload.width_mm = sel.width_mm;
         payload.height_mm = sel.height_mm;
+        if (!CF._dwFavorites) CF._dwFavorites = [];
       }
       const depth   = parseFloat(gVal('dw-depth') || '0');
       const leaf    = parseFloat(gVal('dw-leaf') || '0');
@@ -1138,6 +1143,7 @@ const CF = {
 
   /* ── DOOR/WINDOW CATALOG GALLERY ───────────────────────── */
   _dwCatalog: [],
+  _dwFavorites: [],
   _dwSelection: null,
   _dwCatFilter: 'all',
 
@@ -1154,6 +1160,25 @@ const CF = {
         CF.renderDoorWindowGallery();
       });
     });
+    const saveBtn = el('dw-fav-save');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        const sel = CF._dwSelection;
+        const params = {
+          type_id: sel ? sel.id : '',
+          name: sel ? sel.name : '',
+          category: gVal('dw-cat'),
+          operation: gVal('dw-op'),
+          frame_material: gVal('dw-frame'),
+          panel_style: gVal('dw-panel')
+        };
+        if (sel) {
+          params.width_mm = sel.width_mm;
+          params.height_mm = sel.height_mm;
+        }
+        CF.send('save_door_window_favorite', params);
+      });
+    }
   },
 
   _dwMatchesFilter(item) {
@@ -1172,32 +1197,51 @@ const CF = {
     const grid = el('dw-gallery-grid');
     if (!grid) return;
     const term = (gVal('dw-gallery-search') || '').trim().toLowerCase();
-    const items = CF._dwCatalog.filter(item => {
+    const matches = item => {
       if (!CF._dwMatchesFilter(item)) return false;
       if (!term) return true;
       const hay = [item.id, item.name, item.operation, item.panel_style,
         `${item.width_mm}x${item.height_mm}`,
         `${(item.width_mm / 1000).toFixed(1)}x${(item.height_mm / 1000).toFixed(1)}`].join(' ').toLowerCase();
       return hay.includes(term);
-    });
+    };
+
+    const favorites = (CF._dwFavorites || []).filter(matches);
+    const items = CF._dwCatalog.filter(matches);
+    const total = favorites.length + items.length;
 
     const count = el('dw-gallery-count');
-    if (count) count.textContent = items.length;
+    if (count) count.textContent = total;
 
-    if (!items.length) {
+    if (!total) {
       grid.innerHTML = '<div class="dw-gallery-empty">ไม่พบแบบที่ค้นหา</div>';
       return;
     }
 
-    grid.innerHTML = items.map(item => `
+    const favHtml = favorites.map(item => `
+      <div class="dw-card fav${CF._dwSelection && CF._dwSelection.id === item.id ? ' selected' : ''}" data-dw-id="${item.id}" title="${item.name} — ${item.width_mm}x${item.height_mm} มม. (${item.operation})">
+        <button type="button" class="dw-fav-del" data-dw-del="${item.id}" title="ลบรายการโปรด">✕</button>
+        ${CF.dwSymbolSvg(item)}
+        <div class="dw-card-name">⭐ ${item.name}</div>
+        <div class="dw-card-size">${item.width_mm} × ${item.height_mm} มม.</div>
+      </div>`).join('');
+    const catHtml = items.map(item => `
       <div class="dw-card${CF._dwSelection && CF._dwSelection.id === item.id ? ' selected' : ''}" data-dw-id="${item.id}" title="${item.name} — ${item.width_mm}x${item.height_mm} มม. (${item.operation})">
         ${CF.dwSymbolSvg(item)}
         <div class="dw-card-name">${item.name}</div>
         <div class="dw-card-size">${item.width_mm} × ${item.height_mm} มม.</div>
       </div>`).join('');
 
+    grid.innerHTML = favHtml + catHtml;
+
     grid.querySelectorAll('.dw-card').forEach(card => {
       card.addEventListener('click', () => CF.selectDoorWindowCatalog(card.dataset.dwId));
+    });
+    grid.querySelectorAll('.dw-fav-del').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        CF.send('delete_door_window_favorite', { favorite_id: btn.dataset.dwDel });
+      });
     });
   },
 
@@ -1232,7 +1276,7 @@ const CF = {
   },
 
   selectDoorWindowCatalog(id) {
-    const item = CF._dwCatalog.find(entry => entry.id === id);
+    const item = (CF._dwCatalog || []).concat(CF._dwFavorites || []).find(entry => entry.id === id);
     if (!item) return;
     CF._dwSelection = item;
 

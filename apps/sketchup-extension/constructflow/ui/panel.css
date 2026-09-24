@@ -2164,3 +2164,51 @@ select option { background: var(--bg-card); }
 .dw-selected-bar .dw-clear:hover {
   color: #f87171;
 }
+
+/* ── USER FAVORITES ───────────────────────────────────────── */
+.dw-save-btn {
+  background: rgba(14, 165, 233, 0.18);
+  border: 1px solid rgba(14, 165, 233, 0.45);
+  color: #38bdf8;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.dw-save-btn:hover {
+  background: rgba(14, 165, 233, 0.32);
+  box-shadow: 0 0 8px rgba(14, 165, 233, 0.3);
+}
+
+.dw-card.fav {
+  border-color: rgba(234, 179, 8, 0.5);
+}
+
+.dw-card.fav.selected {
+  border-color: #0ea5e9;
+}
+
+.dw-fav-del {
+  position: absolute;
+  margin-left: 52px;
+  margin-top: -2px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px;
+  line-height: 1;
+}
+
+.dw-fav-del:hover {
+  color: #f87171;
+}
+
+.dw-card {
+  position: relative;
+}

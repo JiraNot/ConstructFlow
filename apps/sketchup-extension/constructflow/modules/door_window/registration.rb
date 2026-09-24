@@ -646,11 +646,28 @@ module JiraNot
 
         def preview_type(input, registry, opening_dimensions)
           type_id = input[:type_id] || input['type_id']
+          favorite_type = favorite_type_for(input, registry, type_id)
+          return favorite_type if favorite_type
           catalog_type = catalog_type_for(type_id, input)
           return catalog_type if catalog_type
           return registry.fetch(type_id) if type_id && registry.registered?(type_id)
 
           build_type(input, opening_dimensions, type_id: type_id)
+        end
+
+        # Gallery favorite placements reference a USER:* id; rebuild the full
+        # type from the stored snapshot (schema-validated on load).
+        def favorite_type_for(_input, registry, type_id)
+          return nil unless type_id.to_s.start_with?(DoorWindow::UserFavorites::ID_PREFIX)
+
+          type = DoorWindow::UserFavorites.build_type(registry_model(registry), type_id)
+          raise ArgumentError, "favorite not found: #{type_id}" unless type
+
+          type
+        end
+
+        def registry_model(registry)
+          registry.instance_variable_get(:@model)
         end
 
         # Gallery placements reference a catalog id; resolve the full catalog

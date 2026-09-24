@@ -66,6 +66,7 @@ DOOR_WINDOW = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'mo
 require File.join(DOOR_WINDOW, 'door_window_type')
 require File.join(DOOR_WINDOW, 'type_registry')
 require File.join(DOOR_WINDOW, 'catalog')
+require File.join(DOOR_WINDOW, 'user_favorites')
 require File.join(DOOR_WINDOW, 'instance_definition')
 require File.join(DOOR_WINDOW, 'instance_repository')
 require File.join(DOOR_WINDOW, 'validators', 'door_window_validator')

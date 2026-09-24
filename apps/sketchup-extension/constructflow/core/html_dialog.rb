@@ -42,6 +42,7 @@ module JiraNot
             push_state(runtime)
             push_selection(runtime)
             push_door_window_catalog
+            push_door_window_favorites(runtime)
           end
         end
 
@@ -210,6 +211,99 @@ module JiraNot
           warn "[ConstructFlow] push_door_window_catalog error: #{e.message}"
         end
 
+        # Push the per-project favorites list → JS gallery.
+        def push_door_window_favorites(runtime)
+          return unless @dialog&.visible?
+
+          items = DoorWindow::UserFavorites.all(runtime.active_model).map do |favorite_id, type_hash|
+            {
+              'id' => favorite_id, 'name' => type_hash['name'], 'category' => type_hash['category'],
+              'operation' => type_hash['operation'], 'width_mm' => type_hash['width_mm'],
+              'height_mm' => type_hash['height_mm'], 'panel_style' => type_hash['panel_style'],
+              'roles' => type_hash['panel_roles'] || [],
+              'frame_material' => type_hash['frame_material'],
+              'frame_width_mm' => type_hash['frame_width_mm'],
+              'frame_depth_mm' => type_hash['frame_depth_mm'],
+              'leaf_thickness_mm' => type_hash['leaf_thickness_mm'],
+              'mullion_width_mm' => type_hash['mullion_width_mm']
+            }
+          end
+          payload = { type: 'door_window_favorites', items: items }.to_json
+          @dialog.execute_script("CF.receive(#{payload.to_json})")
+        rescue StandardError => e
+          warn "[ConstructFlow] push_door_window_favorites error: #{e.message}"
+        end
+
+        # JS → Ruby: save the currently configured door/window form as a
+        # per-project favorite. Resolves the effective type the same way the
+        # placement command will, so the snapshot always matches real use.
+        def save_door_window_favorite(runtime, params)
+          model = runtime.active_model
+          type = effective_door_window_type(runtime, params)
+          favorite_id = params['favorite_id'].to_s.strip
+          favorite_id = DoorWindow::UserFavorites.next_id(model, params['name'] || type.name) if favorite_id.empty?
+
+          DoorWindow::UserFavorites.save(model, favorite_id, type)
+          push_door_window_favorites(runtime)
+          toast("บันทึกรายการโปรด #{favorite_id} แล้ว", level: 'success')
+          favorite_id
+        rescue StandardError => e
+          toast("บันทึกรายการโปรดไม่สำเร็จ: #{e.message}", level: 'error')
+          nil
+        end
+
+        def delete_door_window_favorite(runtime, params)
+          favorite_id = params['favorite_id'].to_s
+          removed = DoorWindow::UserFavorites.delete(runtime.active_model, favorite_id)
+          push_door_window_favorites(runtime)
+          toast(removed ? "ลบรายการโปรด #{favorite_id} แล้ว" : 'ไม่พบรายการโปรดที่จะลบ',
+                level: removed ? 'success' : 'warn')
+          removed
+        end
+
+        def effective_door_window_type(runtime, params)
+          registry = DoorWindow::TypeRegistry.new(runtime.active_model)
+          type_id = params['type_id'].to_s
+          return DoorWindow::UserFavorites.build_type(runtime.active_model, type_id) if type_id.start_with?(DoorWindow::UserFavorites::ID_PREFIX)
+
+          catalog_type = catalog_type_from_params(type_id, params)
+          return catalog_type if catalog_type
+          return registry.fetch(type_id) if !type_id.empty? && registry.registered?(type_id)
+
+          DoorWindow::Catalog.build_type(
+            fallback_catalog_id(params),
+            width_mm: params['width_mm'] ? Float(params['width_mm']) : nil,
+            height_mm: params['height_mm'] ? Float(params['height_mm']) : nil
+          )
+        end
+
+        def catalog_type_from_params(type_id, params)
+          return nil if type_id.empty?
+          return nil unless DoorWindow::Catalog.find(type_id)
+
+          DoorWindow::Catalog.build_type(
+            type_id,
+            width_mm: params['width_mm'] ? Float(params['width_mm']) : nil,
+            height_mm: params['height_mm'] ? Float(params['height_mm']) : nil
+          )
+        end
+
+        # Picks the closest catalog family for hand-typed form values.
+        def fallback_catalog_id(params)
+          op = params['operation'].to_s
+          cat = params['category'] == 'door' ? 'D' : 'W'
+          case op
+          when 'sliding' then "#{cat}-SL2"
+          when 'casement' then "#{cat}-CS2"
+          when 'awning' then 'W-AW1'
+          when 'hopper' then 'W-HP1'
+          when 'pivot' then "#{cat}-PV1"
+          when 'louver' then "#{cat}-LV1"
+          when 'shutter' then "#{cat}-SH1"
+          else "#{cat}-SW1"
+          end
+        end
+
         # ── Private Helpers ──────────────────────────────────────
         private_class_method def build_dialog
           props = {
@@ -254,18 +348,39 @@ module JiraNot
           params = data['params'] || {}
 
           handler = ACTIONS[action]
-          unless handler
+          if handler.nil? && !extended_action?(action)
             toast("ไม่รู้จักคำสั่ง: #{action}", level: 'error')
             return
           end
 
-          result = handler.call(runtime, params)
+          result = dispatch_extended_action(action, runtime, params, handler)
           push_state(runtime) if result != :no_state_push
         rescue JSON::ParserError => e
           toast("JSON error: #{e.message}", level: 'error')
         rescue StandardError => e
           toast("เกิดข้อผิดพลาด: #{e.message}", level: 'error')
           warn "[ConstructFlow] dispatch error (#{action}): #{e.message}\n#{e.backtrace.first(3).join("\n")}"
+        end
+
+        # Extended panel actions that are plain module functions instead of
+        # entries in the ACTIONS lambda table.
+        EXTENDED_ACTIONS = %w[save_door_window_favorite delete_door_window_favorite].freeze
+
+        private_class_method def extended_action?(action)
+          EXTENDED_ACTIONS.include?(action)
+        end
+
+        private_class_method def dispatch_extended_action(action, runtime, params, handler)
+          case action
+          when 'save_door_window_favorite'
+            save_door_window_favorite(runtime, params)
+            :no_state_push
+          when 'delete_door_window_favorite'
+            delete_door_window_favorite(runtime, params)
+            :no_state_push
+          else
+            handler.call(runtime, params)
+          end
         end
 
         private_class_method def build_state(runtime)
