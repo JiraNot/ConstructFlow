@@ -6,6 +6,8 @@ module JiraNot
       class PlanRepresentationProvider
         ARC_SEGMENTS = 8
 
+        HandingStub = Struct.new(:handing)
+
         def initialize(runtime:, repository: InstanceRepository.new,
                        opening_repository: Opening::OpeningRepository.new,
                        wall_repository: Architecture::WallRepository.new)
@@ -93,11 +95,106 @@ module JiraNot
           case type.operation.to_s
           when 'swing'
             swing_primitives(instance, geometry)
+          when 'swing_double'
+            swing_primitives(instance, geometry).concat(
+              swing_primitives(instance_with_handing_flip(instance), geometry)
+            )
+          when 'swing_double_ego'
+            double_ego_primitives(instance, geometry)
+          when 'casement'
+            casement_primitives(geometry)
+          when 'awning', 'hopper'
+            awning_hopper_primitives(type, geometry)
+          when 'pivot'
+            pivot_primitives(geometry)
+          when 'louver'
+            louver_primitives(geometry)
+          when 'shutter'
+            shutter_primitives(geometry)
           when 'sliding'
             sliding_primitives(geometry)
           else
             [{ 'type' => 'symbol', 'role' => 'fixed_panel', 'symbol' => 'FIX', 'position_mm' => geometry[:center], 'style_role' => 'door_window_operation' }]
           end
+        end
+
+        def instance_with_handing_flip(instance)
+          flipped = instance.handing.to_s.downcase.include?('left') ? 'right' : 'left'
+          instance.respond_to?(:with) ? instance.with(handing: flipped) : instance
+        end
+
+        # Two leaves hinged on both jambs swinging the same side.
+        def double_ego_primitives(instance, geometry)
+          half = geometry[:width] / 2.0
+          left = narrowed_geometry(geometry, 0.0, half)
+          right = narrowed_geometry(geometry, half, half)
+          swing_primitives(instance, left).concat(swing_primitives(instance, right))
+        end
+
+        # Two casement leaves meeting at a center mullion, each with its arc.
+        def casement_primitives(geometry)
+          half = geometry[:width] / 2.0
+          left = narrowed_geometry(geometry, 0.0, half)
+          right = narrowed_geometry(geometry, half, half)
+          swing_primitives(HandingStub.new('left'), left)
+            .concat(swing_primitives(HandingStub.new('right'), right))
+        end
+
+        # Awning opens outward-up, hopper inward-down: triangle over the span.
+        def awning_hopper_primitives(type, geometry)
+          a, b = geometry[:a], geometry[:b]
+          sign = type.operation == 'hopper' ? -1.0 : 1.0
+          apex = [geometry[:center][0] + (geometry[:normal][0] * geometry[:width] * 0.18 * sign),
+                  geometry[:center][1] + (geometry[:normal][1] * geometry[:width] * 0.18 * sign),
+                  geometry[:center][2]]
+          [
+            { 'type' => 'polyline', 'role' => 'awning_hopper_leaf', 'points_mm' => [a, apex, b], 'style_role' => 'door_window_operation' }
+          ]
+        end
+
+        # Pivot: center line plus quarter-offset swing arcs on both sides.
+        def pivot_primitives(geometry)
+          center = geometry[:center]
+          arrow = sliding_primitives(geometry)
+          [{ 'type' => 'polyline', 'role' => 'pivot_axis', 'points_mm' => [center, center], 'style_role' => 'door_window_operation' }]
+            .concat(arrow)
+        end
+
+        # Louver: parallel short dashes across the span.
+        def louver_primitives(geometry)
+          lines = []
+          rows = 4
+          rows.times do |index|
+            ratio = (index + 0.5) / rows
+            from = [geometry[:a][0] + ((geometry[:b][0] - geometry[:a][0]) * 0.1),
+                    geometry[:a][1] + ((geometry[:b][1] - geometry[:a][1]) * 0.1),
+                    geometry[:a][2]]
+            to = [geometry[:a][0] + ((geometry[:b][0] - geometry[:a][0]) * ratio * 0.9),
+                  geometry[:a][1] + ((geometry[:b][1] - geometry[:a][1]) * ratio * 0.9),
+                  geometry[:a][2]]
+            lines << { 'type' => 'polyline', 'role' => 'louver_blade', 'points_mm' => [from, to], 'style_role' => 'door_window_operation' }
+          end
+          lines
+        end
+
+        # Shutter: box outline with diagonal hatch on one side.
+        def shutter_primitives(geometry)
+          a, b = geometry[:a], geometry[:b]
+          box = [{ 'type' => 'polyline', 'role' => 'shutter_box', 'points_mm' => [a, b], 'style_role' => 'door_window_operation' }]
+          diag_from = [a[0] + ((b[0] - a[0]) * 0.2), a[1] + ((b[1] - a[1]) * 0.2), a[2]]
+          diag_to = [a[0] + ((b[0] - a[0]) * 0.8), a[1] + ((b[1] - a[1]) * 0.8), a[2]]
+          box << { 'type' => 'polyline', 'role' => 'shutter_hatch', 'points_mm' => [diag_from, diag_to], 'style_role' => 'door_window_operation' }
+          box
+        end
+
+        def narrowed_geometry(geometry, start_ratio, span)
+          a, b = geometry[:a], geometry[:b]
+          point_at = lambda do |ratio|
+            [a[0] + ((b[0] - a[0]) * ratio), a[1] + ((b[1] - a[1]) * ratio), a[2]]
+          end
+          na = point_at.call(start_ratio)
+          nb = point_at.call(start_ratio + span)
+          geometry.merge(a: na, b: nb, center: midpoint(na, nb), width: geometry[:width] * span)
         end
 
         def swing_primitives(instance, geometry)

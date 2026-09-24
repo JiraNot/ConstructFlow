@@ -682,7 +682,14 @@ module JiraNot
             frame_material: frame_material,
             frame_width_mm: input[:frame_width_mm] || input['frame_width_mm'] || 50,
             panel_roles: input[:panel_roles] || input['panel_roles'],
-            panel_style: panel_style
+            panel_style: panel_style,
+            frame_depth_mm: input[:frame_depth_mm] || input['frame_depth_mm'] || 100,
+            glass_thickness_mm: input[:glass_thickness_mm] || input['glass_thickness_mm'] || 6,
+            leaf_thickness_mm: input[:leaf_thickness_mm] || input['leaf_thickness_mm'] || 40,
+            mullion_width_mm: input[:mullion_width_mm] || input['mullion_width_mm'] || 0,
+            louver_spacing_mm: input[:louver_spacing_mm] || input['louver_spacing_mm'] || 80,
+            side_allowance_mm: input[:side_allowance_mm] || input['side_allowance_mm'] || 0,
+            head_allowance_mm: input[:head_allowance_mm] || input['head_allowance_mm'] || 0
           )
         end
 
@@ -741,7 +748,14 @@ module JiraNot
             frame_material: hash['frame_material'],
             frame_width_mm: hash['frame_width_mm'],
             panel_roles: hash['panel_roles'],
-            panel_style: hash['panel_style']
+            panel_style: hash['panel_style'],
+            frame_depth_mm: hash['frame_depth_mm'],
+            glass_thickness_mm: hash['glass_thickness_mm'],
+            leaf_thickness_mm: hash['leaf_thickness_mm'],
+            mullion_width_mm: hash['mullion_width_mm'],
+            louver_spacing_mm: hash['louver_spacing_mm'],
+            side_allowance_mm: hash['side_allowance_mm'],
+            head_allowance_mm: hash['head_allowance_mm']
           }
         end
 
@@ -763,7 +777,7 @@ module JiraNot
             end
 
             values = UI.inputbox(
-              ['Category (door/window)', 'Operation (fixed/sliding/swing)', 'Frame material', 'Panel style'],
+              ['Category (door/window)', 'Operation (fixed/sliding/swing/swing_double/casement/awning/hopper/pivot/louver/shutter)', 'Frame material', 'Panel style'],
               ['window', 'fixed', 'aluminium', 'glazed'],
               'ConstructFlow Door / Window'
             )
@@ -786,7 +800,7 @@ module JiraNot
           end
           menu.add_item('Place Door/Window in Architecture Plan') do
             values = UI.inputbox(
-              ['Category (door/window)', 'Operation (fixed/sliding/swing)', 'Frame material', 'Panel style', 'Handing', 'Schedule mark', 'Width (mm)', 'Height (mm)', 'Sill (mm)', 'Base level ID (optional)'],
+              ['Category (door/window)', 'Operation (fixed/sliding/swing/swing_double/casement/awning/hopper/pivot/louver/shutter)', 'Frame material', 'Panel style', 'Handing', 'Schedule mark', 'Width (mm)', 'Height (mm)', 'Sill (mm)', 'Base level ID (optional)'],
               ['window', 'fixed', 'aluminium', 'glazed', 'default', '', '900', '2100', '0', ''],
               'ConstructFlow Plan Door / Window'
             )

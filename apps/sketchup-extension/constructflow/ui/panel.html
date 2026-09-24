@@ -487,6 +487,9 @@
             <button type="button" class="preset-pill" data-target="dw-cat" data-val="door" data-w="0.90" data-h="2.00">ประตูหน้าบ้าน 90x200</button>
             <button type="button" class="preset-pill" data-target="dw-cat" data-val="door" data-w="1.60" data-h="2.00">บานเลื่อน 1.6x2.0</button>
             <button type="button" class="preset-pill" data-target="dw-cat" data-val="door" data-w="0.70" data-h="2.00">ประตูห้องน้ำ 70x200</button>
+            <button type="button" class="preset-pill" data-target="dw-cat" data-val="door" data-op="swing_double" data-style="solid" data-w="1.60" data-h="2.10">บานคู่ 1.6x2.1</button>
+            <button type="button" class="preset-pill" data-target="dw-cat" data-val="door" data-op="sliding" data-style="glazed" data-w="2.70" data-h="2.10">บานเลื่อน 3 บาน 2.7x2.1</button>
+            <button type="button" class="preset-pill" data-target="dw-cat" data-val="door" data-op="shutter" data-style="solid" data-w="3.00" data-h="2.50">ประตูม้วน 3.0x2.5</button>
           </div>
         </div>
         <div class="drawer-row">
@@ -495,6 +498,10 @@
             <button type="button" class="preset-pill" data-target="dw-cat" data-val="window" data-w="1.20" data-h="1.10">หน้าต่างบานเลื่อน 1.2x1.1</button>
             <button type="button" class="preset-pill" data-target="dw-cat" data-val="window" data-w="0.60" data-h="1.00">บานกระทุ้ง 60x100</button>
             <button type="button" class="preset-pill" data-target="dw-cat" data-val="window" data-w="1.00" data-h="1.20">บานเปิดคู่ 1.0x1.2</button>
+            <button type="button" class="preset-pill" data-target="dw-cat" data-val="window" data-op="casement" data-style="glazed" data-w="1.20" data-h="1.20">บานพับ 2 บาน 1.2x1.2</button>
+            <button type="button" class="preset-pill" data-target="dw-cat" data-val="window" data-op="awning" data-style="glazed" data-w="1.20" data-h="0.60">บานกระทุ้งบน 1.2x0.6</button>
+            <button type="button" class="preset-pill" data-target="dw-cat" data-val="window" data-op="louver" data-style="louvered" data-w="0.90" data-h="1.20">บานเกล็ด 0.9x1.2</button>
+            <button type="button" class="preset-pill" data-target="dw-cat" data-val="window" data-op="shutter" data-style="solid" data-w="1.50" data-h="1.20">ชัตเตอร์ 1.5x1.2</button>
           </div>
         </div>
         <div class="drawer-inputs-row">
@@ -508,10 +515,17 @@
           <div class="drawer-field">
             <label>การเปิด:</label>
             <select id="dw-op">
-              <option value="swing">Swing (บานพับ)</option>
+              <option value="swing">Swing (บานเปิด)</option>
               <option value="sliding">Sliding (บานเลื่อน)</option>
               <option value="fixed">Fixed (บานติดตาย)</option>
-              <option value="awning">Awning (บานกระทุ้ง)</option>
+              <option value="swing_double">Swing Double (บานคู่)</option>
+              <option value="swing_double_ego">บานคู่เปิดออกนอก</option>
+              <option value="casement">Casement (บานพับ 2 บาน)</option>
+              <option value="awning">Awning (กระทุ้งบน)</option>
+              <option value="hopper">Hopper (กระทุ้งล่าง)</option>
+              <option value="pivot">Pivot (บานหมุน)</option>
+              <option value="louver">Louver (บานเกล็ด)</option>
+              <option value="shutter">Shutter (ประตูม้วน)</option>
             </select>
           </div>
           <div class="drawer-field">
@@ -528,8 +542,27 @@
             <select id="dw-panel">
               <option value="glazed">กระจก (Glazed)</option>
               <option value="solid">บานทึบ (Solid Wood)</option>
-              <option value="louver">เกล็ดระบายอากาศ</option>
+              <option value="louvered">เกล็ดระบายอากาศ</option>
+              <option value="mixed">ทึบ+กระจก (Mixed)</option>
             </select>
+          </div>
+        </div>
+        <div class="drawer-inputs-row">
+          <div class="drawer-field">
+            <label>กรอบลึก (มม.):</label>
+            <input type="number" id="dw-depth" step="5" value="100">
+          </div>
+          <div class="drawer-field">
+            <label>หนาบาน (มม.):</label>
+            <input type="number" id="dw-leaf" step="5" value="40">
+          </div>
+          <div class="drawer-field">
+            <label>เสากลาง (มม.):</label>
+            <input type="number" id="dw-mullion" step="5" value="0">
+          </div>
+          <div class="drawer-field">
+            <label>ระยะเกล็ด (มม.):</label>
+            <input type="number" id="dw-louver" step="10" value="80">
           </div>
         </div>
       </div>

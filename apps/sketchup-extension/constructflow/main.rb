@@ -126,6 +126,7 @@ require_relative 'modules/opening/registration'
 
 require_relative 'modules/door_window/door_window_type'
 require_relative 'modules/door_window/type_registry'
+require_relative 'modules/door_window/catalog'
 require_relative 'modules/door_window/instance_definition'
 require_relative 'modules/door_window/instance_repository'
 require_relative 'modules/door_window/validators/door_window_validator'

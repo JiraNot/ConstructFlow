@@ -8,12 +8,16 @@ module JiraNot
     module DoorWindow
       module Tools
         class DoorWindowTool
-          def initialize(runtime:, category: 'door', operation: 'swing', frame_material: 'aluminium', panel_style: 'glazed')
+          def initialize(runtime:, category: 'door', operation: 'swing', frame_material: 'aluminium', panel_style: 'glazed',
+                         frame_depth_mm: nil, leaf_thickness_mm: nil, mullion_width_mm: nil)
             @runtime = runtime
             @category = category.to_s
             @operation = operation.to_s
             @frame_material = frame_material.to_s
             @panel_style = panel_style.to_s
+            @frame_depth_mm = frame_depth_mm
+            @leaf_thickness_mm = leaf_thickness_mm
+            @mullion_width_mm = mullion_width_mm
             @input_point = Sketchup::InputPoint.new
             @hovered_opening = nil
             @flip_swing = false
@@ -62,17 +66,18 @@ module JiraNot
               return
             end
 
-            result = @runtime.commands.execute(
-              'CreateDoorWindow',
-              {
-                opening_object_id: @hovered_opening.id,
-                category: @category,
-                operation: @operation,
-                frame_material: @frame_material,
-                panel_style: @panel_style
-              },
-              project_id: @runtime.project.project_id
-            )
+            payload = {
+              opening_object_id: @hovered_opening.id,
+              category: @category,
+              operation: @operation,
+              frame_material: @frame_material,
+              panel_style: @panel_style
+            }
+            payload[:frame_depth_mm] = Float(@frame_depth_mm) if @frame_depth_mm
+            payload[:leaf_thickness_mm] = Float(@leaf_thickness_mm) if @leaf_thickness_mm
+            payload[:mullion_width_mm] = Float(@mullion_width_mm) if @mullion_width_mm
+
+            result = @runtime.commands.execute('CreateDoorWindow', payload, project_id: @runtime.project.project_id)
 
             if result[:status] == 'success'
               @runtime.active_model.select_tool(nil)

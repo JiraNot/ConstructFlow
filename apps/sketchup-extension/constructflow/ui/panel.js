@@ -539,7 +539,16 @@ const CF = {
       const op    = gVal('dw-op');
       const frame = gVal('dw-frame');
       const panel = gVal('dw-panel');
-      CF.send('place_door_window', { category: cat, operation: op, frame_material: frame, panel_style: panel });
+      const payload = { category: cat, operation: op, frame_material: frame, panel_style: panel };
+      const depth   = parseFloat(gVal('dw-depth') || '0');
+      const leaf    = parseFloat(gVal('dw-leaf') || '0');
+      const mullion = parseFloat(gVal('dw-mullion') || '0');
+      const louver  = parseFloat(gVal('dw-louver') || '0');
+      if (depth > 0) payload.frame_depth_mm = depth;
+      if (leaf > 0) payload.leaf_thickness_mm = leaf;
+      if (mullion > 0) payload.mullion_width_mm = mullion;
+      if (louver > 0) payload.louver_spacing_mm = louver;
+      CF.send('place_door_window', payload);
       CF.toast('คลิกที่ช่องเปิดเพื่อติดตั้ง', 'info');
     },
 
@@ -1280,6 +1289,16 @@ const CF = {
         if (pill.dataset.mat) {
           const matSel = document.getElementById('roof-mat');
           if (matSel) matSel.value = pill.dataset.mat;
+        }
+
+        // Door/window catalog pills: also set operation & panel style
+        if (pill.dataset.op) {
+          const opSel = document.getElementById('dw-op');
+          if (opSel) opSel.value = pill.dataset.op;
+        }
+        if (pill.dataset.style) {
+          const styleSel = document.getElementById('dw-panel');
+          if (styleSel) styleSel.value = pill.dataset.style;
         }
 
         const row = pill.closest('.quick-pill-row');
