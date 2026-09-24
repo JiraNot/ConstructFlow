@@ -4,6 +4,7 @@ require 'sketchup.rb'
 
 require_relative 'modules/door_window/hole_puncher_service'
 require_relative 'core/id_generator'
+require_relative 'core/paths'
 require_relative 'core/diagnostic_log'
 require_relative 'core/attribute_store'
 require_relative 'core/units'
@@ -40,6 +41,8 @@ require_relative 'core/tools/auto_dimension_engine'
 require_relative 'core/tools/spot_elevation_tool'
 require_relative 'core/takeoff_hud_service'
 require_relative 'core/toolbar'
+require_relative 'core/core_commands'
+require_relative 'core/ui_entry'
 require_relative 'core/plan_interaction_engine'
 require_relative 'core/plan_level_context'
 require_relative 'core/plan_selection_filter'
@@ -303,91 +306,17 @@ module JiraNot
                             connections: @connectors.connection_count)
         end
 
+        # -- Thin delegators kept on Runtime for backward compatibility; the
+        # implementations live in Core::CoreCommands / Core::UiEntry. --
+
+        def show_inspector
+          Core::UiEntry.show_inspector(self)
+        end
+
         private
 
         def register_core_commands
-          @commands.register('SetWorkingPhase', owner_module: 'constructflow.core', validator: lambda { |command|
-            phase = command[:input][:phase] || command[:input]['phase']
-            Core::Phase.valid?(phase) ? [] : ["invalid phase: #{phase}"]
-          }) do |command|
-            phase = command[:input][:phase] || command[:input]['phase']
-            previous = @project.working_phase
-            @project.working_phase = phase
-            { events: [{ name: 'WorkingPhaseChanged', payload: { previous: previous, current: phase.to_s } }] }
-          end
-
-          @commands.register('UpdateProjectMetadata', owner_module: 'constructflow.core', validator: lambda { |command|
-            name = command[:input][:name] || command[:input]['name']
-            name.to_s.strip.empty? ? ['project name required'] : []
-          }) do |command|
-            input = command[:input]
-            project = @project.update_metadata!(
-              name: input[:name] || input['name'],
-              code: input.key?(:code) ? input[:code] : input['code']
-            )
-            { events: [{ name: 'ProjectChanged', payload: { project: project } }] }
-          end
-
-          @commands.register('CreateLevel', owner_module: 'constructflow.core', validator: lambda { |command|
-            input = command[:input]; errors = []
-            errors << 'level id required' if (input[:id] || input['id']).to_s.strip.empty?
-            errors << 'level name required' if (input[:name] || input['name']).to_s.strip.empty?
-            errors
-          }) do |command|
-            input = command[:input]
-            level = @levels.register(id: input[:id] || input['id'], name: input[:name] || input['name'],
-                                     kind: input[:kind] || input['kind'] || 'custom',
-                                     elevation_mm: input.key?(:elevation_mm) ? input[:elevation_mm] : input['elevation_mm'],
-                                     source_state: input[:source_state] || input['source_state'] || 'confirmed')
-            { events: [{ name: 'LevelCreated', payload: { level: level.to_h } }] }
-          end
-
-          @commands.register('ModifyLevel', owner_module: 'constructflow.core', validator: lambda { |command|
-            id = command[:input][:id] || command[:input]['id']; id.to_s.strip.empty? ? ['level id required'] : []
-          }) do |command|
-            input = command[:input]; id = input[:id] || input['id']; before = @levels.fetch(id).to_h
-            level = @levels.update(id, name: input[:name] || input['name'], kind: input[:kind] || input['kind'],
-                                   elevation_mm: input.key?(:elevation_mm) ? input[:elevation_mm] : input['elevation_mm'],
-                                   source_state: input[:source_state] || input['source_state'])
-            { events: [{ name: 'LevelChanged', payload: { before: before, after: level.to_h } }] }
-          end
-
-          @commands.register('ConvertSelectionToSmartObject', owner_module: 'constructflow.core', validator: lambda { |command|
-            input = command[:input]; errors = []
-            errors << 'entity required' unless input[:entity] || input['entity']
-            errors << 'type required' if (input[:type] || input['type']).to_s.strip.empty?
-            owner = (input[:owner_module] || input['owner_module']).to_s
-            errors << 'registered owner_module required' unless @modules.registered?(owner)
-            errors
-          }) do |command|
-            input = command[:input]
-            object = @smart_objects.create(entity: input[:entity] || input['entity'], type: input[:type] || input['type'],
-                                           owner_module: input[:owner_module] || input['owner_module'],
-                                           schema_version: input[:schema_version] || input['schema_version'] || 1,
-                                           display_name: input[:display_name] || input['display_name'],
-                                           created_phase: input[:created_phase] || input['created_phase'] || @project.working_phase,
-                                           removed_phase: input[:removed_phase] || input['removed_phase'],
-                                           level_refs: input[:level_refs] || input['level_refs'] || [],
-                                           source_state: input[:source_state] || input['source_state'] || 'confirmed')
-            { created_object_ids: [object.id], events: [{ name: 'ObjectCreated', object_ids: [object.id], payload: { type: object.type } },
-                                                        { name: 'ObjectConverted', object_ids: [object.id], payload: { type: object.type } }] }
-          end
-
-          @commands.register('DemolishObject', owner_module: 'constructflow.core', validator: lambda { |command|
-            object = resolve_object(command[:input])
-            if object.nil? then ['smart object required'] elsif object.created_phase != Core::Phase::EXISTING then ['only existing construction can be demolished'] else [] end
-          }) do |command|
-            object = resolve_object(command[:input])
-            updated = @smart_objects.update_lifecycle(object.entity, removed_phase: Core::Phase::DEMOLITION)
-            @smart_objects.mark_dirty(updated.entity, 'dirty_quantity', 'dirty_drawing')
-            { updated_object_ids: [updated.id], events: [{ name: 'ObjectDemolished', object_ids: [updated.id] },
-                                                          { name: 'ObjectPhaseChanged', object_ids: [updated.id], payload: { removed_phase: Core::Phase::DEMOLITION } }] }
-          end
-        end
-
-        def resolve_object(input)
-          entity = input[:entity] || input['entity']; return @smart_objects.fetch(entity) if entity
-          object_id = input[:object_id] || input['object_id']; object_id ? @smart_objects.fetch_by_id(object_id) : nil
+          Core::CoreCommands.register(self)
         end
 
         def install_model_observer
@@ -396,81 +325,7 @@ module JiraNot
         end
 
         def install_ui_entry
-          @menu = UI.menu('Extensions').add_submenu('ConstructFlow')
-          @menu.add_item('Foundation Inspector') { show_inspector }
-          @menu.add_item('Edit Project') do
-            values = UI.inputbox(
-              ['Project name', 'Project code'],
-              [@project.project_name, @project.project_code.to_s],
-              'ConstructFlow Edit Project'
-            )
-            next unless values
-
-            result = @commands.execute(
-              'UpdateProjectMetadata',
-              { name: values[0], code: values[1] },
-              project_id: @project.project_id
-            )
-            if result[:status] == 'success'
-              UI.messagebox("Project #{values[0]} updated.")
-            else
-              UI.messagebox(Array(result[:errors]).join("\n"))
-            end
-          rescue ArgumentError => error
-            UI.messagebox("ConstructFlow Project error: #{error.message}")
-          end
-          @menu.add_item('Create Level') do
-            values = UI.inputbox(
-              ['Level ID', 'Level name', 'Elevation (mm)', 'Kind'],
-              ['', '', '0', 'FFL'],
-              'ConstructFlow Create Level'
-            )
-            next unless values
-
-            result = @commands.execute(
-              'CreateLevel',
-              { id: values[0].to_s.strip, name: values[1].to_s.strip,
-                elevation_mm: Float(values[2]), kind: values[3].to_s.strip },
-              project_id: @project.project_id
-            )
-            if result[:status] == 'success'
-              UI.messagebox("Level #{values[0]} created.")
-            else
-              UI.messagebox(Array(result[:errors]).join("\n"))
-            end
-          rescue ArgumentError => error
-            UI.messagebox("ConstructFlow Level error: #{error.message}")
-          end
-          @menu.add_item('Edit Level') do
-            values = UI.inputbox(
-              ['Level ID', 'Level name', 'Elevation (mm)', 'Kind'],
-              ['', '', '0', 'FFL'],
-              'ConstructFlow Edit Level'
-            )
-            next unless values
-
-            result = @commands.execute(
-              'ModifyLevel',
-              { id: values[0].to_s.strip, name: values[1].to_s.strip,
-                elevation_mm: Float(values[2]), kind: values[3].to_s.strip },
-              project_id: @project.project_id
-            )
-            if result[:status] == 'success'
-              UI.messagebox("Level #{values[0]} updated.")
-            else
-              UI.messagebox(Array(result[:errors]).join("\n"))
-            end
-          rescue ArgumentError => error
-            UI.messagebox("ConstructFlow Level error: #{error.message}")
-          end
-          @menu.add_item('Show Levels') do
-            levels = @levels.each.map do |level|
-              elevation = level.elevation_mm.nil? ? 'unknown elevation' : "#{level.elevation_mm} mm"
-              "#{level.id} — #{level.name} — #{elevation}"
-            end
-            UI.messagebox(levels.empty? ? 'No ConstructFlow levels defined.' : levels.join("\n"))
-          end
-          Core::Toolbar.install(self)
+          Core::UiEntry.install(self)
         end
 
         def install_builtin_modules
@@ -487,27 +342,6 @@ module JiraNot
           Drainage::Registration.install(self)
           Electrical::Registration.install(self)
           Costing::Registration.install(self)
-        end
-
-        def show_inspector
-          recent = @diagnostics.recent(5).map { |entry| "[#{entry.severity}] #{entry.code}: #{entry.message}" }
-          level_names = @levels ? @levels.map { |l| "  • #{l.name} (#{l.elevation_mm || 0} mm)" } : []
-          message = [
-            'ConstructFlow - ตรวจสอบสถานะโครงการ',
-            "รหัสโครงการ: #{@project&.project_id || '-'}",
-            "ระยะเวลาก่อสร้าง (Phase): #{@project&.working_phase || '-'}",
-            "โมดูลที่ติดตั้ง: #{@modules.size}",
-            "ความสามารถระบบ: #{@capabilities.size}",
-            "ระดับชั้นอาคาร (Levels): #{@levels&.size || 0}",
-            *level_names,
-            "วัตถุอัจฉริยะ (Smart Objects): #{@smart_objects&.size || 0}",
-            "จุดเชื่อมต่อ (Connectors): #{@connectors&.connector_count || 0}",
-            "เส้นทางเชื่อมต่อ (Connections): #{@connectors&.connection_count || 0}",
-            '',
-            'บันทึกการทำงานล่าสุด:',
-            *(recent.empty? ? ['(ไม่มีบันทึก)'] : recent)
-          ].join("\n")
-          UI.messagebox(message, MB_OK)
         end
 
         def seed_default_level!

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../core/extension_command_support'
+
 module JiraNot
   module ConstructFlow
     module Electrical
@@ -89,8 +91,7 @@ module JiraNot
           end
 
           touched = (created_ids + updated_ids).uniq
-          events << { name: 'QuantityDirty', object_ids: touched } unless touched.empty?
-          events << { name: 'DrawingDirty', object_ids: touched } unless touched.empty?
+          events.concat(Core::ExtensionCommandSupport.dirty_events(touched))
           {
             created_object_ids: created_ids,
             updated_object_ids: updated_ids,
@@ -138,24 +139,19 @@ module JiraNot
         end
 
         def find_generated(runtime, extension_id)
-          runtime.smart_objects.all.find do |object|
-            next false unless object.type == 'electrical.luminaire' && object.owner_module == 'constructflow.electrical'
-            Array(object.relationships).any? do |relationship|
-              metadata = relationship['metadata'] || relationship[:metadata] || {}
-              (relationship['kind'] || relationship[:kind]).to_s == RELATION_KIND &&
-                (relationship['target_id'] || relationship[:target_id]).to_s == extension_id.to_s &&
-                (metadata['slot'] || metadata[:slot]).to_s == SLOT
-            end
-          end
+          Core::ExtensionCommandSupport.find_generated(
+            runtime, extension_id,
+            type: 'electrical.luminaire', owner_module: 'constructflow.electrical', slot: SLOT,
+            kind: RELATION_KIND, role: RELATION_ROLE, require_role: false
+          )
         end
 
         def extension_id_from(input, intent = nil)
-          data = intent || fetch(input, :intent) || {}
-          (fetch(input, :extension_id) || fetch(data, :extension_id)).to_s
+          Core::ExtensionCommandSupport.extension_id_from(input, intent)
         end
 
         def fetch(hash, key)
-          hash[key] || hash[key.to_s]
+          Core::ExtensionCommandSupport.fetch(hash, key)
         end
       end
     end

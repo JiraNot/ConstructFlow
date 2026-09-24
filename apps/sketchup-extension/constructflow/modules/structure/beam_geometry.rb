@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../core/model_materials'
+
 module JiraNot
   module ConstructFlow
     module Structure
@@ -58,7 +60,25 @@ module JiraNot
           raise 'failed to create structural beam face' unless face
           face.reverse! if face.normal.z < 0
           face.pushpull(-Core::Units.mm_to_su(depth))
+          Core::ModelMaterials.paint(group_model(group), face, beam_material(definition))
           group
+        end
+
+        def beam_material(definition)
+          case definition.material.to_s
+          when 'steel' then 'CF Steel'
+          when 'timber' then 'CF Timber'
+          else 'CF Concrete'
+          end
+        end
+
+        def group_model(group)
+          return nil unless group.respond_to?(:model)
+
+          model = group.model
+          model.respond_to?(:materials) ? model : nil
+        rescue StandardError
+          nil
         end
 
         private

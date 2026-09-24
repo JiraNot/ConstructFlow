@@ -15,7 +15,13 @@ class StructureExtensionCommandRegistrationTest < Minitest::Test
       true
     end
   end
-  FakeObject = Struct.new(:id, :type, :entity, :relationships)
+  FakeObject = Struct.new(:id, :type, :entity, :relationships) do
+    # Real SmartObject records always carry owner_module; every object in
+    # this test belongs to the structure domain.
+    def owner_module
+      'constructflow.structure'
+    end
+  end
 
   class FakeSmartObjects
     attr_reader :objects

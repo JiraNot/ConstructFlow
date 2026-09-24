@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative 'main'
+require_relative 'core/paths'
+require_relative 'core/extension_command_support'
 require_relative 'core/entity_guard'
 require_relative 'core/shortcut_manager'
 require_relative 'core/tag_manager'

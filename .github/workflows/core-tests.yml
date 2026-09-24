@@ -6,11 +6,15 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   core-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
@@ -18,3 +22,11 @@ jobs:
         run: find apps/sketchup-extension/constructflow/core apps/sketchup-extension/constructflow/modules -name '*.rb' -print0 | xargs -0 -n1 ruby -c
       - name: Run Ruby unit tests
         run: ruby -Itest -Iapps/sketchup-extension -e 'Dir["test/**/*_test.rb"].sort.each { |file| require_relative file }'
+      - name: Syntax check UI panel.js
+        run: node --check apps/sketchup-extension/constructflow/ui/panel.js
+      - name: Compile check MCP server
+        run: python3 -m compileall -q apps/mcp-server
+      - name: Test MCP bridge server
+        run: python3 apps/mcp-server/test_server.py
+      - name: Lint (RuboCop baseline)
+        run: gem install rubocop:1.91.0 --no-document > /dev/null && rubocop

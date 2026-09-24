@@ -1,0 +1,36 @@
+# ConstructFlow RuboCop configuration.
+# Deliberately lenient: correctness (Lint) only — style opinions and metrics
+# stay off. The offense backlog lives in .rubocop_todo.yml and is meant to
+# shrink file by file over time (see docs/FUNCTION-REVIEW-2026-09-24.md §5.2).
+
+inherit_from: .rubocop_todo.yml
+
+AllCops:
+  TargetRubyVersion: 3.2
+  NewCops: disable
+  Exclude:
+    - 'dist/**/*'
+    - 'test.zip'
+
+Style:
+  Enabled: false
+
+Layout:
+  Enabled: false
+
+Metrics:
+  Enabled: false
+
+Gemspec:
+  Enabled: false
+
+Lint:
+  Enabled: true
+
+# 160+ intentional SketchUp-API-boundary guards (`rescue nil`) are tracked as
+# tech debt in the function review (§5.1); do not flag them yet.
+Style/RescueModifier:
+  Enabled: false
+
+Lint/SuppressedException:
+  Enabled: false

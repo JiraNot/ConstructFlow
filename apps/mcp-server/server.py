@@ -8,6 +8,9 @@ from mcp.types import Tool, TextContent
 
 app = Server("constructflow-mcp")
 
+# Max time to wait for SketchUp to answer one command (seconds).
+COMMAND_TIMEOUT_SECONDS = 10.0
+
 # Global state for WebSocket connection to SketchUp
 sketchup_ws = None
 pending_commands = {}
@@ -30,6 +33,12 @@ async def websocket_handler(websocket):
         print("SketchUp disconnected", file=sys.stderr)
     finally:
         sketchup_ws = None
+        # Fail any commands still waiting for the disconnected client so
+        # callers get an error instead of hanging until the timeout.
+        for future in pending_commands.values():
+            if not future.done():
+                future.set_exception(ConnectionError("SketchUp disconnected before the command finished"))
+        pending_commands.clear()
 
 @app.list_tools()
 async def list_tools() -> list[Tool]:
@@ -81,8 +90,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         }))
         
         try:
-            # Wait for SketchUp to respond, max 10 seconds
-            result = await asyncio.wait_for(future, timeout=10.0)
+            # Wait for SketchUp to respond, bounded by COMMAND_TIMEOUT_SECONDS
+            result = await asyncio.wait_for(future, timeout=COMMAND_TIMEOUT_SECONDS)
             return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
         except asyncio.TimeoutError:
             return [TextContent(type="text", text="Error: Command execution timed out.")]

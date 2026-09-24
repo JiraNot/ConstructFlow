@@ -90,7 +90,10 @@ class NativeToolContractTest < Minitest::Test
   def test_hosted_plan_tools_accept_and_apply_an_active_level
     opening_tool = read_source(File.join(TOOLS_ROOT, 'opening', 'tools', 'opening_tool.rb'))
     door_window_tool = read_source(File.join(TOOLS_ROOT, 'door_window', 'tools', 'place_tool.rb'))
-    registration = read_source(File.join(TOOLS_ROOT, 'architecture', 'registration.rb'))
+    architecture_registration_files = [
+      File.join(TOOLS_ROOT, 'architecture', 'registration.rb')
+    ] + Dir[File.join(TOOLS_ROOT, 'architecture', 'registration', '*.rb')].sort
+    registration = architecture_registration_files.map { |path| read_source(path) }.join("\n")
 
     assert_includes opening_tool, 'level_id: nil'
     assert_includes opening_tool, "PlanSelectionFilter.new(object_types: ['architecture.wall'], level_id: @level_id)"
@@ -147,16 +150,21 @@ class NativeToolContractTest < Minitest::Test
     assert_includes registration, "command: 'ModifyFloorBoundary', label: 'Floor', level_id: values[0]"
     assert_includes registration, "command: 'ModifyRoomBoundary', label: 'Room', level_id: values[0]"
     assert_includes registration, "command: 'ModifyCeilingBoundary', label: 'Ceiling', level_id: values[0]"
-    architecture_source = read_source(File.join(TOOLS_ROOT, 'architecture', 'registration.rb'))
+    architecture_source = registration
     assert_includes architecture_source, "id: 'architecture.wall.schedule'"
     assert_includes architecture_source, "'EditWallSchedule'"
-    runtime_source = read_source(File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'main.rb'))
-    assert_includes runtime_source, "@menu.add_item('Create Level')"
-    assert_includes runtime_source, "@commands.execute(\n              'CreateLevel'"
-    assert_includes runtime_source, "@menu.add_item('Edit Level')"
-    assert_includes runtime_source, "@commands.execute(\n              'ModifyLevel'"
-    assert_includes runtime_source, "@menu.add_item('Show Levels')"
-    assert_includes runtime_source, "@menu.add_item('Edit Project')"
+    runtime_files = [
+      File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'main.rb'),
+      File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'core', 'ui_entry.rb'),
+      File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'core', 'core_commands.rb')
+    ]
+    runtime_source = runtime_files.map { |path| read_source(path) }.join("\n")
+    assert_includes runtime_source, "menu.add_item('Create Level')"
+    assert_includes runtime_source, "execute(\n            'CreateLevel'"
+    assert_includes runtime_source, "menu.add_item('Edit Level')"
+    assert_includes runtime_source, "execute(\n            'ModifyLevel'"
+    assert_includes runtime_source, "menu.add_item('Show Levels')"
+    assert_includes runtime_source, "menu.add_item('Edit Project')"
     assert_includes runtime_source, "'UpdateProjectMetadata'"
 
     {

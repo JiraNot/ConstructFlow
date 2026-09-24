@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative 'floor_build_up'
+require_relative '../../core/model_materials'
+
 module JiraNot
   module ConstructFlow
     module Architecture
@@ -16,18 +19,52 @@ module JiraNot
 
           entities = group.entities
           entities.clear!
-          face = entities.add_face(definition.boundary_mm.map { |point| point_from_mm(point) })
-          raise 'failed to create floor face' unless face
+          model = group_model(group)
+          layers = FloorBuildUp.layers_for(definition.thickness_mm, definition.material_id)
+          layers_group = entities.add_group
+          layers_group.name = 'Construction Layers'
+          layer_entities = layers_group.entities
 
-          definition.holes_mm.each do |loop|
-            hole = entities.add_face(loop.map { |point| point_from_mm(point) })
-            hole.erase! if hole && hole.respond_to?(:valid?) && hole.valid?
+          offset = 0.0
+          layers.each do |layer|
+            face = layer_entities.add_face(elevated_boundary(definition, offset))
+            raise "failed to create floor layer face: #{layer[:material]}" unless face
+
+            definition.holes_mm.each do |loop|
+              hole = layer_entities.add_face(elevated_loop(loop, offset))
+              hole.erase! if hole && hole.respond_to?(:valid?) && hole.valid?
+            end
+            face.pushpull(Core::Units.mm_to_su(layer[:thickness_mm]))
+            Core::ModelMaterials.paint(model, face, layer[:material])
+            offset += Float(layer[:thickness_mm])
           end
-          face.pushpull(Core::Units.mm_to_su(definition.thickness_mm))
           group
         end
 
         private
+
+        # Each layer starts where the previous one ended, so the stack keeps
+        # the floor's total thickness (and level math) unchanged.
+        def elevated_boundary(definition, offset_mm)
+          definition.boundary_mm.map { |value| point_from_mm(elevated_point(value, offset_mm)) }
+        end
+
+        def elevated_loop(loop, offset_mm)
+          loop.map { |value| point_from_mm(elevated_point(value, offset_mm)) }
+        end
+
+        def elevated_point(values, offset_mm)
+          [values[0], values[1], Float(values[2]) + offset_mm]
+        end
+
+        def group_model(group)
+          return nil unless group.respond_to?(:model)
+
+          model = group.model
+          model.respond_to?(:materials) ? model : nil
+        rescue StandardError
+          nil
+        end
 
         def point_from_mm(values)
           x, y, z = Core::Units.point_from_mm(values)

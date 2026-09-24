@@ -47,6 +47,15 @@ module JiraNot
           @wall_host_capability.opening_frame_points(wall, value.host_descriptor)
         end
 
+        # Thickness of the host wall at this opening (for infill depth).
+        def infill_depth_mm(opening_object)
+          value = definition(opening_object)
+          wall = @object_resolver.call(value.host_object_id)
+          raise KeyError, "opening wall host not found: #{value.host_object_id}" unless wall
+
+          Float(@wall_host_capability.definition(wall).thickness_mm)
+        end
+
         def fit_status(opening_object, width_mm:, height_mm:, tolerance_mm: DEFAULT_TOLERANCE_MM)
           value = definition(opening_object)
           tolerance = Float(tolerance_mm)

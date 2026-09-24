@@ -1524,8 +1524,7 @@ module JiraNot
               cost_db.calculate_line_total(:acrylic_paint, wall_m2 * 2.0, factor_f)
             ].compact
 
-            user_profile = ENV['USERPROFILE'] || 'C:/Users/Dulla'
-            desktop_dir = File.join(user_profile, 'Desktop')
+            desktop_dir = Core::Paths.desktop_dir
             timestamp = Time.now.strftime('%Y%m%d_%H%M%S')
             file_path = File.join(desktop_dir, "ConstructFlow_BOQ_#{timestamp}.csv")
 
@@ -1553,8 +1552,7 @@ module JiraNot
               designer: p['designer'] || 'ConstructFlow Team',
               scale: p['scale'] || '1:75'
             }
-            user_profile = ENV['USERPROFILE'] || 'C:/Users/Dulla'
-            desktop_dir = File.join(user_profile, 'Desktop')
+            desktop_dir = Core::Paths.desktop_dir
             manifest_path = File.join(desktop_dir, 'ConstructFlow_LayOut_A3_Manifest.json')
             Layout::ThaiA3DrawingSheetService.export_manifest_json(manifest_path, metadata)
 

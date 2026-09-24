@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative 'wall_build_up'
+require_relative '../../core/model_materials'
+
 module JiraNot
   module ConstructFlow
     module Architecture
@@ -16,8 +19,10 @@ module JiraNot
 
           entities = group.entities
           entities.clear!
+          model = group_model(group)
+          layers = WallBuildUp.layers_for(definition.thickness_mm, definition.wall_type_id)
           if Array(openings).empty?
-            add_polyline_wall(entities, definition.centerline_path_mm, definition.thickness_mm, definition.height_mm, joins: definition.joins)
+            add_polyline_wall(entities, model, layers, definition.centerline_path_mm, definition.thickness_mm, definition.height_mm, joins: definition.joins)
             return group
           end
 
@@ -27,6 +32,8 @@ module JiraNot
             end
             add_segment(
               entities,
+              model,
+              layers,
               start_mm,
               finish_mm,
               definition.thickness_mm,
@@ -53,12 +60,197 @@ module JiraNot
 
         private
 
-        def add_polyline_wall(entities, path_mm, thickness_mm, height_mm, joins: [])
-          face = entities.add_face(outline_points_mm(path_mm: path_mm, thickness_mm: thickness_mm, joins: joins).map { |value| point_mm(value) })
-          raise 'failed to create joined wall face' unless face
+        def group_model(group)
+          return nil unless group.respond_to?(:model)
 
-          face.reverse! if face.normal.z < 0
-          face.pushpull(Core::Units.mm_to_su(height_mm))
+          model = group.model
+          model.respond_to?(:materials) ? model : nil
+        rescue StandardError
+          nil
+        end
+
+        # Adds the wall as stacked construction layers (per WallBuildUp). The
+        # total footprint stays identical to the single-thickness wall, so
+        # joins, miters and hosted-opening cells keep working unchanged.
+        def add_polyline_wall(entities, model, layers, path_mm, thickness_mm, height_mm, joins: [])
+          if layers.length == 1
+            face = entities.add_face(outline_points_mm(path_mm: path_mm, thickness_mm: thickness_mm, joins: joins).map { |value| point_mm(value) })
+            raise 'failed to create joined wall face' unless face
+
+            face.reverse! if face.normal.z < 0
+            face.pushpull(Core::Units.mm_to_su(height_mm))
+            Core::ModelMaterials.paint(model, face, layers.first[:material])
+            return
+          end
+
+          layers_group = entities.add_group
+          layers_group.name = 'Construction Layers'
+          layer_entities = layers_group.entities
+          half = Float(thickness_mm) / 2.0
+          offset = half
+          layers.each do |layer|
+            inner = offset - Float(layer[:thickness_mm])
+            layer_joins = core_layer?(layer) ? joins : []
+            outline = offset_polyline(path_mm, offset, joins: layer_joins, thickness_mm: thickness_mm) +
+                      offset_polyline(path_mm, inner, joins: layer_joins, thickness_mm: thickness_mm).reverse
+            face = layer_entities.add_face(outline.map { |value| point_mm(value) })
+            raise "failed to create wall layer face: #{layer[:material]}" unless face
+
+            face.reverse! if face.normal.z < 0
+            face.pushpull(Core::Units.mm_to_su(height_mm))
+            Core::ModelMaterials.paint(model, face, layer[:material])
+            offset = inner
+          end
+          layers_group
+        end
+
+        def core_layer?(layer)
+          layer[:role] == 'core'
+        end
+
+        # Joints live on the wall core; finish layers use plain offsets so a
+        # mitered corner of the wall is mirrored cleanly by the skins.
+        def add_segment(entities, model, layers, start_mm, finish_mm, thickness_mm, height_mm, openings)
+          if openings.empty?
+            add_full_segment(entities, model, layers, start_mm, finish_mm, thickness_mm, height_mm)
+            return
+          end
+
+          length_mm = segment_length_mm(start_mm, finish_mm)
+          normalized = openings.map { |opening| normalize_opening(opening) }
+          x_breaks = [0.0, length_mm]
+          z_breaks = [0.0, Float(height_mm)]
+
+          normalized.each do |opening|
+            x_breaks.concat([opening[:start_offset_mm], opening[:start_offset_mm] + opening[:width_mm]])
+            z_breaks.concat([opening[:sill_mm], opening[:sill_mm] + opening[:height_mm]])
+          end
+
+          x_intervals = intervals(x_breaks, 0.0, length_mm)
+          z_intervals = intervals(z_breaks, 0.0, Float(height_mm))
+          cell_entities = entities
+          if layers.length > 1
+            layers_group = entities.add_group
+            layers_group.name = 'Construction Layers'
+            cell_entities = layers_group.entities
+          end
+          x_intervals.each do |x0, x1|
+            z_intervals.each do |z0, z1|
+              center_x = (x0 + x1) / 2.0
+              center_z = (z0 + z1) / 2.0
+              next if normalized.any? { |opening| inside_opening?(center_x, center_z, opening) }
+
+              add_segment_cell(cell_entities, model, layers, start_mm, finish_mm, thickness_mm, x0, x1, z0, z1)
+            end
+          end
+        end
+
+        def add_full_segment(entities, model, layers, start_mm, finish_mm, thickness_mm, height_mm)
+          start = point_mm(start_mm)
+          finish = point_mm(finish_mm)
+          dx = finish.x - start.x
+          dy = finish.y - start.y
+          planar_length = Math.sqrt((dx * dx) + (dy * dy))
+          raise ArgumentError, 'wall segment cannot be vertical/zero in plan' if planar_length <= 1e-9
+
+          ux = dx / planar_length
+          uy = dy / planar_length
+          nx = -uy
+          ny = ux
+
+          if layers.length == 1
+            face = segment_face(entities, start, finish, nx, ny, Float(thickness_mm) / 2.0, -Float(thickness_mm) / 2.0, start.z)
+            raise 'failed to create wall base face' unless face
+
+            face.reverse! if face.normal.z < 0
+            face.pushpull(Core::Units.mm_to_su(height_mm))
+            Core::ModelMaterials.paint(model, face, layers.first[:material])
+            return
+          end
+
+          layers_group = entities.add_group
+          layers_group.name = 'Construction Layers'
+          layer_entities = layers_group.entities
+          half = Float(thickness_mm) / 2.0
+          offset = half
+          layers.each do |layer|
+            inner = offset - Float(layer[:thickness_mm])
+            face = segment_face(layer_entities, start, finish, nx, ny, offset, inner, start.z)
+            raise "failed to create wall layer face: #{layer[:material]}" unless face
+
+            face.reverse! if face.normal.z < 0
+            face.pushpull(Core::Units.mm_to_su(height_mm))
+            Core::ModelMaterials.paint(model, face, layer[:material])
+            offset = inner
+          end
+          layers_group
+        end
+
+        def segment_face(entities, start, finish, nx, ny, outer_offset_mm, inner_offset_mm, base_z)
+          su = ->(mm) { Core::Units.mm_to_su(mm) }
+          entities.add_face(
+            Geom::Point3d.new(start.x + (nx * su.call(outer_offset_mm)), start.y + (ny * su.call(outer_offset_mm)), base_z),
+            Geom::Point3d.new(finish.x + (nx * su.call(outer_offset_mm)), finish.y + (ny * su.call(outer_offset_mm)), base_z),
+            Geom::Point3d.new(finish.x + (nx * su.call(inner_offset_mm)), finish.y + (ny * su.call(inner_offset_mm)), base_z),
+            Geom::Point3d.new(start.x + (nx * su.call(inner_offset_mm)), start.y + (ny * su.call(inner_offset_mm)), base_z)
+          )
+        end
+
+        def add_segment_cell(entities, model, layers, start_mm, finish_mm, thickness_mm, x0_mm, x1_mm, z0_mm, z1_mm)
+          return if (x1_mm - x0_mm) <= 0.001 || (z1_mm - z0_mm) <= 0.001
+
+          sx, sy, sz = start_mm.map { |value| Float(value) }
+          fx, fy, fz = finish_mm.map { |value| Float(value) }
+          dx = fx - sx
+          dy = fy - sy
+          dz = fz - sz
+          planar_length = Math.sqrt((dx * dx) + (dy * dy))
+          raise ArgumentError, 'wall segment cannot be vertical/zero in plan' if planar_length <= 0.001
+          raise ArgumentError, 'hosted openings currently require a level wall segment' if dz.abs > 1.0
+
+          ux = dx / planar_length
+          uy = dy / planar_length
+          nx = -uy
+          ny = ux
+          half_t = Float(thickness_mm) / 2.0
+
+          ax = sx + (ux * x0_mm)
+          ay = sy + (uy * x0_mm)
+          bx = sx + (ux * x1_mm)
+          by = sy + (uy * x1_mm)
+          base_z = sz + z0_mm
+
+          if layers.length == 1
+            face = entities.add_face(
+              point_mm([ax + (nx * half_t), ay + (ny * half_t), base_z]),
+              point_mm([bx + (nx * half_t), by + (ny * half_t), base_z]),
+              point_mm([bx - (nx * half_t), by - (ny * half_t), base_z]),
+              point_mm([ax - (nx * half_t), ay - (ny * half_t), base_z])
+            )
+            raise 'failed to create wall cell base face' unless face
+
+            face.reverse! if face.normal.z < 0
+            face.pushpull(Core::Units.mm_to_su(z1_mm - z0_mm))
+            Core::ModelMaterials.paint(model, face, layers.first[:material])
+            return
+          end
+
+          offset = half_t
+          layers.each do |layer|
+            inner = offset - Float(layer[:thickness_mm])
+            face = entities.add_face(
+              point_mm([ax + (nx * offset), ay + (ny * offset), base_z]),
+              point_mm([bx + (nx * offset), by + (ny * offset), base_z]),
+              point_mm([bx + (nx * inner), by + (ny * inner), base_z]),
+              point_mm([ax + (nx * inner), ay + (ny * inner), base_z])
+            )
+            raise "failed to create wall cell layer face: #{layer[:material]}" unless face
+
+            face.reverse! if face.normal.z < 0
+            face.pushpull(Core::Units.mm_to_su(z1_mm - z0_mm))
+            Core::ModelMaterials.paint(model, face, layer[:material])
+            offset = inner
+          end
         end
 
         def offset_polyline(path, offset, joins: [], thickness_mm: 100.0)
@@ -178,95 +370,6 @@ module JiraNot
           ratio = (((second_a[0] - first_a[0]) * (second_b[1] - second_a[1])) -
                    ((second_a[1] - first_a[1]) * (second_b[0] - second_a[0]))) / denominator
           [first_a[0] + ratio * (first_b[0] - first_a[0]), first_a[1] + ratio * (first_b[1] - first_a[1])]
-        end
-
-        def add_segment(entities, start_mm, finish_mm, thickness_mm, height_mm, openings)
-          if openings.empty?
-            add_full_segment(entities, start_mm, finish_mm, thickness_mm, height_mm)
-            return
-          end
-
-          length_mm = segment_length_mm(start_mm, finish_mm)
-          normalized = openings.map { |opening| normalize_opening(opening) }
-          x_breaks = [0.0, length_mm]
-          z_breaks = [0.0, Float(height_mm)]
-
-          normalized.each do |opening|
-            x_breaks.concat([opening[:start_offset_mm], opening[:start_offset_mm] + opening[:width_mm]])
-            z_breaks.concat([opening[:sill_mm], opening[:sill_mm] + opening[:height_mm]])
-          end
-
-          x_intervals = intervals(x_breaks, 0.0, length_mm)
-          z_intervals = intervals(z_breaks, 0.0, Float(height_mm))
-          x_intervals.each do |x0, x1|
-            z_intervals.each do |z0, z1|
-              center_x = (x0 + x1) / 2.0
-              center_z = (z0 + z1) / 2.0
-              next if normalized.any? { |opening| inside_opening?(center_x, center_z, opening) }
-
-              add_segment_cell(entities, start_mm, finish_mm, thickness_mm, x0, x1, z0, z1)
-            end
-          end
-        end
-
-        def add_full_segment(entities, start_mm, finish_mm, thickness_mm, height_mm)
-          start = point_mm(start_mm)
-          finish = point_mm(finish_mm)
-          dx = finish.x - start.x
-          dy = finish.y - start.y
-          planar_length = Math.sqrt((dx * dx) + (dy * dy))
-          raise ArgumentError, 'wall segment cannot be vertical/zero in plan' if planar_length <= 1e-9
-
-          half = Core::Units.mm_to_su(thickness_mm) / 2.0
-          ox = (-dy / planar_length) * half
-          oy = (dx / planar_length) * half
-
-          face = entities.add_face(
-            Geom::Point3d.new(start.x + ox, start.y + oy, start.z),
-            Geom::Point3d.new(finish.x + ox, finish.y + oy, finish.z),
-            Geom::Point3d.new(finish.x - ox, finish.y - oy, finish.z),
-            Geom::Point3d.new(start.x - ox, start.y - oy, start.z)
-          )
-          raise 'failed to create wall base face' unless face
-
-          face.reverse! if face.normal.z < 0
-          face.pushpull(Core::Units.mm_to_su(height_mm))
-        end
-
-        def add_segment_cell(entities, start_mm, finish_mm, thickness_mm, x0_mm, x1_mm, z0_mm, z1_mm)
-          return if (x1_mm - x0_mm) <= 0.001 || (z1_mm - z0_mm) <= 0.001
-
-          sx, sy, sz = start_mm.map { |value| Float(value) }
-          fx, fy, fz = finish_mm.map { |value| Float(value) }
-          dx = fx - sx
-          dy = fy - sy
-          dz = fz - sz
-          planar_length = Math.sqrt((dx * dx) + (dy * dy))
-          raise ArgumentError, 'wall segment cannot be vertical/zero in plan' if planar_length <= 0.001
-          raise ArgumentError, 'hosted openings currently require a level wall segment' if dz.abs > 1.0
-
-          ux = dx / planar_length
-          uy = dy / planar_length
-          nx = -uy
-          ny = ux
-          half_t = Float(thickness_mm) / 2.0
-
-          ax = sx + (ux * x0_mm)
-          ay = sy + (uy * x0_mm)
-          bx = sx + (ux * x1_mm)
-          by = sy + (uy * x1_mm)
-          base_z = sz + z0_mm
-
-          face = entities.add_face(
-            point_mm([ax + (nx * half_t), ay + (ny * half_t), base_z]),
-            point_mm([bx + (nx * half_t), by + (ny * half_t), base_z]),
-            point_mm([bx - (nx * half_t), by - (ny * half_t), base_z]),
-            point_mm([ax - (nx * half_t), ay - (ny * half_t), base_z])
-          )
-          raise 'failed to create wall cell base face' unless face
-
-          face.reverse! if face.normal.z < 0
-          face.pushpull(Core::Units.mm_to_su(z1_mm - z0_mm))
         end
 
         def normalize_opening(opening)

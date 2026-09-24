@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../core/extension_command_support'
+
 module JiraNot
   module ConstructFlow
     module Architecture
@@ -221,24 +223,15 @@ module JiraNot
         end
 
         def generated_walls(runtime, extension_id)
-          runtime.smart_objects.all.select do |object|
-            next false unless object.type == 'architecture.wall' && object.owner_module == 'constructflow.architecture'
-
-            Array(object.relationships).any? do |relationship|
-              (relationship['kind'] || relationship[:kind]).to_s == RELATION_KIND &&
-                (relationship['target_id'] || relationship[:target_id]).to_s == extension_id.to_s &&
-                (relationship['role'] || relationship[:role]).to_s == RELATION_ROLE
-            end
-          end
+          Core::ExtensionCommandSupport.all_generated(
+            runtime, extension_id,
+            type: 'architecture.wall', owner_module: 'constructflow.architecture',
+            kind: RELATION_KIND, role: RELATION_ROLE
+          )
         end
 
         def generated_slot(object)
-          relationship = Array(object.relationships).find do |value|
-            (value['kind'] || value[:kind]).to_s == RELATION_KIND &&
-              (value['role'] || value[:role]).to_s == RELATION_ROLE
-          end
-          metadata = relationship && (relationship['metadata'] || relationship[:metadata]) || {}
-          (metadata['slot'] || metadata[:slot]).to_s
+          Core::ExtensionCommandSupport.generated_slot(object, kind: RELATION_KIND, role: RELATION_ROLE)
         end
 
         def validation_errors(input)
@@ -263,21 +256,15 @@ module JiraNot
         end
 
         def resolve_base_elevation(runtime, level_id, offset_mm)
-          return Float(offset_mm) if level_id.nil? || level_id.to_s.empty?
-
-          level = runtime.levels.fetch(level_id)
-          raise ArgumentError, "level #{level_id} has unknown elevation" if level.elevation_mm.nil?
-          Float(level.elevation_mm) + Float(offset_mm)
+          Core::ExtensionCommandSupport.resolve_base_elevation(runtime, level_id, offset_mm)
         end
 
         def level_refs(level_id, offset_mm)
-          return [] if level_id.nil? || level_id.to_s.empty?
-          [{ role: 'base', level_id: level_id.to_s, offset_mm: Float(offset_mm) }]
+          Core::ExtensionCommandSupport.level_refs(level_id, offset_mm)
         end
 
         def raise_on_errors!(issues)
-          errors = Array(issues).select { |issue| (issue[:severity] || issue['severity']).to_s == 'error' }
-          raise ArgumentError, errors.map { |issue| issue[:message] || issue['message'] }.join('; ') unless errors.empty?
+          Core::ExtensionCommandSupport.raise_on_errors!(issues)
         end
 
         def key?(hash, key)
@@ -285,7 +272,7 @@ module JiraNot
         end
 
         def fetch(hash, key)
-          hash[key] || hash[key.to_s]
+          Core::ExtensionCommandSupport.fetch(hash, key)
         end
       end
     end

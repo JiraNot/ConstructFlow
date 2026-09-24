@@ -6,6 +6,7 @@ ROOT = File.expand_path('..', __dir__)
 CORE = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'core')
 
 require File.join(CORE, 'id_generator')
+require File.join(CORE, 'paths')
 require File.join(CORE, 'diagnostic_log')
 require File.join(CORE, 'attribute_store')
 require File.join(CORE, 'units')
@@ -35,6 +36,7 @@ require File.join(CORE, 'schedule_editor')
 
 ARCH = File.join(ROOT, 'apps', 'sketchup-extension', 'constructflow', 'modules', 'architecture')
 require File.join(ARCH, 'wall_definition')
+require File.join(ARCH, 'wall_build_up')
 require File.join(ARCH, 'wall_repository')
 require File.join(ARCH, 'wall_join_engine')
 require File.join(ARCH, 'floor_definition')
@@ -356,6 +358,10 @@ class FakeModel < FakeAttributeCarrier
   end
 
   def redo
+    true
+  end
+
+  def add_observer(_observer)
     true
   end
 end

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../core/extension_command_support'
+
 module JiraNot
   module ConstructFlow
     module Surface
@@ -111,17 +113,11 @@ module JiraNot
         end
 
         def find_generated(runtime, extension_id)
-          runtime.smart_objects.all.find do |object|
-            next false unless object.type == 'surface.boundary' && object.owner_module == 'constructflow.surface'
-
-            Array(object.relationships).any? do |relationship|
-              metadata = relationship['metadata'] || relationship[:metadata] || {}
-              (relationship['kind'] || relationship[:kind]).to_s == RELATION_KIND &&
-                (relationship['target_id'] || relationship[:target_id]).to_s == extension_id.to_s &&
-                (relationship['role'] || relationship[:role]).to_s == RELATION_ROLE &&
-                (metadata['slot'] || metadata[:slot]).to_s == SLOT
-            end
-          end
+          Core::ExtensionCommandSupport.find_generated(
+            runtime, extension_id,
+            type: 'surface.boundary', owner_module: 'constructflow.surface', slot: SLOT,
+            kind: RELATION_KIND, role: RELATION_ROLE
+          )
         end
 
         def validation_errors(input, runtime, validator)
@@ -151,8 +147,7 @@ module JiraNot
         end
 
         def extension_id_from(input, intent = nil)
-          data = intent || fetch(input, :intent) || {}
-          (fetch(input, :extension_id) || fetch(data, :extension_id)).to_s
+          Core::ExtensionCommandSupport.extension_id_from(input, intent)
         end
 
         def warning_messages(issues)
@@ -160,7 +155,7 @@ module JiraNot
         end
 
         def fetch(hash, key)
-          hash[key] || hash[key.to_s]
+          Core::ExtensionCommandSupport.fetch(hash, key)
         end
       end
     end

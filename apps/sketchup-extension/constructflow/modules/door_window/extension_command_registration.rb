@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../core/extension_command_support'
+
 module JiraNot
   module ConstructFlow
     module DoorWindow
@@ -231,25 +233,20 @@ module JiraNot
         def find_attachment_opening(runtime, extension_id)
           runtime.smart_objects.all.find do |object|
             next false unless object.owner_module.to_s == 'constructflow.opening' && object.type.to_s.start_with?('opening.')
-            generated_slot?(object, extension_id, OPENING_SLOT)
+            Core::ExtensionCommandSupport.generated_relation?(object, extension_id, kind: RELATION_KIND, role: RELATION_ROLE, slot: OPENING_SLOT)
           end
         end
 
         def find_generated(runtime, extension_id)
-          runtime.smart_objects.all.find do |object|
-            next false unless object.owner_module.to_s == 'constructflow.door_window' && object.type.to_s == 'door_window.instance'
-            generated_slot?(object, extension_id, SLOT)
-          end
+          Core::ExtensionCommandSupport.find_generated(
+            runtime, extension_id,
+            type: 'door_window.instance', owner_module: 'constructflow.door_window', slot: SLOT,
+            kind: RELATION_KIND, role: RELATION_ROLE
+          )
         end
 
         def generated_slot?(object, extension_id, slot)
-          Array(object.relationships).any? do |relationship|
-            metadata = (relationship['metadata'] || relationship[:metadata]) || {}
-            (relationship['kind'] || relationship[:kind]).to_s == RELATION_KIND &&
-              (relationship['target_id'] || relationship[:target_id]).to_s == extension_id.to_s &&
-              (relationship['role'] || relationship[:role]).to_s == RELATION_ROLE &&
-              (metadata['slot'] || metadata[:slot]).to_s == slot.to_s
-          end
+          Core::ExtensionCommandSupport.generated_relation?(object, extension_id, kind: RELATION_KIND, role: RELATION_ROLE, slot: slot)
         end
 
         def replace_host_relationship(runtime, entity, old_opening_id, new_opening_id)
@@ -323,7 +320,7 @@ module JiraNot
         end
 
         def fetch(hash, key)
-          hash[key] || hash[key.to_s]
+          Core::ExtensionCommandSupport.fetch(hash, key)
         end
       end
     end

@@ -2,8 +2,6 @@
 
 require 'sketchup.rb'
 
-File.open('C:/Users/Dulla/constructflow_debug.log', 'a') { |f| f.puts("Loaded at #{Time.now}") } rescue nil
-
 module JiraNot
   module ConstructFlow
     module RealProjectGenerator
@@ -276,10 +274,9 @@ module JiraNot
         model.commit_operation
 
         # ── 16. SAVE CLEAN .SKP TO DESKTOP & USERPROFILE ─────────────
-        user_profile = ENV['USERPROFILE'] || 'C:/Users/Dulla'
-        desktop_dir = File.join(user_profile, 'Desktop')
+        desktop_dir = Core::Paths.desktop_dir
         save_path = File.join(desktop_dir, 'ConstructFlow_Real_Project.skp')
-        backup_path = File.join(user_profile, 'ConstructFlow_Real_Project.skp')
+        backup_path = File.join(Core::Paths.user_output_dir, 'ConstructFlow_Real_Project.skp')
 
         # Frame entire building in viewport before saving thumbnail
         begin
@@ -291,7 +288,7 @@ module JiraNot
         model.save(save_path)
         model.save(backup_path)
 
-        log_path = File.join(user_profile, 'constructflow_skp_status.txt')
+        log_path = File.join(Core::Paths.user_output_dir, 'constructflow_skp_status.txt')
         File.write(log_path, "SUCCESS_PREMIUM: #{save_path} at #{Time.now}")
 
         puts "=========================================================="
@@ -616,27 +613,27 @@ if defined?(UI)
     UI.messagebox("ConstructFlow: อัปเดตโมเดลสถาปัตย์สมบูรณ์และบันทึกไฟล์ .SKP สำเร็จเรียบร้อยบน Desktop!")
   end
 
-  # Auto-generate once when SketchUp opens
-  $cf_gen_timer = UI.start_timer(1.0, true) do
+  # Optional one-shot auto-generate when SketchUp opens.
+  # Disabled by default: the legacy timer wiped and regenerated the active
+  # model on every startup. Set CONSTRUCTFLOW_AUTO_PROJECT=1 to opt in.
+  if ENV['CONSTRUCTFLOW_AUTO_PROJECT'] == '1'
+    $cf_gen_timer = UI.start_timer(1.0, true) do
     model = Sketchup.active_model
-    File.open('C:/Users/Dulla/constructflow_debug.log', 'a') { |f| f.puts("Timer tick at #{Time.now}, model=#{model.inspect}") } rescue nil
     if model && model.active_entities
-      user_profile = ENV['USERPROFILE'] || 'C:/Users/Dulla'
-      log_path = File.join(user_profile, 'constructflow_skp_status.txt')
+      log_path = File.join(Core::Paths.user_output_dir, 'constructflow_skp_status.txt')
       status = File.exist?(log_path) ? File.read(log_path) : ''
       unless status.include?('SUCCESS_PREMIUM')
-        File.open('C:/Users/Dulla/constructflow_debug.log', 'a') { |f| f.puts("Triggering generate_and_save!") } rescue nil
         begin
           success = JiraNot::ConstructFlow::RealProjectGenerator.generate_and_save!
-          File.open('C:/Users/Dulla/constructflow_debug.log', 'a') { |f| f.puts("Generation result: #{success}") } rescue nil
           UI.stop_timer($cf_gen_timer) if success
         rescue => e
-          File.open('C:/Users/Dulla/constructflow_debug.log', 'a') { |f| f.puts("ERROR: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}") } rescue nil
+          warn("ConstructFlow auto-generate failed: #{e.class}: #{e.message}")
           UI.stop_timer($cf_gen_timer)
         end
       else
         UI.stop_timer($cf_gen_timer)
       end
+    end
     end
   end
 end

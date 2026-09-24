@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../core/model_materials'
+
 module JiraNot
   module ConstructFlow
     module Structure
@@ -31,16 +33,12 @@ module JiraNot
           cx = x - offset[0]
           cy = y - offset[1]
 
-          face = entities.add_face(
-            point([cx - half_w, cy - half_d, z]),
-            point([cx + half_w, cy - half_d, z]),
-            point([cx + half_w, cy + half_d, z]),
-            point([cx - half_w, cy + half_d, z])
-          )
+          face = column_face(entities, definition, cx, cy, z, half_w, half_d)
           raise 'failed to create structural column face' unless face
 
           face.reverse! if face.normal.z < 0
           face.pushpull(Core::Units.mm_to_su(definition.height_mm))
+          Core::ModelMaterials.paint(group_model(group), face, column_material(definition))
           group
         end
 
@@ -72,6 +70,7 @@ module JiraNot
 
           face.reverse! if face.normal.z < 0
           face.pushpull(Core::Units.mm_to_su(thickness))
+          Core::ModelMaterials.paint(group_model(group), face, 'CF Concrete')
           group
         end
 
@@ -212,6 +211,83 @@ module JiraNot
 
 
         private
+
+        # Column cross-section face: circle for round sections, true steel
+        # I/H/box outline from the profile catalog, rectangle otherwise.
+        def column_face(entities, definition, center_x, center_y, base_z, half_w, half_d)
+          section_type = definition.section_type.to_s
+          if section_type == 'round' || section_type == 'circular'
+            points = (0...24).map do |index|
+              angle = (2.0 * Math::PI * index) / 24
+              point([center_x + (Math.cos(angle) * half_w), center_y + (Math.sin(angle) * half_d), base_z])
+            end
+            return entities.add_face(*points)
+          end
+          if %w[steel_i steel_h i_shape h_shape box_tube steel_box].include?(section_type)
+            outline = steel_outline_mm(definition, center_x, center_y, base_z)
+            return entities.add_face(*outline) if outline
+          end
+          entities.add_face(
+            point([center_x - half_w, center_y - half_d, base_z]),
+            point([center_x + half_w, center_y - half_d, base_z]),
+            point([center_x + half_w, center_y + half_d, base_z]),
+            point([center_x - half_w, center_y + half_d, base_z])
+          )
+        end
+
+        # I/H/box cross-section outline (in mm) from StructuralProfileCatalog
+        # data carried on the definition; falls back to the bounding box.
+        def steel_outline_mm(definition, center_x, center_y, base_z)
+          profile = definition.profile_code && defined?(Core::StructuralProfileCatalog) ? Core::StructuralProfileCatalog.find_profile(definition.profile_code) : nil
+          return nil unless profile
+
+          width = Float(profile[:width_mm])
+          depth = Float(profile[:depth_mm])
+          return box_tube_outline(center_x, center_y, base_z, width, depth, Float(profile[:thickness_mm] || width / 10.0)) if profile[:shape] == :box_tube
+
+          tw = Float(profile[:tw] || width / 10.0)
+          tf = Float(profile[:tf] || depth / 10.0)
+          half_w = width / 2.0
+          half_d = depth / 2.0
+          [
+            point([center_x - half_w, center_y - half_d, base_z]), point([center_x + half_w, center_y - half_d, base_z]),
+            point([center_x + half_w, center_y - half_d + tf, base_z]), point([center_x + tw / 2.0, center_y - half_d + tf, base_z]),
+            point([center_x + tw / 2.0, center_y + half_d - tf, base_z]), point([center_x + half_w, center_y + half_d - tf, base_z]),
+            point([center_x + half_w, center_y + half_d, base_z]), point([center_x - half_w, center_y + half_d, base_z]),
+            point([center_x - half_w, center_y + half_d - tf, base_z]), point([center_x - tw / 2.0, center_y + half_d - tf, base_z]),
+            point([center_x - tw / 2.0, center_y - half_d + tf, base_z]), point([center_x - half_w, center_y - half_d + tf, base_z])
+          ]
+        end
+
+        def box_tube_outline(center_x, center_y, base_z, width, depth, thickness)
+          half_w = width / 2.0
+          half_d = depth / 2.0
+          inner_w = half_w - thickness
+          inner_d = half_d - thickness
+          [
+            point([center_x - half_w, center_y - half_d, base_z]), point([center_x + half_w, center_y - half_d, base_z]),
+            point([center_x + half_w, center_y + half_d, base_z]), point([center_x - half_w, center_y + half_d, base_z]),
+            point([center_x - inner_w, center_y + inner_d, base_z]), point([center_x - inner_w, center_y - inner_d, base_z]),
+            point([center_x + inner_w, center_y - inner_d, base_z]), point([center_x + inner_w, center_y + inner_d, base_z])
+          ]
+        end
+
+        def column_material(definition)
+          case definition.material.to_s
+          when 'steel' then 'CF Steel'
+          when 'timber' then 'CF Timber'
+          else 'CF Concrete'
+          end
+        end
+
+        def group_model(group)
+          return nil unless group.respond_to?(:model)
+
+          model = group.model
+          model.respond_to?(:materials) ? model : nil
+        rescue StandardError
+          nil
+        end
 
         def point(values_mm)
           x, y, z = Core::Units.point_from_mm(values_mm)
