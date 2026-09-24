@@ -127,12 +127,13 @@ module JiraNot
         def add_panels(entities, model, frame, type, depth_mm)
           count = [type.panel_roles.length, 1].max
           bottom_left, bottom_right, top_right, top_left = frame
+          leaf_mm = [type.leaf_thickness_mm, depth_mm / 2.0].min
 
           # Mullion: real 3D post between bays (skip after the last bay).
           if type.mullion_width_mm.positive?
             (count - 1).times do |index|
               ratio = (index + 1).to_f / count
-              add_mullion(entities, model, frame, ratio, type.mullion_width_mm, depth_mm)
+              add_mullion(entities, model, frame, ratio, type.mullion_width_mm, depth_mm, leaf_mm)
             end
           end
 
@@ -146,19 +147,19 @@ module JiraNot
           end
 
           type.panel_roles.each_with_index do |role, index|
-            add_role_symbol(entities, model, frame, index, count, role, depth_mm, type.louver_spacing_mm)
+            add_role_symbol(entities, model, frame, index, count, role, depth_mm, type.louver_spacing_mm, leaf_mm)
           end
         end
 
-        # Vertical mullion post between panel bays.
-        def add_mullion(entities, model, frame, ratio, width_mm, depth_mm)
+        # Vertical mullion post between panel bays, centered on the bay line.
+        def add_mullion(entities, model, frame, ratio, width_mm, depth_mm, leaf_mm)
           bottom_left, bottom_right, top_right, top_left = frame
-          half = width_mm / 2.0
-          bl = interpolate(bottom_left, bottom_right, ratio)
-          br = interpolate(bottom_left, bottom_right, [ratio + (half / bay_width_mm(frame)), 1.0].min)
-          tl = interpolate(top_left, top_right, ratio)
-          tr = interpolate(top_left, top_right, [ratio + (half / bay_width_mm(frame)), 1.0].min)
-          add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm)
+          half_ratio = (width_mm / 2.0) / bay_width_mm(frame)
+          bl = interpolate(bottom_left, bottom_right, ratio - half_ratio)
+          br = interpolate(bottom_left, bottom_right, ratio + half_ratio)
+          tl = interpolate(top_left, top_right, ratio - half_ratio)
+          tr = interpolate(top_left, top_right, ratio + half_ratio)
+          add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm, :center, leaf_mm)
         end
 
         def bay_width_mm(frame)
@@ -172,7 +173,7 @@ module JiraNot
           interpolate(a, b, 0.5)
         end
 
-        def add_role_symbol(entities, model, frame, index, count, role, depth_mm, spacing_mm = 80.0)
+        def add_role_symbol(entities, model, frame, index, count, role, depth_mm, spacing_mm = 80.0, leaf_mm = LEAF_DEPTH_MM)
           bottom_left, bottom_right, top_right, top_left = frame
           left_ratio = index.to_f / count
           right_ratio = (index + 1).to_f / count
@@ -183,43 +184,43 @@ module JiraNot
 
           case role.to_s
           when /swing_left_out/
-            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm, :back)
+            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm, :back, leaf_mm)
             add_line(entities, br, tl)
           when /swing_right_out/
-            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm, :back)
+            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm, :back, leaf_mm)
             add_line(entities, bl, tr)
           when /swing_left/
-            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm)
+            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm, :center, leaf_mm)
             add_line(entities, br, tl)
           when /swing_right/
-            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm)
+            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm, :center, leaf_mm)
             add_line(entities, bl, tr)
           when 'swing_top'
-            add_awning_leaf(entities, model, [bl, br, tr, tl], depth_mm, :top)
+            add_awning_leaf(entities, model, [bl, br, tr, tl], depth_mm, :top, leaf_mm)
           when 'swing_bottom'
-            add_awning_leaf(entities, model, [bl, br, tr, tl], depth_mm, :bottom)
+            add_awning_leaf(entities, model, [bl, br, tr, tl], depth_mm, :bottom, leaf_mm)
           when 'pivot_center'
-            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm)
+            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm, :center, leaf_mm)
             add_line(entities, interpolate(bl, tl, 0.5), interpolate(br, tr, 0.5))
             add_line(entities, bl, tr)
             add_line(entities, br, tl)
           when 'louver_row'
             add_louver_blades(entities, model, [bl, br, tr, tl], depth_mm, spacing_mm)
           when 'roller_shutter'
-            add_roller_shutter(entities, model, [bl, br, tr, tl], depth_mm)
+            add_roller_shutter(entities, model, [bl, br, tr, tl], depth_mm, leaf_mm)
           when /slide_left/
-            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm, :front)
+            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm, :front, leaf_mm)
             add_line(entities, interpolate(bl, tl, 0.5), interpolate(br, tr, 0.5))
           when /slide_right/
-            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm, :back)
+            add_leaf_slab(entities, model, [bl, br, tr, tl], depth_mm, :back, leaf_mm)
             add_line(entities, interpolate(bl, tl, 0.5), interpolate(br, tr, 0.5))
           end
         end
 
         # Top/bottom-hinged leaf (awning/hopper): hinged slab drawn as a
         # tilted panel plus a plan triangle symbol.
-        def add_awning_leaf(entities, model, corners, depth_mm, hinge_side)
-          add_leaf_slab(entities, model, corners, depth_mm)
+        def add_awning_leaf(entities, model, corners, depth_mm, hinge_side, leaf_mm)
+          add_leaf_slab(entities, model, corners, depth_mm, :center, leaf_mm)
           bl, br, tr, tl = corners
           apex = hinge_side == :top ? midpoint(bl, br) : midpoint(tl, tr)
           base_left, base_right = hinge_side == :top ? [tl, tr] : [bl, br]
@@ -253,8 +254,8 @@ module JiraNot
 
         # Roller shutter: solid slab with horizontal groove lines every
         # 120 mm reading as stacked slats.
-        def add_roller_shutter(entities, model, corners, depth_mm)
-          add_leaf_slab(entities, model, corners, depth_mm)
+        def add_roller_shutter(entities, model, corners, depth_mm, leaf_mm)
+          add_leaf_slab(entities, model, corners, depth_mm, :center, leaf_mm)
           bl, br, tr, tl = corners
           slat = 120.0
           rows = ((tr[2] - bl[2]) / slat).floor
@@ -267,23 +268,28 @@ module JiraNot
           end
         end
 
-        # Tilt a blade strip in the y-z plane (around the wall's horizontal
-        # axis) so louver blades read as angled glass.
+        # Tilt a blade strip around its OWN center (y-z plane) so louver
+        # blades read as angled glass without flying off the wall plane.
         def tilt_corners(corners, angle_deg)
           angle = angle_deg * Math::PI / 180.0
           cos = Math.cos(angle)
           sin = Math.sin(angle)
+          center_y = corners.sum { |values| values[1] } / corners.length.to_f
+          center_z = corners.sum { |values| values[2] } / corners.length.to_f
           corners.map do |values|
             x, y, z = values
-            [x, (y * cos) - (z * sin), (y * sin) + (z * cos)]
+            dy = y - center_y
+            dz = z - center_z
+            [x, center_y + ((dy * cos) - (dz * sin)), center_z + ((dy * sin) + (dz * cos))]
           end
         end
 
-        # A hinged/sliding leaf as a real slab with thickness. Sliding leaves
-        # offset to alternating planes along the wall normal so adjacent
-        # panels read as interlocking tracks.
-        def add_leaf_slab(entities, model, corners, depth_mm, side = :center)
-          depth = [@leaf_thickness_mm || LEAF_DEPTH_MM, depth_mm / 2.0].min
+        # A hinged/sliding leaf as a real slab with thickness (leaf_mm comes
+        # from the type so different doors/windows have different weights).
+        # Sliding leaves offset to alternating planes along the wall normal
+        # so adjacent panels read as interlocking tracks.
+        def add_leaf_slab(entities, model, corners, depth_mm, side = :center, leaf_mm = LEAF_DEPTH_MM)
+          depth = [leaf_mm, depth_mm / 2.0].min
           shifted = shifted_corners(corners, depth_mm, side)
           face = add_face_from_corners(entities, shifted.map { |values| point(values) })
           return unless face

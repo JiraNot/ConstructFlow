@@ -245,6 +245,15 @@ class FakeFace
   def pushpull(*_args)
     true
   end
+
+  # Geometry code orients faces with normal.z; default stub faces point up.
+  def normal
+    Struct.new(:x, :y, :z).new(0.0, 0.0, 1.0)
+  end
+
+  def reverse!
+    true
+  end
 end
 
 class FakeEdge
