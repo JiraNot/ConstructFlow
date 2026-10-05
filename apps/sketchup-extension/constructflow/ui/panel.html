@@ -174,15 +174,15 @@
             <span class="ribbon-lbl">วาดคาน</span>
             <span class="ribbon-badge">BM</span>
           </button>
-          <button class="ribbon-btn" data-action="drawRoofFraming" data-tool-name="โครงหลังคา [RF]" title="โครงหลังคาเหล็ก (RF)">
+          <button class="ribbon-btn" data-action="drawRoofFraming" data-tool-name="โครงหลังคา [FRM]" title="โครงหลังคาเหล็ก (FRM)">
             <span class="ribbon-icon">🏠</span>
             <span class="ribbon-lbl">โครงหลังคา</span>
-            <span class="ribbon-badge">RF</span>
+            <span class="ribbon-badge">FRM</span>
           </button>
-          <button class="ribbon-btn" data-action="modifyRoofFraming" data-tool-name="แก้ไขโครงหลังคา [MRF]" title="ตั้งค่า/แก้ไขโครงหลังคา">
+          <button class="ribbon-btn" data-action="modifyRoofFraming" data-tool-name="แก้ไขโครงหลังคา [MFR]" title="ตั้งค่า/แก้ไขโครงหลังคา">
             <span class="ribbon-icon">🛠</span>
             <span class="ribbon-lbl">แก้โครงหลังคา</span>
-            <span class="ribbon-badge">MRF</span>
+            <span class="ribbon-badge">MFR</span>
           </button>
           <button class="ribbon-btn" data-action="assignRebar" data-tool-name="เหล็กเสริม 3D [RB]" title="สร้างเหล็กเสริม 3D (RB)">
             <span class="ribbon-icon">🏗️</span>
@@ -299,20 +299,20 @@
             <span class="ribbon-lbl">ดึงระยะ Auto</span>
             <span class="ribbon-badge">DIM</span>
           </button>
-          <button class="ribbon-btn" data-action="activateSpotElevation" data-tool-name="ปักหมุดระดับ [LVL]" title="คลิกปักหมุดสัญลักษณ์ระดับบนพื้นผิว (▼ FL. / ▼ GL. / ▼ BEAM)">
+          <button class="ribbon-btn" data-action="activateSpotElevation" data-tool-name="ปักหมุดระดับ [EL]" title="คลิกปักหมุดสัญลักษณ์ระดับบนพื้นผิว (▼ FL. / ▼ GL. / ▼ BEAM)">
             <span class="ribbon-icon">🎯</span>
             <span class="ribbon-lbl">ปักหมุดระดับ</span>
-            <span class="ribbon-badge">LVL</span>
+            <span class="ribbon-badge">EL</span>
           </button>
           <button class="ribbon-btn" data-action="drawRevitAutoRoof" data-tool-name="หลังคา Auto Revit [AR]" title="สร้างหลังคา Auto แบบ Revit (Roof by Footprint) พร้อมแนบหัวผนังปิดจั่ว">
             <span class="ribbon-icon">🏠</span>
             <span class="ribbon-lbl">หลังคา Revit</span>
             <span class="ribbon-badge">AR</span>
           </button>
-          <button class="ribbon-btn" data-action="generateHipGableRoof" data-tool-name="ปั้นหลังคาปั้นหยา/จั่ว [RF2]" title="สร้างหลังคาปั้นหยา/จั่ว พร้อมเชิงชาย 1-Click">
+          <button class="ribbon-btn" data-action="generateHipGableRoof" data-tool-name="ปั้นหลังคาปั้นหยา/จั่ว [HGR]" title="สร้างหลังคาปั้นหยา/จั่ว พร้อมเชิงชาย 1-Click">
             <span class="ribbon-icon">🏠</span>
             <span class="ribbon-lbl">หลังคาจั่ว/ปั้นหยา</span>
-            <span class="ribbon-badge">RF2</span>
+            <span class="ribbon-badge">HGR</span>
           </button>
                     <button class="ribbon-btn" data-action="smartStretch" data-tool-name="ยืดขอบไม่เพี้ยน [SS]" title="ยืด/ย่อสเกลประตู หน้าต่าง ตู้ โดยขอบเฟรมไม่เพี้ยน (9-Slice Smart Stretch)">
             <span class="ribbon-icon">↔️</span>
@@ -1370,7 +1370,7 @@
             <input type="number" id="clad-overhang" value="0.10" step="0.05">
           </div>
         </div>
-        <button class="btn btn-secondary" data-action="arrayOnFace" data-tip-title="📐 อาร์เรย์บนผิว (Cladding Array)" data-tip-sc="CA" data-tip-desc="วางแผ่นหลังคาหรือระแนงกระจายตัวเต็มพื้นที่ Face ที่ลาดเอียง" data-tip-mouse="คลิกเลือก Face หลังคา/ผนัง ➔ กดปุ่ม">📐 วางชิ้นงานกระจายบน Face <span class="shortcut-badge">CA</span></button>
+        <button class="btn btn-secondary" data-action="arrayOnFace" data-tip-title="📐 อาร์เรย์บนผิว (Cladding Array)" data-tip-sc="AF" data-tip-desc="วางแผ่นหลังคาหรือระแนงกระจายตัวเต็มพื้นที่ Face ที่ลาดเอียง" data-tip-mouse="คลิกเลือก Face หลังคา/ผนัง ➔ กดปุ่ม">📐 วางชิ้นงานกระจายบน Face <span class="shortcut-badge">AF</span></button>
       </div>
 
     </div>
@@ -2049,10 +2049,10 @@
           <span class="ribbon-lbl">ดึงระยะ Auto</span>
           <span class="ribbon-badge">DIM</span>
         </button>
-        <button class="ribbon-btn" data-action="activateSpotElevation" data-tool-name="ปักหมุดระดับ [LVL]" title="คลิกปักหมุดสัญลักษณ์ระดับบนพื้นผิว (▼ FL. / ▼ GL. / ▼ BEAM)">
+        <button class="ribbon-btn" data-action="activateSpotElevation" data-tool-name="ปักหมุดระดับ [EL]" title="คลิกปักหมุดสัญลักษณ์ระดับบนพื้นผิว (▼ FL. / ▼ GL. / ▼ BEAM)">
           <span class="ribbon-icon">🎯</span>
           <span class="ribbon-lbl">ปักหมุดระดับ</span>
-          <span class="ribbon-badge">LVL</span>
+          <span class="ribbon-badge">EL</span>
         </button>
         <button class="ribbon-btn" data-action="useLaserLevel" data-tool-name="เลเซอร์วัดระดับ [LS]" title="เลเซอร์วัดระดับและหาระยะต่างระดับ">
           <span class="ribbon-icon">🔴</span>
@@ -2082,10 +2082,10 @@
           <span class="ribbon-lbl">หลังคา Auto Revit</span>
           <span class="ribbon-badge">AR</span>
         </button>
-        <button class="ribbon-btn" data-action="generateHipGableRoof" data-tool-name="ปั้นหลังคาจั่ว/ปั้นหยา [RF2]" title="สร้างหลังคาปั้นหยา/จั่ว พร้อมเชิงชาย 1-Click">
+        <button class="ribbon-btn" data-action="generateHipGableRoof" data-tool-name="ปั้นหลังคาจั่ว/ปั้นหยา [HGR]" title="สร้างหลังคาปั้นหยา/จั่ว พร้อมเชิงชาย 1-Click">
           <span class="ribbon-icon">🏠</span>
           <span class="ribbon-lbl">หลังคาจั่ว/ปั้นหยา</span>
-          <span class="ribbon-badge">RF2</span>
+          <span class="ribbon-badge">HGR</span>
         </button>
         <button class="ribbon-btn" data-action="stretchByArea" data-tool-name="ยืดตามพื้นที่ [SA]" title="ยืดขยายตามพื้นที่เป้าหมาย ตร.ม.">
           <span class="ribbon-icon">📐</span>

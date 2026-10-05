@@ -5,7 +5,14 @@ module JiraNot
     module Architecture
       module Tools
         class RoofFramingTool
-          def self.modify_selected(model = Sketchup.active_model)
+          # Settings collected by the toolbar/flyout properties dialog
+          # (ShortcutManager). When present, the tool skips its own inputbox
+          # and uses the reviewed values instead of hidden defaults.
+          def initialize(settings = nil, **options)
+            @settings = settings || options[:settings]
+          end
+
+          def self.modify_selected(model = Sketchup.active_model, settings: nil)
             repo = RoofFramingRepository.new
             selected_group = model.selection.find { |e| e.is_a?(Sketchup::Group) && repo.is_roof_framing?(e) }
             
@@ -14,10 +21,10 @@ module JiraNot
               return false
             end
             
-            edit_roof_framing(selected_group, model)
+            edit_roof_framing(selected_group, model, settings)
           end
 
-          def self.edit_roof_framing(group, model = Sketchup.active_model)
+          def self.edit_roof_framing(group, model = Sketchup.active_model, settings = nil)
             repo = RoofFramingRepository.new
             current_def = repo.load(group)
             unless current_def
@@ -25,30 +32,38 @@ module JiraNot
               return false
             end
 
-            prompts = [
-              'องศาความชันหลังคา (Pitch deg):',
-              'ระยะห่างจันทัน/โครงถัก (เมตร m เช่น 1.20):',
-              'ระยะห่างแปเหล็ก (เมตร m เช่น 1.00):',
-              'ระยะยื่นชายคา (เมตร m เช่น 0.80):',
-              'รูปแบบหลังคา (Type):'
-            ]
-            defaults = [
-              current_def.pitch_degrees.to_s,
-              (current_def.truss_spacing_mm / 1000.0).round(2).to_s,
-              (current_def.purlin_spacing_mm / 1000.0).round(2).to_s,
-              (current_def.overhang_mm / 1000.0).round(2).to_s,
-              current_def.type.to_s
-            ]
-            list = ['', '', '', '', 'gable|shed']
+            if settings.nil? || settings.empty?
+              prompts = [
+                'องศาความชันหลังคา (Pitch deg):',
+                'ระยะห่างจันทัน/โครงถัก (เมตร m เช่น 1.20):',
+                'ระยะห่างแปเหล็ก (เมตร m เช่น 1.00):',
+                'ระยะยื่นชายคา (เมตร m เช่น 0.80):',
+                'รูปแบบหลังคา (Type):'
+              ]
+              defaults = [
+                current_def.pitch_degrees.to_s,
+                (current_def.truss_spacing_mm / 1000.0).round(2).to_s,
+                (current_def.purlin_spacing_mm / 1000.0).round(2).to_s,
+                (current_def.overhang_mm / 1000.0).round(2).to_s,
+                current_def.type.to_s
+              ]
+              list = ['', '', '', '', 'gable|shed']
 
-            results = UI.inputbox(prompts, defaults, list, 'ตั้งค่าแก้ไขโครงสร้างเหล็กหลังคา [Edit Roof Framing]')
-            return false unless results
+              results = UI.inputbox(prompts, defaults, list, 'ตั้งค่าแก้ไขโครงสร้างเหล็กหลังคา [Edit Roof Framing]')
+              return false unless results
 
-            pitch = results[0].to_f
-            truss_spacing = results[1].to_f < 50.0 ? results[1].to_f * 1000.0 : results[1].to_f
-            purlin_spacing = results[2].to_f < 50.0 ? results[2].to_f * 1000.0 : results[2].to_f
-            overhang = results[3].to_f < 50.0 ? results[3].to_f * 1000.0 : results[3].to_f
-            roof_type = results[4].to_sym
+              pitch = results[0].to_f
+              truss_spacing = results[1].to_f < 50.0 ? results[1].to_f * 1000.0 : results[1].to_f
+              purlin_spacing = results[2].to_f < 50.0 ? results[2].to_f * 1000.0 : results[2].to_f
+              overhang = results[3].to_f < 50.0 ? results[3].to_f * 1000.0 : results[3].to_f
+              roof_type = results[4].to_sym
+            else
+              pitch = settings[:pitch_degrees].to_f
+              truss_spacing = settings[:truss_spacing_mm].to_f
+              purlin_spacing = settings[:purlin_spacing_mm].to_f
+              overhang = settings[:overhang_mm].to_f
+              roof_type = (settings[:roof_type] || current_def.type).to_sym
+            end
 
             new_def = RoofFramingDefinition.new(
               boundary_mm: current_def.boundary_mm,
@@ -112,25 +127,33 @@ module JiraNot
           
           def generate_roof(face)
             model = Sketchup.active_model
-            
-            prompts = [
-              'องศาความชันหลังคา (Pitch deg):',
-              'ระยะห่างจันทัน/โครงถัก (Truss Spacing mm):',
-              'ระยะห่างแปเหล็ก C-Channel (Purlin Spacing mm):',
-              'ระยะยื่นชายคา (Overhang mm):',
-              'รูปแบบหลังคา (Type):'
-            ]
-            defaults = ['30.0', '1000', '300', '600', 'gable']
-            list = ['', '', '', '', 'gable|shed']
 
-            results = UI.inputbox(prompts, defaults, list, 'สร้างโครงสร้างเหล็กหลังคา [Steel Roof Framing]')
-            return unless results
+            if @settings && !@settings.empty?
+              pitch = @settings[:pitch_degrees].to_f
+              truss_spacing = @settings[:truss_spacing_mm].to_f
+              purlin_spacing = @settings[:purlin_spacing_mm].to_f
+              overhang = @settings[:overhang_mm].to_f
+              roof_type = (@settings[:roof_type] || 'gable').to_sym
+            else
+              prompts = [
+                'องศาความชันหลังคา (Pitch deg):',
+                'ระยะห่างจันทัน/โครงถัก (Truss Spacing mm):',
+                'ระยะห่างแปเหล็ก C-Channel (Purlin Spacing mm):',
+                'ระยะยื่นชายคา (Overhang mm):',
+                'รูปแบบหลังคา (Type):'
+              ]
+              defaults = ['30.0', '1000', '300', '600', 'gable']
+              list = ['', '', '', '', 'gable|shed']
 
-            pitch = results[0].to_f
-            truss_spacing = results[1].to_f < 50.0 ? results[1].to_f * 1000.0 : results[1].to_f
-            purlin_spacing = results[2].to_f < 50.0 ? results[2].to_f * 1000.0 : results[2].to_f
-            overhang = results[3].to_f < 50.0 ? results[3].to_f * 1000.0 : results[3].to_f
-            roof_type = results[4].to_sym
+              results = UI.inputbox(prompts, defaults, list, 'สร้างโครงสร้างเหล็กหลังคา [Steel Roof Framing]')
+              return unless results
+
+              pitch = results[0].to_f
+              truss_spacing = results[1].to_f < 50.0 ? results[1].to_f * 1000.0 : results[1].to_f
+              purlin_spacing = results[2].to_f < 50.0 ? results[2].to_f * 1000.0 : results[2].to_f
+              overhang = results[3].to_f < 50.0 ? results[3].to_f * 1000.0 : results[3].to_f
+              roof_type = results[4].to_sym
+            end
 
             model.start_operation('Generate Roof Framing', true)
         begin

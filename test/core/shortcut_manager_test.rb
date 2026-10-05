@@ -64,10 +64,39 @@ module JiraNot
 
       def test_shortcuts_registry_completeness
         shortcuts = Core::ShortcutManager::SHORTCUTS
-        expected_codes = %w[WA CL BM DR WN OP FL CE FD GR CN PI MH CB WR CF IN]
+        expected_codes = %w[
+          WA CL BM DR WN OP FL CE FD GR RF FRM MFR HGR AR GT
+          CN PI MH PB CB WR SF AS CT CF IN LV PH
+          GF RB BBS ST CW MCW RM PV NP PF PS DIM EL SCN SS SA LS AF CSV
+        ]
         expected_codes.each do |code|
           assert shortcuts.key?(code), "Shortcut '#{code}' should be registered in SHORTCUTS"
         end
+      end
+
+      def test_roof_family_codes_are_distinct_typable_and_registered
+        codes = %w[RF FRM MFR HGR AR]
+        shortcuts = Core::ShortcutManager::SHORTCUTS
+
+        codes.each { |code| assert shortcuts.key?(code), "Roof code #{code} must be registered" }
+
+        actions = codes.map { |code| shortcuts[code][:action] }
+        assert_equal actions.uniq, actions, 'Each roof code must map to a distinct action'
+
+        # An exact match wins while typing, so a shared prefix makes the longer
+        # code unreachable. Roof framing must never be shadowed by RF.
+        codes.combination(2).each do |a, b|
+          refute a.start_with?(b) || b.start_with?(a),
+                 "Roof codes #{a}/#{b} share a prefix, so one cannot be typed"
+        end
+
+        assert_equal :roof, shortcuts['RF'][:action]
+        assert_equal :roof_framing, shortcuts['FRM'][:action]
+      end
+
+      def test_panel_payload_stringifies_symbol_keys
+        assert_equal({ 'form' => 'hip', 'slope_deg' => 30.0 },
+                     Core::ShortcutManager.panel_payload({ form: 'hip', slope_deg: 30.0 }))
       end
 
       def test_key_to_char_conversion
@@ -167,6 +196,60 @@ module JiraNot
         assert_equal '', Core::ShortcutManager.buffer
         # Active tool in model is now ColumnTool!
         assert_instance_of Structure::Tools::ColumnTool, rt.active_model.active_tool
+      end
+
+      def test_prompt_true_opens_properties_dialog_and_uses_entered_values
+        rt = make_runtime
+
+        with_ui_inputbox(['250', '3200', '']) do
+          assert Core::ShortcutManager.execute('WA', rt, prompt: true)
+        end
+
+        tool = rt.active_model.active_tool
+        assert_instance_of Architecture::Tools::WallTool, tool
+        assert_equal 250.0, tool.instance_variable_get(:@thickness_mm)
+        assert_equal 3200.0, tool.instance_variable_get(:@height_mm)
+      end
+
+      def test_prompt_cancel_aborts_before_the_tool_draws
+        rt = make_runtime
+
+        with_ui_inputbox(nil) do
+          refute Core::ShortcutManager.execute('WA', rt, prompt: true)
+        end
+
+        assert_nil rt.active_model.active_tool
+      end
+
+      def test_prompt_false_skips_the_dialog_for_keyboard_shortcuts
+        rt = make_runtime
+
+        with_ui_inputbox(['999', '999', '']) do
+          assert Core::ShortcutManager.execute('WA', rt, prompt: false)
+        end
+
+        tool = rt.active_model.active_tool
+        assert_equal 100.0, tool.instance_variable_get(:@thickness_mm)
+      end
+
+      private
+
+      def with_ui_inputbox(result)
+        added_ui = !Object.const_defined?(:UI)
+        Object.const_set(:UI, Module.new) if added_ui
+        ui = Object.const_get(:UI)
+        had_method = ui.respond_to?(:inputbox)
+        original = ui.method(:inputbox) if had_method
+
+        ui.define_singleton_method(:inputbox) { |*_args| result }
+        yield
+      ensure
+        if had_method
+          ui.define_singleton_method(:inputbox, original)
+        elsif ui.singleton_class.method_defined?(:inputbox)
+          ui.singleton_class.send(:remove_method, :inputbox)
+        end
+        Object.send(:remove_const, :UI) if added_ui
       end
     end
   end

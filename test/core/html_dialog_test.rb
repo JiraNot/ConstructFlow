@@ -117,6 +117,41 @@ module JiraNot
           assert File.exist?(html), "panel.html not found at #{html}"
         end
 
+        # ── Panel shortcut badges must not contradict ShortcutManager ──
+        def test_panel_roof_badges_use_canonical_codes
+          html = File.read(File.join(HtmlDialogManager::UI_DIR, 'panel.html'))
+          shortcuts = JiraNot::ConstructFlow::Core::ShortcutManager::SHORTCUTS
+
+          # data-action -> badge, for every ribbon button that declares one.
+          badges = {}
+          html.scan(/<button\b([^>]*)>(.*?)<\/button>/m) do |attrs, inner|
+            action = attrs[/data-action\s*=\s*"([^"]*)"/, 1]
+            badge = inner[/ribbon-badge">\s*([^<]*?)\s*</, 1]
+            next if action.nil? || badge.nil?
+
+            badges[action] = badge.strip
+          end
+
+          expected = {
+            'drawRoofFraming'       => 'FRM',
+            'modifyRoofFraming'     => 'MFR',
+            'generateHipGableRoof'  => 'HGR',
+            'drawRevitAutoRoof'     => 'AR'
+          }
+          expected.each do |action, code|
+            assert_equal code, badges[action],
+                         "Ribbon action #{action} must be badged [#{code}]"
+            assert shortcuts.key?(code),
+                   "Ribbon badge [#{code}] for #{action} must be a registered shortcut"
+          end
+
+          # The historic conflict: roof framing badged as the roof-system code.
+          refute_equal 'RF', badges['drawRoofFraming'],
+                       'Roof framing must never be badged as RF (roof system)'
+          assert_equal :roof, shortcuts['RF'][:action]
+          assert_equal :roof_framing, shortcuts['FRM'][:action]
+        end
+
         def test_panel_css_exists
           css = File.join(HtmlDialogManager::UI_DIR, 'panel.css')
           assert File.exist?(css), "panel.css not found at #{css}"

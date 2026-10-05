@@ -78,6 +78,12 @@ W=[255,255,255,255]
 
 # ── Icon definitions ───────────────────────────────────────────────────────────
 ICONS = {
+  'panel' => -> {
+    c=Canvas.new
+    c.rect(2,2,9,9,CORE_B).rect(13,2,9,9,CORE_D)
+    c.rect(2,13,9,9,CORE_D).rect(13,13,9,9,CORE_B)
+    c
+  },
   'inspector' => -> {
     c=Canvas.new
     c.ring(12,12,11,8,CORE_B).rect(11,9,2,2,W).rect(11,12,2,6,W)
@@ -128,6 +134,39 @@ ICONS = {
     c=Canvas.new
     c.rect(1,7,22,3,ROOF_B).rect(1,7,3,14,ROOF_B).rect(20,7,3,14,ROOF_B).rect(1,18,22,3,ROOF_D)
     c.rect(4,13,16,5,[100,180,255,180])
+  },
+  'roof_framing' => -> {
+    c=Canvas.new
+    c.triangle([[12,3],[22,20],[2,20]],STR_B)
+    c.hline(14,4,20,STR_D,1)
+    c.vline(12,4,14,STR_D,1)
+    c.vline(7,8,14,STR_D,1).vline(17,8,14,STR_D,1)
+    c.rect(2,20,20,2,STR_D)
+    c
+  },
+  'roof_framing_edit' => -> {
+    c=Canvas.new
+    c.triangle([[12,2],[21,17],[3,17]],STR_B)
+    c.hline(12,5,19,STR_D,1)
+    c.vline(12,3,12,STR_D,1)
+    c.rect(2,19,4,3,ROOF_B).rect(18,19,4,3,ROOF_B)
+    c
+  },
+  'roof_hip_gable' => -> {
+    c=Canvas.new
+    c.triangle([[12,2],[23,19],[1,19]],ROOF_B)
+    c.vline(12,2,19,ROOF_D,1)
+    c.vline(6,10,19,[250,200,80,255],1).vline(18,10,19,[250,200,80,255],1)
+    c.rect(1,19,22,3,ROOF_D)
+    c
+  },
+  'roof_auto' => -> {
+    c=Canvas.new
+    c.triangle([[3,19],[12,6],[21,19]],ROOF_B)
+    c.rect(1,19,22,3,ROOF_D)
+    c.circle(18,7,4,ELEC_B)
+    c.hline(7,15,21,W,1).vline(18,4,10,W,1)
+    c
   },
   'surface' => -> {
     c=Canvas.new
@@ -185,6 +224,165 @@ ICONS = {
     c.rect(5,3,15,19,CST_D).rect(4,2,15,19,CST_B).rect(4,2,15,4,CST_D)
     [7,10,13,16].each{|y|c.rect(6,y,10,1,W)}
     c.rect(8,18,2,3,W).rect(8,18,5,1,W).rect(8,20,4,1,W).rect(8,21,5,1,W)
+  },
+
+  # -- Structure (framing, beam, grid, rebar schedule) ----------------------
+  'grid_framing' => -> {
+    c=Canvas.new
+    c.vline(6,3,20,STR_D,1).vline(17,3,20,STR_D,1)
+    c.hline(6,3,20,STR_D,1).hline(17,3,20,STR_D,1)
+    [[3,3],[14,3],[3,14],[14,14]].each{|x,y|c.rect(x,y,5,5,STR_B)}
+    c
+  },
+  'beam' => -> {
+    c=Canvas.new
+    c.rect(2,10,20,5,STR_B).rect(2,10,20,2,[140,150,160,255])
+    c.rect(3,15,3,6,STR_D).rect(18,15,3,6,STR_D)
+    c.hline(20,2,21,STR_D,2)
+    c
+  },
+  'grid' => -> {
+    c=Canvas.new
+    c.vline(6,3,21,STR_D,1).vline(12,3,21,STR_D,1).vline(18,3,21,STR_D,1)
+    c.hline(6,3,21,STR_D,1).hline(12,3,21,STR_D,1).hline(18,3,21,STR_D,1)
+    c.circle(6,6,2,STR_B).circle(18,18,2,STR_B)
+    c
+  },
+  'rebar' => -> {
+    c=Canvas.new
+    c.rect(7,4,3,17,[170,80,60,255]).rect(14,4,3,17,[190,95,70,255])
+    [6,11,16].each{|y|c.hline(y,5,19,[150,60,45,255],2)}
+    c
+  },
+  'bbs' => -> {
+    c=Canvas.new
+    c.rect(3,3,18,18,CST_B).rect(3,3,18,4,CST_D)
+    [10,14,18].each{|y|c.hline(y,5,19,W,1)}
+    c.vline(9,7,21,W,1).vline(15,7,21,W,1)
+    c
+  },
+
+  # -- Architecture (floor, ceiling, stair, curtain wall, rooms, finishes) --
+  'floor' => -> {
+    c=Canvas.new
+    c.triangle([[2,9],[22,9],[17,18],[7,18]],SURF_B)
+    c.rect(7,18,10,3,SURF_D)
+    c.hline(9,2,22,[220,250,235,255],1)
+    c
+  },
+  'ceiling' => -> {
+    c=Canvas.new
+    c.rect(3,6,18,4,[150,165,180,255]).rect(3,6,18,2,ARCH_D)
+    c.vline(7,2,6,ARCH_D,1).vline(12,2,6,ARCH_D,1).vline(17,2,6,ARCH_D,1)
+    c.hline(2,7,17,ARCH_D,1)
+    c
+  },
+  'stair' => -> {
+    c=Canvas.new
+    [[3,17],[7,14],[11,11],[15,8],[19,5]].each{|x,y|c.rect(x,y,4,4,STR_B).rect(x,y,4,1,STR_D)}
+    c.rect(2,21,20,2,STR_D)
+    c
+  },
+  'curtain_wall' => -> {
+    c=Canvas.new
+    c.rect(2,2,20,20,[180,215,240,180])
+    c.vline(2,2,21,ARCH_D,1).vline(8,2,21,ARCH_D,1).vline(14,2,21,ARCH_D,1).vline(21,2,21,ARCH_D,1)
+    c.hline(2,2,21,ARCH_D,1).hline(8,2,21,ARCH_D,1).hline(14,2,21,ARCH_D,1).hline(21,2,21,ARCH_D,1)
+    c.rect(2,2,2,20,ARCH_B).rect(20,2,2,20,ARCH_B)
+    c
+  },
+  'curtain_wall_edit' => -> {
+    c=Canvas.new
+    c.rect(2,2,15,20,[180,215,240,180])
+    c.vline(7,2,21,ARCH_D,1).vline(12,2,21,ARCH_D,1)
+    c.hline(7,2,16,ARCH_D,1).hline(13,2,16,ARCH_D,1)
+    c.triangle([[13,23],[23,13],[23,23]],LIB_B)
+    c
+  },
+  'room' => -> {
+    c=Canvas.new
+    c.rect(2,2,20,20,ARCH_D).rect(4,4,16,16,[220,232,245,255])
+    c.rect(10,2,4,4,OPE_B)
+    c
+  },
+  'paving' => -> {
+    c=Canvas.new
+    tiles=[[3,3,SURF_B],[11,3,SURF_D],[19,3,SURF_B],[3,11,SURF_D],[11,11,SURF_B],[19,11,SURF_D],[3,19,SURF_B],[11,19,SURF_D],[19,19,SURF_B]]
+    tiles.each{|x,y,col|c.rect(x,y,6,6,col)}
+    c
+  },
+  'profile_new' => -> {
+    c=Canvas.new
+    c.rect(3,5,10,8,STR_B).rect(3,5,10,2,STR_D)
+    c.circle(18,16,5,CST_B)
+    c.hline(16,15,21,W,2).vline(18,13,19,W,2)
+    c
+  },
+  'profile_sweep' => -> {
+    c=Canvas.new
+    c.rect(2,19,20,3,ARCH_D)
+    c.rect(3,14,14,5,LIB_B).rect(3,14,14,2,LIB_D)
+    c.rect(15,7,6,12,INT_B).rect(15,7,6,2,INT_D)
+    c
+  },
+  'profile_sweep_selection' => -> {
+    c=Canvas.new
+    c.hline(13,2,22,ROOF_B,2)
+    c.rect(3,4,7,7,LIB_B).rect(3,4,7,2,LIB_D)
+    c.triangle([[10,7],[21,2],[21,12]],LIB_D)
+    c
+  },
+
+  # -- Drawing / annotation -------------------------------------------------
+  'dimension' => -> {
+    c=Canvas.new
+    c.hline(12,4,20,CORE_B,2)
+    c.triangle([[4,12],[9,8],[9,16]],CORE_B).triangle([[20,12],[15,8],[15,16]],CORE_B)
+    c.vline(4,4,12,CORE_D,1).vline(20,4,12,CORE_D,1)
+    c
+  },
+  'spot_elevation' => -> {
+    c=Canvas.new
+    c.hline(19,3,21,CORE_D,2)
+    c.triangle([[12,4],[6,15],[18,15]],CORE_B)
+    c.rect(10,7,4,4,W)
+    c
+  },
+  'scenes' => -> {
+    c=Canvas.new
+    c.rect(5,8,14,13,CST_B).rect(5,8,14,3,CST_D)
+    c.rect(8,3,14,13,[230,240,250,255]).rect(8,3,14,3,CST_D)
+    c
+  },
+  'smart_stretch' => -> {
+    c=Canvas.new
+    c.rect(8,8,8,8,INT_B)
+    c.triangle([[8,12],[2,8],[2,16]],CORE_B).triangle([[16,12],[22,8],[22,16]],CORE_B)
+    c
+  },
+  'stretch_area' => -> {
+    c=Canvas.new
+    c.rect(4,4,16,16,[210,235,225,255])
+    c.triangle([[12,12],[12,2],[20,6]],ROOF_B).triangle([[12,12],[2,6],[10,2]],ROOF_B)
+    c
+  },
+  'laser_level' => -> {
+    c=Canvas.new
+    c.circle(4,12,3,ELEC_B).rect(3,10,4,4,ELEC_D)
+    c.hline(12,8,22,ELEC_B,2)
+    c
+  },
+  'array_face' => -> {
+    c=Canvas.new
+    [[3,10],[10,8],[17,6],[3,17],[10,15],[17,13]].each{|x,y|c.rect(x,y,6,4,SURF_B).rect(x,y,6,1,SURF_D)}
+    c
+  },
+  'export_csv' => -> {
+    c=Canvas.new
+    c.rect(5,2,14,20,[210,220,230,255]).rect(5,2,14,3,CST_D)
+    c.rect(7,8,10,1,CST_D).rect(7,11,10,1,CST_D)
+    c.vline(20,12,19,CST_D,2).triangle([[17,19],[23,19],[20,23]],CST_B)
+    c
   },
 }.freeze
 

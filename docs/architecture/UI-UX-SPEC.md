@@ -44,6 +44,21 @@ QA
 
 A disabled/uninstalled module should not leave dead UI controls.
 
+## Tool surfaces and shortcut codes
+
+Tool labels, icons and codes are defined once in `Core::ToolCatalog` (tool and stage metadata) and `Core::ShortcutManager::SHORTCUTS` (codes and actions). Every surface — the native ConstructFlow toolbar with its per-stage flyouts, the Extensions menus and the panel ribbon — must render those definitions instead of restating them.
+
+Rules:
+
+- A shortcut badge shown in any surface must be a code registered in `SHORTCUTS`; do not display codes the user cannot type.
+- One code maps to exactly one action. A code must not be reused for a different tool, and a shorter code must not shadow a longer code that shares its prefix, because an exact match wins while typing.
+- The roof family is `RF` (roof system), `FRM` (roof framing), `MFR` (modify roof framing), `HGR` (hip/gable roof) and `AR` (Revit auto roof). Roof framing must never be presented as `RF`.
+- Every roof family tool opens the properties dialog before it runs. `FRM`/`MFR` share the framing schema (pitch, truss/purlin spacing, overhang, type); `HGR`/`AR` expose their roof form, slope and overhang/fascia fields. Values reviewed in the dialog are passed to the tool, which must not prompt again with hidden defaults.
+- Stage flyouts group tools by the workflow stages in `ToolCatalog::STAGES` (setup, structure, architecture, mep, interior, costing, drawing); a tool reachable from a flyout must also remain reachable without pixel-perfect toolbar hunting.
+- ToolCatalog is the whole toolset, not a subset: whenever a tool exists as a panel ribbon button or drawer action it must also appear in `ToolCatalog::TOOLS` with a generated icon, Thai i18n strings and a registered shortcut, so the stage flyouts stay complete. Panel-only shortcuts are not allowed to remain panel-only.
+- The drawing stage hosts annotation, measurement and layout tools (dimension, spot elevation, scenes, smart stretch, stretch-by-area, laser level, array-on-face) and carries label prefix `7.`.
+- Panel shortcut badges must match the registered code for the same action; a badge for a renovated code (for example spot elevation) must be updated in `ui/panel.html`, not left on the old code.
+
 ## Global project header
 
 Always-accessible project context should expose:

@@ -2,20 +2,21 @@
 
 require_relative 'i18n'
 require_relative 'html_dialog'
-require_relative 'ghost_preview'
 require_relative 'shortcut_manager'
-require_relative '../modules/structure/tools/foundation_tool'
-require_relative '../modules/door_window/tools/door_window_tool'
-require_relative '../modules/interior/tools/wardrobe_tool'
-require_relative '../modules/library/tools/asset_tool'
-require_relative '../modules/drainage/tools/pipe_tool'
-require_relative '../modules/electrical/tools/conduit_tool'
+require_relative 'tool_catalog'
+require_relative 'stage_palette'
 
 module JiraNot
   module ConstructFlow
     module Core
+      # Builds the ConstructFlow toolbar.
+      #
+      # Native SketchUp toolbars have no flyout/submenu support, so instead of
+      # 20 flat buttons the toolbar stays short: one full-editor launcher plus
+      # ONE flyout button per workflow stage. Each stage button opens a compact
+      # StagePalette listing that stage's tools (see ToolCatalog for the data).
       module Toolbar
-        ICON_DIR = File.expand_path(File.join(__dir__, '..', 'icons')).freeze
+        ICON_DIR = ToolCatalog::ICON_DIR
 
         module_function
 
@@ -31,20 +32,39 @@ module JiraNot
         def install_toolbar(runtime)
           tb = UI::Toolbar.new(I18n.t('toolbar.name'))
 
-          # Single entry-point button — opens the modern floating panel
-          cmd = UI::Command.new('ConstructFlow') { HtmlDialogManager.open_panel(runtime) }
-          cmd.tooltip     = 'เปิด/ปิดแผงควบคุม ConstructFlow (CF)'
-          cmd.status_bar_text = 'เปิดแผงควบคุม ConstructFlow BIM [คีย์ลัด: CF]'
+          # Full editor launcher (panel: catalog, BOQ, detailed parameters).
+          add_btn(tb, ToolCatalog::PANEL[:icon],
+                  I18n.t('tool.panel.label'), I18n.t('tool.panel.tooltip'), I18n.t('tool.panel.status')) do
+            ShortcutManager.execute(ToolCatalog::PANEL[:code], runtime, prompt: true)
+          end
+          tb.add_separator
 
-          # Try to use the inspector icon as the panel-launch button
-          small = File.join(ICON_DIR, 'inspector.png')
-          large = File.join(ICON_DIR, 'inspector@2x.png')
-          cmd.small_icon = small if File.exist?(small)
-          cmd.large_icon = large if File.exist?(large)
+          # One flyout button per workflow stage keeps the toolbar short while
+          # every tool stays one click away. Stage labels use the bare
+          # `group.<key>` string; tooltips/status live under the same prefix.
+          ToolCatalog::STAGES.each do |stage|
+            add_btn(tb, stage[:icon],
+                    I18n.t(stage[:i18n]),
+                    I18n.t("#{stage[:i18n]}.tooltip"),
+                    I18n.t("#{stage[:i18n]}.status")) do
+              StagePalette.open(runtime, stage[:key])
+            end
+          end
 
-          tb.add_item(cmd)
           tb.restore
           tb
+        end
+
+        def add_btn(toolbar, icon_name, label, tooltip, status, &block)
+          cmd = UI::Command.new(label, &block)
+          cmd.tooltip = tooltip
+          cmd.status_bar_text = status
+          small = File.join(ICON_DIR, "#{icon_name}.png")
+          large = File.join(ICON_DIR, "#{icon_name}@2x.png")
+          cmd.small_icon = small if File.exist?(small)
+          cmd.large_icon = large if File.exist?(large)
+          toolbar.add_item(cmd)
+          cmd
         end
 
         def install_domain_menus(runtime, main_menu)
@@ -63,22 +83,22 @@ module JiraNot
           arch_menu.add_item("ติดตั้งหน้าต่าง (Window)\tWN") { ShortcutManager.execute('WN', runtime) }
           arch_menu.add_item("สร้างแผ่นพื้น (Floor)\tFL") { ShortcutManager.execute('FL', runtime) }
           arch_menu.add_item("สร้างฝ้าเพดาน (Ceiling)\tCE") { ShortcutManager.execute('CE', runtime) }
-          arch_menu.add_item('สร้างหลังคา') { HtmlDialogManager.open_panel(runtime) }
+          arch_menu.add_item('สร้างหลังคา') { StagePalette.open(runtime, 'architecture') }
 
           mep_menu = main_menu.add_submenu('⚡ ระบบ MEP')
           mep_menu.add_item("เดินท่อร้อยสาย (Conduit)\tCN") { ShortcutManager.execute('CN', runtime) }
           mep_menu.add_item("วาดเส้นท่อระบายน้ำ (Pipe)\tPI") { ShortcutManager.execute('PI', runtime) }
           mep_menu.add_item("วางบ่อพักน้ำทิ้ง (Manhole)\tMH") { ShortcutManager.execute('MH', runtime) }
-          mep_menu.add_item('ติดตั้งตู้ไฟฟ้า') { HtmlDialogManager.open_panel(runtime) }
+          mep_menu.add_item('ติดตั้งตู้ไฟฟ้า') { StagePalette.open(runtime, 'mep') }
 
           int_menu = main_menu.add_submenu('🛋 ภายในและตกแต่ง')
           int_menu.add_item("วางเคาน์เตอร์บิวท์อิน (Cabinet)\tCB") { ShortcutManager.execute('CB', runtime) }
           int_menu.add_item("วางตู้เสื้อผ้า (Wardrobe)\tWR") { ShortcutManager.execute('WR', runtime) }
-          int_menu.add_item('ปูผิวพื้น') { HtmlDialogManager.open_panel(runtime) }
+          int_menu.add_item('ปูผิวพื้น') { StagePalette.open(runtime, 'interior') }
 
           lib_menu = main_menu.add_submenu('📦 ไลบรารีและ BOQ')
-          lib_menu.add_item('วางครุภัณฑ์') { HtmlDialogManager.open_panel(runtime) }
-          lib_menu.add_item('💰 สรุป BOQ')  { HtmlDialogManager.open_panel(runtime) }
+          lib_menu.add_item('วางครุภัณฑ์') { StagePalette.open(runtime, 'costing') }
+          lib_menu.add_item('💰 สรุป BOQ') { ShortcutManager.execute('BOQ', runtime) }
         end
       end
     end
