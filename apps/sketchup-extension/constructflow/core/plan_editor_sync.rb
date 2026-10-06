@@ -55,17 +55,22 @@ module JiraNot
           model.start_operation('ConstructFlow 2D Plan -> 3D Sync', true)
           begin
             # 1. Register Levels if missing
-            levels.each do |lvl|
-              lvl_id = lvl['id']
+            level_list = (levels.is_a?(Array) && !levels.empty?) ? levels : [
+              { 'id' => 'GF', 'name' => 'Ground Floor', 'elevation_mm' => 0 },
+              { 'id' => 'L2', 'name' => 'First Floor', 'elevation_mm' => 3000 }
+            ]
+            level_list.each do |lvl|
+              lvl_id = lvl['id'].to_s
               lvl_name = lvl['name'] || lvl_id
               elev = Float(lvl['elevation_mm'] || 0)
-              next if runtime.levels.find(lvl_id) rescue false
+              next if runtime.levels.registered?(lvl_id)
 
-              runtime.commands.execute(
+              res = runtime.commands.execute(
                 'CreateLevel',
                 { id: lvl_id, name: lvl_name, elevation_mm: elev, kind: 'floor' },
                 project_id: project_id
-              ) rescue nil
+              )
+              puts "[ConstructFlow Sync] Level #{lvl_id} registered: #{res[:status]}"
             end
 
             # 2. Sync Grids
@@ -83,7 +88,7 @@ module JiraNot
                        [[extent[0], pos, 0], [extent[1], pos, 0]]
                      end
 
-              runtime.commands.execute(
+              res = runtime.commands.execute(
                 'CreateStructuralGrid',
                 {
                   id: obj['id'],
@@ -93,7 +98,11 @@ module JiraNot
                 },
                 project_id: project_id
               )
-              stats[:grids] += 1
+              if res[:status] == 'success'
+                stats[:grids] += 1
+              else
+                puts "[ConstructFlow Sync] ❌ Grid rejected (#{m['tag']}): #{res[:errors]&.join('; ')}"
+              end
             rescue StandardError => e
               puts "[ConstructFlow Sync] Grid warning: #{e.message}"
             end
@@ -103,12 +112,14 @@ module JiraNot
               next unless obj['object_type'] == 'structure.column'
 
               m = obj['module_data'] || {}
+              loc = m['location_mm'] || [0, 0, 0]
+              loc_3d = [Float(loc[0]), Float(loc[1]), Float(loc[2] || 0)]
               res = runtime.commands.execute(
                 'CreateColumn',
                 {
                   id: obj['id'],
                   mark: m['mark'] || 'C1',
-                  location_mm: m['location_mm'] || [0, 0, 0],
+                  location_mm: loc_3d,
                   section_mm: m['section_mm'] || [200, 200],
                   height_mm: Float(m['height_mm'] || 3000),
                   base_level_id: m['base_level_id'] || 'GF',
@@ -118,7 +129,11 @@ module JiraNot
                 },
                 project_id: project_id
               )
-              stats[:columns] += 1 if res[:status] == 'success'
+              if res[:status] == 'success'
+                stats[:columns] += 1
+              else
+                puts "[ConstructFlow Sync] ❌ Column rejected (#{m['mark']}): #{res[:errors]&.join('; ')}"
+              end
             rescue StandardError => e
               puts "[ConstructFlow Sync] Column warning: #{e.message}"
             end
@@ -128,19 +143,23 @@ module JiraNot
               next unless obj['object_type'] == 'structure.foundation'
 
               m = obj['module_data'] || {}
-              res = runtime.commands.execute(
-                'CreateFoundation',
-                {
-                  id: obj['id'],
-                  mark: m['mark'] || 'F1',
-                  supported_column_id: m['supported_column_id'],
-                  size_mm: m['size_mm'] || [800, 800, 300],
-                  material: m['material'] || 'reinforced_concrete',
-                  created_phase: obj['created_phase'] || 'new_construction'
-                },
-                project_id: project_id
-              )
-              stats[:foundations] += 1 if res[:status] == 'success'
+              loc = m['center_mm'] || m['location_mm']
+              loc_3d = loc ? [Float(loc[0]), Float(loc[1]), Float(loc[2] || 0)] : nil
+              fnd_input = {
+                id: obj['id'],
+                mark: m['mark'] || 'F1',
+                supported_column_id: m['supported_column_id'],
+                size_mm: m['size_mm'] || [800, 800, 300],
+                material: m['material'] || 'reinforced_concrete',
+                created_phase: obj['created_phase'] || 'new_construction'
+              }
+              fnd_input[:location_mm] = loc_3d if loc_3d
+              res = runtime.commands.execute('CreateFoundation', fnd_input, project_id: project_id)
+              if res[:status] == 'success'
+                stats[:foundations] += 1
+              else
+                puts "[ConstructFlow Sync] ❌ Foundation rejected (#{m['mark']}): #{res[:errors]&.join('; ')}"
+              end
             rescue StandardError => e
               puts "[ConstructFlow Sync] Foundation warning: #{e.message}"
             end
@@ -152,12 +171,14 @@ module JiraNot
               m = obj['module_data'] || {}
               p1 = m['start_point_mm'] || [0, 0, 0]
               p2 = m['end_point_mm'] || [4000, 0, 0]
+              p1_3d = [Float(p1[0]), Float(p1[1]), Float(p1[2] || 0)]
+              p2_3d = [Float(p2[0]), Float(p2[1]), Float(p2[2] || 0)]
               res = runtime.commands.execute(
                 'CreateBeam',
                 {
                   id: obj['id'],
                   mark: m['mark'] || 'B1',
-                  path_mm: [p1, p2],
+                  path_mm: [p1_3d, p2_3d],
                   section_mm: m['section_mm'] || [200, 400],
                   level_id: m['level_id'] || 'GF',
                   material: m['material'] || 'reinforced_concrete',
@@ -165,7 +186,11 @@ module JiraNot
                 },
                 project_id: project_id
               )
-              stats[:beams] += 1 if res[:status] == 'success'
+              if res[:status] == 'success'
+                stats[:beams] += 1
+              else
+                puts "[ConstructFlow Sync] ❌ Beam rejected (#{m['mark']}): #{res[:errors]&.join('; ')}"
+              end
             rescue StandardError => e
               puts "[ConstructFlow Sync] Beam warning: #{e.message}"
             end
@@ -177,12 +202,14 @@ module JiraNot
               m = obj['module_data'] || {}
               p1 = m['start_point_mm'] || [0, 0, 0]
               p2 = m['end_point_mm'] || [4000, 0, 0]
+              p1_3d = [Float(p1[0]), Float(p1[1]), Float(p1[2] || 0)]
+              p2_3d = [Float(p2[0]), Float(p2[1]), Float(p2[2] || 0)]
               res = runtime.commands.execute(
                 'CreateWall',
                 {
                   id: obj['id'],
                   mark: m['mark'] || 'W1',
-                  path_mm: [p1, p2],
+                  path_mm: [p1_3d, p2_3d],
                   thickness_mm: Float(m['thickness_mm'] || 100),
                   height_mm: Float(m['height_mm'] || 2800),
                   level_id: m['level_id'] || 'GF',
@@ -191,7 +218,11 @@ module JiraNot
                 },
                 project_id: project_id
               )
-              stats[:walls] += 1 if res[:status] == 'success'
+              if res[:status] == 'success'
+                stats[:walls] += 1
+              else
+                puts "[ConstructFlow Sync] ❌ Wall rejected (#{m['mark']}): #{res[:errors]&.join('; ')}"
+              end
             rescue StandardError => e
               puts "[ConstructFlow Sync] Wall warning: #{e.message}"
             end
@@ -203,12 +234,12 @@ module JiraNot
               next unless is_door || is_win
 
               m = obj['module_data'] || {}
-              wall_id = m['wall_id'] || obj.dig('host_refs', 0)
+              wall_id = m['wall_id'] || (obj['host_refs'] && obj['host_refs'][0])
               next unless wall_id
 
               w_mm = Float(m['width_mm'] || (is_door ? 800 : 1200))
               h_mm = Float(m['height_mm'] || (is_door ? 2000 : 1200))
-              sill_mm = Float(m['sill_height_mm'] || 0)
+              sill_mm = Float(m['sill_height_mm'] || (is_door ? 0 : 900))
               handing = m['handing'] || 'left_in'
               loc = m['location_mm'] || [0, 0, 0]
               loc_3d = [Float(loc[0]), Float(loc[1]), Float(loc[2] || 0)]
@@ -236,6 +267,8 @@ module JiraNot
                 else
                   stats[:windows] += 1
                 end
+              else
+                puts "[ConstructFlow Sync] ❌ Opening rejected (#{m['mark']}): #{res[:errors]&.join('; ')}"
               end
             rescue StandardError => e
               puts "[ConstructFlow Sync] Opening warning: #{e.message}"

@@ -152,7 +152,9 @@ module JiraNot
               place_on_wall_validation_errors(command[:input], runtime, wall_host)
             }
           ) do |command|
-            input = command[:input]
+            input = command[:input].dup
+            desired_infill_id = input.delete(:id) || input.delete('id')
+            opening_input = input.reject { |k, _| k.to_s == 'id' }
             host = runtime.smart_objects.fetch_by_id(input[:host_object_id] || input['host_object_id'])
             placement = wall_host.locate(host, input[:point_mm] || input['point_mm'])
             width_mm = Float(input[:width_mm] || input['width_mm'])
@@ -160,7 +162,7 @@ module JiraNot
             sill_mm = Float(input[:sill_mm] || input['sill_mm'] || 0)
             opening_result = runtime.commands.execute(
               'CreateOpening',
-              input.merge(
+              opening_input.merge(
                 host_object_id: host.id,
                 segment_index: placement[:segment_index],
                 start_offset_mm: placement[:distance_along_mm] - (width_mm / 2.0),
@@ -173,9 +175,11 @@ module JiraNot
             raise ArgumentError, Array(opening_result[:errors]).join('; ') unless opening_result[:status] == 'success'
 
             opening_id = Array(opening_result[:created_object_ids]).first
+            infill_input = input.merge(opening_object_id: opening_id)
+            infill_input[:id] = desired_infill_id if desired_infill_id
             infill_result = runtime.commands.execute(
               'CreateDoorWindow',
-              input.merge(opening_object_id: opening_id),
+              infill_input,
               project_id: runtime.project.project_id
             )
             raise ArgumentError, Array(infill_result[:errors]).join('; ') unless infill_result[:status] == 'success'
@@ -494,7 +498,7 @@ module JiraNot
           end
 
           point = values[:point_mm] || values['point_mm']
-          return ['plan point is required'] unless Array(point).length >= 3
+          return ['plan point is required'] unless Array(point).length >= 2
 
           width = Float(values[:width_mm] || values['width_mm'])
           height = Float(values[:height_mm] || values['height_mm'])

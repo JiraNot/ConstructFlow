@@ -34,8 +34,18 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
     script += `${jsonStr}\n`
     script += `CF_PROJECT_JSON_DATA\n\n`
     script += `runtime = defined?(JiraNot::ConstructFlow::Runtime) ? JiraNot::ConstructFlow::Runtime : nil\n`
+    script += `unless runtime\n`
+    script += `  puts "❌ Error: ConstructFlow runtime is not running in SketchUp."\n`
+    script += `  return\n`
+    script += `end\n\n`
     script += `model = (runtime&.active_model) || Sketchup.active_model\n\n`
-    script += `if runtime && defined?(JiraNot::ConstructFlow::Core::PlanEditorSync)\n`
+    script += `# Ensure PlanEditorSync is loaded\n`
+    script += `begin\n`
+    script += `  require 'constructflow/core/plan_editor_sync'\n`
+    script += `rescue LoadError\n`
+    script += `  # Fallback to direct execution\n`
+    script += `end\n\n`
+    script += `if defined?(JiraNot::ConstructFlow::Core::PlanEditorSync)\n`
     script += `  JiraNot::ConstructFlow::Core::PlanEditorSync.sync_project_json(project_json, runtime)\n`
     script += `else\n`
     script += `  # Self-contained direct execution fallback\n`
@@ -45,29 +55,54 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
     script += `  stats = { cols: 0, fnds: 0, bms: 0, walls: 0, openings: 0 }\n\n`
     script += `  model.start_operation("ConstructFlow: Build 3D from Plan", true)\n`
     script += `  begin\n`
+    script += `    # 0. Levels\n`
+    script += `    levels = doc['levels'] || [{ 'id' => 'GF', 'name' => 'Ground Floor', 'elevation_mm' => 0 }, { 'id' => 'L2', 'name' => 'First Floor', 'elevation_mm' => 3000 }]\n`
+    script += `    levels.each do |lvl|\n`
+    script += `      lvl_id = lvl['id'].to_s\n`
+    script += `      next if runtime.levels.registered?(lvl_id) rescue false\n`
+    script += `      runtime.commands.execute('CreateLevel', {\n`
+    script += `        id: lvl_id, name: lvl['name'] || lvl_id,\n`
+    script += `        elevation_mm: Float(lvl['elevation_mm'] || 0), kind: 'floor'\n`
+    script += `      }, project_id: project_id)\n`
+    script += `    end\n\n`
     script += `    # 1. Columns\n`
     script += `    objects.each_value do |o|\n`
     script += `      next unless o['object_type'] == 'structure.column'\n`
     script += `      m = o['module_data'] || {}\n`
-    script += `      runtime.commands.execute('CreateColumn', {\n`
+    script += `      loc = m['location_mm'] || [0, 0, 0]\n`
+    script += `      loc_3d = [Float(loc[0]), Float(loc[1]), Float(loc[2] || 0)]\n`
+    script += `      res = runtime.commands.execute('CreateColumn', {\n`
     script += `        id: o['id'], mark: m['mark'] || 'C1',\n`
-    script += `        location_mm: m['location_mm'] || [0, 0, 0],\n`
+    script += `        location_mm: loc_3d,\n`
     script += `        section_mm: m['section_mm'] || [200, 200],\n`
     script += `        height_mm: Float(m['height_mm'] || 3000),\n`
-    script += `        base_level_id: m['base_level_id'] || 'GF'\n`
+    script += `        base_level_id: m['base_level_id'] || 'GF',\n`
+    script += `        top_level_id: m['top_level_id'] || 'L2'\n`
     script += `      }, project_id: project_id)\n`
-    script += `      stats[:cols] += 1\n`
+    script += `      if res[:status] == 'success'\n`
+    script += `        stats[:cols] += 1\n`
+    script += `      else\n`
+    script += `        puts \"❌ Column rejected (\#{m['mark']}): \#{res[:errors]&.join('; ')}\"\n`
+    script += `      end\n`
     script += `    end\n\n`
     script += `    # 2. Footings\n`
     script += `    objects.each_value do |o|\n`
     script += `      next unless o['object_type'] == 'structure.foundation'\n`
     script += `      m = o['module_data'] || {}\n`
-    script += `      runtime.commands.execute('CreateFoundation', {\n`
+    script += `      loc = m['center_mm'] || m['location_mm']\n`
+    script += `      loc_3d = loc ? [Float(loc[0]), Float(loc[1]), Float(loc[2] || 0)] : nil\n`
+    script += `      fnd_input = {\n`
     script += `        id: o['id'], mark: m['mark'] || 'F1',\n`
     script += `        supported_column_id: m['supported_column_id'],\n`
     script += `        size_mm: m['size_mm'] || [800, 800, 300]\n`
-    script += `      }, project_id: project_id)\n`
-    script += `      stats[:fnds] += 1\n`
+    script += `      }\n`
+    script += `      fnd_input[:location_mm] = loc_3d if loc_3d\n`
+    script += `      res = runtime.commands.execute('CreateFoundation', fnd_input, project_id: project_id)\n`
+    script += `      if res[:status] == 'success'\n`
+    script += `        stats[:fnds] += 1\n`
+    script += `      else\n`
+    script += `        puts \"❌ Foundation rejected (\#{m['mark']}): \#{res[:errors]&.join('; ')}\"\n`
+    script += `      end\n`
     script += `    end\n\n`
     script += `    # 3. Beams\n`
     script += `    objects.each_value do |o|\n`
@@ -75,12 +110,18 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
     script += `      m = o['module_data'] || {}\n`
     script += `      p1 = m['start_point_mm'] || [0, 0, 0]\n`
     script += `      p2 = m['end_point_mm'] || [4000, 0, 0]\n`
-    script += `      runtime.commands.execute('CreateBeam', {\n`
+    script += `      p1_3d = [Float(p1[0]), Float(p1[1]), Float(p1[2] || 0)]\n`
+    script += `      p2_3d = [Float(p2[0]), Float(p2[1]), Float(p2[2] || 0)]\n`
+    script += `      res = runtime.commands.execute('CreateBeam', {\n`
     script += `        id: o['id'], mark: m['mark'] || 'B1',\n`
-    script += `        path_mm: [p1, p2], section_mm: m['section_mm'] || [200, 400],\n`
+    script += `        path_mm: [p1_3d, p2_3d], section_mm: m['section_mm'] || [200, 400],\n`
     script += `        level_id: m['level_id'] || 'GF'\n`
     script += `      }, project_id: project_id)\n`
-    script += `      stats[:bms] += 1\n`
+    script += `      if res[:status] == 'success'\n`
+    script += `        stats[:bms] += 1\n`
+    script += `      else\n`
+    script += `        puts \"❌ Beam rejected (\#{m['mark']}): \#{res[:errors]&.join('; ')}\"\n`
+    script += `      end\n`
     script += `    end\n\n`
     script += `    # 4. Walls\n`
     script += `    objects.each_value do |o|\n`
@@ -88,12 +129,19 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
     script += `      m = o['module_data'] || {}\n`
     script += `      p1 = m['start_point_mm'] || [0, 0, 0]\n`
     script += `      p2 = m['end_point_mm'] || [4000, 0, 0]\n`
-    script += `      runtime.commands.execute('CreateWall', {\n`
+    script += `      p1_3d = [Float(p1[0]), Float(p1[1]), Float(p1[2] || 0)]\n`
+    script += `      p2_3d = [Float(p2[0]), Float(p2[1]), Float(p2[2] || 0)]\n`
+    script += `      res = runtime.commands.execute('CreateWall', {\n`
     script += `        id: o['id'], mark: m['mark'] || 'W1',\n`
-    script += `        path_mm: [p1, p2], thickness_mm: Float(m['thickness_mm'] || 100),\n`
-    script += `        height_mm: Float(m['height_mm'] || 2800)\n`
+    script += `        path_mm: [p1_3d, p2_3d], thickness_mm: Float(m['thickness_mm'] || 100),\n`
+    script += `        height_mm: Float(m['height_mm'] || 2800),\n`
+    script += `        level_id: m['level_id'] || 'GF'\n`
     script += `      }, project_id: project_id)\n`
-    script += `      stats[:walls] += 1\n`
+    script += `      if res[:status] == 'success'\n`
+    script += `        stats[:walls] += 1\n`
+    script += `      else\n`
+    script += `        puts \"❌ Wall rejected (\#{m['mark']}): \#{res[:errors]&.join('; ')}\"\n`
+    script += `      end\n`
     script += `    end\n\n`
     script += `    # 5. Doors & Windows\n`
     script += `    objects.each_value do |o|\n`
@@ -101,25 +149,31 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
     script += `      is_win = o['object_type'] == 'door_window.window'\n`
     script += `      next unless is_door || is_win\n`
     script += `      m = o['module_data'] || {}\n`
-    script += `      wall_id = m['wall_id'] || o.dig('host_refs', 0)\n`
+    script += `      wall_id = m['wall_id'] || (o['host_refs'] && o['host_refs'][0])\n`
     script += `      next unless wall_id\n`
-    script += `      runtime.commands.execute('PlaceDoorWindowOnWall', {\n`
+    script += `      loc = m['location_mm'] || [0, 0, 0]\n`
+    script += `      loc_3d = [Float(loc[0]), Float(loc[1]), Float(loc[2] || 0)]\n`
+    script += `      res = runtime.commands.execute('PlaceDoorWindowOnWall', {\n`
     script += `        id: o['id'], host_object_id: wall_id,\n`
-    script += `        point_mm: m['location_mm'] || [0, 0, 0],\n`
+    script += `        point_mm: loc_3d,\n`
     script += `        width_mm: Float(m['width_mm'] || (is_door ? 800 : 1200)),\n`
     script += `        height_mm: Float(m['height_mm'] || (is_door ? 2000 : 1200)),\n`
-    script += `        sill_mm: Float(m['sill_height_mm'] || 0),\n`
+    script += `        sill_mm: Float(m['sill_height_mm'] || (is_door ? 0 : 900)),\n`
     script += `        handing: m['handing'] || 'left_in',\n`
     script += `        category: is_door ? 'door' : 'window',\n`
     script += `        schedule_mark: m['mark'] || (is_door ? 'D1' : 'W1')\n`
     script += `      }, project_id: project_id)\n`
-    script += `      stats[:openings] += 1\n`
+    script += `      if res[:status] == 'success'\n`
+    script += `        stats[:openings] += 1\n`
+    script += `      else\n`
+    script += `        puts \"❌ Opening rejected (\#{m['mark']}): \#{res[:errors]&.join('; ')}\"\n`
+    script += `      end\n`
     script += `    end\n\n`
     script += `    model.commit_operation\n`
-    script += `    puts "🎉 ConstructFlow: 3D Model Synced Successfully! [#{stats.inspect}]"\n`
+    script += `    puts \"🎉 ConstructFlow: 3D Model Synced! [\#{stats.inspect}]\"\n`
     script += `  rescue => err\n`
     script += `    model.abort_operation\n`
-    script += `    puts "❌ ConstructFlow Sync Error: \#{err.message}"\n`
+    script += `    puts \"❌ ConstructFlow Sync Error: \#{err.message}\"\n`
     script += `  end\n`
     script += `end\n`
     return script
