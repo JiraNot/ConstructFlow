@@ -63,3 +63,17 @@ export interface FoundationModuleData {
   material: 'reinforced_concrete' | string
   engineering_status: 'preliminary' | 'engineer_approved' | 'as_built'
 }
+
+export interface BeamModuleData {
+  mark: string // Human-readable mark, e.g. "B1", "B2"
+  start_point_mm: [number, number, number] // [x, y, z] in mm
+  end_point_mm: [number, number, number] // [x, y, z] in mm
+  section_mm: [number, number] // [width, depth] in mm, e.g. [200, 400]
+  span_mm: number // computed length in mm, e.g. 4000
+  level_id: string
+  start_column_id?: string // optional connected column UUID
+  end_column_id?: string // optional connected column UUID
+  material: 'reinforced_concrete' | 'steel' | 'timber' | 'generic' | string
+  engineering_status: 'preliminary' | 'engineer_approved' | 'as_built'
+}
+

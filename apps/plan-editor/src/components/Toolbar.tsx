@@ -1,9 +1,7 @@
 import React from 'react'
-import { MousePointer, Columns, Square, Hash } from 'lucide-react'
+import { MousePointer, Columns, Square, Hash, Minus, SlidersHorizontal } from 'lucide-react'
 
-import { SlidersHorizontal } from 'lucide-react'
-
-export type ToolType = 'select' | 'column' | 'foundation' | 'grid'
+export type ToolType = 'select' | 'column' | 'foundation' | 'beam' | 'grid'
 
 interface ToolbarProps {
   activeTool: ToolType
@@ -12,8 +10,11 @@ interface ToolbarProps {
   onChangeActiveColumnType: (type: string) => void
   activeFoundationType: string
   onChangeActiveFoundationType: (type: string) => void
+  activeBeamType: string
+  onChangeActiveBeamType: (type: string) => void
   columnTypes: { name: string; section_mm?: [number, number] }[]
   foundationTypes: { name: string; size_mm?: [number, number, number] }[]
+  beamTypes: { name: string; section_mm?: [number, number] }[]
   onOpenTypeManager: () => void
 }
 
@@ -24,14 +25,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onChangeActiveColumnType,
   activeFoundationType,
   onChangeActiveFoundationType,
+  activeBeamType,
+  onChangeActiveBeamType,
   columnTypes,
   foundationTypes,
+  beamTypes,
   onOpenTypeManager,
 }) => {
   const tools: { id: ToolType; label: string; icon: React.ReactNode; shortcut: string }[] = [
     { id: 'select', label: 'Select (S)', icon: <MousePointer size={18} />, shortcut: 'S' },
     { id: 'column', label: 'Column (C)', icon: <Columns size={18} />, shortcut: 'C' },
-    { id: 'foundation', label: 'Foundation (F)', icon: <Square size={18} />, shortcut: 'F' },
+    { id: 'foundation', label: 'Footing (F)', icon: <Square size={18} />, shortcut: 'F' },
+    { id: 'beam', label: 'Beam (B)', icon: <Minus size={18} strokeWidth={3} />, shortcut: 'B' },
     { id: 'grid', label: 'Grid Line (G)', icon: <Hash size={18} />, shortcut: 'G' },
   ]
 
@@ -135,6 +140,38 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             {foundationTypes.map((t) => (
               <option key={t.name} value={t.name}>
                 {t.name} ({t.size_mm ? `${t.size_mm[0]}×${t.size_mm[1]}` : ''} mm)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Active Type Selector for Beam */}
+      {activeTool === 'beam' && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          borderLeft: '1px solid #334155',
+          paddingLeft: 10,
+        }}>
+          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Type:</span>
+          <select
+            value={activeBeamType}
+            onChange={(e) => onChangeActiveBeamType(e.target.value)}
+            style={{
+              background: '#0f172a',
+              color: '#38bdf8',
+              border: '1px solid #0284c7',
+              borderRadius: 4,
+              padding: '4px 8px',
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            {beamTypes.map((t) => (
+              <option key={t.name} value={t.name}>
+                {t.name} ({t.section_mm ? `${t.section_mm[0]}×${t.section_mm[1]}` : ''} mm)
               </option>
             ))}
           </select>

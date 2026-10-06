@@ -3,9 +3,11 @@ import {
   ProjectDocument,
   SmartObject,
   FoundationModuleData,
+  BeamModuleData,
   isColumnObject,
   isFoundationObject,
   isGridObject,
+  isBeamObject,
 } from '@constructflow/project-model'
 import { Copy, Check, Trash2, PlusCircle } from 'lucide-react'
 
@@ -38,15 +40,18 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   const colObj = selectedObj && isColumnObject(selectedObj) ? selectedObj : null
   const fndObj = selectedObj && isFoundationObject(selectedObj) ? selectedObj : null
+  const beamObj = selectedObj && isBeamObject(selectedObj) ? selectedObj : null
   const grdObj = selectedObj && isGridObject(selectedObj) ? selectedObj : null
 
   const currentMark = colObj
     ? colObj.module_data.mark
     : fndObj
       ? fndObj.module_data.mark
-      : grdObj
-        ? grdObj.module_data.tag
-        : ''
+      : beamObj
+        ? beamObj.module_data.mark
+        : grdObj
+          ? grdObj.module_data.tag
+          : ''
 
   useEffect(() => {
     setEditingMark(currentMark)
@@ -66,6 +71,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       onAssignType(colObj.id, val)
     } else if (fndObj) {
       onAssignType(fndObj.id, val)
+    } else if (beamObj) {
+      onAssignType(beamObj.id, val)
     } else if (grdObj) {
       onUpdateGridTag(grdObj.id, val)
     }
@@ -145,8 +152,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         </span>
       </div>
 
-      {/* Human-Readable Mark (Editable for Columns, Foundations, and Grids!) */}
-      {(colObj || fndObj || grdObj) && (
+      {/* Human-Readable Mark (Editable for Columns, Foundations, Beams, and Grids!) */}
+      {(colObj || fndObj || beamObj || grdObj) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
@@ -154,6 +161,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 ? 'COLUMN TYPE MARK (SCHEDULE)'
                 : fndObj
                 ? 'FOOTING TYPE MARK (SCHEDULE)'
+                : beamObj
+                ? 'BEAM TYPE MARK (SCHEDULE)'
                 : 'GRID AXIS TAG'}
             </label>
             <span style={{ fontSize: 10, color: '#38bdf8' }}>UUID Unchanged</span>
@@ -166,7 +175,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               onChange={(e) => setEditingMark(e.target.value)}
               onBlur={() => handleSaveMark()}
               onKeyDown={(e) => e.key === 'Enter' && handleSaveMark()}
-              placeholder={colObj ? 'e.g. C1' : fndObj ? 'e.g. F1' : 'e.g. A'}
+              placeholder={colObj ? 'e.g. C1' : fndObj ? 'e.g. F1' : beamObj ? 'e.g. B1' : 'e.g. A'}
               style={{
                 flex: 1,
                 background: '#0f172a',
@@ -199,7 +208,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 10, color: '#64748b' }}>Type Presets:</span>
-              {(colObj || fndObj) && (
+              {(colObj || fndObj || beamObj) && (
                 <button
                   onClick={onOpenTypeManager}
                   style={{
@@ -270,6 +279,35 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         }}
                       >
                         {t.name} ({sz[0]}×{sz[1]})
+                      </button>
+                    )
+                  })}
+              </div>
+            )}
+
+            {beamObj && (
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {(project.types || [])
+                  .filter((t) => t.object_type === 'structure.beam')
+                  .map((t) => {
+                    const isCurrent = beamObj.module_data.mark.toLowerCase() === t.name.toLowerCase()
+                    const sec = t.parameters?.section_mm || [200, 400]
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => handleSaveMark(t.name)}
+                        style={{
+                          background: isCurrent ? '#0284c7' : '#1e293b',
+                          color: isCurrent ? '#fff' : '#cbd5e1',
+                          border: isCurrent ? '1px solid #38bdf8' : '1px solid #334155',
+                          borderRadius: 4,
+                          padding: '3px 8px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {t.name} ({sec[0]}×{sec[1]})
                       </button>
                     )
                   })}
@@ -433,6 +471,103 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <span style={{ fontSize: 10, color: '#64748b' }}>
             * ขนาดฐานรากถูกควบคุมโดย Type (เปลี่ยนขนาดได้ที่หน้า Manage Types)
           </span>
+        </div>
+      )}
+
+      {beamObj && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Section dimensions (read-only) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+                SECTION (MM)
+              </label>
+              <button
+                onClick={onOpenTypeManager}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#38bdf8',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  padding: 0,
+                }}
+              >
+                แก้ไขใน Manage Types
+              </button>
+            </div>
+            <div style={{
+              background: '#0f172a',
+              padding: '7px 10px',
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 700,
+              color: '#38bdf8',
+              border: '1px solid #1e293b',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}>
+              <span>{beamObj.module_data.section_mm[0]} × {beamObj.module_data.section_mm[1]} mm</span>
+              <span style={{ fontSize: 10, color: '#64748b', fontWeight: 500 }}>Type {beamObj.module_data.mark}</span>
+            </div>
+            <span style={{ fontSize: 10, color: '#64748b' }}>
+              * ขนาดคานถูกควบคุมโดย Type (เปลี่ยนขนาดได้ที่หน้า Manage Types)
+            </span>
+          </div>
+
+          {/* Span Length */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+              SPAN LENGTH (ความยาวช่วงคาน)
+            </label>
+            <div style={{
+              background: '#0f172a',
+              padding: '7px 10px',
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 700,
+              color: '#34d399',
+              border: '1px solid #1e293b',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}>
+              <span>{(beamObj.module_data.span_mm / 1000).toFixed(2)} m</span>
+              <span style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace' }}>
+                {beamObj.module_data.span_mm.toLocaleString()} mm
+              </span>
+            </div>
+          </div>
+
+          {/* Start and End Node coordinates */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+              BEAM NODES (START → END)
+            </label>
+            <div style={{
+              background: '#0f172a',
+              padding: '7px 10px',
+              borderRadius: 6,
+              fontSize: 11,
+              fontFamily: 'monospace',
+              color: '#cbd5e1',
+              border: '1px solid #1e293b',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#94a3b8' }}>Start:</span>
+                <span>({beamObj.module_data.start_point_mm[0]}, {beamObj.module_data.start_point_mm[1]})</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#94a3b8' }}>End:</span>
+                <span>({beamObj.module_data.end_point_mm[0]}, {beamObj.module_data.end_point_mm[1]})</span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

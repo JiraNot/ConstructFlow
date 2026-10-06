@@ -91,6 +91,7 @@ module JiraNot
             register_move_column(runtime, repository, geometry, validator) unless runtime.commands.registered?('MoveColumn')
             register_update_column_mark(runtime, repository) unless runtime.commands.registered?('UpdateColumnMark')
             register_update_foundation_mark(runtime, repository) unless runtime.commands.registered?('UpdateFoundationMark')
+            register_update_beam_mark(runtime, repository) unless runtime.commands.registered?('UpdateBeamMark')
             register_update_structural_type_dimensions(runtime, repository, geometry, validator) unless runtime.commands.registered?('UpdateStructuralTypeDimensions')
             register_create_foundation(runtime, repository, geometry, validator) unless runtime.commands.registered?('CreateFoundation')
             register_generate_foundation(runtime, repository, geometry, validator) unless runtime.commands.registered?('GenerateFoundation')
@@ -119,6 +120,7 @@ module JiraNot
           register_move_column(runtime, repository, geometry, validator)
           register_update_column_mark(runtime, repository)
           register_update_foundation_mark(runtime, repository)
+          register_update_beam_mark(runtime, repository)
           register_update_structural_type_dimensions(runtime, repository, geometry, validator)
           register_column_schedule_command(runtime, repository, geometry)
           register_grid_commands(runtime, repository, GridGeometry.new)
@@ -327,6 +329,37 @@ module JiraNot
           end
         end
 
+        def register_update_beam_mark(runtime, repository)
+          runtime.commands.register(
+            'UpdateBeamMark',
+            owner_module: MANIFEST[:id],
+            validator: lambda { |command|
+              input = command[:input]
+              beam = resolve_beam(input, runtime)
+              return ['beam not found'] unless beam
+              mark = input[:mark] || input['mark']
+              return ['mark required'] if mark.to_s.strip.empty?
+              []
+            }
+          ) do |command|
+            input = command[:input]
+            beam = resolve_beam(input, runtime)
+            raise ArgumentError, 'beam not found' unless beam
+
+            new_mark = (input[:mark] || input['mark']).to_s.strip
+            store = Core::AttributeStore.new(beam.entity)
+            store.write('display_name', "Beam #{new_mark}")
+            store.write('mark', new_mark)
+
+            {
+              updated_object_ids: [beam.id],
+              events: [
+                { name: 'StructuralMemberChanged', object_ids: [beam.id], payload: { mark: new_mark } }
+              ]
+            }
+          end
+        end
+
         def register_update_structural_type_dimensions(runtime, repository, geometry, validator)
           runtime.commands.register(
             'UpdateStructuralTypeDimensions',
@@ -372,6 +405,20 @@ module JiraNot
                     geometry.rebuild_foundation!(obj.entity, updated)
                     repository.write_foundation(obj.entity, updated)
                     runtime.smart_objects.mark_dirty(obj.entity, 'dirty_quantity', 'dirty_drawing')
+                    updated_ids << obj.id
+                  end
+                elsif obj.type == 'structure.beam' && section_mm
+                  store = Core::AttributeStore.new(obj.entity)
+                  mark = store.read('mark')
+                  is_match = (mark && mark.to_s.strip.downcase == type_name.downcase) ||
+                             (obj.display_name && obj.display_name.to_s.downcase == "beam #{type_name.downcase}")
+                  if is_match
+                    current = repository.read_beam(obj.entity)
+                    new_sec = [Float(section_mm[0]), Float(section_mm[1])]
+                    updated = current.with(section_mm: new_sec)
+                    geometry.rebuild_beam!(obj.entity, updated)
+                    repository.write_beam(obj.entity, updated)
+                    runtime.smart_objects.mark_dirty_with_dependents(obj.entity, 'dirty_quantity', 'dirty_drawing')
                     updated_ids << obj.id
                   end
                 end
@@ -485,12 +532,16 @@ module JiraNot
             input = command[:input]
             definition = beam_definition_from_input(input, runtime)
             group = geometry.create_group(runtime.active_model, definition)
+            mark = input[:mark] || input['mark'] || 'B1'
             object = runtime.smart_objects.create(
               entity: group, type: 'structure.beam', owner_module: MANIFEST[:id],
-              display_name: input[:display_name] || input['display_name'] || 'Structural Beam',
+              display_name: input[:display_name] || input['display_name'] || "Beam #{mark}",
               created_phase: input[:created_phase] || input['created_phase'] || runtime.project.working_phase,
-              level_refs: beam_level_refs(definition), source_state: input[:source_state] || input['source_state'] || 'confirmed'
+              level_refs: beam_level_refs(definition), source_state: input[:source_state] || input['source_state'] || 'confirmed',
+              id: input[:id] || input['id']
             )
+            store = Core::AttributeStore.new(group)
+            store.write('mark', mark)
             repository.write_beam(group, definition)
             sync_beam_supports(runtime, object, definition)
             runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')

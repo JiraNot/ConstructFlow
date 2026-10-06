@@ -1,11 +1,9 @@
-// Precision CAD Snapping Engine (Millimeter Units)
-
-import { ProjectDocument, isColumnObject, isGridObject } from '@constructflow/project-model'
+import { ProjectDocument, isColumnObject, isGridObject, isBeamObject } from '@constructflow/project-model'
 import { ViewportState } from '../viewport/viewportTransform.js'
 
 export interface SnapResult {
   point_mm: [number, number]
-  kind: 'grid_intersection' | 'grid_line' | 'column_center' | 'free'
+  kind: 'grid_intersection' | 'grid_line' | 'column_center' | 'beam_node' | 'free'
   target_id?: string
   description: string
 }
@@ -69,7 +67,33 @@ export function snapPoint(
     }
   }
 
-  // 3. Priority: Single Grid Lines (Project perpendicular)
+  // 3. Priority: Beam Endpoints (Nodes)
+  for (const obj of Object.values(project.objects)) {
+    if (isBeamObject(obj)) {
+      const [sx, sy] = obj.module_data.start_point_mm
+      const [ex, ey] = obj.module_data.end_point_mm
+      const dsSq = (rawWorldPoint_mm[0] - sx) ** 2 + (rawWorldPoint_mm[1] - sy) ** 2
+      if (dsSq <= tolSq) {
+        return {
+          point_mm: [sx, sy],
+          kind: 'beam_node',
+          target_id: obj.id,
+          description: `Beam ${obj.module_data.mark} Node`,
+        }
+      }
+      const deSq = (rawWorldPoint_mm[0] - ex) ** 2 + (rawWorldPoint_mm[1] - ey) ** 2
+      if (deSq <= tolSq) {
+        return {
+          point_mm: [ex, ey],
+          kind: 'beam_node',
+          target_id: obj.id,
+          description: `Beam ${obj.module_data.mark} Node`,
+        }
+      }
+    }
+  }
+
+  // 4. Priority: Single Grid Lines (Project perpendicular)
   for (const vg of verticalGrids) {
     const dx = Math.abs(rawWorldPoint_mm[0] - vg.pos_mm)
     if (dx <= tolerance_mm) {

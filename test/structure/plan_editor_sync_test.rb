@@ -284,4 +284,89 @@ class PlanEditorSyncTest < Minitest::Test
     assert_equal [350.0, 350.0], repo.read_column(col1.entity).section_mm
     assert_equal [350.0, 350.0], repo.read_column(col2.entity).section_mm
   end
+
+  def test_create_beam_preserves_external_uuid_and_human_mark
+    beam_uuid = 'beam-sync-test-uuid'
+    input = {
+      id: beam_uuid,
+      mark: 'B1',
+      path_mm: [[0, 0, 0], [4000, 0, 0]],
+      section_mm: [200, 400],
+      material: 'reinforced_concrete'
+    }
+
+    result = @runtime.commands.execute('CreateBeam', input, project_id: 'test-proj')
+    assert_equal 'success', result[:status], "CreateBeam failed: #{result[:error]}"
+
+    beam = @runtime.smart_objects.fetch_by_id(beam_uuid)
+    refute_nil beam, 'Beam must be fetchable by external UUID'
+    assert_equal beam_uuid, beam.id
+    assert_equal 'Beam B1', beam.display_name
+
+    store = JiraNot::ConstructFlow::Core::AttributeStore.new(beam.entity)
+    assert_equal beam_uuid, store.read('object_id')
+    assert_equal 'structure.beam', store.read('object_type')
+    assert_equal 'B1', store.read('mark')
+
+    repo = JiraNot::ConstructFlow::Structure::Repository.new
+    beam_def = repo.read_beam(beam.entity)
+    assert_equal [[0.0, 0.0, 0.0], [4000.0, 0.0, 0.0]], beam_def.path_mm
+    assert_equal [200.0, 400.0], beam_def.section_mm
+  end
+
+  def test_update_beam_mark_renames_without_changing_uuid
+    beam_uuid = 'beam-rename-uuid'
+    @runtime.commands.execute('CreateBeam', {
+      id: beam_uuid,
+      mark: 'B1',
+      path_mm: [[0, 0, 0], [4000, 0, 0]],
+      section_mm: [200, 400]
+    }, project_id: 'test-proj')
+
+    rename_result = @runtime.commands.execute('UpdateBeamMark', {
+      object_id: beam_uuid,
+      mark: 'B2'
+    }, project_id: 'test-proj')
+    assert_equal 'success', rename_result[:status]
+
+    beam = @runtime.smart_objects.fetch_by_id(beam_uuid)
+    assert_equal beam_uuid, beam.id
+    assert_equal 'Beam B2', beam.display_name
+
+    store = JiraNot::ConstructFlow::Core::AttributeStore.new(beam.entity)
+    assert_equal beam_uuid, store.read('object_id')
+    assert_equal 'B2', store.read('mark')
+  end
+
+  def test_update_structural_type_dimensions_cascades_to_all_matching_beams
+    beam1_id = 'b-batch-1'
+    beam2_id = 'b-batch-2'
+
+    @runtime.commands.execute('CreateBeam', {
+      id: beam1_id,
+      mark: 'B1',
+      path_mm: [[0, 0, 0], [4000, 0, 0]],
+      section_mm: [200, 400]
+    }, project_id: 'test-proj')
+
+    @runtime.commands.execute('CreateBeam', {
+      id: beam2_id,
+      mark: 'B1',
+      path_mm: [[0, 4000, 0], [4000, 4000, 0]],
+      section_mm: [200, 400]
+    }, project_id: 'test-proj')
+
+    res = @runtime.commands.execute('UpdateStructuralTypeDimensions', {
+      type_id_or_name: 'B1',
+      section_mm: [250, 500]
+    }, project_id: 'test-proj')
+    assert_equal 'success', res[:status]
+
+    repo = JiraNot::ConstructFlow::Structure::Repository.new
+    beam1 = @runtime.smart_objects.fetch_by_id(beam1_id)
+    beam2 = @runtime.smart_objects.fetch_by_id(beam2_id)
+
+    assert_equal [250.0, 500.0], repo.read_beam(beam1.entity).section_mm
+    assert_equal [250.0, 500.0], repo.read_beam(beam2.entity).section_mm
+  end
 end

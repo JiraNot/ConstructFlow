@@ -82,6 +82,33 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
       material: 'reinforced_concrete',
     },
   },
+  {
+    id: 'type-beam-b1',
+    object_type: 'structure.beam',
+    name: 'B1',
+    parameters: {
+      section_mm: [200, 400],
+      material: 'reinforced_concrete',
+    },
+  },
+  {
+    id: 'type-beam-b2',
+    object_type: 'structure.beam',
+    name: 'B2',
+    parameters: {
+      section_mm: [200, 500],
+      material: 'reinforced_concrete',
+    },
+  },
+  {
+    id: 'type-beam-rb1',
+    object_type: 'structure.beam',
+    name: 'RB1',
+    parameters: {
+      section_mm: [150, 300],
+      material: 'reinforced_concrete',
+    },
+  },
 ]
 
 export function createEmptyProjectDocument(

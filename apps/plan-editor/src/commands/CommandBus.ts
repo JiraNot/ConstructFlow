@@ -7,9 +7,11 @@ import {
   ColumnModuleData,
   FoundationModuleData,
   GridModuleData,
+  BeamModuleData,
   isColumnObject,
   isFoundationObject,
   isGridObject,
+  isBeamObject,
 } from '@constructflow/project-model'
 import {
   CommandEnvelope,
@@ -19,6 +21,9 @@ import {
   UpdateColumnMarkInput,
   CreateFoundationInput,
   CreateGridInput,
+  CreateBeamInput,
+  UpdateBeamMarkInput,
+  UpdateBeamDimensionsInput,
   DeleteObjectInput,
   DefineStructuralTypeInput,
   UpdateStructuralTypeDimensionsInput,
@@ -429,6 +434,176 @@ export class CommandBus {
           }
         }
 
+        case 'CreateBeam': {
+          const beamInput = input as CreateBeamInput
+          const id = beamInput.id || crypto.randomUUID()
+          const mark = beamInput.mark || 'B1'
+
+          const typeDef = updated.types.find(
+            (t) => t.object_type === 'structure.beam' && t.name.toLowerCase() === mark.toLowerCase()
+          )
+          const section_mm: [number, number] = beamInput.section_mm || typeDef?.parameters?.section_mm || [200, 400]
+
+          const start_point_mm: [number, number, number] = beamInput.start_point_mm.length === 2
+            ? [beamInput.start_point_mm[0], beamInput.start_point_mm[1], 0]
+            : (beamInput.start_point_mm as [number, number, number])
+
+          const end_point_mm: [number, number, number] = beamInput.end_point_mm.length === 2
+            ? [beamInput.end_point_mm[0], beamInput.end_point_mm[1], 0]
+            : (beamInput.end_point_mm as [number, number, number])
+
+          const span_mm = Math.round(Math.hypot(
+            end_point_mm[0] - start_point_mm[0],
+            end_point_mm[1] - start_point_mm[1]
+          ))
+
+          const level_id = beamInput.level_id || project.project.active_level_id
+
+          const smartObject: SmartObject<BeamModuleData> = {
+            id,
+            object_type: 'structure.beam',
+            owner_module: 'constructflow.structure',
+            schema_version: 1,
+            created_phase: beamInput.phase || project.project.active_phase,
+            removed_phase: null,
+            level_refs: [{ role: 'base_level', level_id }],
+            host_refs: [beamInput.start_column_id, beamInput.end_column_id].filter(Boolean) as string[],
+            connector_refs: [],
+            status: 'active',
+            module_data: {
+              mark,
+              start_point_mm,
+              end_point_mm,
+              section_mm,
+              span_mm,
+              level_id,
+              start_column_id: beamInput.start_column_id,
+              end_column_id: beamInput.end_column_id,
+              material: beamInput.material || typeDef?.parameters?.material || 'reinforced_concrete',
+              engineering_status: beamInput.engineering_status || 'preliminary',
+            },
+            created_at: now,
+            updated_at: now,
+          }
+
+          updated.objects[id] = smartObject
+
+          if (beamInput.start_column_id) {
+            updated.relationships.push({
+              kind: 'connects_to',
+              source_id: id,
+              target_id: beamInput.start_column_id,
+              role: 'beam_column_connection',
+            })
+          }
+          if (beamInput.end_column_id) {
+            updated.relationships.push({
+              kind: 'connects_to',
+              source_id: id,
+              target_id: beamInput.end_column_id,
+              role: 'beam_column_connection',
+            })
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [id],
+              created_object_ids: [id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: {
+              ...envelope,
+              input: {
+                ...beamInput,
+                id,
+                mark,
+                path_mm: [start_point_mm, end_point_mm],
+                section_mm,
+                span_mm,
+              },
+            },
+          }
+        }
+
+        case 'UpdateBeamMark': {
+          const bMarkInput = input as UpdateBeamMarkInput
+          const target = updated.objects[bMarkInput.object_id]
+          if (!target || !isBeamObject(target)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Beam UUID ${bMarkInput.object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          updated.objects[bMarkInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              mark: bMarkInput.mark,
+            },
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [bMarkInput.object_id],
+              updated_object_ids: [bMarkInput.object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: envelope,
+          }
+        }
+
+        case 'UpdateBeamDimensions': {
+          const bDimInput = input as UpdateBeamDimensionsInput
+          const target = updated.objects[bDimInput.object_id]
+          if (!target || !isBeamObject(target)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Beam UUID ${bDimInput.object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          updated.objects[bDimInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              section_mm: bDimInput.section_mm,
+            },
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [bDimInput.object_id],
+              updated_object_ids: [bDimInput.object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: envelope,
+          }
+        }
+
         case 'DeleteObject': {
           const delInput = input as DeleteObjectInput
           const target = updated.objects[delInput.object_id]
@@ -465,7 +640,8 @@ export class CommandBus {
 
         case 'DefineStructuralType': {
           const dtInput = input as DefineStructuralTypeInput
-          const typeId = dtInput.id || `type-${dtInput.object_type === 'structure.column' ? 'col' : 'fnd'}-${dtInput.name.toLowerCase()}`
+          const typePrefix = dtInput.object_type === 'structure.column' ? 'col' : dtInput.object_type === 'structure.beam' ? 'beam' : 'fnd'
+          const typeId = dtInput.id || `type-${typePrefix}-${dtInput.name.toLowerCase()}`
 
           const existingIdx = updated.types.findIndex(
             (t) => t.object_type === dtInput.object_type && t.name.toLowerCase() === dtInput.name.toLowerCase()
@@ -506,7 +682,7 @@ export class CommandBus {
 
           const section_mm = dimInput.section_mm || dimInput.parameters?.section_mm
           const size_mm = dimInput.size_mm || dimInput.parameters?.size_mm
-          const targetObjectType = dimInput.object_type || (dimInput.parameters as any)?.object_type || (section_mm ? 'structure.column' : 'structure.foundation')
+          const targetObjectType = dimInput.object_type || (dimInput.parameters as any)?.object_type || (size_mm ? 'structure.foundation' : (targetTypeName.toUpperCase().startsWith('B') || targetTypeName.toUpperCase().startsWith('RB')) ? 'structure.beam' : 'structure.column')
 
           if (!targetTypeName) {
             return {
@@ -528,8 +704,9 @@ export class CommandBus {
           )
 
           if (!typeDef) {
+            const prefix = targetObjectType === 'structure.foundation' ? 'fnd' : targetObjectType === 'structure.beam' ? 'beam' : 'col'
             typeDef = {
-              id: `type-${targetObjectType === 'structure.foundation' ? 'fnd' : 'col'}-${targetTypeName.toLowerCase()}`,
+              id: `type-${prefix}-${targetTypeName.toLowerCase()}`,
               object_type: targetObjectType,
               name: targetTypeName,
               parameters: {},
@@ -549,6 +726,20 @@ export class CommandBus {
           const affected: string[] = []
           for (const [id, obj] of Object.entries(updated.objects)) {
             if (obj.object_type === 'structure.column' && isColumnObject(obj)) {
+              if (obj.module_data.mark.toLowerCase() === typeDef.name.toLowerCase()) {
+                if (section_mm) {
+                  updated.objects[id] = {
+                    ...obj,
+                    updated_at: now,
+                    module_data: {
+                      ...obj.module_data,
+                      section_mm,
+                    },
+                  }
+                  affected.push(id)
+                }
+              }
+            } else if (obj.object_type === 'structure.beam' && isBeamObject(obj)) {
               if (obj.module_data.mark.toLowerCase() === typeDef.name.toLowerCase()) {
                 if (section_mm) {
                   updated.objects[id] = {
@@ -698,6 +889,17 @@ export class CommandBus {
           )
 
           if (isColumnObject(target)) {
+            const section_mm: [number, number] = typeDef?.parameters?.section_mm || target.module_data.section_mm
+            updated.objects[target.id] = {
+              ...target,
+              updated_at: now,
+              module_data: {
+                ...target.module_data,
+                mark: assignInput.type_name,
+                section_mm,
+              },
+            }
+          } else if (isBeamObject(target)) {
             const section_mm: [number, number] = typeDef?.parameters?.section_mm || target.module_data.section_mm
             updated.objects[target.id] = {
               ...target,

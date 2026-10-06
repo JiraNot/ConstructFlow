@@ -1,12 +1,10 @@
-// ConstructFlow 2D Plan Representation Renderer
-// Millimeter Model Geometry -> Viewport Projection -> HTML5 Canvas 2D
-
 import {
   ProjectDocument,
   SmartObject,
   isGridObject,
   isColumnObject,
   isFoundationObject,
+  isBeamObject,
 } from '@constructflow/project-model'
 import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
 import { SnapResult } from '../snapping/snapEngine.js'
@@ -36,14 +34,21 @@ export function renderPlanView(
     }
   }
 
-  // 4. Foundations (rendered underneath columns)
+  // 4. Foundations (rendered underneath beams and columns)
   for (const obj of Object.values(project.objects)) {
     if (isFoundationObject(obj)) {
       drawFoundation(ctx, obj, viewport, selectedId === obj.id, hoveredId === obj.id)
     }
   }
 
-  // 5. Columns (rendered with cross hatch and human-readable mark)
+  // 5. Beams (rendered connecting columns/grids)
+  for (const obj of Object.values(project.objects)) {
+    if (isBeamObject(obj)) {
+      drawBeam(ctx, obj, viewport, selectedId === obj.id, hoveredId === obj.id)
+    }
+  }
+
+  // 6. Columns (rendered with cross hatch and human-readable mark)
   for (const obj of Object.values(project.objects)) {
     if (isColumnObject(obj)) {
       drawColumn(ctx, obj, viewport, selectedId === obj.id, hoveredId === obj.id)
@@ -264,9 +269,97 @@ function drawColumn(
   ctx.restore()
 }
 
+function drawBeam(
+  ctx: CanvasRenderingContext2D,
+  obj: ReturnType<typeof isBeamObject> extends true ? any : SmartObject<any>,
+  viewport: ViewportState,
+  isSelected: boolean,
+  isHovered: boolean
+) {
+  const { mark, start_point_mm, end_point_mm, section_mm, span_mm } = obj.module_data
+  const [w_mm, d_mm] = section_mm || [200, 400]
+
+  const [sx1, sy1] = worldToScreen([start_point_mm[0], start_point_mm[1]], viewport)
+  const [sx2, sy2] = worldToScreen([end_point_mm[0], end_point_mm[1]], viewport)
+
+  const dx = sx2 - sx1
+  const dy = sy2 - sy1
+  const len = Math.hypot(dx, dy)
+  if (len < 1) return
+
+  const nx = -dy / len
+  const ny = dx / len
+  const half_w_px = (w_mm * viewport.zoom) / 2
+
+  ctx.save()
+
+  // 1. Fill beam body
+  ctx.beginPath()
+  ctx.moveTo(sx1 + nx * half_w_px, sy1 + ny * half_w_px)
+  ctx.lineTo(sx2 + nx * half_w_px, sy2 + ny * half_w_px)
+  ctx.lineTo(sx2 - nx * half_w_px, sy2 - ny * half_w_px)
+  ctx.lineTo(sx1 - nx * half_w_px, sy1 - ny * half_w_px)
+  ctx.closePath()
+
+  ctx.fillStyle = isSelected
+    ? 'rgba(14, 165, 233, 0.35)'
+    : isHovered
+    ? 'rgba(56, 189, 248, 0.25)'
+    : 'rgba(30, 41, 59, 0.85)'
+  ctx.fill()
+
+  // 2. Stroke beam boundary
+  ctx.strokeStyle = isSelected ? '#38bdf8' : isHovered ? '#7dd3fc' : '#64748b'
+  ctx.lineWidth = isSelected ? 2.5 : isHovered ? 2 : 1.5
+  ctx.stroke()
+
+  // 3. Centerline
+  ctx.beginPath()
+  ctx.setLineDash([4, 4])
+  ctx.strokeStyle = isSelected ? '#0284c7' : '#475569'
+  ctx.lineWidth = 1
+  ctx.moveTo(sx1, sy1)
+  ctx.lineTo(sx2, sy2)
+  ctx.stroke()
+  ctx.setLineDash([])
+
+  // 4. Text Annotation at Midpoint
+  const mx = (sx1 + sx2) / 2
+  const my = (sy1 + sy2) / 2
+  let angle = Math.atan2(dy, dx)
+  if (angle > Math.PI / 2 || angle < -Math.PI / 2) {
+    angle += Math.PI
+  }
+
+  ctx.translate(mx, my)
+  ctx.rotate(angle)
+
+  // Label badge
+  const label = `${mark || 'B1'} ${w_mm}×${d_mm}`
+  const spanLabel = `L=${(span_mm / 1000).toFixed(2)}m`
+  const text = `${label} [${spanLabel}]`
+
+  ctx.font = 'bold 10px monospace'
+  const textWidth = ctx.measureText(text).width
+
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'
+  ctx.fillRect(-textWidth / 2 - 4, -8, textWidth + 8, 16)
+  ctx.strokeStyle = isSelected ? '#38bdf8' : '#475569'
+  ctx.lineWidth = 1
+  ctx.strokeRect(-textWidth / 2 - 4, -8, textWidth + 8, 16)
+
+  ctx.fillStyle = isSelected ? '#38bdf8' : '#f1f5f9'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, 0, 0)
+
+  ctx.restore()
+}
+
 export interface PlacementGhost {
   type: string
   location_mm: [number, number]
+  target_location_mm?: [number, number]
   size_mm?: [number, number] | [number, number, number]
   mark?: string
 }
@@ -276,9 +369,69 @@ function drawPlacementGhost(
   ghost: PlacementGhost,
   viewport: ViewportState
 ) {
+  ctx.save()
+
+  if (ghost.type === 'beam' && ghost.target_location_mm) {
+    const [sx1, sy1] = worldToScreen(ghost.location_mm, viewport)
+    const [sx2, sy2] = worldToScreen(ghost.target_location_mm, viewport)
+    const w_mm = ghost.size_mm?.[0] || 200
+    const d_mm = ghost.size_mm?.[1] || 400
+    const dx = sx2 - sx1
+    const dy = sy2 - sy1
+    const len = Math.hypot(dx, dy)
+    if (len > 2) {
+      const nx = -dy / len
+      const ny = dx / len
+      const half_w_px = (w_mm * viewport.zoom) / 2
+
+      ctx.beginPath()
+      ctx.moveTo(sx1 + nx * half_w_px, sy1 + ny * half_w_px)
+      ctx.lineTo(sx2 + nx * half_w_px, sy2 + ny * half_w_px)
+      ctx.lineTo(sx2 - nx * half_w_px, sy2 - ny * half_w_px)
+      ctx.lineTo(sx1 - nx * half_w_px, sy1 - ny * half_w_px)
+      ctx.closePath()
+
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.25)'
+      ctx.fill()
+      ctx.strokeStyle = '#38bdf8'
+      ctx.lineWidth = 2
+      ctx.setLineDash([4, 4])
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      // Live span badge
+      const span_mm = Math.round(Math.hypot(
+        ghost.target_location_mm[0] - ghost.location_mm[0],
+        ghost.target_location_mm[1] - ghost.location_mm[1]
+      ))
+      const mx = (sx1 + sx2) / 2
+      const my = (sy1 + sy2) / 2
+      ctx.fillStyle = '#0f172a'
+      const badgeText = `${ghost.mark || 'B1'} (${w_mm}×${d_mm})  Span: ${(span_mm / 1000).toFixed(2)} m (${span_mm} mm)`
+      ctx.font = 'bold 11px monospace'
+      const bw = ctx.measureText(badgeText).width
+      ctx.fillRect(mx - bw / 2 - 6, my - 10, bw + 12, 20)
+      ctx.strokeStyle = '#38bdf8'
+      ctx.lineWidth = 1
+      ctx.strokeRect(mx - bw / 2 - 6, my - 10, bw + 12, 20)
+      ctx.fillStyle = '#38bdf8'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(badgeText, mx, my)
+    }
+
+    // Start anchor circle
+    ctx.fillStyle = '#38bdf8'
+    ctx.beginPath()
+    ctx.arc(sx1, sy1, 5, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.restore()
+    return
+  }
+
   const [x, y] = worldToScreen(ghost.location_mm, viewport)
 
-  ctx.save()
   if (ghost.type === 'foundation') {
     const w_mm = ghost.size_mm?.[0] || 800
     const l_mm = ghost.size_mm?.[1] || 800
@@ -347,6 +500,13 @@ function drawSnapMarker(
     ctx.strokeStyle = '#22c55e'
     ctx.lineWidth = 2
     ctx.strokeRect(x - s, y - s, s * 2, s * 2)
+  } else if (snap.kind === 'beam_node') {
+    // Purple circle for beam node
+    ctx.strokeStyle = '#c084fc'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(x, y, 6, 0, Math.PI * 2)
+    ctx.stroke()
   } else if (snap.kind === 'grid_line') {
     // Cyan cross
     const s = 6

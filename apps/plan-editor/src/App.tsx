@@ -8,6 +8,7 @@ import {
   isGridObject,
   isColumnObject,
   isFoundationObject,
+  isBeamObject,
 } from '@constructflow/project-model'
 import { CommandEnvelope } from '@constructflow/command-schema'
 import { CommandBus } from './commands/CommandBus.js'
@@ -26,13 +27,14 @@ export const App: React.FC = () => {
   const [activeTool, setActiveTool] = useState<ToolType>('select')
   const [activeColumnType, setActiveColumnType] = useState<string>('C1')
   const [activeFoundationType, setActiveFoundationType] = useState<string>('F1')
+  const [activeBeamType, setActiveBeamType] = useState<string>('B1')
   const [isTypeManagerOpen, setIsTypeManagerOpen] = useState<boolean>(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [cursorCoords_mm, setCursorCoords_mm] = useState<[number, number]>([0, 0])
   const [snapKind, setSnapKind] = useState<string>('Free')
   const [commandQueue, setCommandQueue] = useState<CommandEnvelope[]>([])
 
-  // Setup initial template model: Grids A, B, C & 1, 2, 3 + 9 Columns (type C1) + 9 Footings (type F1)
+  // Setup initial template model: Grids A, B, C & 1, 2, 3 + 9 Columns (type C1) + 9 Footings (type F1) + Beams (type B1/B2)
   useEffect(() => {
     let current = createEmptyProjectDocument('CF-PROJ-001', 'ConstructFlow Vertical Slice 01')
     current.levels = [
@@ -109,6 +111,32 @@ export const App: React.FC = () => {
       }
     })
 
+    // 4. Create initial Beams connecting columns along Grid lines
+    const initialBeams = [
+      { start: [0, 0], end: [4000, 0], mark: 'B1' },
+      { start: [4000, 0], end: [8000, 0], mark: 'B1' },
+      { start: [0, 4000], end: [4000, 4000], mark: 'B1' },
+      { start: [4000, 4000], end: [8000, 4000], mark: 'B1' },
+      { start: [0, 0], end: [0, 4000], mark: 'B2' },
+      { start: [4000, 0], end: [4000, 4000], mark: 'B2' },
+      { start: [8000, 0], end: [8000, 4000], mark: 'B2' },
+    ]
+
+    for (const b of initialBeams) {
+      const bId = crypto.randomUUID()
+      const res = CommandBus.execute(current, 'CreateBeam', {
+        id: bId,
+        mark: b.mark,
+        start_point_mm: b.start,
+        end_point_mm: b.end,
+        level_id: 'GF',
+      })
+      if (res.result.status === 'success') {
+        current = res.updatedProject
+        if (res.emittedEnvelope) queue.push(res.emittedEnvelope)
+      }
+    }
+
     setProject(current)
     setCommandQueue(queue)
   }, [])
@@ -126,6 +154,8 @@ export const App: React.FC = () => {
         setActiveTool('column')
       } else if (e.key === 'f' || e.key === 'F') {
         setActiveTool('foundation')
+      } else if (e.key === 'b' || e.key === 'B') {
+        setActiveTool('beam')
       } else if (e.key === 'g' || e.key === 'G') {
         setActiveTool('grid')
       }
@@ -166,6 +196,30 @@ export const App: React.FC = () => {
     }
   }
 
+  // Commit Beam creation with active type
+  const handleCommitBeam = (
+    start_point_mm: [number, number],
+    end_point_mm: [number, number],
+    startColId?: string,
+    endColId?: string
+  ) => {
+    const beamId = crypto.randomUUID()
+    const res = CommandBus.execute(project, 'CreateBeam', {
+      id: beamId,
+      mark: activeBeamType,
+      start_point_mm: [start_point_mm[0], start_point_mm[1], 0],
+      end_point_mm: [end_point_mm[0], end_point_mm[1], 0],
+      start_column_id: startColId,
+      end_column_id: endColId,
+      level_id: project.project.active_level_id,
+    })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      setSelectedId(beamId)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
   // Assign instance type
   const handleAssignType = (objectId: string, typeName: string) => {
     const res = CommandBus.execute(project, 'AssignInstanceType', {
@@ -181,7 +235,7 @@ export const App: React.FC = () => {
   // Update Type Dimensions (Cascades to all instances of this type)
   const handleUpdateTypeDimensions = (
     typeName: string,
-    objectType: 'structure.column' | 'structure.foundation',
+    objectType: 'structure.column' | 'structure.foundation' | 'structure.beam',
     dimensions: { section_mm?: [number, number]; size_mm?: [number, number, number] }
   ) => {
     const res = CommandBus.execute(project, 'UpdateStructuralTypeDimensions', {
@@ -200,7 +254,7 @@ export const App: React.FC = () => {
 
   // Define new type in catalog
   const handleDefineType = (
-    objectType: 'structure.column' | 'structure.foundation',
+    objectType: 'structure.column' | 'structure.foundation' | 'structure.beam',
     name: string,
     parameters: { section_mm?: [number, number]; size_mm?: [number, number, number] }
   ) => {
@@ -309,6 +363,7 @@ export const App: React.FC = () => {
   // Counts & Schedule breakdown
   const columnCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.column').length
   const foundationCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.foundation').length
+  const beamCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.beam').length
   const gridCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.grid').length
 
   const columnTypeCounts = Object.values(project.objects)
@@ -323,6 +378,14 @@ export const App: React.FC = () => {
     .filter(isFoundationObject)
     .reduce<Record<string, number>>((acc, fnd) => {
       const mark = fnd.module_data.mark || 'F1'
+      acc[mark] = (acc[mark] || 0) + 1
+      return acc
+    }, {})
+
+  const beamTypeCounts = Object.values(project.objects)
+    .filter(isBeamObject)
+    .reduce<Record<string, number>>((acc, beam) => {
+      const mark = beam.module_data.mark || 'B1'
       acc[mark] = (acc[mark] || 0) + 1
       return acc
     }, {})
@@ -478,11 +541,31 @@ export const App: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {/* Beams Breakdown */}
+            <div style={{ padding: '8px', background: '#1e293b', borderRadius: 6, fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#cbd5e1', fontWeight: 600, marginBottom: 4 }}>
+                <span>Beams (คาน)</span>
+                <span style={{ color: '#38bdf8' }}>{beamCount} ช่วง</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 4 }}>
+                {Object.keys(beamTypeCounts).length === 0 ? (
+                  <span style={{ color: '#64748b', fontSize: 11 }}>ไม่มีคาน</span>
+                ) : (
+                  Object.entries(beamTypeCounts).sort(([a], [b]) => a.localeCompare(b)).map(([mark, count]) => (
+                    <div key={mark} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}>
+                      <span style={{ fontWeight: 600, color: '#38bdf8' }}>{mark}</span>
+                      <span>{count} ช่วง</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
 
           <div style={{ marginTop: 'auto', fontSize: 10, color: '#64748b', lineHeight: 1.4 }}>
             <b>Vertical Slice 01:</b><br />
-            Project → Levels → Grids → Columns → Foundations → SketchUp Sync
+            Project → Levels → Grids → Columns → Footings → Beams → SketchUp Sync
           </div>
         </aside>
 
@@ -497,12 +580,17 @@ export const App: React.FC = () => {
               onChangeActiveColumnType={setActiveColumnType}
               activeFoundationType={activeFoundationType}
               onChangeActiveFoundationType={setActiveFoundationType}
+              activeBeamType={activeBeamType}
+              onChangeActiveBeamType={setActiveBeamType}
               columnTypes={(project.types || [])
                 .filter((t) => t.object_type === 'structure.column')
                 .map((t) => ({ name: t.name, section_mm: t.parameters?.section_mm }))}
               foundationTypes={(project.types || [])
                 .filter((t) => t.object_type === 'structure.foundation')
                 .map((t) => ({ name: t.name, size_mm: t.parameters?.size_mm }))}
+              beamTypes={(project.types || [])
+                .filter((t) => t.object_type === 'structure.beam')
+                .map((t) => ({ name: t.name, section_mm: t.parameters?.section_mm }))}
               onOpenTypeManager={() => setIsTypeManagerOpen(true)}
             />
           </div>
@@ -514,10 +602,12 @@ export const App: React.FC = () => {
               activeTool={activeTool}
               activeColumnTypeMark={activeColumnType}
               activeFoundationTypeMark={activeFoundationType}
+              activeBeamTypeMark={activeBeamType}
               selectedId={selectedId}
               onSelectObject={setSelectedId}
               onCommitColumn={handleCommitColumn}
               onCommitFoundation={handleCommitFoundation}
+              onCommitBeam={handleCommitBeam}
               onCommitGrid={handleCommitGrid}
               onMoveColumn={handleMoveColumn}
               onCursorChange={(coords, kind) => {

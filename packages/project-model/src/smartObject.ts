@@ -8,12 +8,14 @@ import {
   GridModuleData,
   ColumnModuleData,
   FoundationModuleData,
+  BeamModuleData,
 } from './types.js'
 
 export type KnownModuleData =
   | GridModuleData
   | ColumnModuleData
   | FoundationModuleData
+  | BeamModuleData
   | Record<string, any>
 
 export interface SmartObject<TData extends Record<string, any> = KnownModuleData> {
@@ -94,3 +96,10 @@ export function isGridObject(
 ): obj is SmartObject<GridModuleData> {
   return obj.object_type === 'structure.grid'
 }
+
+export function isBeamObject(
+  obj: SmartObject
+): obj is SmartObject<BeamModuleData> {
+  return obj.object_type === 'structure.beam'
+}
+

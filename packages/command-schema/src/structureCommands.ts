@@ -115,8 +115,55 @@ export interface DeleteObjectInput {
   object_id: string
 }
 
+export interface CreateBeamInput {
+  /** Immutable unique identity (UUID) */
+  id: string
+
+  /** Human-readable mark, e.g. "B1", "B2" */
+  mark?: string
+
+  /** Start node coordinate [x, y] or [x, y, z] in mm */
+  start_point_mm: [number, number, number] | [number, number]
+
+  /** End node coordinate [x, y] or [x, y, z] in mm */
+  end_point_mm: [number, number, number] | [number, number]
+
+  /** Path coordinates for SketchUp sync [[x1, y1, z1], [x2, y2, z2]] in mm */
+  path_mm?: [[number, number, number], [number, number, number]]
+
+  /** Cross-section dimensions [width, depth] in mm */
+  section_mm?: [number, number]
+
+  /** Storey reference ID */
+  level_id?: string
+  base_level_id?: string
+  base_elevation_mm?: number
+  base_offset_mm?: number
+
+  /** Connected Column UUIDs */
+  start_column_id?: string
+  end_column_id?: string
+
+  material?: 'reinforced_concrete' | 'steel' | 'timber' | 'generic' | string
+  phase?: Phase
+  engineering_status?: 'preliminary' | 'engineer_approved' | 'as_built'
+}
+
+export interface UpdateBeamMarkInput {
+  /** Immutable object UUID */
+  object_id: string
+
+  /** New human-readable mark, e.g. "B2" */
+  mark: string
+}
+
+export interface UpdateBeamDimensionsInput {
+  object_id: string
+  section_mm: [number, number]
+}
+
 export interface StructuralTypeParameters {
-  /** Cross-section [width, depth] in mm (for column) */
+  /** Cross-section [width, depth] in mm (for column and beam) */
   section_mm?: [number, number]
   /** Dimensions [width, length, thickness] in mm (for foundation) */
   size_mm?: [number, number, number]
@@ -126,15 +173,15 @@ export interface StructuralTypeParameters {
 
 export interface DefineStructuralTypeInput {
   id?: string
-  object_type: 'structure.column' | 'structure.foundation'
-  name: string // e.g. "C1", "C2", "C3", "F1", "F2"
+  object_type: 'structure.column' | 'structure.foundation' | 'structure.beam'
+  name: string // e.g. "C1", "F1", "B1"
   parameters: StructuralTypeParameters
 }
 
 export interface UpdateStructuralTypeDimensionsInput {
-  type_id_or_name: string // e.g. "C1" or type ID
+  type_id_or_name: string // e.g. "C1", "B1" or type ID
   type_name?: string
-  object_type?: 'structure.column' | 'structure.foundation'
+  object_type?: 'structure.column' | 'structure.foundation' | 'structure.beam'
   section_mm?: [number, number]
   size_mm?: [number, number, number]
   parameters?: StructuralTypeParameters
@@ -152,5 +199,6 @@ export interface UpdateFoundationDimensionsInput {
 
 export interface AssignInstanceTypeInput {
   object_id: string
-  type_name: string // e.g. "C2" or "F2"
+  type_name: string // e.g. "C2", "F2", "B2"
 }
+

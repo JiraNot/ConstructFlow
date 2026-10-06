@@ -5,6 +5,7 @@ import {
   isColumnObject,
   isFoundationObject,
   isGridObject,
+  isBeamObject,
 } from '@constructflow/project-model'
 import { ToolType } from './Toolbar.js'
 import {
@@ -21,10 +22,12 @@ interface PlanCanvasProps {
   activeTool: ToolType
   activeColumnTypeMark: string
   activeFoundationTypeMark: string
+  activeBeamTypeMark: string
   selectedId: string | null
   onSelectObject: (id: string | null) => void
   onCommitColumn: (location_mm: [number, number]) => void
   onCommitFoundation: (opts: { columnId?: string; location_mm?: [number, number] }) => void
+  onCommitBeam: (start: [number, number], end: [number, number], startColId?: string, endColId?: string) => void
   onCommitGrid: (orientation: 'vertical' | 'horizontal', position_mm: number) => void
   onMoveColumn: (id: string, newLocation_mm: [number, number]) => void
   onCursorChange: (coords_mm: [number, number], snapKind: string) => void
@@ -35,10 +38,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   activeTool,
   activeColumnTypeMark,
   activeFoundationTypeMark,
+  activeBeamTypeMark,
   selectedId,
   onSelectObject,
   onCommitColumn,
   onCommitFoundation,
+  onCommitBeam,
   onCommitGrid,
   onMoveColumn,
   onCursorChange,
@@ -62,6 +67,15 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
   // Dragging selected column state
   const [draggingColumnId, setDraggingColumnId] = useState<string | null>(null)
+
+  // 2-click beam placement state (start node -> end node)
+  const [beamStartNode, setBeamStartNode] = useState<{ point_mm: [number, number]; columnId?: string } | null>(null)
+
+  useEffect(() => {
+    if (activeTool !== 'beam') {
+      setBeamStartNode(null)
+    }
+  }, [activeTool])
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current
@@ -90,6 +104,17 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         size_mm: typeDef?.parameters?.size_mm || [800, 800, 300],
         mark: activeFoundationTypeMark,
       }
+    } else if (activeTool === 'beam' && activeSnap && beamStartNode) {
+      const typeDef = project.types?.find(
+        (t) => t.object_type === 'structure.beam' && t.name.toLowerCase() === activeBeamTypeMark.toLowerCase()
+      )
+      ghost = {
+        type: 'beam',
+        location_mm: beamStartNode.point_mm,
+        target_location_mm: activeSnap.point_mm,
+        size_mm: typeDef?.parameters?.section_mm || [200, 400],
+        mark: activeBeamTypeMark,
+      }
     }
 
     renderPlanView(
@@ -103,7 +128,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       activeSnap,
       ghost
     )
-  }, [project, viewport, selectedId, hoveredId, activeSnap, activeTool])
+  }, [project, viewport, selectedId, hoveredId, activeSnap, activeTool, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark, beamStartNode])
 
   useEffect(() => {
     redraw()
@@ -161,7 +186,28 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       }
     }
 
-    // 3. Grids
+    // 3. Beams
+    for (const obj of Object.values(project.objects)) {
+      if (isBeamObject(obj)) {
+        const [x1, y1] = obj.module_data.start_point_mm
+        const [x2, y2] = obj.module_data.end_point_mm
+        const [bw] = obj.module_data.section_mm
+        const hitTol = Math.max(bw / 2, 12 / viewport.zoom)
+        const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2
+        if (l2 > 0) {
+          let t = ((wx - x1) * (x2 - x1) + (wy - y1) * (y2 - y1)) / l2
+          t = Math.max(0, Math.min(1, t))
+          const px = x1 + t * (x2 - x1)
+          const py = y1 + t * (y2 - y1)
+          const distSq = (wx - px) ** 2 + (wy - py) ** 2
+          if (distSq <= hitTol * hitTol) {
+            return obj.id
+          }
+        }
+      }
+    }
+
+    // 4. Grids
     for (const obj of Object.values(project.objects)) {
       if (isGridObject(obj)) {
         const { orientation, position_mm } = obj.module_data
@@ -261,6 +307,30 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         } else {
           // Isolated spread footing at clicked/snapped location
           onCommitFoundation({ location_mm: snap.point_mm })
+        }
+      } else if (activeTool === 'beam') {
+        const clickedCol = Object.values(project.objects).find((o) => {
+          if (!isColumnObject(o)) return false
+          const [cx, cy] = o.module_data.location_mm
+          const [cw, cd] = o.module_data.section_mm
+          const tol = Math.max(cw, cd, 400)
+          return Math.abs(rawWorld[0] - cx) <= tol && Math.abs(rawWorld[1] - cy) <= tol
+        })
+        const colId = clickedCol ? clickedCol.id : (snap.kind === 'column_center' ? snap.target_id : undefined)
+
+        if (!beamStartNode) {
+          // 1st click: set start node
+          setBeamStartNode({ point_mm: snap.point_mm, columnId: colId })
+        } else {
+          // 2nd click: finish beam
+          const dist = Math.hypot(
+            snap.point_mm[0] - beamStartNode.point_mm[0],
+            snap.point_mm[1] - beamStartNode.point_mm[1]
+          )
+          if (dist >= 100) {
+            onCommitBeam(beamStartNode.point_mm, snap.point_mm, beamStartNode.columnId, colId)
+          }
+          setBeamStartNode(null)
         }
       } else if (activeTool === 'grid') {
         // Alt or shift switches between vertical/horizontal

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { ProjectDocument, TypeDefinition, isColumnObject, isFoundationObject } from '@constructflow/project-model'
+import { ProjectDocument, TypeDefinition, isColumnObject, isFoundationObject, isBeamObject } from '@constructflow/project-model'
 import { X, Plus, Check, Sliders, Layers } from 'lucide-react'
 
 interface TypeManagerModalProps {
@@ -8,11 +8,11 @@ interface TypeManagerModalProps {
   project: ProjectDocument
   onUpdateTypeDimensions: (
     typeName: string,
-    objectType: 'structure.column' | 'structure.foundation',
+    objectType: 'structure.column' | 'structure.foundation' | 'structure.beam',
     dimensions: { section_mm?: [number, number]; size_mm?: [number, number, number] }
   ) => void
   onDefineType: (
-    objectType: 'structure.column' | 'structure.foundation',
+    objectType: 'structure.column' | 'structure.foundation' | 'structure.beam',
     name: string,
     parameters: { section_mm?: [number, number]; size_mm?: [number, number, number] }
   ) => void
@@ -25,7 +25,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
   onUpdateTypeDimensions,
   onDefineType,
 }) => {
-  const [activeTab, setActiveTab] = useState<'column' | 'foundation'>('column')
+  const [activeTab, setActiveTab] = useState<'column' | 'foundation' | 'beam'>('column')
 
   // Edit draft states for existing types: typeId -> { w, d, l, t }
   const [editDrafts, setEditDrafts] = useState<Record<string, { w: number; d: number; l?: number; t?: number }>>({})
@@ -34,6 +34,8 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
   const [newTypeName, setNewTypeName] = useState('')
   const [newColW, setNewColW] = useState(250)
   const [newColD, setNewColD] = useState(250)
+  const [newBeamW, setNewBeamW] = useState(200)
+  const [newBeamD, setNewBeamD] = useState(400)
   const [newFndW, setNewFndW] = useState(1000)
   const [newFndL, setNewFndL] = useState(1000)
   const [newFndT, setNewFndT] = useState(350)
@@ -43,6 +45,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
 
   const columnTypes = (project.types || []).filter((t) => t.object_type === 'structure.column')
   const foundationTypes = (project.types || []).filter((t) => t.object_type === 'structure.foundation')
+  const beamTypes = (project.types || []).filter((t) => t.object_type === 'structure.beam')
 
   // Count usage of each type in current project
   const getUsageCount = (objectType: string, typeName: string) => {
@@ -51,6 +54,9 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
         return o.module_data.mark.toLowerCase() === typeName.toLowerCase()
       }
       if (objectType === 'structure.foundation' && isFoundationObject(o)) {
+        return o.module_data.mark.toLowerCase() === typeName.toLowerCase()
+      }
+      if (objectType === 'structure.beam' && isBeamObject(o)) {
         return o.module_data.mark.toLowerCase() === typeName.toLowerCase()
       }
       return false
@@ -62,6 +68,15 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
     const w = draft?.w ?? typeDef.parameters?.section_mm?.[0] ?? 200
     const d = draft?.d ?? typeDef.parameters?.section_mm?.[1] ?? 200
     onUpdateTypeDimensions(typeDef.name, 'structure.column', { section_mm: [w, d] })
+    setSaveSuccess(typeDef.name)
+    setTimeout(() => setSaveSuccess(null), 2000)
+  }
+
+  const handleUpdateBeamDimensions = (typeDef: TypeDefinition) => {
+    const draft = editDrafts[typeDef.id]
+    const w = draft?.w ?? typeDef.parameters?.section_mm?.[0] ?? 200
+    const d = draft?.d ?? typeDef.parameters?.section_mm?.[1] ?? 400
+    onUpdateTypeDimensions(typeDef.name, 'structure.beam', { section_mm: [w, d] })
     setSaveSuccess(typeDef.name)
     setTimeout(() => setSaveSuccess(null), 2000)
   }
@@ -83,6 +98,8 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
 
     if (activeTab === 'column') {
       onDefineType('structure.column', name, { section_mm: [newColW, newColD] })
+    } else if (activeTab === 'beam') {
+      onDefineType('structure.beam', name, { section_mm: [newBeamW, newBeamD] })
     } else {
       onDefineType('structure.foundation', name, { size_mm: [newFndW, newFndL, newFndT] })
     }
@@ -188,6 +205,21 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
           >
             Footing Types (ฐานราก) ({foundationTypes.length})
           </button>
+          <button
+            onClick={() => setActiveTab('beam')}
+            style={{
+              padding: '12px 18px',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'beam' ? '2px solid #38bdf8' : '2px solid transparent',
+              color: activeTab === 'beam' ? '#38bdf8' : '#94a3b8',
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            Beam Types (คาน) ({beamTypes.length})
+          </button>
         </div>
 
         {/* Body List */}
@@ -214,7 +246,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
               รายการประเภทปัจจุบันในแบบ
             </div>
 
-            {(activeTab === 'column' ? columnTypes : foundationTypes).map((t) => {
+            {(activeTab === 'column' ? columnTypes : activeTab === 'beam' ? beamTypes : foundationTypes).map((t) => {
               const usageCount = getUsageCount(t.object_type, t.name)
               const draft = editDrafts[t.id]
 
@@ -311,6 +343,114 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
 
                     <button
                       onClick={() => handleUpdateColDimensions(t)}
+                      style={{
+                        background: '#0284c7',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '6px 14px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      บันทึกขนาด
+                    </button>
+                  </div>
+                )
+              } else if (activeTab === 'beam') {
+                const currentW = draft?.w ?? t.parameters?.section_mm?.[0] ?? 200
+                const currentD = draft?.d ?? t.parameters?.section_mm?.[1] ?? 400
+
+                return (
+                  <div
+                    key={t.id}
+                    style={{
+                      background: '#1e293b',
+                      border: '1px solid #334155',
+                      borderRadius: 8,
+                      padding: '12px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ minWidth: 90 }}>
+                      <span style={{
+                        background: '#0284c7',
+                        color: '#fff',
+                        fontWeight: 800,
+                        fontSize: 14,
+                        padding: '3px 10px',
+                        borderRadius: 4,
+                        fontFamily: 'monospace',
+                      }}>
+                        {t.name}
+                      </span>
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                        {usageCount} ช่วงในแบบ
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>กว้าง:</span>
+                        <input
+                          type="number"
+                          step={50}
+                          value={currentW}
+                          onChange={(e) => setEditDrafts((d) => ({
+                            ...d,
+                            [t.id]: { w: Number(e.target.value), d: currentD },
+                          }))}
+                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateBeamDimensions(t)}
+                          style={{
+                            width: 65,
+                            background: '#0f172a',
+                            border: '1px solid #475569',
+                            color: '#fff',
+                            borderRadius: 4,
+                            padding: '4px 6px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            textAlign: 'center',
+                          }}
+                        />
+                        <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
+                      </div>
+
+                      <span style={{ color: '#64748b' }}>×</span>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>ลึก:</span>
+                        <input
+                          type="number"
+                          step={50}
+                          value={currentD}
+                          onChange={(e) => setEditDrafts((d) => ({
+                            ...d,
+                            [t.id]: { w: currentW, d: Number(e.target.value) },
+                          }))}
+                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateBeamDimensions(t)}
+                          style={{
+                            width: 65,
+                            background: '#0f172a',
+                            border: '1px solid #475569',
+                            color: '#fff',
+                            borderRadius: 4,
+                            padding: '4px 6px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            textAlign: 'center',
+                          }}
+                        />
+                        <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleUpdateBeamDimensions(t)}
                       style={{
                         background: '#0284c7',
                         color: '#fff',
@@ -456,7 +596,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
             paddingTop: 16,
           }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Plus size={16} /> เพิ่มประเภทใหม่ (+ New {activeTab === 'column' ? 'Column' : 'Footing'} Type)
+              <Plus size={16} /> เพิ่มประเภทใหม่ (+ New {activeTab === 'column' ? 'Column' : activeTab === 'beam' ? 'Beam' : 'Footing'} Type)
             </div>
 
             <form
@@ -476,7 +616,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
                 <label style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>ชื่อ Type Mark:</label>
                 <input
                   type="text"
-                  placeholder={activeTab === 'column' ? 'เช่น C3, C-L' : 'เช่น F3, F-COMBINED'}
+                  placeholder={activeTab === 'column' ? 'เช่น C3, C-L' : activeTab === 'beam' ? 'เช่น B3, GB1' : 'เช่น F3, F-COMBINED'}
                   value={newTypeName}
                   onChange={(e) => setNewTypeName(e.target.value)}
                   style={{
@@ -512,6 +652,25 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
                     style={{ width: 60, background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 12 }}
                   />
                 </div>
+              ) : activeTab === 'beam' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <label style={{ fontSize: 12, color: '#94a3b8' }}>ขนาดหน้าตัดคาน (mm):</label>
+                  <input
+                    type="number"
+                    step={50}
+                    value={newBeamW}
+                    onChange={(e) => setNewBeamW(Number(e.target.value))}
+                    style={{ width: 60, background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 12 }}
+                  />
+                  <span style={{ color: '#64748b' }}>×</span>
+                  <input
+                    type="number"
+                    step={50}
+                    value={newBeamD}
+                    onChange={(e) => setNewBeamD(Number(e.target.value))}
+                    style={{ width: 60, background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 12 }}
+                  />
+                </div>
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <label style={{ fontSize: 12, color: '#94a3b8' }}>ขนาด (mm):</label>
@@ -544,7 +703,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
               <button
                 type="submit"
                 style={{
-                  background: activeTab === 'column' ? '#0284c7' : '#d97706',
+                  background: activeTab === 'column' || activeTab === 'beam' ? '#0284c7' : '#d97706',
                   color: '#fff',
                   border: 'none',
                   borderRadius: 6,
