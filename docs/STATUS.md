@@ -363,6 +363,22 @@ Required application contract is represented by merged code/specs, RBZ build pip
 
 The native acceptance step is separate and must exercise this representative workflow inside supported SketchUp/LayOut versions rather than replacing that evidence with unit-test claims.
 
+### Slice 02 Upgrade — Renovation Phasing, Underlay Image & Scale Calibration
+
+Status: **Production Implementation Complete in Plan Editor (`apps/plan-editor`)**.
+
+- **Renovation Phasing**:
+  - Full phase visual separation on 2D Plan: `existing` (Slate neutral/muted), `demolition` (Red tint, dashed lines `[6, 4]`), and `new_construction` (vibrant primary BIM colors).
+  - Live object phase switching dropdown in `PropertiesPanel` via `UpdateObjectPhase` command.
+  - Plan Editor creation commands (`CreateWall`, `CreateDoor`, `CreateWindow`, `CreateColumn`, `CreateBeam`, `CreateFoundation`) automatically inherit active project phase.
+- **Underlay Image Import & Point-to-Point Calibration**:
+  - Direct import of PNG/JPG/WebP floor plan drawings onto 2D canvas with adjustable opacity (10%-100%) and visibility toggle.
+  - Interactive Point-to-Point Calibration tool (`Calibrate (R)`) with real-time rubber-band measuring line, midpoint distance readout, and `UnderlayCalibrationModal` for 1:1 scale calibration in millimeters or meters.
+  - Configurable floor-to-floor storey height in Plan Editor header (Floor 1 to Floor 2 elevation in mm).
+- **Legacy Plugins Strategy**:
+  - 100% zero-conflict coexistence in SketchUp Plugins folder (isolated `JiraNot::ConstructFlow` namespace).
+  - Ability to convert legacy geometry via `ConvertSelectionToSmartObject` into ConstructFlow BIM Smart Objects assigned to `existing` or `demolition` phases.
+
 ## How to update this file
 
 Update status only when there is evidence in merged code/tests/specs. Distinguish **application-level/pure-Ruby evidence** from **real SketchUp/LayOut acceptance evidence** so a green CI run is never presented as proof of native application behavior.

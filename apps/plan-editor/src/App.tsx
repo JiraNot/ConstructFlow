@@ -21,7 +21,9 @@ import { PlanCanvas } from './components/PlanCanvas.js'
 import { PropertiesPanel } from './components/PropertiesPanel.js'
 import { SyncBridgePanel } from './components/SyncBridgePanel.js'
 import { TypeManagerModal } from './components/TypeManagerModal.js'
-import { Building2, Layers, History, Layers2 } from 'lucide-react'
+import { UnderlayCalibrationModal } from './components/UnderlayCalibrationModal.js'
+import { UnderlayConfig } from './rendering/planRenderer.js'
+import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown } from 'lucide-react'
 
 export const App: React.FC = () => {
   const [project, setProject] = useState<ProjectDocument>(() =>
@@ -41,6 +43,17 @@ export const App: React.FC = () => {
   const [cursorCoords_mm, setCursorCoords_mm] = useState<[number, number]>([0, 0])
   const [snapKind, setSnapKind] = useState<string>('Free')
   const [commandQueue, setCommandQueue] = useState<CommandEnvelope[]>([])
+
+  // Underlay & Calibration State
+  const [underlay, setUnderlay] = useState<UnderlayConfig>({
+    image: null,
+    origin_mm: [0, 0],
+    scale_mm_per_px: 10,
+    opacity: 0.6,
+    visible: true,
+  })
+  const [calibrationModalOpen, setCalibrationModalOpen] = useState<boolean>(false)
+  const [measuredCalibrationDist_mm, setMeasuredCalibrationDist_mm] = useState<number>(4000)
 
   // Setup initial template model: Grids A, B, C & 1, 2, 3 + 9 Columns (C1) + 9 Footings (F1) + Beams (B1/B2) + Initial Walls/Door/Window
   useEffect(() => {
@@ -237,11 +250,66 @@ export const App: React.FC = () => {
         setActiveTool('window')
       } else if (e.key === 'g' || e.key === 'G') {
         setActiveTool('grid')
+      } else if (e.key === 'r' || e.key === 'R') {
+        setActiveTool('calibrate')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
+
+  // Update Object Phase (Existing / Demolition / New Construction)
+  const handleUpdateObjectPhase = (objectId: string, newPhase: Phase) => {
+    const res = CommandBus.execute(project, 'UpdateObjectPhase', {
+      object_id: objectId,
+      created_phase: newPhase,
+    })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
+  // Upload Underlay Image file
+  const handleUploadUnderlayImage = (file: File) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      setUnderlay((prev) => ({
+        ...prev,
+        image: img,
+        origin_mm: [0, 0],
+        scale_mm_per_px: 10,
+        visible: true,
+      }))
+    }
+    img.src = url
+  }
+
+  // Apply calibrated 1:1 scale
+  const handleApplyCalibrationScale = (newScale: number, _realDistance_mm: number) => {
+    setUnderlay((prev) => ({
+      ...prev,
+      scale_mm_per_px: newScale,
+    }))
+    setActiveTool('select')
+  }
+
+  // Update floor-to-floor storey height
+  const handleUpdateStoryHeight = (height_mm: number) => {
+    setProject((p) => {
+      const nextLevels = p.levels.map((lvl) => {
+        if (lvl.id === 'GF') {
+          return { ...lvl, height_mm }
+        }
+        if (lvl.id === 'L2') {
+          return { ...lvl, elevation_mm: height_mm }
+        }
+        return lvl
+      })
+      return { ...p, levels: nextLevels }
+    })
+  }
 
   // Commit Column creation with active type
   const handleCommitColumn = (location_mm: [number, number]) => {
@@ -689,6 +757,33 @@ export const App: React.FC = () => {
             </select>
           </div>
 
+          {/* Story Height (Floor 1 -> Floor 2 Elevation) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94a3b8' }}>
+            <ArrowUpDown size={14} color="#38bdf8" />
+            <span style={{ fontSize: 11 }}>ระดับชั้น 1→2:</span>
+            <input
+              type="number"
+              step="100"
+              min="2000"
+              max="6000"
+              value={project.levels.find((l) => l.id === 'L2')?.elevation_mm || 3000}
+              onChange={(e) => handleUpdateStoryHeight(parseInt(e.target.value) || 3000)}
+              style={{
+                width: 64,
+                background: '#1e293b',
+                color: '#38bdf8',
+                border: '1px solid #334155',
+                borderRadius: 4,
+                padding: '3px 6px',
+                fontSize: 12,
+                fontWeight: 700,
+                textAlign: 'center',
+              }}
+              title="ความสูงพื้นถึงพื้น ชั้น 1 ถึงชั้น 2 (mm)"
+            />
+            <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
+          </div>
+
           {/* Phase Switcher */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94a3b8' }}>
             <History size={14} />
@@ -989,6 +1084,13 @@ export const App: React.FC = () => {
               windowTypes={(project.types || [])
                 .filter((t) => t.object_type === 'door_window.window')
                 .map((t) => ({ name: t.name, width_mm: t.parameters?.width_mm, height_mm: t.parameters?.height_mm }))}
+              underlayHasImage={!!underlay.image}
+              underlayVisible={underlay.visible}
+              underlayOpacity={underlay.opacity}
+              onToggleUnderlayVisible={() => setUnderlay((u) => ({ ...u, visible: !u.visible }))}
+              onChangeUnderlayOpacity={(opacity) => setUnderlay((u) => ({ ...u, opacity }))}
+              onUploadUnderlayImage={handleUploadUnderlayImage}
+              onClearUnderlay={() => setUnderlay((u) => ({ ...u, image: null }))}
               onOpenTypeManager={() => setIsTypeManagerOpen(true)}
             />
           </div>
@@ -1005,6 +1107,7 @@ export const App: React.FC = () => {
               activeDoorTypeMark={activeDoorType}
               activeWindowTypeMark={activeWindowType}
               selectedId={selectedId}
+              underlay={underlay}
               onSelectObject={setSelectedId}
               onCommitColumn={handleCommitColumn}
               onCommitFoundation={handleCommitFoundation}
@@ -1015,6 +1118,10 @@ export const App: React.FC = () => {
               onCommitGrid={handleCommitGrid}
               onMoveColumn={handleMoveColumn}
               onFlipDoorHanding={handleFlipDoorHanding}
+              onStartCalibrationModal={(dist) => {
+                setMeasuredCalibrationDist_mm(dist)
+                setCalibrationModalOpen(true)
+              }}
               onCursorChange={(coords, kind) => {
                 setCursorCoords_mm(coords)
                 setSnapKind(kind)
@@ -1050,7 +1157,7 @@ export const App: React.FC = () => {
             </div>
             <div>
               <span>
-                W: Wall • D: Door (Space: Flip) • N: Window • C: Column • F: Footing • B: Beam • Scroll: Zoom • MMB: Pan
+                W: Wall • D: Door (Space: Flip) • N: Window • C: Column • F: Footing • B: Beam • R: Calibrate • Scroll: Zoom • MMB: Pan
               </span>
             </div>
           </footer>
@@ -1076,6 +1183,7 @@ export const App: React.FC = () => {
             onUpdateColumnMark={handleUpdateColumnMark}
             onUpdateFoundationMark={handleUpdateFoundationMark}
             onUpdateGridTag={handleUpdateGridTag}
+            onUpdatePhase={handleUpdateObjectPhase}
             onFlipDoorHanding={handleFlipDoorHanding}
             onOpenTypeManager={() => setIsTypeManagerOpen(true)}
             onAddFoundation={(colId) => handleCommitFoundation({ columnId: colId })}
@@ -1098,6 +1206,15 @@ export const App: React.FC = () => {
         project={project}
         onUpdateTypeDimensions={handleUpdateTypeDimensions}
         onDefineType={handleDefineType}
+      />
+
+      {/* Underlay Point-to-Point Scale Calibration Modal */}
+      <UnderlayCalibrationModal
+        isOpen={calibrationModalOpen}
+        onClose={() => setCalibrationModalOpen(false)}
+        measuredDistance_mm={measuredCalibrationDist_mm}
+        currentScale_mm_per_px={underlay.scale_mm_per_px}
+        onApplyScale={handleApplyCalibrationScale}
       />
     </div>
   )

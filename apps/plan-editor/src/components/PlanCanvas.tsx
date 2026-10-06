@@ -19,7 +19,7 @@ import {
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
 import { SnapResult, snapPoint, snapToWallHost, WallHostSnapResult } from '../snapping/snapEngine.js'
-import { renderPlanView, PlacementGhost } from '../rendering/planRenderer.js'
+import { renderPlanView, PlacementGhost, UnderlayConfig } from '../rendering/planRenderer.js'
 
 interface PlanCanvasProps {
   project: ProjectDocument
@@ -31,6 +31,7 @@ interface PlanCanvasProps {
   activeDoorTypeMark: string
   activeWindowTypeMark: string
   selectedId: string | null
+  underlay?: UnderlayConfig | null
   onSelectObject: (id: string | null) => void
   onCommitColumn: (location_mm: [number, number]) => void
   onCommitFoundation: (opts: { columnId?: string; location_mm?: [number, number] }) => void
@@ -41,6 +42,7 @@ interface PlanCanvasProps {
   onCommitGrid: (orientation: 'vertical' | 'horizontal', position_mm: number) => void
   onMoveColumn: (id: string, newLocation_mm: [number, number]) => void
   onFlipDoorHanding?: (doorId: string) => void
+  onStartCalibrationModal?: (measuredDist_mm: number) => void
   onCursorChange: (coords_mm: [number, number], snapKind: string) => void
 }
 
@@ -54,6 +56,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   activeDoorTypeMark,
   activeWindowTypeMark,
   selectedId,
+  underlay,
   onSelectObject,
   onCommitColumn,
   onCommitFoundation,
@@ -64,6 +67,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onCommitGrid,
   onMoveColumn,
   onFlipDoorHanding,
+  onStartCalibrationModal,
   onCursorChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -93,6 +97,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   // 2-click wall placement state (start node -> end node)
   const [wallStartNode, setWallStartNode] = useState<{ point_mm: [number, number] } | null>(null)
 
+  // Calibration state (P1 -> mouse move -> P2 -> modal)
+  const [calibrationP1, setCalibrationP1] = useState<[number, number] | null>(null)
+  const [calibrationMousePoint, setCalibrationMousePoint] = useState<[number, number] | null>(null)
+
   // Door handing state (can cycle with Spacebar)
   const [doorHanding, setDoorHanding] = useState<DoorHanding>('left_in')
 
@@ -102,6 +110,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
     if (activeTool !== 'wall') {
       setWallStartNode(null)
+    }
+    if (activeTool !== 'calibrate') {
+      setCalibrationP1(null)
+      setCalibrationMousePoint(null)
     }
   }, [activeTool])
 
@@ -209,6 +221,15 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       }
     }
 
+    const calibrationOverlay =
+      activeTool === 'calibrate'
+        ? {
+            point1_mm: calibrationP1,
+            point2_mm: null,
+            mouse_mm: calibrationMousePoint,
+          }
+        : null
+
     renderPlanView(
       ctx,
       canvas.width,
@@ -218,7 +239,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       selectedId,
       hoveredId,
       activeSnap,
-      ghost
+      ghost,
+      underlay,
+      calibrationOverlay
     )
   }, [
     project,
@@ -237,6 +260,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     beamStartNode,
     wallStartNode,
     doorHanding,
+    underlay,
+    calibrationP1,
+    calibrationMousePoint,
   ])
 
   useEffect(() => {
@@ -425,6 +451,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       onCursorChange(snap.point_mm, snap.description)
     }
 
+    if (activeTool === 'calibrate') {
+      setCalibrationMousePoint(rawWorld)
+    }
+
     // Check hover
     const hit = findHitObject(rawWorld)
     setHoveredId(hit)
@@ -552,6 +582,20 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         const orientation = e.shiftKey ? 'horizontal' : 'vertical'
         const pos = orientation === 'vertical' ? Math.round(snap.point_mm[0] / 500) * 500 : Math.round(snap.point_mm[1] / 500) * 500
         onCommitGrid(orientation, pos)
+      } else if (activeTool === 'calibrate') {
+        if (!calibrationP1) {
+          setCalibrationP1(snap.point_mm)
+        } else {
+          const dist = Math.hypot(
+            snap.point_mm[0] - calibrationP1[0],
+            snap.point_mm[1] - calibrationP1[1]
+          )
+          if (dist >= 10 && onStartCalibrationModal) {
+            onStartCalibrationModal(dist)
+          }
+          setCalibrationP1(null)
+          setCalibrationMousePoint(null)
+        }
       }
     }
   }

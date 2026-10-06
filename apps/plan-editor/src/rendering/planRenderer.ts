@@ -16,6 +16,20 @@ import {
 import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
 import { SnapResult } from '../snapping/snapEngine.js'
 
+export interface UnderlayConfig {
+  image: HTMLImageElement | null
+  origin_mm: [number, number]
+  scale_mm_per_px: number
+  opacity: number
+  visible: boolean
+}
+
+export interface CalibrationOverlay {
+  point1_mm: [number, number] | null
+  point2_mm: [number, number] | null
+  mouse_mm?: [number, number] | null
+}
+
 export function renderPlanView(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -25,7 +39,9 @@ export function renderPlanView(
   selectedId: string | null,
   hoveredId: string | null,
   activeSnap: SnapResult | null,
-  ghostObject: PlacementGhost | null
+  ghostObject: PlacementGhost | null,
+  underlay?: UnderlayConfig | null,
+  calibration?: CalibrationOverlay | null
 ) {
   // 1. Dark CAD canvas background
   ctx.fillStyle = '#0f172a'
@@ -33,6 +49,11 @@ export function renderPlanView(
 
   // 2. Background CAD unit grid (1000mm major)
   drawBackgroundCadGrid(ctx, width, height, viewport)
+
+  // 2.5 Underlay Image (Floor plan underlay / DWG with scale & opacity)
+  if (underlay && underlay.visible && underlay.image) {
+    drawUnderlayImage(ctx, underlay, viewport)
+  }
 
   // 3. Structural Grid Lines & Bubbles
   for (const obj of Object.values(project.objects)) {
@@ -87,6 +108,11 @@ export function renderPlanView(
   if (activeSnap && activeSnap.kind !== 'free') {
     drawSnapMarker(ctx, activeSnap, viewport)
   }
+
+  // 11. Calibration Overlay (Point-to-Point Scale Measure)
+  if (calibration && (calibration.point1_mm || calibration.point2_mm)) {
+    drawCalibrationOverlay(ctx, calibration, viewport)
+  }
 }
 
 function drawBackgroundCadGrid(
@@ -125,6 +151,45 @@ function drawBackgroundCadGrid(
   }
 
   ctx.stroke()
+}
+
+function drawUnderlayImage(
+  ctx: CanvasRenderingContext2D,
+  underlay: UnderlayConfig,
+  viewport: ViewportState
+) {
+  if (!underlay.image || !underlay.visible) return
+
+  ctx.save()
+  ctx.globalAlpha = Math.max(0.05, Math.min(1, underlay.opacity))
+
+  const [origX, origY] = underlay.origin_mm
+  const [sx, sy] = worldToScreen([origX, origY], viewport)
+  const imgW = underlay.image.naturalWidth || underlay.image.width
+  const imgH = underlay.image.naturalHeight || underlay.image.height
+
+  const screenW = imgW * underlay.scale_mm_per_px * viewport.zoom
+  const screenH = imgH * underlay.scale_mm_per_px * viewport.zoom
+
+  ctx.drawImage(underlay.image, sx, sy, screenW, screenH)
+
+  // Subtle boundary outline
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)'
+  ctx.lineWidth = 1
+  ctx.setLineDash([6, 6])
+  ctx.strokeRect(sx, sy, screenW, screenH)
+  ctx.setLineDash([])
+
+  // Header badge
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
+  ctx.fillRect(sx, sy - 20, 210, 20)
+  ctx.fillStyle = '#38bdf8'
+  ctx.font = 'bold 10px monospace'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(`📐 Underlay (1px = ${underlay.scale_mm_per_px.toFixed(2)} mm)`, sx + 6, sy - 10)
+
+  ctx.restore()
 }
 
 function drawStructuralGrid(
@@ -316,6 +381,9 @@ function drawBeam(
 
   ctx.save()
 
+  const isDemolition = obj.created_phase === 'demolition' || obj.removed_phase === 'demolition'
+  const isExisting = obj.created_phase === 'existing'
+
   // 1. Fill beam body
   ctx.beginPath()
   ctx.moveTo(sx1 + nx * half_w_px, sy1 + ny * half_w_px)
@@ -328,13 +396,27 @@ function drawBeam(
     ? 'rgba(14, 165, 233, 0.35)'
     : isHovered
     ? 'rgba(56, 189, 248, 0.25)'
+    : isDemolition
+    ? 'rgba(239, 68, 68, 0.2)'
+    : isExisting
+    ? 'rgba(71, 85, 105, 0.5)'
     : 'rgba(30, 41, 59, 0.85)'
   ctx.fill()
 
   // 2. Stroke beam boundary
-  ctx.strokeStyle = isSelected ? '#38bdf8' : isHovered ? '#7dd3fc' : '#64748b'
+  ctx.strokeStyle = isSelected
+    ? '#38bdf8'
+    : isHovered
+    ? '#7dd3fc'
+    : isDemolition
+    ? '#ef4444'
+    : isExisting
+    ? '#64748b'
+    : '#0284c7'
   ctx.lineWidth = isSelected ? 2.5 : isHovered ? 2 : 1.5
+  if (isDemolition) ctx.setLineDash([6, 4])
   ctx.stroke()
+  ctx.setLineDash([])
 
   // 3. Centerline
   ctx.beginPath()
@@ -475,6 +557,9 @@ function drawWall(
     const [sc3x, sc3y] = worldToScreen(c3_mm, viewport)
     const [sc4x, sc4y] = worldToScreen(c4_mm, viewport)
 
+    const isDemolition = wall.created_phase === 'demolition' || wall.removed_phase === 'demolition'
+    const isExisting = wall.created_phase === 'existing'
+
     ctx.save()
     ctx.beginPath()
     ctx.moveTo(sc1x, sc1y)
@@ -487,12 +572,26 @@ function drawWall(
       ? 'rgba(56, 189, 248, 0.4)'
       : isHovered
       ? 'rgba(71, 85, 105, 0.85)'
+      : isDemolition
+      ? 'rgba(239, 68, 68, 0.25)'
+      : isExisting
+      ? 'rgba(71, 85, 105, 0.65)'
       : 'rgba(51, 65, 85, 0.85)'
     ctx.fill()
 
-    ctx.strokeStyle = isSelected ? '#38bdf8' : isHovered ? '#94a3b8' : '#64748b'
+    ctx.strokeStyle = isSelected
+      ? '#38bdf8'
+      : isHovered
+      ? '#94a3b8'
+      : isDemolition
+      ? '#ef4444'
+      : isExisting
+      ? '#64748b'
+      : '#64748b'
     ctx.lineWidth = isSelected ? 2.5 : isHovered ? 2 : 1.5
+    if (isDemolition) ctx.setLineDash([6, 4])
     ctx.stroke()
+    ctx.setLineDash([])
     ctx.restore()
   }
 
@@ -587,6 +686,9 @@ function drawDoor(
   ctx.stroke()
 
   // 2. Door leaf and swing arc
+  const isDemolition = door.created_phase === 'demolition' || door.removed_phase === 'demolition'
+  const isExisting = door.created_phase === 'existing'
+
   const isLeft = handing.startsWith('left')
   const isOut = handing.endsWith('out')
 
@@ -602,18 +704,34 @@ function drawDoor(
 
   // Leaf line
   ctx.beginPath()
-  ctx.strokeStyle = isSelected ? '#38bdf8' : isHovered ? '#4ade80' : '#22c55e'
+  ctx.strokeStyle = isSelected
+    ? '#38bdf8'
+    : isHovered
+    ? '#4ade80'
+    : isDemolition
+    ? '#ef4444'
+    : isExisting
+    ? '#94a3b8'
+    : '#22c55e'
   ctx.lineWidth = isSelected ? 2.5 : 2
+  if (isDemolition) ctx.setLineDash([4, 4])
   ctx.moveTo(shx, shy)
   ctx.lineTo(leafEndX, leafEndY)
   ctx.stroke()
+  ctx.setLineDash([])
 
   // Swing arc
   const angleClosed = Math.atan2(sly - shy, slx - shx)
   const angleOpen = Math.atan2(leafEndY - shy, leafEndX - shx)
 
   ctx.beginPath()
-  ctx.strokeStyle = isSelected ? 'rgba(56, 189, 248, 0.7)' : 'rgba(34, 197, 94, 0.6)'
+  ctx.strokeStyle = isSelected
+    ? 'rgba(56, 189, 248, 0.7)'
+    : isDemolition
+    ? 'rgba(239, 68, 68, 0.7)'
+    : isExisting
+    ? 'rgba(148, 163, 184, 0.6)'
+    : 'rgba(34, 197, 94, 0.6)'
   ctx.lineWidth = 1
   ctx.setLineDash([3, 3])
   const counterClockwise = (angleOpen - angleClosed + 2 * Math.PI) % (2 * Math.PI) > Math.PI
@@ -717,20 +835,31 @@ function drawWindow(
   ctx.stroke()
 
   // Double Glass Lines
+  const isDemolition = win.created_phase === 'demolition' || win.removed_phase === 'demolition'
+  const isExisting = win.created_phase === 'existing'
+
   const glassOffsetPx = Math.max(2, 20 * viewport.zoom)
   const snx = nx
   const sny = ny
   const [sp1x, sp1y] = worldToScreen(p1_mm, viewport)
   const [sp2x, sp2y] = worldToScreen(p2_mm, viewport)
 
-  ctx.strokeStyle = isSelected ? '#38bdf8' : '#38bdf8'
+  ctx.strokeStyle = isSelected
+    ? '#38bdf8'
+    : isDemolition
+    ? '#ef4444'
+    : isExisting
+    ? '#94a3b8'
+    : '#38bdf8'
   ctx.lineWidth = 1.5
+  if (isDemolition) ctx.setLineDash([4, 4])
   ctx.beginPath()
   ctx.moveTo(sp1x + snx * glassOffsetPx, sp1y + sny * glassOffsetPx)
   ctx.lineTo(sp2x + snx * glassOffsetPx, sp2y + sny * glassOffsetPx)
   ctx.moveTo(sp1x - snx * glassOffsetPx, sp1y - sny * glassOffsetPx)
   ctx.lineTo(sp2x - snx * glassOffsetPx, sp2y - sny * glassOffsetPx)
   ctx.stroke()
+  ctx.setLineDash([])
 
   // Badge mark
   const text = `${mark || 'W1'} (${width_mm}mm)`
@@ -1133,3 +1262,94 @@ function drawSnapMarker(
 
   ctx.restore()
 }
+
+function drawCalibrationOverlay(
+  ctx: CanvasRenderingContext2D,
+  calibration: CalibrationOverlay,
+  viewport: ViewportState
+) {
+  ctx.save()
+
+  const p1 = calibration.point1_mm
+  const p2 = calibration.point2_mm || calibration.mouse_mm
+
+  if (p1) {
+    const [sx1, sy1] = worldToScreen(p1, viewport)
+
+    // P1 Marker (Bright red crosshair + ring)
+    ctx.strokeStyle = '#ef4444'
+    ctx.lineWidth = 2.5
+    ctx.beginPath()
+    ctx.arc(sx1, sy1, 9, 0, Math.PI * 2)
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.moveTo(sx1 - 14, sy1)
+    ctx.lineTo(sx1 + 14, sy1)
+    ctx.moveTo(sx1, sy1 - 14)
+    ctx.lineTo(sx1, sy1 + 14)
+    ctx.stroke()
+
+    ctx.fillStyle = '#ef4444'
+    ctx.font = 'bold 11px monospace'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'bottom'
+    ctx.fillText('Point 1', sx1 + 12, sy1 - 6)
+
+    if (p2) {
+      const [sx2, sy2] = worldToScreen(p2, viewport)
+
+      // Dynamic measurement rubber-band
+      ctx.strokeStyle = '#f59e0b' // Amber
+      ctx.lineWidth = 2
+      ctx.setLineDash([6, 4])
+      ctx.beginPath()
+      ctx.moveTo(sx1, sy1)
+      ctx.lineTo(sx2, sy2)
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      // P2 Marker
+      ctx.strokeStyle = '#f59e0b'
+      ctx.lineWidth = 2.5
+      ctx.beginPath()
+      ctx.arc(sx2, sy2, 9, 0, Math.PI * 2)
+      ctx.stroke()
+
+      ctx.beginPath()
+      ctx.moveTo(sx2 - 14, sy2)
+      ctx.lineTo(sx2 + 14, sy2)
+      ctx.moveTo(sx2, sy2 - 14)
+      ctx.lineTo(sx2, sy2 + 14)
+      ctx.stroke()
+
+      ctx.fillStyle = '#f59e0b'
+      ctx.font = 'bold 11px monospace'
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'bottom'
+      ctx.fillText('Point 2', sx2 + 12, sy2 - 6)
+
+      // Live measurement badge at midpoint
+      const mx = (sx1 + sx2) / 2
+      const my = (sy1 + sy2) / 2
+      const dist_mm = Math.round(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]))
+      const badgeText = `📏 วัดเทียบระยะ: ${(dist_mm / 1000).toFixed(3)} m (${dist_mm} mm)`
+
+      ctx.font = 'bold 12px monospace'
+      const bw = ctx.measureText(badgeText).width
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.95)'
+      ctx.fillRect(mx - bw / 2 - 8, my - 13, bw + 16, 26)
+      ctx.strokeStyle = '#f59e0b'
+      ctx.lineWidth = 1.5
+      ctx.strokeRect(mx - bw / 2 - 8, my - 13, bw + 16, 26)
+
+      ctx.fillStyle = '#fef08a'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(badgeText, mx, my)
+    }
+  }
+
+  ctx.restore()
+}
+

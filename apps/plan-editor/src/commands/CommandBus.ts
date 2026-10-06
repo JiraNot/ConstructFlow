@@ -646,7 +646,7 @@ export class CommandBus {
             object_type: 'architecture.wall',
             owner_module: 'constructflow.architecture',
             schema_version: 1,
-            created_phase: wallInput.phase || 'new_construction',
+            created_phase: wallInput.phase || project.project.active_phase,
             removed_phase: null,
             level_refs: [
               {
@@ -803,7 +803,7 @@ export class CommandBus {
             object_type: 'door_window.door',
             owner_module: 'constructflow.door_window',
             schema_version: 1,
-            created_phase: doorInput.phase || 'new_construction',
+            created_phase: doorInput.phase || project.project.active_phase,
             removed_phase: null,
             level_refs: [
               {
@@ -1020,7 +1020,7 @@ export class CommandBus {
             object_type: 'door_window.window',
             owner_module: 'constructflow.door_window',
             schema_version: 1,
-            created_phase: winInput.phase || 'new_construction',
+            created_phase: winInput.phase || project.project.active_phase,
             removed_phase: null,
             level_refs: [
               {
@@ -1655,6 +1655,42 @@ export class CommandBus {
             },
             updatedProject: updated,
             emittedEnvelope: envelope,
+          }
+        }
+
+        case 'UpdateObjectPhase': {
+          const { object_id, created_phase, removed_phase } = input
+          const target = updated.objects[object_id]
+          if (!target) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Object UUID ${object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          updated.objects[object_id] = {
+            ...target,
+            created_phase: (created_phase || target.created_phase) as any,
+            removed_phase: removed_phase !== undefined ? removed_phase : target.removed_phase,
+            updated_at: now,
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [object_id],
+              updated_object_ids: [object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: { ...envelope, input: { ...input } },
           }
         }
 

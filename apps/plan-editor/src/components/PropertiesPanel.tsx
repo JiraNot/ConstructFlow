@@ -14,6 +14,7 @@ import {
   isWallObject,
   isDoorObject,
   isWindowObject,
+  Phase,
 } from '@constructflow/project-model'
 import { Copy, Check, Trash2, PlusCircle, RefreshCw, SlidersHorizontal } from 'lucide-react'
 
@@ -24,6 +25,7 @@ interface PropertiesPanelProps {
   onUpdateColumnMark: (objectId: string, newMark: string) => void
   onUpdateFoundationMark: (objectId: string, newMark: string) => void
   onUpdateGridTag: (objectId: string, newTag: string) => void
+  onUpdatePhase?: (objectId: string, newPhase: Phase) => void
   onFlipDoorHanding?: (doorId: string) => void
   onOpenTypeManager: () => void
   onAddFoundation: (columnId: string) => void
@@ -37,6 +39,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateColumnMark,
   onUpdateFoundationMark,
   onUpdateGridTag,
+  onUpdatePhase,
   onFlipDoorHanding,
   onOpenTypeManager,
   onAddFoundation,
@@ -687,18 +690,32 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
         </div>
         <div>
-          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>PHASE</label>
-          <div style={{
-            background: selectedObj.created_phase === 'existing' ? '#334155' : '#0369a1',
-            padding: '5px 8px',
-            borderRadius: 4,
-            fontSize: 12,
-            marginTop: 4,
-            textTransform: 'capitalize',
-            textAlign: 'center',
-          }}>
-            {selectedObj.created_phase.replace('_', ' ')}
-          </div>
+          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>PHASE (เฟสงาน)</label>
+          <select
+            value={selectedObj.created_phase}
+            onChange={(e) => onUpdatePhase && onUpdatePhase(selectedObj.id, e.target.value as Phase)}
+            style={{
+              width: '100%',
+              background:
+                selectedObj.created_phase === 'existing'
+                  ? '#334155'
+                  : selectedObj.created_phase === 'demolition'
+                  ? '#991b1b'
+                  : '#0369a1',
+              color: '#ffffff',
+              border: '1px solid #475569',
+              borderRadius: 4,
+              padding: '5px 8px',
+              fontSize: 11,
+              fontWeight: 600,
+              marginTop: 4,
+              cursor: 'pointer',
+            }}
+          >
+            <option value="existing">Existing (บ้านเดิม)</option>
+            <option value="demolition">Demolition (ส่วนรื้อถอน)</option>
+            <option value="new_construction">New (ส่วนสร้างใหม่)</option>
+          </select>
         </div>
       </div>
 

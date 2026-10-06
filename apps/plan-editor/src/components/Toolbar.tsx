@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import {
   MousePointer,
   Columns,
@@ -9,9 +9,23 @@ import {
   AppWindow,
   Hash,
   SlidersHorizontal,
+  Ruler,
+  Upload,
+  Eye,
+  EyeOff,
+  Trash2,
 } from 'lucide-react'
 
-export type ToolType = 'select' | 'column' | 'foundation' | 'beam' | 'wall' | 'door' | 'window' | 'grid'
+export type ToolType =
+  | 'select'
+  | 'column'
+  | 'foundation'
+  | 'beam'
+  | 'wall'
+  | 'door'
+  | 'window'
+  | 'grid'
+  | 'calibrate'
 
 interface ToolbarProps {
   activeTool: ToolType
@@ -34,6 +48,13 @@ interface ToolbarProps {
   wallTypes: { name: string; thickness_mm?: number }[]
   doorTypes: { name: string; width_mm?: number; height_mm?: number }[]
   windowTypes: { name: string; width_mm?: number; height_mm?: number }[]
+  underlayHasImage?: boolean
+  underlayVisible?: boolean
+  underlayOpacity?: number
+  onToggleUnderlayVisible?: () => void
+  onChangeUnderlayOpacity?: (opacity: number) => void
+  onUploadUnderlayImage?: (file: File) => void
+  onClearUnderlay?: () => void
   onOpenTypeManager: () => void
 }
 
@@ -58,8 +79,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   wallTypes,
   doorTypes,
   windowTypes,
+  underlayHasImage,
+  underlayVisible,
+  underlayOpacity,
+  onToggleUnderlayVisible,
+  onChangeUnderlayOpacity,
+  onUploadUnderlayImage,
+  onClearUnderlay,
   onOpenTypeManager,
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const tools: { id: ToolType; label: string; icon: React.ReactNode; shortcut: string }[] = [
     { id: 'select', label: 'Select (S)', icon: <MousePointer size={16} />, shortcut: 'S' },
     { id: 'column', label: 'Column (C)', icon: <Columns size={16} />, shortcut: 'C' },
@@ -69,6 +99,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     { id: 'door', label: 'Door (D)', icon: <DoorOpen size={16} />, shortcut: 'D' },
     { id: 'window', label: 'Window (N)', icon: <AppWindow size={16} />, shortcut: 'N' },
     { id: 'grid', label: 'Grid Line (G)', icon: <Hash size={16} />, shortcut: 'G' },
+    { id: 'calibrate', label: 'Calibrate Scale (R)', icon: <Ruler size={16} />, shortcut: 'R' },
   ]
 
   return (
@@ -328,6 +359,101 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <SlidersHorizontal size={13} color="#38bdf8" />
           <span>Manage Types</span>
         </button>
+      </div>
+
+      {/* Underlay Controls */}
+      <div style={{ borderLeft: '1px solid #334155', paddingLeft: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file && onUploadUnderlayImage) {
+              onUploadUnderlayImage(file)
+            }
+          }}
+        />
+
+        {!underlayHasImage ? (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            title="นำเข้าภาพแปลนพื้น (Import Floor Plan Image / Underlay)"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              background: 'rgba(56, 189, 248, 0.1)',
+              border: '1px solid #0284c7',
+              color: '#38bdf8',
+              borderRadius: 6,
+              padding: '4px 8px',
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            <Upload size={13} />
+            <span>Import Plan Image</span>
+          </button>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {/* Toggle Visibility */}
+            <button
+              onClick={onToggleUnderlayVisible}
+              title={underlayVisible ? 'ซ่อนภาพแปลนพื้น (Hide Underlay)' : 'แสดงภาพแปลนพื้น (Show Underlay)'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                background: underlayVisible ? '#0369a1' : '#1e293b',
+                border: '1px solid #334155',
+                color: '#ffffff',
+                borderRadius: 4,
+                padding: '4px 6px',
+                fontSize: 11,
+                cursor: 'pointer',
+              }}
+            >
+              {underlayVisible ? <Eye size={13} /> : <EyeOff size={13} />}
+              <span>{underlayVisible ? 'Underlay ON' : 'Underlay OFF'}</span>
+            </button>
+
+            {/* Opacity slider */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#94a3b8' }}>
+              <span>{Math.round((underlayOpacity ?? 0.6) * 100)}%</span>
+              <input
+                type="range"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                value={underlayOpacity ?? 0.6}
+                onChange={(e) => onChangeUnderlayOpacity && onChangeUnderlayOpacity(parseFloat(e.target.value))}
+                style={{ width: 44, accentColor: '#38bdf8', cursor: 'pointer' }}
+                title="ปรับความโปร่งใสภาพแปลน (Opacity)"
+              />
+            </div>
+
+            {/* Clear Underlay */}
+            <button
+              onClick={onClearUnderlay}
+              title="ลบภาพแปลนพื้นออก (Remove Underlay)"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#ef4444',
+                padding: '4px',
+                cursor: 'pointer',
+                borderRadius: 4,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
