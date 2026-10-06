@@ -70,11 +70,11 @@ export interface CreateFoundationInput {
   /** Immutable unique identity (UUID) */
   id: string
 
-  /** Human-readable mark, e.g. "F01" */
-  mark: string
+  /** Human-readable mark, e.g. "F1" */
+  mark?: string
 
-  /** UUID of the column supported by this footing */
-  supported_column_id: string
+  /** Optional UUID of the column supported by this footing */
+  supported_column_id?: string
 
   /** Foundation type */
   foundation_type?: 'spread_footing' | 'pile_cap'
@@ -84,6 +84,7 @@ export interface CreateFoundationInput {
 
   /** Center coordinates [x, y, z] in mm (if omitted, derives from column location) */
   center_mm?: [number, number, number]
+  location_mm?: [number, number, number] | [number, number]
 
   /** Top surface elevation in mm */
   top_elevation_mm?: number
@@ -91,6 +92,22 @@ export interface CreateFoundationInput {
   material?: string
   phase?: Phase
   engineering_status?: 'preliminary' | 'engineer_approved' | 'as_built'
+}
+
+export interface UpdateFoundationMarkInput {
+  /** Immutable object UUID */
+  object_id: string
+
+  /** New human-readable mark, e.g. "F1" or "F2" */
+  mark: string
+}
+
+export interface UpdateGridTagInput {
+  /** Immutable object UUID */
+  object_id: string
+
+  /** New grid tag, e.g. "A" or "1" */
+  tag: string
 }
 
 export interface DeleteObjectInput {

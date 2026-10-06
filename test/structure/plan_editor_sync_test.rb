@@ -155,7 +155,52 @@ class PlanEditorSyncTest < Minitest::Test
     assert_equal 'C99', store.read('mark')
   end
 
-  def test_vertical_slice_01_batch_sync_9_columns_and_9_footings
+  def test_update_foundation_mark_renames_without_changing_uuid
+    fnd_uuid = 'fnd-rename-uuid'
+    @runtime.commands.execute('CreateFoundation', {
+      id: fnd_uuid,
+      mark: 'F1',
+      location_mm: [2000, 2000, 0],
+      size_mm: [800, 800, 300]
+    }, project_id: 'test-proj')
+
+    rename_result = @runtime.commands.execute('UpdateFoundationMark', {
+      object_id: fnd_uuid,
+      mark: 'F2'
+    }, project_id: 'test-proj')
+    assert_equal 'success', rename_result[:status]
+
+    foundation = @runtime.smart_objects.fetch_by_id(fnd_uuid)
+    assert_equal fnd_uuid, foundation.id
+    assert_equal 'Footing F2', foundation.display_name
+
+    store = JiraNot::ConstructFlow::Core::AttributeStore.new(foundation.entity)
+    assert_equal fnd_uuid, store.read('object_id')
+    assert_equal 'F2', store.read('mark')
+  end
+
+  def test_create_isolated_spread_footing_without_column
+    isolated_uuid = 'fnd-isolated-123'
+    result = @runtime.commands.execute('CreateFoundation', {
+      id: isolated_uuid,
+      mark: 'F1',
+      location_mm: [5000, 3000, 0],
+      size_mm: [1000, 1000, 400]
+    }, project_id: 'test-proj')
+    assert_equal 'success', result[:status]
+
+    fnd = @runtime.smart_objects.fetch_by_id(isolated_uuid)
+    refute_nil fnd
+    assert_equal isolated_uuid, fnd.id
+    assert_equal 'Footing F1', fnd.display_name
+
+    repo = JiraNot::ConstructFlow::Structure::Repository.new
+    def_data = repo.read_foundation(fnd.entity)
+    assert_equal [5000.0, 3000.0, 0.0], def_data.center_mm
+    assert_equal [1000.0, 1000.0, 400.0], def_data.size_mm
+  end
+
+  def test_vertical_slice_01_batch_sync_9_columns_and_9_footings_schedule_types
     # 3x3 grid: x in [0, 4000, 8000], y in [0, 4000, 8000]
     grid_coords = [
       [0, 0], [4000, 0], [8000, 0],
@@ -172,18 +217,20 @@ class PlanEditorSyncTest < Minitest::Test
       col_uuids << c_id
       fnd_uuids << f_id
 
+      # All 9 initial columns share engineering schedule Type Mark 'C1'
       col_res = @runtime.commands.execute('CreateColumn', {
         id: c_id,
-        mark: "C#{idx + 1}",
+        mark: 'C1',
         location_mm: [x, y, 0],
         section_mm: [200, 200],
         height_mm: 3000
       }, project_id: 'test-proj')
       assert_equal 'success', col_res[:status]
 
+      # All 9 initial footings share engineering schedule Type Mark 'F1'
       fnd_res = @runtime.commands.execute('CreateFoundation', {
         id: f_id,
-        mark: "F#{idx + 1}",
+        mark: 'F1',
         supported_column_id: c_id,
         size_mm: [800, 800, 300]
       }, project_id: 'test-proj')
@@ -195,11 +242,13 @@ class PlanEditorSyncTest < Minitest::Test
       obj = @runtime.smart_objects.fetch_by_id(c_id)
       refute_nil obj
       assert_equal 'structure.column', obj.type
+      assert_equal 'Column C1', obj.display_name
     end
     fnd_uuids.each do |f_id|
       obj = @runtime.smart_objects.fetch_by_id(f_id)
       refute_nil obj
       assert_equal 'structure.foundation', obj.type
+      assert_equal 'Footing F1', obj.display_name
     end
   end
 end

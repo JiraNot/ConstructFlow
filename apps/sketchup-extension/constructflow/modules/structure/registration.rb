@@ -13,7 +13,7 @@ module JiraNot
           optional_capabilities: %w[drainage.network roof.frame_intent site.ground_reference],
           provides: %w[structure.coordination structure.quantity],
           objects: %w[structure.grid structure.beam structure.column structure.foundation structure.rebar_set],
-          commands: %w[CreateStructuralGrid ModifyStructuralGrid CreateBeam ModifyBeamPath CreateColumn MoveColumn UpdateColumnMark EditColumnSchedule CreateFoundation GenerateFoundation AssignRebarSet ModifyRebarSet],
+          commands: %w[CreateStructuralGrid ModifyStructuralGrid CreateBeam ModifyBeamPath CreateColumn MoveColumn UpdateColumnMark UpdateFoundationMark EditColumnSchedule CreateFoundation GenerateFoundation AssignRebarSet ModifyRebarSet],
           events: %w[StructuralMemberCreated FoundationGenerated RebarSetAssigned RebarSetChanged GeometryChanged QuantityDirty DrawingDirty ValidationStateChanged],
           providers: ['constructflow.structure.quantity'],
           validators: %w[structure.column.validity structure.foundation.validity structure.rebar.validity]
@@ -90,6 +90,7 @@ module JiraNot
             validator = Validators::StructureValidator.new
             register_move_column(runtime, repository, geometry, validator) unless runtime.commands.registered?('MoveColumn')
             register_update_column_mark(runtime, repository) unless runtime.commands.registered?('UpdateColumnMark')
+            register_update_foundation_mark(runtime, repository) unless runtime.commands.registered?('UpdateFoundationMark')
             register_create_foundation(runtime, repository, geometry, validator) unless runtime.commands.registered?('CreateFoundation')
             register_generate_foundation(runtime, repository, geometry, validator) unless runtime.commands.registered?('GenerateFoundation')
             return
@@ -116,6 +117,7 @@ module JiraNot
           register_create_column(runtime, repository, geometry, validator)
           register_move_column(runtime, repository, geometry, validator)
           register_update_column_mark(runtime, repository)
+          register_update_foundation_mark(runtime, repository)
           register_column_schedule_command(runtime, repository, geometry)
           register_grid_commands(runtime, repository, GridGeometry.new)
           register_beam_commands(runtime, repository, BeamGeometry.new)
@@ -283,6 +285,37 @@ module JiraNot
               events: [
                 { name: 'StructuralMemberChanged', object_ids: [column.id], payload: { mark: new_mark } },
                 { name: 'ScheduleDirty', object_ids: [column.id], payload: { schedule_id: COLUMN_SCHEDULE.id } }
+              ]
+            }
+          end
+        end
+
+        def register_update_foundation_mark(runtime, repository)
+          runtime.commands.register(
+            'UpdateFoundationMark',
+            owner_module: MANIFEST[:id],
+            validator: lambda { |command|
+              input = command[:input]
+              fnd = resolve_foundation(input, runtime)
+              return ['foundation not found'] unless fnd
+              mark = input[:mark] || input['mark']
+              return ['mark required'] if mark.to_s.strip.empty?
+              []
+            }
+          ) do |command|
+            input = command[:input]
+            fnd = resolve_foundation(input, runtime)
+            raise ArgumentError, 'foundation not found' unless fnd
+
+            new_mark = (input[:mark] || input['mark']).to_s.strip
+            store = Core::AttributeStore.new(fnd.entity)
+            store.write('display_name', "Footing #{new_mark}")
+            store.write('mark', new_mark)
+
+            {
+              updated_object_ids: [fnd.id],
+              events: [
+                { name: 'StructuralMemberChanged', object_ids: [fnd.id], payload: { mark: new_mark } }
               ]
             }
           end
@@ -1203,6 +1236,14 @@ module JiraNot
           entity = input[:column_entity] || input['column_entity'] || input[:entity] || input['entity']
           object = entity ? runtime.smart_objects.fetch(entity) : runtime.smart_objects.fetch_by_id(object_id)
           return nil unless object && object.owner_module == 'constructflow.structure' && object.type == 'structure.column'
+          object
+        end
+
+        def resolve_foundation(input, runtime)
+          object_id = input[:foundation_object_id] || input['foundation_object_id'] || input[:object_id] || input['object_id'] || input[:id] || input['id']
+          entity = input[:foundation_entity] || input['foundation_entity'] || input[:entity] || input['entity']
+          object = entity ? runtime.smart_objects.fetch(entity) : runtime.smart_objects.fetch_by_id(object_id)
+          return nil unless object && object.owner_module == 'constructflow.structure' && object.type == 'structure.foundation'
           object
         end
 

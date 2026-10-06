@@ -8,6 +8,7 @@ import {
   GridModuleData,
   isColumnObject,
   isFoundationObject,
+  isGridObject,
 } from '@constructflow/project-model'
 import {
   CommandEnvelope,
@@ -97,11 +98,8 @@ export class CommandBus {
           const colInput = input as CreateColumnInput
           const id = colInput.id || crypto.randomUUID()
 
-          // Generate sequential mark if not provided (e.g. C01, C02...)
-          const count = Object.values(updated.objects).filter(
-            (o) => o.object_type === 'structure.column'
-          ).length
-          const mark = colInput.mark || `C${String(count + 1).padStart(2, '0')}`
+          // Default structural column type mark is C1
+          const mark = colInput.mark || 'C1'
 
           const location_mm: [number, number, number] = colInput.location_mm.length === 2
             ? [colInput.location_mm[0], colInput.location_mm[1], 0]
@@ -248,43 +246,113 @@ export class CommandBus {
           }
         }
 
-        case 'CreateFoundation': {
-          const fInput = input as CreateFoundationInput
-          const column = updated.objects[fInput.supported_column_id]
-          if (!column || !isColumnObject(column)) {
+        case 'UpdateFoundationMark': {
+          const markInput = input as { object_id: string; mark: string }
+          const target = updated.objects[markInput.object_id]
+          if (!target || !isFoundationObject(target)) {
             return {
               result: {
                 status: 'rejected',
                 command_id,
                 command_name: commandName,
                 affected_object_ids: [],
-                errors: [`Host column UUID ${fInput.supported_column_id} not found`],
+                errors: [`Foundation UUID ${markInput.object_id} not found`],
               },
               updatedProject: project,
             }
           }
 
-          const id = fInput.id || crypto.randomUUID()
-          const count = Object.values(updated.objects).filter(
-            (o) => o.object_type === 'structure.foundation'
-          ).length
-          const mark = fInput.mark || `F${String(count + 1).padStart(2, '0')}`
+          updated.objects[markInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              mark: markInput.mark,
+            },
+          }
 
-          const center_mm: [number, number, number] = fInput.center_mm || [
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [markInput.object_id],
+              updated_object_ids: [markInput.object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: envelope,
+          }
+        }
+
+        case 'UpdateGridTag': {
+          const tagInput = input as { object_id: string; tag: string }
+          const target = updated.objects[tagInput.object_id]
+          if (!target || !isGridObject(target)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Grid UUID ${tagInput.object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          updated.objects[tagInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              tag: tagInput.tag,
+            },
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [tagInput.object_id],
+              updated_object_ids: [tagInput.object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: envelope,
+          }
+        }
+
+        case 'CreateFoundation': {
+          const fInput = input as CreateFoundationInput
+          const column = fInput.supported_column_id ? updated.objects[fInput.supported_column_id] : null
+          const isHosted = !!(column && isColumnObject(column))
+
+          const id = fInput.id || crypto.randomUUID()
+          const mark = fInput.mark || 'F1'
+
+          const rawLoc: [number, number, number] | undefined = fInput.center_mm
+            ? fInput.center_mm
+            : fInput.location_mm
+              ? (fInput.location_mm.length === 2
+                  ? [fInput.location_mm[0], fInput.location_mm[1], 0]
+                  : (fInput.location_mm as [number, number, number]))
+              : undefined
+
+          const center_mm: [number, number, number] = rawLoc || (isHosted ? [
             column.module_data.location_mm[0],
             column.module_data.location_mm[1],
             column.module_data.location_mm[2] || 0,
-          ]
+          ] : [0, 0, 0])
 
           const smartObject: SmartObject<FoundationModuleData> = {
             id,
             object_type: 'structure.foundation',
             owner_module: 'constructflow.structure',
             schema_version: 1,
-            created_phase: fInput.phase || column.created_phase,
+            created_phase: fInput.phase || (isHosted ? column.created_phase : 'new_construction'),
             removed_phase: null,
-            level_refs: column.level_refs,
-            host_refs: [column.id],
+            level_refs: isHosted ? column.level_refs : [],
+            host_refs: isHosted ? [column.id] : [],
             connector_refs: [],
             status: 'active',
             module_data: {
@@ -293,7 +361,7 @@ export class CommandBus {
               center_mm,
               size_mm: fInput.size_mm || [800, 800, 300],
               top_elevation_mm: fInput.top_elevation_mm || center_mm[2],
-              supported_column_id: column.id,
+              supported_column_id: isHosted ? column.id : '',
               material: fInput.material || 'reinforced_concrete',
               engineering_status: fInput.engineering_status || 'preliminary',
             },
@@ -302,26 +370,41 @@ export class CommandBus {
           }
 
           updated.objects[id] = smartObject
-          updated.relationships.push({
-            kind: 'supports',
-            source_id: id,
-            target_id: column.id,
-            role: 'foundation_support',
-          })
+          if (isHosted) {
+            updated.relationships.push({
+              kind: 'supports',
+              source_id: id,
+              target_id: column.id,
+              role: 'foundation_support',
+            })
+            updated.relationships.push({
+              kind: 'supported_by',
+              source_id: column.id,
+              target_id: id,
+              role: 'foundation_support',
+            })
+          }
 
           return {
             result: {
               status: 'success',
               command_id,
               command_name: commandName,
-              affected_object_ids: [id, column.id],
+              affected_object_ids: isHosted ? [id, column.id] : [id],
               created_object_ids: [id],
-              updated_object_ids: [column.id],
+              updated_object_ids: isHosted ? [column.id] : [],
             },
             updatedProject: updated,
             emittedEnvelope: {
               ...envelope,
-              input: { ...fInput, id, mark, center_mm, size_mm: smartObject.module_data.size_mm },
+              input: {
+                ...fInput,
+                id,
+                mark,
+                center_mm,
+                size_mm: smartObject.module_data.size_mm,
+                supported_column_id: isHosted ? column.id : undefined,
+              },
             },
           }
         }

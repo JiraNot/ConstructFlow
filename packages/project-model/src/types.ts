@@ -59,7 +59,7 @@ export interface FoundationModuleData {
   center_mm: [number, number, number] // [x, y, z] in mm
   size_mm: [number, number, number] // [width, length, thickness] in mm
   top_elevation_mm: number
-  supported_column_id: string // UUID of the supported column
+  supported_column_id?: string // UUID of the supported column (optional for isolated footings)
   material: 'reinforced_concrete' | string
   engineering_status: 'preliminary' | 'engineer_approved' | 'as_built'
 }

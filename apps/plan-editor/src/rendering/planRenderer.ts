@@ -187,22 +187,22 @@ function drawFoundation(
   ctx.save()
   // Dashed structural footing outline
   ctx.setLineDash([5, 5])
-  ctx.strokeStyle = isSelected ? '#38bdf8' : isHovered ? '#60a5fa' : '#334155'
+  ctx.strokeStyle = isSelected ? '#38bdf8' : isHovered ? '#60a5fa' : '#64748b'
   ctx.lineWidth = isSelected ? 2 : 1.5
-  ctx.fillStyle = 'rgba(30, 41, 59, 0.45)'
+  ctx.fillStyle = 'rgba(30, 41, 59, 0.65)'
 
   ctx.beginPath()
   ctx.rect(minX, minY, screenW, screenH)
   ctx.fill()
   ctx.stroke()
 
-  // Mark label (e.g. F01) at bottom-right of footing
+  // Mark label (e.g. F1) at bottom-right or top-left of footing
   ctx.setLineDash([])
-  ctx.fillStyle = '#94a3b8'
-  ctx.font = '10px monospace'
+  ctx.fillStyle = isSelected ? '#38bdf8' : '#94a3b8'
+  ctx.font = 'bold 10px monospace'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.fillText(mark || 'F', minX + 4, minY + 4)
+  ctx.fillText(mark || 'F1', minX + 4, minY + 4)
 
   ctx.restore()
 }
@@ -270,17 +270,43 @@ function drawPlacementGhost(
   viewport: ViewportState
 ) {
   const [x, y] = worldToScreen(ghost.location_mm, viewport)
-  const size_px = 200 * viewport.zoom // 200mm preview
-  const half = size_px / 2
 
   ctx.save()
-  ctx.fillStyle = 'rgba(56, 189, 248, 0.35)'
-  ctx.strokeStyle = '#38bdf8'
-  ctx.lineWidth = 1.5
-  ctx.setLineDash([4, 4])
+  if (ghost.type === 'foundation') {
+    const size_px = 800 * viewport.zoom // 800mm footing preview
+    const half = size_px / 2
 
-  ctx.fillRect(x - half, y - half, size_px, size_px)
-  ctx.strokeRect(x - half, y - half, size_px, size_px)
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.25)' // Amber
+    ctx.strokeStyle = '#f59e0b'
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([4, 4])
+
+    ctx.fillRect(x - half, y - half, size_px, size_px)
+    ctx.strokeRect(x - half, y - half, size_px, size_px)
+
+    ctx.fillStyle = '#f59e0b'
+    ctx.font = 'bold 11px monospace'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('F1', x, y)
+  } else {
+    const size_px = 200 * viewport.zoom // 200mm column preview
+    const half = size_px / 2
+
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.35)' // Cyan
+    ctx.strokeStyle = '#38bdf8'
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([4, 4])
+
+    ctx.fillRect(x - half, y - half, size_px, size_px)
+    ctx.strokeRect(x - half, y - half, size_px, size_px)
+
+    ctx.fillStyle = '#38bdf8'
+    ctx.font = 'bold 11px monospace'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('C1', x, y)
+  }
   ctx.restore()
 }
 

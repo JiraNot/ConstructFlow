@@ -6,6 +6,8 @@ import {
   deserializeProject,
   Phase,
   isGridObject,
+  isColumnObject,
+  isFoundationObject,
 } from '@constructflow/project-model'
 import { CommandEnvelope } from '@constructflow/command-schema'
 import { CommandBus } from './commands/CommandBus.js'
@@ -26,7 +28,7 @@ export const App: React.FC = () => {
   const [snapKind, setSnapKind] = useState<string>('Free')
   const [commandQueue, setCommandQueue] = useState<CommandEnvelope[]>([])
 
-  // Setup initial template model: Grids A, B, C & 1, 2, 3 + 9 Columns + 9 Footings
+  // Setup initial template model: Grids A, B, C & 1, 2, 3 + 9 Columns (type C1) + 9 Footings (type F1)
   useEffect(() => {
     let current = createEmptyProjectDocument('CF-PROJ-001', 'ConstructFlow Vertical Slice 01')
     current.levels = [
@@ -55,17 +57,17 @@ export const App: React.FC = () => {
       }
     }
 
-    // 2. Create 9 Columns at intersections (A-1..C-3) with marks C01..C09
+    // 2. Create 9 Columns at intersections (A-1..C-3), all with Type Mark C1
     const intersections = [
-      { x: 0, y: 0, mark: 'C01' },
-      { x: 4000, y: 0, mark: 'C02' },
-      { x: 8000, y: 0, mark: 'C03' },
-      { x: 0, y: 4000, mark: 'C04' },
-      { x: 4000, y: 4000, mark: 'C05' },
-      { x: 8000, y: 4000, mark: 'C06' },
-      { x: 0, y: 8000, mark: 'C07' },
-      { x: 4000, y: 8000, mark: 'C08' },
-      { x: 8000, y: 8000, mark: 'C09' },
+      { x: 0, y: 0, mark: 'C1' },
+      { x: 4000, y: 0, mark: 'C1' },
+      { x: 8000, y: 0, mark: 'C1' },
+      { x: 0, y: 4000, mark: 'C1' },
+      { x: 4000, y: 4000, mark: 'C1' },
+      { x: 8000, y: 4000, mark: 'C1' },
+      { x: 0, y: 8000, mark: 'C1' },
+      { x: 4000, y: 8000, mark: 'C1' },
+      { x: 8000, y: 8000, mark: 'C1' },
     ]
 
     const columnIds: string[] = []
@@ -87,10 +89,10 @@ export const App: React.FC = () => {
       }
     }
 
-    // 3. Create 9 Foundations hosting each of the 9 columns
-    columnIds.forEach((colId, idx) => {
+    // 3. Create 9 Foundations hosting each column, all with Type Mark F1
+    columnIds.forEach((colId) => {
       const fId = crypto.randomUUID()
-      const fMark = `F${String(idx + 1).padStart(2, '0')}`
+      const fMark = 'F1'
       const res = CommandBus.execute(current, 'CreateFoundation', {
         id: fId,
         mark: fMark,
@@ -144,12 +146,14 @@ export const App: React.FC = () => {
     }
   }
 
-  // Commit Foundation creation
-  const handleCommitFoundation = (columnId: string) => {
+  // Commit Foundation creation (supports hosted on column or isolated spread footing)
+  const handleCommitFoundation = (opts: { columnId?: string; location_mm?: [number, number] }) => {
     const fId = crypto.randomUUID()
     const res = CommandBus.execute(project, 'CreateFoundation', {
       id: fId,
-      supported_column_id: columnId,
+      mark: 'F1',
+      supported_column_id: opts.columnId,
+      location_mm: opts.location_mm ? [opts.location_mm[0], opts.location_mm[1], 0] : undefined,
       size_mm: [800, 800, 300],
     })
     if (res.result.status === 'success') {
@@ -204,6 +208,30 @@ export const App: React.FC = () => {
     }
   }
 
+  // Rename Foundation Mark handler (UUID stays identical!)
+  const handleUpdateFoundationMark = (objectId: string, newMark: string) => {
+    const res = CommandBus.execute(project, 'UpdateFoundationMark', {
+      object_id: objectId,
+      mark: newMark,
+    })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
+  // Rename Grid Tag handler (UUID stays identical!)
+  const handleUpdateGridTag = (objectId: string, newTag: string) => {
+    const res = CommandBus.execute(project, 'UpdateGridTag', {
+      object_id: objectId,
+      tag: newTag,
+    })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
   // Delete Object
   const handleDeleteObject = (objectId: string) => {
     const res = CommandBus.execute(project, 'DeleteObject', { object_id: objectId })
@@ -226,10 +254,26 @@ export const App: React.FC = () => {
     URL.revokeObjectURL(url)
   }
 
-  // Counts
+  // Counts & Schedule breakdown
   const columnCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.column').length
   const foundationCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.foundation').length
   const gridCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.grid').length
+
+  const columnTypeCounts = Object.values(project.objects)
+    .filter(isColumnObject)
+    .reduce<Record<string, number>>((acc, col) => {
+      const mark = col.module_data.mark || 'C1'
+      acc[mark] = (acc[mark] || 0) + 1
+      return acc
+    }, {})
+
+  const foundationTypeCounts = Object.values(project.objects)
+    .filter(isFoundationObject)
+    .reduce<Record<string, number>>((acc, fnd) => {
+      const mark = fnd.module_data.mark || 'F1'
+      acc[mark] = (acc[mark] || 0) + 1
+      return acc
+    }, {})
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden' }}>
@@ -332,20 +376,55 @@ export const App: React.FC = () => {
           gap: 12,
         }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
-            Structure Model
+            Structure Schedule
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', background: '#1e293b', borderRadius: 4, fontSize: 12 }}>
-              <span style={{ color: '#cbd5e1' }}>Grids:</span>
-              <span style={{ color: '#38bdf8', fontWeight: 700 }}>{gridCount}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* Grids */}
+            <div style={{ padding: '8px', background: '#1e293b', borderRadius: 6, fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#cbd5e1', fontWeight: 600 }}>
+                <span>Grids (แกนเสา)</span>
+                <span style={{ color: '#38bdf8' }}>{gridCount} เส้น</span>
+              </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', background: '#1e293b', borderRadius: 4, fontSize: 12 }}>
-              <span style={{ color: '#cbd5e1' }}>Columns:</span>
-              <span style={{ color: '#38bdf8', fontWeight: 700 }}>{columnCount}</span>
+
+            {/* Columns Breakdown */}
+            <div style={{ padding: '8px', background: '#1e293b', borderRadius: 6, fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#cbd5e1', fontWeight: 600, marginBottom: 4 }}>
+                <span>Columns (เสา)</span>
+                <span style={{ color: '#38bdf8' }}>{columnCount} ต้น</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 4 }}>
+                {Object.keys(columnTypeCounts).length === 0 ? (
+                  <span style={{ color: '#64748b', fontSize: 11 }}>ไม่มีเสา</span>
+                ) : (
+                  Object.entries(columnTypeCounts).sort(([a], [b]) => a.localeCompare(b)).map(([mark, count]) => (
+                    <div key={mark} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}>
+                      <span style={{ fontWeight: 600, color: '#38bdf8' }}>{mark}</span>
+                      <span>{count} ต้น</span>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', background: '#1e293b', borderRadius: 4, fontSize: 12 }}>
-              <span style={{ color: '#cbd5e1' }}>Footings:</span>
-              <span style={{ color: '#38bdf8', fontWeight: 700 }}>{foundationCount}</span>
+
+            {/* Footings Breakdown */}
+            <div style={{ padding: '8px', background: '#1e293b', borderRadius: 6, fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#cbd5e1', fontWeight: 600, marginBottom: 4 }}>
+                <span>Footings (ฐานราก)</span>
+                <span style={{ color: '#38bdf8' }}>{foundationCount} ฐาน</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 4 }}>
+                {Object.keys(foundationTypeCounts).length === 0 ? (
+                  <span style={{ color: '#64748b', fontSize: 11 }}>ไม่มีฐานราก</span>
+                ) : (
+                  Object.entries(foundationTypeCounts).sort(([a], [b]) => a.localeCompare(b)).map(([mark, count]) => (
+                    <div key={mark} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}>
+                      <span style={{ fontWeight: 600, color: '#f59e0b' }}>{mark}</span>
+                      <span>{count} ฐาน</span>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
 
@@ -421,7 +500,9 @@ export const App: React.FC = () => {
             project={project}
             selectedId={selectedId}
             onUpdateColumnMark={handleUpdateColumnMark}
-            onAddFoundation={handleCommitFoundation}
+            onUpdateFoundationMark={handleUpdateFoundationMark}
+            onUpdateGridTag={handleUpdateGridTag}
+            onAddFoundation={(colId) => handleCommitFoundation({ columnId: colId })}
             onDeleteObject={handleDeleteObject}
           />
 

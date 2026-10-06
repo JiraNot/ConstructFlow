@@ -13,6 +13,8 @@ interface PropertiesPanelProps {
   project: ProjectDocument
   selectedId: string | null
   onUpdateColumnMark: (objectId: string, newMark: string) => void
+  onUpdateFoundationMark: (objectId: string, newMark: string) => void
+  onUpdateGridTag: (objectId: string, newTag: string) => void
   onAddFoundation: (columnId: string) => void
   onDeleteObject: (objectId: string) => void
 }
@@ -21,6 +23,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   project,
   selectedId,
   onUpdateColumnMark,
+  onUpdateFoundationMark,
+  onUpdateGridTag,
   onAddFoundation,
   onDeleteObject,
 }) => {
@@ -51,10 +55,17 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     setTimeout(() => setCopied(false), 1500)
   }
 
-  const handleMarkBlur = () => {
-    if (colObj && editingMark.trim() && editingMark !== currentMark) {
-      onUpdateColumnMark(colObj.id, editingMark.trim())
+  const handleSaveMark = (preset?: string) => {
+    const val = (preset !== undefined ? preset : editingMark).trim()
+    if (!val) return
+    if (colObj) {
+      onUpdateColumnMark(colObj.id, val)
+    } else if (fndObj) {
+      onUpdateFoundationMark(fndObj.id, val)
+    } else if (grdObj) {
+      onUpdateGridTag(grdObj.id, val)
     }
+    setEditingMark(val)
   }
 
   // Check if this column already has a hosted foundation
@@ -130,30 +141,132 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         </span>
       </div>
 
-      {/* Human-Readable Mark (Editable for Columns!) */}
-      {colObj && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
-            HUMAN-READABLE MARK (RENAMEABLE)
-          </label>
-          <input
-            type="text"
-            value={editingMark}
-            onChange={(e) => setEditingMark(e.target.value)}
-            onBlur={handleMarkBlur}
-            onKeyDown={(e) => e.key === 'Enter' && handleMarkBlur()}
-            style={{
-              background: '#0f172a',
-              border: '1px solid #475569',
-              borderRadius: 6,
-              color: '#ffffff',
-              padding: '6px 10px',
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          />
+      {/* Human-Readable Mark (Editable for Columns, Foundations, and Grids!) */}
+      {(colObj || fndObj || grdObj) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+              {colObj
+                ? 'COLUMN TYPE MARK (SCHEDULE)'
+                : fndObj
+                ? 'FOOTING TYPE MARK (SCHEDULE)'
+                : 'GRID AXIS TAG'}
+            </label>
+            <span style={{ fontSize: 10, color: '#38bdf8' }}>UUID Unchanged</span>
+          </div>
+
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              type="text"
+              value={editingMark}
+              onChange={(e) => setEditingMark(e.target.value)}
+              onBlur={() => handleSaveMark()}
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveMark()}
+              placeholder={colObj ? 'e.g. C1' : fndObj ? 'e.g. F1' : 'e.g. A'}
+              style={{
+                flex: 1,
+                background: '#0f172a',
+                border: '1px solid #475569',
+                borderRadius: 6,
+                color: '#ffffff',
+                padding: '6px 10px',
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            />
+            <button
+              onClick={() => handleSaveMark()}
+              style={{
+                background: '#0284c7',
+                border: 'none',
+                color: '#ffffff',
+                padding: '0 12px',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Save
+            </button>
+          </div>
+
+          {/* Quick Schedule Mark Presets */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <span style={{ fontSize: 10, color: '#64748b' }}>Presets:</span>
+            {colObj && (
+              <div style={{ display: 'flex', gap: 4 }}>
+                {['C1', 'C2', 'C3', 'C4'].map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => handleSaveMark(p)}
+                    style={{
+                      background: editingMark === p ? '#0284c7' : '#1e293b',
+                      color: editingMark === p ? '#fff' : '#94a3b8',
+                      border: '1px solid #334155',
+                      borderRadius: 4,
+                      padding: '2px 8px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            )}
+            {fndObj && (
+              <div style={{ display: 'flex', gap: 4 }}>
+                {['F1', 'F2', 'F3', 'F4'].map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => handleSaveMark(p)}
+                    style={{
+                      background: editingMark === p ? '#d97706' : '#1e293b',
+                      color: editingMark === p ? '#fff' : '#94a3b8',
+                      border: '1px solid #334155',
+                      borderRadius: 4,
+                      padding: '2px 8px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            )}
+            {grdObj && (
+              <div style={{ display: 'flex', gap: 4 }}>
+                {(grdObj.module_data.orientation === 'vertical'
+                  ? ['A', 'B', 'C', 'D']
+                  : ['1', '2', '3', '4']
+                ).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => handleSaveMark(p)}
+                    style={{
+                      background: editingMark === p ? '#0284c7' : '#1e293b',
+                      color: editingMark === p ? '#fff' : '#94a3b8',
+                      border: '1px solid #334155',
+                      borderRadius: 4,
+                      padding: '2px 8px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <span style={{ fontSize: 10, color: '#64748b' }}>
-            Renaming modifies visual tag without changing object UUID.
+            Schedule mark updates visual name; internal object UUID remains intact.
           </span>
         </div>
       )}

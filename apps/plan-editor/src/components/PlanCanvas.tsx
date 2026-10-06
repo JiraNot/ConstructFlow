@@ -22,7 +22,7 @@ interface PlanCanvasProps {
   selectedId: string | null
   onSelectObject: (id: string | null) => void
   onCommitColumn: (location_mm: [number, number]) => void
-  onCommitFoundation: (columnId: string) => void
+  onCommitFoundation: (opts: { columnId?: string; location_mm?: [number, number] }) => void
   onCommitGrid: (orientation: 'vertical' | 'horizontal', position_mm: number) => void
   onMoveColumn: (id: string, newLocation_mm: [number, number]) => void
   onCursorChange: (coords_mm: [number, number], snapKind: string) => void
@@ -68,6 +68,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     let ghost: { type: string; location_mm: [number, number] } | null = null
     if (activeTool === 'column' && activeSnap) {
       ghost = { type: 'column', location_mm: activeSnap.point_mm }
+    } else if (activeTool === 'foundation' && activeSnap) {
+      ghost = { type: 'foundation', location_mm: activeSnap.point_mm }
     }
 
     renderPlanView(
@@ -221,11 +223,24 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         const colHit = Object.values(project.objects).find((o) => {
           if (!isColumnObject(o)) return false
           const [cx, cy] = o.module_data.location_mm
-          const distSq = (rawWorld[0] - cx) ** 2 + (rawWorld[1] - cy) ** 2
-          return distSq <= (400 / viewport.zoom) ** 2
+          const [cw, cd] = o.module_data.section_mm
+          const tol = Math.max(cw, cd, 400)
+          return Math.abs(rawWorld[0] - cx) <= tol && Math.abs(rawWorld[1] - cy) <= tol
         })
+
         if (colHit) {
-          onCommitFoundation(colHit.id)
+          // Check if this column already has a foundation
+          const existingFnd = Object.values(project.objects).find(
+            (o) => isFoundationObject(o) && (o.module_data.supported_column_id === colHit.id || o.host_refs?.includes(colHit.id))
+          )
+          if (existingFnd) {
+            onSelectObject(existingFnd.id)
+          } else {
+            onCommitFoundation({ columnId: colHit.id })
+          }
+        } else {
+          // Isolated spread footing at clicked/snapped location
+          onCommitFoundation({ location_mm: snap.point_mm })
         }
       } else if (activeTool === 'grid') {
         // Alt or shift switches between vertical/horizontal
