@@ -2,6 +2,7 @@
 
 require 'time'
 require_relative 'tag_manager'
+require_relative 'dependency_graph'
 
 module JiraNot
   module ConstructFlow
@@ -11,12 +12,15 @@ module JiraNot
         DEFAULT_STATUS = 'active'
         UNSET = Object.new.freeze
 
+        attr_reader :dependency_graph
+
         def initialize(model:, levels: nil, id_generator: IdGenerator.new, diagnostics: nil)
           @model = model
           @levels = levels
           @id_generator = id_generator
           @diagnostics = diagnostics
           @index = {}
+          @dependency_graph = DependencyGraph.new(smart_object_manager: self, diagnostics: diagnostics)
         end
 
         def create(entity:, type:, owner_module:, schema_version: 1, display_name: nil,
@@ -242,26 +246,7 @@ module JiraNot
         end
 
         def dependent_ids(object_id)
-          target_id = object_id.respond_to?(:id) ? object_id.id.to_s : object_id.to_s
-          reverse = Hash.new { |hash, key| hash[key] = [] }
-          all.each do |object|
-            Array(object.relationships).each do |relationship|
-              target = relationship['target_id'] || relationship[:target_id]
-              reverse[target.to_s] << object.id if target
-            end
-          end
-          result = []
-          queue = [target_id]
-          visited = {}
-          until queue.empty?
-            current = queue.shift
-            next if visited[current]
-
-            visited[current] = true
-            result << current
-            reverse[current].sort.each { |dependent| queue << dependent unless visited[dependent] }
-          end
-          result
+          @dependency_graph.transitive_dependents(object_id)
         end
 
         def clear_dirty(entity, *flags)

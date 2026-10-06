@@ -2,13 +2,17 @@
 
 require_relative 'entity_guard'
 require_relative 'geometry_guard'
+require_relative 'host/model_transaction_adapter'
 
 module JiraNot
   module ConstructFlow
     module Core
       class TransactionManager
-        def initialize(model:)
+        attr_reader :model, :adapter
+
+        def initialize(model:, adapter: nil)
           @model = model
+          @adapter = adapter || Host::ModelTransactionAdapter.new(model)
           @depth = 0
         end
 
@@ -22,14 +26,14 @@ module JiraNot
             end
           end
 
-          @model.start_operation(name.to_s, true, false, transparent)
+          @adapter.start_operation(name.to_s, transparent: transparent)
           started_here = true
           @depth = 1
           result = yield
-          @model.commit_operation
+          @adapter.commit_operation
           result
         rescue StandardError
-          @model.abort_operation if started_here
+          @adapter.abort_operation if started_here
           raise
         ensure
           @depth = 0 if started_here

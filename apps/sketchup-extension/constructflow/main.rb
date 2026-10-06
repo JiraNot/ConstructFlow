@@ -23,7 +23,57 @@ require_relative 'core/capability_registry'
 require_relative 'core/connector_registry'
 require_relative 'core/mep_semantic_contract'
 require_relative 'core/sketchup_app_observer'
+require_relative 'core/host/sketchup_host'
+require_relative 'core/dependency_graph'
+require_relative 'core/module_definition'
+require_relative 'core/builtin_modules'
 require_relative 'core/drawing_sheet_spec'
+require_relative 'core/drawing_sheet_metadata'
+require_relative 'core/vector_lineweight_profile'
+require_relative 'core/layout_template_placeholder_map'
+require_relative 'core/layout_template_registry'
+require_relative 'core/layout_template_pin_store'
+require_relative 'core/layout_template_asset_verifier'
+require_relative 'core/layout_template_runtime_integration'
+require_relative 'core/layout_export_plan_builder'
+require_relative 'core/layout_export_runtime_integration'
+require_relative 'core/drawing_issue_set'
+require_relative 'core/drawing_issue_set_builder'
+require_relative 'core/native_layout_sheet_decorator'
+require_relative 'core/native_layout_adapter'
+require_relative 'core/native_layout_issue_set_backend'
+require_relative 'core/native_layout_issue_set_adapter'
+require_relative 'core/native_layout_issue_set_service'
+require_relative 'core/native_layout_export_service'
+require_relative 'core/native_layout_runtime_integration'
+require_relative 'core/native_acceptance_evidence_store'
+require_relative 'core/native_acceptance_preflight'
+require_relative 'core/native_acceptance_service'
+require_relative 'core/native_acceptance_auto_evidence'
+require_relative 'core/native_acceptance_runtime_integration'
+require_relative 'core/native_copy_identity_repair'
+require_relative 'core/sketchup_native_copy_identity_observer'
+require_relative 'core/native_copy_identity_runtime_integration'
+require_relative 'core/representation_registry'
+require_relative 'core/representation_runtime_integration'
+require_relative 'core/drawing_view_preset_registry'
+require_relative 'core/drawing_view_preset_registration'
+require_relative 'core/drawing_view_preset_runtime_integration'
+require_relative 'core/plan_graphic_style_registry'
+require_relative 'core/plan_graphic_style_registration'
+require_relative 'core/plan_graphic_style_runtime_integration'
+require_relative 'core/sketchup_native_graphic_style_adapter'
+require_relative 'core/sketchup_plan_renderer'
+require_relative 'core/sketchup_scene_presentation_service'
+require_relative 'core/sketchup_plan_scene_service'
+require_relative 'core/plan_scene_runtime_integration'
+require_relative 'core/extension_command_support'
+require_relative 'core/entity_guard'
+require_relative 'core/shortcut_manager'
+require_relative 'core/tag_manager'
+require_relative 'core/viewport_snap_helper'
+require_relative 'core/structural_profile_catalog'
+require_relative 'core/schedule_editor'
 require_relative 'core/drawing_intent_registry'
 require_relative 'core/elevation_generator'
 require_relative 'core/section_generator'
@@ -52,7 +102,6 @@ require_relative 'core/plan_selection_filter'
 require_relative 'core/representation_object_resolver'
 require_relative 'core/parametric_object_engine'
 require_relative 'core/constraint_engine'
-require_relative 'core/schedule_editor'
 
 require_relative 'modules/architecture/wall_definition'
 require_relative 'modules/architecture/wall_repository'
@@ -251,6 +300,71 @@ require_relative 'modules/costing/boq_exporter'
 require_relative 'modules/costing/repository'
 require_relative 'modules/costing/registration'
 
+require_relative 'modules/extension/execution_runner'
+require_relative 'modules/architecture/attachment_edge_resolver'
+require_relative 'modules/architecture/extension_command_registration'
+require_relative 'modules/opening/extension_command_registration'
+require_relative 'modules/door_window/extension_command_registration'
+require_relative 'modules/structure/extension_command_registration'
+require_relative 'modules/surface/extension_command_registration'
+require_relative 'modules/roof/extension_command_registration'
+require_relative 'modules/interior/extension_command_registration'
+require_relative 'modules/structure/plan_representation_provider'
+require_relative 'modules/structure/representation_registration'
+require_relative 'modules/roof/plan_representation_provider'
+require_relative 'modules/roof/representation_registration'
+require_relative 'modules/surface/plan_representation_provider'
+require_relative 'modules/surface/representation_registration'
+require_relative 'modules/interior/plan_representation_provider'
+require_relative 'modules/interior/representation_registration'
+require_relative 'modules/architecture/plan_representation_provider'
+require_relative 'modules/architecture/representation_registration'
+require_relative 'modules/opening/plan_representation_provider'
+require_relative 'modules/opening/representation_registration'
+require_relative 'modules/door_window/plan_representation_provider'
+require_relative 'modules/door_window/representation_registration'
+require_relative 'modules/electrical/extension_command_registration'
+require_relative 'modules/electrical/plan_representation_provider'
+require_relative 'modules/electrical/representation_registration'
+require_relative 'modules/extension/runtime_integration'
+require_relative 'modules/drainage/downpipe_definition'
+require_relative 'modules/drainage/rainwater_downpipe_service'
+require_relative 'modules/drainage/rainwater_downpipe_registration'
+require_relative 'modules/roof/rainwater_registration'
+require_relative 'modules/roof/rainwater_catchment_planner'
+require_relative 'modules/roof/rainwater_planning_registration'
+require_relative 'modules/roof/rainwater_plan_application'
+require_relative 'modules/roof/rainwater_package_integration'
+require_relative 'modules/roof/hosted_gutter_regenerator'
+require_relative 'modules/drainage/route_planner'
+require_relative 'modules/drainage/extension_command_registration'
+require_relative 'modules/drainage/route_candidate_evaluator'
+require_relative 'modules/drainage/route_alternative_planner'
+require_relative 'modules/drainage/route_edit_service'
+require_relative 'modules/drainage/intermediate_manhole_planner'
+require_relative 'modules/drainage/intermediate_manhole_service'
+require_relative 'modules/drainage/route_detour_planner'
+require_relative 'modules/drainage/route_detour_registration'
+require_relative 'modules/drainage/network_audit'
+require_relative 'modules/drainage/quantity/project_takeoff'
+require_relative 'modules/drainage/quality_registration'
+require_relative 'modules/drainage/tools/route_node_tool'
+require_relative 'modules/drainage/route_node_picker'
+require_relative 'modules/drainage/route_node_ui_registration'
+require_relative 'modules/drainage/routing_registration'
+require_relative 'modules/drainage/plan_representation_provider'
+require_relative 'modules/drainage/representation_registration'
+require_relative 'modules/extension/construction_intent_store'
+require_relative 'modules/extension/construction_intent_registration'
+require_relative 'modules/extension/construction_takeoff'
+require_relative 'modules/extension/construction_quality_gate'
+require_relative 'modules/extension/construction_issue_set_factory'
+require_relative 'modules/extension/construction_currentness_audit'
+require_relative 'modules/extension/construction_output_settlement'
+require_relative 'modules/extension/construction_issue_history_store'
+require_relative 'modules/extension/construction_workflow_runner'
+require_relative 'modules/extension/construction_workflow_registration'
+
 module JiraNot
   module ConstructFlow
     module Runtime
@@ -266,12 +380,13 @@ module JiraNot
       class << self
         attr_reader :modules, :module_loader, :events, :commands, :levels, :project,
                     :smart_objects, :diagnostics, :migrations, :active_model, :menu,
-                    :capabilities, :connectors
+                    :capabilities, :connectors, :host
 
         def boot!
           return if @booted
           @ids = Core::IdGenerator.new
           @diagnostics = Core::DiagnosticLog.new
+          @host = Core::Host::SketchUpHost.new(Sketchup.active_model)
           @modules = Core::ModuleRegistry.new(diagnostics: @diagnostics)
           @modules.register(manifest: CORE_MANIFEST)
           @module_loader = Core::ModuleLoader.new(registry: @modules, diagnostics: @diagnostics)
@@ -284,6 +399,7 @@ module JiraNot
           attach_model(Sketchup.active_model)
           install_model_observer
           install_ui_entry
+          install_core_integrations
           install_builtin_modules
           @booted = true
           @diagnostics.info('runtime_booted', 'ConstructFlow runtime booted')
@@ -296,6 +412,7 @@ module JiraNot
         def attach_model(model)
           return unless model
           @active_model = model
+          @host.attach_model(model) if @host
           Core::Units.configure_model(model)
           @project = Core::ProjectStore.new(model, id_generator: @ids)
           @project.ensure_project!
@@ -334,20 +451,12 @@ module JiraNot
           Core::UiEntry.install(self)
         end
 
+        def install_core_integrations
+          Core::BuiltinModules.install_core_integrations(self)
+        end
+
         def install_builtin_modules
-          Architecture::Registration.install(self)
-          Opening::Registration.install(self)
-          DoorWindow::Registration.install(self)
-          Extension::Registration.install(self)
-          Roof::Registration.install(self)
-          Structure::Registration.install(self)
-          Surface::Registration.install(self)
-          Surface::LayoutRegistration.install(self)
-          Interior::Registration.install(self)
-          Library::Registration.install(self)
-          Drainage::Registration.install(self)
-          Electrical::Registration.install(self)
-          Costing::Registration.install(self)
+          @module_loader.load_module_definitions(Core::BuiltinModules.definitions, self)
         end
 
         def seed_default_level!

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative 'host/entity_attribute_adapter'
 
 module JiraNot
   module ConstructFlow
@@ -9,20 +10,23 @@ module JiraNot
         CORE_DICTIONARY = 'constructflow.core'
         LIBRARY_DICTIONARY = 'constructflow.library'
 
-        def initialize(entity)
+        attr_reader :entity, :adapter
+
+        def initialize(entity, adapter: nil)
           @entity = entity
+          @adapter = adapter || Host::EntityAttributeAdapter.new(entity)
         end
 
         def read(key, default = nil, dictionary: CORE_DICTIONARY)
-          @entity.get_attribute(dictionary, key.to_s, default)
+          @adapter.get_attribute(dictionary, key.to_s, default)
         end
 
         def write(key, value, dictionary: CORE_DICTIONARY)
-          @entity.set_attribute(dictionary, key.to_s, value)
+          @adapter.set_attribute(dictionary, key.to_s, value)
         end
 
         def delete(key, dictionary: CORE_DICTIONARY)
-          @entity.delete_attribute(dictionary, key.to_s)
+          @adapter.delete_attribute(dictionary, key.to_s)
         end
 
         def read_json(key, default = nil, dictionary: CORE_DICTIONARY)
