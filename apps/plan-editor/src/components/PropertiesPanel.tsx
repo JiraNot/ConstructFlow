@@ -1,0 +1,336 @@
+import React, { useState, useEffect } from 'react'
+import {
+  ProjectDocument,
+  SmartObject,
+  FoundationModuleData,
+  isColumnObject,
+  isFoundationObject,
+  isGridObject,
+} from '@constructflow/project-model'
+import { Copy, Check, Trash2, PlusCircle } from 'lucide-react'
+
+interface PropertiesPanelProps {
+  project: ProjectDocument
+  selectedId: string | null
+  onUpdateColumnMark: (objectId: string, newMark: string) => void
+  onAddFoundation: (columnId: string) => void
+  onDeleteObject: (objectId: string) => void
+}
+
+export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
+  project,
+  selectedId,
+  onUpdateColumnMark,
+  onAddFoundation,
+  onDeleteObject,
+}) => {
+  const selectedObj = selectedId ? project.objects[selectedId] : null
+  const [copied, setCopied] = useState(false)
+  const [editingMark, setEditingMark] = useState('')
+
+  const colObj = selectedObj && isColumnObject(selectedObj) ? selectedObj : null
+  const fndObj = selectedObj && isFoundationObject(selectedObj) ? selectedObj : null
+  const grdObj = selectedObj && isGridObject(selectedObj) ? selectedObj : null
+
+  const currentMark = colObj
+    ? colObj.module_data.mark
+    : fndObj
+      ? fndObj.module_data.mark
+      : grdObj
+        ? grdObj.module_data.tag
+        : ''
+
+  useEffect(() => {
+    setEditingMark(currentMark)
+  }, [selectedId, currentMark])
+
+  const handleCopyUUID = () => {
+    if (!selectedId) return
+    navigator.clipboard.writeText(selectedId)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  const handleMarkBlur = () => {
+    if (colObj && editingMark.trim() && editingMark !== currentMark) {
+      onUpdateColumnMark(colObj.id, editingMark.trim())
+    }
+  }
+
+  // Check if this column already has a hosted foundation
+  const hostedFoundation = colObj
+    ? Object.values(project.objects).find(
+        (o): o is SmartObject<FoundationModuleData> =>
+          isFoundationObject(o) &&
+          (o.host_refs?.includes(colObj.id) || o.module_data.supported_column_id === colObj.id)
+      )
+    : null
+
+  if (!selectedObj) {
+    return (
+      <div style={{ padding: 16, color: '#64748b', fontSize: 13, textAlign: 'center' }}>
+        No object selected. Click an element on the canvas to inspect properties.
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ borderBottom: '1px solid #334155', paddingBottom: 10 }}>
+        <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#38bdf8', fontWeight: 700 }}>
+          {selectedObj.object_type}
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>
+          {currentMark || selectedObj.id.slice(0, 8)}
+        </div>
+      </div>
+
+      {/* Immutable UUID Display */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+          IMMUTABLE OBJECT ID (UUID)
+        </label>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          background: '#0f172a',
+          padding: '6px 8px',
+          borderRadius: 6,
+          border: '1px solid #334155',
+        }}>
+          <span style={{
+            fontSize: 11,
+            fontFamily: 'monospace',
+            color: '#cbd5e1',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1,
+          }}>
+            {selectedObj.id}
+          </span>
+          <button
+            onClick={handleCopyUUID}
+            title="Copy UUID"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: copied ? '#22c55e' : '#94a3b8',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+          </button>
+        </div>
+        <span style={{ fontSize: 10, color: '#64748b' }}>
+          * Synced to SketchUp attribute: constructflow.object_id
+        </span>
+      </div>
+
+      {/* Human-Readable Mark (Editable for Columns!) */}
+      {colObj && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+            HUMAN-READABLE MARK (RENAMEABLE)
+          </label>
+          <input
+            type="text"
+            value={editingMark}
+            onChange={(e) => setEditingMark(e.target.value)}
+            onBlur={handleMarkBlur}
+            onKeyDown={(e) => e.key === 'Enter' && handleMarkBlur()}
+            style={{
+              background: '#0f172a',
+              border: '1px solid #475569',
+              borderRadius: 6,
+              color: '#ffffff',
+              padding: '6px 10px',
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          />
+          <span style={{ fontSize: 10, color: '#64748b' }}>
+            Renaming modifies visual tag without changing object UUID.
+          </span>
+        </div>
+      )}
+
+      {/* Coordinates / Position */}
+      {colObj && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+            LOCATION (WORLD MM)
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            <div style={{ background: '#0f172a', padding: '5px 8px', borderRadius: 4, fontSize: 12 }}>
+              <span style={{ color: '#ef4444', fontWeight: 700 }}>X: </span>
+              {Math.round(colObj.module_data.location_mm[0])}
+            </div>
+            <div style={{ background: '#0f172a', padding: '5px 8px', borderRadius: 4, fontSize: 12 }}>
+              <span style={{ color: '#22c55e', fontWeight: 700 }}>Y: </span>
+              {Math.round(colObj.module_data.location_mm[1])}
+            </div>
+            <div style={{ background: '#0f172a', padding: '5px 8px', borderRadius: 4, fontSize: 12 }}>
+              <span style={{ color: '#38bdf8', fontWeight: 700 }}>Z: </span>
+              {Math.round(colObj.module_data.location_mm[2] || 0)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fndObj && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+            CENTER (WORLD MM)
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            <div style={{ background: '#0f172a', padding: '5px 8px', borderRadius: 4, fontSize: 12 }}>
+              <span style={{ color: '#ef4444', fontWeight: 700 }}>X: </span>
+              {Math.round(fndObj.module_data.center_mm[0])}
+            </div>
+            <div style={{ background: '#0f172a', padding: '5px 8px', borderRadius: 4, fontSize: 12 }}>
+              <span style={{ color: '#22c55e', fontWeight: 700 }}>Y: </span>
+              {Math.round(fndObj.module_data.center_mm[1])}
+            </div>
+            <div style={{ background: '#0f172a', padding: '5px 8px', borderRadius: 4, fontSize: 12 }}>
+              <span style={{ color: '#38bdf8', fontWeight: 700 }}>Z: </span>
+              {Math.round(fndObj.module_data.center_mm[2] || 0)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cross-section / Size */}
+      {colObj && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+            SECTION (MM)
+          </label>
+          <div style={{ background: '#0f172a', padding: '6px 8px', borderRadius: 6, fontSize: 12 }}>
+            {colObj.module_data.section_mm[0]} × {colObj.module_data.section_mm[1]} mm
+          </div>
+        </div>
+      )}
+
+      {fndObj && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+            FOOTING SIZE (MM)
+          </label>
+          <div style={{ background: '#0f172a', padding: '6px 8px', borderRadius: 6, fontSize: 12 }}>
+            {fndObj.module_data.size_mm[0]} × {fndObj.module_data.size_mm[1]} × {fndObj.module_data.size_mm[2]} mm
+          </div>
+        </div>
+      )}
+
+      {grdObj && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+            GRID LINE POSITION (MM)
+          </label>
+          <div style={{ background: '#0f172a', padding: '6px 8px', borderRadius: 6, fontSize: 12 }}>
+            {grdObj.module_data.orientation === 'vertical' ? 'X = ' : 'Y = '}
+            {grdObj.module_data.position_mm} mm
+          </div>
+        </div>
+      )}
+
+      {/* Level and Phase */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div>
+          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>BASE LEVEL</label>
+          <div style={{ background: '#0f172a', padding: '5px 8px', borderRadius: 4, fontSize: 12, marginTop: 4 }}>
+            {selectedObj.level_refs?.[0]?.level_id || 'Ground Floor'}
+          </div>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>PHASE</label>
+          <div style={{
+            background: selectedObj.created_phase === 'existing' ? '#334155' : '#0369a1',
+            padding: '5px 8px',
+            borderRadius: 4,
+            fontSize: 12,
+            marginTop: 4,
+            textTransform: 'capitalize',
+            textAlign: 'center',
+          }}>
+            {selectedObj.created_phase.replace('_', ' ')}
+          </div>
+        </div>
+      </div>
+
+      {/* Hosted Foundation Status / Action */}
+      {colObj && (
+        <div style={{ borderTop: '1px solid #334155', paddingTop: 10 }}>
+          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>HOSTED FOUNDATION</label>
+          {hostedFoundation ? (
+            <div style={{
+              background: '#0f172a',
+              padding: '8px 10px',
+              borderRadius: 6,
+              border: '1px solid #334155',
+              marginTop: 6,
+              fontSize: 12,
+            }}>
+              <div style={{ color: '#38bdf8', fontWeight: 600 }}>
+                Footing {hostedFoundation.module_data.mark} ({hostedFoundation.module_data.size_mm.join(' × ')} mm)
+              </div>
+              <div style={{ color: '#64748b', fontSize: 10, marginTop: 2 }}>
+                UUID: {hostedFoundation.id.slice(0, 8)}...
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => onAddFoundation(colObj.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                background: '#1e293b',
+                color: '#38bdf8',
+                border: '1px solid #0284c7',
+                padding: '6px 12px',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 600,
+                marginTop: 6,
+                width: '100%',
+                justifyContent: 'center',
+              }}
+            >
+              <PlusCircle size={14} /> Add Hosted Footing (800×800)
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Delete Object Action */}
+      <div style={{ borderTop: '1px solid #334155', paddingTop: 10 }}>
+        <button
+          onClick={() => onDeleteObject(selectedObj.id)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: 'rgba(239, 68, 68, 0.1)',
+            color: '#ef4444',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            padding: '6px 12px',
+            borderRadius: 6,
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 600,
+            width: '100%',
+            justifyContent: 'center',
+          }}
+        >
+          <Trash2 size={14} /> Delete Object
+        </button>
+      </div>
+    </div>
+  )
+}

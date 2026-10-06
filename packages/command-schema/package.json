@@ -1,0 +1,18 @@
+{
+  "name": "@constructflow/command-schema",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ConstructFlow Cross-Process Semantic Command Contracts and Schemas",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@constructflow/project-model": "file:../project-model"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

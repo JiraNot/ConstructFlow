@@ -26,7 +26,7 @@ module JiraNot
         def create(entity:, type:, owner_module:, schema_version: 1, display_name: nil,
                    created_phase: Phase::NEW_CONSTRUCTION, removed_phase: nil,
                    level_refs: [], source_state: 'confirmed', relationships: [],
-                   geometry_refs: [], catalog_ref: nil, revision_meta: {})
+                   geometry_refs: [], catalog_ref: nil, revision_meta: {}, id: nil)
           raise ArgumentError, 'entity required' if entity.nil?
           raise ArgumentError, 'entity is already a smart object' if smart_entity?(entity)
 
@@ -35,7 +35,7 @@ module JiraNot
           validate_source_state!(source_state)
           validate_level_refs!(level_refs)
 
-          object_id = @id_generator.smart_object_id
+          object_id = (id && !id.to_s.empty?) ? id.to_s : @id_generator.smart_object_id
           timestamp = Time.now.utc.iso8601
           store = AttributeStore.new(entity)
 

@@ -29,3 +29,7 @@ vendor/bundle/
 tmp/
 artifacts/
 .freebuff/
+
+# Python
+__pycache__/
+*.py[cod]

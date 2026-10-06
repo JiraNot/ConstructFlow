@@ -13,7 +13,7 @@ module JiraNot
           optional_capabilities: %w[drainage.network roof.frame_intent site.ground_reference],
           provides: %w[structure.coordination structure.quantity],
           objects: %w[structure.grid structure.beam structure.column structure.foundation structure.rebar_set],
-          commands: %w[CreateStructuralGrid ModifyStructuralGrid CreateBeam ModifyBeamPath CreateColumn EditColumnSchedule CreateFoundation GenerateFoundation AssignRebarSet ModifyRebarSet],
+          commands: %w[CreateStructuralGrid ModifyStructuralGrid CreateBeam ModifyBeamPath CreateColumn MoveColumn UpdateColumnMark EditColumnSchedule CreateFoundation GenerateFoundation AssignRebarSet ModifyRebarSet],
           events: %w[StructuralMemberCreated FoundationGenerated RebarSetAssigned RebarSetChanged GeometryChanged QuantityDirty DrawingDirty ValidationStateChanged],
           providers: ['constructflow.structure.quantity'],
           validators: %w[structure.column.validity structure.foundation.validity structure.rebar.validity]
@@ -88,6 +88,8 @@ module JiraNot
             repository = Repository.new
             geometry = Geometry.new
             validator = Validators::StructureValidator.new
+            register_move_column(runtime, repository, geometry, validator) unless runtime.commands.registered?('MoveColumn')
+            register_update_column_mark(runtime, repository) unless runtime.commands.registered?('UpdateColumnMark')
             register_create_foundation(runtime, repository, geometry, validator) unless runtime.commands.registered?('CreateFoundation')
             register_generate_foundation(runtime, repository, geometry, validator) unless runtime.commands.registered?('GenerateFoundation')
             return
@@ -112,6 +114,8 @@ module JiraNot
           )
 
           register_create_column(runtime, repository, geometry, validator)
+          register_move_column(runtime, repository, geometry, validator)
+          register_update_column_mark(runtime, repository)
           register_column_schedule_command(runtime, repository, geometry)
           register_grid_commands(runtime, repository, GridGeometry.new)
           register_beam_commands(runtime, repository, BeamGeometry.new)
@@ -140,14 +144,20 @@ module JiraNot
             input = command[:input]
             definition = column_definition_from_input(input, runtime)
             group = geometry.create_column_group(runtime.active_model, definition)
+            display_name = input[:display_name] || input['display_name']
+            if display_name.nil?
+              mark = input[:mark] || input['mark']
+              display_name = mark ? "Column #{mark}" : 'Structural Column'
+            end
             object = runtime.smart_objects.create(
               entity: group,
               type: 'structure.column',
               owner_module: 'constructflow.structure',
-              display_name: input[:display_name] || input['display_name'] || 'Structural Column',
+              display_name: display_name,
               created_phase: input[:created_phase] || input['created_phase'] || runtime.project.working_phase,
               level_refs: column_level_refs(definition),
-              source_state: input[:source_state] || input['source_state'] || 'confirmed'
+              source_state: input[:source_state] || input['source_state'] || 'confirmed',
+              id: input[:id] || input['id']
             )
             repository.write_column(group, definition)
             runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
@@ -163,6 +173,116 @@ module JiraNot
                 { name: 'QuantityDirty', object_ids: [object.id] },
                 { name: 'DrawingDirty', object_ids: [object.id] },
                 { name: 'ValidationStateChanged', object_ids: [object.id], payload: { issues: issues } }
+              ]
+            }
+          end
+        end
+
+        def register_move_column(runtime, repository, geometry, validator)
+          runtime.commands.register(
+            'MoveColumn',
+            owner_module: MANIFEST[:id],
+            validator: lambda { |command|
+              input = command[:input]
+              column = resolve_column(input, runtime)
+              return ['column not found'] unless column
+              loc = input[:location_mm] || input['location_mm']
+              return ['location_mm required'] unless loc && loc.is_a?(Array) && loc.length >= 2
+              []
+            }
+          ) do |command|
+            input = command[:input]
+            column = resolve_column(input, runtime)
+            raise ArgumentError, 'column not found' unless column
+
+            current = repository.read_column(column.entity)
+            raw_loc = input[:location_mm] || input['location_mm']
+            new_x = Float(raw_loc[0])
+            new_y = Float(raw_loc[1])
+            new_z = raw_loc.length >= 3 ? Float(raw_loc[2]) : current.location_mm[2]
+            new_loc = [new_x, new_y, new_z]
+
+            updated = current.with(location_mm: new_loc)
+            geometry.rebuild_column!(column.entity, updated)
+            repository.write_column(column.entity, updated)
+            runtime.smart_objects.mark_dirty_with_dependents(column.entity, 'dirty_quantity', 'dirty_drawing')
+
+            # Move any hosted foundations
+            updated_ids = [column.id]
+            dependents = runtime.respond_to?(:dependency_graph) && runtime.dependency_graph ? (runtime.dependency_graph.dependents_of(column.id) rescue []) : []
+            dependents.each do |dep_id|
+              dep_obj = runtime.smart_objects.fetch_by_id(dep_id)
+              next unless dep_obj && dep_obj.type == 'structure.foundation'
+
+              fnd_def = repository.read_foundation(dep_obj.entity)
+              updated_fnd = fnd_def.with(center_mm: [new_x, new_y, fnd_def.center_mm[2]])
+              geometry.rebuild_foundation!(dep_obj.entity, updated_fnd)
+              repository.write_foundation(dep_obj.entity, updated_fnd)
+              runtime.smart_objects.mark_dirty(dep_obj.entity, 'dirty_quantity', 'dirty_drawing')
+              updated_ids << dep_id
+            end
+
+            if runtime.smart_objects.respond_to?(:all)
+              runtime.smart_objects.all.each do |obj|
+                next unless obj.type == 'structure.foundation'
+                next if updated_ids.include?(obj.id)
+
+                fnd_def = repository.read_foundation(obj.entity)
+                is_supported = fnd_def.supported_object_id.to_s == column.id.to_s ||
+                               Array(obj.relationships).any? { |r| (r['kind'] == 'supports' || r[:kind] == 'supports') && (r['target_id'].to_s == column.id.to_s || r[:target_id].to_s == column.id.to_s) }
+                if is_supported
+                  updated_fnd = fnd_def.with(center_mm: [new_x, new_y, fnd_def.center_mm[2]])
+                  geometry.rebuild_foundation!(obj.entity, updated_fnd)
+                  repository.write_foundation(obj.entity, updated_fnd)
+                  runtime.smart_objects.mark_dirty(obj.entity, 'dirty_quantity', 'dirty_drawing')
+                  updated_ids << obj.id
+                end
+              end
+            end
+
+            issues = validator.validate_column(updated)
+
+            {
+              updated_object_ids: updated_ids,
+              warnings: warning_messages(issues),
+              events: [
+                { name: 'StructuralMemberChanged', object_ids: [column.id], payload: { location_mm: new_loc } },
+                { name: 'GeometryChanged', object_ids: updated_ids },
+                { name: 'QuantityDirty', object_ids: updated_ids },
+                { name: 'DrawingDirty', object_ids: updated_ids },
+                { name: 'ValidationStateChanged', object_ids: [column.id], payload: { issues: issues } }
+              ]
+            }
+          end
+        end
+
+        def register_update_column_mark(runtime, repository)
+          runtime.commands.register(
+            'UpdateColumnMark',
+            owner_module: MANIFEST[:id],
+            validator: lambda { |command|
+              input = command[:input]
+              column = resolve_column(input, runtime)
+              return ['column not found'] unless column
+              mark = input[:mark] || input['mark']
+              return ['mark required'] if mark.to_s.strip.empty?
+              []
+            }
+          ) do |command|
+            input = command[:input]
+            column = resolve_column(input, runtime)
+            raise ArgumentError, 'column not found' unless column
+
+            new_mark = (input[:mark] || input['mark']).to_s.strip
+            store = Core::AttributeStore.new(column.entity)
+            store.write('display_name', "Column #{new_mark}")
+            store.write('mark', new_mark)
+
+            {
+              updated_object_ids: [column.id],
+              events: [
+                { name: 'StructuralMemberChanged', object_ids: [column.id], payload: { mark: new_mark } },
+                { name: 'ScheduleDirty', object_ids: [column.id], payload: { schedule_id: COLUMN_SCHEDULE.id } }
               ]
             }
           end
@@ -216,7 +336,8 @@ module JiraNot
               display_name: definition.name,
               created_phase: input[:created_phase] || input['created_phase'] || runtime.project.working_phase,
               level_refs: grid_level_refs(definition),
-              source_state: input[:source_state] || input['source_state'] || 'confirmed'
+              source_state: input[:source_state] || input['source_state'] || 'confirmed',
+              id: input[:id] || input['id']
             )
             repository.write_grid(group, definition)
             runtime.smart_objects.mark_dirty(group, 'dirty_drawing')
@@ -342,7 +463,7 @@ module JiraNot
             owner_module: MANIFEST[:id],
             validator: lambda { |command|
               begin
-                definition = foundation_definition_at_location(command[:input])
+                definition = foundation_definition_at_location(command[:input], runtime, repository)
                 issues = validator.validate_foundation(definition)
                 issues.select { |issue| issue[:severity] == 'error' }.map { |issue| issue[:message] }
               rescue StandardError => error
@@ -351,17 +472,44 @@ module JiraNot
             }
           ) do |command|
             input = command[:input]
-            definition = foundation_definition_at_location(input)
+            definition = foundation_definition_at_location(input, runtime, repository)
             group = geometry.create_foundation_group(runtime.active_model, definition)
+            display_name = input[:display_name] || input['display_name']
+            if display_name.nil?
+              mark = input[:mark] || input['mark']
+              display_name = mark ? "Footing #{mark}" : definition.foundation_type.tr('_', ' ').capitalize
+            end
             foundation = runtime.smart_objects.create(
               entity: group,
               type: 'structure.foundation',
               owner_module: MANIFEST[:id],
-              display_name: input[:display_name] || input['display_name'] || definition.foundation_type.tr('_', ' ').capitalize,
+              display_name: display_name,
               created_phase: input[:created_phase] || input['created_phase'] || runtime.project.working_phase,
-              source_state: input[:source_state] || input['source_state'] || 'confirmed'
+              source_state: input[:source_state] || input['source_state'] || 'confirmed',
+              id: input[:id] || input['id']
             )
             repository.write_foundation(group, definition)
+
+            col_id = definition.supported_object_id || input[:supported_column_id] || input['supported_column_id']
+            if col_id
+              col_obj = runtime.smart_objects.fetch_by_id(col_id)
+              if col_obj
+                runtime.smart_objects.add_relationship(
+                  group,
+                  kind: 'supports',
+                  target_id: col_id,
+                  role: 'foundation_support'
+                )
+                runtime.smart_objects.add_relationship(
+                  col_obj.entity,
+                  kind: 'supported_by',
+                  target_id: foundation.id,
+                  role: 'foundation_support'
+                )
+                runtime.smart_objects.mark_dirty(col_obj.entity, 'dirty_quantity', 'dirty_drawing')
+              end
+            end
+
             runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
             issues = validator.validate_foundation(definition)
 
@@ -396,7 +544,8 @@ module JiraNot
               owner_module: 'constructflow.structure',
               display_name: input[:display_name] || input['display_name'] || definition.foundation_type.tr('_', ' ').capitalize,
               created_phase: column.created_phase,
-              source_state: input[:source_state] || input['source_state'] || column.source_state
+              source_state: input[:source_state] || input['source_state'] || column.source_state,
+              id: input[:id] || input['id']
             )
             repository.write_foundation(group, definition)
             runtime.smart_objects.add_relationship(
@@ -779,8 +928,18 @@ module JiraNot
           Math.sqrt(((point[0] - projected[0])**2) + ((point[1] - projected[1])**2))
         end
 
-        def foundation_definition_at_location(input)
-          location = input[:location_mm] || input['location_mm']
+        def foundation_definition_at_location(input, runtime = nil, repository = nil)
+          col_id = input[:supported_column_id] || input['supported_column_id']
+          location = input[:location_mm] || input['location_mm'] || input[:center_mm] || input['center_mm']
+
+          if location.nil? && col_id && runtime && repository
+            col = runtime.smart_objects.fetch_by_id(col_id)
+            if col
+              col_def = repository.read_column(col.entity)
+              location = [col_def.location_mm[0], col_def.location_mm[1], col_def.base_elevation_mm]
+            end
+          end
+
           raise ArgumentError, 'foundation placement location required' unless location
 
           type = input[:foundation_type] || input['foundation_type'] || 'spread_footing'
@@ -789,6 +948,7 @@ module JiraNot
             size_mm: input[:size_mm] || input['size_mm'] || [800, 800, 300],
             top_elevation_mm: input[:top_elevation_mm] || input['top_elevation_mm'] || Array(location)[2] || 0,
             foundation_type: type,
+            supported_object_id: col_id,
             material: input[:material] || input['material'] || 'reinforced_concrete',
             engineering_status: input[:engineering_status] || input['engineering_status'] || 'preliminary'
           )
@@ -1039,7 +1199,7 @@ module JiraNot
         end
 
         def resolve_column(input, runtime)
-          object_id = input[:column_object_id] || input['column_object_id'] || input[:object_id] || input['object_id']
+          object_id = input[:column_object_id] || input['column_object_id'] || input[:object_id] || input['object_id'] || input[:id] || input['id']
           entity = input[:column_entity] || input['column_entity'] || input[:entity] || input['entity']
           object = entity ? runtime.smart_objects.fetch(entity) : runtime.smart_objects.fetch_by_id(object_id)
           return nil unless object && object.owner_module == 'constructflow.structure' && object.type == 'structure.column'
@@ -1073,6 +1233,8 @@ module JiraNot
         end
 
         def install_ui(runtime)
+          return unless runtime.respond_to?(:menu) && runtime.menu
+
           menu = runtime.menu.add_submenu('Structure')
           menu.add_item('Draw Structural Beam in Plan') do
             values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Width (mm)', 'Depth (mm)', 'Base Level ID', 'Offset (mm)'], ['200', '300', '', '0'], 'ConstructFlow Structural Beam', nil, millimeter_indices: [0, 1, 3])

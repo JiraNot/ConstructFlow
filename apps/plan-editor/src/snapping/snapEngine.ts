@@ -1,0 +1,102 @@
+// Precision CAD Snapping Engine (Millimeter Units)
+
+import { ProjectDocument, isColumnObject, isGridObject } from '@constructflow/project-model'
+import { ViewportState } from '../viewport/viewportTransform.js'
+
+export interface SnapResult {
+  point_mm: [number, number]
+  kind: 'grid_intersection' | 'grid_line' | 'column_center' | 'free'
+  target_id?: string
+  description: string
+}
+
+export function snapPoint(
+  rawWorldPoint_mm: [number, number],
+  project: ProjectDocument,
+  viewport: ViewportState,
+  snapDistanceScreenPx: number = 16
+): SnapResult {
+  const tolerance_mm = snapDistanceScreenPx / viewport.zoom
+  const tolSq = tolerance_mm * tolerance_mm
+
+  const verticalGrids: { id: string; tag: string; pos_mm: number }[] = []
+  const horizontalGrids: { id: string; tag: string; pos_mm: number }[] = []
+
+  // Collect structural grids
+  for (const obj of Object.values(project.objects)) {
+    if (isGridObject(obj)) {
+      const { tag, orientation, position_mm } = obj.module_data
+      if (orientation === 'vertical') {
+        verticalGrids.push({ id: obj.id, tag, pos_mm: position_mm })
+      } else {
+        horizontalGrids.push({ id: obj.id, tag, pos_mm: position_mm })
+      }
+    }
+  }
+
+  // 1. Priority: Grid Intersections (e.g. A-1, B-2)
+  for (const vg of verticalGrids) {
+    for (const hg of horizontalGrids) {
+      const ix = vg.pos_mm
+      const iy = hg.pos_mm
+      const dx = rawWorldPoint_mm[0] - ix
+      const dy = rawWorldPoint_mm[1] - iy
+      if (dx * dx + dy * dy <= tolSq) {
+        return {
+          point_mm: [ix, iy],
+          kind: 'grid_intersection',
+          target_id: `${vg.tag}-${hg.tag}`,
+          description: `Grid ${vg.tag} / ${hg.tag}`,
+        }
+      }
+    }
+  }
+
+  // 2. Priority: Column Centers
+  for (const obj of Object.values(project.objects)) {
+    if (isColumnObject(obj)) {
+      const [cx, cy] = obj.module_data.location_mm
+      const dx = rawWorldPoint_mm[0] - cx
+      const dy = rawWorldPoint_mm[1] - cy
+      if (dx * dx + dy * dy <= tolSq) {
+        return {
+          point_mm: [cx, cy],
+          kind: 'column_center',
+          target_id: obj.id,
+          description: `Column ${obj.module_data.mark || obj.id.slice(0, 8)}`,
+        }
+      }
+    }
+  }
+
+  // 3. Priority: Single Grid Lines (Project perpendicular)
+  for (const vg of verticalGrids) {
+    const dx = Math.abs(rawWorldPoint_mm[0] - vg.pos_mm)
+    if (dx <= tolerance_mm) {
+      return {
+        point_mm: [vg.pos_mm, rawWorldPoint_mm[1]],
+        kind: 'grid_line',
+        target_id: vg.id,
+        description: `Grid ${vg.tag}`,
+      }
+    }
+  }
+
+  for (const hg of horizontalGrids) {
+    const dy = Math.abs(rawWorldPoint_mm[1] - hg.pos_mm)
+    if (dy <= tolerance_mm) {
+      return {
+        point_mm: [rawWorldPoint_mm[0], hg.pos_mm],
+        kind: 'grid_line',
+        target_id: hg.id,
+        description: `Grid ${hg.tag}`,
+      }
+    }
+  }
+
+  return {
+    point_mm: rawWorldPoint_mm,
+    kind: 'free',
+    description: 'Free',
+  }
+}
