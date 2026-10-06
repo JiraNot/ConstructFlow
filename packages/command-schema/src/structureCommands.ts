@@ -133,9 +133,21 @@ export interface DefineStructuralTypeInput {
 
 export interface UpdateStructuralTypeDimensionsInput {
   type_id_or_name: string // e.g. "C1" or type ID
-  object_type: 'structure.column' | 'structure.foundation'
+  type_name?: string
+  object_type?: 'structure.column' | 'structure.foundation'
   section_mm?: [number, number]
   size_mm?: [number, number, number]
+  parameters?: StructuralTypeParameters
+}
+
+export interface UpdateColumnDimensionsInput {
+  object_id: string
+  section_mm: [number, number]
+}
+
+export interface UpdateFoundationDimensionsInput {
+  object_id: string
+  size_mm: [number, number, number]
 }
 
 export interface AssignInstanceTypeInput {

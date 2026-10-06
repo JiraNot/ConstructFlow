@@ -13,7 +13,7 @@ module JiraNot
           optional_capabilities: %w[drainage.network roof.frame_intent site.ground_reference],
           provides: %w[structure.coordination structure.quantity],
           objects: %w[structure.grid structure.beam structure.column structure.foundation structure.rebar_set],
-          commands: %w[CreateStructuralGrid ModifyStructuralGrid CreateBeam ModifyBeamPath CreateColumn MoveColumn UpdateColumnMark UpdateFoundationMark EditColumnSchedule CreateFoundation GenerateFoundation AssignRebarSet ModifyRebarSet],
+          commands: %w[CreateStructuralGrid ModifyStructuralGrid CreateBeam ModifyBeamPath CreateColumn MoveColumn UpdateColumnMark UpdateFoundationMark UpdateStructuralTypeDimensions EditColumnSchedule CreateFoundation GenerateFoundation AssignRebarSet ModifyRebarSet],
           events: %w[StructuralMemberCreated FoundationGenerated RebarSetAssigned RebarSetChanged GeometryChanged QuantityDirty DrawingDirty ValidationStateChanged],
           providers: ['constructflow.structure.quantity'],
           validators: %w[structure.column.validity structure.foundation.validity structure.rebar.validity]
@@ -91,6 +91,7 @@ module JiraNot
             register_move_column(runtime, repository, geometry, validator) unless runtime.commands.registered?('MoveColumn')
             register_update_column_mark(runtime, repository) unless runtime.commands.registered?('UpdateColumnMark')
             register_update_foundation_mark(runtime, repository) unless runtime.commands.registered?('UpdateFoundationMark')
+            register_update_structural_type_dimensions(runtime, repository, geometry, validator) unless runtime.commands.registered?('UpdateStructuralTypeDimensions')
             register_create_foundation(runtime, repository, geometry, validator) unless runtime.commands.registered?('CreateFoundation')
             register_generate_foundation(runtime, repository, geometry, validator) unless runtime.commands.registered?('GenerateFoundation')
             return
@@ -118,6 +119,7 @@ module JiraNot
           register_move_column(runtime, repository, geometry, validator)
           register_update_column_mark(runtime, repository)
           register_update_foundation_mark(runtime, repository)
+          register_update_structural_type_dimensions(runtime, repository, geometry, validator)
           register_column_schedule_command(runtime, repository, geometry)
           register_grid_commands(runtime, repository, GridGeometry.new)
           register_beam_commands(runtime, repository, BeamGeometry.new)
@@ -162,6 +164,10 @@ module JiraNot
               id: input[:id] || input['id']
             )
             repository.write_column(group, definition)
+            if mark
+              store = Core::AttributeStore.new(group)
+              store.write('mark', mark)
+            end
             runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
             issues = validator.validate_column(definition)
 
@@ -316,6 +322,69 @@ module JiraNot
               updated_object_ids: [fnd.id],
               events: [
                 { name: 'StructuralMemberChanged', object_ids: [fnd.id], payload: { mark: new_mark } }
+              ]
+            }
+          end
+        end
+
+        def register_update_structural_type_dimensions(runtime, repository, geometry, validator)
+          runtime.commands.register(
+            'UpdateStructuralTypeDimensions',
+            owner_module: MANIFEST[:id],
+            validator: lambda { |command|
+              input = command[:input]
+              type_name = input[:type_id_or_name] || input['type_id_or_name'] || input[:type_name] || input['type_name']
+              return ['type_name required'] if type_name.to_s.strip.empty?
+              []
+            }
+          ) do |command|
+            input = command[:input]
+            type_name = (input[:type_id_or_name] || input['type_id_or_name'] || input[:type_name] || input['type_name']).to_s.strip
+            section_mm = input[:section_mm] || input['section_mm'] || (input[:parameters] && input[:parameters][:section_mm]) || (input['parameters'] && input['parameters']['section_mm'])
+            size_mm = input[:size_mm] || input['size_mm'] || (input[:parameters] && input[:parameters][:size_mm]) || (input['parameters'] && input['parameters']['size_mm'])
+
+            updated_ids = []
+            if runtime.smart_objects.respond_to?(:all)
+              runtime.smart_objects.all.each do |obj|
+                if obj.type == 'structure.column' && section_mm
+                  store = Core::AttributeStore.new(obj.entity)
+                  mark = store.read('mark')
+                  is_match = (mark && mark.to_s.strip.downcase == type_name.downcase) ||
+                             (obj.display_name && obj.display_name.to_s.downcase == "column #{type_name.downcase}")
+                  if is_match
+                    current = repository.read_column(obj.entity)
+                    new_sec = [Float(section_mm[0]), Float(section_mm[1])]
+                    updated = current.with(section_mm: new_sec)
+                    geometry.rebuild_column!(obj.entity, updated)
+                    repository.write_column(obj.entity, updated)
+                    runtime.smart_objects.mark_dirty_with_dependents(obj.entity, 'dirty_quantity', 'dirty_drawing')
+                    updated_ids << obj.id
+                  end
+                elsif obj.type == 'structure.foundation' && size_mm
+                  store = Core::AttributeStore.new(obj.entity)
+                  mark = store.read('mark')
+                  is_match = (mark && mark.to_s.strip.downcase == type_name.downcase) ||
+                             (obj.display_name && obj.display_name.to_s.downcase == "footing #{type_name.downcase}")
+                  if is_match
+                    current = repository.read_foundation(obj.entity)
+                    new_sz = [Float(size_mm[0]), Float(size_mm[1]), Float(size_mm[2])]
+                    updated = current.with(size_mm: new_sz)
+                    geometry.rebuild_foundation!(obj.entity, updated)
+                    repository.write_foundation(obj.entity, updated)
+                    runtime.smart_objects.mark_dirty(obj.entity, 'dirty_quantity', 'dirty_drawing')
+                    updated_ids << obj.id
+                  end
+                end
+              end
+            end
+
+            {
+              updated_object_ids: updated_ids,
+              events: [
+                { name: 'StructuralMemberChanged', object_ids: updated_ids, payload: { type_name: type_name } },
+                { name: 'GeometryChanged', object_ids: updated_ids },
+                { name: 'QuantityDirty', object_ids: updated_ids },
+                { name: 'DrawingDirty', object_ids: updated_ids }
               ]
             }
           end
@@ -522,6 +591,10 @@ module JiraNot
               id: input[:id] || input['id']
             )
             repository.write_foundation(group, definition)
+            if mark
+              store = Core::AttributeStore.new(group)
+              store.write('mark', mark)
+            end
 
             col_id = definition.supported_object_id || input[:supported_column_id] || input['supported_column_id']
             if col_id

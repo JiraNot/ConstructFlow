@@ -22,6 +22,8 @@ import {
   DeleteObjectInput,
   DefineStructuralTypeInput,
   UpdateStructuralTypeDimensionsInput,
+  UpdateColumnDimensionsInput,
+  UpdateFoundationDimensionsInput,
   AssignInstanceTypeInput,
 } from '@constructflow/command-schema'
 
@@ -496,30 +498,51 @@ export class CommandBus {
 
         case 'UpdateStructuralTypeDimensions': {
           const dimInput = input as UpdateStructuralTypeDimensionsInput
-          const typeDef = updated.types.find(
-            (t) => (t.id === dimInput.type_id_or_name || t.name.toLowerCase() === dimInput.type_id_or_name.toLowerCase()) &&
-                   (!dimInput.object_type || t.object_type === dimInput.object_type)
-          )
+          const targetTypeName = (
+            dimInput.type_id_or_name ||
+            dimInput.type_name ||
+            ''
+          ).trim()
 
-          if (!typeDef) {
+          const section_mm = dimInput.section_mm || dimInput.parameters?.section_mm
+          const size_mm = dimInput.size_mm || dimInput.parameters?.size_mm
+          const targetObjectType = dimInput.object_type || (dimInput.parameters as any)?.object_type || (section_mm ? 'structure.column' : 'structure.foundation')
+
+          if (!targetTypeName) {
             return {
               result: {
                 status: 'rejected',
                 command_id,
                 command_name: commandName,
                 affected_object_ids: [],
-                errors: [`Type ${dimInput.type_id_or_name} not found in project catalog`],
+                errors: ['Missing type name or mark for UpdateStructuralTypeDimensions'],
               },
               updatedProject: project,
             }
           }
 
-          // Update type parameters
-          if (dimInput.section_mm) {
-            typeDef.parameters.section_mm = dimInput.section_mm
+          let typeDef = updated.types.find(
+            (t) => (t.id.toLowerCase() === targetTypeName.toLowerCase() ||
+                    t.name.toLowerCase() === targetTypeName.toLowerCase()) &&
+                   (!targetObjectType || t.object_type === targetObjectType)
+          )
+
+          if (!typeDef) {
+            typeDef = {
+              id: `type-${targetObjectType === 'structure.foundation' ? 'fnd' : 'col'}-${targetTypeName.toLowerCase()}`,
+              object_type: targetObjectType,
+              name: targetTypeName,
+              parameters: {},
+            }
+            updated.types.push(typeDef)
           }
-          if (dimInput.size_mm) {
-            typeDef.parameters.size_mm = dimInput.size_mm
+
+          // Update type parameters
+          if (section_mm) {
+            typeDef.parameters.section_mm = section_mm
+          }
+          if (size_mm) {
+            typeDef.parameters.size_mm = size_mm
           }
 
           // Cascading update to all matching instances!
@@ -527,13 +550,13 @@ export class CommandBus {
           for (const [id, obj] of Object.entries(updated.objects)) {
             if (obj.object_type === 'structure.column' && isColumnObject(obj)) {
               if (obj.module_data.mark.toLowerCase() === typeDef.name.toLowerCase()) {
-                if (dimInput.section_mm) {
+                if (section_mm) {
                   updated.objects[id] = {
                     ...obj,
                     updated_at: now,
                     module_data: {
                       ...obj.module_data,
-                      section_mm: dimInput.section_mm,
+                      section_mm,
                     },
                   }
                   affected.push(id)
@@ -541,13 +564,13 @@ export class CommandBus {
               }
             } else if (obj.object_type === 'structure.foundation' && isFoundationObject(obj)) {
               if (obj.module_data.mark.toLowerCase() === typeDef.name.toLowerCase()) {
-                if (dimInput.size_mm) {
+                if (size_mm) {
                   updated.objects[id] = {
                     ...obj,
                     updated_at: now,
                     module_data: {
                       ...obj.module_data,
-                      size_mm: dimInput.size_mm,
+                      size_mm,
                     },
                   }
                   affected.push(id)
@@ -563,6 +586,91 @@ export class CommandBus {
               command_name: commandName,
               affected_object_ids: affected,
               updated_object_ids: affected,
+            },
+            updatedProject: updated,
+            emittedEnvelope: {
+              ...envelope,
+              input: {
+                type_id_or_name: targetTypeName,
+                type_name: targetTypeName,
+                object_type: typeDef.object_type,
+                section_mm,
+                size_mm,
+              },
+            },
+          }
+        }
+
+        case 'UpdateColumnDimensions': {
+          const colDimInput = input as UpdateColumnDimensionsInput
+          const target = updated.objects[colDimInput.object_id]
+          if (!target || !isColumnObject(target)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Column UUID ${colDimInput.object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          updated.objects[colDimInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              section_mm: colDimInput.section_mm,
+            },
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [colDimInput.object_id],
+              updated_object_ids: [colDimInput.object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: envelope,
+          }
+        }
+
+        case 'UpdateFoundationDimensions': {
+          const fndDimInput = input as UpdateFoundationDimensionsInput
+          const target = updated.objects[fndDimInput.object_id]
+          if (!target || !isFoundationObject(target)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Foundation UUID ${fndDimInput.object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          updated.objects[fndDimInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              size_mm: fndDimInput.size_mm,
+            },
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [fndDimInput.object_id],
+              updated_object_ids: [fndDimInput.object_id],
             },
             updatedProject: updated,
             emittedEnvelope: envelope,

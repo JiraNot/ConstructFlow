@@ -185,8 +185,11 @@ export const App: React.FC = () => {
     dimensions: { section_mm?: [number, number]; size_mm?: [number, number, number] }
   ) => {
     const res = CommandBus.execute(project, 'UpdateStructuralTypeDimensions', {
+      type_id_or_name: typeName,
       type_name: typeName,
       object_type: objectType,
+      section_mm: dimensions.section_mm,
+      size_mm: dimensions.size_mm,
       parameters: dimensions,
     })
     if (res.result.status === 'success') {

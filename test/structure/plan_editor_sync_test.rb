@@ -251,4 +251,37 @@ class PlanEditorSyncTest < Minitest::Test
       assert_equal 'Footing F1', obj.display_name
     end
   end
+
+  def test_update_structural_type_dimensions_cascades_to_all_matching_columns
+    col1_id = 'c-batch-1'
+    col2_id = 'c-batch-2'
+
+    @runtime.commands.execute('CreateColumn', {
+      id: col1_id,
+      mark: 'C1',
+      location_mm: [0, 0, 0],
+      section_mm: [200, 200]
+    }, project_id: 'test-proj')
+
+    @runtime.commands.execute('CreateColumn', {
+      id: col2_id,
+      mark: 'C1',
+      location_mm: [4000, 0, 0],
+      section_mm: [200, 200]
+    }, project_id: 'test-proj')
+
+    # Execute UpdateStructuralTypeDimensions
+    res = @runtime.commands.execute('UpdateStructuralTypeDimensions', {
+      type_id_or_name: 'C1',
+      section_mm: [350, 350]
+    }, project_id: 'test-proj')
+    assert_equal 'success', res[:status]
+
+    repo = JiraNot::ConstructFlow::Structure::Repository.new
+    col1 = @runtime.smart_objects.fetch_by_id(col1_id)
+    col2 = @runtime.smart_objects.fetch_by_id(col2_id)
+
+    assert_equal [350.0, 350.0], repo.read_column(col1.entity).section_mm
+    assert_equal [350.0, 350.0], repo.read_column(col2.entity).section_mm
+  end
 end

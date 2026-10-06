@@ -60,6 +60,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [inlineFndW, setInlineFndW] = useState(800)
   const [inlineFndL, setInlineFndL] = useState(800)
   const [inlineFndT, setInlineFndT] = useState(300)
+  const [updateFeedback, setUpdateFeedback] = useState<string | null>(null)
 
   useEffect(() => {
     setEditingMark(currentMark)
@@ -92,6 +93,25 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       onUpdateGridTag(grdObj.id, val)
     }
     setEditingMark(val)
+  }
+
+  const handleUpdateColumnDims = () => {
+    if (!colObj) return
+    const w = Math.max(50, inlineColW || 200)
+    const d = Math.max(50, inlineColD || 200)
+    onUpdateTypeDimensions(colObj.module_data.mark, 'structure.column', { section_mm: [w, d] })
+    setUpdateFeedback('col')
+    setTimeout(() => setUpdateFeedback(null), 2000)
+  }
+
+  const handleUpdateFoundationDims = () => {
+    if (!fndObj) return
+    const w = Math.max(100, inlineFndW || 800)
+    const l = Math.max(100, inlineFndL || 800)
+    const t = Math.max(50, inlineFndT || 300)
+    onUpdateTypeDimensions(fndObj.module_data.mark, 'structure.foundation', { size_mm: [w, l, t] })
+    setUpdateFeedback('fnd')
+    setTimeout(() => setUpdateFeedback(null), 2000)
   }
 
   // Check if this column already has a hosted foundation
@@ -351,6 +371,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     step={50}
                     value={inlineColW}
                     onChange={(e) => setInlineColW(Number(e.target.value))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleUpdateColumnDims()}
                     style={{ width: '100%', background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 12, textAlign: 'center' }}
                   />
                 </div>
@@ -362,13 +383,15 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     step={50}
                     value={inlineColD}
                     onChange={(e) => setInlineColD(Number(e.target.value))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleUpdateColumnDims()}
                     style={{ width: '100%', background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 12, textAlign: 'center' }}
                   />
                 </div>
                 <button
-                  onClick={() => onUpdateTypeDimensions(colObj.module_data.mark, 'structure.column', { section_mm: [inlineColW, inlineColD] })}
+                  onClick={handleUpdateColumnDims}
+                  title="Update dimensions for all columns of this type (Enter to save)"
                   style={{
-                    background: '#0284c7',
+                    background: updateFeedback === 'col' ? '#16a34a' : '#0284c7',
                     color: '#fff',
                     border: 'none',
                     borderRadius: 4,
@@ -377,9 +400,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     fontWeight: 700,
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
+                    transition: 'all 0.15s',
                   }}
                 >
-                  Update
+                  {updateFeedback === 'col' ? 'Saved ✓' : 'Update'}
                 </button>
               </div>
             </div>
@@ -409,6 +433,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   step={100}
                   value={inlineFndW}
                   onChange={(e) => setInlineFndW(Number(e.target.value))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleUpdateFoundationDims()}
                   style={{ flex: 1, background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 11, textAlign: 'center' }}
                 />
                 <span style={{ color: '#64748b' }}>×</span>
@@ -417,6 +442,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   step={100}
                   value={inlineFndL}
                   onChange={(e) => setInlineFndL(Number(e.target.value))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleUpdateFoundationDims()}
                   style={{ flex: 1, background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 11, textAlign: 'center' }}
                 />
                 <span style={{ color: '#64748b' }}>×</span>
@@ -425,12 +451,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   step={50}
                   value={inlineFndT}
                   onChange={(e) => setInlineFndT(Number(e.target.value))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleUpdateFoundationDims()}
                   style={{ flex: 1, background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 11, textAlign: 'center' }}
                 />
                 <button
-                  onClick={() => onUpdateTypeDimensions(fndObj.module_data.mark, 'structure.foundation', { size_mm: [inlineFndW, inlineFndL, inlineFndT] })}
+                  onClick={handleUpdateFoundationDims}
+                  title="Update dimensions for all footings of this type (Enter to save)"
                   style={{
-                    background: '#d97706',
+                    background: updateFeedback === 'fnd' ? '#16a34a' : '#d97706',
                     color: '#fff',
                     border: 'none',
                     borderRadius: 4,
@@ -439,9 +467,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     fontWeight: 700,
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
+                    transition: 'all 0.15s',
                   }}
                 >
-                  Update
+                  {updateFeedback === 'fnd' ? 'Saved ✓' : 'Update'}
                 </button>
               </div>
             </div>
