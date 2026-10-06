@@ -324,7 +324,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}>
             <span>Position:</span>
-            <span style={{ fontFamily: 'monospace' }}>({colObj.module_data.location_mm[0]}, {colObj.module_data.location_mm[1]})</span>
+            <span style={{ fontFamily: 'monospace' }}>
+              ({(colObj.module_data.location_mm[0] / 1000).toFixed(3)} m, {(colObj.module_data.location_mm[1] / 1000).toFixed(3)} m)
+            </span>
           </div>
         </div>
       )}
@@ -366,7 +368,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}>
             <span>Center:</span>
-            <span style={{ fontFamily: 'monospace' }}>({fndObj.module_data.center_mm[0]}, {fndObj.module_data.center_mm[1]})</span>
+            <span style={{ fontFamily: 'monospace' }}>
+              ({(fndObj.module_data.center_mm[0] / 1000).toFixed(3)} m, {(fndObj.module_data.center_mm[1] / 1000).toFixed(3)} m)
+            </span>
           </div>
         </div>
       )}
@@ -672,11 +676,12 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       {grdObj && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
-            GRID LINE POSITION (MM)
+            GRID LINE POSITION
           </label>
           <div style={{ background: '#0f172a', padding: '6px 8px', borderRadius: 6, fontSize: 12 }}>
             {grdObj.module_data.orientation === 'vertical' ? 'X = ' : 'Y = '}
-            {grdObj.module_data.position_mm} mm
+            <b>{(grdObj.module_data.position_mm / 1000).toFixed(3)} m</b>{' '}
+            <span style={{ color: '#64748b', fontSize: 11 }}>({grdObj.module_data.position_mm} mm)</span>
           </div>
         </div>
       )}

@@ -258,9 +258,32 @@ dispatchCommand({
 });
 ```
 
-### 2. Strict Type Safety & Canonical Units
-* **Millimeter Standard:** All coordinates, lengths, widths, depths, and elevations are strictly numbers in **millimeters (`mm`)**. Never store inches, centimeters, or meters in the canonical model.
-* **Angle Standard:** All rotations and slopes are in **degrees (`deg`)**, or explicit ratios (`1:50`, `1:100`) where documented.
+### 2. Strict Type Safety & Dual-Layer Unit System (Meter-First Standard)
+ConstructFlow uses a deliberate **Dual-Layer Unit Architecture** designed for professional architectural & engineering practice:
+
+```
++-----------------------------------------------------------------------------------+
+|               PRESENTATION & WORKING LAYER (USER UI & DRAWINGS)                   |
+|  - Primary Working Unit: Meters (m)                                              |
+|  - Architectural Dimensions & Spans: 2 decimal places (e.g., 4.00 m, 3.50 m)     |
+|  - Site Survey, Datum Levels & Invert Elevations: 3 decimal places                |
+|    (e.g., +0.000 m, +1.200 m, IL -0.850 m, X: 4.250 m, Y: 8.000 m)              |
+|  - Smart Input: Typing "4", "4.0", "4.00", or "4.25" interprets directly as METERS |
++-----------------------------------------------------------------------------------+
+                                         │  (Seamless UI Conversion)
+                                         ▼
++-----------------------------------------------------------------------------------+
+|               CANONICAL DATA & STORAGE LAYER (SSOT DOMAIN TIER)                   |
+|  - Storage Standard: Integers / Numbers in Millimeters (mm)                        |
+|  - Prevents floating-point precision drift across geometry and clash operations    |
+|  - Native compatibility with DXF/DWG ($INSUNITS=4), IFC 4.3, and SketchUp Ruby API|
++-----------------------------------------------------------------------------------+
+```
+
+* **Working Unit (Meters / เมตร):** All user-facing dialogues, canvas dimension labels, status bars, coordinate inspectors, and permit sheet annotations default to **Meters (`m`) with 2 or 3 decimal places**.
+* **Canonical Storage (Millimeters / มม.):** All internal coordinates, property values in `packages/project-model/src/types.ts`, and CQRS command payloads store exact numbers in **`mm`** to eliminate floating-point rounding errors.
+* **Smart Input Parsing:** Any length/offset input field in the UI accepts values in meters by default (e.g. `4.5` $\rightarrow 4,500$ mm). If a user enters an explicit suffix like `200mm` or `20cm`, the parser converts it correctly.
+* **Angle Standard:** All rotations and slopes are in **degrees (`deg`)**, or standard Thai drainage slopes (`1:50`, `1:100`).
 * **TypeScript Strictness:** No `any` types in public module contracts. Define comprehensive interfaces in `packages/project-model/src/types.ts`.
 
 ### 3. Non-Destructive Downstream Adapter Rule

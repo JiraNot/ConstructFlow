@@ -743,7 +743,7 @@ function drawDoor(
   const handingText = (handing || 'left_in').replace('_', ' ').toUpperCase()
   const text = isSelected
     ? `${mark || 'D1'} [${handingText} • Space: Flip]`
-    : `${mark || 'D1'} (${width_mm}mm)`
+    : `${mark || 'D1'} (${(width_mm / 1000).toFixed(2)} m)`
   ctx.font = isSelected ? 'bold 10px monospace' : 'bold 9px monospace'
   const bw = ctx.measureText(text).width
   ctx.fillStyle = 'rgba(15, 23, 42, 0.95)'
@@ -862,7 +862,7 @@ function drawWindow(
   ctx.setLineDash([])
 
   // Badge mark
-  const text = `${mark || 'W1'} (${width_mm}mm)`
+  const text = `${mark || 'W1'} (${(width_mm / 1000).toFixed(2)} m)`
   ctx.font = 'bold 9px monospace'
   const bw = ctx.measureText(text).width
   ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'
@@ -933,7 +933,7 @@ function drawPlacementGhost(
       const mx = (sx1 + sx2) / 2
       const my = (sy1 + sy2) / 2
       ctx.fillStyle = '#0f172a'
-      const badgeText = `${ghost.mark || 'B1'} (${w_mm}×${d_mm})  Span: ${(span_mm / 1000).toFixed(2)} m (${span_mm} mm)`
+      const badgeText = `${ghost.mark || 'B1'} (${(w_mm / 1000).toFixed(2)}×${(d_mm / 1000).toFixed(2)} m)  Span: ${(span_mm / 1000).toFixed(2)} m`
       ctx.font = 'bold 11px monospace'
       const bw = ctx.measureText(badgeText).width
       ctx.fillRect(mx - bw / 2 - 6, my - 10, bw + 12, 20)
@@ -991,7 +991,7 @@ function drawPlacementGhost(
       const mx = (sx1 + sx2) / 2
       const my = (sy1 + sy2) / 2
       ctx.fillStyle = '#0f172a'
-      const badgeText = `${ghost.mark || 'W1'} (${thick_mm}mm)  L: ${(length_mm / 1000).toFixed(2)} m (${length_mm} mm)`
+      const badgeText = `${ghost.mark || 'W1'} (${(thick_mm / 1000).toFixed(2)} m)  L: ${(length_mm / 1000).toFixed(2)} m`
       ctx.font = 'bold 11px monospace'
       const bw = ctx.measureText(badgeText).width
       ctx.fillRect(mx - bw / 2 - 6, my - 10, bw + 12, 20)
@@ -1080,7 +1080,7 @@ function drawPlacementGhost(
         ctx.setLineDash([])
 
         const handingLabel = (ghost.handing || 'left_in').replace('_', ' ').toUpperCase()
-        const badgeText = `${ghost.mark || 'D1'} (${width_mm}mm) [${handingLabel} • Space: Flip]`
+        const badgeText = `${ghost.mark || 'D1'} (${(width_mm / 1000).toFixed(2)} m) [${handingLabel} • Space: Flip]`
         ctx.font = 'bold 10px monospace'
         const bw = ctx.measureText(badgeText).width
         ctx.fillStyle = '#0f172a'
@@ -1135,7 +1135,7 @@ function drawPlacementGhost(
         ctx.lineTo(sp2x, sp2y)
         ctx.stroke()
 
-        const badgeText = `${ghost.mark || 'W1'} (${width_mm}mm)`
+        const badgeText = `${ghost.mark || 'W1'} (${(width_mm / 1000).toFixed(2)} m)`
         ctx.font = 'bold 10px monospace'
         const bw = ctx.measureText(badgeText).width
         ctx.fillStyle = '#0f172a'

@@ -1146,10 +1146,10 @@ export const App: React.FC = () => {
           >
             <div style={{ display: 'flex', gap: 16 }}>
               <span>
-                X: <b>{Math.round(cursorCoords_mm[0])} mm</b>
+                X: <b>{(cursorCoords_mm[0] / 1000).toFixed(3)} m</b> <span style={{ color: '#64748b', fontSize: 10 }}>({Math.round(cursorCoords_mm[0])} mm)</span>
               </span>
               <span>
-                Y: <b>{Math.round(cursorCoords_mm[1])} mm</b>
+                Y: <b>{(cursorCoords_mm[1] / 1000).toFixed(3)} m</b> <span style={{ color: '#64748b', fontSize: 10 }}>({Math.round(cursorCoords_mm[1])} mm)</span>
               </span>
               <span style={{ color: snapKind === 'Free' ? '#64748b' : '#38bdf8' }}>
                 Snap: <b>{snapKind}</b>
