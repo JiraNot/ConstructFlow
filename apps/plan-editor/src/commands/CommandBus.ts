@@ -8,10 +8,17 @@ import {
   FoundationModuleData,
   GridModuleData,
   BeamModuleData,
+  WallModuleData,
+  DoorModuleData,
+  WindowModuleData,
+  DoorHanding,
   isColumnObject,
   isFoundationObject,
   isGridObject,
   isBeamObject,
+  isWallObject,
+  isDoorObject,
+  isWindowObject,
 } from '@constructflow/project-model'
 import {
   CommandEnvelope,
@@ -24,6 +31,16 @@ import {
   CreateBeamInput,
   UpdateBeamMarkInput,
   UpdateBeamDimensionsInput,
+  CreateWallInput,
+  UpdateWallMarkInput,
+  UpdateWallDimensionsInput,
+  CreateDoorInput,
+  UpdateDoorMarkInput,
+  UpdateDoorDimensionsInput,
+  FlipDoorHandingInput,
+  CreateWindowInput,
+  UpdateWindowMarkInput,
+  UpdateWindowDimensionsInput,
   DeleteObjectInput,
   DefineStructuralTypeInput,
   UpdateStructuralTypeDimensionsInput,
@@ -604,6 +621,547 @@ export class CommandBus {
           }
         }
 
+        case 'CreateWall': {
+          const wallInput = input as CreateWallInput
+          const id = wallInput.id || crypto.randomUUID()
+          const mark = wallInput.mark || 'W1'
+          const rawStart = wallInput.start_point_mm || (wallInput as any).start_node_mm || [0, 0, 0]
+          const rawEnd = wallInput.end_point_mm || (wallInput as any).end_node_mm || [0, 0, 0]
+          const start_point_mm: [number, number, number] = [
+            rawStart[0],
+            rawStart[1],
+            rawStart[2] ?? 0,
+          ]
+          const end_point_mm: [number, number, number] = [
+            rawEnd[0],
+            rawEnd[1],
+            rawEnd[2] ?? 0,
+          ]
+          const dx = end_point_mm[0] - start_point_mm[0]
+          const dy = end_point_mm[1] - start_point_mm[1]
+          const length_mm = Math.round(Math.sqrt(dx * dx + dy * dy))
+
+          const wallObj: SmartObject<WallModuleData> = {
+            id,
+            object_type: 'architecture.wall',
+            owner_module: 'constructflow.architecture',
+            schema_version: 1,
+            created_phase: wallInput.phase || 'new_construction',
+            removed_phase: null,
+            level_refs: [
+              {
+                role: 'base_level',
+                level_id: wallInput.level_id,
+              },
+            ],
+            host_refs: [],
+            connector_refs: [],
+            status: 'active',
+            module_data: {
+              mark,
+              start_point_mm,
+              end_point_mm,
+              thickness_mm: wallInput.thickness_mm || 100,
+              height_mm: wallInput.height_mm || 2800,
+              length_mm,
+              level_id: wallInput.level_id,
+              material: wallInput.material || 'brick_masonry',
+            },
+            created_at: now,
+            updated_at: now,
+          }
+
+          updated.objects[id] = wallObj
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [id],
+              created_object_ids: [id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: {
+              ...envelope,
+              input: {
+                ...wallInput,
+                id,
+                mark,
+                path_mm: [start_point_mm, end_point_mm],
+                thickness_mm: wallInput.thickness_mm || 100,
+                height_mm: wallInput.height_mm || 2800,
+                length_mm,
+              },
+            },
+          }
+        }
+
+        case 'UpdateWallMark': {
+          const wMarkInput = input as UpdateWallMarkInput
+          const target = updated.objects[wMarkInput.object_id]
+          if (!target || !isWallObject(target)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Wall UUID ${wMarkInput.object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          updated.objects[wMarkInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              mark: wMarkInput.mark,
+            },
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [wMarkInput.object_id],
+              updated_object_ids: [wMarkInput.object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: envelope,
+          }
+        }
+
+        case 'UpdateWallDimensions': {
+          const wDimInput = input as UpdateWallDimensionsInput
+          const target = updated.objects[wDimInput.object_id]
+          if (!target || !isWallObject(target)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Wall UUID ${wDimInput.object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          updated.objects[wDimInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              thickness_mm: wDimInput.thickness_mm,
+              height_mm: wDimInput.height_mm ?? target.module_data.height_mm,
+            },
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [wDimInput.object_id],
+              updated_object_ids: [wDimInput.object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: envelope,
+          }
+        }
+
+        case 'CreateDoor': {
+          const doorInput = input as CreateDoorInput
+          const id = doorInput.id || crypto.randomUUID()
+          const mark = doorInput.mark || 'D1'
+          const hostWall = updated.objects[doorInput.wall_id]
+          if (!hostWall || !isWallObject(hostWall)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Host Wall UUID ${doorInput.wall_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          const location_mm: [number, number, number] = [
+            doorInput.location_mm[0],
+            doorInput.location_mm[1],
+            doorInput.location_mm[2] ?? 0,
+          ]
+
+          const doorObj: SmartObject<DoorModuleData> = {
+            id,
+            object_type: 'door_window.door',
+            owner_module: 'constructflow.door_window',
+            schema_version: 1,
+            created_phase: doorInput.phase || 'new_construction',
+            removed_phase: null,
+            level_refs: [
+              {
+                role: 'base_level',
+                level_id: doorInput.level_id || hostWall.module_data.level_id,
+              },
+            ],
+            host_refs: [doorInput.wall_id],
+            connector_refs: [],
+            status: 'active',
+            module_data: {
+              mark,
+              wall_id: doorInput.wall_id,
+              location_mm,
+              offset_along_wall_mm: doorInput.offset_along_wall_mm,
+              width_mm: doorInput.width_mm || 800,
+              height_mm: doorInput.height_mm || 2000,
+              handing: doorInput.handing || 'left_in',
+              level_id: doorInput.level_id || hostWall.module_data.level_id,
+            },
+            created_at: now,
+            updated_at: now,
+          }
+
+          updated.objects[id] = doorObj
+          updated.relationships.push({
+            kind: 'hosted_on',
+            source_id: id,
+            target_id: doorInput.wall_id,
+            role: 'door_wall_host',
+          })
+          updated.relationships.push({
+            kind: 'hosts',
+            source_id: doorInput.wall_id,
+            target_id: id,
+            role: 'wall_door_opening',
+          })
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [id, doorInput.wall_id],
+              created_object_ids: [id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: {
+              ...envelope,
+              input: {
+                ...doorInput,
+                id,
+                mark,
+                host_object_id: doorInput.wall_id,
+                point_mm: location_mm,
+                width_mm: doorInput.width_mm || 800,
+                height_mm: doorInput.height_mm || 2000,
+                sill_mm: 0,
+              },
+            },
+          }
+        }
+
+        case 'UpdateDoorMark': {
+          const dMarkInput = input as UpdateDoorMarkInput
+          const target = updated.objects[dMarkInput.object_id]
+          if (!target || !isDoorObject(target)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Door UUID ${dMarkInput.object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          updated.objects[dMarkInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              mark: dMarkInput.mark,
+            },
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [dMarkInput.object_id],
+              updated_object_ids: [dMarkInput.object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: envelope,
+          }
+        }
+
+        case 'UpdateDoorDimensions': {
+          const dDimInput = input as UpdateDoorDimensionsInput
+          const target = updated.objects[dDimInput.object_id]
+          if (!target || !isDoorObject(target)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Door UUID ${dDimInput.object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          updated.objects[dDimInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              width_mm: dDimInput.width_mm,
+              height_mm: dDimInput.height_mm ?? target.module_data.height_mm,
+            },
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [dDimInput.object_id],
+              updated_object_ids: [dDimInput.object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: envelope,
+          }
+        }
+
+        case 'FlipDoorHanding': {
+          const flipInput = input as FlipDoorHandingInput
+          const target = updated.objects[flipInput.object_id]
+          if (!target || !isDoorObject(target)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Door UUID ${flipInput.object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          const currentHanding = target.module_data.handing
+          const cycle: Record<DoorHanding, DoorHanding> = {
+            left_in: 'left_out',
+            left_out: 'right_out',
+            right_out: 'right_in',
+            right_in: 'left_in',
+          }
+          const newHanding = flipInput.handing || cycle[currentHanding] || 'left_in'
+
+          updated.objects[flipInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              handing: newHanding,
+            },
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [flipInput.object_id],
+              updated_object_ids: [flipInput.object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: envelope,
+          }
+        }
+
+        case 'CreateWindow': {
+          const winInput = input as CreateWindowInput
+          const id = winInput.id || crypto.randomUUID()
+          const mark = winInput.mark || 'W1'
+          const hostWall = updated.objects[winInput.wall_id]
+          if (!hostWall || !isWallObject(hostWall)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Host Wall UUID ${winInput.wall_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          const location_mm: [number, number, number] = [
+            winInput.location_mm[0],
+            winInput.location_mm[1],
+            winInput.location_mm[2] ?? 0,
+          ]
+
+          const winObj: SmartObject<WindowModuleData> = {
+            id,
+            object_type: 'door_window.window',
+            owner_module: 'constructflow.door_window',
+            schema_version: 1,
+            created_phase: winInput.phase || 'new_construction',
+            removed_phase: null,
+            level_refs: [
+              {
+                role: 'base_level',
+                level_id: winInput.level_id || hostWall.module_data.level_id,
+              },
+            ],
+            host_refs: [winInput.wall_id],
+            connector_refs: [],
+            status: 'active',
+            module_data: {
+              mark,
+              wall_id: winInput.wall_id,
+              location_mm,
+              offset_along_wall_mm: winInput.offset_along_wall_mm,
+              width_mm: winInput.width_mm || 1200,
+              height_mm: winInput.height_mm || 1200,
+              sill_height_mm: winInput.sill_height_mm || 900,
+              level_id: winInput.level_id || hostWall.module_data.level_id,
+            },
+            created_at: now,
+            updated_at: now,
+          }
+
+          updated.objects[id] = winObj
+          updated.relationships.push({
+            kind: 'hosted_on',
+            source_id: id,
+            target_id: winInput.wall_id,
+            role: 'window_wall_host',
+          })
+          updated.relationships.push({
+            kind: 'hosts',
+            source_id: winInput.wall_id,
+            target_id: id,
+            role: 'wall_window_opening',
+          })
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [id, winInput.wall_id],
+              created_object_ids: [id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: {
+              ...envelope,
+              input: {
+                ...winInput,
+                id,
+                mark,
+                host_object_id: winInput.wall_id,
+                point_mm: location_mm,
+                width_mm: winInput.width_mm || 1200,
+                height_mm: winInput.height_mm || 1200,
+                sill_mm: winInput.sill_height_mm || 900,
+              },
+            },
+          }
+        }
+
+        case 'UpdateWindowMark': {
+          const wMarkInput = input as UpdateWindowMarkInput
+          const target = updated.objects[wMarkInput.object_id]
+          if (!target || !isWindowObject(target)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Window UUID ${wMarkInput.object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          updated.objects[wMarkInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              mark: wMarkInput.mark,
+            },
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [wMarkInput.object_id],
+              updated_object_ids: [wMarkInput.object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: envelope,
+          }
+        }
+
+        case 'UpdateWindowDimensions': {
+          const wDimInput = input as UpdateWindowDimensionsInput
+          const target = updated.objects[wDimInput.object_id]
+          if (!target || !isWindowObject(target)) {
+            return {
+              result: {
+                status: 'rejected',
+                command_id,
+                command_name: commandName,
+                affected_object_ids: [],
+                errors: [`Window UUID ${wDimInput.object_id} not found`],
+              },
+              updatedProject: project,
+            }
+          }
+
+          updated.objects[wDimInput.object_id] = {
+            ...target,
+            updated_at: now,
+            module_data: {
+              ...target.module_data,
+              width_mm: wDimInput.width_mm,
+              height_mm: wDimInput.height_mm ?? target.module_data.height_mm,
+              sill_height_mm: wDimInput.sill_height_mm ?? target.module_data.sill_height_mm,
+            },
+          }
+
+          return {
+            result: {
+              status: 'success',
+              command_id,
+              command_name: commandName,
+              affected_object_ids: [wDimInput.object_id],
+              updated_object_ids: [wDimInput.object_id],
+            },
+            updatedProject: updated,
+            emittedEnvelope: envelope,
+          }
+        }
+
         case 'DeleteObject': {
           const delInput = input as DeleteObjectInput
           const target = updated.objects[delInput.object_id]
@@ -620,9 +1178,27 @@ export class CommandBus {
             }
           }
 
+          // If deleting a wall, also cascade delete hosted openings (doors/windows)
+          const hostedIdsToDelete: string[] = []
+          if (target.object_type === 'architecture.wall') {
+            for (const [id, obj] of Object.entries(updated.objects)) {
+              if (
+                (isDoorObject(obj) && obj.module_data.wall_id === delInput.object_id) ||
+                (isWindowObject(obj) && obj.module_data.wall_id === delInput.object_id)
+              ) {
+                hostedIdsToDelete.push(id)
+              }
+            }
+          }
+
           delete updated.objects[delInput.object_id]
+          for (const hid of hostedIdsToDelete) {
+            delete updated.objects[hid]
+          }
+
+          const allDeletedIds = [delInput.object_id, ...hostedIdsToDelete]
           updated.relationships = updated.relationships.filter(
-            (r) => r.source_id !== delInput.object_id && r.target_id !== delInput.object_id
+            (r) => !allDeletedIds.includes(r.source_id) && !allDeletedIds.includes(r.target_id)
           )
 
           return {
@@ -630,8 +1206,8 @@ export class CommandBus {
               status: 'success',
               command_id,
               command_name: commandName,
-              affected_object_ids: [delInput.object_id],
-              deleted_object_ids: [delInput.object_id],
+              affected_object_ids: allDeletedIds,
+              deleted_object_ids: allDeletedIds,
             },
             updatedProject: updated,
             emittedEnvelope: envelope,
@@ -640,7 +1216,18 @@ export class CommandBus {
 
         case 'DefineStructuralType': {
           const dtInput = input as DefineStructuralTypeInput
-          const typePrefix = dtInput.object_type === 'structure.column' ? 'col' : dtInput.object_type === 'structure.beam' ? 'beam' : 'fnd'
+          const typePrefix =
+            dtInput.object_type === 'structure.column'
+              ? 'col'
+              : dtInput.object_type === 'structure.beam'
+              ? 'beam'
+              : dtInput.object_type === 'structure.foundation'
+              ? 'fnd'
+              : dtInput.object_type === 'architecture.wall'
+              ? 'wall'
+              : dtInput.object_type === 'door_window.door'
+              ? 'door'
+              : 'window'
           const typeId = dtInput.id || `type-${typePrefix}-${dtInput.name.toLowerCase()}`
 
           const existingIdx = updated.types.findIndex(
@@ -682,7 +1269,27 @@ export class CommandBus {
 
           const section_mm = dimInput.section_mm || dimInput.parameters?.section_mm
           const size_mm = dimInput.size_mm || dimInput.parameters?.size_mm
-          const targetObjectType = dimInput.object_type || (dimInput.parameters as any)?.object_type || (size_mm ? 'structure.foundation' : (targetTypeName.toUpperCase().startsWith('B') || targetTypeName.toUpperCase().startsWith('RB')) ? 'structure.beam' : 'structure.column')
+          const thickness_mm = dimInput.thickness_mm || dimInput.parameters?.thickness_mm
+          const height_mm = dimInput.height_mm || dimInput.parameters?.height_mm
+          const width_mm = dimInput.width_mm || dimInput.parameters?.width_mm
+          const sill_height_mm = dimInput.sill_height_mm || dimInput.parameters?.sill_height_mm
+
+          const targetObjectType =
+            dimInput.object_type ||
+            (dimInput.parameters as any)?.object_type ||
+            (thickness_mm
+              ? 'architecture.wall'
+              : sill_height_mm
+              ? 'door_window.window'
+              : size_mm
+              ? 'structure.foundation'
+              : targetTypeName.toUpperCase().startsWith('D')
+              ? 'door_window.door'
+              : targetTypeName.toUpperCase().startsWith('B') || targetTypeName.toUpperCase().startsWith('RB')
+              ? 'structure.beam'
+              : targetTypeName.toUpperCase().startsWith('W') && !section_mm
+              ? 'architecture.wall'
+              : 'structure.column')
 
           if (!targetTypeName) {
             return {
@@ -704,7 +1311,18 @@ export class CommandBus {
           )
 
           if (!typeDef) {
-            const prefix = targetObjectType === 'structure.foundation' ? 'fnd' : targetObjectType === 'structure.beam' ? 'beam' : 'col'
+            const prefix =
+              targetObjectType === 'structure.foundation'
+                ? 'fnd'
+                : targetObjectType === 'structure.beam'
+                ? 'beam'
+                : targetObjectType === 'architecture.wall'
+                ? 'wall'
+                : targetObjectType === 'door_window.door'
+                ? 'door'
+                : targetObjectType === 'door_window.window'
+                ? 'window'
+                : 'col'
             typeDef = {
               id: `type-${prefix}-${targetTypeName.toLowerCase()}`,
               object_type: targetObjectType,
@@ -720,6 +1338,18 @@ export class CommandBus {
           }
           if (size_mm) {
             typeDef.parameters.size_mm = size_mm
+          }
+          if (thickness_mm !== undefined) {
+            typeDef.parameters.thickness_mm = thickness_mm
+          }
+          if (height_mm !== undefined) {
+            typeDef.parameters.height_mm = height_mm
+          }
+          if (width_mm !== undefined) {
+            typeDef.parameters.width_mm = width_mm
+          }
+          if (sill_height_mm !== undefined) {
+            typeDef.parameters.sill_height_mm = sill_height_mm
           }
 
           // Cascading update to all matching instances!
@@ -767,6 +1397,53 @@ export class CommandBus {
                   affected.push(id)
                 }
               }
+            } else if (obj.object_type === 'architecture.wall' && isWallObject(obj)) {
+              if (obj.module_data.mark.toLowerCase() === typeDef.name.toLowerCase()) {
+                const newThickness = thickness_mm !== undefined ? thickness_mm : obj.module_data.thickness_mm
+                const newHeight = height_mm !== undefined ? height_mm : obj.module_data.height_mm
+                updated.objects[id] = {
+                  ...obj,
+                  updated_at: now,
+                  module_data: {
+                    ...obj.module_data,
+                    thickness_mm: newThickness,
+                    height_mm: newHeight,
+                  },
+                }
+                affected.push(id)
+              }
+            } else if (obj.object_type === 'door_window.door' && isDoorObject(obj)) {
+              if (obj.module_data.mark.toLowerCase() === typeDef.name.toLowerCase()) {
+                const newWidth = width_mm !== undefined ? width_mm : obj.module_data.width_mm
+                const newHeight = height_mm !== undefined ? height_mm : obj.module_data.height_mm
+                updated.objects[id] = {
+                  ...obj,
+                  updated_at: now,
+                  module_data: {
+                    ...obj.module_data,
+                    width_mm: newWidth,
+                    height_mm: newHeight,
+                  },
+                }
+                affected.push(id)
+              }
+            } else if (obj.object_type === 'door_window.window' && isWindowObject(obj)) {
+              if (obj.module_data.mark.toLowerCase() === typeDef.name.toLowerCase()) {
+                const newWidth = width_mm !== undefined ? width_mm : obj.module_data.width_mm
+                const newHeight = height_mm !== undefined ? height_mm : obj.module_data.height_mm
+                const newSill = sill_height_mm !== undefined ? sill_height_mm : obj.module_data.sill_height_mm
+                updated.objects[id] = {
+                  ...obj,
+                  updated_at: now,
+                  module_data: {
+                    ...obj.module_data,
+                    width_mm: newWidth,
+                    height_mm: newHeight,
+                    sill_height_mm: newSill,
+                  },
+                }
+                affected.push(id)
+              }
             }
           }
 
@@ -787,6 +1464,10 @@ export class CommandBus {
                 object_type: typeDef.object_type,
                 section_mm,
                 size_mm,
+                thickness_mm,
+                height_mm,
+                width_mm,
+                sill_height_mm,
               },
             },
           }
@@ -919,6 +1600,47 @@ export class CommandBus {
                 ...target.module_data,
                 mark: assignInput.type_name,
                 size_mm,
+              },
+            }
+          } else if (isWallObject(target)) {
+            const thickness_mm: number = typeDef?.parameters?.thickness_mm ?? target.module_data.thickness_mm
+            const height_mm: number = typeDef?.parameters?.height_mm ?? target.module_data.height_mm
+            updated.objects[target.id] = {
+              ...target,
+              updated_at: now,
+              module_data: {
+                ...target.module_data,
+                mark: assignInput.type_name,
+                thickness_mm,
+                height_mm,
+              },
+            }
+          } else if (isDoorObject(target)) {
+            const width_mm: number = typeDef?.parameters?.width_mm ?? target.module_data.width_mm
+            const height_mm: number = typeDef?.parameters?.height_mm ?? target.module_data.height_mm
+            updated.objects[target.id] = {
+              ...target,
+              updated_at: now,
+              module_data: {
+                ...target.module_data,
+                mark: assignInput.type_name,
+                width_mm,
+                height_mm,
+              },
+            }
+          } else if (isWindowObject(target)) {
+            const width_mm: number = typeDef?.parameters?.width_mm ?? target.module_data.width_mm
+            const height_mm: number = typeDef?.parameters?.height_mm ?? target.module_data.height_mm
+            const sill_height_mm: number = typeDef?.parameters?.sill_height_mm ?? target.module_data.sill_height_mm
+            updated.objects[target.id] = {
+              ...target,
+              updated_at: now,
+              module_data: {
+                ...target.module_data,
+                mark: assignInput.type_name,
+                width_mm,
+                height_mm,
+                sill_height_mm,
               },
             }
           }

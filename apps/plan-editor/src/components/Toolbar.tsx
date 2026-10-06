@@ -1,7 +1,17 @@
 import React from 'react'
-import { MousePointer, Columns, Square, Hash, Minus, SlidersHorizontal } from 'lucide-react'
+import {
+  MousePointer,
+  Columns,
+  Square,
+  Minus,
+  BrickWall,
+  DoorOpen,
+  AppWindow,
+  Hash,
+  SlidersHorizontal,
+} from 'lucide-react'
 
-export type ToolType = 'select' | 'column' | 'foundation' | 'beam' | 'grid'
+export type ToolType = 'select' | 'column' | 'foundation' | 'beam' | 'wall' | 'door' | 'window' | 'grid'
 
 interface ToolbarProps {
   activeTool: ToolType
@@ -12,9 +22,18 @@ interface ToolbarProps {
   onChangeActiveFoundationType: (type: string) => void
   activeBeamType: string
   onChangeActiveBeamType: (type: string) => void
+  activeWallType: string
+  onChangeActiveWallType: (type: string) => void
+  activeDoorType: string
+  onChangeActiveDoorType: (type: string) => void
+  activeWindowType: string
+  onChangeActiveWindowType: (type: string) => void
   columnTypes: { name: string; section_mm?: [number, number] }[]
   foundationTypes: { name: string; size_mm?: [number, number, number] }[]
   beamTypes: { name: string; section_mm?: [number, number] }[]
+  wallTypes: { name: string; thickness_mm?: number }[]
+  doorTypes: { name: string; width_mm?: number; height_mm?: number }[]
+  windowTypes: { name: string; width_mm?: number; height_mm?: number }[]
   onOpenTypeManager: () => void
 }
 
@@ -27,32 +46,45 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onChangeActiveFoundationType,
   activeBeamType,
   onChangeActiveBeamType,
+  activeWallType,
+  onChangeActiveWallType,
+  activeDoorType,
+  onChangeActiveDoorType,
+  activeWindowType,
+  onChangeActiveWindowType,
   columnTypes,
   foundationTypes,
   beamTypes,
+  wallTypes,
+  doorTypes,
+  windowTypes,
   onOpenTypeManager,
 }) => {
   const tools: { id: ToolType; label: string; icon: React.ReactNode; shortcut: string }[] = [
-    { id: 'select', label: 'Select (S)', icon: <MousePointer size={18} />, shortcut: 'S' },
-    { id: 'column', label: 'Column (C)', icon: <Columns size={18} />, shortcut: 'C' },
-    { id: 'foundation', label: 'Footing (F)', icon: <Square size={18} />, shortcut: 'F' },
-    { id: 'beam', label: 'Beam (B)', icon: <Minus size={18} strokeWidth={3} />, shortcut: 'B' },
-    { id: 'grid', label: 'Grid Line (G)', icon: <Hash size={18} />, shortcut: 'G' },
+    { id: 'select', label: 'Select (S)', icon: <MousePointer size={16} />, shortcut: 'S' },
+    { id: 'column', label: 'Column (C)', icon: <Columns size={16} />, shortcut: 'C' },
+    { id: 'foundation', label: 'Footing (F)', icon: <Square size={16} />, shortcut: 'F' },
+    { id: 'beam', label: 'Beam (B)', icon: <Minus size={16} strokeWidth={3} />, shortcut: 'B' },
+    { id: 'wall', label: 'Wall (W)', icon: <BrickWall size={16} />, shortcut: 'W' },
+    { id: 'door', label: 'Door (D)', icon: <DoorOpen size={16} />, shortcut: 'D' },
+    { id: 'window', label: 'Window (N)', icon: <AppWindow size={16} />, shortcut: 'N' },
+    { id: 'grid', label: 'Grid Line (G)', icon: <Hash size={16} />, shortcut: 'G' },
   ]
 
   return (
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      gap: 10,
+      gap: 8,
       background: '#1e293b',
       padding: '6px 12px',
       borderRadius: 8,
       border: '1px solid #334155',
       boxShadow: '0 4px 6px -1px rgba(0,0,0,0.3)',
+      flexWrap: 'wrap',
     }}>
       {/* Tool Buttons */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         {tools.map((t) => {
           const isActive = activeTool === t.id
           return (
@@ -63,14 +95,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                padding: '6px 12px',
+                gap: 5,
+                padding: '5px 10px',
                 borderRadius: 6,
                 border: isActive ? '1px solid #38bdf8' : '1px solid transparent',
                 background: isActive ? '#0369a1' : 'transparent',
                 color: isActive ? '#ffffff' : '#94a3b8',
                 cursor: 'pointer',
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: 500,
                 transition: 'all 0.15s ease',
               }}
@@ -89,7 +121,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           alignItems: 'center',
           gap: 6,
           borderLeft: '1px solid #334155',
-          paddingLeft: 10,
+          paddingLeft: 8,
         }}>
           <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Type:</span>
           <select
@@ -100,8 +132,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               color: '#38bdf8',
               border: '1px solid #0284c7',
               borderRadius: 4,
-              padding: '4px 8px',
-              fontSize: 12,
+              padding: '3px 6px',
+              fontSize: 11,
               fontWeight: 700,
             }}
           >
@@ -121,7 +153,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           alignItems: 'center',
           gap: 6,
           borderLeft: '1px solid #334155',
-          paddingLeft: 10,
+          paddingLeft: 8,
         }}>
           <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Type:</span>
           <select
@@ -132,8 +164,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               color: '#f59e0b',
               border: '1px solid #d97706',
               borderRadius: 4,
-              padding: '4px 8px',
-              fontSize: 12,
+              padding: '3px 6px',
+              fontSize: 11,
               fontWeight: 700,
             }}
           >
@@ -153,7 +185,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           alignItems: 'center',
           gap: 6,
           borderLeft: '1px solid #334155',
-          paddingLeft: 10,
+          paddingLeft: 8,
         }}>
           <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Type:</span>
           <select
@@ -164,8 +196,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               color: '#38bdf8',
               border: '1px solid #0284c7',
               borderRadius: 4,
-              padding: '4px 8px',
-              fontSize: 12,
+              padding: '3px 6px',
+              fontSize: 11,
               fontWeight: 700,
             }}
           >
@@ -178,27 +210,123 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         </div>
       )}
 
+      {/* Active Type Selector for Wall */}
+      {activeTool === 'wall' && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          borderLeft: '1px solid #334155',
+          paddingLeft: 8,
+        }}>
+          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Type:</span>
+          <select
+            value={activeWallType}
+            onChange={(e) => onChangeActiveWallType(e.target.value)}
+            style={{
+              background: '#0f172a',
+              color: '#cbd5e1',
+              border: '1px solid #64748b',
+              borderRadius: 4,
+              padding: '3px 6px',
+              fontSize: 11,
+              fontWeight: 700,
+            }}
+          >
+            {wallTypes.map((t) => (
+              <option key={t.name} value={t.name}>
+                {t.name} ({t.thickness_mm ? `${t.thickness_mm} mm` : ''})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Active Type Selector for Door */}
+      {activeTool === 'door' && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          borderLeft: '1px solid #334155',
+          paddingLeft: 8,
+        }}>
+          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Type:</span>
+          <select
+            value={activeDoorType}
+            onChange={(e) => onChangeActiveDoorType(e.target.value)}
+            style={{
+              background: '#0f172a',
+              color: '#4ade80',
+              border: '1px solid #16a34a',
+              borderRadius: 4,
+              padding: '3px 6px',
+              fontSize: 11,
+              fontWeight: 700,
+            }}
+          >
+            {doorTypes.map((t) => (
+              <option key={t.name} value={t.name}>
+                {t.name} ({t.width_mm && t.height_mm ? `${t.width_mm}×${t.height_mm}` : ''} mm)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Active Type Selector for Window */}
+      {activeTool === 'window' && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          borderLeft: '1px solid #334155',
+          paddingLeft: 8,
+        }}>
+          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Type:</span>
+          <select
+            value={activeWindowType}
+            onChange={(e) => onChangeActiveWindowType(e.target.value)}
+            style={{
+              background: '#0f172a',
+              color: '#38bdf8',
+              border: '1px solid #0284c7',
+              borderRadius: 4,
+              padding: '3px 6px',
+              fontSize: 11,
+              fontWeight: 700,
+            }}
+          >
+            {windowTypes.map((t) => (
+              <option key={t.name} value={t.name}>
+                {t.name} ({t.width_mm && t.height_mm ? `${t.width_mm}×${t.height_mm}` : ''} mm)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Type Manager Launcher Button */}
-      <div style={{ borderLeft: '1px solid #334155', paddingLeft: 10 }}>
+      <div style={{ borderLeft: '1px solid #334155', paddingLeft: 8 }}>
         <button
           onClick={onOpenTypeManager}
-          title="Open Structural Type Catalog (จัดการประเภทเสาและฐานราก)"
+          title="Open Type Catalog (จัดการประเภทเสา, ฐานราก, คาน, ผนัง, ประตู, หน้าต่าง)"
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 5,
             background: 'transparent',
             border: '1px solid #475569',
             color: '#cbd5e1',
             borderRadius: 6,
-            padding: '5px 10px',
-            fontSize: 12,
+            padding: '4px 8px',
+            fontSize: 11,
             fontWeight: 600,
             cursor: 'pointer',
           }}
         >
-          <SlidersHorizontal size={14} color="#38bdf8" />
-          <span>Types</span>
+          <SlidersHorizontal size={13} color="#38bdf8" />
+          <span>Manage Types</span>
         </button>
       </div>
     </div>

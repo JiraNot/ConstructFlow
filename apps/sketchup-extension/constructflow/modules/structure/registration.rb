@@ -421,6 +421,31 @@ module JiraNot
                     runtime.smart_objects.mark_dirty_with_dependents(obj.entity, 'dirty_quantity', 'dirty_drawing')
                     updated_ids << obj.id
                   end
+                elsif obj.type == 'architecture.wall'
+                  thickness_val = input[:thickness_mm] || input['thickness_mm'] || (input[:parameters] && (input[:parameters][:thickness_mm] || input[:parameters]['thickness_mm']))
+                  height_val = input[:height_mm] || input['height_mm'] || (input[:parameters] && (input[:parameters][:height_mm] || input[:parameters]['height_mm']))
+                  if thickness_val || height_val
+                    store = Core::AttributeStore.new(obj.entity)
+                    mark = store.read('mark')
+                    is_match = (mark && mark.to_s.strip.downcase == type_name.downcase) ||
+                               (obj.display_name && obj.display_name.to_s.downcase == "wall #{type_name.downcase}")
+                    if is_match
+                      wall_repo = Architecture::WallRepository.new rescue nil
+                      wall_geom = Architecture::WallGeometry.new rescue nil
+                      if wall_repo && wall_geom
+                        current = wall_repo.read(obj.entity)
+                        if current
+                          new_thk = thickness_val ? Float(thickness_val) : current.thickness_mm
+                          new_hgt = height_val ? Float(height_val) : current.height_mm
+                          updated = current.with(thickness_mm: new_thk, height_mm: new_hgt)
+                          wall_geom.rebuild!(obj.entity, updated, openings: wall_repo.host_openings(obj.entity))
+                          wall_repo.write(obj.entity, updated)
+                          runtime.smart_objects.mark_dirty_with_dependents(obj.entity, 'dirty_quantity', 'dirty_drawing')
+                          updated_ids << obj.id
+                        end
+                      end
+                    end
+                  end
                 end
               end
             end

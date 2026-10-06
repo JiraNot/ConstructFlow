@@ -5,6 +5,13 @@ import {
   isColumnObject,
   isFoundationObject,
   isBeamObject,
+  isWallObject,
+  isDoorObject,
+  isWindowObject,
+  WallModuleData,
+  DoorModuleData,
+  WindowModuleData,
+  DoorHanding,
 } from '@constructflow/project-model'
 import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
 import { SnapResult } from '../snapping/snapEngine.js'
@@ -48,19 +55,35 @@ export function renderPlanView(
     }
   }
 
-  // 6. Columns (rendered with cross hatch and human-readable mark)
+  // 6. Walls (rendered with opening cutouts)
+  for (const obj of Object.values(project.objects)) {
+    if (isWallObject(obj)) {
+      drawWall(ctx, obj, project, viewport, selectedId === obj.id, hoveredId === obj.id)
+    }
+  }
+
+  // 7. Windows & Doors (infill symbols on walls)
+  for (const obj of Object.values(project.objects)) {
+    if (isWindowObject(obj)) {
+      drawWindow(ctx, obj, project, viewport, selectedId === obj.id, hoveredId === obj.id)
+    } else if (isDoorObject(obj)) {
+      drawDoor(ctx, obj, project, viewport, selectedId === obj.id, hoveredId === obj.id)
+    }
+  }
+
+  // 8. Columns (rendered with cross hatch and human-readable mark)
   for (const obj of Object.values(project.objects)) {
     if (isColumnObject(obj)) {
       drawColumn(ctx, obj, viewport, selectedId === obj.id, hoveredId === obj.id)
     }
   }
 
-  // 6. Placement Ghost Preview
+  // 9. Placement Ghost Preview
   if (ghostObject) {
-    drawPlacementGhost(ctx, ghostObject, viewport)
+    drawPlacementGhost(ctx, ghostObject, viewport, project)
   }
 
-  // 7. Snap Target Indicator
+  // 10. Snap Target Indicator
   if (activeSnap && activeSnap.kind !== 'free') {
     drawSnapMarker(ctx, activeSnap, viewport)
   }
@@ -356,18 +379,389 @@ function drawBeam(
   ctx.restore()
 }
 
+function drawWall(
+  ctx: CanvasRenderingContext2D,
+  wall: SmartObject<WallModuleData>,
+  project: ProjectDocument,
+  viewport: ViewportState,
+  isSelected: boolean,
+  isHovered: boolean
+) {
+  const { start_point_mm, end_point_mm, thickness_mm, mark } = wall.module_data
+  const [x1, y1] = start_point_mm
+  const [x2, y2] = end_point_mm
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const len = Math.hypot(dx, dy)
+  if (len < 5) return
+
+  const ux = dx / len
+  const uy = dy / len
+  const nx = -uy
+  const ny = ux
+
+  // Collect openings hosted on this wall
+  interface OpeningSpan {
+    start_dist: number
+    end_dist: number
+  }
+  const openings: OpeningSpan[] = []
+
+  for (const obj of Object.values(project.objects)) {
+    if (isDoorObject(obj) && obj.module_data.wall_id === wall.id) {
+      const halfW = obj.module_data.width_mm / 2
+      const center = obj.module_data.offset_along_wall_mm
+      openings.push({
+        start_dist: Math.max(0, center - halfW),
+        end_dist: Math.min(len, center + halfW),
+      })
+    } else if (isWindowObject(obj) && obj.module_data.wall_id === wall.id) {
+      const halfW = obj.module_data.width_mm / 2
+      const center = obj.module_data.offset_along_wall_mm
+      openings.push({
+        start_dist: Math.max(0, center - halfW),
+        end_dist: Math.min(len, center + halfW),
+      })
+    }
+  }
+
+  // Sort and merge openings
+  openings.sort((a, b) => a.start_dist - b.start_dist)
+  const mergedOpenings: OpeningSpan[] = []
+  for (const op of openings) {
+    if (mergedOpenings.length === 0) {
+      mergedOpenings.push({ ...op })
+    } else {
+      const last = mergedOpenings[mergedOpenings.length - 1]
+      if (op.start_dist <= last.end_dist) {
+        last.end_dist = Math.max(last.end_dist, op.end_dist)
+      } else {
+        mergedOpenings.push({ ...op })
+      }
+    }
+  }
+
+  // Wall sub-segments
+  interface WallSubSegment {
+    s: number
+    e: number
+  }
+  const subSegments: WallSubSegment[] = []
+  let curr = 0
+  for (const op of mergedOpenings) {
+    if (op.start_dist > curr) {
+      subSegments.push({ s: curr, e: op.start_dist })
+    }
+    curr = Math.max(curr, op.end_dist)
+  }
+  if (curr < len) {
+    subSegments.push({ s: curr, e: len })
+  }
+
+  const half_thick = thickness_mm / 2
+
+  // Render solid segments
+  for (const seg of subSegments) {
+    const p1_mm: [number, number] = [x1 + seg.s * ux, y1 + seg.s * uy]
+    const p2_mm: [number, number] = [x1 + seg.e * ux, y1 + seg.e * uy]
+
+    const c1_mm: [number, number] = [p1_mm[0] + nx * half_thick, p1_mm[1] + ny * half_thick]
+    const c2_mm: [number, number] = [p2_mm[0] + nx * half_thick, p2_mm[1] + ny * half_thick]
+    const c3_mm: [number, number] = [p2_mm[0] - nx * half_thick, p2_mm[1] - ny * half_thick]
+    const c4_mm: [number, number] = [p1_mm[0] - nx * half_thick, p1_mm[1] - ny * half_thick]
+
+    const [sc1x, sc1y] = worldToScreen(c1_mm, viewport)
+    const [sc2x, sc2y] = worldToScreen(c2_mm, viewport)
+    const [sc3x, sc3y] = worldToScreen(c3_mm, viewport)
+    const [sc4x, sc4y] = worldToScreen(c4_mm, viewport)
+
+    ctx.save()
+    ctx.beginPath()
+    ctx.moveTo(sc1x, sc1y)
+    ctx.lineTo(sc2x, sc2y)
+    ctx.lineTo(sc3x, sc3y)
+    ctx.lineTo(sc4x, sc4y)
+    ctx.closePath()
+
+    ctx.fillStyle = isSelected
+      ? 'rgba(56, 189, 248, 0.4)'
+      : isHovered
+      ? 'rgba(71, 85, 105, 0.85)'
+      : 'rgba(51, 65, 85, 0.85)'
+    ctx.fill()
+
+    ctx.strokeStyle = isSelected ? '#38bdf8' : isHovered ? '#94a3b8' : '#64748b'
+    ctx.lineWidth = isSelected ? 2.5 : isHovered ? 2 : 1.5
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  // Draw centerline dashes along entire wall
+  const [sx1, sy1] = worldToScreen([x1, y1], viewport)
+  const [sx2, sy2] = worldToScreen([x2, y2], viewport)
+  ctx.save()
+  ctx.beginPath()
+  ctx.setLineDash([3, 3])
+  ctx.strokeStyle = isSelected ? '#38bdf8' : '#475569'
+  ctx.lineWidth = 1
+  ctx.moveTo(sx1, sy1)
+  ctx.lineTo(sx2, sy2)
+  ctx.stroke()
+  ctx.restore()
+
+  // Label badge at midpoint
+  ctx.save()
+  const mx = (sx1 + sx2) / 2
+  const my = (sy1 + sy2) / 2
+  let angle = Math.atan2(dy, dx)
+  if (angle > Math.PI / 2 || angle < -Math.PI / 2) {
+    angle += Math.PI
+  }
+  ctx.translate(mx, my)
+  ctx.rotate(angle)
+
+  const text = `${mark || 'W1'} (${thickness_mm}mm) [L=${(len / 1000).toFixed(2)}m]`
+  ctx.font = 'bold 9px monospace'
+  const textWidth = ctx.measureText(text).width
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'
+  ctx.fillRect(-textWidth / 2 - 4, -7, textWidth + 8, 14)
+  ctx.strokeStyle = isSelected ? '#38bdf8' : '#475569'
+  ctx.lineWidth = 1
+  ctx.strokeRect(-textWidth / 2 - 4, -7, textWidth + 8, 14)
+  ctx.fillStyle = isSelected ? '#38bdf8' : '#e2e8f0'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, 0, 0)
+  ctx.restore()
+}
+
+function drawDoor(
+  ctx: CanvasRenderingContext2D,
+  door: SmartObject<DoorModuleData>,
+  project: ProjectDocument,
+  viewport: ViewportState,
+  isSelected: boolean,
+  isHovered: boolean
+) {
+  const { mark, wall_id, offset_along_wall_mm, width_mm, handing } = door.module_data
+  const hostWall = project.objects[wall_id]
+  if (!hostWall || !isWallObject(hostWall)) return
+
+  const [wx1, wy1] = hostWall.module_data.start_point_mm
+  const [wx2, wy2] = hostWall.module_data.end_point_mm
+  const wdx = wx2 - wx1
+  const wdy = wy2 - wy1
+  const wlen = Math.hypot(wdx, wdy)
+  if (wlen < 1) return
+
+  const ux = wdx / wlen
+  const uy = wdy / wlen
+  const nx = -uy
+  const ny = ux
+
+  const cx = wx1 + offset_along_wall_mm * ux
+  const cy = wy1 + offset_along_wall_mm * uy
+  const half_w = width_mm / 2
+
+  const j1_mm: [number, number] = [cx - half_w * ux, cy - half_w * uy]
+  const j2_mm: [number, number] = [cx + half_w * ux, cy + half_w * uy]
+
+  const [sj1x, sj1y] = worldToScreen(j1_mm, viewport)
+  const [sj2x, sj2y] = worldToScreen(j2_mm, viewport)
+  const [scx, scy] = worldToScreen([cx, cy], viewport)
+
+  ctx.save()
+
+  // 1. Jamb end lines
+  const thick_px = hostWall.module_data.thickness_mm * viewport.zoom
+  const snx = nx
+  const sny = ny
+
+  ctx.strokeStyle = isSelected ? '#38bdf8' : isHovered ? '#7dd3fc' : '#94a3b8'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(sj1x + snx * (thick_px / 2), sj1y + sny * (thick_px / 2))
+  ctx.lineTo(sj1x - snx * (thick_px / 2), sj1y - sny * (thick_px / 2))
+  ctx.moveTo(sj2x + snx * (thick_px / 2), sj2y + sny * (thick_px / 2))
+  ctx.lineTo(sj2x - snx * (thick_px / 2), sj2y - sny * (thick_px / 2))
+  ctx.stroke()
+
+  // 2. Door leaf and swing arc
+  const isLeft = handing.startsWith('left')
+  const isOut = handing.endsWith('out')
+
+  const hinge_mm = isLeft ? j1_mm : j2_mm
+  const latch_mm = isLeft ? j2_mm : j1_mm
+  const [shx, shy] = worldToScreen(hinge_mm, viewport)
+  const [slx, sly] = worldToScreen(latch_mm, viewport)
+
+  const normalSign = isOut ? -1 : 1
+  const doorLeafLenPx = width_mm * viewport.zoom
+  const leafEndX = shx + normalSign * snx * doorLeafLenPx
+  const leafEndY = shy + normalSign * sny * doorLeafLenPx
+
+  // Leaf line
+  ctx.beginPath()
+  ctx.strokeStyle = isSelected ? '#38bdf8' : isHovered ? '#4ade80' : '#22c55e'
+  ctx.lineWidth = isSelected ? 2.5 : 2
+  ctx.moveTo(shx, shy)
+  ctx.lineTo(leafEndX, leafEndY)
+  ctx.stroke()
+
+  // Swing arc
+  const angleClosed = Math.atan2(sly - shy, slx - shx)
+  const angleOpen = Math.atan2(leafEndY - shy, leafEndX - shx)
+
+  ctx.beginPath()
+  ctx.strokeStyle = isSelected ? 'rgba(56, 189, 248, 0.7)' : 'rgba(34, 197, 94, 0.6)'
+  ctx.lineWidth = 1
+  ctx.setLineDash([3, 3])
+  const counterClockwise = (angleOpen - angleClosed + 2 * Math.PI) % (2 * Math.PI) > Math.PI
+  ctx.arc(shx, shy, doorLeafLenPx, angleClosed, angleOpen, counterClockwise)
+  ctx.stroke()
+  ctx.setLineDash([])
+
+  // Badge mark
+  const text = `${mark || 'D1'} (${width_mm}mm)`
+  ctx.font = 'bold 9px monospace'
+  const bw = ctx.measureText(text).width
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'
+  ctx.fillRect(scx - bw / 2 - 3, scy - 7, bw + 6, 14)
+  ctx.strokeStyle = isSelected ? '#38bdf8' : '#22c55e'
+  ctx.lineWidth = 1
+  ctx.strokeRect(scx - bw / 2 - 3, scy - 7, bw + 6, 14)
+  ctx.fillStyle = isSelected ? '#38bdf8' : '#4ade80'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, scx, scy)
+
+  ctx.restore()
+}
+
+function drawWindow(
+  ctx: CanvasRenderingContext2D,
+  win: SmartObject<WindowModuleData>,
+  project: ProjectDocument,
+  viewport: ViewportState,
+  isSelected: boolean,
+  isHovered: boolean
+) {
+  const { mark, wall_id, offset_along_wall_mm, width_mm } = win.module_data
+  const hostWall = project.objects[wall_id]
+  if (!hostWall || !isWallObject(hostWall)) return
+
+  const [wx1, wy1] = hostWall.module_data.start_point_mm
+  const [wx2, wy2] = hostWall.module_data.end_point_mm
+  const wdx = wx2 - wx1
+  const wdy = wy2 - wy1
+  const wlen = Math.hypot(wdx, wdy)
+  if (wlen < 1) return
+
+  const ux = wdx / wlen
+  const uy = wdy / wlen
+  const nx = -uy
+  const ny = ux
+  const half_thick = hostWall.module_data.thickness_mm / 2
+
+  const cx = wx1 + offset_along_wall_mm * ux
+  const cy = wy1 + offset_along_wall_mm * uy
+  const half_w = width_mm / 2
+
+  const p1_mm: [number, number] = [cx - half_w * ux, cy - half_w * uy]
+  const p2_mm: [number, number] = [cx + half_w * ux, cy + half_w * uy]
+
+  const c1_mm: [number, number] = [p1_mm[0] + nx * half_thick, p1_mm[1] + ny * half_thick]
+  const c2_mm: [number, number] = [p2_mm[0] + nx * half_thick, p2_mm[1] + ny * half_thick]
+  const c3_mm: [number, number] = [p2_mm[0] - nx * half_thick, p2_mm[1] - ny * half_thick]
+  const c4_mm: [number, number] = [p1_mm[0] - nx * half_thick, p1_mm[1] - ny * half_thick]
+
+  const [sc1x, sc1y] = worldToScreen(c1_mm, viewport)
+  const [sc2x, sc2y] = worldToScreen(c2_mm, viewport)
+  const [sc3x, sc3y] = worldToScreen(c3_mm, viewport)
+  const [sc4x, sc4y] = worldToScreen(c4_mm, viewport)
+  const [scx, scy] = worldToScreen([cx, cy], viewport)
+
+  ctx.save()
+
+  // Opening cutout background
+  ctx.beginPath()
+  ctx.moveTo(sc1x, sc1y)
+  ctx.lineTo(sc2x, sc2y)
+  ctx.lineTo(sc3x, sc3y)
+  ctx.lineTo(sc4x, sc4y)
+  ctx.closePath()
+  ctx.fillStyle = isSelected ? 'rgba(56, 189, 248, 0.25)' : 'rgba(15, 23, 42, 0.95)'
+  ctx.fill()
+
+  // Jambs
+  ctx.strokeStyle = isSelected ? '#38bdf8' : isHovered ? '#7dd3fc' : '#94a3b8'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(sc1x, sc1y)
+  ctx.lineTo(sc4x, sc4y)
+  ctx.moveTo(sc2x, sc2y)
+  ctx.lineTo(sc3x, sc3y)
+  ctx.stroke()
+
+  // Sill lines
+  ctx.strokeStyle = isSelected ? '#38bdf8' : '#64748b'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(sc1x, sc1y)
+  ctx.lineTo(sc2x, sc2y)
+  ctx.moveTo(sc4x, sc4y)
+  ctx.lineTo(sc3x, sc3y)
+  ctx.stroke()
+
+  // Double Glass Lines
+  const glassOffsetPx = Math.max(2, 20 * viewport.zoom)
+  const snx = nx
+  const sny = ny
+  const [sp1x, sp1y] = worldToScreen(p1_mm, viewport)
+  const [sp2x, sp2y] = worldToScreen(p2_mm, viewport)
+
+  ctx.strokeStyle = isSelected ? '#38bdf8' : '#38bdf8'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(sp1x + snx * glassOffsetPx, sp1y + sny * glassOffsetPx)
+  ctx.lineTo(sp2x + snx * glassOffsetPx, sp2y + sny * glassOffsetPx)
+  ctx.moveTo(sp1x - snx * glassOffsetPx, sp1y - sny * glassOffsetPx)
+  ctx.lineTo(sp2x - snx * glassOffsetPx, sp2y - sny * glassOffsetPx)
+  ctx.stroke()
+
+  // Badge mark
+  const text = `${mark || 'W1'} (${width_mm}mm)`
+  ctx.font = 'bold 9px monospace'
+  const bw = ctx.measureText(text).width
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'
+  ctx.fillRect(scx - bw / 2 - 3, scy - 7, bw + 6, 14)
+  ctx.strokeStyle = isSelected ? '#38bdf8' : '#0ea5e9'
+  ctx.lineWidth = 1
+  ctx.strokeRect(scx - bw / 2 - 3, scy - 7, bw + 6, 14)
+  ctx.fillStyle = isSelected ? '#38bdf8' : '#38bdf8'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, scx, scy)
+
+  ctx.restore()
+}
+
 export interface PlacementGhost {
   type: string
   location_mm: [number, number]
   target_location_mm?: [number, number]
   size_mm?: [number, number] | [number, number, number]
   mark?: string
+  handing?: DoorHanding
+  wall_id?: string
+  offset_along_wall_mm?: number
 }
 
 function drawPlacementGhost(
   ctx: CanvasRenderingContext2D,
   ghost: PlacementGhost,
-  viewport: ViewportState
+  viewport: ViewportState,
+  project?: ProjectDocument
 ) {
   ctx.save()
 
@@ -428,6 +822,182 @@ function drawPlacementGhost(
 
     ctx.restore()
     return
+  }
+
+  if (ghost.type === 'wall' && ghost.target_location_mm) {
+    const [sx1, sy1] = worldToScreen(ghost.location_mm, viewport)
+    const [sx2, sy2] = worldToScreen(ghost.target_location_mm, viewport)
+    const thick_mm = ghost.size_mm?.[0] || 100
+    const dx = sx2 - sx1
+    const dy = sy2 - sy1
+    const len = Math.hypot(dx, dy)
+    if (len > 2) {
+      const nx = -dy / len
+      const ny = dx / len
+      const half_thick_px = (thick_mm * viewport.zoom) / 2
+
+      ctx.beginPath()
+      ctx.moveTo(sx1 + nx * half_thick_px, sy1 + ny * half_thick_px)
+      ctx.lineTo(sx2 + nx * half_thick_px, sy2 + ny * half_thick_px)
+      ctx.lineTo(sx2 - nx * half_thick_px, sy2 - ny * half_thick_px)
+      ctx.lineTo(sx1 - nx * half_thick_px, sy1 - ny * half_thick_px)
+      ctx.closePath()
+
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.35)'
+      ctx.fill()
+      ctx.strokeStyle = '#94a3b8'
+      ctx.lineWidth = 2
+      ctx.setLineDash([4, 4])
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      // Live length badge
+      const length_mm = Math.round(Math.hypot(
+        ghost.target_location_mm[0] - ghost.location_mm[0],
+        ghost.target_location_mm[1] - ghost.location_mm[1]
+      ))
+      const mx = (sx1 + sx2) / 2
+      const my = (sy1 + sy2) / 2
+      ctx.fillStyle = '#0f172a'
+      const badgeText = `${ghost.mark || 'W1'} (${thick_mm}mm)  L: ${(length_mm / 1000).toFixed(2)} m (${length_mm} mm)`
+      ctx.font = 'bold 11px monospace'
+      const bw = ctx.measureText(badgeText).width
+      ctx.fillRect(mx - bw / 2 - 6, my - 10, bw + 12, 20)
+      ctx.strokeStyle = '#94a3b8'
+      ctx.lineWidth = 1
+      ctx.strokeRect(mx - bw / 2 - 6, my - 10, bw + 12, 20)
+      ctx.fillStyle = '#e2e8f0'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(badgeText, mx, my)
+    }
+
+    ctx.fillStyle = '#94a3b8'
+    ctx.beginPath()
+    ctx.arc(sx1, sy1, 5, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.restore()
+    return
+  }
+
+  if (ghost.type === 'door' && ghost.wall_id && project) {
+    const hostWall = project.objects[ghost.wall_id]
+    if (hostWall && isWallObject(hostWall)) {
+      const [wx1, wy1] = hostWall.module_data.start_point_mm
+      const [wx2, wy2] = hostWall.module_data.end_point_mm
+      const wdx = wx2 - wx1
+      const wdy = wy2 - wy1
+      const wlen = Math.hypot(wdx, wdy)
+      if (wlen > 1) {
+        const ux = wdx / wlen
+        const uy = wdy / wlen
+        const nx = -uy
+        const ny = ux
+        const offset = ghost.offset_along_wall_mm ?? (wlen / 2)
+        const cx = wx1 + offset * ux
+        const cy = wy1 + offset * uy
+        const width_mm = ghost.size_mm?.[0] || 800
+        const half_w = width_mm / 2
+        const j1_mm: [number, number] = [cx - half_w * ux, cy - half_w * uy]
+        const j2_mm: [number, number] = [cx + half_w * ux, cy + half_w * uy]
+        const [sj1x, sj1y] = worldToScreen(j1_mm, viewport)
+        const [sj2x, sj2y] = worldToScreen(j2_mm, viewport)
+        const [scx, scy] = worldToScreen([cx, cy], viewport)
+
+        const thick_px = hostWall.module_data.thickness_mm * viewport.zoom
+        ctx.strokeStyle = '#4ade80'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(sj1x + nx * (thick_px / 2), sj1y + ny * (thick_px / 2))
+        ctx.lineTo(sj1x - nx * (thick_px / 2), sj1y - ny * (thick_px / 2))
+        ctx.moveTo(sj2x + nx * (thick_px / 2), sj2y + ny * (thick_px / 2))
+        ctx.lineTo(sj2x - nx * (thick_px / 2), sj2y - ny * (thick_px / 2))
+        ctx.stroke()
+
+        const doorLeafLenPx = width_mm * viewport.zoom
+        ctx.beginPath()
+        ctx.moveTo(sj1x, sj1y)
+        ctx.lineTo(sj1x + nx * doorLeafLenPx, sj1y + ny * doorLeafLenPx)
+        ctx.stroke()
+
+        ctx.beginPath()
+        ctx.setLineDash([3, 3])
+        ctx.arc(sj1x, sj1y, doorLeafLenPx, Math.atan2(sj2y - sj1y, sj2x - sj1x), Math.atan2(ny, nx), false)
+        ctx.stroke()
+        ctx.setLineDash([])
+
+        const badgeText = `${ghost.mark || 'D1'} (${width_mm}mm) [Space: Flip]`
+        ctx.font = 'bold 10px monospace'
+        const bw = ctx.measureText(badgeText).width
+        ctx.fillStyle = '#0f172a'
+        ctx.fillRect(scx - bw / 2 - 4, scy - 8, bw + 8, 16)
+        ctx.strokeStyle = '#22c55e'
+        ctx.strokeRect(scx - bw / 2 - 4, scy - 8, bw + 8, 16)
+        ctx.fillStyle = '#4ade80'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(badgeText, scx, scy)
+
+        ctx.restore()
+        return
+      }
+    }
+  }
+
+  if (ghost.type === 'window' && ghost.wall_id && project) {
+    const hostWall = project.objects[ghost.wall_id]
+    if (hostWall && isWallObject(hostWall)) {
+      const [wx1, wy1] = hostWall.module_data.start_point_mm
+      const [wx2, wy2] = hostWall.module_data.end_point_mm
+      const wdx = wx2 - wx1
+      const wdy = wy2 - wy1
+      const wlen = Math.hypot(wdx, wdy)
+      if (wlen > 1) {
+        const ux = wdx / wlen
+        const uy = wdy / wlen
+        const nx = -uy
+        const ny = ux
+        const offset = ghost.offset_along_wall_mm ?? (wlen / 2)
+        const cx = wx1 + offset * ux
+        const cy = wy1 + offset * uy
+        const width_mm = ghost.size_mm?.[0] || 1200
+        const half_w = width_mm / 2
+        const [scx, scy] = worldToScreen([cx, cy], viewport)
+
+        const p1_mm: [number, number] = [cx - half_w * ux, cy - half_w * uy]
+        const p2_mm: [number, number] = [cx + half_w * ux, cy + half_w * uy]
+        const [sp1x, sp1y] = worldToScreen(p1_mm, viewport)
+        const [sp2x, sp2y] = worldToScreen(p2_mm, viewport)
+        const thick_px = hostWall.module_data.thickness_mm * viewport.zoom
+
+        ctx.strokeStyle = '#38bdf8'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(sp1x + nx * (thick_px / 2), sp1y + ny * (thick_px / 2))
+        ctx.lineTo(sp1x - nx * (thick_px / 2), sp1y - ny * (thick_px / 2))
+        ctx.moveTo(sp2x + nx * (thick_px / 2), sp2y + ny * (thick_px / 2))
+        ctx.lineTo(sp2x - nx * (thick_px / 2), sp2y - ny * (thick_px / 2))
+        ctx.moveTo(sp1x, sp1y)
+        ctx.lineTo(sp2x, sp2y)
+        ctx.stroke()
+
+        const badgeText = `${ghost.mark || 'W1'} (${width_mm}mm)`
+        ctx.font = 'bold 10px monospace'
+        const bw = ctx.measureText(badgeText).width
+        ctx.fillStyle = '#0f172a'
+        ctx.fillRect(scx - bw / 2 - 4, scy - 8, bw + 8, 16)
+        ctx.strokeStyle = '#0284c7'
+        ctx.strokeRect(scx - bw / 2 - 4, scy - 8, bw + 8, 16)
+        ctx.fillStyle = '#38bdf8'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(badgeText, scx, scy)
+
+        ctx.restore()
+        return
+      }
+    }
   }
 
   const [x, y] = worldToScreen(ghost.location_mm, viewport)
@@ -506,6 +1076,17 @@ function drawSnapMarker(
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.arc(x, y, 6, 0, Math.PI * 2)
+    ctx.stroke()
+  } else if (snap.kind === 'wall_endpoint') {
+    // Cyan triangle for wall endpoint
+    const s = 6
+    ctx.strokeStyle = '#38bdf8'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(x, y - s)
+    ctx.lineTo(x + s, y + s)
+    ctx.lineTo(x - s, y + s)
+    ctx.closePath()
     ctx.stroke()
   } else if (snap.kind === 'grid_line') {
     // Cyan cross

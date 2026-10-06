@@ -9,6 +9,9 @@ import {
   ColumnModuleData,
   FoundationModuleData,
   BeamModuleData,
+  WallModuleData,
+  DoorModuleData,
+  WindowModuleData,
 } from './types.js'
 
 export type KnownModuleData =
@@ -16,6 +19,9 @@ export type KnownModuleData =
   | ColumnModuleData
   | FoundationModuleData
   | BeamModuleData
+  | WallModuleData
+  | DoorModuleData
+  | WindowModuleData
   | Record<string, any>
 
 export interface SmartObject<TData extends Record<string, any> = KnownModuleData> {
@@ -101,5 +107,23 @@ export function isBeamObject(
   obj: SmartObject
 ): obj is SmartObject<BeamModuleData> {
   return obj.object_type === 'structure.beam'
+}
+
+export function isWallObject(
+  obj: SmartObject
+): obj is SmartObject<WallModuleData> {
+  return obj.object_type === 'architecture.wall'
+}
+
+export function isDoorObject(
+  obj: SmartObject
+): obj is SmartObject<DoorModuleData> {
+  return obj.object_type === 'door_window.door'
+}
+
+export function isWindowObject(
+  obj: SmartObject
+): obj is SmartObject<WindowModuleData> {
+  return obj.object_type === 'door_window.window'
 }
 

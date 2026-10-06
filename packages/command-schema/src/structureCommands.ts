@@ -167,23 +167,43 @@ export interface StructuralTypeParameters {
   section_mm?: [number, number]
   /** Dimensions [width, length, thickness] in mm (for foundation) */
   size_mm?: [number, number, number]
+  /** Wall thickness in mm */
+  thickness_mm?: number
+  /** Element height in mm */
+  height_mm?: number
+  /** Door / Window width in mm */
+  width_mm?: number
+  /** Window sill height in mm */
+  sill_height_mm?: number
   material?: string
   foundation_type?: 'spread_footing' | 'pile_cap'
 }
 
+export type CatalogObjectType =
+  | 'structure.column'
+  | 'structure.foundation'
+  | 'structure.beam'
+  | 'architecture.wall'
+  | 'door_window.door'
+  | 'door_window.window'
+
 export interface DefineStructuralTypeInput {
   id?: string
-  object_type: 'structure.column' | 'structure.foundation' | 'structure.beam'
-  name: string // e.g. "C1", "F1", "B1"
+  object_type: CatalogObjectType
+  name: string // e.g. "C1", "F1", "B1", "W1", "D1"
   parameters: StructuralTypeParameters
 }
 
 export interface UpdateStructuralTypeDimensionsInput {
-  type_id_or_name: string // e.g. "C1", "B1" or type ID
+  type_id_or_name: string // e.g. "C1", "B1", "W1" or type ID
   type_name?: string
-  object_type?: 'structure.column' | 'structure.foundation' | 'structure.beam'
+  object_type?: CatalogObjectType
   section_mm?: [number, number]
   size_mm?: [number, number, number]
+  thickness_mm?: number
+  height_mm?: number
+  width_mm?: number
+  sill_height_mm?: number
   parameters?: StructuralTypeParameters
 }
 

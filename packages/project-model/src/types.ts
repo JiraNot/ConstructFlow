@@ -77,3 +77,45 @@ export interface BeamModuleData {
   engineering_status: 'preliminary' | 'engineer_approved' | 'as_built'
 }
 
+// -------------------------------------------------------------
+// Architecture & Openings Domain Module Payloads
+// -------------------------------------------------------------
+
+export interface WallModuleData {
+  mark: string // Human-readable mark, e.g. "W1", "W2"
+  start_point_mm: [number, number, number] // [x, y, z] in mm
+  end_point_mm: [number, number, number] // [x, y, z] in mm
+  thickness_mm: number // e.g. 100, 150, 200 mm
+  height_mm: number // e.g. 2800 mm
+  length_mm: number // computed length in mm
+  level_id: string
+  wall_type_id?: string
+  material: 'brick_masonry' | 'lightweight_block' | 'drywall' | 'reinforced_concrete' | string
+}
+
+export type DoorHanding = 'left_in' | 'left_out' | 'right_in' | 'right_out'
+
+export interface DoorModuleData {
+  mark: string // Human-readable mark, e.g. "D1", "D2"
+  wall_id: string // Host wall UUID
+  location_mm: [number, number, number] // Center point [x, y, z] along wall in mm
+  offset_along_wall_mm: number // Distance along wall from start_point_mm
+  width_mm: number // e.g. 800, 900, 1000 mm
+  height_mm: number // e.g. 2000, 2100 mm
+  handing: DoorHanding
+  level_id: string
+  door_type_id?: string
+}
+
+export interface WindowModuleData {
+  mark: string // Human-readable mark, e.g. "W1", "W2"
+  wall_id: string // Host wall UUID
+  location_mm: [number, number, number] // Center point [x, y, z] along wall in mm
+  offset_along_wall_mm: number // Distance along wall from start_point_mm
+  width_mm: number // e.g. 1200, 1800, 2400 mm
+  height_mm: number // e.g. 1200, 1500 mm
+  sill_height_mm: number // e.g. 800, 900 mm
+  level_id: string
+  window_type_id?: string
+}
+

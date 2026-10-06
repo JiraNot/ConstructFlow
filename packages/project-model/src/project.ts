@@ -109,7 +109,99 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
       material: 'reinforced_concrete',
     },
   },
+  // Walls
+  {
+    id: 'type-wall-w1',
+    object_type: 'architecture.wall',
+    name: 'W1',
+    parameters: {
+      thickness_mm: 100,
+      height_mm: 2800,
+      material: 'brick_masonry',
+    },
+  },
+  {
+    id: 'type-wall-w2',
+    object_type: 'architecture.wall',
+    name: 'W2',
+    parameters: {
+      thickness_mm: 150,
+      height_mm: 2800,
+      material: 'lightweight_block',
+    },
+  },
+  {
+    id: 'type-wall-w3',
+    object_type: 'architecture.wall',
+    name: 'W3',
+    parameters: {
+      thickness_mm: 200,
+      height_mm: 2800,
+      material: 'reinforced_concrete',
+    },
+  },
+  // Doors
+  {
+    id: 'type-door-d1',
+    object_type: 'door_window.door',
+    name: 'D1',
+    parameters: {
+      width_mm: 800,
+      height_mm: 2000,
+    },
+  },
+  {
+    id: 'type-door-d2',
+    object_type: 'door_window.door',
+    name: 'D2',
+    parameters: {
+      width_mm: 900,
+      height_mm: 2000,
+    },
+  },
+  {
+    id: 'type-door-d3',
+    object_type: 'door_window.door',
+    name: 'D3',
+    parameters: {
+      width_mm: 1000,
+      height_mm: 2100,
+    },
+  },
+  // Windows
+  {
+    id: 'type-window-w1',
+    object_type: 'door_window.window',
+    name: 'W1',
+    parameters: {
+      width_mm: 1200,
+      height_mm: 1200,
+      sill_height_mm: 900,
+    },
+  },
+  {
+    id: 'type-window-w2',
+    object_type: 'door_window.window',
+    name: 'W2',
+    parameters: {
+      width_mm: 1800,
+      height_mm: 1200,
+      sill_height_mm: 900,
+    },
+  },
+  {
+    id: 'type-window-w3',
+    object_type: 'door_window.window',
+    name: 'W3',
+    parameters: {
+      width_mm: 2400,
+      height_mm: 1500,
+      sill_height_mm: 800,
+    },
+  },
 ]
+
+export const DEFAULT_TYPES = DEFAULT_STRUCTURAL_TYPES
 
 export function createEmptyProjectDocument(
   id: string,
@@ -137,7 +229,7 @@ export function createEmptyProjectDocument(
     },
     levels: [defaultLevel],
     phases: DEFAULT_PHASES,
-    types: DEFAULT_STRUCTURAL_TYPES.map((t) => ({ ...t, parameters: { ...t.parameters } })),
+    types: DEFAULT_TYPES.map((t) => ({ ...t, parameters: { ...t.parameters } })),
     objects: {},
     relationships: [],
   }

@@ -342,14 +342,19 @@ module JiraNot
             definition = definition_from_input(input, runtime)
             group = geometry.create_group(runtime.active_model, definition)
             smart_object = runtime.smart_objects.create(
+              id: input[:id] || input['id'],
               entity: group,
               type: 'architecture.wall',
               owner_module: 'constructflow.architecture',
-              display_name: input[:display_name] || input['display_name'] || 'Wall',
+              display_name: input[:display_name] || input['display_name'] || (input[:mark] || input['mark'] ? "Wall #{input[:mark] || input['mark']}" : 'Wall'),
               created_phase: input[:created_phase] || input['created_phase'] || runtime.project.working_phase,
               level_refs: level_refs(input),
               source_state: input[:source_state] || input['source_state'] || 'confirmed'
             )
+            if (mark = input[:mark] || input['mark'])
+              store = Core::AttributeStore.new(group)
+              store.write('mark', mark.to_s)
+            end
             repository.write(group, definition)
             runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
             reconcile_wall_joins(runtime, repository, geometry: geometry, tolerance_mm: 50.0)
