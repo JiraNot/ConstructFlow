@@ -16,11 +16,6 @@ interface PropertiesPanelProps {
   onUpdateColumnMark: (objectId: string, newMark: string) => void
   onUpdateFoundationMark: (objectId: string, newMark: string) => void
   onUpdateGridTag: (objectId: string, newTag: string) => void
-  onUpdateTypeDimensions: (
-    typeName: string,
-    objectType: 'structure.column' | 'structure.foundation',
-    dimensions: { section_mm?: [number, number]; size_mm?: [number, number, number] }
-  ) => void
   onOpenTypeManager: () => void
   onAddFoundation: (columnId: string) => void
   onDeleteObject: (objectId: string) => void
@@ -33,7 +28,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateColumnMark,
   onUpdateFoundationMark,
   onUpdateGridTag,
-  onUpdateTypeDimensions,
   onOpenTypeManager,
   onAddFoundation,
   onDeleteObject,
@@ -54,26 +48,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         ? grdObj.module_data.tag
         : ''
 
-  // Inline dimensions draft
-  const [inlineColW, setInlineColW] = useState(200)
-  const [inlineColD, setInlineColD] = useState(200)
-  const [inlineFndW, setInlineFndW] = useState(800)
-  const [inlineFndL, setInlineFndL] = useState(800)
-  const [inlineFndT, setInlineFndT] = useState(300)
-  const [updateFeedback, setUpdateFeedback] = useState<string | null>(null)
-
   useEffect(() => {
     setEditingMark(currentMark)
-    if (colObj) {
-      setInlineColW(colObj.module_data.section_mm[0])
-      setInlineColD(colObj.module_data.section_mm[1])
-    }
-    if (fndObj) {
-      setInlineFndW(fndObj.module_data.size_mm[0])
-      setInlineFndL(fndObj.module_data.size_mm[1])
-      setInlineFndT(fndObj.module_data.size_mm[2])
-    }
-  }, [selectedId, currentMark, colObj?.module_data.section_mm?.[0], colObj?.module_data.section_mm?.[1], fndObj?.module_data.size_mm?.[0]])
+  }, [selectedId, currentMark])
 
   const handleCopyUUID = () => {
     if (!selectedId) return
@@ -93,25 +70,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       onUpdateGridTag(grdObj.id, val)
     }
     setEditingMark(val)
-  }
-
-  const handleUpdateColumnDims = () => {
-    if (!colObj) return
-    const w = Math.max(50, inlineColW || 200)
-    const d = Math.max(50, inlineColD || 200)
-    onUpdateTypeDimensions(colObj.module_data.mark, 'structure.column', { section_mm: [w, d] })
-    setUpdateFeedback('col')
-    setTimeout(() => setUpdateFeedback(null), 2000)
-  }
-
-  const handleUpdateFoundationDims = () => {
-    if (!fndObj) return
-    const w = Math.max(100, inlineFndW || 800)
-    const l = Math.max(100, inlineFndL || 800)
-    const t = Math.max(50, inlineFndT || 300)
-    onUpdateTypeDimensions(fndObj.module_data.mark, 'structure.foundation', { size_mm: [w, l, t] })
-    setUpdateFeedback('fnd')
-    setTimeout(() => setUpdateFeedback(null), 2000)
   }
 
   // Check if this column already has a hosted foundation
@@ -345,136 +303,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             )}
           </div>
 
-          {/* Inline Type Dimension Tuning for Column */}
-          {colObj && (
-            <div style={{
-              background: '#0b1329',
-              border: '1px solid #334155',
-              borderRadius: 6,
-              padding: '10px 12px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-              marginTop: 4,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label style={{ fontSize: 11, color: '#38bdf8', fontWeight: 700 }}>
-                  TYPE DIMENSIONS: {colObj.module_data.mark}
-                </label>
-                <span style={{ fontSize: 10, color: '#64748b' }}>All {colObj.module_data.mark} columns</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ fontSize: 11, color: '#94a3b8' }}>W:</span>
-                  <input
-                    type="number"
-                    step={50}
-                    value={inlineColW}
-                    onChange={(e) => setInlineColW(Number(e.target.value))}
-                    onKeyDown={(e) => e.key === 'Enter' && handleUpdateColumnDims()}
-                    style={{ width: '100%', background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 12, textAlign: 'center' }}
-                  />
-                </div>
-                <span style={{ color: '#64748b' }}>×</span>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ fontSize: 11, color: '#94a3b8' }}>D:</span>
-                  <input
-                    type="number"
-                    step={50}
-                    value={inlineColD}
-                    onChange={(e) => setInlineColD(Number(e.target.value))}
-                    onKeyDown={(e) => e.key === 'Enter' && handleUpdateColumnDims()}
-                    style={{ width: '100%', background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 12, textAlign: 'center' }}
-                  />
-                </div>
-                <button
-                  onClick={handleUpdateColumnDims}
-                  title="Update dimensions for all columns of this type (Enter to save)"
-                  style={{
-                    background: updateFeedback === 'col' ? '#16a34a' : '#0284c7',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 4,
-                    padding: '5px 10px',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {updateFeedback === 'col' ? 'Saved ✓' : 'Update'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Inline Type Dimension Tuning for Foundation */}
-          {fndObj && (
-            <div style={{
-              background: '#0b1329',
-              border: '1px solid #334155',
-              borderRadius: 6,
-              padding: '10px 12px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-              marginTop: 4,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700 }}>
-                  TYPE DIMENSIONS: {fndObj.module_data.mark}
-                </label>
-                <span style={{ fontSize: 10, color: '#64748b' }}>All {fndObj.module_data.mark} footings</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <input
-                  type="number"
-                  step={100}
-                  value={inlineFndW}
-                  onChange={(e) => setInlineFndW(Number(e.target.value))}
-                  onKeyDown={(e) => e.key === 'Enter' && handleUpdateFoundationDims()}
-                  style={{ flex: 1, background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 11, textAlign: 'center' }}
-                />
-                <span style={{ color: '#64748b' }}>×</span>
-                <input
-                  type="number"
-                  step={100}
-                  value={inlineFndL}
-                  onChange={(e) => setInlineFndL(Number(e.target.value))}
-                  onKeyDown={(e) => e.key === 'Enter' && handleUpdateFoundationDims()}
-                  style={{ flex: 1, background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 11, textAlign: 'center' }}
-                />
-                <span style={{ color: '#64748b' }}>×</span>
-                <input
-                  type="number"
-                  step={50}
-                  value={inlineFndT}
-                  onChange={(e) => setInlineFndT(Number(e.target.value))}
-                  onKeyDown={(e) => e.key === 'Enter' && handleUpdateFoundationDims()}
-                  style={{ flex: 1, background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 11, textAlign: 'center' }}
-                />
-                <button
-                  onClick={handleUpdateFoundationDims}
-                  title="Update dimensions for all footings of this type (Enter to save)"
-                  style={{
-                    background: updateFeedback === 'fnd' ? '#16a34a' : '#d97706',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 4,
-                    padding: '5px 10px',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {updateFeedback === 'fnd' ? 'Saved ✓' : 'Update'}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -526,23 +354,85 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       {/* Cross-section / Size */}
       {colObj && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
-            SECTION (MM)
-          </label>
-          <div style={{ background: '#0f172a', padding: '6px 8px', borderRadius: 6, fontSize: 12 }}>
-            {colObj.module_data.section_mm[0]} × {colObj.module_data.section_mm[1]} mm
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+              SECTION (MM)
+            </label>
+            <button
+              onClick={onOpenTypeManager}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#38bdf8',
+                fontSize: 11,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                padding: 0,
+              }}
+            >
+              แก้ไขใน Manage Types
+            </button>
           </div>
+          <div style={{
+            background: '#0f172a',
+            padding: '7px 10px',
+            borderRadius: 6,
+            fontSize: 13,
+            fontWeight: 700,
+            color: '#38bdf8',
+            border: '1px solid #1e293b',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}>
+            <span>{colObj.module_data.section_mm[0]} × {colObj.module_data.section_mm[1]} mm</span>
+            <span style={{ fontSize: 10, color: '#64748b', fontWeight: 500 }}>Type {colObj.module_data.mark}</span>
+          </div>
+          <span style={{ fontSize: 10, color: '#64748b' }}>
+            * ขนาดเสาถูกควบคุมโดย Type (เปลี่ยนขนาดได้ที่หน้า Manage Types)
+          </span>
         </div>
       )}
 
       {fndObj && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
-            FOOTING SIZE (MM)
-          </label>
-          <div style={{ background: '#0f172a', padding: '6px 8px', borderRadius: 6, fontSize: 12 }}>
-            {fndObj.module_data.size_mm[0]} × {fndObj.module_data.size_mm[1]} × {fndObj.module_data.size_mm[2]} mm
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+              FOOTING SIZE (MM)
+            </label>
+            <button
+              onClick={onOpenTypeManager}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#f59e0b',
+                fontSize: 11,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                padding: 0,
+              }}
+            >
+              แก้ไขใน Manage Types
+            </button>
           </div>
+          <div style={{
+            background: '#0f172a',
+            padding: '7px 10px',
+            borderRadius: 6,
+            fontSize: 13,
+            fontWeight: 700,
+            color: '#f59e0b',
+            border: '1px solid #1e293b',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}>
+            <span>{fndObj.module_data.size_mm[0]} × {fndObj.module_data.size_mm[1]} × {fndObj.module_data.size_mm[2]} mm</span>
+            <span style={{ fontSize: 10, color: '#64748b', fontWeight: 500 }}>Type {fndObj.module_data.mark}</span>
+          </div>
+          <span style={{ fontSize: 10, color: '#64748b' }}>
+            * ขนาดฐานรากถูกควบคุมโดย Type (เปลี่ยนขนาดได้ที่หน้า Manage Types)
+          </span>
         </div>
       )}
 

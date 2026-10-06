@@ -571,7 +571,6 @@ export const App: React.FC = () => {
             onUpdateColumnMark={handleUpdateColumnMark}
             onUpdateFoundationMark={handleUpdateFoundationMark}
             onUpdateGridTag={handleUpdateGridTag}
-            onUpdateTypeDimensions={handleUpdateTypeDimensions}
             onOpenTypeManager={() => setIsTypeManagerOpen(true)}
             onAddFoundation={(colId) => handleCommitFoundation({ columnId: colId })}
             onDeleteObject={handleDeleteObject}

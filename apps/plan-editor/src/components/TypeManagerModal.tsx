@@ -264,6 +264,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
                             ...d,
                             [t.id]: { w: Number(e.target.value), d: currentD },
                           }))}
+                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateColDimensions(t)}
                           style={{
                             width: 65,
                             background: '#0f172a',
@@ -291,6 +292,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
                             ...d,
                             [t.id]: { w: currentW, d: Number(e.target.value) },
                           }))}
+                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateColDimensions(t)}
                           style={{
                             width: 65,
                             background: '#0f172a',
@@ -369,6 +371,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
                           ...d,
                           [t.id]: { w: Number(e.target.value), l: currentL, t: currentT, d: currentL },
                         }))}
+                        onKeyDown={(e) => e.key === 'Enter' && handleUpdateFndDimensions(t)}
                         style={{
                           width: 58,
                           background: '#0f172a',
@@ -389,6 +392,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
                           ...d,
                           [t.id]: { w: currentW, l: Number(e.target.value), t: currentT, d: Number(e.target.value) },
                         }))}
+                        onKeyDown={(e) => e.key === 'Enter' && handleUpdateFndDimensions(t)}
                         style={{
                           width: 58,
                           background: '#0f172a',
@@ -409,6 +413,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
                           ...d,
                           [t.id]: { w: currentW, l: currentL, t: Number(e.target.value), d: currentL },
                         }))}
+                        onKeyDown={(e) => e.key === 'Enter' && handleUpdateFndDimensions(t)}
                         style={{
                           width: 54,
                           background: '#0f172a',
