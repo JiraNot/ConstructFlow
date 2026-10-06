@@ -20,9 +20,8 @@
     </div>
   </div>
   <div class="header-actions">
-    <div class="unit-toggle-wrap" title="สลับหน่วยวัด (Unit)">
-      <button class="unit-btn active" id="unit-btn-m" data-unit="m">ม. (m)</button>
-      <button class="unit-btn" id="unit-btn-mm" data-unit="mm">มม. (mm)</button>
+    <div class="unit-toggle-wrap" title="ConstructFlow ใช้หน่วยเมตรเท่านั้น">
+      <button class="unit-btn active" id="unit-btn-m" data-unit="m" type="button">เมตร (m)</button>
     </div>
     <button id="btn-help-modal" class="header-help-btn" title="ดูคู่มือคีย์ลัดและวิธีใช้งาน (Shortcuts & Help)">❓ คู่มือ</button>
   </div>
@@ -568,20 +567,20 @@
         </div>
         <div class="drawer-inputs-row">
           <div class="drawer-field">
-            <label>กรอบลึก (มม.):</label>
-            <input type="number" id="dw-depth" step="5" value="100">
+            <label>กรอบลึก (ม.):</label>
+            <input type="number" id="dw-depth" step="0.005" value="0.100">
           </div>
           <div class="drawer-field">
-            <label>หนาบาน (มม.):</label>
-            <input type="number" id="dw-leaf" step="5" value="40">
+            <label>หนาบาน (ม.):</label>
+            <input type="number" id="dw-leaf" step="0.005" value="0.040">
           </div>
           <div class="drawer-field">
-            <label>เสากลาง (มม.):</label>
-            <input type="number" id="dw-mullion" step="5" value="0">
+            <label>เสากลาง (ม.):</label>
+            <input type="number" id="dw-mullion" step="0.005" value="0">
           </div>
           <div class="drawer-field">
-            <label>ระยะเกล็ด (มม.):</label>
-            <input type="number" id="dw-louver" step="10" value="80">
+            <label>ระยะเกล็ด (ม.):</label>
+            <input type="number" id="dw-louver" step="0.01" value="0.080">
           </div>
         </div>
       </div>
@@ -752,24 +751,22 @@
             <label>ชนิดฐานราก</label>
             <select id="fnd-type">
               <option value="spread_footing">Spread Footing (แผ่)</option>
-              <option value="strip_footing">Strip Footing (แนวยาว)</option>
               <option value="pile_cap">Pile Cap (เสาเข็ม)</option>
-              <option value="raft">Raft Foundation (แพ)</option>
             </select>
           </div>
         </div>
         <div class="field-row cols-3">
           <div class="field">
             <label class="unit-lbl">กว้าง W (ม.)</label>
-            <input type="number" id="fnd-w" value="1000" step="50">
+            <input type="number" id="fnd-w" value="1.00" step="0.05">
           </div>
           <div class="field">
             <label class="unit-lbl">ยาว L (ม.)</label>
-            <input type="number" id="fnd-l" value="1000" step="50">
+            <input type="number" id="fnd-l" value="1.00" step="0.05">
           </div>
           <div class="field">
             <label class="unit-lbl">หนา D (ม.)</label>
-            <input type="number" id="fnd-d" value="400" step="50">
+            <input type="number" id="fnd-d" value="0.40" step="0.05">
           </div>
         </div>
         <button class="btn btn-primary" data-action="placeFoundation" data-tip-title="🟫 ฐานรากโครงสร้าง (Foundation)" data-tip-sc="FD" data-tip-desc="วางฐานรากแผ่อิงระดับชั้น" data-tip-mouse="คลิกตำแหน่งเพื่อวางฐานราก" data-tip-keys="Esc: ยกเลิก">🟫 วางฐานราก <span class="shortcut-badge">FD</span></button>
@@ -850,15 +847,15 @@
         <div class="field-row cols-3">
           <div class="field">
             <label class="unit-lbl">กว้าง (ม.)</label>
-            <input type="number" id="col-w" value="0.20" step="0.05">
+            <input type="number" id="col-w" value="0.20" step="0.01">
           </div>
           <div class="field">
             <label class="unit-lbl">ลึก (ม.)</label>
-            <input type="number" id="col-d" value="0.20" step="0.05">
+            <input type="number" id="col-d" value="0.20" step="0.01">
           </div>
           <div class="field">
             <label class="unit-lbl">สูง (ม.)</label>
-            <input type="number" id="col-h" value="2.80" step="0.10">
+            <input type="number" id="col-h" value="2.80" step="0.05">
           </div>
         </div>
         <div class="field-row cols-2">
@@ -962,11 +959,11 @@
         <div class="field-row cols-2">
           <div class="field">
             <label class="unit-lbl">กว้าง (ม.)</label>
-            <input type="number" id="bm-w" value="0.20" step="0.05">
+            <input type="number" id="bm-w" value="0.20" step="0.01">
           </div>
           <div class="field">
             <label class="unit-lbl">ลึก (ม.)</label>
-            <input type="number" id="bm-d" value="0.40" step="0.05">
+            <input type="number" id="bm-d" value="0.40" step="0.01">
           </div>
         </div>
         <div class="field">
@@ -1035,11 +1032,11 @@
         <div class="field-row cols-2">
           <div class="field">
             <label class="unit-lbl">หนา (ม.)</label>
-            <input type="number" id="wall-thick" value="100" step="25">
+            <input type="number" id="wall-thick" value="0.10" step="0.01">
           </div>
           <div class="field">
             <label class="unit-lbl">สูง (ม.)</label>
-            <input type="number" id="wall-height" value="2800" step="100">
+            <input type="number" id="wall-height" value="2.80" step="0.05">
           </div>
         </div>
         <div class="field-row">
@@ -1065,15 +1062,15 @@
         <div class="field-row cols-3">
           <div class="field">
             <label class="unit-lbl">กว้าง (ม.)</label>
-            <input type="number" id="op-w" value="900" step="50">
+            <input type="number" id="op-w" value="0.90" step="0.05">
           </div>
           <div class="field">
             <label class="unit-lbl">สูง (ม.)</label>
-            <input type="number" id="op-h" value="2050" step="50">
+            <input type="number" id="op-h" value="2.05" step="0.05">
           </div>
           <div class="field">
             <label class="unit-lbl">Sill (ม.)</label>
-            <input type="number" id="op-sill" value="0" step="50">
+            <input type="number" id="op-sill" value="0" step="0.05">
           </div>
         </div>
         <button class="btn btn-primary" data-action="cutOpening" data-tip-title="🔲 เจาะช่องเปิดผนัง (Wall Opening)" data-tip-sc="OP" data-tip-desc="เจาะช่องเปิดบนผนังเพื่อเตรียมติดตั้งประตู/หน้าต่าง" data-tip-mouse="เลื่อนชี้บนระนาบผนัง ➔ คลิกตำแหน่งที่ต้องการเจาะ" data-tip-keys="Esc: ยกเลิก">🔲 เจาะช่องเปิด <span class="shortcut-badge">OP</span></button>
@@ -1406,7 +1403,7 @@
         <div class="field-row cols-2">
           <div class="field">
             <label class="unit-lbl">ขนาดบ่อ (ม.)</label>
-            <input type="number" id="mh-size" value="600" step="100">
+            <input type="number" id="mh-size" value="0.60" step="0.05">
           </div>
           <div class="field">
             <label class="unit-lbl">ระดับฝา (ม.)</label>
@@ -1438,7 +1435,7 @@
         <div class="field-row cols-2">
           <div class="field">
             <label class="unit-lbl">เส้นผ่าศูนย์กลาง (ม.)</label>
-            <input type="number" id="pipe-dia" value="100" step="25">
+            <input type="number" id="pipe-dia" value="0.10" step="0.005">
           </div>
           <div class="field">
             <label>ระบบท่อ</label>
@@ -1510,7 +1507,7 @@
         <div class="field-row cols-2">
           <div class="field">
             <label class="unit-lbl">ระดับฝ้า Z (ม.)</label>
-            <input type="number" id="cond-cz" value="2600" step="100">
+            <input type="number" id="cond-cz" value="2.60" step="0.05">
           </div>
           <div class="field">
             <label>กลยุทธ์เดินสาย</label>
@@ -1578,15 +1575,15 @@
         <div class="field-row cols-3">
           <div class="field">
             <label class="unit-lbl">กว้าง (ม.)</label>
-            <input type="number" id="cab-w" value="1800" step="100">
+            <input type="number" id="cab-w" value="1.80" step="0.05">
           </div>
           <div class="field">
             <label class="unit-lbl">สูง (ม.)</label>
-            <input type="number" id="cab-h" value="850" step="50">
+            <input type="number" id="cab-h" value="0.85" step="0.05">
           </div>
           <div class="field">
             <label class="unit-lbl">ลึก (ม.)</label>
-            <input type="number" id="cab-d" value="600" step="50">
+            <input type="number" id="cab-d" value="0.60" step="0.05">
           </div>
         </div>
         <div class="field-row cols-2">
@@ -1614,15 +1611,15 @@
         <div class="field-row cols-3">
           <div class="field">
             <label class="unit-lbl">กว้าง (ม.)</label>
-            <input type="number" id="wd-w" value="1800" step="100">
+            <input type="number" id="wd-w" value="1.80" step="0.05">
           </div>
           <div class="field">
             <label class="unit-lbl">สูง (ม.)</label>
-            <input type="number" id="wd-h" value="2400" step="100">
+            <input type="number" id="wd-h" value="2.40" step="0.05">
           </div>
           <div class="field">
             <label class="unit-lbl">ลึก (ม.)</label>
-            <input type="number" id="wd-d" value="600" step="50">
+            <input type="number" id="wd-d" value="0.60" step="0.05">
           </div>
         </div>
         <div class="field-row">
@@ -1835,7 +1832,7 @@
         <div class="field-row cols-2">
           <div class="field">
             <label class="unit-lbl">ระดับสูง (ม.)</label>
-            <input type="number" id="level-elev" value="3000" step="100">
+            <input type="number" id="level-elev" value="3.00" step="0.05">
           </div>
           <div class="field">
             <label>ประเภท</label>

@@ -52,7 +52,7 @@ module JiraNot
             defaults = ['hip', '30.0', '0.80', '0.15', '0.20', 'yes']
             list = ['hip|gable|shed|flat', '', '', '', '', 'yes|no']
 
-            results = UI.inputbox(prompts, defaults, list, 'ConstructFlow - หลังคา Auto แบบ Revit (Roof by Footprint)')
+            results = JiraNot::ConstructFlow::Core::Units.meter_inputbox(prompts, defaults, list, 'ConstructFlow - หลังคา Auto แบบ Revit (Roof by Footprint)')
             return unless results
 
             form = results[0].to_s

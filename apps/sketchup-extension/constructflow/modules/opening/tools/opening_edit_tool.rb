@@ -129,8 +129,9 @@ module JiraNot
             view.line_width = 3
             view.drawing_color = @opening ? 'blue' : 'cyan'
             view.draw(GL_LINES, points)
-            label = @opening ? format('Opening %.0f mm', definition.width_mm) : 'Click Opening to edit'
-            view.draw_text(points[0], label)
+            label = @opening ? format('Opening %.2f m', definition.width_mm / 1000.0) : 'Click Opening to edit'
+            screen = view.respond_to?(:screen_coords) ? view.screen_coords(points[0]) : nil
+            view.draw_text(Geom::Point3d.new(screen.x, screen.y, 0), label) if screen
           rescue StandardError
             nil
           end

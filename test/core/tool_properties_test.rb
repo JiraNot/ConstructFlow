@@ -78,7 +78,7 @@ class ToolPropertiesTest < Minitest::Test
   def test_collect_prompt_confirm_coerces_values_and_saves_defaults
     runtime = build_test_runtime
 
-    with_ui_inputbox(['250', '3200', 'level_x']) do
+    with_ui_inputbox(['0.25', '3.2', 'level_x']) do
       values = Props.collect(runtime, 'WA', prompt: true, title: 'Wall')
       assert_equal 250.0, values[:thickness_mm]
       assert_equal 3200.0, values[:height_mm]
@@ -112,7 +112,7 @@ class ToolPropertiesTest < Minitest::Test
   def test_optional_float_fields_accept_blank_as_nil
     runtime = build_test_runtime
 
-    with_ui_inputbox(['600', '600', '', '', '']) do
+    with_ui_inputbox(['0.6', '0.6', '', '', '']) do
       values = Props.collect(runtime, 'MH', prompt: true, title: 'Manhole')
       assert_equal 600.0, values[:size_width_mm]
       assert_nil values[:cover_level_mm]
@@ -130,7 +130,7 @@ class ToolPropertiesTest < Minitest::Test
   def test_roof_framing_collect_confirm_coerces_and_saves_defaults
     runtime = build_test_runtime
 
-    with_ui_inputbox(['35', '1200', '400', '900', 'shed']) do
+    with_ui_inputbox(['35', '1.2', '0.4', '0.9', 'shed']) do
       values = Props.collect(runtime, 'FRM', prompt: true, title: 'Roof Framing')
       assert_equal 35.0, values[:pitch_degrees]
       assert_equal 1200.0, values[:truss_spacing_mm]

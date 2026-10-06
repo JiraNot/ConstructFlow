@@ -13,7 +13,7 @@ module JiraNot
           optional_capabilities: %w[drainage.network roof.frame_intent site.ground_reference],
           provides: %w[structure.coordination structure.quantity],
           objects: %w[structure.grid structure.beam structure.column structure.foundation structure.rebar_set],
-          commands: %w[CreateStructuralGrid ModifyStructuralGrid CreateBeam ModifyBeamPath CreateColumn EditColumnSchedule GenerateFoundation AssignRebarSet ModifyRebarSet],
+          commands: %w[CreateStructuralGrid ModifyStructuralGrid CreateBeam ModifyBeamPath CreateColumn EditColumnSchedule CreateFoundation GenerateFoundation AssignRebarSet ModifyRebarSet],
           events: %w[StructuralMemberCreated FoundationGenerated RebarSetAssigned RebarSetChanged GeometryChanged QuantityDirty DrawingDirty ValidationStateChanged],
           providers: ['constructflow.structure.quantity'],
           validators: %w[structure.column.validity structure.foundation.validity structure.rebar.validity]
@@ -30,7 +30,7 @@ module JiraNot
             { id: 'engineering_status', label: 'Engineering Status', field_type: 'text', editable: true, scope: 'instance' },
             { id: 'length_m', label: 'Length (m)', field_type: 'number', calculated: true },
             { id: 'volume_m3', label: 'Volume (m³)', field_type: 'number', calculated: true },
-            { id: 'section_mm', label: 'Section (mm)', field_type: 'text', calculated: true }
+            { id: 'section_mm', label: 'Section (stock mm)', field_type: 'text', calculated: true }
           ]
         ).freeze
 
@@ -43,7 +43,7 @@ module JiraNot
             { id: 'engineering_status', label: 'Engineering Status', field_type: 'text', editable: true, scope: 'instance' },
             { id: 'height_m', label: 'Height (m)', field_type: 'number', calculated: true },
             { id: 'volume_m3', label: 'Volume (m³)', field_type: 'number', calculated: true },
-            { id: 'section_mm', label: 'Section (mm)', field_type: 'text', calculated: true }
+            { id: 'section_mm', label: 'Section (stock mm)', field_type: 'text', calculated: true }
           ]
         ).freeze
 
@@ -84,7 +84,14 @@ module JiraNot
         end
 
         def install(runtime)
-          return if runtime.modules.registered?('constructflow.structure')
+          if runtime.modules.registered?('constructflow.structure')
+            repository = Repository.new
+            geometry = Geometry.new
+            validator = Validators::StructureValidator.new
+            register_create_foundation(runtime, repository, geometry, validator) unless runtime.commands.registered?('CreateFoundation')
+            register_generate_foundation(runtime, repository, geometry, validator) unless runtime.commands.registered?('GenerateFoundation')
+            return
+          end
 
           runtime.module_loader.load(MANIFEST)
           repository = Repository.new
@@ -108,6 +115,7 @@ module JiraNot
           register_column_schedule_command(runtime, repository, geometry)
           register_grid_commands(runtime, repository, GridGeometry.new)
           register_beam_commands(runtime, repository, BeamGeometry.new)
+          register_create_foundation(runtime, repository, geometry, validator)
           register_generate_foundation(runtime, repository, geometry, validator)
           register_assign_rebar(runtime, repository, geometry, validator, coordination)
           register_modify_rebar(runtime, repository, geometry, validator, coordination)
@@ -323,6 +331,49 @@ module JiraNot
                 { name: 'QuantityDirty', object_ids: [object.id] },
                 { name: 'DrawingDirty', object_ids: [object.id] },
                 { name: 'ScheduleDirty', object_ids: [object.id], payload: { schedule_id: BEAM_SCHEDULE.id } }
+              ]
+            }
+          end
+        end
+
+        def register_create_foundation(runtime, repository, geometry, validator)
+          runtime.commands.register(
+            'CreateFoundation',
+            owner_module: MANIFEST[:id],
+            validator: lambda { |command|
+              begin
+                definition = foundation_definition_at_location(command[:input])
+                issues = validator.validate_foundation(definition)
+                issues.select { |issue| issue[:severity] == 'error' }.map { |issue| issue[:message] }
+              rescue StandardError => error
+                [error.message]
+              end
+            }
+          ) do |command|
+            input = command[:input]
+            definition = foundation_definition_at_location(input)
+            group = geometry.create_foundation_group(runtime.active_model, definition)
+            foundation = runtime.smart_objects.create(
+              entity: group,
+              type: 'structure.foundation',
+              owner_module: MANIFEST[:id],
+              display_name: input[:display_name] || input['display_name'] || definition.foundation_type.tr('_', ' ').capitalize,
+              created_phase: input[:created_phase] || input['created_phase'] || runtime.project.working_phase,
+              source_state: input[:source_state] || input['source_state'] || 'confirmed'
+            )
+            repository.write_foundation(group, definition)
+            runtime.smart_objects.mark_dirty(group, 'dirty_quantity', 'dirty_drawing')
+            issues = validator.validate_foundation(definition)
+
+            {
+              created_object_ids: [foundation.id],
+              warnings: warning_messages(issues),
+              events: [
+                { name: 'ObjectCreated', object_ids: [foundation.id], payload: { type: 'structure.foundation' } },
+                { name: 'GeometryChanged', object_ids: [foundation.id] },
+                { name: 'QuantityDirty', object_ids: [foundation.id] },
+                { name: 'DrawingDirty', object_ids: [foundation.id] },
+                { name: 'ValidationStateChanged', object_ids: [foundation.id], payload: { issues: issues } }
               ]
             }
           end
@@ -728,8 +779,28 @@ module JiraNot
           Math.sqrt(((point[0] - projected[0])**2) + ((point[1] - projected[1])**2))
         end
 
+        def foundation_definition_at_location(input)
+          location = input[:location_mm] || input['location_mm']
+          raise ArgumentError, 'foundation placement location required' unless location
+
+          type = input[:foundation_type] || input['foundation_type'] || 'spread_footing'
+          FoundationDefinition.new(
+            center_mm: location,
+            size_mm: input[:size_mm] || input['size_mm'] || [800, 800, 300],
+            top_elevation_mm: input[:top_elevation_mm] || input['top_elevation_mm'] || Array(location)[2] || 0,
+            foundation_type: type,
+            material: input[:material] || input['material'] || 'reinforced_concrete',
+            engineering_status: input[:engineering_status] || input['engineering_status'] || 'preliminary'
+          )
+        end
+
         def foundation_definition_from_input(input, column, column_definition)
-          center = [column_definition.location_mm[0], column_definition.location_mm[1], column_definition.base_elevation_mm]
+          location = input[:location_mm] || input['location_mm']
+          center = if location && Array(location).length >= 2
+                     [Float(location[0]), Float(location[1]), column_definition.base_elevation_mm]
+                   else
+                     [column_definition.location_mm[0], column_definition.location_mm[1], column_definition.base_elevation_mm]
+                   end
           FoundationDefinition.new(
             center_mm: center,
             size_mm: input[:size_mm] || input['size_mm'] || [800, 800, 300],
@@ -1004,7 +1075,7 @@ module JiraNot
         def install_ui(runtime)
           menu = runtime.menu.add_submenu('Structure')
           menu.add_item('Draw Structural Beam in Plan') do
-            values = UI.inputbox(['Width (mm)', 'Depth (mm)', 'Base Level ID', 'Offset (mm)'], ['200', '300', '', '0'], 'ConstructFlow Structural Beam')
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Width (mm)', 'Depth (mm)', 'Base Level ID', 'Offset (mm)'], ['200', '300', '', '0'], 'ConstructFlow Structural Beam', nil, millimeter_indices: [0, 1, 3])
             next unless values
             runtime.active_model.select_tool(
               Tools::BeamTool.new(runtime: runtime, section_mm: [Float(values[0]), Float(values[1])], level_id: values[2].to_s, base_offset_mm: Float(values[3]))
@@ -1026,7 +1097,7 @@ module JiraNot
           end
 
           menu.add_item('Draw Structural Grid in Plan') do
-            values = UI.inputbox(['Grid name', 'Level ID', 'Offset (mm)'], ['A', '', '0'], 'ConstructFlow Structural Grid')
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Grid name', 'Level ID', 'Offset (mm)'], ['A', '', '0'], 'ConstructFlow Structural Grid', nil, millimeter_indices: [2])
             next unless values
             runtime.active_model.select_tool(
               Tools::GridTool.new(runtime: runtime, name: values[0].to_s, level_id: values[1].to_s, offset_mm: Float(values[2]))
@@ -1048,10 +1119,12 @@ module JiraNot
           end
 
           menu.add_item('Place Structural Column') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Width (mm)', 'Depth (mm)', 'Height (mm)', 'Base level ID', 'Top level ID'],
               ['200', '200', '2800', '', ''],
-              'ConstructFlow Structural Column — Preliminary'
+              'ConstructFlow Structural Column — Preliminary',
+              nil,
+              millimeter_indices: [0, 1, 2]
             )
             next unless values
             runtime.active_model.select_tool(
@@ -1073,10 +1146,12 @@ module JiraNot
               UI.messagebox('Select one ConstructFlow structural column first.')
               next
             end
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Foundation type', 'Width (mm)', 'Length (mm)', 'Thickness (mm)'],
               ['spread_footing', '800', '800', '300'],
-              'ConstructFlow Foundation — Preliminary'
+              'ConstructFlow Foundation — Preliminary',
+              nil,
+              millimeter_indices: [1, 2, 3]
             )
             next unless values
             result = runtime.commands.execute(
@@ -1100,10 +1175,12 @@ module JiraNot
               UI.messagebox('Select one structural column or foundation first.')
               next
             end
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Diameter (mm)', 'Bar count', 'Length each (mm, 0=auto)', 'Role', 'Cover (mm)'],
               ['12', '4', '0', 'main_bottom', '40'],
-              'ConstructFlow Rebar Set — Preliminary'
+              'ConstructFlow Rebar Set — Preliminary',
+              nil,
+              millimeter_indices: [0, 2, 4]
             )
             next unless values
             length = Float(values[2])

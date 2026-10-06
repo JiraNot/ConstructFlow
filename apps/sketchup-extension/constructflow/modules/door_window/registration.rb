@@ -30,9 +30,9 @@ module JiraNot
             { id: 'handing', label: 'Handing', field_type: 'text', editable: true, scope: 'instance' },
             { id: 'type_id', label: 'Type', field_type: 'text', editable: true, scope: 'instance' },
             { id: 'frame_material', label: 'Frame', field_type: 'text', editable: true, scope: 'type' },
-            { id: 'width_mm', label: 'Width (mm)', field_type: 'number', calculated: true },
-            { id: 'height_mm', label: 'Height (mm)', field_type: 'number', calculated: true },
-            { id: 'area_mm2', label: 'Area (mm²)', field_type: 'number', calculated: true }
+            { id: 'width_mm', label: 'Width (m)', field_type: 'number', calculated: true },
+            { id: 'height_mm', label: 'Height (m)', field_type: 'number', calculated: true },
+            { id: 'area_mm2', label: 'Area (m²)', field_type: 'number', calculated: true }
           ]
         ).freeze
 
@@ -48,9 +48,9 @@ module JiraNot
                 handing: instance.handing,
                 type_id: type.id,
                 frame_material: type.frame_material,
-                width_mm: type.width_mm,
-                height_mm: type.height_mm,
-                area_mm2: type.width_mm * type.height_mm
+                width_mm: type.width_mm / 1000.0,
+                height_mm: type.height_mm / 1000.0,
+                area_mm2: type.width_mm * type.height_mm / 1_000_000.0
               }
             },
             updater: lambda { |change| schedule_update_result(runtime, change) }
@@ -810,7 +810,7 @@ module JiraNot
               next
             end
 
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Category (door/window)', 'Operation (fixed/sliding/swing/swing_double/casement/awning/hopper/pivot/louver/shutter)', 'Frame material', 'Panel style'],
               ['window', 'fixed', 'aluminium', 'glazed'],
               'ConstructFlow Door / Window'
@@ -833,7 +833,7 @@ module JiraNot
             UI.messagebox(error.message)
           end
           menu.add_item('Place Door/Window in Architecture Plan') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Category (door/window)', 'Operation (fixed/sliding/swing/swing_double/casement/awning/hopper/pivot/louver/shutter)', 'Frame material', 'Panel style', 'Handing', 'Schedule mark', 'Width (mm)', 'Height (mm)', 'Sill (mm)', 'Base level ID (optional)'],
               ['window', 'fixed', 'aluminium', 'glazed', 'default', '', '900', '2100', '0', ''],
               'ConstructFlow Plan Door / Window'

@@ -52,7 +52,7 @@ module JiraNot
         end
 
         def edit_project(runtime)
-          values = UI.inputbox(
+          values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
             ['ชื่อโครงการ', 'รหัสโครงการ'],
             [runtime.project.project_name, runtime.project.project_code.to_s],
             'ConstructFlow ตั้งค่าโครงการ'
@@ -70,8 +70,8 @@ module JiraNot
         end
 
         def create_level(runtime)
-          values = UI.inputbox(
-            ['รหัสระดับชั้น', 'ชื่อระดับชั้น', 'ระดับความสูง (มม.)', 'ชนิด (FFL/SL)'],
+          values = Units.meter_inputbox(
+            ['รหัสระดับชั้น', 'ชื่อระดับชั้น', 'ระดับความสูง (m)', 'ชนิด (FFL/SL)'],
             ['', '', '0', 'FFL'],
             'ConstructFlow สร้างระดับชั้น'
           )
@@ -89,8 +89,8 @@ module JiraNot
         end
 
         def edit_level(runtime)
-          values = UI.inputbox(
-            ['รหัสระดับชั้น', 'ชื่อระดับชั้น', 'ระดับความสูง (มม.)', 'ชนิด (FFL/SL)'],
+          values = Units.meter_inputbox(
+            ['รหัสระดับชั้น', 'ชื่อระดับชั้น', 'ระดับความสูง (m)', 'ชนิด (FFL/SL)'],
             ['', '', '0', 'FFL'],
             'ConstructFlow แก้ไขระดับชั้น'
           )
@@ -109,7 +109,7 @@ module JiraNot
 
         def show_levels(runtime)
           levels = runtime.levels.each.map do |level|
-            elevation = level.elevation_mm.nil? ? 'unknown elevation' : "#{level.elevation_mm} mm"
+            elevation = level.elevation_mm.nil? ? 'unknown elevation' : Units.format_length(level.elevation_mm)
             "#{level.id} — #{level.name} — #{elevation}"
           end
           UI.messagebox(levels.empty? ? 'ยังไม่มีระดับชั้นในโครงการ' : levels.join("\n"))
@@ -117,7 +117,7 @@ module JiraNot
 
         def show_inspector(runtime)
           recent = runtime.diagnostics.recent(5).map { |entry| "[#{entry.severity}] #{entry.code}: #{entry.message}" }
-          level_names = runtime.levels ? runtime.levels.map { |l| "  • #{l.name} (#{l.elevation_mm || 0} mm)" } : []
+          level_names = runtime.levels ? runtime.levels.map { |l| "  • #{l.name} (#{Units.format_length(l.elevation_mm || 0)})" } : []
           message = [
             'ConstructFlow - ตรวจสอบสถานะโครงการ',
             "รหัสโครงการ: #{runtime.project&.project_id || '-'}",

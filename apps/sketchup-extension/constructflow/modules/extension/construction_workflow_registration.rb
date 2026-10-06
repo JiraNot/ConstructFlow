@@ -70,7 +70,7 @@ module JiraNot
               UI.messagebox('Select one ConstructFlow extension zone first.') if defined?(UI)
               next
             end
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Revision', 'Issue status', 'Strict QA?'],
               ['P01', 'working', 'No'],
               'ConstructFlow Construction Package'

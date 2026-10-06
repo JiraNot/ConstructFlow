@@ -556,10 +556,10 @@ const CF = {
         payload.height_mm = sel.height_mm;
         if (!CF._dwFavorites) CF._dwFavorites = [];
       }
-      const depth   = parseFloat(gVal('dw-depth') || '0');
-      const leaf    = parseFloat(gVal('dw-leaf') || '0');
-      const mullion = parseFloat(gVal('dw-mullion') || '0');
-      const louver  = parseFloat(gVal('dw-louver') || '0');
+      const depth   = toMm(parseFloat(gVal('dw-depth') || '0.10'));
+      const leaf    = toMm(parseFloat(gVal('dw-leaf') || '0.04'));
+      const mullion = toMm(parseFloat(gVal('dw-mullion') || '0'));
+      const louver  = toMm(parseFloat(gVal('dw-louver') || '0.08'));
       if (depth > 0) payload.frame_depth_mm = depth;
       if (leaf > 0) payload.leaf_thickness_mm = leaf;
       if (mullion > 0) payload.mullion_width_mm = mullion;
@@ -662,9 +662,9 @@ const CF = {
     },
 
     placeCabinet() {
-      const w    = parseFloat(gVal('cab-w')    || '1800');
-      const h    = parseFloat(gVal('cab-h')    || '850');
-      const d    = parseFloat(gVal('cab-d')    || '600');
+      const w    = toMm(parseFloat(gVal('cab-w')    || '1.8'));
+      const h    = toMm(parseFloat(gVal('cab-h')    || '0.85'));
+      const d    = toMm(parseFloat(gVal('cab-d')    || '0.6'));
       const mods = parseInt(gVal('cab-mods')   || '3');
       const mat  = gVal('cab-mat');
       CF.send('place_cabinet', { width_mm: w, height_mm: h, depth_mm: d, module_count: mods, carcass_material_id: mat });
@@ -672,9 +672,9 @@ const CF = {
     },
 
     placeWardrobe() {
-      const w    = parseFloat(gVal('wd-w')  || '1800');
-      const h    = parseFloat(gVal('wd-h')  || '2400');
-      const d    = parseFloat(gVal('wd-d')  || '600');
+      const w    = toMm(parseFloat(gVal('wd-w')  || '1.8'));
+      const h    = toMm(parseFloat(gVal('wd-h')  || '2.4'));
+      const d    = toMm(parseFloat(gVal('wd-d')  || '0.6'));
       const door = gVal('wd-door');
       CF.send('place_wardrobe', { width_mm: w, height_mm: h, depth_mm: d, door_type: door });
       CF.toast('คลิกในโมเดลเพื่อวางตู้เสื้อผ้า', 'info');
@@ -935,55 +935,15 @@ const CF = {
 
   initUnitToggle() {
     const btnM = el('unit-btn-m');
-    const btnMm = el('unit-btn-mm');
-    if (!btnM || !btnMm) return;
+    if (!btnM) return;
 
-    const idsToConvert = [
-      'level-elev', 'fnd-w', 'fnd-l', 'fnd-d',
-      'col-w', 'col-d', 'col-h', 'wall-thick', 'wall-height',
-      'op-w', 'op-h', 'op-sill', 'mh-size', 'mh-cover',
-      'mh-invin', 'mh-invout', 'pipe-dia', 'cond-cz',
-      'cab-w', 'cab-h', 'cab-d', 'ward-w', 'ward-h', 'ward-d'
-    ];
-
-    const setUnit = (newUnit) => {
-      if (CF._unit === newUnit) return;
-      const oldUnit = CF._unit;
-      CF._unit = newUnit;
-
-      btnM.classList.toggle('active', newUnit === 'm');
-      btnMm.classList.toggle('active', newUnit === 'mm');
-
-      // Convert all input values
-      idsToConvert.forEach(id => {
-        const input = el(id);
-        if (!input || input.value === '') return;
-        const val = parseFloat(input.value);
-        if (isNaN(val)) return;
-
-        if (newUnit === 'm') {
-          input.value = (val / 1000.0).toFixed(val % 1000 === 0 ? 2 : (val < 100 ? 3 : 2));
-          input.step = '0.05';
-        } else {
-          input.value = Math.round(val * 1000.0);
-          input.step = '10';
-        }
-      });
-
-      // Update unit labels
-      document.querySelectorAll('.unit-lbl').forEach(lbl => {
-        if (newUnit === 'm') {
-          lbl.textContent = lbl.textContent.replace('(มม.)', '(ม.)').replace('(mm)', '(ม.)');
-        } else {
-          lbl.textContent = lbl.textContent.replace('(ม.)', '(มม.)').replace('(m)', '(มม.)');
-        }
-      });
-
-      CF.toast(`สลับหน่วยวัดเป็น: ${newUnit === 'm' ? 'เมตร (Meters)' : 'มิลลิเมตร (Millimeters)'}`, 'info');
-    };
-
-    btnM.addEventListener('click', () => setUnit('m'));
-    btnMm.addEventListener('click', () => setUnit('mm'));
+    CF._unit = 'm';
+    btnM.classList.add('active');
+    document.querySelectorAll('.unit-lbl').forEach(label => {
+      label.textContent = label.textContent
+        .replace(/\(มม\.?\)/g, '(ม.)')
+        .replace(/\(mm\)/gi, '(m)');
+    });
   },
 
   initTooltips() {
@@ -1218,18 +1178,18 @@ const CF = {
       return;
     }
 
-    const favHtml = favorites.map(item => `
-      <div class="dw-card fav${CF._dwSelection && CF._dwSelection.id === item.id ? ' selected' : ''}" data-dw-id="${item.id}" title="${item.name} — ${item.width_mm}x${item.height_mm} มม. (${item.operation})">
+    const favHtml = favorites.map(item => `        <div class="dw-card fav${CF._dwSelection && CF._dwSelection.id === item.id ? ' selected' : ''}" data-dw-id="${item.id}" title="${item.name} — ${(item.width_mm / 1000).toFixed(3)}x${(item.height_mm / 1000).toFixed(3)} ม. (${item.operation})">
+
         <button type="button" class="dw-fav-del" data-dw-del="${item.id}" title="ลบรายการโปรด">✕</button>
         ${CF.dwSymbolSvg(item)}
         <div class="dw-card-name">⭐ ${item.name}</div>
-        <div class="dw-card-size">${item.width_mm} × ${item.height_mm} มม.</div>
+        <div class="dw-card-size">${(item.width_mm / 1000).toFixed(3)} × ${(item.height_mm / 1000).toFixed(3)} ม.</div>
       </div>`).join('');
     const catHtml = items.map(item => `
-      <div class="dw-card${CF._dwSelection && CF._dwSelection.id === item.id ? ' selected' : ''}" data-dw-id="${item.id}" title="${item.name} — ${item.width_mm}x${item.height_mm} มม. (${item.operation})">
+      <div class="dw-card${CF._dwSelection && CF._dwSelection.id === item.id ? ' selected' : ''}" data-dw-id="${item.id}" title="${item.name} — ${(item.width_mm / 1000).toFixed(3)}x${(item.height_mm / 1000).toFixed(3)} ม. (${item.operation})">
         ${CF.dwSymbolSvg(item)}
         <div class="dw-card-name">${item.name}</div>
-        <div class="dw-card-size">${item.width_mm} × ${item.height_mm} มม.</div>
+        <div class="dw-card-size">${(item.width_mm / 1000).toFixed(3)} × ${(item.height_mm / 1000).toFixed(3)} ม.</div>
       </div>`).join('');
 
     grid.innerHTML = favHtml + catHtml;
@@ -1284,9 +1244,9 @@ const CF = {
     setVal('dw-op', item.operation);
     setVal('dw-panel', item.panel_style);
     setVal('dw-frame', item.frame_material === 'steel' ? 'steel' : 'aluminum');
-    setVal('dw-depth', item.frame_depth_mm || 100);
-    setVal('dw-leaf', item.leaf_thickness_mm || 40);
-    setVal('dw-mullion', item.mullion_width_mm || 0);
+    setVal('dw-depth', ((item.frame_depth_mm || 100) / 1000).toFixed(3));
+    setVal('dw-leaf', ((item.leaf_thickness_mm || 40) / 1000).toFixed(3));
+    setVal('dw-mullion', ((item.mullion_width_mm || 0) / 1000).toFixed(3));
 
     document.querySelectorAll('.dw-card').forEach(card => {
       card.classList.toggle('selected', card.dataset.dwId === id);
@@ -1306,7 +1266,7 @@ const CF = {
       document.querySelectorAll('.dw-card.selected').forEach(c => c.classList.remove('selected'));
     });
 
-    CF.toast(`เลือกแบบ ${item.name} — ขนาด ${item.width_mm}x${item.height_mm} มม.`, 'info');
+    CF.toast(`เลือกแบบ ${item.name} — ขนาด ${(item.width_mm / 1000).toFixed(3)} × ${(item.height_mm / 1000).toFixed(3)} ม.`, 'info');
   },
 
   showContextualDrawer(action, toolTitle) {
@@ -1607,11 +1567,11 @@ const CF = {
 /* ── Helpers ──────────────────────────────────────────────── */
 function toMm(val) {
   if (isNaN(val)) return 0;
-  return CF._unit === 'm' ? val * 1000.0 : val;
+  return val * 1000.0;
 }
 function fromMm(val) {
   if (isNaN(val)) return 0;
-  return CF._unit === 'm' ? val / 1000.0 : val;
+  return val / 1000.0;
 }
 function el(id)      { return document.getElementById(id); }
 function gVal(id)    { const e = el(id); return e ? e.value : ''; }

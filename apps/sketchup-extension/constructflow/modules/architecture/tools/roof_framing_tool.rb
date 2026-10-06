@@ -49,13 +49,13 @@ module JiraNot
               ]
               list = ['', '', '', '', 'gable|shed']
 
-              results = UI.inputbox(prompts, defaults, list, 'ตั้งค่าแก้ไขโครงสร้างเหล็กหลังคา [Edit Roof Framing]')
+              results = JiraNot::ConstructFlow::Core::Units.meter_inputbox(prompts, defaults, list, 'ตั้งค่าแก้ไขโครงสร้างเหล็กหลังคา [Edit Roof Framing]')
               return false unless results
 
               pitch = results[0].to_f
-              truss_spacing = results[1].to_f < 50.0 ? results[1].to_f * 1000.0 : results[1].to_f
-              purlin_spacing = results[2].to_f < 50.0 ? results[2].to_f * 1000.0 : results[2].to_f
-              overhang = results[3].to_f < 50.0 ? results[3].to_f * 1000.0 : results[3].to_f
+              truss_spacing = Float(results[1]) * 1000.0
+              purlin_spacing = Float(results[2]) * 1000.0
+              overhang = Float(results[3]) * 1000.0
               roof_type = results[4].to_sym
             else
               pitch = settings[:pitch_degrees].to_f
@@ -137,21 +137,21 @@ module JiraNot
             else
               prompts = [
                 'องศาความชันหลังคา (Pitch deg):',
-                'ระยะห่างจันทัน/โครงถัก (Truss Spacing mm):',
-                'ระยะห่างแปเหล็ก C-Channel (Purlin Spacing mm):',
-                'ระยะยื่นชายคา (Overhang mm):',
+                'ระยะห่างจันทัน/โครงถัก (เมตร m):',
+                'ระยะห่างแปเหล็ก C-Channel (เมตร m):',
+                'ระยะยื่นชายคา (เมตร m):',
                 'รูปแบบหลังคา (Type):'
               ]
-              defaults = ['30.0', '1000', '300', '600', 'gable']
+              defaults = ['30.0', '1.00', '0.30', '0.60', 'gable']
               list = ['', '', '', '', 'gable|shed']
 
-              results = UI.inputbox(prompts, defaults, list, 'สร้างโครงสร้างเหล็กหลังคา [Steel Roof Framing]')
+              results = JiraNot::ConstructFlow::Core::Units.meter_inputbox(prompts, defaults, list, 'สร้างโครงสร้างเหล็กหลังคา [Steel Roof Framing]')
               return unless results
 
               pitch = results[0].to_f
-              truss_spacing = results[1].to_f < 50.0 ? results[1].to_f * 1000.0 : results[1].to_f
-              purlin_spacing = results[2].to_f < 50.0 ? results[2].to_f * 1000.0 : results[2].to_f
-              overhang = results[3].to_f < 50.0 ? results[3].to_f * 1000.0 : results[3].to_f
+              truss_spacing = Float(results[1]) * 1000.0
+              purlin_spacing = Float(results[2]) * 1000.0
+              overhang = Float(results[3]) * 1000.0
               roof_type = results[4].to_sym
             end
 

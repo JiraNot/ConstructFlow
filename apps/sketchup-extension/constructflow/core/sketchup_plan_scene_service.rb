@@ -169,14 +169,27 @@ module JiraNot
           page
         end
 
+        # The managed scene is authored with a top parallel camera, but the
+        # user's working viewport must survive the refresh: plan scenes refresh
+        # on every GeometryChanged event, so moving the live camera here would
+        # yank the view away from whatever the user is drawing.
         def configure_top_parallel_view(model, page)
           return unless model.respond_to?(:active_view) && defined?(Sketchup::Camera)
+          view = model.active_view
+          return unless view.respond_to?(:camera=) && view.respond_to?(:camera)
+          return unless page && page.respond_to?(:update)
+
+          original_camera = view.camera
           bounds = model.respond_to?(:bounds) ? model.bounds : nil
           center = bounds && bounds.respond_to?(:center) ? bounds.center : [0.0, 0.0, 0.0]
           cx, cy, cz = point_components(center)
           camera = Sketchup::Camera.new([cx, cy, cz + 10_000.0], [cx, cy, cz], [0.0, 1.0, 0.0], false)
-          model.active_view.camera = camera if model.active_view.respond_to?(:camera=)
-          page.update if page && page.respond_to?(:update)
+          begin
+            view.camera = camera
+            page.update
+          ensure
+            view.camera = original_camera if original_camera
+          end
         rescue StandardError
           nil
         end

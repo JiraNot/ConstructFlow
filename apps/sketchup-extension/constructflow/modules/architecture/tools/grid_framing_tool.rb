@@ -40,12 +40,12 @@ module JiraNot
               'RC-C-0.20x0.20',
               'RC-B-0.20x0.40'
             ]
-            results = UI.inputbox(prompts, defaults, 'วางโครงสร้างกริดเสา-คานอัตโนมัติ [Grid Framing]')
+            results = JiraNot::ConstructFlow::Core::Units.meter_inputbox(prompts, defaults, 'วางโครงสร้างกริดเสา-คานอัตโนมัติ [Grid Framing]')
             return unless results
 
-            x_spans = results[0].split(',').map { |s| v = s.strip.to_f; v < 50.0 ? v * 1000.0 : v }.select(&:positive?)
-            y_spans = results[1].split(',').map { |s| v = s.strip.to_f; v < 50.0 ? v * 1000.0 : v }.select(&:positive?)
-            raw_h = results[2].to_f; height = raw_h < 50.0 ? raw_h * 1000.0 : raw_h
+            x_spans = results[0].split(',').map { |s| Float(s.strip) * 1000.0 }.select(&:positive?)
+            y_spans = results[1].split(',').map { |s| Float(s.strip) * 1000.0 }.select(&:positive?)
+            height = Float(results[2]) * 1000.0
             col_type = results[3].strip
             bm_type = results[4].strip
 

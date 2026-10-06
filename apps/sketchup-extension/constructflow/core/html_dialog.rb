@@ -452,7 +452,7 @@ module JiraNot
               if defined?(Structure::Repository)
                 definition = Structure::Repository.new.read_beam(entity)
                 if definition
-                  props['หน้าตัด (Section)'] = definition.section_mm.map { |v| format('%.1f', v) }.join('x') + ' mm'
+                  props['หน้าตัด (Section)'] = definition.section_mm.map { |v| format('%.3f', v / 1000.0) }.join(' × ') + ' m'
                   props['ความยาว (L)'] = "#{format('%.2f', definition.length_mm / 1000.0)} m"
                   props['ปริมาตร (Vol)'] = "#{format('%.3f', definition.volume_mm3 / 1_000_000_000.0)} คิว (m³)"
                   props['วัสดุ'] = definition.material.to_s
@@ -462,7 +462,7 @@ module JiraNot
               if defined?(Structure::Repository)
                 definition = Structure::Repository.new.read_column(entity)
                 if definition
-                  props['หน้าตัด (Section)'] = definition.section_mm.map { |v| format('%.1f', v) }.join('x') + ' mm'
+                  props['หน้าตัด (Section)'] = definition.section_mm.map { |v| format('%.3f', v / 1000.0) }.join(' × ') + ' m'
                   props['ความสูง (H)'] = "#{format('%.2f', definition.height_mm / 1000.0)} m"
                   props['ปริมาตร (Vol)'] = "#{format('%.3f', definition.volume_mm3 / 1_000_000_000.0)} คิว (m³)"
                   props['วัสดุ'] = definition.material.to_s
@@ -860,9 +860,9 @@ module JiraNot
 
           'trigger_shortcut' => lambda { |runtime, p|
             code = p['code'].to_s.strip.upcase
-            success = Core::ShortcutManager.execute(code, runtime)
+            success = Core::ShortcutManager.execute(code, runtime, prompt: true)
             unless success
-              HtmlDialogManager.toast("ไม่พบคีย์ลัด: #{code}", level: 'warning')
+              HtmlDialogManager.toast("ไม่พบคีย์ลัดหรือยกเลิก: #{code}", level: 'warning')
             end
             :no_state_push
           },
@@ -934,7 +934,7 @@ module JiraNot
               kind:         p['kind'].to_s.empty? ? 'floor' : p['kind'].to_s,
               source_state: 'confirmed'
             )
-            HtmlDialogManager.toast("สร้างระดับชั้น \"#{name}\" (+#{p['elevation_mm']} mm) สำเร็จ", level: 'success')
+            HtmlDialogManager.toast("สร้างระดับชั้น \"#{name}\" (+#{Core::Units.format_dimension(p['elevation_mm'])}) สำเร็จ", level: 'success')
           },
 
           'set_phase' => lambda { |runtime, p|
@@ -1408,7 +1408,7 @@ module JiraNot
             extracted = Core::CustomProfileStore.extract_profile_from_face(face, anchor: anchor)
             if extracted
               Core::CustomProfileStore.add_profile(code, name, extracted[:points_mm], extracted[:width_mm], extracted[:depth_mm])
-              UI.messagebox("บันทึกหน้าตัดโปรไฟล์ '#{name}' (#{code}) สำเร็จ!\nขนาด: #{extracted[:width_mm]} x #{extracted[:depth_mm]} mm")
+              UI.messagebox("บันทึกหน้าตัดโปรไฟล์ '#{name}' (#{code}) สำเร็จ!\nขนาด: #{Core::Units.format_dimension(extracted[:width_mm])} × #{Core::Units.format_dimension(extracted[:depth_mm])}")
             else
               UI.messagebox('ไม่สามารถสกัดจุดหน้าตัดจาก Face ที่เลือกได้')
             end
@@ -1432,7 +1432,9 @@ module JiraNot
             }
 
             Core::SmartStretchEngine.new(ent, opts).execute(runtime.active_model)
-            UI.messagebox("ยืดขยายขนาดสำเร็จโดยขอบเฟรมไม่เพี้ยน!\nกว้างเป้าหมาย: #{p['target_width_m'] || p['target_width_mm'] || 'คงเดิม'} ม. | สูงเป้าหมาย: #{p['target_height_m'] || p['target_height_mm'] || 'คงเดิม'} ม.")
+            width_m = p['target_width_m'] || (p['target_width_mm'] && Core::Units.mm_to_m(p['target_width_mm'])) || 'คงเดิม'
+            height_m = p['target_height_m'] || (p['target_height_mm'] && Core::Units.mm_to_m(p['target_height_mm'])) || 'คงเดิม'
+            UI.messagebox("ยืดขยายขนาดสำเร็จโดยขอบเฟรมไม่เพี้ยน!\nกว้างเป้าหมาย: #{width_m} m | สูงเป้าหมาย: #{height_m} m")
             :no_state_push
           },
 

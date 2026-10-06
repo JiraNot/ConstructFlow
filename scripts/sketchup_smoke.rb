@@ -99,6 +99,32 @@ begin
       { 'form' => 'hip', 'slope_deg' => 30.0 }
   end
 
+  # Drawing must never yank the user's working viewport. The managed plan
+  # scene keeps its own top camera, but the live camera must stay put.
+  def camera_fingerprint(view)
+    cam = view.camera
+    {
+      eye: cam.eye.to_a.map(&:to_f),
+      target: cam.target.to_a.map(&:to_f),
+      up: cam.up.to_a.map(&:to_f),
+      perspective: (cam.respond_to?(:perspective?) ? cam.perspective? : nil),
+      height: (cam.respond_to?(:height) ? cam.height.to_f : nil)
+    }
+  end
+
+  check(failures, lines, 'Plan-scene refresh leaves the user camera untouched') do
+    runtime = JiraNot::ConstructFlow::Runtime
+    view = Sketchup.active_model.active_view
+    before = camera_fingerprint(view)
+    runtime.plan_scenes.refresh_preset('architecture.construction')
+    after = camera_fingerprint(view)
+    unless before == after
+      lines << "      camera before=#{before.inspect}"
+      lines << "      camera after =#{after.inspect}"
+    end
+    before == after
+  end
+
   # Real-model API touch: a blank model must accept our tool without erroring.
   check(failures, lines, 'Active model accepts RoofFramingTool selection') do
     model = Sketchup.active_model

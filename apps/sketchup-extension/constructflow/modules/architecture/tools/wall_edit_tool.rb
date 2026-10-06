@@ -175,7 +175,8 @@ module JiraNot
             view.draw_points(points, @wall ? 7 : 5, 1, @wall ? 'blue' : 'cyan')
             unless @wall
               label = @copy_mode ? 'Click Smart Wall to copy' : 'Click Smart Wall to edit'
-              view.draw_text(points[points.length / 2], label) if points.any?
+              screen = points.any? && view.respond_to?(:screen_coords) ? view.screen_coords(points[points.length / 2]) : nil
+              view.draw_text(Geom::Point3d.new(screen.x, screen.y, 0), label) if screen
               return
             end
             if @action == :segment && @segment_index
@@ -206,7 +207,8 @@ module JiraNot
                             else
                               points[points.length / 2]
                             end
-              view.draw_text(label_point, dimension)
+              screen = view.respond_to?(:screen_coords) ? view.screen_coords(label_point) : nil
+              view.draw_text(Geom::Point3d.new(screen.x, screen.y, 0), dimension) if screen
             end
           rescue StandardError
             nil
@@ -226,7 +228,7 @@ module JiraNot
           def onUserText(text, view)
             @numeric_length_mm = typed_stretch_length(text)
             label = text.to_s.strip.start_with?('+', '-') ? 'relative' : 'absolute'
-            Sketchup.set_status_text("ConstructFlow Plan Wall Edit: #{@numeric_length_mm.round(1)} mm (#{label})", SB_PROMPT)
+            Sketchup.set_status_text("ConstructFlow Plan Wall Edit: #{Core::Units.format_dimension(@numeric_length_mm)} (#{label})", SB_PROMPT)
 
             if @wall && @action == :stretch && @endpoint_index
               path = @definition.centerline_path_mm
@@ -244,7 +246,7 @@ module JiraNot
               )
               if result[:status] == 'success'
                 refresh_plan
-                Sketchup.set_status_text("ขยายผนังเป็น #{@numeric_length_mm.round(1)} mm สำเร็จ", SB_PROMPT)
+                Sketchup.set_status_text("ขยายผนังเป็น #{Core::Units.format_dimension(@numeric_length_mm)} สำเร็จ", SB_PROMPT)
                 clear_edit
               else
                 UI.messagebox(Array(result[:errors]).join("\n"))
@@ -320,16 +322,18 @@ module JiraNot
           private
 
           def change_wall_type(view)
-            values = UI.inputbox(
-              ['Thickness (mm)', 'Wall type ID'],
-              [@definition.thickness_mm.to_s, @definition.wall_type_id.to_s],
-              'ConstructFlow Change Smart Wall Type'
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
+              ['Thickness (m)', 'Wall type ID'],
+              [( @definition.thickness_mm / 1000.0).to_s, @definition.wall_type_id.to_s],
+              'ConstructFlow Change Smart Wall Type',
+              nil,
+              millimeter_indices: []
             )
             return unless values
 
             result = @runtime.commands.execute(
               'ChangeWallType',
-              { object_id: @wall.id, thickness_mm: Float(values[0]), wall_type_id: values[1].to_s.strip },
+              { object_id: @wall.id, thickness_mm: Float(values[0]) * 1000.0, wall_type_id: values[1].to_s.strip },
               project_id: @runtime.project.project_id
             )
             if result[:status] == 'success'
@@ -408,14 +412,14 @@ module JiraNot
 
           def preview_dimension(definition)
             if @numeric_length_mm && @action == :stretch
-              format('L %.0f mm (typed)', @numeric_length_mm)
+              format('L %.2f m (typed)', @numeric_length_mm / 1000.0)
             elsif @action == :segment && @segment_index
-              format('Segment %.0f mm', segment_length(definition.path_mm[@segment_index], definition.path_mm[@segment_index + 1]))
+              format('Segment %.2f m', segment_length(definition.path_mm[@segment_index], definition.path_mm[@segment_index + 1]) / 1000.0)
             elsif @action == :stretch && @endpoint_index
               anchor_index = @endpoint_index.zero? ? 1 : @endpoint_index - 1
-              format('L %.0f mm', segment_length(definition.path_mm[anchor_index], definition.path_mm[@endpoint_index]))
+              format('L %.2f m', segment_length(definition.path_mm[anchor_index], definition.path_mm[@endpoint_index]) / 1000.0)
             else
-              format('Wall %.0f mm', definition.length_mm)
+              format('Wall %.2f m', definition.length_mm / 1000.0)
             end
           end
 

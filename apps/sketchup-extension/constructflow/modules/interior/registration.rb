@@ -433,7 +433,7 @@ module JiraNot
 
           menu = runtime.menu.add_submenu('Interior & Joinery')
           menu.add_item('Place Cabinet Run') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Width (mm)', 'Height (mm)', 'Depth (mm)', 'Modules', 'Carcass material'],
               ['1800', '800', '600', '3', 'board.hmr.18'],
               'ConstructFlow Cabinet Run'
@@ -457,7 +457,7 @@ module JiraNot
               UI.messagebox('Select one ConstructFlow Cabinet Run first.')
               next
             end
-            values = UI.inputbox(['Equal module count'], ['3'], 'ConstructFlow Split Cabinet')
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Equal module count'], ['3'], 'ConstructFlow Split Cabinet')
             next unless values
             execute_ui(runtime, 'SplitCabinetModule', cabinet.id, strategy: 'equal', count: Integer(values[0]))
           end
@@ -468,7 +468,7 @@ module JiraNot
               UI.messagebox('Select one ConstructFlow Cabinet Run first.')
               next
             end
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Module ID', 'Front type', 'Style', 'Material ID'],
               ['M01', 'single_swing', 'flat', 'front.hmr.18'],
               'ConstructFlow Cabinet Front'
@@ -487,7 +487,7 @@ module JiraNot
               UI.messagebox('Select one ConstructFlow Cabinet Run first.')
               next
             end
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Module ID', 'Drawer count', 'Slide type'],
               ['M01', '3', 'soft_close'],
               'ConstructFlow Drawer Set'

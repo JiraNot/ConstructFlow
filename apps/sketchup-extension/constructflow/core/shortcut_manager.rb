@@ -383,7 +383,7 @@ module JiraNot
               project_id: runtime.project.project_id
             )
             if result[:status] == 'success'
-              UI.messagebox("สร้างระดับชั้น #{params[:name]} (+#{params[:elevation_mm]} mm) เรียบร้อยแล้ว")
+              UI.messagebox("สร้างระดับชั้น #{params[:name]} (+#{Core::Units.format_dimension(params[:elevation_mm])}) เรียบร้อยแล้ว")
             else
               UI.messagebox(Array(result[:errors]).join("\n"))
             end

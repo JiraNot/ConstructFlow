@@ -429,9 +429,9 @@ class WallDefinitionTest < Minitest::Test
     tool.instance_variable_set(:@endpoint_index, 1)
     tool.instance_variable_set(:@action, :stretch)
 
-    assert_equal 3500.0, tool.send(:typed_stretch_length, '+500 mm')
-    assert_equal 2500.0, tool.send(:typed_stretch_length, '-500 mm')
-    assert_equal 1200.0, tool.send(:typed_stretch_length, '1200 mm')
+    assert_equal 3500.0, tool.send(:typed_stretch_length, '+0.5')
+    assert_equal 2500.0, tool.send(:typed_stretch_length, '-0.5')
+    assert_equal 1200.0, tool.send(:typed_stretch_length, '1.2')
   end
 
   def test_wall_geometry_builds_one_continuous_mitered_outline_for_polyline

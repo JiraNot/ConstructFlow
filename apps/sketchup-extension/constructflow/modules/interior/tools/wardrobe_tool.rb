@@ -13,19 +13,25 @@ module JiraNot
             @width_mm = Float(width_mm)
             @height_mm = Float(height_mm)
             @depth_mm = Float(depth_mm)
-            @door_type = door_type.to_s
-            @input_point = Sketchup::InputPoint.new
+          @door_type = door_type.to_s
+          @input_point = Sketchup::InputPoint.new
+          @hover_point_mm = nil
           end
 
           def activate
             Sketchup.set_status_text(
-              "ConstructFlow ตู้เสื้อผ้า: คลิกเพื่อวางตู้เสื้อผ้า (#{@width_mm.to_i}x#{@height_mm.to_i}x#{@depth_mm.to_i} mm - #{@door_type}) • Esc เพื่อยกเลิก",
+              "ConstructFlow ตู้เสื้อผ้า: คลิกเพื่อวางตู้เสื้อผ้า (#{[@width_mm, @height_mm, @depth_mm].map { |value| Core::Units.format_dimension(value) }.join(' × ')} - #{@door_type}) • Esc เพื่อยกเลิก",
               SB_PROMPT
             )
           end
 
           def onMouseMove(_flags, x, y, view)
             @input_point.pick(view, x, y)
+            @hover_point_mm = if @input_point.valid?
+                                Core::Units.point_to_mm(@input_point.position)
+                              else
+                                nil
+                              end
             view.invalidate
           end
 
@@ -33,8 +39,13 @@ module JiraNot
             @input_point.draw(view) if @input_point.valid?
 
             if @input_point.valid?
+              preview_point = if @hover_point_mm
+                                Geom::Point3d.new(*Core::Units.point_from_mm(@hover_point_mm))
+                              else
+                                @input_point.position
+                              end
               mesh = Core::GhostPreview.build_wardrobe_mesh(
-                @input_point.position,
+                preview_point,
                 @width_mm,
                 @height_mm,
                 @depth_mm,
@@ -58,7 +69,7 @@ module JiraNot
             result = @runtime.commands.execute(
               'CreateWardrobe',
               {
-                origin_mm: Core::Units.point_to_mm(@input_point.position),
+                origin_mm: @hover_point_mm || Core::Units.point_to_mm(@input_point.position),
                 width_mm: @width_mm,
                 height_mm: @height_mm,
                 depth_mm: @depth_mm,
@@ -79,12 +90,14 @@ module JiraNot
           def getExtents
             bounds = Geom::BoundingBox.new
             bounds.add(@start_point) if defined?(@start_point) && @start_point
+            bounds.add(Geom::Point3d.new(*Core::Units.point_from_mm(@hover_point_mm))) if @hover_point_mm
             bounds.add(@input_point.position) if @input_point&.valid?
             bounds
           end
 
           def deactivate(view)
             @start_point = nil if defined?(@start_point)
+            @hover_point_mm = nil
             view.invalidate if view
           end
 

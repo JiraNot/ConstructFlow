@@ -133,12 +133,11 @@ module JiraNot
         tool.onKeyDown(82, false, 0, nil)
         assert_equal 360.0, tool.instance_variable_get(:@rotation_deg)
 
-        # VCB dimension input "500, 400"
-        tool.onUserText("500, 400", nil)
+        # VCB dimensions are meters; the 20m limit is applied to sections.
+        tool.onUserText("0.5, 0.4", nil)
         assert_equal [500.0, 400.0], tool.instance_variable_get(:@section_mm)
 
-        # VCB square input "600"
-        tool.onUserText("600", nil)
+        tool.onUserText("0.6", nil)
         assert_equal [600.0, 600.0], tool.instance_variable_get(:@section_mm)
       end
 

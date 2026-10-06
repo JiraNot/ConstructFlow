@@ -27,7 +27,7 @@ module JiraNot
           end
 
           def activate
-            Sketchup.set_status_text('ConstructFlow เสา [CL]: คลิกตำแหน่งกึ่งกลางเพื่อวางเสา • [R: หมุน 90° | VCB: พิมพ์ขนาด เช่น 400,400 | ลูกศร: ล็อกแกน | Esc: ยกเลิก]', (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+            Sketchup.set_status_text('ConstructFlow เสา [CL]: คลิกตำแหน่งกึ่งกลางเพื่อวางเสา • [R: หมุน 90° | VCB: พิมพ์ขนาด เช่น 0.40,0.40 | ลูกศร: ล็อกแกน | Esc: ยกเลิก]', (defined?(SB_PROMPT) ? SB_PROMPT : nil))
           end
 
           def onMouseMove(_flags, x, y, view)
@@ -48,11 +48,17 @@ module JiraNot
               x, y, z = Core::Units.point_from_mm(@hover_mm)
               pt = Geom::Point3d.new(x, y, z)
               view.draw_points([pt], 10, 1, 'orange')
-              view.draw_text(pt, 'Column snap') if view.respond_to?(:draw_text)
+              screen = view.respond_to?(:screen_coords) ? view.screen_coords(pt) : nil
+              view.draw_text(Geom::Point3d.new(screen.x, screen.y, 0), 'Column snap') if screen && view.respond_to?(:draw_text)
             end
 
             if @input_point.valid? && defined?(Core::GhostPreview)
-              mesh = Core::GhostPreview.build_column_mesh(@input_point.position, @section_mm, @explicit_height_mm)
+              preview_point = if @hover_mm
+                                Geom::Point3d.new(*Core::Units.point_from_mm(@hover_mm))
+                              else
+                                @input_point.position
+                              end
+              mesh = Core::GhostPreview.build_column_mesh(preview_point, @section_mm, @explicit_height_mm)
               if mesh
                 Core::GhostPreview.render_ghost(
                   view,
@@ -117,7 +123,7 @@ module JiraNot
             if (key == 82 || key == 114) && !repeat # R key: Rotate section 90 degrees
               @section_mm = [@section_mm[1], @section_mm[0]]
               @rotation_deg = (@rotation_deg || 0.0) + 90.0
-              Sketchup.set_status_text("ConstructFlow เสาโครงสร้าง: หมุนเสา 90° ขนาด #{@section_mm[0].to_i}x#{@section_mm[1].to_i} mm (R เพื่อหมุนต่อ)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+              Sketchup.set_status_text("ConstructFlow เสาโครงสร้าง: หมุนเสา 90° ขนาด #{@section_mm.map { |value| Core::Units.format_dimension(value) }.join(' × ')} (R เพื่อหมุนต่อ)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
               view&.invalidate
               return
             end
@@ -129,23 +135,19 @@ module JiraNot
 
           def onUserText(text, view)
             parts = text.to_s.strip.split(/[,xX*]/).map(&:strip).reject(&:empty?)
-            if parts.length >= 2
-              w = Float(parts[0])
-              d = Float(parts[1])
-              w = (w * 1000.0) if w < 10.0 # Support meters (e.g. 0.2, 0.2)
-              d = (d * 1000.0) if d < 10.0
-              @section_mm = [w, d]
-            elsif parts.length == 1
-              val = Float(parts[0])
-              val = (val * 1000.0) if val < 10.0
-              @section_mm = [val, val]
+            raise ArgumentError, 'กรอกหน้าตัดเป็นเมตร เช่น 0.20 หรือ 0.20,0.20' unless (1..2).cover?(parts.length)
+            raise ArgumentError, 'ขนาดหน้าตัดต้องไม่เกิน 20 เมตร' if parts.any? { |value| Float(value) > 20.0 }
+
+            dimensions_mm = parts.map { |value| Core::Units.m_input_to_mm(value, max_meters: 20.0) }
+            unless dimensions_mm.all?(&:positive?)
+              raise ArgumentError, 'หน้าตัดเสาต้องมากกว่า 0'
             end
-            w_m = format('%.2f m', @section_mm[0] / 1000.0)
-            d_m = format('%.2f m', @section_mm[1] / 1000.0)
-            Sketchup.set_status_text("กำหนดขนาดหน้าตัดเสา: #{w_m} x #{d_m} (คลิกเพื่อวาง)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+
+            @section_mm = dimensions_mm.length == 1 ? [dimensions_mm[0], dimensions_mm[0]] : dimensions_mm
+            Sketchup.set_status_text("กำหนดขนาดหน้าตัดเสา: #{@section_mm.map { |value| Core::Units.format_dimension(value) }.join(' × ')} (คลิกเพื่อวาง)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
             view&.invalidate
           rescue StandardError => e
-            UI.messagebox("Invalid section dimension: #{e.message}") if defined?(UI) && UI.respond_to?(:messagebox)
+            UI.messagebox("ขนาดเสาไม่ถูกต้อง: #{e.message}") if defined?(UI) && UI.respond_to?(:messagebox)
           end
 
           def deactivate(view)

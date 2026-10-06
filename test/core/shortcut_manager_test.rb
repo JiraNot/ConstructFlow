@@ -201,7 +201,7 @@ module JiraNot
       def test_prompt_true_opens_properties_dialog_and_uses_entered_values
         rt = make_runtime
 
-        with_ui_inputbox(['250', '3200', '']) do
+        with_ui_inputbox(['0.25', '3.2', '']) do
           assert Core::ShortcutManager.execute('WA', rt, prompt: true)
         end
 
@@ -224,7 +224,7 @@ module JiraNot
       def test_prompt_false_skips_the_dialog_for_keyboard_shortcuts
         rt = make_runtime
 
-        with_ui_inputbox(['999', '999', '']) do
+        with_ui_inputbox(['0.999', '0.999', '']) do
           assert Core::ShortcutManager.execute('WA', rt, prompt: false)
         end
 

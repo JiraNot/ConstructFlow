@@ -414,7 +414,7 @@ module JiraNot
         def install_ui(runtime)
           menu = runtime.menu.add_submenu('Roof')
           menu.add_item('Draw Roof Footprint in Plan') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Roof form (lean_to/flat/gable/hip)', 'Slope (%)', 'Covering'],
               ['lean_to', '5', 'metal_sheet'],
               'ConstructFlow Plan Roof'
@@ -454,7 +454,7 @@ module JiraNot
               next
             end
 
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Covering', 'Slope (%)', 'Slope direction X', 'Slope direction Y'],
               ['metal_sheet', '5', '0', '1'],
               'ConstructFlow Roof'
@@ -485,7 +485,7 @@ module JiraNot
               next
             end
 
-            values = UI.inputbox(['Edge index', 'Outlet ratio 0-1'], ['0', '1.0'], 'ConstructFlow Gutter')
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Edge index', 'Outlet ratio 0-1'], ['0', '1.0'], 'ConstructFlow Gutter')
             next unless values
 
             result = runtime.commands.execute(

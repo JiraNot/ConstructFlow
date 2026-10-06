@@ -70,6 +70,24 @@ class BootstrapContractTest < Minitest::Test
     end
   end
 
+  def test_free_foundation_command_is_registered_and_creates_an_object
+    require BOOTSTRAP
+
+    runtime = JiraNot::ConstructFlow::Runtime
+    assert runtime.commands.registered?('CreateFoundation')
+
+    result = runtime.commands.execute(
+      'CreateFoundation',
+      { location_mm: [1000, 2000, 0], size_mm: [1000, 1000, 400] },
+      project_id: runtime.project.project_id
+    )
+
+    assert_equal 'success', result[:status], result[:errors].join(', ')
+    assert_equal 1, result[:created_object_ids].length
+    object = runtime.smart_objects.fetch_by_id(result[:created_object_ids].first)
+    assert_equal 'structure.foundation', object.type
+  end
+
   def test_boot_is_idempotent
     require BOOTSTRAP
 

@@ -60,7 +60,7 @@ module JiraNot
                 @active_snap = preview[:snap]
                 if defined?(SB_VCB_LABEL)
                   Sketchup.set_status_text('ความยาวคาน (Length)', SB_VCB_LABEL)
-                  Sketchup.set_status_text(format('%.1f mm', preview[:length_mm]), SB_VCB_VALUE)
+                  Sketchup.set_status_text(format('%.2f m', preview[:length_mm] / 1000.0), SB_VCB_VALUE)
                 end
               else
                 @finish_mm = snapped
@@ -103,10 +103,12 @@ module JiraNot
 
           def onUserText(text, view)
             length_mm = @interaction.numeric_distance_mm(text)
+            raise ArgumentError, 'ความยาวคานต้องไม่เกิน 20 เมตร' if length_mm > 20_000.0
+
             @numeric_length_mm = length_mm
 
             unless @start_mm
-              Sketchup.set_status_text("กำหนดความยาวคาน #{length_mm.round(1)} mm (คลิกจุดเริ่มต้นเพื่อวางคาน)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+              Sketchup.set_status_text("กำหนดความยาวคาน #{Core::Units.format_dimension(length_mm)} (คลิกจุดเริ่มต้นเพื่อวางคาน)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
               view.invalidate
               return
             end
@@ -122,7 +124,7 @@ module JiraNot
             @start_mm = finish
             @start_input_point = Sketchup::InputPoint.new(point_from_mm(finish))
             @numeric_length_mm = nil
-            Sketchup.set_status_text("สร้างคานความยาว #{length_mm.round(1)} mm สำเร็จ (คลิกจุดถัดไปหรือพิมพ์ความยาว)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+            Sketchup.set_status_text("สร้างคานความยาว #{Core::Units.format_dimension(length_mm)} สำเร็จ (คลิกจุดถัดไปหรือพิมพ์ความยาว)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
             Sketchup.set_status_text('', SB_VCB_VALUE) if defined?(SB_VCB_VALUE)
             view.invalidate
           rescue ArgumentError => error
@@ -198,7 +200,8 @@ module JiraNot
 
             if view.respond_to?(:draw_text)
               len = Math.sqrt((dx * dx) + (dy * dy))
-              view.draw_text(finish_pt, format('Beam L %.0f mm%s', len, axis_label))
+              screen = view.respond_to?(:screen_coords) ? view.screen_coords(finish_pt) : nil
+              view.draw_text(Geom::Point3d.new(screen.x, screen.y, 0), format('Beam L %.2f m%s', len / 1000.0, axis_label)) if screen
             end
           end
 

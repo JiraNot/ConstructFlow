@@ -13,18 +13,62 @@ module JiraNot
             @size_mm = size_mm.map { |v| Float(v) }
             @foundation_type = foundation_type.to_s
             @input_point = Sketchup::InputPoint.new
+            @hovered_point_mm = nil
             @hovered_column = nil
           end
 
           def activate
             Sketchup.set_status_text(
-              "ConstructFlow ฐานราก: คลิกตำแหน่งบนพื้นหรือคลิกที่เสาเพื่อวางฐานราก คสล. (#{@size_mm[0].to_i}x#{@size_mm[1].to_i}x#{@size_mm[2].to_i} mm)",
+              "ConstructFlow ฐานราก: คลิกตำแหน่งบนพื้นหรือคลิกที่เสาเพื่อวางฐานราก คสล. (#{@size_mm.map { |value| Core::Units.format_dimension(value) }.join(' × ')})",
               SB_PROMPT
             )
           end
 
+          def enableVCB?
+            true
+          end
+
+          def onUserText(text, view)
+            dimensions = text.to_s.strip.split(/[,xX*]/).map(&:strip)
+            raise ArgumentError, 'กรอกขนาดฐานรากเป็นเมตร: กว้าง,ยาว,หนา' unless (1..3).cover?(dimensions.length)
+
+            parsed = dimensions.map { |value| Core::Units.m_input_to_mm(value, max_meters: 20.0) }
+            raise ArgumentError, 'ความหนาฐานรากต้องไม่เกิน 20 เมตร' if parsed[2] && parsed[2] > 20_000.0
+            raise ArgumentError, 'ขนาดฐานรากต้องมากกว่า 0' unless parsed.all?(&:positive?)
+
+            updated_size = case parsed.length
+                           when 1 then [parsed[0], parsed[0], @size_mm[2]]
+                           when 2 then [parsed[0], parsed[1], @size_mm[2]]
+                           else parsed
+                           end
+            unless updated_size.all?(&:positive?) && updated_size[0] <= 20_000 && updated_size[1] <= 20_000
+              raise ArgumentError, 'ขนาดฐานรากต้องมากกว่า 0 และกว้าง/ยาวไม่เกิน 20 เมตร'
+            end
+
+            @size_mm = updated_size
+            Sketchup.set_status_text("ขนาดฐานราก #{@size_mm.map { |value| Core::Units.format_dimension(value) }.join(' × ')} (คลิกเพื่อวาง)", SB_PROMPT)
+            view&.invalidate
+          rescue ArgumentError => error
+            UI.messagebox(error.message)
+          end
+
+          def deactivate(view)
+            @hovered_point_mm = nil
+            @hovered_column = nil
+            view.invalidate if view
+          end
+
+          def onCancel(_reason, _view)
+            @runtime.active_model.select_tool(nil)
+          end
+
           def onMouseMove(_flags, x, y, view)
             @input_point.pick(view, x, y)
+            @hovered_point_mm = if @input_point.valid?
+                                  Core::Units.point_to_mm(@input_point.position)
+                                else
+                                  nil
+                                end
             @hovered_column = pick_column(view, x, y)
             view.invalidate
           end
@@ -36,7 +80,9 @@ module JiraNot
               bounds = @hovered_column.entity.respond_to?(:bounds) ? @hovered_column.entity.bounds : nil
               if bounds
                 center = bounds.center
-                base_pt = [center.x, center.y, bounds.min.z]
+                column_location_mm = Core::Units.point_to_mm(center)
+                column_location_mm[2] = Core::Units.su_to_mm(bounds.min.z)
+                base_pt = Core::Units.point_from_mm(column_location_mm)
                 mesh = Core::GhostPreview.build_foundation_mesh(base_pt, @size_mm)
                 if mesh
                   Core::GhostPreview.render_ghost(
@@ -49,7 +95,8 @@ module JiraNot
                 end
               end
             elsif @input_point.valid?
-              mesh = Core::GhostPreview.build_foundation_mesh(@input_point.position, @size_mm)
+              preview_point = @hovered_point_mm ? Geom::Point3d.new(*Core::Units.point_from_mm(@hovered_point_mm)) : @input_point.position
+              mesh = Core::GhostPreview.build_foundation_mesh(preview_point, @size_mm)
               if mesh
                 Core::GhostPreview.render_ghost(
                   view,
@@ -81,7 +128,7 @@ module JiraNot
                 {
                   foundation_type: @foundation_type,
                   size_mm: @size_mm,
-                  location_mm: Core::Units.point_to_mm(@input_point.position)
+                  location_mm: @hovered_point_mm || Core::Units.point_to_mm(@input_point.position)
                 },
                 project_id: @runtime.project.project_id
               )
@@ -98,18 +145,9 @@ module JiraNot
 
           def getExtents
             bounds = Geom::BoundingBox.new
-            bounds.add(@start_point) if defined?(@start_point) && @start_point
+            bounds.add(Geom::Point3d.new(*Core::Units.point_from_mm(@hovered_point_mm))) if @hovered_point_mm
             bounds.add(@input_point.position) if @input_point&.valid?
             bounds
-          end
-
-          def deactivate(view)
-            @start_point = nil if defined?(@start_point)
-            view.invalidate if view
-          end
-
-          def onCancel(_reason, _view)
-            @runtime.active_model.select_tool(nil)
           end
 
           private

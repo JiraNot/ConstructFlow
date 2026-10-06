@@ -27,9 +27,14 @@ When a drawing scene is refreshed:
 2. other ConstructFlow drawing-output tags are hidden;
 3. `CF-STYLE-*` tags needed by generated children remain visible;
 4. unrelated user tags retain their current visibility;
-5. the Scene/Page is updated after visibility and camera configuration.
+5. the Scene/Page is updated after visibility and camera configuration;
+6. the live user viewport is restored to the camera it had before the refresh.
 
 This uses parent drawing-group isolation rather than duplicating domain objects or creating a separate 2D model.
+
+### Live viewport must not be captured
+
+Plan scene refresh runs automatically on every `GeometryChanged` event, i.e. while the user is actively drawing. The managed scene still records its top parallel camera, but authoring that camera must not move the user's working view: the refresh stores the plan camera on the Scene/Page and then restores the pre-refresh live camera. A drawing tool may never change the visible viewport as a side effect of creating geometry.
 
 ## Example
 

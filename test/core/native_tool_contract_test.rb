@@ -52,7 +52,7 @@ class NativeToolContractTest < Minitest::Test
     assert_includes source, '@hover_point = nil'
     assert_includes source, '@preview = nil'
     assert_includes source, '@plane.project(Core::Units.point_to_mm(@input_point.position))'
-    assert_includes source, "view.draw_text(@hover_point, 'Click to start Smart Wall')"
+    assert_includes source, "view.draw_text(Geom::Point3d.new(screen.x, screen.y, 0), 'Click to start Smart Wall')"
     assert_includes source, 'return unless key == 16 && !repeat # Shift'
     %w[floor_tool room_tool ceiling_tool].each do |tool_name|
       tool_source = read_source(File.join(TOOLS_ROOT, 'architecture', 'tools', "#{tool_name}.rb"))

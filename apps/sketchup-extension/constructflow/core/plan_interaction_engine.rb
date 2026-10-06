@@ -105,21 +105,13 @@ module JiraNot
         end
 
         def numeric_distance_mm(value, default_unit: (defined?(Core::Units) ? Core::Units.active_unit : :meter))
-          text = value.to_s.strip.downcase.delete(',')
-          match = /\A([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(mm|cm|m|in|ft)?\z/.match(text)
-          raise ArgumentError, "invalid numeric distance: #{value}" unless match
+          text = value.to_s.strip.downcase
+          match = /\A([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(m)?\z/.match(text)
+          raise ArgumentError, "invalid distance: #{value}; enter meters only" unless match
 
           number = Float(match[1])
-          unit = match[2]
-          if unit.nil?
-            multiplier = if default_unit == :meter
-                           number < 50.0 ? 1000.0 : 1.0
-                         else
-                           1.0
-                         end
-          else
-            multiplier = { 'mm' => 1.0, 'cm' => 10.0, 'm' => 1000.0, 'in' => 25.4, 'ft' => 304.8 }.fetch(unit)
-          end
+          multiplier = 1000.0
+          raise ArgumentError, 'distance must not be negative' if number.negative?
 
           distance = number * multiplier
           raise ArgumentError, 'numeric distance must be greater than zero' unless distance.positive?

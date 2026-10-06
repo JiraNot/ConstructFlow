@@ -70,7 +70,7 @@ module JiraNot
               [b3, b4, t4, t3], [b4, b1, t1, t4]
             ],
             midpoint: [(s[0] + e[0]) / 2.0, (s[1] + e[1]) / 2.0, (s[2] + e[2]) / 2.0 + h_su + 2.0],
-            label: "ผนัง: ยาว #{Units.su_to_mm(len_su).round} mm | หนา #{thickness_mm.to_i} mm | สูง #{height_mm.to_i} mm"
+            label: "ผนัง: ยาว #{Units.format_dimension(Units.su_to_mm(len_su))} | หนา #{Units.format_dimension(thickness_mm)} | สูง #{Units.format_dimension(height_mm)}"
           }
         end
 
@@ -131,7 +131,7 @@ module JiraNot
               [b3, b4, t4, t3], [b4, b1, t1, t4]
             ],
             midpoint: [(b1[0] + b3[0]) / 2.0, (b1[1] + b3[1]) / 2.0, b1[2] + h_su + 2.0],
-            label: "เจาะช่องเปิด: #{width_mm.to_i} x #{height_mm.to_i} mm (Sill: #{sill_mm.to_i} mm)"
+            label: "เจาะช่องเปิด: #{Units.format_dimension(width_mm)} × #{Units.format_dimension(height_mm)} (ระดับธรณี #{Units.format_dimension(sill_mm)})"
           }
         end
 
@@ -169,7 +169,7 @@ module JiraNot
               [b3, b4, t4, t3], [b4, b1, t1, t4]
             ],
             midpoint: [c[0], c[1], c[2] + h_su + 2.0],
-            label: "เสา คสล.: #{section_mm[0].to_i}x#{section_mm[1].to_i} mm (สูง #{height_mm.to_i} mm)"
+            label: "เสา คสล.: #{Units.format_dimension(section_mm[0])} × #{Units.format_dimension(section_mm[1])} (สูง #{Units.format_dimension(height_mm)})"
           }
         end
 
@@ -207,7 +207,7 @@ module JiraNot
               [t3, t4, b4, b3], [t4, t1, b1, b4]
             ],
             midpoint: [c[0], c[1], c[2] + 2.0],
-            label: "ฐานราก: #{size_mm[0].to_i}x#{size_mm[1].to_i} mm (หนา #{size_mm[2].to_i} mm)"
+            label: "ฐานราก: #{Units.format_dimension(size_mm[0])} × #{Units.format_dimension(size_mm[1])} (หนา #{Units.format_dimension(size_mm[2])})"
           }
         end
 
@@ -244,7 +244,7 @@ module JiraNot
               [t3, t4, b4, b3], [t4, t1, b1, b4]
             ],
             midpoint: [c[0], c[1], c[2] + 2.0],
-            label: "บ่อพักน้ำทิ้ง: #{size_mm[0].to_i}x#{size_mm[1].to_i} mm (ลึก #{depth_mm.to_i} mm)"
+            label: "บ่อพักน้ำทิ้ง: #{Units.format_dimension(size_mm[0])} × #{Units.format_dimension(size_mm[1])} (ลึก #{Units.format_dimension(depth_mm)})"
           }
         end
 
@@ -297,7 +297,7 @@ module JiraNot
               [b3, b4, t4, t3], [b4, b1, t1, t4]
             ],
             midpoint: [o[0] + (w_su / 2.0), o[1] + (d_su / 2.0), o[2] + h_su + 2.0],
-            label: "เคาน์เตอร์บิวท์อิน: #{width_mm.to_i}x#{height_mm.to_i}x#{depth_mm.to_i} mm (#{count} ช่อง)"
+            label: "เคาน์เตอร์บิวท์อิน: #{Units.format_dimension(width_mm)} × #{Units.format_dimension(height_mm)} × #{Units.format_dimension(depth_mm)} (#{count} ช่อง)"
           }
         end
 
@@ -346,7 +346,7 @@ module JiraNot
               [b3, b4, t4, t3], [b4, b1, t1, t4]
             ],
             midpoint: [o[0] + (w_su / 2.0), o[1] + (d_su / 2.0), o[2] + h_su + 2.0],
-            label: "ตู้เสื้อผ้า: #{width_mm.to_i}x#{height_mm.to_i}x#{depth_mm.to_i} mm (#{door_type == 'sliding' ? 'บานเลื่อน' : 'บานเปิด'})"
+            label: "ตู้เสื้อผ้า: #{Units.format_dimension(width_mm)} × #{Units.format_dimension(height_mm)} × #{Units.format_dimension(depth_mm)} (#{door_type == 'sliding' ? 'บานเลื่อน' : 'บานเปิด'})"
           }
         end
 
@@ -370,7 +370,7 @@ module JiraNot
             diameter_mm: diameter_mm,
             slope_pct: slope_pct,
             midpoint: [(s[0] + e[0]) / 2.0, (s[1] + e[1]) / 2.0, (s[2] + e[2]) / 2.0 + 1.0],
-            label: "แนวท่อระบายน้ำ: Ø#{diameter_mm.to_i} mm (ลาดเอียง Slope #{slope_pct}%)"
+            label: "แนวท่อระบายน้ำ: Ø#{Units.format_dimension(diameter_mm)} (ลาดเอียง Slope #{slope_pct}%)"
           }
         end
 
@@ -390,7 +390,7 @@ module JiraNot
             type: :conduit,
             wireframe_lines: [p1, p2, p2, p3, p3, p4],
             midpoint: [(s[0] + e[0]) / 2.0, (s[1] + e[1]) / 2.0, cz_su + 1.0],
-            label: "แนวท่อร้อยสายไฟ (ระดับฝ้าเพดาน #{ceiling_z_mm.to_i} mm)"
+            label: "แนวท่อร้อยสายไฟ (ระดับฝ้าเพดาน #{Units.format_dimension(ceiling_z_mm)})"
           }
         end
 
@@ -510,12 +510,9 @@ module JiraNot
           # 4. Floating HUD dimension tag
           text_to_draw = label || mesh[:label]
           if text_to_draw && view.respond_to?(:draw_text)
-            screen_pt = if view.respond_to?(:screen_coords) && mesh[:midpoint]
-                          view.screen_coords(mesh[:midpoint])
-                        else
-                          mesh[:midpoint]
-                        end
-            view.draw_text(screen_pt, text_to_draw) if screen_pt
+            world_pt = mesh[:midpoint] && Geom::Point3d.new(*mesh[:midpoint])
+            screen_pt = world_pt && view.respond_to?(:screen_coords) ? view.screen_coords(world_pt) : nil
+            view.draw_text(Geom::Point3d.new(screen_pt.x, screen_pt.y, 0), text_to_draw) if screen_pt
           end
         rescue StandardError
           nil

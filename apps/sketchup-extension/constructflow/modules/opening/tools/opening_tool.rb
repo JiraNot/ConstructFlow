@@ -60,12 +60,14 @@ module JiraNot
               end
             elsif @input_point.valid? && view.respond_to?(:draw_text)
               screen = view.respond_to?(:screen_coords) ? view.screen_coords(@input_point.position) : @input_point.position
-              view.draw_text(screen, "ช่องเปิด #{@width_mm.to_i}x#{@height_mm.to_i} mm")
+              text_point = Geom::Point3d.new(screen.x, screen.y, 0)
+              view.draw_text(text_point, "ช่องเปิด #{Core::Units.format_dimension(@width_mm)} × #{Core::Units.format_dimension(@height_mm)}")
             end
 
             if @preview
               label = @preview[:state] == 'valid' ? 'Opening valid' : @preview[:state] == 'invalid' ? @preview[:errors].first : 'Select Smart Wall'
-              view.draw_text(@input_point.position, label) if @input_point.valid?
+              screen = view.respond_to?(:screen_coords) ? view.screen_coords(@input_point.position) : nil
+              view.draw_text(Geom::Point3d.new(screen.x, screen.y, 0), label) if @input_point.valid? && screen
             end
           end
 

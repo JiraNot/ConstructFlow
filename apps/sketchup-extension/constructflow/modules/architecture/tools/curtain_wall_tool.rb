@@ -45,16 +45,16 @@ module JiraNot
             ]
             list = ['', '', '', '', 'glass|louver|slat|open|solid', '', '']
 
-            results = UI.inputbox(prompts, defaults, list, 'ตั้งค่าแก้ไขผนังกระจก/ระแนง [Edit Curtain Wall]')
+            results = JiraNot::ConstructFlow::Core::Units.meter_inputbox(prompts, defaults, list, 'ตั้งค่าแก้ไขผนังกระจก/ระแนง [Edit Curtain Wall]')
             return false unless results
 
-            grid_w = results[0].to_f
-            grid_h = results[1].to_f
-            m_w = results[2].to_f
-            m_d = results[3].to_f
+            grid_w = results[0].to_f * 1000.0
+            grid_h = results[1].to_f * 1000.0
+            m_w = results[2].to_f * 1000.0
+            m_d = results[3].to_f * 1000.0
             infill = results[4].to_sym
             louver_angle = results[5].to_f
-            thickness = results[6].to_f
+            thickness = results[6].to_f * 1000.0
 
             new_def = CurtainWallDefinition.new(
               boundary_mm: current_def.boundary_mm,
@@ -123,27 +123,27 @@ module JiraNot
             model = Sketchup.active_model
             
             prompts = [
-              'ระยะห่างเสากรอบแนวตั้ง (Mullion Spacing mm):',
-              'ระยะห่างคานกรอบแนวนอน/ระแนง (Transom/Slat Spacing mm):',
-              'ความกว้างกรอบอลูมิเนียม (Mullion Width mm):',
-              'ความลึกกรอบอลูมิเนียม (Mullion Depth mm):',
+              'ระยะห่างเสากรอบแนวตั้ง (เมตร m):',
+              'ระยะห่างคานกรอบแนวนอน/ระแนง (เมตร m):',
+              'ความกว้างกรอบอลูมิเนียม (เมตร m):',
+              'ความลึกกรอบอลูมิเนียม (เมตร m):',
               'รูปแบบแผ่นลูกฟัก (Infill Type):',
               'องศาเอียงเกล็ด/ระแนง (Louver Angle deg):',
-              'ความหนากระจก/แผ่นไม้ (Thickness mm):'
+              'ความหนากระจก/แผ่นไม้ (เมตร m):'
             ]
-            defaults = ['1000', '1200', '50', '100', 'glass', '0', '8']
+            defaults = ['1.0', '1.2', '0.05', '0.10', 'glass', '0', '0.008']
             list = ['', '', '', '', 'glass|louver|slat|open|solid', '', '']
 
-            results = UI.inputbox(prompts, defaults, list, 'สร้างผนังกระจก / แผงระแนง [Curtain Wall & Lattice]')
+            results = JiraNot::ConstructFlow::Core::Units.meter_inputbox(prompts, defaults, list, 'สร้างผนังกระจก / แผงระแนง [Curtain Wall & Lattice]')
             return unless results
 
-            grid_w = results[0].to_f
-            grid_h = results[1].to_f
-            m_w = results[2].to_f
-            m_d = results[3].to_f
+            grid_w = results[0].to_f * 1000.0
+            grid_h = results[1].to_f * 1000.0
+            m_w = results[2].to_f * 1000.0
+            m_d = results[3].to_f * 1000.0
             infill = results[4].to_sym
             louver_angle = results[5].to_f
-            thickness = results[6].to_f
+            thickness = results[6].to_f * 1000.0
 
             boundary = face.outer_loop.vertices.map { |v| v.position.to_a.map { |coord| coord.to_mm } }
 

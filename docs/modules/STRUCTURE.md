@@ -53,7 +53,11 @@ Use semantic level roles where appropriate:
 
 Raw geometry must not be the only source of vertical meaning.
 
-## Foundation objects
+## Foundation placement and units
+
+The SketchUp Structure workflow supports placing a standalone footing directly at the cursor as well as generating a supported foundation from a selected column. Standalone placement is dispatched through the registered `CreateFoundation` command; column-based generation remains `GenerateFoundation`.
+
+User-facing model dimensions and placement inputs are meters only. Foundation width and length are limited to 20 m, matching typical residential footprints; do not apply this footprint cap to unrelated general-purpose distance parsing. Persisted Structure definitions and command fields remain canonical millimetres (`*_mm`), with UI inputs converted at the boundary. Preview graphics and annotations must use the same snapped world point as the committed foundation and draw labels in screen coordinates.
 
 Pile:
 
@@ -141,7 +145,8 @@ Full 3D bars are not required for BBS/weight takeoff.
 - `CreateBeam`
 - `CreateSlab`
 - `CreatePileGroup`
-- `GenerateFoundation`
+- `CreateFoundation` — place a standalone foundation at an explicit `location_mm`.
+- `GenerateFoundation` — create a foundation associated with a selected structural column.
 - `ConnectGroundBeam`
 - `CreateSteelMember`
 - `ApplySteelConnection`

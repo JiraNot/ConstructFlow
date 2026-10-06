@@ -80,7 +80,7 @@ module JiraNot
 
                 if defined?(SB_VCB_LABEL)
                   Sketchup.set_status_text('ความยาว (Length)', SB_VCB_LABEL)
-                  Sketchup.set_status_text(format('%.1f mm', preview[:length_mm]), SB_VCB_VALUE)
+                  Sketchup.set_status_text(format('%.2f m', preview[:length_mm] / 1000.0), SB_VCB_VALUE)
                 end
               else
                 snapped = @interaction.snap(point_mm, references: plan_references)
@@ -160,7 +160,8 @@ module JiraNot
             unless @start_point
               @input_point.draw(view) if @input_point&.valid?
               view.draw_points([@hover_point], 8, 1, 'cyan') if view.respond_to?(:draw_points)
-              view.draw_text(@hover_point, 'Click to start Smart Wall') if view.respond_to?(:draw_text)
+              screen = view.respond_to?(:screen_coords) ? view.screen_coords(@hover_point) : nil
+              view.draw_text(Geom::Point3d.new(screen.x, screen.y, 0), 'Click to start Smart Wall') if screen && view.respond_to?(:draw_text)
               return
             end
 
@@ -225,7 +226,8 @@ module JiraNot
             if @closing_loop && @first_point && view.respond_to?(:draw_points)
               first_pt = point_from_mm(@first_point)
               view.draw_points([first_pt], 14, 2, 'gold')
-              view.draw_text(first_pt, ' 🔒 คลิกเพื่อปิดลูปห้อง (Close Loop)') if view.respond_to?(:draw_text)
+              screen = view.respond_to?(:screen_coords) ? view.screen_coords(first_pt) : nil
+              view.draw_text(Geom::Point3d.new(screen.x, screen.y, 0), ' 🔒 คลิกเพื่อปิดลูปห้อง (Close Loop)') if screen && view.respond_to?(:draw_text)
             end
 
             if @preview && view.respond_to?(:draw_text)
@@ -314,7 +316,7 @@ module JiraNot
             @numeric_length_mm = length_mm
 
             unless @start_point
-              Sketchup.status_text = "ConstructFlow Plan Wall: กำหนดความยาว #{length_mm.round(1)} mm (คลิกจุดเริ่มต้นเพื่อเริ่มวาดผนัง)"
+              Sketchup.status_text = "ConstructFlow Plan Wall: กำหนดความยาว #{Core::Units.format_dimension(length_mm)} (คลิกจุดเริ่มต้นเพื่อเริ่มวาดผนัง)"
               view.invalidate
               return
             end
@@ -336,7 +338,7 @@ module JiraNot
               @start_input_point = Sketchup::InputPoint.new(point_from_mm(finish))
               @numeric_length_mm = nil
               @preview = nil
-              Sketchup.status_text = "สร้างผนังความยาว #{length_mm.round(1)} mm สำเร็จ (คลิกหรือพิมพ์ความยาวสำหรับช่วงถัดไป)"
+              Sketchup.status_text = "สร้างผนังความยาว #{Core::Units.format_dimension(length_mm)} สำเร็จ (คลิกหรือพิมพ์ความยาวสำหรับช่วงถัดไป)"
               Sketchup.set_status_text('', SB_VCB_VALUE) if defined?(SB_VCB_VALUE)
             end
             view.invalidate

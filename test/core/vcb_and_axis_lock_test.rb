@@ -92,8 +92,8 @@ class VcbAndAxisLockTest < Minitest::Test
     tool.instance_variable_set(:@start_point, [0.0, 0.0, 0.0])
     tool.instance_variable_set(:@hover_point, Geom::Point3d.new(100.0, 0, 0))
 
-    # User types 3000 mm and hits Enter
-    tool.onUserText('3000 mm', view)
+    # User enters 3 m and hits Enter
+    tool.onUserText('3', view)
 
     assert_equal 1, @commands.executed.length
     cmd = @commands.executed.first
@@ -110,7 +110,7 @@ class VcbAndAxisLockTest < Minitest::Test
 
     tool.instance_variable_set(:@start_point, [1000.0, 500.0, 0.0])
     tool.onKeyDown(39, false, 0, view) # Lock Red axis
-    tool.onUserText('2500', view)
+    tool.onUserText('2.5', view)
 
     cmd = @commands.executed.first
     assert_equal 'CreateWall', cmd[:name]
@@ -125,7 +125,7 @@ class VcbAndAxisLockTest < Minitest::Test
 
     tool.instance_variable_set(:@start_point, [1000.0, 500.0, 0.0])
     tool.onKeyDown(37, false, 0, view) # Lock Green axis
-    tool.onUserText('4000 mm', view)
+    tool.onUserText('4', view)
 
     cmd = @commands.executed.first
     assert_equal 'CreateWall', cmd[:name]
@@ -139,7 +139,7 @@ class VcbAndAxisLockTest < Minitest::Test
     view = Class.new { def invalidate; end }.new
     tool.instance_variable_set(:@start_mm, [0.0, 0.0, 0.0])
     tool.onKeyDown(39, false, 0, view) # Lock Red
-    tool.onUserText('5000 mm', view)
+    tool.onUserText('5', view)
 
     cmd = @commands.executed.first
     assert_equal 'CreateBeam', cmd[:name]
@@ -153,7 +153,7 @@ class VcbAndAxisLockTest < Minitest::Test
     view = Class.new { def invalidate; end }.new
     tool.instance_variable_set(:@start_mm, [0.0, 0.0, 0.0])
     tool.onKeyDown(37, false, 0, view) # Lock Green
-    tool.onUserText('6000 mm', view)
+    tool.onUserText('6', view)
 
     cmd = @commands.executed.first
     assert_equal 'CreateStructuralGrid', cmd[:name]

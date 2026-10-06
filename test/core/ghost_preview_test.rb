@@ -19,9 +19,10 @@ class GhostPreviewTest < Minitest::Test
     assert_equal 2800.0, mesh[:height_mm]
     assert_equal 24, mesh[:wireframe_lines].size # 12 line segments * 2 points
     assert_equal 6, mesh[:faces].size # 6 bounding faces
-    assert_includes mesh[:label], '3000 mm'
-    assert_includes mesh[:label], '100 mm'
-    assert_includes mesh[:label], '2800 mm'
+    assert_includes mesh[:label], '3.000 m'
+    assert_includes mesh[:label], '0.100 m'
+    assert_includes mesh[:label], '2.800 m'
+    refute_match(/\bmm\b|มม/i, mesh[:label])
   end
 
   def test_opening_cutout_mesh_generation
@@ -37,8 +38,9 @@ class GhostPreviewTest < Minitest::Test
     assert_equal 2100.0, mesh[:height_mm]
     assert_equal 100.0, mesh[:sill_mm]
     assert_equal 6, mesh[:faces].size
-    assert_includes mesh[:label], '900 x 2100 mm'
-    assert_includes mesh[:label], 'Sill: 100 mm'
+    assert_includes mesh[:label], '0.900 m × 2.100 m'
+    assert_includes mesh[:label], 'ระดับธรณี 0.100 m'
+    refute_match(/\bmm\b|มม/i, mesh[:label])
   end
 
   def test_column_mesh_generation
@@ -50,8 +52,9 @@ class GhostPreviewTest < Minitest::Test
     assert_equal [200.0, 200.0], mesh[:section_mm]
     assert_equal 3000.0, mesh[:height_mm]
     assert_equal 6, mesh[:faces].size
-    assert_includes mesh[:label], '200x200 mm'
-    assert_includes mesh[:label], '3000 mm'
+    assert_includes mesh[:label], '0.200 m × 0.200 m'
+    assert_includes mesh[:label], '3.000 m'
+    refute_match(/\bmm\b|มม/i, mesh[:label])
   end
 
   def test_foundation_mesh_generation
@@ -62,8 +65,9 @@ class GhostPreviewTest < Minitest::Test
     assert_equal :foundation, mesh[:type]
     assert_equal [1200.0, 1200.0, 500.0], mesh[:size_mm]
     assert_equal 6, mesh[:faces].size
-    assert_includes mesh[:label], '1200x1200 mm'
-    assert_includes mesh[:label], '500 mm'
+    assert_includes mesh[:label], '1.200 m × 1.200 m'
+    assert_includes mesh[:label], '0.500 m'
+    refute_match(/\bmm\b|มม/i, mesh[:label])
   end
 
   def test_manhole_mesh_generation
@@ -74,8 +78,8 @@ class GhostPreviewTest < Minitest::Test
     assert_equal :manhole, mesh[:type]
     assert_equal [600.0, 600.0], mesh[:size_mm]
     assert_equal 900.0, mesh[:depth_mm]
-    assert_includes mesh[:label], '600x600 mm'
-    assert_includes mesh[:label], '900 mm'
+    assert_includes mesh[:label], '0.600 m × 0.600 m'
+    assert_includes mesh[:label], '0.900 m'
   end
 
   def test_cabinet_mesh_generation
@@ -88,7 +92,7 @@ class GhostPreviewTest < Minitest::Test
     assert_equal 850.0, mesh[:height_mm]
     assert_equal 600.0, mesh[:depth_mm]
     assert_equal 4, mesh[:module_count]
-    assert_includes mesh[:label], '2400x850x600 mm'
+    assert_includes mesh[:label], '2.400 m × 0.850 m × 0.600 m'
     assert_includes mesh[:label], '4 ช่อง'
   end
 
@@ -112,7 +116,7 @@ class GhostPreviewTest < Minitest::Test
     assert_equal :pipe, mesh[:type]
     assert_equal 150.0, mesh[:diameter_mm]
     assert_equal 2.0, mesh[:slope_pct] # 2 / 100 * 100% = 2.0%
-    assert_includes mesh[:label], 'Ø150 mm'
+    assert_includes mesh[:label], 'Ø0.150 m'
     assert_includes mesh[:label], 'Slope 2.0%'
   end
 
@@ -124,7 +128,7 @@ class GhostPreviewTest < Minitest::Test
     refute_nil mesh
     assert_equal :conduit, mesh[:type]
     assert_equal 6, mesh[:wireframe_lines].size
-    assert_includes mesh[:label], '2700 mm'
+    assert_includes mesh[:label], '2.700 m'
   end
 
   def test_asset_mesh_generation
@@ -156,7 +160,7 @@ class GhostPreviewTest < Minitest::Test
       end
 
       def screen_coords(point)
-        point
+        Geom::Point3d.new(100, 200, 300)
       end
     end.new
 
@@ -171,5 +175,7 @@ class GhostPreviewTest < Minitest::Test
     refute_empty view_mock.drawn_calls
     refute_empty view_mock.text_calls
     assert_equal mesh[:label], view_mock.text_calls.first[1]
+    assert_equal [100.0, 200.0, 0.0], view_mock.text_calls.first[0].to_a
+    refute_match(/\bmm\b|มม/i, mesh[:label])
   end
 end

@@ -468,7 +468,7 @@ module JiraNot
             )
           end
           menu.add_item('Place Fixed Asset by ID') do
-            values = UI.inputbox(['Asset ID', 'Version (blank = latest)', 'Rotation (deg)'], ['', '', '0'], 'ConstructFlow Catalog Asset')
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Asset ID', 'Version (blank = latest)', 'Rotation (deg)'], ['', '', '0'], 'ConstructFlow Catalog Asset')
             next unless values
             asset_id = values[0].to_s.strip
             version = values[1].to_s.strip

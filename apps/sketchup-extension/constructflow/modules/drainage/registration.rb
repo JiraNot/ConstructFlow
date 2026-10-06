@@ -551,7 +551,7 @@ module JiraNot
 
           menu = runtime.menu.add_submenu('Drainage')
           menu.add_item('Place Manhole') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Size (mm)', 'Cover level mm (blank=unknown)', 'Invert in mm (blank=unknown)', 'Invert out mm (blank=unknown)'],
               ['600', '', '', ''],
               'ConstructFlow Manhole'

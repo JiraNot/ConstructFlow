@@ -223,7 +223,7 @@ module JiraNot
               next
             end
 
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Program', 'Target height (mm)', 'Roof intent'],
               ['custom', '2800', 'lean_to'],
               'ConstructFlow Extension Zone'

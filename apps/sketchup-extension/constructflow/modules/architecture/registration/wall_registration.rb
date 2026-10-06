@@ -15,7 +15,7 @@ module JiraNot
           object_type: 'architecture.wall',
           columns: [
             { id: 'wall_type_id', label: 'Wall Type', field_type: 'text', editable: true, scope: 'type' },
-            { id: 'thickness_mm', label: 'Thickness (mm)', field_type: 'number', editable: true, scope: 'instance' },
+            { id: 'thickness_mm', label: 'Thickness (stock mm)', field_type: 'number', editable: true, scope: 'instance' },
             { id: 'height_m', label: 'Height (m)', field_type: 'number', calculated: true },
             { id: 'length_m', label: 'Length (m)', field_type: 'number', calculated: true },
             { id: 'volume_m3', label: 'Volume (m³)', field_type: 'number', calculated: true },

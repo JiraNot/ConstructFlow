@@ -4,9 +4,10 @@ Status: Accepted foundation contract.
 
 ## Units
 
-- Internal canonical length: millimetres.
-- User-facing units are project-configurable.
-- Quantity providers normalize to declared output units such as m, m², m³, kg, pcs, pair, sheet and set.
+- Internal canonical length: millimetres; domain/persistence fields use explicit `_mm` names.
+- In the SketchUp extension, all user-facing length entry and model display is meters only. Convert to/from internal millimetres at the UI boundary; do not offer a millimetre display toggle.
+- User-facing areas and volumes use m² and m³. Quantity providers normalize to declared output units such as m, m², m³, kg, pcs, pair, sheet and set.
+- Structural footprint placement and dimensions for typical residential work support up to 20 m in plan; this is a domain/tool limit, not a generic parser limit for every length.
 - Do not repeatedly round intermediate calculations.
 
 ## Identifiers

@@ -734,7 +734,7 @@ module JiraNot
 
           menu = runtime.menu.add_submenu('Surface & Paving')
           menu.add_item('Draw Surface Boundary in Plan') do
-            values = UI.inputbox(['Surface type', 'Base level ID (optional)'], ['paver', ''], 'ConstructFlow Plan Surface')
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Surface type', 'Base level ID (optional)'], ['paver', ''], 'ConstructFlow Plan Surface')
             next unless values
 
             runtime.active_model.select_tool(
@@ -749,7 +749,7 @@ module JiraNot
               UI.messagebox('Select one SketchUp face first.')
               next
             end
-            values = UI.inputbox(['Surface type'], ['paver'], 'ConstructFlow Surface')
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Surface type'], ['paver'], 'ConstructFlow Surface')
             next unless values
             outer = face.outer_loop.vertices.map { |vertex| Core::Units.point_to_mm(vertex.position) }
             holes = face.loops.reject(&:outer?).map { |loop| loop.vertices.map { |vertex| Core::Units.point_to_mm(vertex.position) } }
@@ -769,7 +769,7 @@ module JiraNot
               UI.messagebox('Select one ConstructFlow Surface first.')
               next
             end
-            values = UI.inputbox(['Width (mm)', 'Material ID'], ['150', 'generic.border'], 'ConstructFlow Paving Border')
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Width (mm)', 'Material ID'], ['150', 'generic.border'], 'ConstructFlow Paving Border')
             next unless values
             result = runtime.commands.execute(
               'AddPavingBorder',
@@ -785,7 +785,7 @@ module JiraNot
               UI.messagebox('Select one ConstructFlow Surface first.')
               next
             end
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Pattern', 'Module width (mm)', 'Module height (mm)', 'Joint (mm)', 'Angle (deg)'],
               ['grid', '300', '300', '3', '0'],
               'ConstructFlow Paving Pattern'
@@ -811,7 +811,7 @@ module JiraNot
               UI.messagebox('Select one ConstructFlow Surface first.')
               next
             end
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Bay count', 'Bay width (mm)', 'Bay length (mm)', 'Divider width (mm)', 'Angle (deg)'],
               ['3', '2500', '5000', '100', '0'],
               'ConstructFlow Parking Layout'

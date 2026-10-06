@@ -148,7 +148,8 @@ Extension orchestration follows the same rule. `GenerateOrUpdateArchitectureFrom
 - `EditBeamSchedule`
 - `CreateColumn`
 - `EditColumnSchedule`
-- `GenerateFoundation`
+- `CreateFoundation` — create a standalone foundation at an explicit model location.
+- `GenerateFoundation` — generate a foundation supported by a selected column.
 - `CreatePileGroup`
 - `ConnectGroundBeam`
 - `CreateBeam`

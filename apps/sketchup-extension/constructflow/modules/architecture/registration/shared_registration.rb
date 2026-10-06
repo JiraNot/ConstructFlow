@@ -991,15 +991,15 @@ module JiraNot
             prompts = ['รูปแบบหลังคา (Form):', 'ความลาดชัน (องศา Deg):', 'ระยะยื่นชายคา (เมตร m):', 'ความสูงไม้เชิงชาย (เมตร m):', 'ความหนาแผ่นมุง (เมตร m):']
             defaults = ['hip', '30.0', '0.80', '0.20', '0.035']
             list = ['hip|gable|lean_to', '', '', '', '']
-            input = UI.inputbox(prompts, defaults, list, 'ConstructFlow - สร้างหลังคาปั้นหยา/จั่ว')
+            input = JiraNot::ConstructFlow::Core::Units.meter_inputbox(prompts, defaults, list, 'ConstructFlow - สร้างหลังคาปั้นหยา/จั่ว')
             if input
               Architecture::HipGableRoofGenerator.generate_from_selection(
                 runtime.active_model,
                 form: input[0].to_s,
                 slope_deg: input[1].to_f,
-                overhang_mm: input[2].to_f,
-                fascia_height_mm: input[3].to_f,
-                thickness_mm: input[4].to_f
+                overhang_mm: input[2].to_f * 1000.0,
+                fascia_height_mm: input[3].to_f * 1000.0,
+                thickness_mm: input[4].to_f * 1000.0
               )
             end
           end
@@ -1021,7 +1021,7 @@ module JiraNot
             prompts = ['ชื่อหน้าตัดโปรไฟล์ (Profile Name):', 'รหัสโปรไฟล์ (Profile Code):', 'จุดยึด (Anchor Point):']
             defaults = ['บัวผนังที่วาดใหม่', 'CUST-01', 'bottom_left']
             list = ['', '', 'bottom_left|bottom_center|bottom_right|center|top_left|top_center|top_right']
-            results = UI.inputbox(prompts, defaults, list, 'บันทึกหน้าตัดโปรไฟล์ [Custom Profile]')
+            results = JiraNot::ConstructFlow::Core::Units.meter_inputbox(prompts, defaults, list, 'บันทึกหน้าตัดโปรไฟล์ [Custom Profile]')
             if results
               name = results[0]
               code = results[1]
@@ -1029,7 +1029,7 @@ module JiraNot
               extracted = Core::CustomProfileStore.extract_profile_from_face(face, anchor: anchor)
               if extracted
                 Core::CustomProfileStore.add_profile(code, name, extracted[:points_mm], extracted[:width_mm], extracted[:depth_mm])
-                UI.messagebox("บันทึกหน้าตัดโปรไฟล์ '#{name}' (#{code}) สำเร็จ!\nขนาด: #{extracted[:width_mm]} x #{extracted[:depth_mm]} mm")
+                UI.messagebox("บันทึกหน้าตัดโปรไฟล์ '#{name}' (#{code}) สำเร็จ!\nขนาด: #{Core::Units.format_dimension(extracted[:width_mm])} × #{Core::Units.format_dimension(extracted[:depth_mm])}")
               else
                 UI.messagebox('ไม่สามารถสกัดจุดหน้าตัดจาก Face ที่เลือกได้')
               end
@@ -1046,7 +1046,7 @@ module JiraNot
             prompts = ['เลือกโปรไฟล์ (Profile Code):']
             defaults = ['SKIRT-100x15']
             list = [all_profiles.join('|')]
-            results = UI.inputbox(prompts, defaults, list, 'กวาดบัวตามแนวเส้นที่เลือก [Sweep Along Edges]')
+            results = JiraNot::ConstructFlow::Core::Units.meter_inputbox(prompts, defaults, list, 'กวาดบัวตามแนวเส้นที่เลือก [Sweep Along Edges]')
             if results
               code = results[0]
               res = Core::CustomProfileStore.sweep_along_edges(edges, code, runtime.active_model)
@@ -1067,7 +1067,7 @@ module JiraNot
           end
 
           architecture_menu.add_item('Draw Smart Wall') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Thickness (mm)', 'Height (mm)', 'Base level ID (optional)'],
               ['100', '2800', ''],
               'ConstructFlow Smart Wall'
@@ -1089,7 +1089,7 @@ module JiraNot
             UI.messagebox(error.message)
           end
           architecture_menu.add_item('Open Architecture Plan Editor') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Base level ID (optional)'],
               [''],
               'ConstructFlow Architecture Plan'
@@ -1108,7 +1108,7 @@ module JiraNot
             UI.messagebox("ConstructFlow Architecture Plan error: #{error.message}")
           end
           architecture_menu.add_item('Draw Architectural Floor in Plan') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Thickness (mm)', 'Base level ID (optional)'],
               ['150', ''],
               'ConstructFlow Architectural Floor'
@@ -1126,7 +1126,7 @@ module JiraNot
             UI.messagebox(error.message)
           end
           architecture_menu.add_item('Draw Room in Plan') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Room name', 'Room number', 'Program', 'Base level ID (optional)'],
               ['', '', 'generic', ''],
               'ConstructFlow Room'
@@ -1143,7 +1143,7 @@ module JiraNot
             UI.messagebox(error.message)
           end
           architecture_menu.add_item('Detect Rooms from Smart Walls') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Room name prefix', 'Program', 'Base level ID (optional)'],
               ['Room', 'generic', ''],
               'ConstructFlow Room Detection'
@@ -1161,7 +1161,7 @@ module JiraNot
             UI.messagebox("ConstructFlow Room detection error: #{error.message}")
           end
           architecture_menu.add_item('Draw Ceiling in Plan') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Height above base level (mm)', 'Thickness (mm)', 'Base level ID (optional)'],
               ['2700', '12', ''],
               'ConstructFlow Architectural Ceiling'
@@ -1177,7 +1177,7 @@ module JiraNot
             UI.messagebox(error.message)
           end
           architecture_menu.add_item('Edit Floor Boundary in Plan') do
-            values = UI.inputbox(['Base level ID (optional)'], [''], 'ConstructFlow Floor Boundary Edit')
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Base level ID (optional)'], [''], 'ConstructFlow Floor Boundary Edit')
             next unless values
 
             runtime.plan_scenes.refresh_preset('architecture.construction') if runtime.respond_to?(:plan_scenes)
@@ -1189,7 +1189,7 @@ module JiraNot
             UI.messagebox("ConstructFlow Floor edit error: #{error.message}")
           end
           architecture_menu.add_item('Edit Room Boundary in Plan') do
-            values = UI.inputbox(['Base level ID (optional)'], [''], 'ConstructFlow Room Boundary Edit')
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Base level ID (optional)'], [''], 'ConstructFlow Room Boundary Edit')
             next unless values
 
             runtime.plan_scenes.refresh_preset('architecture.construction') if runtime.respond_to?(:plan_scenes)
@@ -1201,7 +1201,7 @@ module JiraNot
             UI.messagebox("ConstructFlow Room edit error: #{error.message}")
           end
           architecture_menu.add_item('Edit Ceiling Boundary in Plan') do
-            values = UI.inputbox(['Base level ID (optional)'], [''], 'ConstructFlow Ceiling Boundary Edit')
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Base level ID (optional)'], [''], 'ConstructFlow Ceiling Boundary Edit')
             next unless values
 
             runtime.plan_scenes.refresh_preset('architecture.construction') if runtime.respond_to?(:plan_scenes)
@@ -1213,7 +1213,7 @@ module JiraNot
             UI.messagebox("ConstructFlow Ceiling edit error: #{error.message}")
           end
           architecture_menu.add_item('Edit Smart Wall in Plan') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Base level ID (optional)'],
               [''],
               'ConstructFlow Smart Wall Edit'
@@ -1226,7 +1226,7 @@ module JiraNot
             UI.messagebox("ConstructFlow Architecture Plan error: #{error.message}")
           end
           architecture_menu.add_item('Copy Smart Wall in Plan') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Base level ID (optional)'],
               [''],
               'ConstructFlow Smart Wall Copy'

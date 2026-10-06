@@ -491,7 +491,7 @@ module JiraNot
             UI.messagebox("ConstructFlow Opening host scan error: #{error.message}")
           end
           menu.add_item('Place Rectangular Opening') do
-            values = UI.inputbox(
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Width (mm)', 'Height (mm)', 'Sill (mm)', 'Base level ID (optional)'],
               ['900', '2100', '0', ''],
               'ConstructFlow Opening'
@@ -511,7 +511,7 @@ module JiraNot
             UI.messagebox(error.message)
           end
           menu.add_item('Edit Opening in Architecture Plan') do
-            values = UI.inputbox(['Base level ID (optional)'], [''], 'ConstructFlow Opening Edit')
+            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Base level ID (optional)'], [''], 'ConstructFlow Opening Edit')
             next unless values
 
             runtime.active_model.select_tool(Tools::OpeningEditTool.new(runtime: runtime, level_id: values[0]))

@@ -46,7 +46,7 @@ module JiraNot
               dist_mm = @start_point.distance(pos).to_mm
               if defined?(SB_VCB_LABEL)
                 Sketchup.set_status_text('ความยาว (Length)', SB_VCB_LABEL)
-                Sketchup.set_status_text(format('%.1f mm', dist_mm), SB_VCB_VALUE)
+                Sketchup.set_status_text(format('%.2f m', dist_mm / 1000.0), SB_VCB_VALUE)
               end
             end
             view.invalidate
@@ -64,7 +64,7 @@ module JiraNot
                   mesh,
                   face_color: [243, 156, 18, 80],
                   line_color: [211, 84, 0],
-                  label: "แนวท่อร้อยสายไฟฟ้า (ระดับฝ้า #{@ceiling_z_mm.to_i} mm) - คลิกจุดสิ้นสุด"
+                  label: "แนวท่อร้อยสายไฟฟ้า (ระดับฝ้า #{Core::Units.format_dimension(@ceiling_z_mm)}) - คลิกจุดสิ้นสุด"
                 )
               end
 
@@ -76,8 +76,8 @@ module JiraNot
                 view.draw(GL_LINES, [@start_point, target])
               end
             elsif @input_point.valid? && view.respond_to?(:draw_text)
-              screen = view.respond_to?(:screen_coords) ? view.screen_coords(@input_point.position) : @input_point.position
-              view.draw_text(screen, "คลิกจุดเริ่มต้นแนวท่อร้อยสายไฟ")
+              screen = view.respond_to?(:screen_coords) ? view.screen_coords(@input_point.position) : nil
+              view.draw_text(Geom::Point3d.new(screen.x, screen.y, 0), "คลิกจุดเริ่มต้นแนวท่อร้อยสายไฟ") if screen
             end
           end
 
@@ -106,7 +106,7 @@ module JiraNot
             @numeric_length_mm = length_mm
 
             unless @start_point
-              Sketchup.set_status_text("กำหนดความยาวแนวท่อ #{length_mm.round(1)} mm (คลิกจุดเริ่มต้นเพื่อวางท่อ)", SB_PROMPT)
+              Sketchup.set_status_text("กำหนดความยาวแนวท่อ #{Core::Units.format_dimension(length_mm)} (คลิกจุดเริ่มต้นเพื่อวางท่อ)", SB_PROMPT)
               view.invalidate
               return
             end

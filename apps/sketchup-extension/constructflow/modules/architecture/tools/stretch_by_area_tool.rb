@@ -45,7 +45,7 @@ module JiraNot
             ]
             list = ['', '', 'uniform|stretch_x|stretch_y']
 
-            results = UI.inputbox(prompts, defaults, list, 'ยืดขยายตามพื้นที่เป้าหมาย [Stretch by Area]')
+            results = JiraNot::ConstructFlow::Core::Units.meter_inputbox(prompts, defaults, list, 'ยืดขยายตามพื้นที่เป้าหมาย [Stretch by Area]')
             return unless results
 
             target_m2 = results[1].to_f

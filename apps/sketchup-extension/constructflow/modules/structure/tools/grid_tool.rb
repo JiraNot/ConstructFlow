@@ -59,7 +59,7 @@ module JiraNot
               @finish_mm = preview[:finish_mm]
               if defined?(SB_VCB_LABEL)
                 Sketchup.set_status_text('ระยะกริด (Length)', SB_VCB_LABEL)
-                Sketchup.set_status_text(format('%.1f mm', preview[:length_mm]), SB_VCB_VALUE)
+                Sketchup.set_status_text(format('%.2f m', preview[:length_mm] / 1000.0), SB_VCB_VALUE)
               end
             else
               @finish_mm = snapped
@@ -101,10 +101,12 @@ module JiraNot
 
           def onUserText(text, view)
             length_mm = @interaction.numeric_distance_mm(text)
+            raise ArgumentError, 'ความยาวกริดต้องไม่เกิน 20 เมตร' if length_mm > 20_000.0
+
             @numeric_length_mm = length_mm
 
             unless @start_mm
-              Sketchup.set_status_text("กำหนดระยะกริด #{length_mm.round(1)} mm (คลิกจุดเริ่มต้นเพื่อวางกริด)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+              Sketchup.set_status_text("กำหนดระยะกริด #{Core::Units.format_dimension(length_mm)} (คลิกจุดเริ่มต้นเพื่อวางกริด)", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
               view.invalidate
               return
             end
@@ -121,7 +123,7 @@ module JiraNot
             @start_input_point = nil
             @finish_mm = nil
             @numeric_length_mm = nil
-            Sketchup.set_status_text("สร้างเส้นกริดความยาว #{length_mm.round(1)} mm สำเร็จ", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
+            Sketchup.set_status_text("สร้างเส้นกริดความยาว #{Core::Units.format_dimension(length_mm)} สำเร็จ", (defined?(SB_PROMPT) ? SB_PROMPT : nil))
             Sketchup.set_status_text('', SB_VCB_VALUE) if defined?(SB_VCB_VALUE)
             view.invalidate
           rescue ArgumentError => error
@@ -190,7 +192,8 @@ module JiraNot
 
             if view.respond_to?(:draw_text)
               len = Math.sqrt((dx * dx) + (dy * dy))
-              view.draw_text(finish_pt, format('%s L %.0f mm', @name, len))
+              screen = view.respond_to?(:screen_coords) ? view.screen_coords(finish_pt) : nil
+              view.draw_text(Geom::Point3d.new(screen.x, screen.y, 0), format('%s L %.2f m', @name, len / 1000.0)) if screen
             end
           end
 

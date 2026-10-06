@@ -51,9 +51,9 @@ Project state includes at minimum:
 
 ## Units
 
-Foundation canonical internal length unit: millimetres.
+Foundation canonical internal length unit: millimetres. Persisted/domain fields retain their explicit `_mm` representation.
 
-Domain/platform output normalizes to declared units. UI may display project-selected metric formats without changing canonical persisted values unexpectedly.
+In the SketchUp extension, user-facing lengths are meters only: the model display, VCB, dialogs, property panel, tool previews and labels use meters. Inputs are converted to millimetres at the UI boundary before reaching domain commands; model/unit preferences must not switch ConstructFlow's visible length unit to millimetres. Areas and volumes use m² and m³ respectively. Product stock/profile sizes may retain a clearly marked stock specification where needed, but must not change the unit used for model dimensions.
 
 ## Stable ID
 

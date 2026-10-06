@@ -57,24 +57,33 @@ module JiraNot
           end
 
           def onUserText(text, view)
-            # Parse VCB input: e.g. "1200, 2200" or "1200"
-            parts = text.split(',').map(&:strip)
-            w = parts[0] ? parts[0].to_f : nil
-            h = parts[1] ? parts[1].to_f : nil
+            # Parse VCB input in meters: e.g. "1.2, 2.2" or "1.2"
+            parts = text.to_s.strip.split(',').map(&:strip)
+            raise ArgumentError, 'กรอกความกว้าง,ความสูงเป็นเมตร เช่น 1.2,2.2' unless (1..2).cover?(parts.length)
+
+            dimensions_mm = parts.map { |value| Core::Units.m_input_to_mm(value, max_meters: 20.0) }
+            w = dimensions_mm[0]
+            h = dimensions_mm[1]
 
             model = view.model
             ent = model.selection.find { |e| e.is_a?(Sketchup::Group) || e.is_a?(Sketchup::ComponentInstance) }
             if ent && (w || h)
-              opts = { target_width_mm: w, target_height_mm: h }
+              opts = {}
+              opts[:target_width_mm] = w if w
+              opts[:target_height_mm] = h if h
               Core::SmartStretchEngine.new(ent, opts).execute(model)
-              Sketchup.status_text = "ยืดสเกลสำเร็จ: กว้าง #{w || 'เดิม'} mm, สูง #{h || 'เดิม'} mm (ขอบเฟรมไม่เพี้ยน)"
+              width_m = w.nil? ? 'เดิม' : Core::Units.format_dimension(w)
+              height_m = h.nil? ? 'เดิม' : Core::Units.format_dimension(h)
+              Sketchup.status_text = "ยืดสเกลสำเร็จ: กว้าง #{width_m}, สูง #{height_m} (ขอบเฟรมไม่เพี้ยน)"
             end
+          rescue ArgumentError => error
+            UI.messagebox(error.message)
           end
 
           private
 
           def update_status
-            Sketchup.status_text = 'คลิกเลือกประตู/หน้าต่าง/ตู้ ที่ต้องการยืดขยาย หรือพิมพ์ความกว้าง,ความสูง (mm) ในช่อง VCB'
+            Sketchup.status_text = 'คลิกเลือกประตู/หน้าต่าง/ตู้ ที่ต้องการยืดขยาย หรือพิมพ์ความกว้าง,ความสูงเป็นเมตรในช่อง VCB'
           end
 
           def prompt_for_dimensions(model, ent)
@@ -89,16 +98,16 @@ module JiraNot
             ]
             defaults = [cur_w_m.to_s, cur_h_m.to_s, '0.05']
 
-            res = UI.inputbox(prompts, defaults, 'ConstructFlow - ยืดสเกลขอบไม่เพี้ยน (เมตร) [9-Slice Smart Stretch]')
+            res = JiraNot::ConstructFlow::Core::Units.meter_inputbox(prompts, defaults, 'ConstructFlow - ยืดสเกลขอบไม่เพี้ยน (เมตร) [9-Slice Smart Stretch]')
             if res
               target_w = res[0].to_f
               target_h = res[1].to_f
               margin = res[2].to_f
 
               opts = {
-                target_width_m: target_w,
-                target_height_m: target_h,
-                frame_margin_m: margin
+                target_width_mm: Core::Units.m_to_mm(target_w),
+                target_height_mm: Core::Units.m_to_mm(target_h),
+                frame_margin_mm: Core::Units.m_to_mm(margin)
               }
               Core::SmartStretchEngine.new(ent, opts).execute(model)
               UI.messagebox("ยืดขยายขนาดวัตถุสำเร็จ!\nความกว้าง: #{cur_w_m} ➔ #{target_w} ม.\nความสูง: #{cur_h_m} ➔ #{target_h} ม.\nขอบเฟรมคงที่: #{margin} ม.")

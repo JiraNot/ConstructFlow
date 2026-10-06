@@ -296,6 +296,7 @@ module JiraNot
         def attach_model(model)
           return unless model
           @active_model = model
+          Core::Units.configure_model(model)
           @project = Core::ProjectStore.new(model, id_generator: @ids)
           @project.ensure_project!
           @levels = Core::LevelRegistry.new(project_store: @project)

@@ -25,22 +25,22 @@ module JiraNot
         # default: last-resort value, type: :float/:integer/:optional_float/:string/:choice
         SCHEMA = {
           'WA' => [
-            { key: :thickness_mm, label: 'ความหนาผนัง (mm)', default: 100.0, type: :float },
-            { key: :height_mm, label: 'ความสูงผนัง (mm)', default: 2800.0, type: :float },
+            { key: :thickness_mm, label: 'ความหนาผนัง (m)', default: 100.0, type: :float },
+            { key: :height_mm, label: 'ความสูงผนัง (m)', default: 2800.0, type: :float },
             { key: :level_id, label: 'Base Level ID (เว้นว่าง = ชั้นอัตโนมัติ)', default: '', type: :string }
           ],
           'CL' => [
-            { key: :section_width_mm, label: 'ความกว้างหน้าตัด (mm)', default: 200.0, type: :float },
-            { key: :section_depth_mm, label: 'ความลึกหน้าตัด (mm)', default: 200.0, type: :float },
-            { key: :height_mm, label: 'ความสูงเสา (mm)', default: 2800.0, type: :float },
+            { key: :section_width_mm, label: 'ความกว้างหน้าตัด (m)', default: 200.0, type: :float },
+            { key: :section_depth_mm, label: 'ความลึกหน้าตัด (m)', default: 200.0, type: :float },
+            { key: :height_mm, label: 'ความสูงเสา (m)', default: 2800.0, type: :float },
             { key: :base_level_id, label: 'Base Level ID (เว้นว่างได้)', default: '', type: :string },
             { key: :top_level_id, label: 'Top Level ID (เว้นว่างได้)', default: '', type: :string }
           ],
           'BM' => [
-            { key: :section_width_mm, label: 'ความกว้างหน้าตัด (mm)', default: 200.0, type: :float },
-            { key: :section_depth_mm, label: 'ความลึกหน้าตัด (mm)', default: 300.0, type: :float },
+            { key: :section_width_mm, label: 'ความกว้างหน้าตัด (m)', default: 200.0, type: :float },
+            { key: :section_depth_mm, label: 'ความลึกหน้าตัด (m)', default: 300.0, type: :float },
             { key: :level_id, label: 'Base Level ID (เว้นว่าง = ชั้นอัตโนมัติ)', default: '', type: :string },
-            { key: :base_offset_mm, label: 'ระยะยกจากระดับชั้น (mm)', default: 0.0, type: :float }
+            { key: :base_offset_mm, label: 'ระยะยกจากระดับชั้น (m)', default: 0.0, type: :float }
           ],
           'DR' => [
             { key: :category, label: 'หมวดหมู่ (door/window)', default: 'door', type: :choice, choices: %w[door window] },
@@ -55,54 +55,54 @@ module JiraNot
             { key: :panel_style, label: 'รูปแบบบาน', default: 'glazed', type: :string }
           ],
           'OP' => [
-            { key: :width_mm, label: 'ความกว้างช่องเปิด (mm)', default: 900.0, type: :float },
-            { key: :height_mm, label: 'ความสูงช่องเปิด (mm)', default: 2100.0, type: :float },
-            { key: :sill_mm, label: 'ระยะยกขอบพื้น Sill (mm)', default: 0.0, type: :float }
+            { key: :width_mm, label: 'ความกว้างช่องเปิด (m)', default: 900.0, type: :float },
+            { key: :height_mm, label: 'ความสูงช่องเปิด (m)', default: 2100.0, type: :float },
+            { key: :sill_mm, label: 'ระยะยกขอบพื้น Sill (m)', default: 0.0, type: :float }
           ],
           'FL' => [
-            { key: :thickness_mm, label: 'ความหนาแผ่นพื้น (mm)', default: 100.0, type: :float },
+            { key: :thickness_mm, label: 'ความหนาแผ่นพื้น (m)', default: 100.0, type: :float },
             { key: :level_id, label: 'Base Level ID (เว้นว่าง = ชั้นอัตโนมัติ)', default: '', type: :string }
           ],
           'CE' => [
-            { key: :height_mm, label: 'ความสูงฝ้าเพดาน (mm)', default: 2600.0, type: :float },
+            { key: :height_mm, label: 'ความสูงฝ้าเพดาน (m)', default: 2600.0, type: :float },
             { key: :level_id, label: 'Base Level ID (เว้นว่าง = ชั้นอัตโนมัติ)', default: '', type: :string }
           ],
           'FD' => [
-            { key: :size_width_mm, label: 'ความกว้างฐานราก (mm)', default: 1000.0, type: :float },
-            { key: :size_length_mm, label: 'ความยาวฐานราก (mm)', default: 1000.0, type: :float },
-            { key: :size_depth_mm, label: 'ความหนาฐานราก (mm)', default: 400.0, type: :float },
-            { key: :foundation_type, label: 'ชนิดฐานราก (isolated)', default: 'isolated', type: :string }
+            { key: :size_width_mm, label: 'ความกว้างฐานราก (m)', default: 1000.0, type: :float },
+            { key: :size_length_mm, label: 'ความยาวฐานราก (m)', default: 1000.0, type: :float },
+            { key: :size_depth_mm, label: 'ความหนาฐานราก (m)', default: 400.0, type: :float },
+            { key: :foundation_type, label: 'ชนิดฐานราก (spread_footing/pile_cap)', default: 'spread_footing', type: :choice, choices: %w[spread_footing pile_cap] }
           ],
           'GR' => [
             { key: :name, label: 'ชื่อเส้นกริด', default: 'A', type: :string },
             { key: :level_id, label: 'Base Level ID (เว้นว่าง = ชั้นอัตโนมัติ)', default: '', type: :string },
-            { key: :offset_mm, label: 'ระยะเยื้อง (mm)', default: 0.0, type: :float }
+            { key: :offset_mm, label: 'ระยะเยื้อง (m)', default: 0.0, type: :float }
           ],
           'CN' => [
-            { key: :ceiling_z_mm, label: 'ระดับฝ้าเพดาน Z (mm)', default: 2600.0, type: :float },
+            { key: :ceiling_z_mm, label: 'ระดับฝ้าเพดาน Z (m)', default: 2600.0, type: :float },
             { key: :strategy, label: 'กลยุทธ์ (ceiling_first/floor_first)', default: 'ceiling_first', type: :choice, choices: %w[ceiling_first floor_first] }
           ],
           'PI' => [
-            { key: :diameter_mm, label: 'ขนาดท่อ (mm)', default: 100.0, type: :float },
+            { key: :diameter_mm, label: 'ขนาดท่อ (m)', default: 100.0, type: :float },
             { key: :system, label: 'ระบบท่อ (waste/storm/sewage)', default: 'waste', type: :choice, choices: %w[waste storm sewage] }
           ],
           'MH' => [
-            { key: :size_width_mm, label: 'ความกว้างบ่อพัก (mm)', default: 600.0, type: :float },
-            { key: :size_length_mm, label: 'ความยาวบ่อพัก (mm)', default: 600.0, type: :float },
-            { key: :cover_level_mm, label: 'ระดับฝา Cover (mm, เว้นว่างได้)', default: nil, type: :optional_float },
-            { key: :invert_in_mm, label: 'ระดับก้นท่อเข้า (mm, เว้นว่างได้)', default: nil, type: :optional_float },
-            { key: :invert_out_mm, label: 'ระดับก้นท่อออก (mm, เว้นว่างได้)', default: nil, type: :optional_float }
+            { key: :size_width_mm, label: 'ความกว้างบ่อพัก (m)', default: 600.0, type: :float },
+            { key: :size_length_mm, label: 'ความยาวบ่อพัก (m)', default: 600.0, type: :float },
+            { key: :cover_level_mm, label: 'ระดับฝา Cover (m, เว้นว่างได้)', default: nil, type: :optional_float },
+            { key: :invert_in_mm, label: 'ระดับก้นท่อเข้า (m, เว้นว่างได้)', default: nil, type: :optional_float },
+            { key: :invert_out_mm, label: 'ระดับก้นท่อออก (m, เว้นว่างได้)', default: nil, type: :optional_float }
           ],
           'CB' => [
-            { key: :width_mm, label: 'ความกว้างรวม (mm)', default: 1800.0, type: :float },
-            { key: :height_mm, label: 'ความสูงเคาน์เตอร์ (mm)', default: 850.0, type: :float },
-            { key: :depth_mm, label: 'ความลึกตู้ (mm)', default: 600.0, type: :float },
+            { key: :width_mm, label: 'ความกว้างรวม (m)', default: 1800.0, type: :float },
+            { key: :height_mm, label: 'ความสูงเคาน์เตอร์ (m)', default: 850.0, type: :float },
+            { key: :depth_mm, label: 'ความลึกตู้ (m)', default: 600.0, type: :float },
             { key: :module_count, label: 'จำนวนช่องโมดูล', default: 3, type: :integer }
           ],
           'WR' => [
-            { key: :width_mm, label: 'ความกว้างตู้ (mm)', default: 1200.0, type: :float },
-            { key: :height_mm, label: 'ความสูงตู้ (mm)', default: 2200.0, type: :float },
-            { key: :depth_mm, label: 'ความลึกตู้ (mm)', default: 600.0, type: :float },
+            { key: :width_mm, label: 'ความกว้างตู้ (m)', default: 1200.0, type: :float },
+            { key: :height_mm, label: 'ความสูงตู้ (m)', default: 2200.0, type: :float },
+            { key: :depth_mm, label: 'ความลึกตู้ (m)', default: 600.0, type: :float },
             { key: :door_type, label: 'ชนิดหน้าบาน (hinged/sliding)', default: 'hinged', type: :choice, choices: %w[hinged sliding] }
           ],
           'AS' => [
@@ -132,7 +132,7 @@ module JiraNot
           ],
           'LV' => [
             { key: :name, label: 'ชื่อระดับชั้น (Level Name)', default: 'ชั้น 1', type: :string },
-            { key: :elevation_mm, label: 'ระดับความสูง (mm)', default: 3000.0, type: :float },
+            { key: :elevation_mm, label: 'ระดับความสูง (m)', default: 3000.0, type: :float },
             { key: :kind, label: 'ประเภท (floor/roof/ceiling)', default: 'floor', type: :choice, choices: %w[floor roof ceiling] }
           ],
           'PH' => [
@@ -142,25 +142,25 @@ module JiraNot
           # Roof family — every code opens the properties dialog before it runs.
           'FRM' => [
             { key: :pitch_degrees, label: 'ความชันหลังคา (องศา)', default: 30.0, type: :float },
-            { key: :truss_spacing_mm, label: 'ระยะห่างจันทัน/โครงถัก (mm)', default: 1000.0, type: :float },
-            { key: :purlin_spacing_mm, label: 'ระยะห่างแปเหล็ก (mm)', default: 300.0, type: :float },
-            { key: :overhang_mm, label: 'ระยะยื่นชายคา (mm)', default: 600.0, type: :float },
+            { key: :truss_spacing_mm, label: 'ระยะห่างจันทัน/โครงถัก (m)', default: 1000.0, type: :float },
+            { key: :purlin_spacing_mm, label: 'ระยะห่างแปเหล็ก (m)', default: 300.0, type: :float },
+            { key: :overhang_mm, label: 'ระยะยื่นชายคา (m)', default: 600.0, type: :float },
             { key: :roof_type, label: 'รูปแบบหลังคา (gable/shed)', default: 'gable', type: :choice, choices: %w[gable shed] }
           ],
           'MFR' => [
             { key: :pitch_degrees, label: 'ความชันหลังคาใหม่ (องศา)', default: 30.0, type: :float },
-            { key: :truss_spacing_mm, label: 'ระยะห่างจันทัน/โครงถัก (mm)', default: 1000.0, type: :float },
-            { key: :purlin_spacing_mm, label: 'ระยะห่างแปเหล็ก (mm)', default: 300.0, type: :float },
-            { key: :overhang_mm, label: 'ระยะยื่นชายคา (mm)', default: 600.0, type: :float },
+            { key: :truss_spacing_mm, label: 'ระยะห่างจันทัน/โครงถัก (m)', default: 1000.0, type: :float },
+            { key: :purlin_spacing_mm, label: 'ระยะห่างแปเหล็ก (m)', default: 300.0, type: :float },
+            { key: :overhang_mm, label: 'ระยะยื่นชายคา (m)', default: 600.0, type: :float },
             { key: :roof_type, label: 'รูปแบบหลังคา (gable/shed)', default: 'gable', type: :choice, choices: %w[gable shed] }
           ],
           'HGR' => [
             { key: :form, label: 'รูปแบบหลังคา (hip/gable/shed)', default: 'hip', type: :choice, choices: %w[hip gable shed] },
             { key: :slope_deg, label: 'ความลาดชัน (องศา)', default: 30.0, type: :float },
-            { key: :overhang_mm, label: 'ระยะยื่นชายคา (mm)', default: 800.0, type: :float },
-            { key: :thickness_mm, label: 'ความหนาแผ่นหลังคา (mm)', default: 35.0, type: :float },
-            { key: :fascia_height_mm, label: 'ความสูงเชิงชาย (mm)', default: 200.0, type: :float },
-            { key: :fascia_thickness_mm, label: 'ความหนาเชิงชาย (mm)', default: 25.0, type: :float }
+            { key: :overhang_mm, label: 'ระยะยื่นชายคา (m)', default: 800.0, type: :float },
+            { key: :thickness_mm, label: 'ความหนาแผ่นหลังคา (m)', default: 35.0, type: :float },
+            { key: :fascia_height_mm, label: 'ความสูงเชิงชาย (m)', default: 200.0, type: :float },
+            { key: :fascia_thickness_mm, label: 'ความหนาเชิงชาย (m)', default: 25.0, type: :float }
           ],
           'AR' => [
             { key: :form, label: 'รูปแบบหลังคา (hip/gable/shed/flat)', default: 'hip', type: :choice, choices: %w[hip gable shed flat] },
@@ -207,10 +207,15 @@ module JiraNot
           values = defaults_for(runtime, code)
           return values unless prompt && ui_available?
 
-          entered = UI.inputbox(
+          defaults = fields.map { |field| format_value(values[field[:key]]) }
+          entered = Core::Units.meter_inputbox(
             fields.map { |field| field[:label] },
-            fields.map { |field| format_value(values[field[:key]]) },
-            title || default_title(code)
+            defaults,
+            title || default_title(code),
+            nil,
+            millimeter_indices: fields.each_index.select do |index|
+              dimensional_field?(fields[index])
+            end
           )
           return nil if entered.nil? || entered == false
 
@@ -220,6 +225,14 @@ module JiraNot
           end
           save_defaults(runtime, code, coerced)
           coerced
+        end
+
+        def dimensional_field?(field)
+          %i[float optional_float].include?(field[:type]) && field[:key].to_s.end_with?('_mm')
+        end
+
+        def dimensional_indices(fields)
+          Array(fields).each_index.select { |index| dimensional_field?(Array(fields)[index]) }
         end
 
         def save_defaults(runtime, code, values)

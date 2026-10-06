@@ -156,7 +156,8 @@ class PlanInteractionEngineTest < Minitest::Test
 
   def test_parses_numeric_distances_and_applies_exact_length
     assert_equal 2500.0, @engine.numeric_distance_mm('2.5m')
-    assert_equal 304.8, @engine.numeric_distance_mm('1 ft')
+    assert_raises(ArgumentError) { @engine.numeric_distance_mm('1 ft') }
+    assert_raises(ArgumentError) { @engine.numeric_distance_mm('2,500') }
     result = @engine.segment_preview([0, 0, 0], [900, 300, 0], length_mm: 1200)
 
     assert_equal [1200.0, 0.0, 0.0], result[:finish_mm]
@@ -197,10 +198,11 @@ class PlanInteractionEngineTest < Minitest::Test
     assert_equal [0.0, 0.0, 400.0], blue[:finish_mm]
   end
 
-  def test_parses_comma_formatted_distances
+  def test_numeric_distance_accepts_only_meter_values_at_house_scale_and_larger
     assert_equal 3500.0, @engine.numeric_distance_mm('3.5')
     assert_equal 4000.0, @engine.numeric_distance_mm('4')
-    assert_equal 3500.0, @engine.numeric_distance_mm('3,500 mm')
-    assert_equal 10000.0, @engine.numeric_distance_mm('10,000')
+    assert_equal 21_000.0, @engine.numeric_distance_mm('21')
+    assert_raises(ArgumentError) { @engine.numeric_distance_mm('3,500 mm') }
+    assert_raises(ArgumentError) { @engine.numeric_distance_mm('10,000') }
   end
 end
