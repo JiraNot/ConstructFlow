@@ -324,12 +324,20 @@ export const App: React.FC = () => {
     handing: DoorHanding
   ) => {
     const doorId = crypto.randomUUID()
+    const activeType = project.types?.find(
+      (t) => t.object_type === 'door_window.door' && t.name.toLowerCase() === activeDoorType.toLowerCase()
+    )
+    const width_mm = activeType?.parameters.width_mm || 800
+    const height_mm = activeType?.parameters.height_mm || 2000
+
     const res = CommandBus.execute(project, 'CreateDoor', {
       id: doorId,
       mark: activeDoorType,
       wall_id: wallId,
       offset_along_wall_mm: offset_mm,
       location_mm: [point_mm[0], point_mm[1], 0],
+      width_mm,
+      height_mm,
       handing,
     })
     if (res.result.status === 'success') {
@@ -342,12 +350,22 @@ export const App: React.FC = () => {
   // Commit Window creation hosted on wall
   const handleCommitWindow = (wallId: string, point_mm: [number, number], offset_mm: number) => {
     const winId = crypto.randomUUID()
+    const activeType = project.types?.find(
+      (t) => t.object_type === 'door_window.window' && t.name.toLowerCase() === activeWindowType.toLowerCase()
+    )
+    const width_mm = activeType?.parameters.width_mm || 1200
+    const height_mm = activeType?.parameters.height_mm || 1200
+    const sill_height_mm = activeType?.parameters.sill_height_mm || 900
+
     const res = CommandBus.execute(project, 'CreateWindow', {
       id: winId,
       mark: activeWindowType,
       wall_id: wallId,
       offset_along_wall_mm: offset_mm,
       location_mm: [point_mm[0], point_mm[1], 0],
+      width_mm,
+      height_mm,
+      sill_height_mm,
     })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
@@ -996,6 +1014,7 @@ export const App: React.FC = () => {
               onCommitWindow={handleCommitWindow}
               onCommitGrid={handleCommitGrid}
               onMoveColumn={handleMoveColumn}
+              onFlipDoorHanding={handleFlipDoorHanding}
               onCursorChange={(coords, kind) => {
                 setCursorCoords_mm(coords)
                 setSnapKind(kind)

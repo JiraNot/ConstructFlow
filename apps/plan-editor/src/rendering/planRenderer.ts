@@ -622,14 +622,17 @@ function drawDoor(
   ctx.setLineDash([])
 
   // Badge mark
-  const text = `${mark || 'D1'} (${width_mm}mm)`
-  ctx.font = 'bold 9px monospace'
+  const handingText = (handing || 'left_in').replace('_', ' ').toUpperCase()
+  const text = isSelected
+    ? `${mark || 'D1'} [${handingText} • Space: Flip]`
+    : `${mark || 'D1'} (${width_mm}mm)`
+  ctx.font = isSelected ? 'bold 10px monospace' : 'bold 9px monospace'
   const bw = ctx.measureText(text).width
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'
-  ctx.fillRect(scx - bw / 2 - 3, scy - 7, bw + 6, 14)
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.95)'
+  ctx.fillRect(scx - bw / 2 - 4, scy - 8, bw + 8, 16)
   ctx.strokeStyle = isSelected ? '#38bdf8' : '#22c55e'
-  ctx.lineWidth = 1
-  ctx.strokeRect(scx - bw / 2 - 3, scy - 7, bw + 6, 14)
+  ctx.lineWidth = isSelected ? 1.5 : 1
+  ctx.strokeRect(scx - bw / 2 - 4, scy - 8, bw + 8, 16)
   ctx.fillStyle = isSelected ? '#38bdf8' : '#4ade80'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -915,19 +918,40 @@ function drawPlacementGhost(
         ctx.lineTo(sj2x - nx * (thick_px / 2), sj2y - ny * (thick_px / 2))
         ctx.stroke()
 
+        const isLeft = (ghost.handing || 'left_in').startsWith('left')
+        const isOut = (ghost.handing || 'left_in').endsWith('out')
+
+        const hinge_s = isLeft ? [sj1x, sj1y] : [sj2x, sj2y]
+        const latch_s = isLeft ? [sj2x, sj2y] : [sj1x, sj1y]
+
+        const normalSign = isOut ? -1 : 1
         const doorLeafLenPx = width_mm * viewport.zoom
+        const leafEndX = hinge_s[0] + normalSign * nx * doorLeafLenPx
+        const leafEndY = hinge_s[1] + normalSign * ny * doorLeafLenPx
+
+        // Leaf line
         ctx.beginPath()
-        ctx.moveTo(sj1x, sj1y)
-        ctx.lineTo(sj1x + nx * doorLeafLenPx, sj1y + ny * doorLeafLenPx)
+        ctx.strokeStyle = '#4ade80'
+        ctx.lineWidth = 2
+        ctx.moveTo(hinge_s[0], hinge_s[1])
+        ctx.lineTo(leafEndX, leafEndY)
         ctx.stroke()
 
+        // Swing arc
+        const angleClosed = Math.atan2(latch_s[1] - hinge_s[1], latch_s[0] - hinge_s[0])
+        const angleOpen = Math.atan2(leafEndY - hinge_s[1], leafEndX - hinge_s[0])
+        const counterClockwise = (angleOpen - angleClosed + 2 * Math.PI) % (2 * Math.PI) > Math.PI
+
         ctx.beginPath()
+        ctx.strokeStyle = 'rgba(74, 222, 128, 0.7)'
+        ctx.lineWidth = 1
         ctx.setLineDash([3, 3])
-        ctx.arc(sj1x, sj1y, doorLeafLenPx, Math.atan2(sj2y - sj1y, sj2x - sj1x), Math.atan2(ny, nx), false)
+        ctx.arc(hinge_s[0], hinge_s[1], doorLeafLenPx, angleClosed, angleOpen, counterClockwise)
         ctx.stroke()
         ctx.setLineDash([])
 
-        const badgeText = `${ghost.mark || 'D1'} (${width_mm}mm) [Space: Flip]`
+        const handingLabel = (ghost.handing || 'left_in').replace('_', ' ').toUpperCase()
+        const badgeText = `${ghost.mark || 'D1'} (${width_mm}mm) [${handingLabel} • Space: Flip]`
         ctx.font = 'bold 10px monospace'
         const bw = ctx.measureText(badgeText).width
         ctx.fillStyle = '#0f172a'

@@ -40,6 +40,7 @@ interface PlanCanvasProps {
   onCommitWindow: (wallId: string, point_mm: [number, number], offset_mm: number) => void
   onCommitGrid: (orientation: 'vertical' | 'horizontal', position_mm: number) => void
   onMoveColumn: (id: string, newLocation_mm: [number, number]) => void
+  onFlipDoorHanding?: (doorId: string) => void
   onCursorChange: (coords_mm: [number, number], snapKind: string) => void
 }
 
@@ -62,6 +63,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onCommitWindow,
   onCommitGrid,
   onMoveColumn,
+  onFlipDoorHanding,
   onCursorChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -103,25 +105,33 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
   }, [activeTool])
 
-  // Listen for Spacebar to toggle door handing
+  // Listen for Spacebar to toggle door handing (both during placement and on selected door)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && activeTool === 'door') {
-        e.preventDefault()
-        setDoorHanding((prev) => {
-          const cycle: Record<DoorHanding, DoorHanding> = {
-            left_in: 'left_out',
-            left_out: 'right_out',
-            right_out: 'right_in',
-            right_in: 'left_in',
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
+      if (e.code === 'Space') {
+        if (activeTool === 'door') {
+          e.preventDefault()
+          setDoorHanding((prev) => {
+            const cycle: Record<DoorHanding, DoorHanding> = {
+              left_in: 'left_out',
+              left_out: 'right_out',
+              right_out: 'right_in',
+              right_in: 'left_in',
+            }
+            return cycle[prev] || 'left_in'
+          })
+        } else if (selectedId && project.objects[selectedId] && isDoorObject(project.objects[selectedId])) {
+          e.preventDefault()
+          if (onFlipDoorHanding) {
+            onFlipDoorHanding(selectedId)
           }
-          return cycle[prev] || 'left_in'
-        })
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTool])
+  }, [activeTool, selectedId, project.objects, onFlipDoorHanding])
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current
@@ -253,13 +263,15 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const findHitObject = (worldPoint_mm: [number, number]): string | null => {
     const [wx, wy] = worldPoint_mm
 
-    // 1. Doors (highest pick priority for openings)
+    const openingTol = Math.max(150, 16 / viewport.zoom)
+
+    // 1. Doors (highest pick priority for openings: wall span + swing arc)
     for (const obj of Object.values(project.objects)) {
       if (isDoorObject(obj)) {
         const [cx, cy] = obj.module_data.location_mm
         const w = obj.module_data.width_mm
         const dist = Math.hypot(wx - cx, wy - cy)
-        if (dist <= w / 2 + 100) {
+        if (dist <= w + openingTol) {
           return obj.id
         }
       }
@@ -271,7 +283,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         const [cx, cy] = obj.module_data.location_mm
         const w = obj.module_data.width_mm
         const dist = Math.hypot(wx - cx, wy - cy)
-        if (dist <= w / 2 + 100) {
+        if (dist <= w / 2 + openingTol) {
           return obj.id
         }
       }
@@ -386,7 +398,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const rawWorld = screenToWorld([screenX, screenY], viewport)
 
     if (activeTool === 'door' || activeTool === 'window') {
-      const openingW = activeTool === 'door' ? 800 : 1200
+      const typeDef = project.types?.find(
+        (t) =>
+          t.object_type === (activeTool === 'door' ? 'door_window.door' : 'door_window.window') &&
+          t.name.toLowerCase() === (activeTool === 'door' ? activeDoorTypeMark : activeWindowTypeMark).toLowerCase()
+      )
+      const openingW = typeDef?.parameters?.width_mm || (activeTool === 'door' ? 800 : 1200)
       const wallSnap = snapToWallHost(rawWorld, project, viewport, openingW)
       setActiveWallSnap(wallSnap)
       if (wallSnap) {
@@ -505,20 +522,30 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           setWallStartNode(null)
         }
       } else if (activeTool === 'door') {
-        if (activeWallSnap) {
+        const typeDef = project.types?.find(
+          (t) => t.object_type === 'door_window.door' && t.name.toLowerCase() === activeDoorTypeMark.toLowerCase()
+        )
+        const openingW = typeDef?.parameters?.width_mm || 800
+        const wallSnap = snapToWallHost(rawWorld, project, viewport, openingW) || activeWallSnap
+        if (wallSnap) {
           onCommitDoor(
-            activeWallSnap.wall_id,
-            activeWallSnap.point_mm,
-            activeWallSnap.offset_along_wall_mm,
+            wallSnap.wall_id,
+            wallSnap.point_mm,
+            wallSnap.offset_along_wall_mm,
             doorHanding
           )
         }
       } else if (activeTool === 'window') {
-        if (activeWallSnap) {
+        const typeDef = project.types?.find(
+          (t) => t.object_type === 'door_window.window' && t.name.toLowerCase() === activeWindowTypeMark.toLowerCase()
+        )
+        const openingW = typeDef?.parameters?.width_mm || 1200
+        const wallSnap = snapToWallHost(rawWorld, project, viewport, openingW) || activeWallSnap
+        if (wallSnap) {
           onCommitWindow(
-            activeWallSnap.wall_id,
-            activeWallSnap.point_mm,
-            activeWallSnap.offset_along_wall_mm
+            wallSnap.wall_id,
+            wallSnap.point_mm,
+            wallSnap.offset_along_wall_mm
           )
         }
       } else if (activeTool === 'grid') {

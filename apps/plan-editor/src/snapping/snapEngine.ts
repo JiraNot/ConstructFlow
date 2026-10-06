@@ -171,7 +171,7 @@ export function snapToWallHost(
   project: ProjectDocument,
   viewport: ViewportState,
   openingWidth_mm: number = 800,
-  snapDistanceScreenPx: number = 28
+  snapDistanceScreenPx: number = 36
 ): WallHostSnapResult | null {
   const tolerance_mm = snapDistanceScreenPx / viewport.zoom
   let closest: WallHostSnapResult | null = null
@@ -193,20 +193,22 @@ export function snapToWallHost(
       const px = rawWorldPoint_mm[0] - sx
       const py = rawWorldPoint_mm[1] - sy
 
-      // Projection along wall
+      // Projection along wall direction
       const t = px * ux + py * uy
       const halfOpening = openingWidth_mm / 2
 
-      // Check if point is within wall bounds (with slight margin)
-      if (t < halfOpening - 100 || t > len - halfOpening + 100) continue
+      // Must be roughly within the wall's longitudinal span
+      if (t < -tolerance_mm || t > len + tolerance_mm) continue
 
       // Clamp t so opening stays within wall endpoints
-      const clampedT = Math.max(halfOpening, Math.min(len - halfOpening, t))
+      const minT = Math.min(halfOpening, len / 2)
+      const maxT = Math.max(minT, len - halfOpening)
+      const clampedT = Math.max(minT, Math.min(maxT, t))
 
-      // Perpendicular distance
+      // Perpendicular projection point on the wall centerline
       const projX = sx + clampedT * ux
       const projY = sy + clampedT * uy
-      const perpDist = Math.sqrt((rawWorldPoint_mm[0] - projX) ** 2 + (rawWorldPoint_mm[1] - projY) ** 2)
+      const perpDist = Math.hypot(rawWorldPoint_mm[0] - projX, rawWorldPoint_mm[1] - projY)
 
       const wallTol = tolerance_mm + (obj.module_data.thickness_mm / 2)
       if (perpDist <= wallTol && perpDist < minPerpDist) {
