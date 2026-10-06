@@ -15,6 +15,7 @@ import { Toolbar, ToolType } from './components/Toolbar.js'
 import { PlanCanvas } from './components/PlanCanvas.js'
 import { PropertiesPanel } from './components/PropertiesPanel.js'
 import { SyncBridgePanel } from './components/SyncBridgePanel.js'
+import { TypeManagerModal } from './components/TypeManagerModal.js'
 import { Building2, Layers, History, Layers2 } from 'lucide-react'
 
 export const App: React.FC = () => {
@@ -23,6 +24,9 @@ export const App: React.FC = () => {
   )
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
+  const [activeColumnType, setActiveColumnType] = useState<string>('C1')
+  const [activeFoundationType, setActiveFoundationType] = useState<string>('F1')
+  const [isTypeManagerOpen, setIsTypeManagerOpen] = useState<boolean>(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [cursorCoords_mm, setCursorCoords_mm] = useState<[number, number]>([0, 0])
   const [snapKind, setSnapKind] = useState<string>('Free')
@@ -130,13 +134,13 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  // Commit Column creation
+  // Commit Column creation with active type
   const handleCommitColumn = (location_mm: [number, number]) => {
     const colId = crypto.randomUUID()
     const res = CommandBus.execute(project, 'CreateColumn', {
       id: colId,
+      mark: activeColumnType,
       location_mm: [location_mm[0], location_mm[1], 0],
-      section_mm: [200, 200],
       base_level_id: project.project.active_level_id,
     })
     if (res.result.status === 'success') {
@@ -146,19 +150,64 @@ export const App: React.FC = () => {
     }
   }
 
-  // Commit Foundation creation (supports hosted on column or isolated spread footing)
+  // Commit Foundation creation with active type (supports hosted on column or isolated spread footing)
   const handleCommitFoundation = (opts: { columnId?: string; location_mm?: [number, number] }) => {
     const fId = crypto.randomUUID()
     const res = CommandBus.execute(project, 'CreateFoundation', {
       id: fId,
-      mark: 'F1',
+      mark: activeFoundationType,
       supported_column_id: opts.columnId,
       location_mm: opts.location_mm ? [opts.location_mm[0], opts.location_mm[1], 0] : undefined,
-      size_mm: [800, 800, 300],
     })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
       setSelectedId(fId)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
+  // Assign instance type
+  const handleAssignType = (objectId: string, typeName: string) => {
+    const res = CommandBus.execute(project, 'AssignInstanceType', {
+      object_id: objectId,
+      type_name: typeName,
+    })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
+  // Update Type Dimensions (Cascades to all instances of this type)
+  const handleUpdateTypeDimensions = (
+    typeName: string,
+    objectType: 'structure.column' | 'structure.foundation',
+    dimensions: { section_mm?: [number, number]; size_mm?: [number, number, number] }
+  ) => {
+    const res = CommandBus.execute(project, 'UpdateStructuralTypeDimensions', {
+      type_name: typeName,
+      object_type: objectType,
+      parameters: dimensions,
+    })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
+  // Define new type in catalog
+  const handleDefineType = (
+    objectType: 'structure.column' | 'structure.foundation',
+    name: string,
+    parameters: { section_mm?: [number, number]; size_mm?: [number, number, number] }
+  ) => {
+    const res = CommandBus.execute(project, 'DefineStructuralType', {
+      object_type: objectType,
+      name,
+      parameters,
+    })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
       if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
     }
   }
@@ -438,7 +487,21 @@ export const App: React.FC = () => {
         <main style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
           {/* Floating Tool Bar */}
           <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}>
-            <Toolbar activeTool={activeTool} onSelectTool={setActiveTool} />
+            <Toolbar
+              activeTool={activeTool}
+              onSelectTool={setActiveTool}
+              activeColumnType={activeColumnType}
+              onChangeActiveColumnType={setActiveColumnType}
+              activeFoundationType={activeFoundationType}
+              onChangeActiveFoundationType={setActiveFoundationType}
+              columnTypes={(project.types || [])
+                .filter((t) => t.object_type === 'structure.column')
+                .map((t) => ({ name: t.name, section_mm: t.parameters?.section_mm }))}
+              foundationTypes={(project.types || [])
+                .filter((t) => t.object_type === 'structure.foundation')
+                .map((t) => ({ name: t.name, size_mm: t.parameters?.size_mm }))}
+              onOpenTypeManager={() => setIsTypeManagerOpen(true)}
+            />
           </div>
 
           {/* Interactive Plan Canvas */}
@@ -446,6 +509,8 @@ export const App: React.FC = () => {
             <PlanCanvas
               project={project}
               activeTool={activeTool}
+              activeColumnTypeMark={activeColumnType}
+              activeFoundationTypeMark={activeFoundationType}
               selectedId={selectedId}
               onSelectObject={setSelectedId}
               onCommitColumn={handleCommitColumn}
@@ -499,9 +564,12 @@ export const App: React.FC = () => {
           <PropertiesPanel
             project={project}
             selectedId={selectedId}
+            onAssignType={handleAssignType}
             onUpdateColumnMark={handleUpdateColumnMark}
             onUpdateFoundationMark={handleUpdateFoundationMark}
             onUpdateGridTag={handleUpdateGridTag}
+            onUpdateTypeDimensions={handleUpdateTypeDimensions}
+            onOpenTypeManager={() => setIsTypeManagerOpen(true)}
             onAddFoundation={(colId) => handleCommitFoundation({ columnId: colId })}
             onDeleteObject={handleDeleteObject}
           />
@@ -513,6 +581,15 @@ export const App: React.FC = () => {
           />
         </aside>
       </div>
+
+      {/* Structural Type Manager Modal */}
+      <TypeManagerModal
+        isOpen={isTypeManagerOpen}
+        onClose={() => setIsTypeManagerOpen(false)}
+        project={project}
+        onUpdateTypeDimensions={handleUpdateTypeDimensions}
+        onDefineType={handleDefineType}
+      />
     </div>
   )
 }

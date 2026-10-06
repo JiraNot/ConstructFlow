@@ -19,6 +19,8 @@ import { renderPlanView } from '../rendering/planRenderer.js'
 interface PlanCanvasProps {
   project: ProjectDocument
   activeTool: ToolType
+  activeColumnTypeMark: string
+  activeFoundationTypeMark: string
   selectedId: string | null
   onSelectObject: (id: string | null) => void
   onCommitColumn: (location_mm: [number, number]) => void
@@ -31,6 +33,8 @@ interface PlanCanvasProps {
 export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   project,
   activeTool,
+  activeColumnTypeMark,
+  activeFoundationTypeMark,
   selectedId,
   onSelectObject,
   onCommitColumn,
@@ -65,11 +69,27 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    let ghost: { type: string; location_mm: [number, number] } | null = null
+    let ghost: any = null
     if (activeTool === 'column' && activeSnap) {
-      ghost = { type: 'column', location_mm: activeSnap.point_mm }
+      const typeDef = project.types?.find(
+        (t) => t.object_type === 'structure.column' && t.name.toLowerCase() === activeColumnTypeMark.toLowerCase()
+      )
+      ghost = {
+        type: 'column',
+        location_mm: activeSnap.point_mm,
+        size_mm: typeDef?.parameters?.section_mm || [200, 200],
+        mark: activeColumnTypeMark,
+      }
     } else if (activeTool === 'foundation' && activeSnap) {
-      ghost = { type: 'foundation', location_mm: activeSnap.point_mm }
+      const typeDef = project.types?.find(
+        (t) => t.object_type === 'structure.foundation' && t.name.toLowerCase() === activeFoundationTypeMark.toLowerCase()
+      )
+      ghost = {
+        type: 'foundation',
+        location_mm: activeSnap.point_mm,
+        size_mm: typeDef?.parameters?.size_mm || [800, 800, 300],
+        mark: activeFoundationTypeMark,
+      }
     }
 
     renderPlanView(

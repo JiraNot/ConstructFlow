@@ -43,6 +43,47 @@ export const DEFAULT_PHASES: PhaseDefinition[] = [
   { id: 'new_construction', name: 'New Construction', order: 3 },
 ]
 
+export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
+  {
+    id: 'type-col-c1',
+    object_type: 'structure.column',
+    name: 'C1',
+    parameters: {
+      section_mm: [200, 200],
+      material: 'reinforced_concrete',
+    },
+  },
+  {
+    id: 'type-col-c2',
+    object_type: 'structure.column',
+    name: 'C2',
+    parameters: {
+      section_mm: [300, 300],
+      material: 'reinforced_concrete',
+    },
+  },
+  {
+    id: 'type-fnd-f1',
+    object_type: 'structure.foundation',
+    name: 'F1',
+    parameters: {
+      size_mm: [800, 800, 300],
+      foundation_type: 'spread_footing',
+      material: 'reinforced_concrete',
+    },
+  },
+  {
+    id: 'type-fnd-f2',
+    object_type: 'structure.foundation',
+    name: 'F2',
+    parameters: {
+      size_mm: [1200, 1200, 400],
+      foundation_type: 'spread_footing',
+      material: 'reinforced_concrete',
+    },
+  },
+]
+
 export function createEmptyProjectDocument(
   id: string,
   name: string = 'Untitled Project'
@@ -69,7 +110,7 @@ export function createEmptyProjectDocument(
     },
     levels: [defaultLevel],
     phases: DEFAULT_PHASES,
-    types: [],
+    types: DEFAULT_STRUCTURAL_TYPES.map((t) => ({ ...t, parameters: { ...t.parameters } })),
     objects: {},
     relationships: [],
   }

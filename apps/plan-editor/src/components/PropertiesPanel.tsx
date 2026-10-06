@@ -12,9 +12,16 @@ import { Copy, Check, Trash2, PlusCircle } from 'lucide-react'
 interface PropertiesPanelProps {
   project: ProjectDocument
   selectedId: string | null
+  onAssignType: (objectId: string, typeName: string) => void
   onUpdateColumnMark: (objectId: string, newMark: string) => void
   onUpdateFoundationMark: (objectId: string, newMark: string) => void
   onUpdateGridTag: (objectId: string, newTag: string) => void
+  onUpdateTypeDimensions: (
+    typeName: string,
+    objectType: 'structure.column' | 'structure.foundation',
+    dimensions: { section_mm?: [number, number]; size_mm?: [number, number, number] }
+  ) => void
+  onOpenTypeManager: () => void
   onAddFoundation: (columnId: string) => void
   onDeleteObject: (objectId: string) => void
 }
@@ -22,9 +29,12 @@ interface PropertiesPanelProps {
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   project,
   selectedId,
+  onAssignType,
   onUpdateColumnMark,
   onUpdateFoundationMark,
   onUpdateGridTag,
+  onUpdateTypeDimensions,
+  onOpenTypeManager,
   onAddFoundation,
   onDeleteObject,
 }) => {
@@ -44,9 +54,25 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         ? grdObj.module_data.tag
         : ''
 
+  // Inline dimensions draft
+  const [inlineColW, setInlineColW] = useState(200)
+  const [inlineColD, setInlineColD] = useState(200)
+  const [inlineFndW, setInlineFndW] = useState(800)
+  const [inlineFndL, setInlineFndL] = useState(800)
+  const [inlineFndT, setInlineFndT] = useState(300)
+
   useEffect(() => {
     setEditingMark(currentMark)
-  }, [selectedId, currentMark])
+    if (colObj) {
+      setInlineColW(colObj.module_data.section_mm[0])
+      setInlineColD(colObj.module_data.section_mm[1])
+    }
+    if (fndObj) {
+      setInlineFndW(fndObj.module_data.size_mm[0])
+      setInlineFndL(fndObj.module_data.size_mm[1])
+      setInlineFndT(fndObj.module_data.size_mm[2])
+    }
+  }, [selectedId, currentMark, colObj?.module_data.section_mm?.[0], colObj?.module_data.section_mm?.[1], fndObj?.module_data.size_mm?.[0]])
 
   const handleCopyUUID = () => {
     if (!selectedId) return
@@ -59,9 +85,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const val = (preset !== undefined ? preset : editingMark).trim()
     if (!val) return
     if (colObj) {
-      onUpdateColumnMark(colObj.id, val)
+      onAssignType(colObj.id, val)
     } else if (fndObj) {
-      onUpdateFoundationMark(fndObj.id, val)
+      onAssignType(fndObj.id, val)
     } else if (grdObj) {
       onUpdateGridTag(grdObj.id, val)
     }
@@ -143,7 +169,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       {/* Human-Readable Mark (Editable for Columns, Foundations, and Grids!) */}
       {(colObj || fndObj || grdObj) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
               {colObj
@@ -191,53 +217,87 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </button>
           </div>
 
-          {/* Quick Schedule Mark Presets */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-            <span style={{ fontSize: 10, color: '#64748b' }}>Presets:</span>
+          {/* Dynamic Schedule Mark Presets from Project Catalog */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 10, color: '#64748b' }}>Type Presets:</span>
+              {(colObj || fndObj) && (
+                <button
+                  onClick={onOpenTypeManager}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#38bdf8',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    padding: 0,
+                  }}
+                >
+                  Manage Types
+                </button>
+              )}
+            </div>
+
             {colObj && (
-              <div style={{ display: 'flex', gap: 4 }}>
-                {['C1', 'C2', 'C3', 'C4'].map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => handleSaveMark(p)}
-                    style={{
-                      background: editingMark === p ? '#0284c7' : '#1e293b',
-                      color: editingMark === p ? '#fff' : '#94a3b8',
-                      border: '1px solid #334155',
-                      borderRadius: 4,
-                      padding: '2px 8px',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {p}
-                  </button>
-                ))}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {(project.types || [])
+                  .filter((t) => t.object_type === 'structure.column')
+                  .map((t) => {
+                    const isCurrent = colObj.module_data.mark.toLowerCase() === t.name.toLowerCase()
+                    const sec = t.parameters?.section_mm || [200, 200]
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => handleSaveMark(t.name)}
+                        style={{
+                          background: isCurrent ? '#0284c7' : '#1e293b',
+                          color: isCurrent ? '#fff' : '#cbd5e1',
+                          border: isCurrent ? '1px solid #38bdf8' : '1px solid #334155',
+                          borderRadius: 4,
+                          padding: '3px 8px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {t.name} ({sec[0]}×{sec[1]})
+                      </button>
+                    )
+                  })}
               </div>
             )}
+
             {fndObj && (
-              <div style={{ display: 'flex', gap: 4 }}>
-                {['F1', 'F2', 'F3', 'F4'].map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => handleSaveMark(p)}
-                    style={{
-                      background: editingMark === p ? '#d97706' : '#1e293b',
-                      color: editingMark === p ? '#fff' : '#94a3b8',
-                      border: '1px solid #334155',
-                      borderRadius: 4,
-                      padding: '2px 8px',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {p}
-                  </button>
-                ))}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {(project.types || [])
+                  .filter((t) => t.object_type === 'structure.foundation')
+                  .map((t) => {
+                    const isCurrent = fndObj.module_data.mark.toLowerCase() === t.name.toLowerCase()
+                    const sz = t.parameters?.size_mm || [800, 800, 300]
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => handleSaveMark(t.name)}
+                        style={{
+                          background: isCurrent ? '#d97706' : '#1e293b',
+                          color: isCurrent ? '#fff' : '#cbd5e1',
+                          border: isCurrent ? '1px solid #f59e0b' : '1px solid #334155',
+                          borderRadius: 4,
+                          padding: '3px 8px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {t.name} ({sz[0]}×{sz[1]})
+                      </button>
+                    )
+                  })}
               </div>
             )}
+
             {grdObj && (
               <div style={{ display: 'flex', gap: 4 }}>
                 {(grdObj.module_data.orientation === 'vertical'
@@ -265,9 +325,127 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             )}
           </div>
 
-          <span style={{ fontSize: 10, color: '#64748b' }}>
-            Schedule mark updates visual name; internal object UUID remains intact.
-          </span>
+          {/* Inline Type Dimension Tuning for Column */}
+          {colObj && (
+            <div style={{
+              background: '#0b1329',
+              border: '1px solid #334155',
+              borderRadius: 6,
+              padding: '10px 12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              marginTop: 4,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontSize: 11, color: '#38bdf8', fontWeight: 700 }}>
+                  TYPE DIMENSIONS: {colObj.module_data.mark}
+                </label>
+                <span style={{ fontSize: 10, color: '#64748b' }}>All {colObj.module_data.mark} columns</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>W:</span>
+                  <input
+                    type="number"
+                    step={50}
+                    value={inlineColW}
+                    onChange={(e) => setInlineColW(Number(e.target.value))}
+                    style={{ width: '100%', background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 12, textAlign: 'center' }}
+                  />
+                </div>
+                <span style={{ color: '#64748b' }}>×</span>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>D:</span>
+                  <input
+                    type="number"
+                    step={50}
+                    value={inlineColD}
+                    onChange={(e) => setInlineColD(Number(e.target.value))}
+                    style={{ width: '100%', background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 12, textAlign: 'center' }}
+                  />
+                </div>
+                <button
+                  onClick={() => onUpdateTypeDimensions(colObj.module_data.mark, 'structure.column', { section_mm: [inlineColW, inlineColD] })}
+                  style={{
+                    background: '#0284c7',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 4,
+                    padding: '5px 10px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Update
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Inline Type Dimension Tuning for Foundation */}
+          {fndObj && (
+            <div style={{
+              background: '#0b1329',
+              border: '1px solid #334155',
+              borderRadius: 6,
+              padding: '10px 12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              marginTop: 4,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700 }}>
+                  TYPE DIMENSIONS: {fndObj.module_data.mark}
+                </label>
+                <span style={{ fontSize: 10, color: '#64748b' }}>All {fndObj.module_data.mark} footings</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input
+                  type="number"
+                  step={100}
+                  value={inlineFndW}
+                  onChange={(e) => setInlineFndW(Number(e.target.value))}
+                  style={{ flex: 1, background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 11, textAlign: 'center' }}
+                />
+                <span style={{ color: '#64748b' }}>×</span>
+                <input
+                  type="number"
+                  step={100}
+                  value={inlineFndL}
+                  onChange={(e) => setInlineFndL(Number(e.target.value))}
+                  style={{ flex: 1, background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 11, textAlign: 'center' }}
+                />
+                <span style={{ color: '#64748b' }}>×</span>
+                <input
+                  type="number"
+                  step={50}
+                  value={inlineFndT}
+                  onChange={(e) => setInlineFndT(Number(e.target.value))}
+                  style={{ flex: 1, background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '4px', fontSize: 11, textAlign: 'center' }}
+                />
+                <button
+                  onClick={() => onUpdateTypeDimensions(fndObj.module_data.mark, 'structure.foundation', { size_mm: [inlineFndW, inlineFndL, inlineFndT] })}
+                  style={{
+                    background: '#d97706',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 4,
+                    padding: '5px 10px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Update
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

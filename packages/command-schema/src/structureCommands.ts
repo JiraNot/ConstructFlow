@@ -114,3 +114,31 @@ export interface DeleteObjectInput {
   /** Immutable object UUID */
   object_id: string
 }
+
+export interface StructuralTypeParameters {
+  /** Cross-section [width, depth] in mm (for column) */
+  section_mm?: [number, number]
+  /** Dimensions [width, length, thickness] in mm (for foundation) */
+  size_mm?: [number, number, number]
+  material?: string
+  foundation_type?: 'spread_footing' | 'pile_cap'
+}
+
+export interface DefineStructuralTypeInput {
+  id?: string
+  object_type: 'structure.column' | 'structure.foundation'
+  name: string // e.g. "C1", "C2", "C3", "F1", "F2"
+  parameters: StructuralTypeParameters
+}
+
+export interface UpdateStructuralTypeDimensionsInput {
+  type_id_or_name: string // e.g. "C1" or type ID
+  object_type: 'structure.column' | 'structure.foundation'
+  section_mm?: [number, number]
+  size_mm?: [number, number, number]
+}
+
+export interface AssignInstanceTypeInput {
+  object_id: string
+  type_name: string // e.g. "C2" or "F2"
+}

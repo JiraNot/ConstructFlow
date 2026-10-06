@@ -20,7 +20,7 @@ export function renderPlanView(
   selectedId: string | null,
   hoveredId: string | null,
   activeSnap: SnapResult | null,
-  ghostObject: { type: string; location_mm: [number, number] } | null
+  ghostObject: PlacementGhost | null
 ) {
   // 1. Dark CAD canvas background
   ctx.fillStyle = '#0f172a'
@@ -264,48 +264,59 @@ function drawColumn(
   ctx.restore()
 }
 
+export interface PlacementGhost {
+  type: string
+  location_mm: [number, number]
+  size_mm?: [number, number] | [number, number, number]
+  mark?: string
+}
+
 function drawPlacementGhost(
   ctx: CanvasRenderingContext2D,
-  ghost: { type: string; location_mm: [number, number] },
+  ghost: PlacementGhost,
   viewport: ViewportState
 ) {
   const [x, y] = worldToScreen(ghost.location_mm, viewport)
 
   ctx.save()
   if (ghost.type === 'foundation') {
-    const size_px = 800 * viewport.zoom // 800mm footing preview
-    const half = size_px / 2
+    const w_mm = ghost.size_mm?.[0] || 800
+    const l_mm = ghost.size_mm?.[1] || 800
+    const w_px = w_mm * viewport.zoom
+    const l_px = l_mm * viewport.zoom
 
     ctx.fillStyle = 'rgba(245, 158, 11, 0.25)' // Amber
     ctx.strokeStyle = '#f59e0b'
     ctx.lineWidth = 1.5
     ctx.setLineDash([4, 4])
 
-    ctx.fillRect(x - half, y - half, size_px, size_px)
-    ctx.strokeRect(x - half, y - half, size_px, size_px)
+    ctx.fillRect(x - w_px / 2, y - l_px / 2, w_px, l_px)
+    ctx.strokeRect(x - w_px / 2, y - l_px / 2, w_px, l_px)
 
     ctx.fillStyle = '#f59e0b'
     ctx.font = 'bold 11px monospace'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('F1', x, y)
+    ctx.fillText(`${ghost.mark || 'F1'} (${w_mm}×${l_mm})`, x, y)
   } else {
-    const size_px = 200 * viewport.zoom // 200mm column preview
-    const half = size_px / 2
+    const w_mm = ghost.size_mm?.[0] || 200
+    const d_mm = ghost.size_mm?.[1] || 200
+    const w_px = w_mm * viewport.zoom
+    const d_px = d_mm * viewport.zoom
 
     ctx.fillStyle = 'rgba(56, 189, 248, 0.35)' // Cyan
     ctx.strokeStyle = '#38bdf8'
     ctx.lineWidth = 1.5
     ctx.setLineDash([4, 4])
 
-    ctx.fillRect(x - half, y - half, size_px, size_px)
-    ctx.strokeRect(x - half, y - half, size_px, size_px)
+    ctx.fillRect(x - w_px / 2, y - d_px / 2, w_px, d_px)
+    ctx.strokeRect(x - w_px / 2, y - d_px / 2, w_px, d_px)
 
     ctx.fillStyle = '#38bdf8'
     ctx.font = 'bold 11px monospace'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('C1', x, y)
+    ctx.fillText(`${ghost.mark || 'C1'} (${w_mm}×${d_mm})`, x, y)
   }
   ctx.restore()
 }
