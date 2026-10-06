@@ -1,29 +1,137 @@
 import React, { useState } from 'react'
+import { ProjectDocument } from '@constructflow/project-model'
 import { CommandEnvelope } from '@constructflow/command-schema'
-import { ArrowRightLeft, CheckCircle2, Copy, Send, Download } from 'lucide-react'
+import { ArrowRightLeft, Copy, Send, Download, Sparkles, HelpCircle } from 'lucide-react'
 
 interface SyncBridgePanelProps {
+  project: ProjectDocument
   commandQueue: CommandEnvelope[]
   onClearQueue: () => void
   onExportProject: () => void
 }
 
 export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
+  project,
   commandQueue,
   onClearQueue,
   onExportProject,
 }) => {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'failed'>('idle')
   const [syncLog, setSyncLog] = useState<string>('')
-  const [copiedScript, setCopiedScript] = useState(false)
+  const [copiedFullScript, setCopiedFullScript] = useState(false)
+  const [copiedIncrementalScript, setCopiedIncrementalScript] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
 
-  // Generate pure Ruby CommandBus execution script matching ConstructFlow Ruby API
-  const generateRubyCommandBusScript = () => {
-    let script = `# ConstructFlow Incremental Sync Script (Ruby CommandBus)\n`
-    script += `runtime = JiraNot::ConstructFlow.runtime\n`
-    script += `project_id = runtime.project.project_id\n`
-    script += `model = runtime.active_model\n\n`
-    script += `model.start_operation("ConstructFlow Plan Sync", true)\n`
+  // Generate pure, self-contained Ruby script that generates the ENTIRE current 2D plan as 3D in SketchUp
+  const generateFullProjectRubyScript = () => {
+    const jsonStr = JSON.stringify(project, null, 2)
+    let script = `# ─────────────────────────────────────────────────────────────────────────────\n`
+    script += `# ConstructFlow: Full 2D Plan -> SketchUp 3D Model Sync Script\n`
+    script += `# Instructions: Open SketchUp -> Window -> Ruby Console -> Paste & press Enter\n`
+    script += `# ─────────────────────────────────────────────────────────────────────────────\n\n`
+    script += `require 'json'\n\n`
+    script += `project_json = <<-'CF_PROJECT_JSON_DATA'\n`
+    script += `${jsonStr}\n`
+    script += `CF_PROJECT_JSON_DATA\n\n`
+    script += `runtime = defined?(JiraNot::ConstructFlow::Runtime) ? JiraNot::ConstructFlow::Runtime : nil\n`
+    script += `model = (runtime&.active_model) || Sketchup.active_model\n\n`
+    script += `if runtime && defined?(JiraNot::ConstructFlow::Core::PlanEditorSync)\n`
+    script += `  JiraNot::ConstructFlow::Core::PlanEditorSync.sync_project_json(project_json, runtime)\n`
+    script += `else\n`
+    script += `  # Self-contained direct execution fallback\n`
+    script += `  doc = JSON.parse(project_json)\n`
+    script += `  objects = doc['objects'] || {}\n`
+    script += `  project_id = doc.dig('project', 'id') || 'CF-PROJ'\n`
+    script += `  stats = { cols: 0, fnds: 0, bms: 0, walls: 0, openings: 0 }\n\n`
+    script += `  model.start_operation("ConstructFlow: Build 3D from Plan", true)\n`
+    script += `  begin\n`
+    script += `    # 1. Columns\n`
+    script += `    objects.each_value do |o|\n`
+    script += `      next unless o['object_type'] == 'structure.column'\n`
+    script += `      m = o['module_data'] || {}\n`
+    script += `      runtime.commands.execute('CreateColumn', {\n`
+    script += `        id: o['id'], mark: m['mark'] || 'C1',\n`
+    script += `        location_mm: m['location_mm'] || [0, 0, 0],\n`
+    script += `        section_mm: m['section_mm'] || [200, 200],\n`
+    script += `        height_mm: Float(m['height_mm'] || 3000),\n`
+    script += `        base_level_id: m['base_level_id'] || 'GF'\n`
+    script += `      }, project_id: project_id)\n`
+    script += `      stats[:cols] += 1\n`
+    script += `    end\n\n`
+    script += `    # 2. Footings\n`
+    script += `    objects.each_value do |o|\n`
+    script += `      next unless o['object_type'] == 'structure.foundation'\n`
+    script += `      m = o['module_data'] || {}\n`
+    script += `      runtime.commands.execute('CreateFoundation', {\n`
+    script += `        id: o['id'], mark: m['mark'] || 'F1',\n`
+    script += `        supported_column_id: m['supported_column_id'],\n`
+    script += `        size_mm: m['size_mm'] || [800, 800, 300]\n`
+    script += `      }, project_id: project_id)\n`
+    script += `      stats[:fnds] += 1\n`
+    script += `    end\n\n`
+    script += `    # 3. Beams\n`
+    script += `    objects.each_value do |o|\n`
+    script += `      next unless o['object_type'] == 'structure.beam'\n`
+    script += `      m = o['module_data'] || {}\n`
+    script += `      p1 = m['start_point_mm'] || [0, 0, 0]\n`
+    script += `      p2 = m['end_point_mm'] || [4000, 0, 0]\n`
+    script += `      runtime.commands.execute('CreateBeam', {\n`
+    script += `        id: o['id'], mark: m['mark'] || 'B1',\n`
+    script += `        path_mm: [p1, p2], section_mm: m['section_mm'] || [200, 400],\n`
+    script += `        level_id: m['level_id'] || 'GF'\n`
+    script += `      }, project_id: project_id)\n`
+    script += `      stats[:bms] += 1\n`
+    script += `    end\n\n`
+    script += `    # 4. Walls\n`
+    script += `    objects.each_value do |o|\n`
+    script += `      next unless o['object_type'] == 'architecture.wall'\n`
+    script += `      m = o['module_data'] || {}\n`
+    script += `      p1 = m['start_point_mm'] || [0, 0, 0]\n`
+    script += `      p2 = m['end_point_mm'] || [4000, 0, 0]\n`
+    script += `      runtime.commands.execute('CreateWall', {\n`
+    script += `        id: o['id'], mark: m['mark'] || 'W1',\n`
+    script += `        path_mm: [p1, p2], thickness_mm: Float(m['thickness_mm'] || 100),\n`
+    script += `        height_mm: Float(m['height_mm'] || 2800)\n`
+    script += `      }, project_id: project_id)\n`
+    script += `      stats[:walls] += 1\n`
+    script += `    end\n\n`
+    script += `    # 5. Doors & Windows\n`
+    script += `    objects.each_value do |o|\n`
+    script += `      is_door = o['object_type'] == 'door_window.door'\n`
+    script += `      is_win = o['object_type'] == 'door_window.window'\n`
+    script += `      next unless is_door || is_win\n`
+    script += `      m = o['module_data'] || {}\n`
+    script += `      wall_id = m['wall_id'] || o.dig('host_refs', 0)\n`
+    script += `      next unless wall_id\n`
+    script += `      runtime.commands.execute('PlaceDoorWindowOnWall', {\n`
+    script += `        id: o['id'], host_object_id: wall_id,\n`
+    script += `        point_mm: m['location_mm'] || [0, 0, 0],\n`
+    script += `        width_mm: Float(m['width_mm'] || (is_door ? 800 : 1200)),\n`
+    script += `        height_mm: Float(m['height_mm'] || (is_door ? 2000 : 1200)),\n`
+    script += `        sill_mm: Float(m['sill_height_mm'] || 0),\n`
+    script += `        handing: m['handing'] || 'left_in',\n`
+    script += `        category: is_door ? 'door' : 'window',\n`
+    script += `        schedule_mark: m['mark'] || (is_door ? 'D1' : 'W1')\n`
+    script += `      }, project_id: project_id)\n`
+    script += `      stats[:openings] += 1\n`
+    script += `    end\n\n`
+    script += `    model.commit_operation\n`
+    script += `    puts "🎉 ConstructFlow: 3D Model Synced Successfully! [#{stats.inspect}]"\n`
+    script += `  rescue => err\n`
+    script += `    model.abort_operation\n`
+    script += `    puts "❌ ConstructFlow Sync Error: \#{err.message}"\n`
+    script += `  end\n`
+    script += `end\n`
+    return script
+  }
+
+  // Generate pure Ruby incremental execution script for pending mutations
+  const generateIncrementalRubyScript = () => {
+    let script = `# ConstructFlow Incremental Sync Script (Pending Events)\n`
+    script += `runtime = JiraNot::ConstructFlow::Runtime\n`
+    script += `model = runtime.active_model || Sketchup.active_model\n`
+    script += `project_id = runtime.project.project_id rescue 'CF-PROJ'\n\n`
+    script += `model.start_operation("ConstructFlow Incremental Sync", true)\n`
     script += `begin\n`
 
     for (const cmd of commandQueue) {
@@ -33,19 +141,26 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
     }
 
     script += `  model.commit_operation\n`
-    script += `  puts "ConstructFlow: Synced ${commandQueue.length} commands successfully."\n`
+    script += `  puts "ConstructFlow: Incremental sync completed for ${commandQueue.length} commands."\n`
     script += `rescue => err\n`
     script += `  model.abort_operation\n`
-    script += `  puts "ConstructFlow Sync error: \#{err.message}"\n`
+    script += `  puts "ConstructFlow Incremental error: \#{err.message}"\n`
     script += `end\n`
     return script
   }
 
-  const handleCopyRubyScript = () => {
-    const script = generateRubyCommandBusScript()
+  const handleCopyFullScript = () => {
+    const script = generateFullProjectRubyScript()
     navigator.clipboard.writeText(script)
-    setCopiedScript(true)
-    setTimeout(() => setCopiedScript(false), 2000)
+    setCopiedFullScript(true)
+    setTimeout(() => setCopiedFullScript(false), 2500)
+  }
+
+  const handleCopyIncrementalScript = () => {
+    const script = generateIncrementalRubyScript()
+    navigator.clipboard.writeText(script)
+    setCopiedIncrementalScript(true)
+    setTimeout(() => setCopiedIncrementalScript(false), 2500)
   }
 
   const handlePostToBridge = async () => {
@@ -54,7 +169,6 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
     setSyncLog(`Dispatching ${commandQueue.length} semantic commands to bridge...`)
 
     try {
-      // POST to ConstructFlow local bridge server (apps/mcp-server/http_bridge.py)
       const res = await fetch('http://localhost:8000/api/sync/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -69,80 +183,88 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
         throw new Error(`Bridge returned HTTP ${res.status}`)
       }
     } catch (err: any) {
-      // Offline fallback: Bridge not currently running in SketchUp
       setSyncStatus('idle')
-      setSyncLog(`Bridge offline (port 8000). Use 'Copy Ruby Script' to paste into SketchUp console, or save project.`)
+      setSyncLog(`Bridge offline (port 8000). Use 'Copy Full Plan Ruby Script' to paste into SketchUp console, or export file.`)
     }
   }
 
+  const totalElements = Object.keys(project.objects || {}).length
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #334155', paddingBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#38bdf8', fontWeight: 600, fontSize: 13 }}>
           <ArrowRightLeft size={16} />
-          SKETCHUP SYNC BRIDGE
+          SKETCHUP 3D SYNC BRIDGE
         </div>
-        <span style={{
+        <button
+          onClick={() => setShowHelp(!showHelp)}
+          title="ดูวิธีใช้งานการซิงค์"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#94a3b8',
+            cursor: 'pointer',
+            padding: 2,
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          <HelpCircle size={15} />
+        </button>
+      </div>
+
+      <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>
+        Plan Editor is <b>authoritative</b>. ทุกวัตถุมี UUID ตรงกับ SketchUp เพื่อให้ถอด 3D และคำนวณราคา (BOQ) ได้แม่นยำ
+      </div>
+
+      {/* Instructions Accordion */}
+      {showHelp && (
+        <div style={{
+          background: '#090d16',
+          border: '1px solid #1e293b',
+          borderRadius: 6,
+          padding: 10,
           fontSize: 11,
-          padding: '2px 6px',
-          borderRadius: 4,
-          background: commandQueue.length > 0 ? '#0284c7' : '#334155',
-          color: '#ffffff',
-          fontWeight: 700,
+          color: '#cbd5e1',
+          lineHeight: 1.5,
         }}>
-          {commandQueue.length} Pending
-        </span>
-      </div>
+          <b style={{ color: '#38bdf8' }}>วิธีนำผังไปสร้างเป็นโมเดล 3D ใน SketchUp:</b>
+          <ol style={{ paddingLeft: 18, marginTop: 4, marginBottom: 4 }}>
+            <li>
+              <b>วิธีที่ 1 (เร็วที่สุด):</b> คลิกปุ่ม <i>"Copy Full Plan Ruby Script"</i> ด้านล่าง ➔ เปิด SketchUp ➔ เปิดเมนู <code>Window &gt; Ruby Console</code> ➔ กด <code>Ctrl+V</code> วางแล้วกด Enter
+            </li>
+            <li>
+              <b>วิธีที่ 2 (ผ่านไฟล์):</b> คลิกปุ่ม <i>"Export project.cfproj"</i> ➔ ใน SketchUp เปิดเมนู <code>Extensions &gt; ConstructFlow &gt; นำเข้าผังจาก Plan Editor...</code>
+            </li>
+          </ol>
+        </div>
+      )}
 
-      <div style={{ fontSize: 11, color: '#94a3b8' }}>
-        Plan Editor is <b>authoritative</b>. Commands sync directly to ConstructFlow's <b>CommandBus</b> in SketchUp preserving object UUIDs.
-      </div>
-
-      {/* Sync Actions */}
+      {/* Primary Action: Full Plan 3D Generation */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <button
-          onClick={handlePostToBridge}
-          disabled={commandQueue.length === 0 || syncStatus === 'syncing'}
+          onClick={handleCopyFullScript}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 8,
-            background: commandQueue.length > 0 ? '#0284c7' : '#334155',
+            gap: 7,
+            background: copiedFullScript ? '#16a34a' : '#0284c7',
             color: '#ffffff',
             border: 'none',
-            padding: '8px 12px',
+            padding: '9px 12px',
             borderRadius: 6,
-            cursor: commandQueue.length > 0 ? 'pointer' : 'default',
-            fontWeight: 600,
+            cursor: 'pointer',
+            fontWeight: 700,
             fontSize: 12,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
             transition: 'background 0.2s',
           }}
         >
-          <Send size={14} />
-          {syncStatus === 'syncing' ? 'Syncing to SketchUp...' : 'Sync to SketchUp'}
-        </button>
-
-        <button
-          onClick={handleCopyRubyScript}
-          disabled={commandQueue.length === 0}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            background: '#1e293b',
-            color: copiedScript ? '#22c55e' : '#cbd5e1',
-            border: '1px solid #475569',
-            padding: '6px 12px',
-            borderRadius: 6,
-            cursor: commandQueue.length > 0 ? 'pointer' : 'default',
-            fontSize: 11,
-            fontWeight: 500,
-          }}
-        >
-          <Copy size={13} />
-          {copiedScript ? 'Copied Ruby CommandBus Script!' : 'Copy Ruby Sync Script'}
+          <Sparkles size={15} />
+          {copiedFullScript ? '✓ Copied! Paste into SketchUp Ruby Console' : `Copy Full 3D Script (${totalElements} ชิ้น)`}
         </button>
 
         <button
@@ -153,18 +275,90 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
             justifyContent: 'center',
             gap: 6,
             background: '#1e293b',
-            color: '#cbd5e1',
-            border: '1px solid #475569',
-            padding: '6px 12px',
+            color: '#f1f5f9',
+            border: '1px solid #3b82f6',
+            padding: '7px 12px',
             borderRadius: 6,
             cursor: 'pointer',
             fontSize: 11,
-            fontWeight: 500,
+            fontWeight: 600,
           }}
         >
           <Download size={13} />
-          Export project.cfproj
+          Export project.cfproj (นำเข้าใน SketchUp)
         </button>
+      </div>
+
+      {/* Secondary Actions: Incremental Sync & Events */}
+      <div style={{
+        marginTop: 4,
+        paddingTop: 8,
+        borderTop: '1px dashed #334155',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>MUTATION STREAM</span>
+          <span style={{
+            fontSize: 10,
+            padding: '1px 5px',
+            borderRadius: 4,
+            background: commandQueue.length > 0 ? '#38bdf8' : '#334155',
+            color: commandQueue.length > 0 ? '#0f172a' : '#ffffff',
+            fontWeight: 700,
+          }}>
+            {commandQueue.length} Pending
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={handleCopyIncrementalScript}
+            disabled={commandQueue.length === 0}
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              background: '#0f172a',
+              color: commandQueue.length > 0 ? (copiedIncrementalScript ? '#22c55e' : '#cbd5e1') : '#475569',
+              border: '1px solid #334155',
+              padding: '5px 8px',
+              borderRadius: 5,
+              cursor: commandQueue.length > 0 ? 'pointer' : 'default',
+              fontSize: 10,
+              fontWeight: 500,
+            }}
+          >
+            <Copy size={11} />
+            {copiedIncrementalScript ? 'Copied Pending!' : 'Copy Pending Events'}
+          </button>
+
+          <button
+            onClick={handlePostToBridge}
+            disabled={commandQueue.length === 0 || syncStatus === 'syncing'}
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              background: '#0f172a',
+              color: commandQueue.length > 0 ? '#38bdf8' : '#475569',
+              border: '1px solid #334155',
+              padding: '5px 8px',
+              borderRadius: 5,
+              cursor: commandQueue.length > 0 ? 'pointer' : 'default',
+              fontSize: 10,
+              fontWeight: 500,
+            }}
+          >
+            <Send size={11} />
+            {syncStatus === 'syncing' ? 'Syncing...' : 'Sync HTTP Bridge'}
+          </button>
+        </div>
       </div>
 
       {syncLog && (
@@ -183,35 +377,34 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
         </div>
       )}
 
-      {/* Command Queue List */}
+      {/* Recent Sync Events Log */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>RECENT SYNC EVENTS</div>
         <div style={{
-          maxHeight: 160,
+          maxHeight: 120,
           overflowY: 'auto',
-          background: '#0f172a',
+          background: '#0a0f1d',
           borderRadius: 6,
-          border: '1px solid #334155',
+          border: '1px solid #1e293b',
           padding: 6,
           display: 'flex',
           flexDirection: 'column',
-          gap: 4,
+          gap: 3,
         }}>
           {commandQueue.length === 0 ? (
-            <div style={{ fontSize: 11, color: '#475569', textAlign: 'center', padding: '12px 0' }}>
+            <div style={{ fontSize: 10, color: '#475569', textAlign: 'center', padding: '8px 0' }}>
               No unsynced mutations
             </div>
           ) : (
-            commandQueue.slice(-10).reverse().map((cmd, idx) => (
+            commandQueue.slice(-8).reverse().map((cmd, idx) => (
               <div
                 key={cmd.command_id || idx}
                 style={{
-                  fontSize: 11,
+                  fontSize: 10,
                   fontFamily: 'monospace',
-                  padding: '4px 6px',
+                  padding: '3px 6px',
                   borderRadius: 4,
-                  background: '#1e293b',
-                  borderLeft: '3px solid #38bdf8',
+                  background: '#131d31',
+                  borderLeft: '2px solid #38bdf8',
                   display: 'flex',
                   justifyContent: 'space-between',
                 }}

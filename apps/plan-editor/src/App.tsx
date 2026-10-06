@@ -1083,6 +1083,7 @@ export const App: React.FC = () => {
           />
 
           <SyncBridgePanel
+            project={project}
             commandQueue={commandQueue}
             onClearQueue={() => setCommandQueue([])}
             onExportProject={handleExportProject}

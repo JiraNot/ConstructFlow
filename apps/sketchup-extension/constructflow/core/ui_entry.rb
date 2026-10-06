@@ -41,6 +41,13 @@ module JiraNot
           menu.add_item('📏 แก้ไขระดับชั้น (Level)') { edit_level(runtime) }
           menu.add_item('🗂 แสดงระดับชั้นทั้งหมด') { show_levels(runtime) }
           menu.add_item('🏠 สร้างโมเดลตัวอย่าง .SKP') { generate_real_project }
+          menu.add_separator
+          menu.add_item('🔄 นำเข้าผังจาก Plan Editor (.cfproj)...') { import_plan_editor_project(runtime) }
+        end
+
+        def import_plan_editor_project(runtime)
+          require_relative 'plan_editor_sync'
+          PlanEditorSync.import_cfproj_file(runtime)
         end
 
         def generate_real_project
