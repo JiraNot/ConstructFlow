@@ -22,8 +22,9 @@ import { PropertiesPanel } from './components/PropertiesPanel.js'
 import { SyncBridgePanel } from './components/SyncBridgePanel.js'
 import { TypeManagerModal } from './components/TypeManagerModal.js'
 import { UnderlayCalibrationModal } from './components/UnderlayCalibrationModal.js'
+import { ExtensionPresetsModal } from './components/ExtensionPresetsModal.js'
 import { UnderlayConfig } from './rendering/planRenderer.js'
-import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown } from 'lucide-react'
+import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles } from 'lucide-react'
 
 export const App: React.FC = () => {
   const [project, setProject] = useState<ProjectDocument>(() =>
@@ -54,6 +55,7 @@ export const App: React.FC = () => {
   })
   const [calibrationModalOpen, setCalibrationModalOpen] = useState<boolean>(false)
   const [measuredCalibrationDist_mm, setMeasuredCalibrationDist_mm] = useState<number>(4000)
+  const [isPresetsModalOpen, setIsPresetsModalOpen] = useState<boolean>(false)
 
   // Setup initial template model: Grids A, B, C & 1, 2, 3 + 9 Columns (C1) + 9 Footings (F1) + Beams (B1/B2) + Initial Walls/Door/Window
   useEffect(() => {
@@ -552,6 +554,12 @@ export const App: React.FC = () => {
     }
   }
 
+  // Apply 1-Click Extension Preset (atomic batch of SmartObjects)
+  const handleApplyExtensionPreset = (updatedProject: ProjectDocument, envelopes: CommandEnvelope[]) => {
+    setProject(updatedProject)
+    setCommandQueue((q) => [...q, ...envelopes])
+  }
+
   // Move Column handler (UUID stays identical!)
   const handleMoveColumn = (objectId: string, newLocation_mm: [number, number]) => {
     const res = CommandBus.execute(project, 'MoveColumn', {
@@ -811,6 +819,30 @@ export const App: React.FC = () => {
               ))}
             </select>
           </div>
+
+          {/* Quick Extension Presets Modal Launcher */}
+          <button
+            onClick={() => setIsPresetsModalOpen(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 6,
+              padding: '5px 12px',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
+              transition: 'all 0.15s ease',
+            }}
+            title="สร้างส่วนต่อเติมสำเร็จรูป 1 คลิก (โรงจอดรถ, ครัวหลังบ้าน, เทอเรสไม้เทียม)"
+          >
+            <Sparkles size={14} />
+            <span>✨ ส่วนต่อเติมสำเร็จรูป (Presets)</span>
+          </button>
         </div>
       </header>
 
@@ -1215,6 +1247,14 @@ export const App: React.FC = () => {
         measuredDistance_mm={measuredCalibrationDist_mm}
         currentScale_mm_per_px={underlay.scale_mm_per_px}
         onApplyScale={handleApplyCalibrationScale}
+      />
+
+      {/* 1-Click Parametric Extension Presets Modal */}
+      <ExtensionPresetsModal
+        isOpen={isPresetsModalOpen}
+        onClose={() => setIsPresetsModalOpen(false)}
+        project={project}
+        onApplyPreset={handleApplyExtensionPreset}
       />
     </div>
   )
