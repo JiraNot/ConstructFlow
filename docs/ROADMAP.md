@@ -38,86 +38,48 @@ Exit criteria:
 
 ---
 
-## R1 — Plan Editor + Smart Wall 2.0
+## R1 — Plan Editor + Smart Wall 2.0 (Vertical Slice 01 & 02 Completed)
 
 **Goal:** make plan editing a first-class production modeling environment.
 
-Deliverables:
+### Status: Core Slices Complete & Synced
+- [x] **Slice 01 (Structure):** Grids (A-C, 1-3), Columns (C1/C2) with intersection snapping, hosted Foundations (F1/F2), and Beams (B1/B2/RB1) with live span calculation and Type Catalog.
+- [x] **Slice 02 (Architecture):** Smart Walls (W1-W3) with thickness/material options, hosted Doors (D1-D3) with 4-quadrant swing flipping, and Windows (W1-W3) with dynamic real-time 2D wall cutouts.
+- [x] **SketchUp 3D Sync Bridge:** Automated `.cfproj` file import and 1-click Ruby sync script generator creating 3D columns, footings, beams, walls, and real cutouts into walls.
 
-### Plan Interaction Engine
-
-- level-aware plan editing plane
-- endpoint / midpoint / intersection snapping
-- axis inference
-- perpendicular / parallel inference
-- host/reference snapping
-- previews
-- temporary dimensions
-- numeric input
-- chain drawing
-- selection filters
-- grips / handles
-- move / copy / stretch
-- placement validity feedback
-
-### Smart Wall 2.0
-
-- wall path editing
-- wall types
-- layered wall assemblies
-- materials per layer
-- core definition
-- base level / base offset
-- top constraint / top offset
-- unconnected height
-- location lines: center/core/finish faces
-- wall orientation
-- room-bounding state
-- L/T/X/corner join engine
-- butt/miter/disallow-join behavior
-- stretch and numeric length editing from plan
-
-Exit criteria:
-
-- a user can lay out and reshape a multi-room wall plan without relying on raw SketchUp Line / Rectangle / Push-Pull for primary walls
-- 3D geometry and joins follow plan edits deterministically
+### Upcoming R1 Feature Tracks:
+- [ ] **Phasing Awareness for Renovation:** Explicit lifecycle visualization and assignment for Existing (บ้านเดิม), Demolition (ส่วนรื้อถอน), and New Construction (ส่วนสร้างใหม่).
+- [ ] **AI Vision & Underlay Calibration:**
+  - Import floor plan image (PNG/JPG) or 2D DWG as underlay.
+  - Point-to-Point Scale Calibration tool (click two points, specify distance e.g. 4.00m to scale the plan accurately).
+  - Floor-to-floor elevation setup (e.g. GF to L2 height prompt).
+- [ ] **Auto-Dimensioning Engine:** Automatic exterior grid-to-grid, column-to-column, and wall opening dimension strings ready for LayOut export.
 
 ---
 
-## R2 — Hosted Architecture Core
+## R2 — Hosted Architecture Core (In Progress)
 
 **Goal:** complete the minimum architectural primitives needed for a simple residential level.
 
 Deliverables:
 
 ### Door / Window / Opening 2.0
+- [x] host-wall placement preview and snapping
+- [x] host relationship and offset along host calculation
+- [x] width / height / sill / head dimensions
+- [x] hand/facing/flip state (4 quadrants)
+- [x] dynamic 2D wall cutouts without breaking topology
+- [x] 3D hole punching and infill creation via SketchUp CommandBus
+- [ ] type vs instance parameters flex in UI
+- [ ] host stretch reconciliation
 
-- host-wall placement preview
-- host relationship
-- offset along host
-- width / height / sill / head
-- hand/facing/flip state
-- automatic opening cut
-- type vs instance parameters
-- host stretch reconciliation
-- host deletion/replacement resolution
-
-### Floors
-
+### Floors & Ceilings
 - boundary + holes
 - level / offset
 - thickness / layered build-up
-- materials
+- materials and hatch representations
 - slopes where applicable
 - quantity representation
-
-### Ceilings
-
-- boundary
-- level / height / offset
-- materials
-- reflected-ceiling representation
-- hosting contract for ceiling devices
 
 ### Rooms
 

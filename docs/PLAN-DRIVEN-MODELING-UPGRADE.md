@@ -160,13 +160,33 @@ Create a reusable interaction foundation instead of implementing each tool indep
 
 ### Initial tools
 
-- Wall Tool
-- Door Tool
-- Window Tool
+- Wall Tool (W1-W3, with thickness, height, material)
+- Door Tool (D1-D3, with 4-quadrant swing flipping)
+- Window Tool (W1-W3, with sill height and dual-line glazing)
 - Opening Tool
 - Floor Boundary Tool
 - Room Tool
-- Column Tool
+- Column Tool (C1/C2)
+- Beam Tool (B1/B2/RB1, with live span measurement)
+- Foundation Tool (F1/F2, column-hosted footings)
+
+### 2D Plan Editor Application & 3D Sync Architecture
+
+To deliver an ultra-responsive CAD/BIM drawing experience, the Plan Interaction Engine is instantiated as an interactive 2D Canvas application (`apps/plan-editor`) communicating with SketchUp via the shared `@constructflow/command-schema` and `@constructflow/project-model`:
+
+1. **Interactive Plan Canvas:**
+   - Real-time pan, zoom, wheel, grid lines (A-C, 1-3) with bubble labels.
+   - Dynamic 2D wall cutouts: hosted doors and windows dynamically carve clean geometric openings into wall segments without destroying wall centerline topology.
+   - Door swing direction: click-to-flip between 4 quadrants (`left_in`, `left_out`, `right_in`, `right_out`).
+2. **Deterministic 3D Sync Bridge (`Core::PlanEditorSync`):**
+   - Import `.cfproj` project documents directly via SketchUp extension menu (`Extensions > ConstructFlow > 🔄 นำเข้าผังจาก Plan Editor...`) or paste 1-click self-contained Ruby script from the web UI.
+   - Automatic Level Registration: registers project storeys (`GF` 0 mm, `L2` 3000 mm) in SketchUp before member generation.
+   - Automatic 3D Geometry & Hole Punching: creates 3D columns, footings, beams, walls, and parametric door/window infills with real cutouts into walls while preserving exact Smart Object UUIDs.
+3. **Renovation & Underlay Roadmap Tracks:**
+   - **Phasing Awareness:** Visual and semantic tagging for Existing (บ้านเดิม), Demolition (ส่วนรื้อถอน), and New Construction (ส่วนสร้างใหม่).
+   - **Image/DWG Underlay with Point-to-Point Scale Calibration:** Click two known points on an underlay image/plan, specify real distance (e.g. 4.00 m) to accurately calibrate drawing scale.
+   - **Floor-to-Floor Height Prompts:** Prompt user for floor elevations when plans lack vertical elevation markers.
+   - **LayOut Publishing & Detailing:** Direct dimension chain generation for LayOut, with hatch patterns and annotations.
 
 ### Exit gate
 

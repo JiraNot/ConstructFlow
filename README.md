@@ -18,7 +18,19 @@ Core lifecycle:
 
 ## Status
 
-The current implementation priority is **R0 Native Reliability → R1 Plan Editor + Smart Wall 2.0**. The plan-driven upgrade is being built on the modular kernel and shared Smart Object graph so plan edits, 3D geometry, hosted relationships, schedules, quantities and documentation remain synchronized. The full product scope remains intact; Extension, Drainage, Paving, Landscape, Joinery, BOQ, QA and AI are sequenced onto the same interaction and parametric foundation rather than removed.
+The implementation has achieved major milestones across the **Plan-Driven Modeling Engine** and **SketchUp 3D Synchronization Bridge**:
+
+1. **2D Plan Editor (Interactive Web/Desktop Canvas):**
+   * **Slice 01 (Structure):** Grids, Structural Columns (C1/C2) with intersection snapping, hosted Footings/Piles (F1/F2), and Beams (B1/B2/RB1) with live span calculation and Type Catalog management.
+   * **Slice 02 (Architecture):** Smart Walls with multiple thicknesses and materials, hosted Doors (D1-D3) with 4-quadrant swing flipping, and Windows (W1-W3) with dynamic real-time 2D wall cutouts.
+2. **SketchUp 3D Synchronization Bridge:**
+   * One-click `.cfproj` project import and full Ruby script synchronization (`Core::PlanEditorSync`).
+   * SketchUp CommandBus automatically creates 3D columns, footings, beams, walls, and parametric door/window infills with real cutouts into walls while preserving exact Smart Object UUIDs.
+   * Extension Directory Junction configured for instant hot-reload during development.
+3. **Upcoming Sequence:**
+   * **Phasing & Renovation:** Existing (บ้านเดิม), Demolition (ส่วนรื้อถอน), New Construction (ส่วนสร้างใหม่).
+   * **AI Vision & Underlay:** Image/DWG underlay with Point-to-Point Scale Calibration.
+   * **2D-to-LayOut Auto-Dimensioning:** Automated dimension strings sent to LayOut with hatch detailing.
 
 See the [Master Upgrade Plan](docs/PLAN-DRIVEN-MODELING-UPGRADE.md), [Roadmap](docs/ROADMAP.md) and [implementation status](docs/STATUS.md) for the authoritative sequence and evidence boundary.
 

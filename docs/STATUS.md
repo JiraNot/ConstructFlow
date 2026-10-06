@@ -70,10 +70,29 @@ This file is the current high-level implementation dashboard. It is informationa
 
 ## Implementation status
 
-ConstructFlow has moved beyond the original Core-only foundation. The repository now contains an **application-level Construction Workflow v1 vertical slice** that composes semantic domain objects, quantity providers, QA, drawing views, output settlement, currentness, LayOut/PDF publication boundaries and issue-history evidence through the same Smart Object graph. In addition, the **native acceptance infrastructure**, **automatic evidence recorder**, **preflight readiness service**, and **deterministic RBZ packaging pipeline** have been implemented and verified under pure-Ruby CI.
+ConstructFlow has achieved major end-to-end milestones with the **2D Plan Editor Web/Desktop Application** and the **SketchUp 3D Synchronization Bridge**, alongside the core SketchUp extension architecture:
 
-Implemented and covered by pure-Ruby CI include:
+### 2D Plan Editor & SketchUp 3D Sync (Vertical Slices 01 & 02)
+- **Monorepo Architecture:** TypeScript packages `@constructflow/project-model` and `@constructflow/command-schema` shared with `apps/plan-editor` (React + Canvas + Tailwind) and mirrored by `apps/sketchup-extension`.
+- **Slice 01 (Structural Foundation):**
+  - Interactive 2D Canvas with Pan, Zoom, Wheel navigation and dynamic grid lines (A-C, 1-3) with snapping.
+  - Column placement (`CreateColumn`, C1/C2) with grid intersection snapping and dedicated Type Catalog management.
+  - Hosted Foundation placement (`CreateFoundation`, F1/F2) anchored directly to columns.
+  - Beam placement (`CreateBeam`, B1/B2/RB1) with 2-click linear drawing connecting columns and live span calculation.
+- **Slice 02 (Architecture & Openings):**
+  - Smart Wall drawing (`CreateWall`, W1-W3) with customizable thickness (100, 150, 200 mm), height, and materials (brick, lightweight block, RC).
+  - Hosted Openings (`CreateDoor`, `CreateWindow`): snaps to walls, calculates offset along wall segment.
+  - Dynamic 2D Wall Cutouts: walls automatically render geometric opening cutouts in real-time on canvas without breaking centerline topology.
+  - Door Handing & Swing Flipping: 4-quadrant swing directions (`left_in`, `left_out`, `right_in`, `right_out`) with click-to-flip interaction.
+  - Window frame and dual-line glazing rendering with sill height parameters.
+- **SketchUp 3D Synchronization Bridge (`Core::PlanEditorSync`):**
+  - Full project sync via `.cfproj` file import (`Extensions > ConstructFlow > 🔄 นำเข้าผังจาก Plan Editor...`) or 1-click Ruby script copy from `SyncBridgePanel.tsx`.
+  - Level registration: automatically detects and registers missing project levels (e.g. `GF` 0 mm, `L2` 3000 mm) before generating structural members.
+  - 3D Geometry Generation: generates 3D columns, footings, beams, and walls in SketchUp matching exact plan dimensions and Smart Object UUIDs.
+  - 3D Wall Hole Punching: cleanly decouples opening cutout UUIDs from door/window infill UUIDs, invoking `CreateOpening` and `CreateDoorWindow` without ID collisions.
+  - Development Symlink: Directory junction configured between SketchUp Plugins AppData and repository, enabling live hot-reloads.
 
+### Construction Workflow v1 & Pure-Ruby CI Foundations
 - Core project, level, Smart Object, lifecycle, relationship, connector, command/event and transaction foundations;
 - R0 transaction boundary hardening: semantic command handlers, synchronous event side-effects and nested delegated commands now share one native SketchUp operation, with abort/commit regression coverage;
 - R0 native preflight hardening: acceptance readiness now requires a saved model plus native `undo`/`redo` API availability before the persistence gate can be exercised;
