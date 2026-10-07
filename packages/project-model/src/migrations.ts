@@ -171,7 +171,7 @@ export function validateProjectV2(project: ProjectDocument): void {
     if (values.rebar_type !== undefined) {
       const config = values.rebar_type
       if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error(`Invalid project format: ${owner} reinforcement must be an object`)
-      const roles = ['top', 'bottom', 'stirrups']
+      const roles = ['top', 'bottom', 'stirrups', 'main', 'ties', 'bottom_x', 'bottom_y', 'starter']
       const entries: [string, unknown][] = roles.some(role => role in config) ? Object.entries(config) : [['general', config]]
       for (const [role, raw] of entries) {
         if ((!roles.includes(role) && role !== 'general') || !raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`Invalid project format: ${owner} invalid reinforcement role`)
@@ -184,7 +184,7 @@ export function validateProjectV2(project: ProjectDocument): void {
         }
         if (!['SR24', 'SD40', 'SD50'].includes(String(d.grade))) throw new Error(`Invalid project format: ${owner} invalid reinforcement grade`)
         if (![0, 90, 135].includes(Number(d.hook_angle_deg))) throw new Error(`Invalid project format: ${owner} invalid hook angle`)
-        if (role === 'stirrups') {
+        if (role === 'stirrups' || role === 'ties') {
           if (!Array.isArray(d.spacing_zones) || !d.spacing_zones.length) throw new Error(`Invalid project format: ${owner} stirrups need zones`)
           for (const zone of d.spacing_zones) {
             if (!zone || typeof zone !== 'object' || Array.isArray(zone)) throw new Error(`Invalid project format: ${owner} invalid stirrup zone`)

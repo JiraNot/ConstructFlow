@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "skipLibCheck": true,
+    "paths": {
+      "@constructflow/project-model": ["../project-model/dist/index.d.ts"],
+      "@constructflow/geometry-kernel": ["../geometry-kernel/dist/index.d.ts"],
+      "@constructflow/structure-engine": ["../structure-engine/dist/index.d.ts"],
+      "@constructflow/representation-engine": ["../representation-engine/dist/index.d.ts"],
+      "@constructflow/domain-providers": ["../domain-providers/dist/index.d.ts"],
+      "@constructflow/takeoff-engine": ["../takeoff-engine/dist/index.d.ts"]
+    }
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}

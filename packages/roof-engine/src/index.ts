@@ -33,8 +33,10 @@ export function decodeRoof(
   d: Record<string, unknown>,
   p: ProjectDocument,
 ): RoofModuleData {
+  const isFlat = !d.edges || !(d.edges as any[]).some((e) => e.defines_slope && e.slope_deg > 0);
+  const allowConcave = Boolean(d.allow_concave || isFlat || d.voids_mm);
   const raw = list(d.boundary_mm, "boundary_mm", (v) => vec2(v, "boundary"), 3),
-    boundary_mm = simplePolygon(raw, true),
+    boundary_mm = simplePolygon(raw, !allowConcave),
     edges = list(
       d.edges,
       "edges",
@@ -64,9 +66,15 @@ export function decodeRoof(
     throw new Error(
       "Mixed zero/sloped edges are ambiguous; disable zero-slope edges",
     );
+  const voids_mm = Array.isArray(d.voids_mm)
+    ? (d.voids_mm as unknown[]).map((h) =>
+        simplePolygon(list(h, "void", (v) => vec2(v, "void")), false),
+      )
+    : undefined;
   return {
     ...placement(d, p),
     boundary_mm,
+    voids_mm,
     elevation_mm: num(d.elevation_mm, "elevation"),
     edges: mapped,
     material: text(d.material, "material"),
@@ -99,7 +107,7 @@ export function solveRoof(d: RoofModuleData): RoofFacet[] {
     ];
   });
   if (!planes.length) planes.push({ i: -1, a: 0, b: 0, c: d.elevation_mm });
-  return planes.flatMap((plane) => {
+  const facets: RoofFacet[] = planes.flatMap((plane) => {
     let region = p.map((v) => [...v] as Vec2);
     for (const other of planes) {
       if (other === plane) continue;
@@ -129,6 +137,21 @@ export function solveRoof(d: RoofModuleData): RoofFacet[] {
       },
     ];
   });
+  const voids = d.voids_mm;
+  if (voids && voids.length > 0) {
+    const totalVoidAreaM2 = voids.reduce(
+      (sum: number, hole) => sum + Math.abs(signedArea(hole)) / 1e6,
+      0,
+    );
+    const totalInitialArea = facets.reduce((s: number, f: RoofFacet) => s + f.area_m2, 0);
+    if (totalInitialArea > 0) {
+      const factor = Math.max(0, (totalInitialArea - totalVoidAreaM2) / totalInitialArea);
+      for (const f of facets) {
+        f.area_m2 *= factor;
+      }
+    }
+  }
+  return facets;
 }
 export function executeRoofCommand(
   c: CommandHandlerContext,
@@ -148,6 +171,14 @@ export function roofOutputs(p: ProjectDocument): DomainOutput[] {
         out = output(o, d);
       out.meshes = f.flatMap((v) => v.triangles);
       out.paths = f.map((v) => [...v.vertices_mm, v.vertices_mm[0]]);
+      if (d.voids_mm) {
+        for (const hole of d.voids_mm) {
+          out.paths.push([
+            ...hole.map((pt) => [pt[0], pt[1], d.elevation_mm] as Vec3),
+            [hole[0][0], hole[0][1], d.elevation_mm] as Vec3,
+          ]);
+        }
+      }
       out.quantities = [
         {
           classification: "roof.covering",

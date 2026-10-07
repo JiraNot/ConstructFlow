@@ -114,8 +114,33 @@ function hostGeometry(
       end: [a[0], a[1], zt],
     };
   }
+  if (o.object_type === "structure.foundation") {
+    const center = list(
+        d.center_mm ?? [0, 0, 0],
+        "center",
+        (v) => num(v, "point"),
+        3,
+      ) as Vec3,
+      rawSize = d.size_mm ?? [1000, 1000, 300];
+    const s =
+      Array.isArray(rawSize) && rawSize.length === 3
+        ? [
+            num(rawSize[0], "width"),
+            num(rawSize[1], "length"),
+            num(rawSize[2], "thickness"),
+          ]
+        : [1000, 1000, 300];
+    const [w, l, t] = s;
+    return {
+      length: l,
+      width: w,
+      depth: t,
+      start: [center[0], center[1] - l / 2, center[2] - t / 2],
+      end: [center[0], center[1] + l / 2, center[2] - t / 2],
+    };
+  }
   throw new Error(
-    "Rebar host must be a beam or column; explicit legs can reference a slab/foundation",
+    "Rebar host must be a beam, column, or foundation; explicit legs can reference a slab",
   );
 }
 export function decodeRebar(
@@ -149,7 +174,14 @@ export function decodeRebar(
       "0"
         ? 0
         : (Number(d.hook_angle_deg) as 90 | 135),
-    hook_extension_mm: num(d.hook_extension_mm, "hook_extension_mm", 0),
+    hook_extension_mm:
+      typeof d.hook_extension_mm === "number"
+        ? num(d.hook_extension_mm, "hook_extension_mm", 0)
+        : Number(d.hook_angle_deg) === 90
+        ? 12 * positive(d.diameter_mm, "diameter_mm")
+        : Number(d.hook_angle_deg) === 135
+        ? Math.max(75, 6 * positive(d.diameter_mm, "diameter_mm"))
+        : 0,
     lap_mm: num(d.lap_mm, "lap_mm", 0),
     legs_mm: list(d.legs_mm ?? [], "legs_mm", (v) => positive(v, "leg"), 0),
     spacing_zones: list(
@@ -183,9 +215,13 @@ export function decodeRebar(
     throw new Error("Explicit bar needs tangent-leg lengths");
   if (data.mode !== "explicit") {
     const h = hostGeometry(p, host_id);
+    const hostObj = p.objects[host_id];
+    const isFootingX =
+      hostObj?.object_type === "structure.foundation" && role === "bottom_x";
+    const span = isFootingX ? h.width : h.length;
     if (data.cover_mm * 2 + data.diameter_mm >= Math.min(h.width, h.depth))
       throw new Error("Cover/bar exceeds host section");
-    if (h.length <= 2 * data.cover_mm)
+    if (span <= 2 * data.cover_mm)
       throw new Error("Cover exceeds host length");
     if (data.mode === "stirrups") {
       if (!data.spacing_zones.length)
@@ -211,7 +247,17 @@ export function decodeRebar(
   }
   data.role = choice(
     role,
-    ["top", "bottom", "stirrups", "general"] as const,
+    [
+      "top",
+      "bottom",
+      "stirrups",
+      "general",
+      "main",
+      "ties",
+      "bottom_x",
+      "bottom_y",
+      "starter",
+    ] as const,
     "rebar role",
   );
   return data;
@@ -238,8 +284,12 @@ export function calculateBBS(p: ProjectDocument, o: SmartObject): BBSRow {
     len = d.legs_mm.reduce((a, b) => a + b, 0) + hook + d.lap_mm;
   else {
     const h = hostGeometry(p, d.host_id);
+    const hostObj = p.objects[d.host_id];
+    const isFootingX =
+      hostObj?.object_type === "structure.foundation" && d.role === "bottom_x";
+    const span = isFootingX ? h.width : h.length;
     if (d.mode === "longitudinal")
-      len = h.length - 2 * d.cover_mm + hook + d.lap_mm;
+      len = span - 2 * d.cover_mm + hook + d.lap_mm;
     else {
       const w = h.width - 2 * d.cover_mm - d.diameter_mm,
         depth = h.depth - 2 * d.cover_mm - d.diameter_mm,
@@ -309,6 +359,114 @@ export function executeStructureConstructionCommand(
         mark: String(record(host.module_data).mark) + "-" + role,
         level_id: record(host.module_data).level_id,
         mode: role === "stirrups" ? "stirrups" : "longitudinal",
+        created_phase: host.created_phase,
+        inherit_host_type: c.input.inherit_host_type !== false,
+      };
+      const response = domainCommand(
+        { ...c, input: request },
+        "structure.rebar_set",
+        "constructflow.structure",
+        decodeRebar,
+        { update: !!old, hostFields: ["host_id"] },
+      );
+      affected.push(...response.result.affected_object_ids);
+    }
+    return {
+      result: {
+        status: "success",
+        command_id: c.command_id,
+        command_name: c.commandName,
+        affected_object_ids: affected,
+        updated_object_ids: affected,
+      },
+      updatedProject: c.updated,
+      emittedEnvelope: {
+        ...c.envelope,
+        input: { ...c.input, bar_set_ids: affected.slice(1) },
+      },
+    };
+  }
+  if (c.commandName === "ConfigureColumnReinforcement") {
+    const host = c.updated.objects[text(c.input.host_id, "host_id")];
+    if (host?.object_type !== "structure.column")
+      throw new Error("Column host required");
+    const config = record(c.input.reinforcement, "reinforcement"),
+      roles = ["main", "ties"] as const,
+      affected: string[] = [host.id];
+    for (const role of roles) {
+      if (!config[role]) continue;
+      const params = record(config[role], role),
+        old = Object.values(c.updated.objects).find(
+          (o) =>
+            o.object_type === "structure.rebar_set" &&
+            record(o.module_data).host_id === host.id &&
+            record(o.module_data).role === role,
+        );
+      const suppliedIds = Array.isArray(c.input.bar_set_ids)
+        ? c.input.bar_set_ids
+        : [];
+      const request = {
+        ...params,
+        id: old?.id ?? suppliedIds[roles.indexOf(role)] ?? crypto.randomUUID(),
+        host_id: host.id,
+        role,
+        mark: String(record(host.module_data).mark) + "-" + role,
+        level_id: record(host.module_data).level_id,
+        mode: role === "ties" ? "stirrups" : "longitudinal",
+        created_phase: host.created_phase,
+        inherit_host_type: c.input.inherit_host_type !== false,
+      };
+      const response = domainCommand(
+        { ...c, input: request },
+        "structure.rebar_set",
+        "constructflow.structure",
+        decodeRebar,
+        { update: !!old, hostFields: ["host_id"] },
+      );
+      affected.push(...response.result.affected_object_ids);
+    }
+    return {
+      result: {
+        status: "success",
+        command_id: c.command_id,
+        command_name: c.commandName,
+        affected_object_ids: affected,
+        updated_object_ids: affected,
+      },
+      updatedProject: c.updated,
+      emittedEnvelope: {
+        ...c.envelope,
+        input: { ...c.input, bar_set_ids: affected.slice(1) },
+      },
+    };
+  }
+  if (c.commandName === "ConfigureFoundationReinforcement") {
+    const host = c.updated.objects[text(c.input.host_id, "host_id")];
+    if (host?.object_type !== "structure.foundation")
+      throw new Error("Foundation host required");
+    const config = record(c.input.reinforcement, "reinforcement"),
+      roles = ["bottom_x", "bottom_y"] as const,
+      affected: string[] = [host.id];
+    for (const role of roles) {
+      if (!config[role]) continue;
+      const params = record(config[role], role),
+        old = Object.values(c.updated.objects).find(
+          (o) =>
+            o.object_type === "structure.rebar_set" &&
+            record(o.module_data).host_id === host.id &&
+            record(o.module_data).role === role,
+        );
+      const suppliedIds = Array.isArray(c.input.bar_set_ids)
+        ? c.input.bar_set_ids
+        : [];
+      const request = {
+        ...params,
+        id: old?.id ?? suppliedIds[roles.indexOf(role)] ?? crypto.randomUUID(),
+        host_id: host.id,
+        role,
+        mark: String(record(host.module_data).mark) + "-" + role,
+        level_id: record(host.module_data).level_id,
+        mode: "longitudinal",
         created_phase: host.created_phase,
         inherit_host_type: c.input.inherit_host_type !== false,
       };
@@ -471,34 +629,90 @@ export function structureOutputs(p: ProjectDocument): DomainOutput[] {
       ];
       if (d.mode !== "explicit") {
         const h = hostGeometry(p, d.host_id);
-        // Bar locations are derived in the host's local section frame.
-        const axis = h.end.map((v, i) => (v - h.start[i]) / h.length) as Vec3;
-        const horizontal = Math.hypot(axis[0], axis[1]);
-        const u: Vec3 =
-          horizontal > 1e-8
-            ? [-axis[1] / horizontal, axis[0] / horizontal, 0]
-            : [1, 0, 0];
-        const v: Vec3 = [
-          axis[1] * u[2] - axis[2] * u[1],
-          axis[2] * u[0] - axis[0] * u[2],
-          axis[0] * u[1] - axis[1] * u[0],
-        ];
-        const at = (along: number, x: number, y: number): Vec3 =>
-          h.start.map(
-            (n, i) => n + axis[i] * along + u[i] * x + v[i] * y,
-          ) as Vec3;
-        const halfW = h.width / 2 - d.cover_mm - d.diameter_mm / 2,
-          halfD = h.depth / 2 - d.cover_mm - d.diameter_mm / 2;
-        if (d.mode === "longitudinal") {
-          if (d.count > 2000)
-            throw new Error("Bar rendering count exceeds supported limit");
-          out.paths = Array.from({ length: d.count }, (_, i) => {
-            const x =
-                d.count === 1 ? 0 : -halfW + (2 * halfW * i) / (d.count - 1),
-              y = d.role === "bottom" ? -halfD : d.role === "top" ? halfD : 0;
-            return [at(d.cover_mm, x, y), at(h.length - d.cover_mm, x, y)];
-          });
+        const hostObj = p.objects[d.host_id];
+        const isFooting = hostObj?.object_type === "structure.foundation";
+        const isColumn = hostObj?.object_type === "structure.column";
+        if (isFooting) {
+          const center = h.start.map((v, i) => (v + h.end[i]) / 2) as Vec3;
+          const halfW = h.width / 2 - d.cover_mm - d.diameter_mm / 2;
+          const halfL = h.length / 2 - d.cover_mm - d.diameter_mm / 2;
+          const zBottom = center[2] + d.cover_mm + d.diameter_mm / 2;
+          if (d.role === "bottom_x") {
+            out.paths = Array.from({ length: d.count }, (_, i) => {
+              const y =
+                d.count === 1
+                  ? center[1]
+                  : center[1] - halfL + (2 * halfL * i) / (d.count - 1);
+              return [
+                [center[0] - halfW, y, zBottom],
+                [center[0] + halfW, y, zBottom],
+              ];
+            });
+          } else {
+            out.paths = Array.from({ length: d.count }, (_, i) => {
+              const x =
+                d.count === 1
+                  ? center[0]
+                  : center[0] - halfW + (2 * halfW * i) / (d.count - 1);
+              return [
+                [x, center[1] - halfL, zBottom],
+                [x, center[1] + halfL, zBottom],
+              ];
+            });
+          }
         } else {
+          // Bar locations are derived in the host's local section frame.
+          const axis = h.end.map((v, i) => (v - h.start[i]) / h.length) as Vec3;
+          const horizontal = Math.hypot(axis[0], axis[1]);
+          const u: Vec3 =
+            horizontal > 1e-8
+              ? [-axis[1] / horizontal, axis[0] / horizontal, 0]
+              : [1, 0, 0];
+          const v: Vec3 = [
+            axis[1] * u[2] - axis[2] * u[1],
+            axis[2] * u[0] - axis[0] * u[2],
+            axis[0] * u[1] - axis[1] * u[0],
+          ];
+          const at = (along: number, x: number, y: number): Vec3 =>
+            h.start.map(
+              (n, i) => n + axis[i] * along + u[i] * x + v[i] * y,
+            ) as Vec3;
+          const halfW = h.width / 2 - d.cover_mm - d.diameter_mm / 2,
+            halfD = h.depth / 2 - d.cover_mm - d.diameter_mm / 2;
+          if (d.mode === "longitudinal") {
+            if (d.count > 2000)
+              throw new Error("Bar rendering count exceeds supported limit");
+            if (
+              isColumn &&
+              (d.role === "main" || d.role === "general") &&
+              d.count === 4
+            ) {
+              const corners = [
+                [-halfW, -halfD],
+                [halfW, -halfD],
+                [halfW, halfD],
+                [-halfW, halfD],
+              ];
+              out.paths = corners.map(([x, y]) => [
+                at(d.cover_mm, x, y),
+                at(h.length - d.cover_mm, x, y),
+              ]);
+            } else {
+              out.paths = Array.from({ length: d.count }, (_, i) => {
+                const x =
+                    d.count === 1 ? 0 : -halfW + (2 * halfW * i) / (d.count - 1),
+                  y =
+                    d.role === "bottom" ||
+                    d.role === "bottom_x" ||
+                    d.role === "bottom_y"
+                      ? -halfD
+                      : d.role === "top"
+                      ? halfD
+                      : 0;
+                return [at(d.cover_mm, x, y), at(h.length - d.cover_mm, x, y)];
+              });
+            }
+          } else {
           const locations = new Set<number>();
           for (const z of d.spacing_zones) {
             for (
@@ -546,6 +760,7 @@ export function structureOutputs(p: ProjectDocument): DomainOutput[] {
             });
         }
       }
+      }
       results.push(out);
     }
   }
@@ -561,7 +776,7 @@ export function validateStructureConstruction(p: ProjectDocument): void {
 /** Catalog-owned bars are materialized with deterministic child UUIDs in the same transaction. */
 export function reconcileTypeReinforcement(c: CommandHandlerContext): string[] {
   const affected: string[] = [];
-  for (const host of Object.values(c.updated.objects))
+  for (const host of Object.values(c.updated.objects)) {
     if (host.object_type === "structure.beam") {
       const hd = resolvedData(c.updated, host),
         config = hd.rebar_type;
@@ -609,5 +824,100 @@ export function reconcileTypeReinforcement(c: CommandHandlerContext): string[] {
         affected.push(...response.result.affected_object_ids);
       }
     }
+    if (host.object_type === "structure.column") {
+      const hd = resolvedData(c.updated, host),
+        config = hd.rebar_type;
+      if (!config) continue;
+      for (const role of ["main", "ties"] as const) {
+        const raw = record(config)[role];
+        if (!raw) continue;
+        const old = Object.values(c.updated.objects).find(
+          (o) =>
+            o.object_type === "structure.rebar_set" &&
+            record(o.module_data).host_id === host.id &&
+            record(o.module_data).role === role,
+        );
+        if (old && record(old.module_data).inherit_host_type !== true) continue;
+        const id =
+            old?.id ?? legacyTypeUuid("structure.rebar_set", host.id, role),
+          input = {
+            ...record(raw),
+            id,
+            host_id: host.id,
+            role,
+            mark: String(hd.mark) + "-" + role,
+            level_id: hd.level_id,
+            mode: role === "ties" ? "stirrups" : "longitudinal",
+            inherit_host_type: true,
+            created_phase: host.created_phase,
+          };
+        const decoded = decodeRebar(input, c.updated);
+        if (
+          old &&
+          JSON.stringify(record(old.module_data)) === JSON.stringify(decoded) &&
+          old.created_phase === host.created_phase &&
+          old.removed_phase === host.removed_phase
+        )
+          continue;
+        const response = domainCommand(
+          { ...c, input },
+          "structure.rebar_set",
+          "constructflow.structure",
+          decodeRebar,
+          { update: !!old, hostFields: ["host_id"] },
+        );
+        c.updated.objects[id].created_phase = host.created_phase;
+        c.updated.objects[id].removed_phase = host.removed_phase;
+        affected.push(...response.result.affected_object_ids);
+      }
+    }
+    if (host.object_type === "structure.foundation") {
+      const hd = resolvedData(c.updated, host),
+        config = hd.rebar_type;
+      if (!config) continue;
+      for (const role of ["bottom_x", "bottom_y"] as const) {
+        const raw = record(config)[role];
+        if (!raw) continue;
+        const old = Object.values(c.updated.objects).find(
+          (o) =>
+            o.object_type === "structure.rebar_set" &&
+            record(o.module_data).host_id === host.id &&
+            record(o.module_data).role === role,
+        );
+        if (old && record(old.module_data).inherit_host_type !== true) continue;
+        const id =
+            old?.id ?? legacyTypeUuid("structure.rebar_set", host.id, role),
+          input = {
+            ...record(raw),
+            id,
+            host_id: host.id,
+            role,
+            mark: String(hd.mark) + "-" + role,
+            level_id: hd.level_id,
+            mode: "longitudinal",
+            inherit_host_type: true,
+            created_phase: host.created_phase,
+          };
+        const decoded = decodeRebar(input, c.updated);
+        if (
+          old &&
+          JSON.stringify(record(old.module_data)) === JSON.stringify(decoded) &&
+          old.created_phase === host.created_phase &&
+          old.removed_phase === host.removed_phase
+        )
+          continue;
+        const response = domainCommand(
+          { ...c, input },
+          "structure.rebar_set",
+          "constructflow.structure",
+          decodeRebar,
+          { update: !!old, hostFields: ["host_id"] },
+        );
+        c.updated.objects[id].created_phase = host.created_phase;
+        c.updated.objects[id].removed_phase = host.removed_phase;
+        affected.push(...response.result.affected_object_ids);
+      }
+    }
+  }
   return affected;
 }

@@ -88,3 +88,60 @@ test("Phase 6: saved sheet settings control the compiler and invalid coordinate 
     /center_mm/,
   );
 });
+
+test("Track 2: Permit Package evaluates legal metadata, deed boundaries, setbacks, and issue_ready", () => {
+  const p = createEmptyProjectDocument("PERMIT-LEGAL", "บ้านพักอาศัยโมเดิร์น 2 ชั้น");
+
+  p.legal_metadata = {
+    deed_no: "45678",
+    land_no: "123",
+    survey_page: "9988",
+    subdistrict: "ลาดยาว",
+    district: "จตุจักร",
+    province: "กรุงเทพมหานคร",
+    rai: 0,
+    ngan: 1,
+    sq_wa: 50,
+    total_area_sqm: 600,
+    boundary_pegs: [
+      { peg_no: "1", coordinate_m: [0, 0] },
+      { peg_no: "2", coordinate_m: [20, 0] },
+      { peg_no: "3", coordinate_m: [20, 30] },
+      { peg_no: "4", coordinate_m: [0, 30] },
+    ],
+    setbacks: {
+      front_m: 3.0,
+      rear_m: 2.0,
+      left_m: 2.0,
+      right_m: 2.0,
+      min_opening_setback_m: 2.0,
+      min_blind_setback_m: 0.5,
+    },
+    zoning: {
+      zone_code: "ย.4-12",
+      far_limit: 3.0,
+      osr_min_percent: 10.0,
+      permeable_open_space_ratio_percent: 50.0,
+    },
+    signatories: {
+      owner_name: "นายสมชาย เจริญสุข",
+      architect_name: "นายสถาปัตย์ มั่นคง",
+      architect_license_no: "ส-สถ. 9876",
+      structural_engineer_name: "นายวิศวกร ปลอดภัย",
+      structural_engineer_license_no: "วส. 5432",
+      issue_approved: true,
+    },
+  };
+
+  const set = compilePermitDrawingSet(p);
+  const a01 = set.sheets.find((s) => s.id === "A-01");
+  assert.ok(a01);
+  assert.equal(a01.status, "issued");
+  assert.ok(!a01.warnings.some((w) => w.includes("Deed boundary")));
+
+  // Verify A-01 contains Deed Table text and Peg text
+  assert.ok(a01.primitives.some((pr) => pr.kind === "text" && pr.text.includes("45678")));
+  assert.ok(a01.primitives.some((pr) => pr.kind === "text" && pr.text.includes("หลักเขต 1")));
+  assert.ok(a01.primitives.some((pr) => pr.kind === "text" && pr.text.includes("ส-สถ. 9876")));
+  assert.ok(a01.primitives.some((pr) => pr.kind === "text" && pr.text.includes("PERMIT ISSUE SET")));
+});

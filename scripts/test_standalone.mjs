@@ -34,6 +34,8 @@ for (const directory of [
   "packages/sheet-engine",
   "packages/command-runtime",
   "packages/extension-engine",
+  "packages/cad-adapter",
+  "packages/bim-adapter",
 ])
   run(directory, ["test"]);
 for (const verifier of ["verify:kitchen", "verify:file-io", "verify:phases"])

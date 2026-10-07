@@ -164,5 +164,24 @@ class McpBridgeServerTest(unittest.TestCase):
         self.assertIsNone(server.sketchup_ws)
 
 
+    def test_list_tools_contains_all_bim_tools(self):
+        tools = asyncio.run(server.app.list_tools_handler())
+        tool_names = [t["name"] if isinstance(t, dict) else t.name for t in tools]
+        self.assertIn("cf_query_model", tool_names)
+        self.assertIn("cf_mutate_geometry", tool_names)
+        self.assertIn("cf_validate_compliance", tool_names)
+        self.assertIn("cf_run_clash", tool_names)
+        self.assertIn("cf_export_sheets", tool_names)
+        self.assertIn("cf_sync_sketchup", tool_names)
+        self.assertIn("cf_export_dxf", tool_names)
+        self.assertIn("cf_export_ifc", tool_names)
+
+    def test_standalone_tool_execution(self):
+        result = asyncio.run(server.app.call_tool_handler("cf_export_dxf", {"version": "2018"}))
+        payload = json.loads(result[0]["text"])
+        self.assertEqual(payload["status"], "success")
+        self.assertEqual(payload["tool"], "cf_export_dxf")
+        self.assertFalse(payload["live_bridge"])
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

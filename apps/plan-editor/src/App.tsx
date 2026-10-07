@@ -23,8 +23,12 @@ import { SyncBridgePanel } from './components/SyncBridgePanel.js'
 import { TypeManagerModal } from './components/TypeManagerModal.js'
 import { UnderlayCalibrationModal } from './components/UnderlayCalibrationModal.js'
 import { ExtensionPresetsModal } from './components/ExtensionPresetsModal.js'
+import { ProjectLegalModal } from './components/ProjectLegalModal.js'
+import { exportProjectToDxf } from '@constructflow/cad-adapter'
+import { exportProjectToIfc } from '@constructflow/bim-adapter'
+import type { ProjectLegalMetadata } from '@constructflow/project-model'
 import { UnderlayConfig } from './rendering/planRenderer.js'
-import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot } from 'lucide-react'
+import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck } from 'lucide-react'
 import { calculateTakeoff } from '@constructflow/takeoff-engine'
 import { createKitchenProofProject } from '@constructflow/extension-engine'
 import { renderPermitDrawingSetHtml } from '@constructflow/sheet-engine'
@@ -120,6 +124,7 @@ export const App: React.FC = () => {
   const [calibrationModalOpen, setCalibrationModalOpen] = useState<boolean>(false)
   const [measuredCalibrationDist_mm, setMeasuredCalibrationDist_mm] = useState<number>(4000)
   const [isPresetsModalOpen, setIsPresetsModalOpen] = useState<boolean>(false)
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState<boolean>(false)
 
   useEffect(() => {
     if (!hasUnsavedChanges) return
@@ -1203,6 +1208,64 @@ export const App: React.FC = () => {
             <Redo2 size={14} />
           </button>
 
+          {/* Legal & Signatures Modal Button */}
+          <button
+            onClick={() => setIsLegalModalOpen(true)}
+            style={{
+              ...headerActionStyle,
+              background: project.legal_metadata?.signatories?.issue_approved ? '#065f46' : '#1e293b',
+              color: project.legal_metadata?.signatories?.issue_approved ? '#6ee7b7' : '#e2e8f0',
+              borderColor: project.legal_metadata?.signatories?.issue_approved ? '#10b981' : '#334155',
+            }}
+            title="กรอกข้อมูลโฉนดที่ดิน ระยะร่น และผู้เซ็นแบบขออนุญาต อ.1"
+          >
+            <FileCheck size={14} />
+            <span>โฉนด & ผู้เซ็นแบบ</span>
+          </button>
+
+          {/* Export CAD 20 Layouts */}
+          <button
+            onClick={() => {
+              const res = exportProjectToDxf(project, {
+                projectName: project.project.name,
+                architectName: project.legal_metadata?.signatories?.architect_name,
+                engineerLicense: project.legal_metadata?.signatories?.structural_engineer_license_no,
+              })
+              const blob = new Blob([res.dxfContent], { type: 'application/dxf' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `${project.project.id || 'ConstructFlow'}_20Layouts.dxf`
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+            style={headerActionStyle}
+            title="ส่งออก AutoCAD DWG/DXF (ModelSpace 1:1 mm + 20 PaperSpace Layouts + ACAD_TABLE)"
+          >
+            <span>DXF (20 Sheets)</span>
+          </button>
+
+          {/* Export OpenBIM IFC 4.3 */}
+          <button
+            onClick={() => {
+              const res = exportProjectToIfc(project, {
+                projectName: project.project.name,
+                authorName: project.legal_metadata?.signatories?.architect_name,
+              })
+              const blob = new Blob([res.ifcContent], { type: 'application/x-step' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `${project.project.id || 'ConstructFlow'}.ifc`
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+            style={headerActionStyle}
+            title="ส่งออก OpenBIM IFC 4.3 ADD2 (ISO 16739-1:2024)"
+          >
+            <span>IFC 4.3</span>
+          </button>
+
           {/* Quick Extension Presets Modal Launcher */}
           <button style={headerActionStyle} onClick={()=>setIsConstructionOpen(true)}>Phase 1–6 · BIM & Sheets</button>
           <button
@@ -1683,6 +1746,20 @@ export const App: React.FC = () => {
         onClose={() => setIsPresetsModalOpen(false)}
         project={project}
         onApplyPreset={handleApplyExtensionPreset}
+      />
+
+      {/* Title Deed & Legal Signatories Modal (Permit Issue Set) */}
+      <ProjectLegalModal
+        isOpen={isLegalModalOpen}
+        onClose={() => setIsLegalModalOpen(false)}
+        project={project}
+        onSave={(legal) => {
+          setProject((prev) => {
+            const next = { ...prev, legal_metadata: legal }
+            projectSessionRef.current = new ProjectCommandSession(next)
+            return next
+          })
+        }}
       />
     </div>
   )

@@ -1,0 +1,24 @@
+{
+  "name": "@constructflow/cad-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@constructflow/domain-providers": "file:../domain-providers",
+    "@constructflow/geometry-kernel": "file:../geometry-kernel",
+    "@constructflow/project-model": "file:../project-model",
+    "@constructflow/representation-engine": "file:../representation-engine",
+    "@constructflow/structure-engine": "file:../structure-engine",
+    "@constructflow/takeoff-engine": "file:../takeoff-engine",
+    "constructflow-standalone": "file:../.."
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,6 +1,6 @@
 // ConstructFlow Project Container Interface (.cfproj format)
 
-import { Phase, Level, PileSystem, Relationship } from './types.js'
+import { Phase, Level, PileSystem, Relationship, ProjectLegalMetadata } from './types.js'
 import { SmartObject } from './smartObject.js'
 import type { DrawingSettings } from './sheetSettings.js'
 
@@ -59,6 +59,7 @@ export interface ProjectDocument {
   objects: Record<string, SmartObject> // Keyed by immutable UUID
   relationships: Relationship[]
   drawing_settings?: DrawingSettings
+  legal_metadata?: ProjectLegalMetadata
 }
 
 export const DEFAULT_PHASES: PhaseDefinition[] = [

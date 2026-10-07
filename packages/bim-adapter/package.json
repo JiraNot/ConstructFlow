@@ -1,0 +1,21 @@
+{
+  "name": "@constructflow/bim-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@constructflow/geometry-kernel": "file:../geometry-kernel",
+    "@constructflow/project-model": "file:../project-model",
+    "@constructflow/structure-engine": "file:../structure-engine",
+    "constructflow-standalone": "file:../.."
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

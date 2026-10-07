@@ -22,4 +22,6 @@ export const packageDirectories = [
   "extension-engine",
   "takeoff-engine",
   "sheet-engine",
+  "cad-adapter",
+  "bim-adapter",
 ].map((name) => `packages/${name}`);

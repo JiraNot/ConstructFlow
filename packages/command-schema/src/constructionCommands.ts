@@ -30,6 +30,28 @@ export interface ConstructionCommandInputs {
     bar_set_ids?: string[];
     inherit_host_type?: boolean;
   };
+  ConfigureColumnReinforcement: {
+    host_id: string;
+    reinforcement: Partial<
+      Record<
+        "main" | "ties",
+        Omit<RebarModuleData, "host_id" | "role" | "mark" | "level_id">
+      >
+    >;
+    bar_set_ids?: string[];
+    inherit_host_type?: boolean;
+  };
+  ConfigureFoundationReinforcement: {
+    host_id: string;
+    reinforcement: Partial<
+      Record<
+        "bottom_x" | "bottom_y",
+        Omit<RebarModuleData, "host_id" | "role" | "mark" | "level_id">
+      >
+    >;
+    bar_set_ids?: string[];
+    inherit_host_type?: boolean;
+  };
   CreateSlab: ConstructionInput<SlabModuleData>;
   UpdateSlab: ConstructionInput<SlabModuleData>;
   AssignRebarSet: ConstructionInput<RebarModuleData>;

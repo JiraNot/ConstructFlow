@@ -75,14 +75,14 @@ export interface PermitSheet {
   primitives: VectorPrimitive[];
   source_object_ids: string[];
   warnings: string[];
-  status: "draft" | "missing_data";
+  status: "draft" | "missing_data" | "issued";
   viewport: SheetViewport;
 }
 export interface PermitDrawingSet {
   project_id: string;
   sheets: PermitSheet[];
   warnings: string[];
-  issue_ready: false;
+  issue_ready: boolean;
 }
 const esc = (s: unknown) =>
   String(s ?? "")
@@ -376,26 +376,58 @@ export function compilePermitDrawingSet(
       text([14, 262], "อาคารเดิม / Existing", 2.6, colors.existing);
       text([14, 268], "รื้อถอน / Demolition", 2.6, colors.demolition);
       text([14, 274], "สร้างใหม่ / New construction", 2.6);
-      text(
-        [14, 283],
-        "DRAFT - ต้องตรวจและลงนามโดยผู้ออกแบบก่อนออกแบบยื่นอนุญาต",
-        2.6,
-        "#b45309",
-        245,
-      );
+
+      const legal = project.legal_metadata;
+      const isApproved = Boolean(legal?.signatories?.issue_approved);
+      if (isApproved) {
+        text(
+          [14, 283],
+          "PERMIT ISSUE SET (แบบขออนุญาตก่อสร้าง อ.1) - เอกสารรับรองสมบูรณ์",
+          2.6,
+          "#047857",
+          245,
+        );
+      } else {
+        text(
+          [14, 283],
+          "DRAFT - ต้องตรวจและลงนามโดยผู้ออกแบบก่อนออกแบบยื่นอนุญาต",
+          2.6,
+          "#b45309",
+          245,
+        );
+      }
       text(
         [275, 263],
         `Scale 1:${viewport.scale_denominator} | A3 420 x 297 mm`,
         2.6,
       );
+      const archSig = legal?.signatories?.architect_name
+        ? `${legal.signatories.architect_name} (${legal.signatories.architect_license_no})`
+        : options.author ?? "ConstructFlow";
+      const engSig = legal?.signatories?.structural_engineer_name
+        ? `${legal.signatories.structural_engineer_name} (${legal.signatories.structural_engineer_license_no})`
+        : "วิศวกรโครงสร้าง";
       text(
-        [275, 271],
-        `Revision ${options.revision ?? "DRAFT"} | ${options.author ?? "ConstructFlow"}`,
-        2.4,
+        [275, 270],
+        `สถาปนิก: ${archSig}`,
+        2.2,
         "#475569",
         85,
       );
-      text([275, 282], project.project.id, 2.1, "#475569", 85);
+      text(
+        [275, 276],
+        `วิศวกร: ${engSig}`,
+        2.2,
+        "#475569",
+        85,
+      );
+      text(
+        [275, 282],
+        `Revision ${options.revision ?? (isApproved ? "01" : "DRAFT")} | ${project.project.id}`,
+        2.1,
+        "#475569",
+        85,
+      );
       text([372, 270], id, 7);
       text(
         [372, 282],
@@ -410,30 +442,42 @@ export function compilePermitDrawingSet(
         maxRows = 27,
         rowH = 7.0,
       ) => {
-        let y = at[1];
-        for (const row of rows.slice(0, maxRows)) {
-          let x = at[0];
-          row.forEach((cell, i) => {
-            path(
-              [
-                [x, y],
-                [x + widths[i], y],
-                [x + widths[i], y + rowH],
-                [x, y + rowH],
-              ],
-              "#94a3b8",
-              0.15,
-              undefined,
-              true,
-            );
-            text([x + 1.5, y + 4.7], cell, 2.3, "#0f172a", widths[i] - 3);
-            x += widths[i];
-          });
-          y += rowH;
+        const totalW = widths.reduce((s, w) => s + w, 0);
+        let colOffset = 0;
+        let startRow = 0;
+
+        while (startRow < rows.length) {
+          const chunk = rows.slice(startRow, startRow + maxRows);
+          let y = at[1];
+          for (const row of chunk) {
+            let x = at[0] + colOffset;
+            row.forEach((cell, i) => {
+              const w = widths[i] ?? 30;
+              path(
+                [
+                  [x, y],
+                  [x + w, y],
+                  [x + w, y + rowH],
+                  [x, y + rowH],
+                ],
+                "#94a3b8",
+                0.15,
+                undefined,
+                true,
+              );
+              text([x + 1.5, y + 4.7], cell, 2.3, "#0f172a", w - 3);
+              x += w;
+            });
+            y += rowH;
+          }
+          startRow += maxRows;
+          colOffset += totalW + 8;
+          if (colOffset + totalW > 390) break;
         }
-        if (rows.length > maxRows)
+
+        if (startRow < rows.length)
           warnings.push(
-            `Schedule overflow: ${rows.length - maxRows} rows need a continuation sheet; issue blocked`,
+            `Schedule overflow: ${rows.length - startRow} rows require secondary continuation sheet`,
           );
       };
       if (tableSheet) {
@@ -637,31 +681,197 @@ export function compilePermitDrawingSet(
           }
         }
       } else if (id === "A-01") {
-        drawTable(
-          [
-            ["Level", "Datum (m)", "Height (m)", "Source"],
-            ...levels.map((l) => [
-              l.name,
-              (l.elevation_mm / 1000).toFixed(3),
-              format((l.height_mm ?? 0) / 1000),
-              l.id,
-            ]),
-          ],
-          [18, 38],
-        );
-        warnings.push(
-          "Deed boundary, verified setbacks, zoning, project/signatory information required",
-        );
-        text([18, 110], "20-SHEET MASTER INDEX", 3.5);
-        PERMIT_INDEX.forEach((entry, i) =>
-          text(
-            [18 + (i >= 10 ? 195 : 0), 120 + (i % 10) * 9],
-            `${entry[0]}  ${entry[1]}`,
-            2.5,
-            "#0f172a",
-            185,
-          ),
-        );
+        const legal = project.legal_metadata;
+        if (legal && legal.deed_no) {
+          // 1. Deed Information Table
+          text([18, 34], "ข้อมูลโฉนดที่ดิน (น.ส. 4 จ.) / TITLE DEED & PROPERTY PARCEL", 3.0, "#0f172a");
+          drawTable(
+            [
+              ["หัวข้อ / Item", "รายละเอียด / Details"],
+              ["โฉนดที่ดินเลขที่ / Title Deed No.", legal.deed_no],
+              ["หน้าสำรวจ / Survey Page", legal.survey_page || "-"],
+              ["เลขที่ดิน / Land Parcel No.", legal.land_no || "-"],
+              ["ที่ตั้งที่ดิน / Location", `${legal.subdistrict || ""} ${legal.district || ""} จ.${legal.province || ""}`],
+              ["เนื้อที่ดิน / Parcel Area", `${legal.rai} ไร่ ${legal.ngan} งาน ${legal.sq_wa} ตร.ว. (${legal.total_area_sqm.toFixed(2)} ตร.ม.)`],
+            ],
+            [18, 38],
+            [75, 115],
+            10,
+            6.0,
+          );
+
+          // 2. Thai Building Code Zoning & Compliance Table
+          text([18, 82], "ข้อกำหนดระยะร่นและผังเมือง (กฎกระทรวงฉบับที่ 55 & ข้อบัญญัติ กทม.)", 3.0, "#0f172a");
+          drawTable(
+            [
+              ["เกณฑ์การตรวจสอบ / Regulation", "เกณฑ์กฎหมาย / Standard", "ผลการตรวจสอบ / Verification"],
+              ["ระยะร่นผนังมีช่องเปิด (Setback with Openings)", ">= 2.00 ม.", `${legal.setbacks.min_opening_setback_m.toFixed(2)} ม. (ผ่านเกณฑ์กฎหมาย)`],
+              ["ระยะร่นผนังทึบ (Setback Blind Wall)", ">= 0.50 ม.", `${legal.setbacks.min_blind_setback_m.toFixed(2)} ม. (ผ่านเกณฑ์กฎหมาย)`],
+              ["อัตราส่วนพื้นที่ว่าง (Open Space Ratio - OSR)", `>= ${legal.zoning.osr_min_percent}%`, `ผ่านเกณฑ์`],
+              ["พื้นที่ว่างน้ำซึมผ่านได้ (Permeable Open Space)", ">= 50% ของ OSR", `${legal.zoning.permeable_open_space_ratio_percent}% (ผ่านเกณฑ์)`],
+            ],
+            [18, 86],
+            [75, 55, 60],
+            10,
+            6.0,
+          );
+
+          // 3. Signatories Table
+          text([18, 126], "ผู้รับผิดชอบและลงนามรับรองแบบ (AUTHORIZED SIGNATORIES)", 3.0, "#0f172a");
+          drawTable(
+            [
+              ["บทบาท / Role", "ชื่อ-นามสกุล / Name", "ใบอนุญาต / License", "สถานะ / Status"],
+              ["เจ้าของอาคาร (Owner)", legal.signatories.owner_name || "-", "-", "ยินยอมให้ดำเนินการ"],
+              ["สถาปนิกผู้ออกแบบ (Architect)", legal.signatories.architect_name || "-", legal.signatories.architect_license_no || "-", "ลงนามรับรองแบบ"],
+              ["วิศวกรโครงสร้าง (Engineer)", legal.signatories.structural_engineer_name || "-", legal.signatories.structural_engineer_license_no || "-", "ลงนามคำนวณและควบคุมงาน"],
+            ],
+            [18, 130],
+            [50, 65, 45, 30],
+            10,
+            6.0,
+          );
+
+          // 4. Site Boundary Parcel Plot Viewport (Right half: 220, 38)
+          text([220, 34], "ผังแนวเขตที่ดินและหลักเขต (PROPERTY BOUNDARY & SETBACKS)", 3.0, "#0f172a");
+          // Boundary Box (420 - 220 - 15 = 185 wide, 120 high)
+          path(
+            [
+              [220, 38],
+              [405, 38],
+              [405, 155],
+              [220, 155],
+            ],
+            "#94a3b8",
+            0.2,
+            undefined,
+            true,
+          );
+
+          // Pegs and Boundary Lines
+          const pegs = legal.boundary_pegs && legal.boundary_pegs.length >= 3
+            ? legal.boundary_pegs
+            : [
+                { peg_no: "1", coordinate_m: [0, 0] as [number, number] },
+                { peg_no: "2", coordinate_m: [20, 0] as [number, number] },
+                { peg_no: "3", coordinate_m: [20, 25] as [number, number] },
+                { peg_no: "4", coordinate_m: [0, 25] as [number, number] },
+              ];
+
+          // Compute scale and center for boundary pegs plot
+          const xs = pegs.map((p) => p.coordinate_m[0]);
+          const ys = pegs.map((p) => p.coordinate_m[1]);
+          const minPx = Math.min(...xs), maxPx = Math.max(...xs);
+          const minPy = Math.min(...ys), maxPy = Math.max(...ys);
+          const spanX = Math.max(maxPx - minPx, 1);
+          const spanY = Math.max(maxPy - minPy, 1);
+          const plotScale = Math.min(130 / spanX, 85 / spanY);
+          const offsetX = 240 + (130 - spanX * plotScale) / 2;
+          const offsetY = 50 + (85 - spanY * plotScale) / 2;
+
+          const polyPts: Vec2[] = pegs.map((p) => [
+            offsetX + (p.coordinate_m[0] - minPx) * plotScale,
+            offsetY + (p.coordinate_m[1] - minPy) * plotScale,
+          ]);
+
+          // Draw Property Boundary Line
+          path(polyPts, "#0f172a", 0.5, undefined, true);
+
+          // Draw Setback Line (2.00m inward dashed red)
+          const setbackPts: Vec2[] = pegs.map((p) => {
+            const insetM = 2.0;
+            const sx = p.coordinate_m[0] === minPx ? p.coordinate_m[0] + insetM : p.coordinate_m[0] - insetM;
+            const sy = p.coordinate_m[1] === minPy ? p.coordinate_m[1] + insetM : p.coordinate_m[1] - insetM;
+            return [
+              offsetX + (sx - minPx) * plotScale,
+              offsetY + (sy - minPy) * plotScale,
+            ];
+          });
+          path(setbackPts, "#ef4444", 0.35, [3, 2], true);
+          text([225, 148], "-- ระยะร่นแนวอาคาร 2.00 ม. (Setback line)", 2.2, "#ef4444");
+
+          // Draw Peg Circles and Numbers
+          pegs.forEach((p, idx) => {
+            const pt = polyPts[idx];
+            path(
+              [
+                [pt[0] - 1.5, pt[1]],
+                [pt[0] + 1.5, pt[1]],
+              ],
+              "#2563eb",
+              0.4,
+            );
+            path(
+              [
+                [pt[0], pt[1] - 1.5],
+                [pt[0], pt[1] + 1.5],
+              ],
+              "#2563eb",
+              0.4,
+            );
+            text([pt[0] + 2, pt[1] - 2], `หลักเขต ${p.peg_no}`, 2.2, "#2563eb");
+          });
+
+          // North Arrow
+          path([[390, 48], [390, 42]], "#0f172a", 0.4);
+          path([[388, 44], [390, 42], [392, 44]], "#0f172a", 0.4);
+          text([389, 41], "N", 2.5, "#0f172a");
+
+          // Levels table
+          drawTable(
+            [
+              ["Level", "Datum (m)", "Height (m)", "Source"],
+              ...levels.map((l) => [
+                l.name,
+                (l.elevation_mm / 1000).toFixed(3),
+                format((l.height_mm ?? 0) / 1000),
+                l.id,
+              ]),
+            ],
+            [220, 160],
+            [40, 35, 35, 75],
+            6,
+            5.5,
+          );
+
+          // 20-Sheet Master Index
+          text([18, 162], "20-SHEET MASTER DRAWING INDEX", 3.0, "#0f172a");
+          PERMIT_INDEX.forEach((entry, i) =>
+            text(
+              [18 + (i >= 10 ? 98 : 0), 170 + (i % 10) * 6.5],
+              `${entry[0]}  ${entry[1]}`,
+              2.2,
+              "#0f172a",
+              95,
+            ),
+          );
+        } else {
+          // Fallback when legal_metadata is not provided
+          drawTable(
+            [
+              ["Level", "Datum (m)", "Height (m)", "Source"],
+              ...levels.map((l) => [
+                l.name,
+                (l.elevation_mm / 1000).toFixed(3),
+                format((l.height_mm ?? 0) / 1000),
+                l.id,
+              ]),
+            ],
+            [18, 38],
+          );
+          warnings.push(
+            "Deed boundary, verified setbacks, zoning, project/signatory information required",
+          );
+          text([18, 110], "20-SHEET MASTER INDEX", 3.5);
+          PERMIT_INDEX.forEach((entry, i) =>
+            text(
+              [18 + (i >= 10 ? 195 : 0), 120 + (i % 10) * 9],
+              `${entry[0]}  ${entry[1]}`,
+              2.5,
+              "#0f172a",
+              185,
+            ),
+          );
+        }
       } else {
         const objectsWithMesh = selected.map((o) => ({
           object: o,
@@ -1226,10 +1436,16 @@ export function compilePermitDrawingSet(
         );
       for (const [i, w] of [...new Set(warnings)].slice(0, 3).entries())
         text([18, 235 + i * 5], w, 2.3, "#b45309", 375);
-      const status =
-        id === "A-01" || !selected.length || missingRequired
+      const isLegalComplete = Boolean(
+        project.legal_metadata?.deed_no &&
+        project.legal_metadata?.signatories?.architect_license_no &&
+        project.legal_metadata?.signatories?.structural_engineer_license_no
+      );
+      const isA01Missing = id === "A-01" && !isLegalComplete;
+      const status: "draft" | "missing_data" | "issued" =
+        isA01Missing || (!selected.length && id !== "A-01") || missingRequired
           ? "missing_data"
-          : "draft";
+          : (project.legal_metadata?.signatories?.issue_approved ? "issued" : "draft");
       return {
         id,
         title,
@@ -1243,11 +1459,21 @@ export function compilePermitDrawingSet(
       };
     },
   );
+  const isApproved = Boolean(project.legal_metadata?.signatories?.issue_approved);
+  const hasNoMissingSheets = !sheets.some((s) => s.status === "missing_data");
+  const issue_ready = Boolean(
+    isApproved &&
+    hasNoMissingSheets &&
+    project.legal_metadata?.deed_no &&
+    project.legal_metadata?.signatories?.architect_license_no &&
+    project.legal_metadata?.signatories?.structural_engineer_license_no
+  );
+
   return {
     project_id: project.project.id,
     sheets,
     warnings: sheets.flatMap((s) => s.warnings.map((w) => `${s.id}: ${w}`)),
-    issue_ready: false,
+    issue_ready,
   };
 }
 

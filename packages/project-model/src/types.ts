@@ -173,7 +173,7 @@ export interface SlabModuleData extends CatalogPlacement {
 }
 export interface RebarSpacingZone { start_mm:number; end_mm:number; spacing_mm:number }
 export interface RebarModuleData extends CatalogPlacement {
-  role?: 'top' | 'bottom' | 'stirrups' | 'general'
+  role?: 'top' | 'bottom' | 'stirrups' | 'general' | 'main' | 'ties' | 'bottom_x' | 'bottom_y' | 'starter'
   inherit_host_type?: boolean
   host_id:string
   mode:'longitudinal'|'stirrups'|'explicit'
@@ -191,6 +191,7 @@ export interface RebarModuleData extends CatalogPlacement {
 export interface RoofEdgeSlope { defines_slope:boolean; slope_deg:number }
 export interface RoofModuleData extends CatalogPlacement {
   boundary_mm:Point2Mm[]
+  voids_mm?:Point2Mm[][]
   elevation_mm:number
   edges:RoofEdgeSlope[]
   material:string
@@ -302,4 +303,101 @@ export interface CabinetModuleData extends CatalogPlacement {
   back_material:string
   countertop_material:string
   countertop_mm:number
+}
+
+// -------------------------------------------------------------
+// Legal, Land Title Deed & Signatories (Permit Package อ.1)
+// -------------------------------------------------------------
+
+export interface BoundaryPeg {
+  peg_no: string
+  coordinate_m: [number, number] // [x, y] in meters
+  bearing_deg?: number
+  distance_m?: number
+}
+
+export interface ThaiBuildingCodeSetbacks {
+  front_m: number
+  rear_m: number
+  left_m: number
+  right_m: number
+  min_opening_setback_m: number // 2.00m (กฎกระทรวงฉบับที่ 55)
+  min_blind_setback_m: number // 0.50m
+}
+
+export interface ThaiZoningData {
+  zone_code: string // e.g. "ย.4-12"
+  far_limit: number // e.g. 3.0
+  osr_min_percent: number // e.g. 10.0%
+  permeable_open_space_ratio_percent: number // >= 50% of open space
+}
+
+export interface ProjectSignatories {
+  owner_name: string
+  architect_name: string
+  architect_license_no: string // e.g. "ส-สถ. 12345"
+  structural_engineer_name: string
+  structural_engineer_license_no: string // e.g. "วส. 67890"
+  mep_engineer_name?: string
+  mep_engineer_license_no?: string
+  signed_date?: string
+  issue_approved?: boolean
+}
+
+export interface ProjectLegalMetadata {
+  deed_no: string
+  land_no: string
+  survey_page: string
+  subdistrict: string
+  district: string
+  province: string
+  rai: number
+  ngan: number
+  sq_wa: number
+  total_area_sqm: number
+  boundary_pegs: BoundaryPeg[]
+  setbacks: ThaiBuildingCodeSetbacks
+  zoning: ThaiZoningData
+  signatories: ProjectSignatories
+}
+
+// -------------------------------------------------------------
+// Stair & Railing Geometry & Thai Building Code Check (กม.55)
+// -------------------------------------------------------------
+
+export type StairType = 'straight' | 'l_shape' | 'u_shape'
+export type StairStructureType = 'rc_monolithic' | 'steel_stringer' | 'wood_treads'
+
+export interface StairCodeCheckResult {
+  passed: boolean
+  violations: string[]
+  width_ok: boolean // width_mm >= 900
+  riser_ok: boolean // riser_mm <= 200
+  tread_ok: boolean // tread_mm >= 220
+  landing_ok: boolean // rise >= 3000 requires landing >= width
+  railing_ok: boolean // railing_height >= 900
+}
+
+export interface StairModuleData extends CatalogPlacement {
+  stair_type: StairType
+  structure_type: StairStructureType
+  start_point_mm: Point3Mm
+  total_rise_mm: number
+  width_mm: number
+  num_risers: number
+  riser_height_mm: number
+  tread_depth_mm: number
+  landing_depth_mm?: number
+  turn_direction?: 'left' | 'right'
+  has_handrail: boolean
+  handrail_height_mm: number
+  code_check?: StairCodeCheckResult
+}
+
+export interface RailingModuleData extends CatalogPlacement {
+  path_mm: Point3Mm[]
+  height_mm: number
+  style: 'vertical_balusters' | 'glass_panel' | 'horizontal_rails' | 'wrought_iron'
+  baluster_spacing_mm: number
+  material: string
 }
