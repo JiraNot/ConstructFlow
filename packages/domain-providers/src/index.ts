@@ -8,6 +8,8 @@ import {
 import {
   bathroomOutputs,
   validateBathroom,
+  stairOutputs,
+  validateStairs,
 } from "@constructflow/architecture-engine";
 import { roofOutputs, validateRoof } from "@constructflow/roof-engine";
 import {
@@ -35,6 +37,7 @@ export function constructionOutputs(project: ProjectDocument): DomainOutput[] {
   return [
     structureOutputs,
     bathroomOutputs,
+    stairOutputs,
     roofOutputs,
     decorativeOutputs,
     drainageOutputs,
@@ -48,6 +51,7 @@ export function validateConstructionProject(project: ProjectDocument): void {
   for (const validate of [
     validateStructureConstruction,
     validateBathroom,
+    validateStairs,
     validateRoof,
     validateDecorative,
     validateDrainage,

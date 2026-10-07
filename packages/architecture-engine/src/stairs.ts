@@ -2,12 +2,20 @@
 // Automated Thai Building Code (กฎกระทรวงฉบับที่ 55 พ.ศ. 2543 ข้อ 23) Compliance & Parametric Modeling
 
 import type {
+  ProjectDocument,
   StairModuleData,
   StairCodeCheckResult,
   RailingModuleData,
   Point3Mm,
   Point2Mm,
 } from "@constructflow/project-model";
+import {
+  output,
+  resolvedData,
+  type DomainOutput,
+  type Vec3,
+  type Triangle,
+} from "@constructflow/module-sdk";
 
 /**
  * Validates residential stair dimensions against Thai Building Code (กฎกระทรวงฉบับที่ 55 พ.ศ. 2543 ข้อ 23).
@@ -288,3 +296,136 @@ export function computeStairGeometry(stair: StairModuleData): {
     };
   }
 }
+
+export function decodeStair(
+  d: Record<string, unknown>,
+  _p: ProjectDocument,
+): StairModuleData {
+  const mark = String(d.mark ?? "ST1");
+  const stair_type = (d.stair_type as any) || "straight";
+  const structure_type = (d.structure_type as any) || "rc_monolithic";
+  const start_point_mm = (Array.isArray(d.start_point_mm) && d.start_point_mm.length === 3
+    ? d.start_point_mm.map(Number)
+    : [0, 0, 0]) as Point3Mm;
+  const total_rise_mm = Number(d.total_rise_mm ?? 3000);
+  const width_mm = Number(d.width_mm ?? 1000);
+  const riser_height_mm = Number(d.riser_height_mm ?? 176.5);
+  const tread_depth_mm = Number(d.tread_depth_mm ?? 250);
+  const num_risers = Number(d.num_risers ?? Math.round(total_rise_mm / riser_height_mm));
+  const landing_depth_mm = d.landing_depth_mm !== undefined ? Number(d.landing_depth_mm) : undefined;
+  const turn_direction = d.turn_direction as any;
+  const has_handrail = d.has_handrail !== false;
+  const handrail_height_mm = Number(d.handrail_height_mm ?? 900);
+
+  const code_check = validateStairThaiBuildingCode({
+    width_mm,
+    riser_height_mm,
+    tread_depth_mm,
+    total_rise_mm,
+    landing_depth_mm,
+    handrail_height_mm,
+  });
+
+  return {
+    mark,
+    level_id: String(d.level_id ?? _p.project.active_level_id ?? "GF"),
+    stair_type,
+    structure_type,
+    start_point_mm,
+    total_rise_mm,
+    width_mm,
+    num_risers,
+    riser_height_mm,
+    tread_depth_mm,
+    landing_depth_mm,
+    turn_direction,
+    has_handrail,
+    handrail_height_mm,
+    code_check,
+  };
+}
+
+export function stairOutputs(p: ProjectDocument): DomainOutput[] {
+  return Object.values(p.objects)
+    .filter((o) => o.object_type === "architecture.stair")
+    .map((o) => {
+      const d = decodeStair(resolvedData(p, o), p);
+      const out = output(o, d);
+      const geom = computeStairGeometry(d);
+
+      const triangles: Triangle[] = [];
+      const v = geom.mesh3d.vertices;
+      for (let i = 0; i < geom.mesh3d.indices.length; i += 3) {
+        const i0 = geom.mesh3d.indices[i];
+        const i1 = geom.mesh3d.indices[i + 1];
+        const i2 = geom.mesh3d.indices[i + 2];
+        if (v[i0] && v[i1] && v[i2]) {
+          triangles.push([v[i0] as Vec3, v[i1] as Vec3, v[i2] as Vec3]);
+        }
+      }
+      out.meshes = triangles;
+
+      const z0 = d.start_point_mm[2];
+      out.paths = [
+        ...geom.geometry2d.step_lines_mm.map(([p1, p2]) => [
+          [p1[0], p1[1], z0] as Vec3,
+          [p2[0], p2[1], z0] as Vec3,
+        ]),
+        geom.geometry2d.walkline_path_mm.map((pt) => [pt[0], pt[1], z0] as Vec3),
+      ];
+
+      const approxVol_m3 = (d.num_risers * (d.tread_depth_mm * d.riser_height_mm / 2) * d.width_mm + (d.num_risers * d.tread_depth_mm * 100 * d.width_mm)) / 1e9;
+      out.quantities = [
+        {
+          classification: "stair.concrete",
+          description: `${d.mark} Stair Concrete`,
+          quantity: Math.max(0.5, Math.round(approxVol_m3 * 100) / 100),
+          unit: "m3",
+          formula: "waist_slab + step_triangles",
+          material: "concrete",
+        },
+        {
+          classification: "stair.steps",
+          description: `${d.mark} Step Risers`,
+          quantity: d.num_risers,
+          unit: "pcs",
+          formula: "count",
+        },
+      ];
+      if (d.has_handrail) {
+        out.quantities.push({
+          classification: "stair.handrail",
+          description: `${d.mark} Handrail`,
+          quantity: Math.round(Math.hypot(d.num_risers * d.tread_depth_mm, d.total_rise_mm) / 1000 * 10) / 10,
+          unit: "m",
+          formula: "hypot(run, rise) / 1000",
+          material: "stainless_steel",
+        });
+      }
+
+      out.schedule = {
+        Type: d.stair_type,
+        Width_m: d.width_mm / 1000,
+        Total_rise_m: d.total_rise_mm / 1000,
+        Risers: d.num_risers,
+        Riser_mm: d.riser_height_mm,
+        Tread_mm: d.tread_depth_mm,
+        Code_Passed: geom.code_check.passed ? "PASS" : "VIOLATION",
+      };
+
+      if (!geom.code_check.passed) {
+        out.warnings = geom.code_check.violations;
+      }
+
+      return out;
+    });
+}
+
+export function validateStairs(p: ProjectDocument): void {
+  for (const o of Object.values(p.objects)) {
+    if (o.object_type === "architecture.stair") {
+      decodeStair(resolvedData(p, o), p);
+    }
+  }
+}
+

@@ -10,13 +10,15 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@constructflow/module-sdk": "file:../module-sdk",
-    "@constructflow/representation-engine": "file:../representation-engine",
     "@constructflow/domain-providers": "file:../domain-providers",
+    "@constructflow/electrical-engine": "file:../electrical-engine",
     "@constructflow/geometry-kernel": "file:../geometry-kernel",
+    "@constructflow/module-sdk": "file:../module-sdk",
     "@constructflow/project-model": "file:../project-model",
+    "@constructflow/representation-engine": "file:../representation-engine",
     "@constructflow/structure-engine": "file:../structure-engine",
     "@pdf-lib/fontkit": "^1.1.1",
+    "constructflow-standalone": "file:../..",
     "pdf-lib": "^1.17.1"
   },
   "devDependencies": {

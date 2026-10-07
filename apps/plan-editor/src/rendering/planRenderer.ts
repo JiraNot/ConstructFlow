@@ -1167,6 +1167,44 @@ function drawPlacementGhost(
 
   const [x, y] = worldToScreen(ghost.location_mm, viewport)
 
+  if (ghost.type === 'stair') {
+    const w_mm = ghost.size_mm?.[0] || 1000
+    const l_mm = ghost.size_mm?.[1] || 4000
+    const w_px = w_mm * viewport.zoom
+    const l_px = l_mm * viewport.zoom
+
+    ctx.fillStyle = 'rgba(168, 85, 247, 0.25)'
+    ctx.strokeStyle = '#a855f7'
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([4, 4])
+    ctx.fillRect(x, y, w_px, l_px)
+    ctx.strokeRect(x, y, w_px, l_px)
+    const numSteps = 16
+    const stepH = l_px / numSteps
+    ctx.setLineDash([])
+    for (let i = 1; i < numSteps; i++) {
+      ctx.beginPath()
+      ctx.moveTo(x, y + i * stepH)
+      ctx.lineTo(x + w_px, y + i * stepH)
+      ctx.stroke()
+    }
+    ctx.beginPath()
+    ctx.moveTo(x + w_px / 2, y + l_px - 8)
+    ctx.lineTo(x + w_px / 2, y + 8)
+    ctx.lineTo(x + w_px / 2 - 5, y + 16)
+    ctx.moveTo(x + w_px / 2, y + 8)
+    ctx.lineTo(x + w_px / 2 + 5, y + 16)
+    ctx.stroke()
+
+    ctx.fillStyle = '#c084fc'
+    ctx.font = 'bold 11px monospace'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(`${ghost.mark || 'ST1'} UP (17 Risers)`, x + w_px / 2, y + l_px / 2)
+    ctx.restore()
+    return
+  }
+
   if (ghost.type === 'foundation') {
     const w_mm = ghost.size_mm?.[0] || 800
     const l_mm = ghost.size_mm?.[1] || 800

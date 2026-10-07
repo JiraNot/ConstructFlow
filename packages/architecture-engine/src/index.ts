@@ -3,6 +3,7 @@ import { CreateWallInput, MoveWallInput, MoveOpeningInput, UpdateWallMarkInput, 
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
 import type { ProjectDocument } from '@constructflow/project-model'
+import { validateStairThaiBuildingCode } from './stairs.js'
 
 function positiveCatalogNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
@@ -701,7 +702,97 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       }
     }
 
+    case 'CreateStair':
+    case 'UpdateStair': {
+      const sInput = input as Record<string, unknown>
+      const isUpdate = commandName === 'UpdateStair'
+      const stairId = isUpdate ? (sInput.id as string) : ((sInput.id as string) || crypto.randomUUID())
+      if (isUpdate && !updated.objects[stairId]) {
+        return {
+          result: {
+            status: 'rejected',
+            command_id,
+            command_name: commandName,
+            affected_object_ids: [],
+            errors: [`Stair UUID ${stairId} not found`],
+          },
+          updatedProject: project,
+        }
+      }
+      const existing = updated.objects[stairId]
+      const oldData = (existing?.module_data as Record<string, unknown>) || {}
 
+      const mark = (sInput.mark as string) || (oldData.mark as string) || 'ST1'
+      const stair_type = (sInput.stair_type as any) || (oldData.stair_type as any) || 'straight'
+      const width_mm = Number(sInput.width_mm ?? oldData.width_mm ?? 1000)
+      const total_rise_mm = Number(sInput.total_rise_mm ?? oldData.total_rise_mm ?? 3000)
+      const riser_height_mm = Number(sInput.riser_height_mm ?? oldData.riser_height_mm ?? 176.5)
+      const tread_depth_mm = Number(sInput.tread_depth_mm ?? oldData.tread_depth_mm ?? 250)
+      const num_risers = Number(sInput.num_risers ?? oldData.num_risers ?? Math.round(total_rise_mm / riser_height_mm))
+      const start_point_mm = (sInput.start_point_mm as [number, number, number]) || (oldData.start_point_mm as [number, number, number]) || [0, 0, 0]
+      const landing_depth_mm = sInput.landing_depth_mm !== undefined ? Number(sInput.landing_depth_mm) : (oldData.landing_depth_mm !== undefined ? Number(oldData.landing_depth_mm) : (total_rise_mm >= 3000 ? width_mm : undefined))
+      const handrail_height_mm = Number(sInput.handrail_height_mm ?? oldData.handrail_height_mm ?? 900)
+      const has_handrail = sInput.has_handrail !== undefined ? Boolean(sInput.has_handrail) : (oldData.has_handrail !== undefined ? Boolean(oldData.has_handrail) : true)
+      const structure_type = (sInput.structure_type as any) || (oldData.structure_type as any) || 'rc_monolithic'
+      const turn_direction = (sInput.turn_direction as any) || (oldData.turn_direction as any)
+
+      const code_check = validateStairThaiBuildingCode({
+        width_mm,
+        riser_height_mm,
+        tread_depth_mm,
+        total_rise_mm,
+        landing_depth_mm,
+        handrail_height_mm,
+      })
+
+      const stairData = {
+        mark,
+        level_id: (sInput.level_id as string) || (oldData.level_id as string) || updated.project.active_level_id,
+        stair_type,
+        structure_type,
+        start_point_mm,
+        total_rise_mm,
+        width_mm,
+        num_risers,
+        riser_height_mm,
+        tread_depth_mm,
+        landing_depth_mm,
+        turn_direction,
+        has_handrail,
+        handrail_height_mm,
+        code_check,
+      }
+
+      const stairObj: SmartObject = {
+        id: stairId,
+        object_type: 'architecture.stair',
+        owner_module: 'constructflow.architecture',
+        schema_version: 1,
+        created_phase: (sInput.created_phase as any) || existing?.created_phase || updated.project.active_phase || 'new_construction',
+        removed_phase: existing?.removed_phase ?? null,
+        level_refs: existing?.level_refs || [{ level_id: updated.project.active_level_id, role: 'base' }],
+        host_refs: existing?.host_refs || [],
+        connector_refs: existing?.connector_refs || [],
+        status: 'active',
+        created_at: existing?.created_at || now,
+        updated_at: now,
+        module_data: stairData as any,
+      }
+
+      updated.objects[stairId] = stairObj
+
+      return {
+        result: {
+          status: 'success',
+          command_id,
+          command_name: commandName,
+          affected_object_ids: [stairId],
+          updated_object_ids: [stairId],
+        },
+        updatedProject: updated,
+        emittedEnvelope: { ...envelope, input: { ...sInput, id: stairId } },
+      }
+    }
   }
 }
 export * from './bathroom.js'

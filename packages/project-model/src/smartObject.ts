@@ -14,6 +14,7 @@ import {
   DoorModuleData,
   WindowModuleData,
   SlabModuleData,RebarModuleData,RoofModuleData,MouldingModuleData,PanelLayoutModuleData,PipeRouteModuleData,ManholeModuleData,SepticModuleData,PumpBypassModuleData,BathroomModuleData,ElectricalFixtureModuleData,CircuitModuleData,LEDModuleData,CabinetModuleData,
+  StairModuleData, RailingModuleData,
 } from './types.js'
 
 export type KnownModuleData =
@@ -25,6 +26,7 @@ export type KnownModuleData =
   | DoorModuleData
   | WindowModuleData
   | SlabModuleData | RebarModuleData | RoofModuleData | MouldingModuleData | PanelLayoutModuleData | PipeRouteModuleData | ManholeModuleData | SepticModuleData | PumpBypassModuleData | BathroomModuleData | ElectricalFixtureModuleData | CircuitModuleData | LEDModuleData | CabinetModuleData
+  | StairModuleData | RailingModuleData
   | Record<string, unknown>
 
 export interface SmartObject<TData extends object = KnownModuleData> {

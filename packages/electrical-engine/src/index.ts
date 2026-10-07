@@ -276,3 +276,130 @@ export function validateElectrical(p: ProjectDocument): void {
       }
     }
 }
+
+export interface EITSizingRecommendation {
+  breaker_rating_at: number;
+  breaker_frame_af: number;
+  cable_size_mm2: number;
+  cable_type: string;
+  conduit_size_mm: number;
+}
+
+/**
+ * Calculates Thai Engineering Institute (EIT / วสท.) recommended breaker rating and wire size
+ * based on continuous connected load current with 1.25 safety factor.
+ */
+export function recommendEITBreakerAndWire(
+  loadWatts: number,
+  voltage = 230,
+): EITSizingRecommendation {
+  const currentA = loadWatts / voltage;
+  const designCurrent = currentA * 1.25;
+
+  if (designCurrent <= 10) {
+    return {
+      breaker_rating_at: 16,
+      breaker_frame_af: 50,
+      cable_size_mm2: 2.5,
+      cable_type: "IEC 01 (THW) 750V 70°C",
+      conduit_size_mm: 15,
+    };
+  } else if (designCurrent <= 16) {
+    return {
+      breaker_rating_at: 20,
+      breaker_frame_af: 50,
+      cable_size_mm2: 4.0,
+      cable_type: "IEC 01 (THW) 750V 70°C",
+      conduit_size_mm: 20,
+    };
+  } else if (designCurrent <= 24) {
+    return {
+      breaker_rating_at: 32,
+      breaker_frame_af: 50,
+      cable_size_mm2: 6.0,
+      cable_type: "IEC 01 (THW) 750V 70°C",
+      conduit_size_mm: 20,
+    };
+  } else if (designCurrent <= 32) {
+    return {
+      breaker_rating_at: 40,
+      breaker_frame_af: 50,
+      cable_size_mm2: 10.0,
+      cable_type: "IEC 01 (THW) 750V 70°C",
+      conduit_size_mm: 25,
+    };
+  } else {
+    return {
+      breaker_rating_at: 50,
+      breaker_frame_af: 100,
+      cable_size_mm2: 16.0,
+      cable_type: "IEC 01 (THW) 750V 70°C",
+      conduit_size_mm: 25,
+    };
+  }
+}
+
+export interface PhaseBalanceSummary {
+  phase_a_watts: number;
+  phase_b_watts: number;
+  phase_c_watts: number;
+  total_watts: number;
+  average_watts: number;
+  max_unbalance_pct: number;
+  is_balanced: boolean;
+  assignments: Record<string, "Phase A" | "Phase B" | "Phase C">;
+}
+
+/**
+ * Distributes circuits across Phase A, Phase B, and Phase C to balance load according to วสท. standards.
+ */
+export function balanceCircuitsPhase(
+  circuits: Array<{ id: string; watts: number }>,
+): PhaseBalanceSummary {
+  const sorted = [...circuits].sort((a, b) => b.watts - a.watts);
+  const phases: Array<{
+    name: "Phase A" | "Phase B" | "Phase C";
+    watts: number;
+    cktIds: string[];
+  }> = [
+    { name: "Phase A", watts: 0, cktIds: [] },
+    { name: "Phase B", watts: 0, cktIds: [] },
+    { name: "Phase C", watts: 0, cktIds: [] },
+  ];
+
+  for (const c of sorted) {
+    phases.sort((a, b) => a.watts - b.watts);
+    phases[0].watts += c.watts;
+    phases[0].cktIds.push(c.id);
+  }
+
+  const phaseA = phases.find((p) => p.name === "Phase A")?.watts ?? 0;
+  const phaseB = phases.find((p) => p.name === "Phase B")?.watts ?? 0;
+  const phaseC = phases.find((p) => p.name === "Phase C")?.watts ?? 0;
+  const total = phaseA + phaseB + phaseC;
+  const avg = total / 3;
+  const maxDiff = Math.max(
+    Math.abs(phaseA - avg),
+    Math.abs(phaseB - avg),
+    Math.abs(phaseC - avg),
+  );
+  const unbalancePct = avg > 0 ? (maxDiff / avg) * 100 : 0;
+
+  const assignments: Record<string, "Phase A" | "Phase B" | "Phase C"> = {};
+  for (const p of phases) {
+    for (const cId of p.cktIds) {
+      assignments[cId] = p.name;
+    }
+  }
+
+  return {
+    phase_a_watts: phaseA,
+    phase_b_watts: phaseB,
+    phase_c_watts: phaseC,
+    total_watts: total,
+    average_watts: avg,
+    max_unbalance_pct: Math.round(unbalancePct * 10) / 10,
+    is_balanced: unbalancePct <= 15,
+    assignments,
+  };
+}

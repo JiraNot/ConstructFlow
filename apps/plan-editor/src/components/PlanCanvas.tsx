@@ -42,6 +42,7 @@ interface PlanCanvasProps {
   onCommitDoor: (wallId: string, point_mm: [number, number], offset_mm: number, handing: DoorHanding) => void
   onCommitWindow: (wallId: string, point_mm: [number, number], offset_mm: number) => void
   onCommitGrid: (orientation: 'vertical' | 'horizontal', position_mm: number) => void
+  onCommitStair?: (location_mm: [number, number]) => void
   onMoveColumn: (id: string, newLocation_mm: [number, number]) => void
   onMoveWall: (id: string, delta_mm: [number, number]) => void
   onMoveOpening: (id: string, offset_along_wall_mm: number) => void
@@ -69,6 +70,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onCommitDoor,
   onCommitWindow,
   onCommitGrid,
+  onCommitStair,
   onMoveColumn,
   onMoveWall,
   onMoveOpening,
@@ -237,6 +239,13 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         offset_along_wall_mm: activeWallSnap.offset_along_wall_mm,
         size_mm: [typeDef?.parameters?.width_mm || 1200, typeDef?.parameters?.height_mm || 1200],
         mark: activeWindowTypeMark,
+      }
+    } else if (activeTool === 'stair' && activeSnap) {
+      ghost = {
+        type: 'stair',
+        location_mm: activeSnap.point_mm,
+        size_mm: [1000, 4000],
+        mark: 'ST1',
       }
     }
 
@@ -662,6 +671,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           }
           setCalibrationP1(null)
           setCalibrationMousePoint(null)
+        }
+      } else if (activeTool === 'stair') {
+        if (onCommitStair) {
+          onCommitStair(snap.point_mm)
         }
       }
     }

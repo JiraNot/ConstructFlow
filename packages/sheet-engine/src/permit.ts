@@ -15,6 +15,10 @@ import {
 } from "@constructflow/geometry-kernel";
 import { calculateBBS } from "@constructflow/structure-engine";
 import { resolvedData } from "@constructflow/module-sdk";
+import {
+  recommendEITBreakerAndWire,
+  balanceCircuitsPhase,
+} from "@constructflow/electrical-engine";
 
 export const PERMIT_INDEX = [
   ["A-01", "ผังบริเวณ / Site & project information", 200],
@@ -249,7 +253,7 @@ export function compilePermitDrawingSet(
             return f.startsWith("land.") || f.startsWith("site.");
           case "A-02":
             return (
-              belongs(o, ground) &&
+              (belongs(o, ground) || f === "architecture.stair") &&
               !f.startsWith("electrical.") &&
               !f.startsWith("drainage.") &&
               !f.startsWith("plumbing.") &&
@@ -257,7 +261,7 @@ export function compilePermitDrawingSet(
             );
           case "A-03":
             return (
-              belongs(o, upper) &&
+              (belongs(o, upper) || f === "architecture.stair") &&
               !f.startsWith("electrical.") &&
               !f.startsWith("drainage.") &&
               !f.startsWith("plumbing.")
@@ -306,7 +310,9 @@ export function compilePermitDrawingSet(
             return (
               f.startsWith("decorative.") ||
               f.startsWith("interior.") ||
-              f === "electrical.led_run"
+              f === "electrical.led_run" ||
+              f === "electrical.fixture" ||
+              f === "architecture.wall"
             );
           case "M-01":
             return f.startsWith("plumbing.");
@@ -1256,7 +1262,43 @@ export function compilePermitDrawingSet(
               }
             }
           }
-          if (mode !== "xy")
+          if (mode !== "xy") {
+            const glPt = mapped([minX, 0]);
+            const glY = glPt[1];
+            if (glY >= view.y && glY <= view.y + view.h) {
+              path(
+                [
+                  [view.x, glY],
+                  [view.x + view.w, glY],
+                ],
+                "#0f172a",
+                0.7,
+              );
+              for (let gx = view.x; gx <= view.x + view.w; gx += 6) {
+                path(
+                  [
+                    [gx, glY],
+                    [gx - 3.5, glY + 3.5],
+                  ],
+                  "#475569",
+                  0.3,
+                );
+                path(
+                  [
+                    [gx - 1.5, glY],
+                    [gx - 3.5, glY + 2.0],
+                  ],
+                  "#64748b",
+                  0.2,
+                );
+              }
+              text(
+                [view.x + 2, glY - 2],
+                "±0.000 GL (ระดับดินเดิม)",
+                2.3,
+                "#0f172a",
+              );
+            }
             for (const level of levels) {
               const a = mapped([minX, level.elevation_mm]);
               if (a[1] >= view.y && a[1] <= view.y + view.h) {
@@ -1266,16 +1308,126 @@ export function compilePermitDrawingSet(
                     [view.x + view.w, a[1]],
                   ],
                   "#94a3b8",
-                  0.15,
-                  [2, 1],
+                  0.18,
+                  [4, 2, 1, 2],
                 );
-                text(
-                  [view.x, a[1] - 1],
-                  `${level.name} ${(level.elevation_mm / 1000).toFixed(3)} m`,
-                  2.3,
+                const datumX = view.x + view.w - 24;
+                path(
+                  [
+                    [datumX - 2.5, a[1] - 3.0],
+                    [datumX + 2.5, a[1] - 3.0],
+                    [datumX, a[1]],
+                  ],
+                  "#0f172a",
+                  0.3,
+                  undefined,
+                  true,
                 );
+                path(
+                  [
+                    [datumX - 4, a[1]],
+                    [datumX + 22, a[1]],
+                  ],
+                  "#0f172a",
+                  0.3,
+                );
+                const elevStr = `${level.elevation_mm >= 0 ? "+" : ""}${(level.elevation_mm / 1000).toFixed(2)} ${level.name}`;
+                text([datumX + 2, a[1] - 1.2], elevStr, 2.2, "#0f172a");
               }
             }
+          }
+          if (mode === "xy" && (id === "A-02" || id === "A-03")) {
+            for (const o of selected.filter(
+              (s) => s.object_type === "architecture.stair",
+            )) {
+              const sd = data(o);
+              const [sx0, sy0] = (sd.start_point_mm as
+                | number[]
+                | undefined) ?? [0, 0, 0];
+              const sw = Number(sd.width_mm ?? 1000);
+              const st = Number(sd.tread_depth_mm ?? 250);
+              const sn = Number(sd.num_risers ?? 17);
+              const sLen = sn * st;
+
+              const wStart = mapped([sx0 + st / 2, sy0 + sw / 2]);
+              const wEnd = mapped([sx0 + sLen - st / 2, sy0 + sw / 2]);
+              if (wStart[0] >= view.x && wEnd[0] <= view.x + view.w) {
+                path(
+                  [
+                    [wStart[0] - 1, wStart[1]],
+                    [wStart[0] + 1, wStart[1]],
+                  ],
+                  "#0f172a",
+                  0.6,
+                );
+                path([wStart, wEnd], "#0f172a", 0.35);
+                path(
+                  [
+                    [wEnd[0] - 3, wEnd[1] - 2],
+                    wEnd,
+                    [wEnd[0] - 3, wEnd[1] + 2],
+                  ],
+                  "#0f172a",
+                  0.35,
+                );
+                text(
+                  [(wStart[0] + wEnd[0]) / 2 - 3, wStart[1] - 2],
+                  "UP",
+                  2.2,
+                  "#0f172a",
+                );
+                text([wStart[0] - 2, wStart[1] + 4], "1", 2.0, "#64748b");
+                text([wEnd[0] - 4, wEnd[1] + 4], `${sn}`, 2.0, "#64748b");
+
+                if (id === "A-02") {
+                  const cutX = sx0 + 7 * st;
+                  const c1 = mapped([cutX - 120, sy0 - 80]);
+                  const c2 = mapped([cutX + 120, sy0 + sw + 80]);
+                  path([c1, c2], "#0f172a", 0.45);
+                  path(
+                    [
+                      mapped([cutX - 80, sy0 - 80]),
+                      mapped([cutX + 160, sy0 + sw + 80]),
+                    ],
+                    "#0f172a",
+                    0.45,
+                  );
+                  text(
+                    [c1[0] + 2, c1[1] + 3],
+                    "แนวตัดบันได 1FL",
+                    1.8,
+                    "#64748b",
+                  );
+                }
+              }
+            }
+          }
+          if (id === "A-10" && mode === "xy" && pts.length) {
+            const stepGrid = 600;
+            const startGx = Math.ceil(minX / stepGrid) * stepGrid;
+            const startGy = Math.ceil(minY / stepGrid) * stepGrid;
+            for (let gx = startGx; gx <= maxX; gx += stepGrid) {
+              const p1 = mapped([gx, minY]);
+              const p2 = mapped([gx, maxY]);
+              if (p1[0] >= view.x && p1[0] <= view.x + view.w) {
+                path([p1, p2], "#cbd5e1", 0.12, [2, 2]);
+              }
+            }
+            for (let gy = startGy; gy <= maxY; gy += stepGrid) {
+              const p1 = mapped([minX, gy]);
+              const p2 = mapped([maxX, gy]);
+              if (p1[1] >= view.y && p1[1] <= view.y + view.h) {
+                path([p1, p2], "#cbd5e1", 0.12, [2, 2]);
+              }
+            }
+            text(
+              [view.x + 2, view.y + view.h - 3],
+              "RCP: ฝ้าเพดานยิปซัมบอร์ด 9 มม. โครง C-Line @0.60 ม. ระดับ +2.70 ม. / Grid 600x600 mm",
+              2.1,
+              "#475569",
+              240,
+            );
+          }
           text(
             [view.x, 35],
             mode === "xy"
@@ -1344,44 +1496,90 @@ export function compilePermitDrawingSet(
           const circuits = selected.filter(
             (o) => o.object_type === "electrical.circuit",
           );
-          text([232, 42], "Single line diagram / NTS", 2.8);
+          text([232, 42], "Single line diagram & Phase Schedule / NTS", 2.8);
+
+          const circuitWatts = circuits.map((o) => {
+            const d = resolvedData(project, o);
+            const w = (d.device_ids as string[])
+              .filter((loadId) => project.objects[loadId]?.removed_phase === null)
+              .reduce(
+                (s, loadId) =>
+                  s +
+                  Number(
+                    resolvedData(project, project.objects[loadId])?.watts ?? 0,
+                  ),
+                0,
+              );
+            return { id: o.id, watts: w };
+          });
+          const balance = balanceCircuitsPhase(circuitWatts);
+
           for (const [i, o] of circuits.slice(0, 5).entries()) {
             const d = resolvedData(project, o),
               out = outputs.find((v) => v.object_id === o.id),
-              y = 52 + i * 25,
-              panel = project.objects[String(d.panel_id)];
+              y = 50 + i * 23,
+              panel = project.objects[String(d.panel_id)],
+              phaseName =
+                balance.assignments[o.id] ??
+                `Phase ${["A", "B", "C"][i % 3]}`,
+              loadW =
+                typeof out?.schedule.Watts === "number"
+                  ? out.schedule.Watts
+                  : 0,
+              eit = recommendEITBreakerAndWire(
+                loadW,
+                Number(d.voltage) || 230,
+              );
             text(
               [232, y],
-              `${panel ? String(data(panel).mark) : "Panel"} -> ${d.mark}`,
-              2.5,
+              `${panel ? String(data(panel).mark) : "Panel"} -> ${d.mark} [${phaseName}]`,
+              2.4,
+              "#0f172a",
             );
             path(
               [
-                [234, y + 5],
-                [260, y + 5],
-                [262, y + 3],
-                [265, y + 7],
-                [268, y + 5],
-                [384, y + 5],
+                [234, y + 4],
+                [258, y + 4],
+                [260, y + 2],
+                [263, y + 6],
+                [266, y + 4],
+                [384, y + 4],
               ],
               "#0f172a",
               0.3,
             );
             text(
-              [232, y + 12],
-              `${d.breaker_a} A | ${d.cable_mm2} mm2 | ${out?.schedule.Watts ?? "?"} W / ${d.voltage} V`,
-              2.4,
+              [232, y + 10],
+              `วสท.: ${eit.breaker_rating_at}AT/${eit.breaker_frame_af}AF | 2x${eit.cable_size_mm2} mm2 (${eit.cable_type}) | ${loadW} W`,
+              2.2,
+              "#0f172a",
             );
             text(
-              [232, y + 18],
-              (d.device_ids as string[])
-                .map((id) => String(data(project.objects[id]).mark))
-                .join(", "),
-              2.3,
+              [232, y + 15],
+              `Loads: ${(d.device_ids as string[])
+                .map((id) => String(data(project.objects[id])?.mark ?? id))
+                .join(", ")}`,
+              2.0,
               "#475569",
               160,
             );
           }
+
+          text(
+            [232, 172],
+            `ตารางสมดุลเฟส วสท. (EIT Phase Balance): A: ${balance.phase_a_watts.toFixed(0)} W | B: ${balance.phase_b_watts.toFixed(0)} W | C: ${balance.phase_c_watts.toFixed(0)} W`,
+            2.2,
+            "#0f172a",
+            175,
+          );
+          text(
+            [232, 178],
+            `Unbalance: ${balance.max_unbalance_pct.toFixed(1)}% (เกณฑ์ วสท. <= 15% ${balance.is_balanced ? "ผ่านเกณฑ์" : "ควรปรับโหลด"})`,
+            2.2,
+            balance.is_balanced ? "#047857" : "#b45309",
+            175,
+          );
+
           if (circuits.length > 5)
             warnings.push(
               "SLD overflow: add circuit continuation sheet; issue blocked",

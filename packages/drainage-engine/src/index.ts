@@ -355,3 +355,98 @@ export function validateDrainage(p: ProjectDocument): void {
     };
   for (const node of edges.keys()) visit(node);
 }
+
+/**
+ * Automatically solves and assigns gravity drainage pipe inverts and connecting manhole inverts
+ * ensuring standard minimum slope >= 0.01 (1:100) throughout the network.
+ */
+export function solveGravityInverts(p: ProjectDocument): ProjectDocument {
+  const updated: ProjectDocument = {
+    ...p,
+    objects: { ...p.objects },
+  };
+
+  const pipes = Object.values(updated.objects).filter(
+    (o) => o.object_type === "drainage.pipe_route" && o.removed_phase === null,
+  );
+
+  for (const pipeObj of pipes) {
+    const raw = resolvedData(updated, pipeObj);
+    const d = decodePipe(raw, updated);
+    if (!["waste", "soil", "rainwater"].includes(d.system)) continue;
+
+    const horizontal = d.nodes_mm
+      .slice(1)
+      .reduce(
+        (s, v, i) =>
+          s + Math.hypot(v[0] - d.nodes_mm[i][0], v[1] - d.nodes_mm[i][1]),
+        0,
+      );
+    if (horizontal <= 0) continue;
+
+    const slope = Math.max(d.minimum_slope_ratio || 0.01, 0.01);
+    let startIL = d.start_invert_mm;
+
+    if (startIL === null && d.start_node_id && updated.objects[d.start_node_id]) {
+      const mhData = resolvedData(updated, updated.objects[d.start_node_id]);
+      if (typeof mhData.invert_mm === "number") {
+        startIL = mhData.invert_mm;
+      }
+    }
+    if (startIL === null) {
+      startIL =
+        Number.isFinite(d.nodes_mm[0]?.[2]) && d.nodes_mm[0][2] < 0
+          ? d.nodes_mm[0][2]
+          : -300;
+    }
+
+    let endIL = d.end_invert_mm;
+    if (endIL === null) {
+      endIL = startIL - horizontal * slope;
+    }
+
+    const newNodes = d.nodes_mm.map((node, i) => {
+      const segDist = d.nodes_mm
+        .slice(0, i + 1)
+        .slice(1)
+        .reduce(
+          (s, v, j) =>
+            s + Math.hypot(v[0] - d.nodes_mm[j][0], v[1] - d.nodes_mm[j][1]),
+          0,
+        );
+      const nodeZ = startIL! + ((endIL! - startIL!) * segDist) / horizontal;
+      return [node[0], node[1], nodeZ] as [number, number, number];
+    });
+
+    updated.objects[pipeObj.id] = {
+      ...pipeObj,
+      module_data: {
+        ...pipeObj.module_data,
+        nodes_mm: newNodes,
+        start_invert_mm: startIL,
+        end_invert_mm: endIL,
+      },
+      updated_at: new Date().toISOString(),
+    };
+
+    if (d.end_node_id && updated.objects[d.end_node_id]) {
+      const mhObj = updated.objects[d.end_node_id];
+      const mhData = resolvedData(updated, mhObj);
+      if (
+        mhData.invert_mm === null ||
+        (typeof mhData.invert_mm === "number" && mhData.invert_mm > endIL)
+      ) {
+        updated.objects[d.end_node_id] = {
+          ...mhObj,
+          module_data: {
+            ...mhObj.module_data,
+            invert_mm: endIL,
+          },
+          updated_at: new Date().toISOString(),
+        };
+      }
+    }
+  }
+
+  return updated;
+}

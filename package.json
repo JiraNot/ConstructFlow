@@ -9,6 +9,7 @@
     "dev:standalone": "node scripts/start_standalone.mjs",
     "verify:file-io": "node scripts/verify_project_file_io.mjs",
     "verify:kitchen": "node scripts/verify_kitchen_vertical_slice.mjs",
-    "verify:kitchen-file": "node scripts/verify_kitchen_saved_project.mjs"
+    "verify:kitchen-file": "node scripts/verify_kitchen_saved_project.mjs",
+    "package:sketchup": "node scripts/package_sketchup_rbz.mjs"
   }
 }

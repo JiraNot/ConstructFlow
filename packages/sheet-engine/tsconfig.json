@@ -18,6 +18,9 @@
       ],
       "@constructflow/structure-engine": [
         "../structure-engine/dist/index.d.ts"
+      ],
+      "@constructflow/electrical-engine": [
+        "../electrical-engine/dist/index.d.ts"
       ]
     }
   },

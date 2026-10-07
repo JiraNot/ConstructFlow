@@ -14,6 +14,7 @@ import type {
   CircuitModuleData,
   CabinetModuleData,
   LEDModuleData,
+  StairModuleData,
 } from "@constructflow/project-model";
 export type ConstructionInput<T extends object> = T & {
   id?: string;
@@ -21,6 +22,8 @@ export type ConstructionInput<T extends object> = T & {
   created_phase?: Phase;
 };
 export interface ConstructionCommandInputs {
+  CreateStair: ConstructionInput<StairModuleData>;
+  UpdateStair: ConstructionInput<StairModuleData>;
   ConfigureBeamReinforcement: {
     host_id: string;
     reinforcement: Record<

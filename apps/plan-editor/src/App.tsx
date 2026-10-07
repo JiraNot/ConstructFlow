@@ -357,6 +357,8 @@ export const App: React.FC = () => {
         setActiveTool('grid')
       } else if (e.key === 'r' || e.key === 'R') {
         setActiveTool('calibrate')
+      } else if (e.key === 't' || e.key === 'T') {
+        setActiveTool('stair')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -562,6 +564,33 @@ export const App: React.FC = () => {
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
       setSelectedId(winId)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
+  // Commit Stair creation
+  const handleCommitStair = (location_mm: [number, number]) => {
+    const stairId = crypto.randomUUID()
+    const res = CommandBus.execute(project, 'CreateStair', {
+      id: stairId,
+      mark: 'ST1',
+      stair_type: 'straight',
+      structure_type: 'rc_monolithic',
+      start_point_mm: [location_mm[0], location_mm[1], 0],
+      total_rise_mm: 3000,
+      width_mm: 1000,
+      num_risers: 17,
+      riser_height_mm: 176.5,
+      tread_depth_mm: 250,
+      landing_depth_mm: 1000,
+      has_handrail: true,
+      handrail_height_mm: 900,
+      level_id: project.project.active_level_id || 'GF',
+      created_phase: project.project.active_phase || 'new_construction',
+    })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      setSelectedId(stairId)
       if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
     }
   }
@@ -1603,6 +1632,7 @@ export const App: React.FC = () => {
               onCommitDoor={handleCommitDoor}
               onCommitWindow={handleCommitWindow}
               onCommitGrid={handleCommitGrid}
+              onCommitStair={handleCommitStair}
               onMoveColumn={handleMoveColumn}
               onMoveWall={handleMoveWall}
               onMoveOpening={handleMoveOpening}

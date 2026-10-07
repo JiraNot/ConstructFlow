@@ -24,6 +24,7 @@ export type ToolType =
   | 'wall'
   | 'door'
   | 'window'
+  | 'stair'
   | 'grid'
   | 'calibrate'
 
@@ -98,6 +99,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     { id: 'wall', label: 'Wall (W)', icon: <BrickWall size={16} />, shortcut: 'W' },
     { id: 'door', label: 'Door (D)', icon: <DoorOpen size={16} />, shortcut: 'D' },
     { id: 'window', label: 'Window (N)', icon: <AppWindow size={16} />, shortcut: 'N' },
+    {
+      id: 'stair',
+      label: 'Stair (T)',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 19h4v-4h4v-4h4v-4h4" />
+        </svg>
+      ),
+      shortcut: 'T',
+    },
     { id: 'grid', label: 'Grid Line (G)', icon: <Hash size={16} />, shortcut: 'G' },
     { id: 'calibrate', label: 'Calibrate Scale (R)', icon: <Ruler size={16} />, shortcut: 'R' },
   ]
