@@ -1,7 +1,8 @@
 import { resolveCatalogType, type ProjectDocument, type Phase } from '@constructflow/project-model'
+import { constructionOutputs } from '@constructflow/domain-providers'
 
 export type TakeoffCostCenter = 'demolition_site_prep' | 'new_construction' | 'existing_to_remain' | 'remodeling_joint_treatment'
-export type QuantityUnit = 'item' | 'm' | 'm2' | 'm3'
+export type QuantityUnit = 'item' | 'm' | 'm2' | 'm3' | 'kg'
 
 export interface TakeoffLine {
   id: string
@@ -228,11 +229,16 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
     }
   }
 
+  for(const out of constructionOutputs(project)) {
+    for(const q of out.quantities) add(project.objects[out.object_id],q.unit==='pcs'?'item':q.unit,q.quantity,q.formula,q.material,
+      {...phaseAndCostCenter(out.phase,out.removed_phase),object_type:q.classification,mark:out.mark})
+    warnings.push(...out.warnings.map(w=>`${out.object_id}: ${w}`))
+  }
   const totals: TakeoffReport['totals_by_cost_center'] = {
-    demolition_site_prep: { item: 0, m: 0, m2: 0, m3: 0 },
-    new_construction: { item: 0, m: 0, m2: 0, m3: 0 },
-    existing_to_remain: { item: 0, m: 0, m2: 0, m3: 0 },
-    remodeling_joint_treatment: { item: 0, m: 0, m2: 0, m3: 0 },
+    demolition_site_prep: { item: 0, m: 0, m2: 0, m3: 0, kg:0 },
+    new_construction: { item: 0, m: 0, m2: 0, m3: 0, kg:0 },
+    existing_to_remain: { item: 0, m: 0, m2: 0, m3: 0, kg:0 },
+    remodeling_joint_treatment: { item: 0, m: 0, m2: 0, m3: 0, kg:0 },
   }
   const sorted = [...lines.values()].sort((a, b) => a.phase.localeCompare(b.phase) || a.object_type.localeCompare(b.object_type) || a.mark.localeCompare(b.mark))
   for (const line of sorted) totals[line.cost_center][line.unit] += line.quantity

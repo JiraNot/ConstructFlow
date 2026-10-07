@@ -5,13 +5,25 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "scripts": { "build": "tsc", "test": "node --test test/*.test.mjs" },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test test/*.test.mjs"
+  },
   "dependencies": {
     "@constructflow/project-model": "file:../project-model",
     "@constructflow/command-schema": "file:../command-schema",
     "@constructflow/structure-engine": "file:../structure-engine",
     "@constructflow/architecture-engine": "file:../architecture-engine",
-    "@constructflow/catalog-engine": "file:../catalog-engine"
+    "@constructflow/catalog-engine": "file:../catalog-engine",
+    "@constructflow/roof-engine": "file:../roof-engine",
+    "@constructflow/decorative-engine": "file:../decorative-engine",
+    "@constructflow/drainage-engine": "file:../drainage-engine",
+    "@constructflow/plumbing-engine": "file:../plumbing-engine",
+    "@constructflow/electrical-engine": "file:../electrical-engine",
+    "@constructflow/interior-engine": "file:../interior-engine",
+    "@constructflow/domain-providers": "file:../domain-providers"
   },
-  "devDependencies": { "typescript": "^5.7.3" }
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
 }

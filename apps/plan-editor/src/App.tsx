@@ -27,7 +27,7 @@ import { UnderlayConfig } from './rendering/planRenderer.js'
 import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot } from 'lucide-react'
 import { calculateTakeoff } from '@constructflow/takeoff-engine'
 import { createKitchenProofProject } from '@constructflow/extension-engine'
-import { renderDrawingSetHtml } from '@constructflow/sheet-engine'
+import { renderPermitDrawingSetHtml } from '@constructflow/sheet-engine'
 import { readProjectFile, writeProjectFile, type LocalProjectFileHandle } from './projectFileIO.js'
 
 const headerActionStyle: React.CSSProperties = {
@@ -51,6 +51,7 @@ const takeoffCostCenterLabels: Record<string, string> = {
 }
 
 const Model3DViewport = lazy(() => import('./components/Model3DViewport.js').then(module => ({ default: module.Model3DViewport })))
+const ConstructionWorkbench=lazy(()=>import('./components/ConstructionWorkbench.js').then(m=>({default:m.ConstructionWorkbench})))
 
 type ProjectSaveWindow = Window & {
   showOpenFilePicker?: (options: {
@@ -102,6 +103,7 @@ export const App: React.FC = () => {
   const [activeWindowType, setActiveWindowType] = useState<string>('W1')
 
   const [isTypeManagerOpen, setIsTypeManagerOpen] = useState<boolean>(false)
+  const [isConstructionOpen,setIsConstructionOpen]=useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [cursorCoords_mm, setCursorCoords_mm] = useState<[number, number]>([0, 0])
   const [snapKind, setSnapKind] = useState<string>('Free')
@@ -870,7 +872,7 @@ export const App: React.FC = () => {
   }
 
   const handleExportDrawingSet = () => {
-    const html = renderDrawingSetHtml(project)
+    const html = renderPermitDrawingSetHtml(project)
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
     const preview = window.open(url, '_blank')
     if (!preview) {
@@ -1034,7 +1036,7 @@ export const App: React.FC = () => {
                 borderRadius: 4,
               }}
             >
-              Slice 01 & 02
+              Standalone BIM · Phase 1–6
             </span>
           </div>
         </div>
@@ -1202,6 +1204,7 @@ export const App: React.FC = () => {
           </button>
 
           {/* Quick Extension Presets Modal Launcher */}
+          <button style={headerActionStyle} onClick={()=>setIsConstructionOpen(true)}>Phase 1–6 · BIM & Sheets</button>
           <button
             onClick={() => setIsPresetsModalOpen(true)}
             style={{
@@ -1454,9 +1457,9 @@ export const App: React.FC = () => {
           </div>
 
           <div style={{ marginTop: 'auto', fontSize: 10, color: '#64748b', lineHeight: 1.4 }}>
-            <b>Vertical Slice 01 & 02:</b>
+            <b>Standalone workflow:</b>
             <br />
-            Grids → Columns → Footings → Beams → Walls → Openings (Doors/Windows) → SketchUp Sync
+            Grids → Structure → Architecture → MEP → Built-in → BOQ → A3 PDF
           </div>
         </aside>
 
@@ -1620,7 +1623,7 @@ export const App: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <strong style={{ color: '#e2e8f0', fontSize: 12 }}>ปริมาณจากโมเดล (BOQ)</strong>
               <div style={{ display: 'flex', gap: 5 }}>
-                <button type="button" onClick={handleExportDrawingSet} title="สร้างแบบ A-02, S-01 และ A-08 จากโมเดลปัจจุบัน" style={{ ...headerActionStyle, fontSize: 10 }}>A3 Sheets</button>
+                <button type="button" onClick={()=>setIsConstructionOpen(true)} title="เปิด viewport และส่งออกชุดแบบ A3 20 แผ่น" style={{ ...headerActionStyle, fontSize: 10 }}>A3 · 20 Sheets</button>
                 <button type="button" onClick={handleExportTakeoff} style={{ ...headerActionStyle, fontSize: 10 }}>CSV</button>
               </div>
             </div>
@@ -1645,16 +1648,17 @@ export const App: React.FC = () => {
             )}
           </section>
 
-          <SyncBridgePanel
+          <details style={{padding:12,color:'#94a3b8',fontSize:11}}><summary style={{cursor:'pointer'}}>Optional CAD adapters · SketchUp</summary><SyncBridgePanel
             project={project}
             commandQueue={commandQueue}
             onClearQueue={() => setCommandQueue([])}
             onExportProject={handleExportProject}
-          />
+          /></details>
         </aside>
       </div>
 
       {/* BIM Type Manager Modal */}
+      {isConstructionOpen&&<Suspense fallback={<div>กำลังเปิด BIM Workbench…</div>}><ConstructionWorkbench project={project} onClose={()=>setIsConstructionOpen(false)} onExecute={dispatchCommandBatch}/></Suspense>}
       <TypeManagerModal
         isOpen={isTypeManagerOpen}
         onClose={() => setIsTypeManagerOpen(false)}

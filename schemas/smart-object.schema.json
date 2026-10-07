@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["id", "object_type", "owner_module", "schema_version", "created_phase", "status"],
   "properties": {
-    "id": { "type": "string", "minLength": 1 },
+    "id": { "type": "string", "format":"uuid", "pattern":"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$" },
     "object_type": { "type": "string", "minLength": 1 },
     "owner_module": { "type": "string", "pattern": "^constructflow\\.[a-z0-9_.-]+$" },
     "schema_version": { "type": "integer", "minimum": 1 },
@@ -15,7 +15,7 @@
     },
     "removed_phase": {
       "type": ["string", "null"],
-      "enum": ["demolition", "new_construction", null]
+      "enum": ["demolition", null]
     },
     "level_refs": {
       "type": "array",

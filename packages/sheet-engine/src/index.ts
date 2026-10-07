@@ -1,4 +1,9 @@
 import { getDisplayPhase, resolveCatalogType, type ProjectDocument } from '@constructflow/project-model'
+export * from './permit.js'
+/** Load font shaping and PDF libraries only when PDF export is requested. */
+export async function compilePermitPdf(...args: Parameters<typeof import('./pdf.js').compilePermitPdf>) {
+  return (await import('./pdf.js')).compilePermitPdf(...args)
+}
 
 export type SheetId = 'A-02' | 'S-01' | 'A-08'
 export interface CompiledSheet { id: SheetId; title: string; scale: string; svg: string }

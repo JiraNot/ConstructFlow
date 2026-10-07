@@ -2,6 +2,7 @@
 
 import { Phase, Level, PileSystem, Relationship } from './types.js'
 import { SmartObject } from './smartObject.js'
+import type { DrawingSettings } from './sheetSettings.js'
 
 export interface ProjectMetadata {
   id: string
@@ -27,6 +28,11 @@ export interface TypeParameters {
   height_mm?: number
   width_mm?: number
   sill_height_mm?: number
+  topping_mm?: number
+  slab_system?: 'slab_on_ground' | 'suspended' | 'precast_plank' | 'hollow_core'
+  drop_mm?: number
+  rebar_type?: Record<string, unknown>
+  mass_per_m_kg?: number
   [field: string]: unknown
 }
 
@@ -52,6 +58,7 @@ export interface ProjectDocument {
   types: TypeDefinition[]
   objects: Record<string, SmartObject> // Keyed by immutable UUID
   relationships: Relationship[]
+  drawing_settings?: DrawingSettings
 }
 
 export const DEFAULT_PHASES: PhaseDefinition[] = [
@@ -228,11 +235,17 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
 ]
 
 export const DEFAULT_TYPES = DEFAULT_STRUCTURAL_TYPES
+DEFAULT_TYPES.push(
+  { id: 'aed33941-9ba8-5e5c-977a-b35a81d2b903', object_type: 'structure.slab', name: 'GS', parameters: { thickness_mm: 120, topping_mm: 0, slab_system: 'slab_on_ground', material: 'reinforced_concrete' } },
+  { id: '1a6d1781-cf3a-5c29-9f43-4b1efa2577cf', object_type: 'structure.slab', name: 'S1', parameters: { thickness_mm: 150, topping_mm: 50, slab_system: 'precast_plank', material: 'precast_concrete' } }
+)
 
 export const CATALOG_PARAMETER_FIELDS: Record<string, string[]> = {
   'structure.column': ['section_mm', 'material'],
   'structure.foundation': ['size_mm', 'foundation_type', 'pile_type', 'pile_offsets_mm', 'pile_length_mm', 'material'],
-  'structure.beam': ['section_mm', 'material'],
+  'structure.beam': ['section_mm', 'material', 'drop_mm', 'rebar_type', 'mass_per_m_kg'],
+  'structure.slab': ['thickness_mm', 'topping_mm', 'slab_system', 'material'],
+  'interior.cabinet_run': ['width_mm','height_mm','depth_mm','board_mm','back_mm','plinth_mm','front','carcass_material','front_material','back_material','countertop_material','countertop_mm'],
   'architecture.wall': ['thickness_mm', 'height_mm', 'material'],
   'door_window.door': ['width_mm', 'height_mm'],
   'door_window.window': ['width_mm', 'height_mm', 'sill_height_mm'],

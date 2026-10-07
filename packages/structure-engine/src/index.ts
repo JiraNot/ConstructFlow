@@ -2,6 +2,7 @@ import { SmartObject, ColumnModuleData, FoundationModuleData, GridModuleData, Be
 import { CreateColumnInput, MoveColumnInput, UpdateColumnMarkInput, CreateFoundationInput, CreateGridInput, CreateBeamInput, UpdateBeamMarkInput, UpdateBeamDimensionsInput, UpdateColumnDimensionsInput, UpdateFoundationDimensionsInput } from '@constructflow/command-schema'
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
+export * from './construction.js'
 
 function tuple2(value: unknown, fallback: [number, number]): [number, number] {
   return Array.isArray(value) && value.length === 2 && value.every(item => typeof item === 'number' && Number.isFinite(item))

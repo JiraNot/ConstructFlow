@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@constructflow/project-model": "file:../project-model",
-    "@constructflow/command-schema": "file:../command-schema"
+    "@constructflow/command-schema": "file:../command-schema",
+    "@constructflow/geometry-kernel": "file:../geometry-kernel",
+    "@constructflow/module-sdk": "file:../module-sdk"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

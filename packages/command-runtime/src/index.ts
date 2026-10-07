@@ -7,8 +7,19 @@ import { executeStructureCommand, reconcileStructuralLevelElevation } from '@con
 import { executeArchitectureCommand } from '@constructflow/architecture-engine'
 import { executeCatalogCommand } from '@constructflow/catalog-engine'
 import { executeProjectCommand } from './projectCommands.js'
+import { executeStructureConstructionCommand, reconcileTypeReinforcement } from '@constructflow/structure-engine'
+import { executeBathroomCommand } from '@constructflow/architecture-engine'
+import { executeRoofCommand } from '@constructflow/roof-engine'
+import { executeDecorativeCommand } from '@constructflow/decorative-engine'
+import { executeDrainageCommand } from '@constructflow/drainage-engine'
+import { executePlumbingCommand } from '@constructflow/plumbing-engine'
+import { executeElectricalCommand } from '@constructflow/electrical-engine'
+import { executeInteriorCommand } from '@constructflow/interior-engine'
+import { validateConstructionProject } from '@constructflow/domain-providers'
 
-const handlers = [executeProjectCommand, executeStructureCommand, executeArchitectureCommand, executeCatalogCommand]
+const handlers = [executeProjectCommand, executeStructureCommand, executeArchitectureCommand, executeCatalogCommand,
+  executeStructureConstructionCommand, executeBathroomCommand, executeRoofCommand, executeDecorativeCommand,
+  executePlumbingCommand, executeDrainageCommand, executeElectricalCommand, executeInteriorCommand]
 const phases = new Set(['existing', 'demolition', 'new_construction'])
 
 /** Host-independent CQRS runtime. Domain handlers never receive the live document. */
@@ -68,8 +79,11 @@ export class CommandBus {
           response.result.updated_object_ids = [...new Set([...(response.result.updated_object_ids ?? []), ...reconciledIds])]
         }
         // A successful transaction also updates project metadata without touching the input.
+        const rebarIds=reconcileTypeReinforcement(context)
+        response.result.affected_object_ids=[...new Set([...response.result.affected_object_ids,...rebarIds])]
         response.updatedProject.project.updated_at = now
         validateProjectV2(response.updatedProject)
+        validateConstructionProject(response.updatedProject)
         return response
       }
       return reject(`Unknown command: ${commandName}`)

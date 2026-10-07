@@ -6,6 +6,8 @@ import {
   type ProjectDocument,
   type SmartObject,
 } from '@constructflow/project-model'
+import { constructionOutputs } from '@constructflow/domain-providers'
+import { tube, type Triangle } from '@constructflow/geometry-kernel'
 
 export type Vec3Mm = [number, number, number]
 
@@ -18,6 +20,7 @@ export interface OpeningCutout {
 }
 
 export type RepresentationShape =
+  | { kind: 'triangle_mesh'; triangles_mm: Triangle[] }
   | { kind: 'box'; size_mm: Vec3Mm }
   | { kind: 'wall_extrusion'; length_mm: number; thickness_mm: number; height_mm: number; cutouts: OpeningCutout[] }
 
@@ -186,7 +189,7 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
         warnings.push(`${object.id}: beam has no horizontal span; 3D representation omitted`)
         return undefined
       }
-      return baseObject(object, data, [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2, start[2] + section[1] / 2], Math.atan2(dy, dx),
+      return baseObject(object, data, [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2, start[2] + section[1] / 2 - (typeof data.drop_mm === 'number' ? data.drop_mm : 0)], Math.atan2(dy, dx),
         { kind: 'box', size_mm: [length, section[0], section[1]] }, { kind: 'select_only' })
     }
     case 'architecture.wall': {
@@ -272,5 +275,12 @@ export function buildProjectRepresentations3D(project: ProjectDocument): Represe
     .sort((a, b) => a.id.localeCompare(b.id))
     .map(object => representObject(project, object, warnings))
     .filter((object): object is ObjectRepresentation3D => object !== undefined)
+  for (const out of constructionOutputs(project)) {
+    const object = project.objects[out.object_id], data = moduleData(object) ?? {}
+    const triangles = [...out.meshes]
+    if (!triangles.length) for(const path of out.paths) for(let i=1;i<path.length;i++) if(Math.hypot(...path[i].map((v,j)=>v-path[i-1][j]))>1e-8)triangles.push(...tube(path[i-1],path[i],typeof data.diameter_mm==='number'?data.diameter_mm/2:10))
+    if(triangles.length) objects.push(baseObject(object,data,[0,0,0],0,{kind:'triangle_mesh',triangles_mm:triangles},{kind:'select_only'}))
+    warnings.push(...out.warnings.map(w=>`${object.id}: ${w}`))
+  }
   return { objects, warnings }
 }

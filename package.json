@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:standalone": "node scripts/test_standalone.mjs",
+    "verify:phases": "node scripts/verify_phase_proof.mjs",
     "build:standalone": "node scripts/build_standalone.mjs",
     "dev:standalone": "node scripts/start_standalone.mjs",
     "verify:file-io": "node scripts/verify_project_file_io.mjs",

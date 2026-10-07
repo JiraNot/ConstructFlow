@@ -7,7 +7,17 @@
     "declaration": true,
     "outDir": "dist",
     "rootDir": "src",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@constructflow/geometry-kernel": [
+        "../geometry-kernel/dist/index.d.ts"
+      ],
+      "@constructflow/domain-providers": [
+        "../domain-providers/dist/index.d.ts"
+      ]
+    }
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts"
+  ]
 }

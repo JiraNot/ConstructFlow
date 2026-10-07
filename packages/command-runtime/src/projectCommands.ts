@@ -1,5 +1,7 @@
 import { getArchitectureDeletionDependents } from '@constructflow/architecture-engine'
 import { DeleteObjectInput } from '@constructflow/command-schema'
+import { validateDrawingSettings } from '@constructflow/project-model'
+import type { UpdateSheetViewportInput } from '@constructflow/command-schema'
 
 import {
   CommandHandlerContext,
@@ -13,6 +15,12 @@ import {
 export function executeProjectCommand(context: CommandHandlerContext): CommandBusResult | undefined {
   const { project, updated, commandName, input, command_id, now, envelope } = context
   switch (commandName) {
+    case 'UpdateSheetViewport': {
+      const {sheet_id,viewport}=input as unknown as UpdateSheetViewportInput
+      updated.drawing_settings={...updated.drawing_settings,viewports:{...updated.drawing_settings?.viewports,[sheet_id]:viewport}}
+      validateDrawingSettings(updated.drawing_settings)
+      return {result:{status:'success',command_id,command_name:commandName,affected_object_ids:[]},updatedProject:updated,emittedEnvelope:envelope}
+    }
     case 'SetWorkingLevel': {
       const { level_id } = input as unknown as SetWorkingLevelInput
       if (!updated.levels.some(level => level.id === level_id)) {

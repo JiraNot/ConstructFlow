@@ -1,0 +1,25 @@
+export const domainPackages = [
+  "roof-engine",
+  "decorative-engine",
+  "drainage-engine",
+  "plumbing-engine",
+  "electrical-engine",
+  "interior-engine",
+];
+export const packageDirectories = [
+  "project-model",
+  "geometry-kernel",
+  "command-schema",
+  "module-sdk",
+  "structure-engine",
+  "architecture-engine",
+  "catalog-engine",
+  ...domainPackages,
+  "domain-providers",
+  "representation-engine",
+  "clash-engine",
+  "command-runtime",
+  "extension-engine",
+  "takeoff-engine",
+  "sheet-engine",
+].map((name) => `packages/${name}`);

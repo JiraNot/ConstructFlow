@@ -16,7 +16,11 @@ function phaseColor(phase: ObjectRepresentation3D['display_phase']): THREE.Color
 
 function makeObjectMesh(representation: ObjectRepresentation3D): ModelMesh {
   let geometry: THREE.BufferGeometry
-  if (representation.shape.kind === 'wall_extrusion') {
+  if (representation.shape.kind === 'triangle_mesh') {
+    geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position',new THREE.Float32BufferAttribute(representation.shape.triangles_mm.flat(2).map(mmToM),3))
+    geometry.computeVertexNormals()
+  } else if (representation.shape.kind === 'wall_extrusion') {
     const { length_mm, height_mm, thickness_mm, cutouts } = representation.shape
     const length = mmToM(length_mm), height = mmToM(height_mm), thickness = mmToM(thickness_mm)
     const shape = new THREE.Shape()
@@ -36,6 +40,7 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelMesh {
   }
   const displayPhase = representation.display_phase
   const material = new THREE.MeshStandardMaterial({
+    side: THREE.DoubleSide,
     color: phaseColor(displayPhase),
     roughness: 0.76,
     metalness: representation.object_type === 'structure.beam' && representation.material === 'steel' ? 0.72 : 0.05,

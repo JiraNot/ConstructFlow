@@ -22,11 +22,15 @@ The standalone semantic foundation now separates command execution, domain handl
 extension preset planning from React. The Plan Editor opens and saves local `.cfproj` files,
 uses schema v2 with a v1 migration, exposes model Undo/Redo, and calculates an initial
 quantity-only BOQ with CSV export. The Plan Editor includes a lazy-loaded Three.js/WebGL
-viewport, a kitchen-extension proof model starter, and a first vector A3 issue set (A-02,
-S-01 and A-08) with browser print-to-PDF. Thai font shaping, verified print-scale output,
-full 20-sheet coverage, full geometry editing and domain-wide quantity/rate coverage remain
-future milestones. See the [October 2026 analysis and
-development plan](docs/STANDALONE-ENGINE-REVIEW-2026-10.md).
+viewport and a kitchen-extension proof model starter. The Phase 1–6 workbench now adds
+beam/slab catalogs, BBS and drop beams, convex footprint roofs, continuous mouldings,
+decorative panels, manhole/IL networks, pump bypass, bathroom plan/section, joinery cut lists
+and LED sizing. A native vector compiler produces the 20-sheet A3 draft set with embedded
+Sarabun Thai shaping. Sheet scale/crop settings persist in `.cfproj` through the Command Bus.
+Missing source data, clipping and schedule overflow are reported; the set is not certified
+for permit submission. See the [implementation and verification record](docs/implementation/STANDALONE-PHASES-1-6.md)
+for supported inputs and remaining Master coverage. The [October 2026 analysis](docs/STANDALONE-ENGINE-REVIEW-2026-10.md)
+records the earlier baseline.
 
 ## Run the standalone web app
 
@@ -58,8 +62,13 @@ After a standalone build, run the first-slice acceptance checks with:
 ```bash
 npm run verify:kitchen
 npm run verify:file-io
+npm run verify:phases
 npm run verify:kitchen-file -- "D:/path/to/CF-KITCHEN-PROOF-001.cfproj"
 ```
+
+`verify:phases` generates `output/pdf/phase-1-6-proof.pdf`, a matching `.cfproj`, SVG/HTML
+and a source/quantity/warning report. In the app, open **Phase 1–6 · BIM & Sheets** to create
+or edit objects, update catalogs, adjust saved viewports and download vector PDF/cut-list CSV.
 
 These checks cover the preset → lifecycle phase → takeoff → A-02/S-01/A-08 pipeline and the
 local file adapter contract. The file check round-trips canonical `.cfproj` JSON through a real

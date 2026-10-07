@@ -76,6 +76,9 @@ export interface FoundationModuleData {
 }
 
 export interface BeamModuleData {
+  drop_mm?: number
+  rebar_type?: Record<string, unknown>
+  mass_per_m_kg?: number
   type_id?: string
   instance_overrides?: Record<string, unknown>
   mark: string // Human-readable mark, e.g. "B1", "B2"
@@ -149,3 +152,154 @@ export interface WindowModuleData {
   window_type_id?: string
 }
 
+// Standalone construction payloads. Coordinates/dimensions are canonical millimetres.
+export type Point2Mm = [number, number]
+export type Point3Mm = [number, number, number]
+export interface CatalogPlacement {
+  mark: string
+  type_id?: string
+  instance_overrides?: Record<string, unknown>
+  level_id: string
+}
+export interface SlabModuleData extends CatalogPlacement {
+  boundary_mm: Point2Mm[]
+  elevation_mm: number
+  thickness_mm: number
+  topping_mm: number
+  slab_system: 'slab_on_ground' | 'suspended' | 'precast_plank' | 'hollow_core'
+  material: string
+  slope_ratio?: number
+  drain_direction_deg?: number
+}
+export interface RebarSpacingZone { start_mm:number; end_mm:number; spacing_mm:number }
+export interface RebarModuleData extends CatalogPlacement {
+  role?: 'top' | 'bottom' | 'stirrups' | 'general'
+  inherit_host_type?: boolean
+  host_id:string
+  mode:'longitudinal'|'stirrups'|'explicit'
+  grade:'SR24'|'SD40'|'SD50'
+  diameter_mm:number
+  cover_mm:number
+  count:number
+  bend_radius_mm:number
+  hook_angle_deg:0|90|135
+  hook_extension_mm:number
+  lap_mm:number
+  legs_mm:number[]
+  spacing_zones:RebarSpacingZone[]
+}
+export interface RoofEdgeSlope { defines_slope:boolean; slope_deg:number }
+export interface RoofModuleData extends CatalogPlacement {
+  boundary_mm:Point2Mm[]
+  elevation_mm:number
+  edges:RoofEdgeSlope[]
+  material:string
+  thickness_mm:number
+}
+export interface MouldingModuleData extends CatalogPlacement {
+  path_mm:Point3Mm[]
+  profile_mm:Point2Mm[]
+  closed:boolean
+  miter_limit:number
+  material:string
+  host_id?:string
+}
+export interface PanelLayoutModuleData extends CatalogPlacement {
+  host_id:string
+  rows:number
+  columns:number
+  margin_mm:number
+  gap_mm:number
+  depth_mm:number
+  material:string
+}
+export type PipeSystem = 'waste'|'soil'|'rainwater'|'vent'|'cold_water'|'hot_water'
+export interface PipeRouteModuleData extends CatalogPlacement {
+  system:PipeSystem
+  nodes_mm:Point3Mm[]
+  diameter_mm:number
+  start_node_id?:string
+  end_node_id?:string
+  start_invert_mm:number|null
+  end_invert_mm:number|null
+  minimum_slope_ratio:number
+  material:string
+}
+export interface ManholeModuleData extends CatalogPlacement {
+  location_mm:Point3Mm
+  size_mm:Point3Mm
+  invert_mm:number|null
+  system:'waste'|'soil'|'rainwater'
+}
+export interface SepticModuleData extends CatalogPlacement {
+  location_mm:Point3Mm
+  people:number
+  litres_per_person:number
+  reserve_ratio:number
+  capacity_litres:number
+  rule_source:string
+}
+export interface PumpBypassModuleData extends CatalogPlacement {
+  location_mm:Point3Mm
+  span_mm:number
+  diameter_mm:number
+  mode:'pump'|'bypass'|'isolated'
+  valve_states:{inlet:boolean;outlet:boolean;bypass:boolean}
+}
+export interface BathroomModuleData extends CatalogPlacement {
+  boundary_mm:Point2Mm[]
+  elevation_mm:number
+  drop_mm:number
+  slope_ratio:number
+  drain_mm:Point2Mm
+  waterproof_upstand_mm:number
+  wet_wall_height_mm:number
+  wet_wall_length_mm:number
+  tile_mm:Point2Mm
+  toilet_rough_in_mm:number
+}
+export interface ElectricalFixtureModuleData extends CatalogPlacement {
+  location_mm:Point3Mm
+  kind:'light'|'switch'|'outlet'|'panel'
+  watts:number
+  circuit_id?:string
+  controlled_ids:string[]
+  switch_ways:1|2|3
+  grounded:boolean
+}
+export interface CircuitModuleData extends CatalogPlacement {
+  panel_id:string
+  voltage:number
+  breaker_a:number
+  cable_mm2:number
+  allowable_current_a:number
+  device_ids:string[]
+}
+export interface LEDModuleData extends CatalogPlacement {
+  path_mm:Point3Mm[]
+  watts_per_m:number
+  voltage:number
+  driver_watts:number
+  derating_ratio:number
+  material:string
+  host_id?:string
+}
+export interface CabinetModuleData extends CatalogPlacement {
+  location_mm:Point3Mm
+  width_mm:number
+  height_mm:number
+  depth_mm:number
+  board_mm:number
+  back_mm:number
+  plinth_mm:number
+  rotation_deg:number
+  modules_mm:number[]
+  shelves:number
+  drawers:number
+  front:'solid'|'glass'|'open'
+  carcass_material:string
+  front_material:string
+  back_material:string
+  countertop_material:string
+  countertop_mm:number
+}

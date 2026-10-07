@@ -1,4 +1,5 @@
 import { resolveCatalogType, type ProjectDocument, type SmartObject } from '@constructflow/project-model'
+import { constructionOutputs } from '@constructflow/domain-providers'
 
 export type Vec3 = [number, number, number]
 
@@ -165,9 +166,10 @@ function boundsFor(project: ProjectDocument, object: SmartObject, warnings: stri
     }
     const halfPlan = Math.max(...section) / 2
     const halfDepth = section[1] / 2
+    const drop=isFiniteNumber(data.drop_mm)?data.drop_mm:0
     return makeBounds(
-      [Math.min(start[0], end[0]) - halfPlan, Math.min(start[1], end[1]) - halfPlan, Math.min(start[2], end[2]) - halfDepth],
-      [Math.max(start[0], end[0]) + halfPlan, Math.max(start[1], end[1]) + halfPlan, Math.max(start[2], end[2]) + halfDepth],
+      [Math.min(start[0], end[0]) - halfPlan, Math.min(start[1], end[1]) - halfPlan, Math.min(start[2], end[2]) - halfDepth-drop],
+      [Math.max(start[0], end[0]) + halfPlan, Math.max(start[1], end[1]) + halfPlan, Math.max(start[2], end[2]) + halfDepth-drop],
     )
   }
 
@@ -271,8 +273,15 @@ export class RTree<T> {
 export function analyzeProjectSpatialBounds(project: ProjectDocument): ProjectSpatialAnalysis {
   const warnings: string[] = []
   const objects: SpatialObjectBounds[] = []
+  const domainBounds=new Map<string,SpatialBounds>()
+  for(const out of constructionOutputs(project)){
+    const data=record(project.objects[out.object_id].module_data),points=[...out.meshes.flat(),...out.paths.flat()]
+    if(out.family==='drainage.pipe_route'&&['soil','waste','rainwater'].includes(String(data?.system))&&(data?.start_invert_mm===null||data?.end_invert_mm===null)){warnings.push(`${out.object_id}: unknown invert; spatial clearance cannot be verified`);continue}
+    if(!points.length)continue;const radius=isPositiveNumber(data?.diameter_mm)?data.diameter_mm/2:0
+    domainBounds.set(out.object_id,{min:[0,1,2].map(i=>Math.min(...points.map(v=>v[i]))-radius) as Vec3,max:[0,1,2].map(i=>Math.max(...points.map(v=>v[i]))+radius) as Vec3})
+  }
   for (const object of Object.values(project.objects)) {
-    const bounds = boundsFor(project, object, warnings)
+    const bounds = domainBounds.get(object.id)??boundsFor(project, object, warnings)
     if (!bounds) continue
     const data = record(object.module_data)
     const levelId = typeof data?.level_id === 'string'

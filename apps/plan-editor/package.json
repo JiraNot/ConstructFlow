@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@constructflow/domain-providers": "file:../../packages/domain-providers",
     "@constructflow/command-runtime": "file:../../packages/command-runtime",
     "@constructflow/command-schema": "file:../../packages/command-schema",
     "@constructflow/architecture-engine": "file:../../packages/architecture-engine",

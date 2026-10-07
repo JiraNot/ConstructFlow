@@ -270,7 +270,7 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
       </div>
 
       <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>
-        Plan Editor is <b>authoritative</b>. ทุกวัตถุมี UUID ตรงกับ SketchUp เพื่อให้ถอด 3D และคำนวณราคา (BOQ) ได้แม่นยำ
+        ConstructFlow คำนวณโมเดล 3D และ BOQ ได้ในตัว Bridge นี้ใช้ส่งออกไป SketchUp โดยรักษา UUID
       </div>
 
       {/* Instructions Accordion */}

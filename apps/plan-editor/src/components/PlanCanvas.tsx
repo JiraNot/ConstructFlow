@@ -12,6 +12,7 @@ import {
 } from '@constructflow/project-model'
 import { projectPointToWallOffsetMm } from '@constructflow/architecture-engine'
 import { getPlanVisibleObjects } from '@constructflow/representation-engine'
+import { constructionOutputs } from '@constructflow/domain-providers'
 import { ToolType } from './Toolbar.js'
 import {
   ViewportState,
@@ -259,7 +260,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       activeSnap,
       ghost,
       underlay,
-      calibrationOverlay
+      calibrationOverlay,
+      project
     )
   }, [
     project,
@@ -438,6 +440,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       }
     }
 
+    for(const out of constructionOutputs(project).filter(v=>!!planProject.objects[v.object_id]).reverse()){
+      const near=(a:number[],b:number[])=>{const dx=b[0]-a[0],dy=b[1]-a[1],len=dx*dx+dy*dy,t=len?Math.max(0,Math.min(1,((wx-a[0])*dx+(wy-a[1])*dy)/len)):0;return Math.hypot(wx-a[0]-t*dx,wy-a[1]-t*dy)<12/viewport.zoom}
+      if(out.paths.some(path=>path.slice(1).some((v,i)=>near(path[i],v))))return out.object_id
+      for(const tr of out.meshes){const signs=tr.map((a,i)=>{const b=tr[(i+1)%3];return (b[0]-a[0])*(wy-a[1])-(b[1]-a[1])*(wx-a[0])});if(Math.abs((tr[1][0]-tr[0][0])*(tr[2][1]-tr[0][1])-(tr[1][1]-tr[0][1])*(tr[2][0]-tr[0][0]))>1&& (signs.every(v=>v>=0)||signs.every(v=>v<=0)))return out.object_id}
+    }
     return null
   }
 

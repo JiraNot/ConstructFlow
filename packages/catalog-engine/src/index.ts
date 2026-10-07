@@ -1,7 +1,7 @@
 import { catalogInstanceOverrides, resolveCatalogType, type TypeDefinition, type ProjectDocument } from '@constructflow/project-model'
 import type { AssignInstanceTypeInput, CommandBusResult, CommandHandlerContext, DefineStructuralTypeInput, RenameCatalogTypeInput, UpdateStructuralTypeDimensionsInput } from '@constructflow/command-schema'
 
-const PARAMETER_FIELDS = ['section_mm', 'size_mm', 'thickness_mm', 'height_mm', 'width_mm', 'sill_height_mm', 'material', 'foundation_type'] as const
+const PARAMETER_FIELDS = ['section_mm', 'size_mm', 'thickness_mm', 'height_mm', 'width_mm', 'sill_height_mm', 'material', 'foundation_type', 'topping_mm', 'slab_system', 'drop_mm', 'rebar_type', 'mass_per_m_kg', 'diameter_mm', 'cover_mm', 'grade', 'count', 'depth_mm', 'board_mm', 'back_mm', 'plinth_mm', 'front', 'carcass_material', 'front_material', 'back_material', 'countertop_material', 'countertop_mm', 'watts_per_m', 'driver_watts', 'derating_ratio'] as const
 
 function reject(context: CommandHandlerContext, message: string): CommandBusResult {
   return {
@@ -10,7 +10,7 @@ function reject(context: CommandHandlerContext, message: string): CommandBusResu
   }
 }
 
-function updateInstances(context: CommandHandlerContext, type: TypeDefinition, updates: Record<string, unknown>): string[] {
+function updateInstances(context: CommandHandlerContext, type: TypeDefinition, updates: Record<string, unknown>, previousType:TypeDefinition): string[] {
   const { updated, now } = context
   const affected: string[] = []
   for (const [id, object] of Object.entries(updated.objects)) {
@@ -20,13 +20,13 @@ function updateInstances(context: CommandHandlerContext, type: TypeDefinition, u
     if (!matches) continue
     const overrides = data.instance_overrides && typeof data.instance_overrides === 'object' && !Array.isArray(data.instance_overrides)
       ? data.instance_overrides as Record<string, unknown>
-      : catalogInstanceOverrides(type.object_type, data, type)
+      : catalogInstanceOverrides(type.object_type, data, previousType)
     const nextData: Record<string, unknown> = { ...data, type_id: type.id, instance_overrides: overrides }
     for (const [field, value] of Object.entries(updates)) {
       if (value !== undefined && overrides[field] === undefined) nextData[field] = structuredClone(value)
     }
     if (JSON.stringify(nextData) !== JSON.stringify(data)) {
-      updated.objects[id] = { ...object, module_data: nextData, updated_at: now }
+      updated.objects[id] = { ...object, schema_version:object.object_type==='structure.beam'&&(nextData.drop_mm!==undefined||nextData.rebar_type!==undefined)?2:object.schema_version,module_data: nextData, updated_at: now,revision_meta:{...object.revision_meta,dirty_quantity:true,dirty_drawing:true} }
       affected.push(id)
     }
   }
@@ -67,12 +67,13 @@ export function executeCatalogCommand(context: CommandHandlerContext): CommandBu
       if (!reference || !unambiguous) return reject(context, `Catalog type ${reference || '(empty)'} was not found or is ambiguous`)
       const updates: Record<string, unknown> = {}
       for (const field of PARAMETER_FIELDS) {
-        const value = (request as unknown as Record<string, unknown>)[field] ?? request.parameters?.[field]
+        const value = (request as unknown as Record<string, unknown>)[field] ?? (request.parameters as Record<string, unknown> | undefined)?.[field]
         if (value !== undefined) updates[field] = structuredClone(value)
       }
       if (Object.keys(updates).length === 0) return reject(context, `No supported parameters provided for ${unambiguous.name}`)
+      const previousType=structuredClone(unambiguous)
       Object.assign(unambiguous.parameters, updates)
-      const affected = updateInstances(context, unambiguous, updates)
+      const affected = updateInstances(context, unambiguous, updates,previousType)
       return {
         result: { status: 'success', command_id, command_name: commandName, affected_object_ids: affected, updated_object_ids: affected },
         updatedProject: updated,

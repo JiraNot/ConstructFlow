@@ -704,3 +704,4 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
 
   }
 }
+export * from './bathroom.js'

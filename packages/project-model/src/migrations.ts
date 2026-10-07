@@ -1,5 +1,7 @@
 import type { Phase } from './types.js'
 import type { ProjectDocument, TypeDefinition } from './project.js'
+import { validateConstructionPayloads } from './constructionValidation.js'
+import { validateDrawingSettings } from './sheetSettings.js'
 
 export interface ProjectDocumentV1 {
   schema_version: 1
@@ -129,6 +131,8 @@ export function validateProjectV2(project: ProjectDocument): void {
     throw new Error('Invalid project format: levels, types, phases and relationships arrays required')
   }
   if (!project.objects || typeof project.objects !== 'object' || Array.isArray(project.objects)) throw new Error('Invalid project format: objects map required')
+  validateConstructionPayloads(project)
+  if(project.drawing_settings!==undefined)validateDrawingSettings(project.drawing_settings)
   function requireFinite(value: unknown, objectId: string, field: string): asserts value is number {
     if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Invalid project format: object ${objectId} has a non-finite ${field}`)
   }
@@ -147,12 +151,13 @@ export function validateProjectV2(project: ProjectDocument): void {
   function validateFamilyParameters(values: Record<string, unknown>, objectType: string, owner: string): void {
     const allowedFamilies: Record<string, string[]> = {
       section_mm: ['structure.column', 'structure.beam'],
-      size_mm: ['structure.foundation'],
+      size_mm: ['structure.foundation', 'drainage.manhole'],
       foundation_type: ['structure.foundation'],
-      thickness_mm: ['architecture.wall'],
-      width_mm: ['door_window.door', 'door_window.window'],
-      height_mm: ['architecture.wall', 'door_window.door', 'door_window.window'],
+      thickness_mm: ['architecture.wall', 'structure.slab', 'roof.system'],
+      width_mm: ['door_window.door', 'door_window.window', 'interior.cabinet_run'],
+      height_mm: ['architecture.wall', 'door_window.door', 'door_window.window', 'interior.cabinet_run'],
       sill_height_mm: ['door_window.window'],
+      drop_mm:['structure.beam','architecture.bathroom'],rebar_type:['structure.beam','structure.column'],topping_mm:['structure.slab'],slab_system:['structure.slab'],
     }
     for (const [field, families] of Object.entries(allowedFamilies)) {
       if (values[field] !== undefined && !families.includes(objectType)) {
@@ -161,6 +166,35 @@ export function validateProjectV2(project: ProjectDocument): void {
     }
     if (values.material !== undefined && (typeof values.material !== 'string' || !values.material.trim())) {
       throw new Error(`Invalid project format: ${owner} has an invalid material`)
+    }
+    for(const field of ['drop_mm','topping_mm'])if(values[field]!==undefined){requireFinite(values[field],owner,field);if(Number(values[field])<0)throw new Error(`Invalid project format: ${owner} has negative ${field}`)}
+    if (values.rebar_type !== undefined) {
+      const config = values.rebar_type
+      if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error(`Invalid project format: ${owner} reinforcement must be an object`)
+      const roles = ['top', 'bottom', 'stirrups']
+      const entries: [string, unknown][] = roles.some(role => role in config) ? Object.entries(config) : [['general', config]]
+      for (const [role, raw] of entries) {
+        if ((!roles.includes(role) && role !== 'general') || !raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`Invalid project format: ${owner} invalid reinforcement role`)
+        const d = raw as Record<string, unknown>
+        for (const key of ['diameter_mm', 'count']) requirePositive(d[key], owner, key)
+        if (!Number.isInteger(d.count) || Number(d.count) > 2000 || Number(d.diameter_mm) > 100) throw new Error(`Invalid project format: ${owner} reinforcement count/diameter exceeds supported limits`)
+        for (const key of ['cover_mm', 'bend_radius_mm', 'hook_extension_mm', 'lap_mm']) {
+          requireFinite(d[key], owner, key)
+          if (Number(d[key]) < 0) throw new Error(`Invalid project format: ${owner} negative ${key}`)
+        }
+        if (!['SR24', 'SD40', 'SD50'].includes(String(d.grade))) throw new Error(`Invalid project format: ${owner} invalid reinforcement grade`)
+        if (![0, 90, 135].includes(Number(d.hook_angle_deg))) throw new Error(`Invalid project format: ${owner} invalid hook angle`)
+        if (role === 'stirrups') {
+          if (!Array.isArray(d.spacing_zones) || !d.spacing_zones.length) throw new Error(`Invalid project format: ${owner} stirrups need zones`)
+          for (const zone of d.spacing_zones) {
+            if (!zone || typeof zone !== 'object' || Array.isArray(zone)) throw new Error(`Invalid project format: ${owner} invalid stirrup zone`)
+            const z = zone as Record<string, unknown>, relative = z.start_ratio !== undefined || z.end_ratio !== undefined
+            const start = relative ? z.start_ratio : z.start_mm, end = relative ? z.end_ratio : z.end_mm
+            requireFinite(start, owner, 'zone start'); requireFinite(end, owner, 'zone end'); requirePositive(z.spacing_mm, owner, 'zone spacing')
+            if (Number(start) < 0 || Number(end) <= Number(start) || (relative && Number(end) > 1)) throw new Error(`Invalid project format: ${owner} invalid stirrup zone range`)
+          }
+        }
+      }
     }
     if (values.foundation_type !== undefined && values.foundation_type !== 'spread_footing' && values.foundation_type !== 'pile_cap') {
       throw new Error(`Invalid project format: ${owner} has an invalid foundation type`)

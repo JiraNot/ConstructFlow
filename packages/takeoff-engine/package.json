@@ -5,7 +5,14 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "scripts": { "build": "tsc" },
-  "dependencies": { "@constructflow/project-model": "file:../project-model" },
-  "devDependencies": { "typescript": "^5.7.3" }
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@constructflow/project-model": "file:../project-model",
+    "@constructflow/domain-providers": "file:../domain-providers"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
 }

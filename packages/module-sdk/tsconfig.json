@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "declaration": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@constructflow/project-model": [
+        "../project-model/dist/index.d.ts"
+      ],
+      "@constructflow/command-schema": [
+        "../command-schema/dist/index.d.ts"
+      ],
+      "@constructflow/geometry-kernel": [
+        "../geometry-kernel/dist/index.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "src/**/*"
+  ]
+}
+

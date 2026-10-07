@@ -80,6 +80,11 @@ export interface CreateFoundationInput {
 
   /** Foundation type */
   foundation_type?: 'spread_footing' | 'pile_cap'
+  topping_mm?:number
+  slab_system?:'slab_on_ground'|'suspended'|'precast_plank'|'hollow_core'
+  drop_mm?:number
+  rebar_type?:Record<string,unknown>
+  [field:string]:unknown
   pile_type?: PileSystem
   pile_offsets_mm?: [number, number][]
   pile_length_mm?: number
@@ -186,6 +191,7 @@ export interface StructuralTypeParameters {
 }
 
 export type CatalogObjectType =
+  | 'structure.slab'
   | 'structure.column'
   | 'structure.foundation'
   | 'structure.beam'

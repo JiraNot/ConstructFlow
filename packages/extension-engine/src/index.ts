@@ -1,6 +1,7 @@
 import { createEmptyProjectDocument, type ProjectDocument } from '@constructflow/project-model'
 import type { CommandRequest, ExtensionPresetInput, CommandActorKind, CommandBatchResult } from '@constructflow/command-schema'
 import { CommandBus } from '@constructflow/command-runtime'
+export * from './phaseProof.js'
 
 /** Compile public domain commands; no state or geometry is mutated during planning. */
 export function planExtensionPreset(project: ProjectDocument, options: ExtensionPresetInput): CommandRequest[] {

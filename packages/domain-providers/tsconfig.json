@@ -1,0 +1,54 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "declaration": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@constructflow/project-model": [
+        "../project-model/dist/index.d.ts"
+      ],
+      "@constructflow/command-schema": [
+        "../command-schema/dist/index.d.ts"
+      ],
+      "@constructflow/geometry-kernel": [
+        "../geometry-kernel/dist/index.d.ts"
+      ],
+      "@constructflow/module-sdk": [
+        "../module-sdk/dist/index.d.ts"
+      ],
+      "@constructflow/structure-engine": [
+        "../structure-engine/dist/index.d.ts"
+      ],
+      "@constructflow/architecture-engine": [
+        "../architecture-engine/dist/index.d.ts"
+      ],
+      "@constructflow/roof-engine": [
+        "../roof-engine/dist/index.d.ts"
+      ],
+      "@constructflow/decorative-engine": [
+        "../decorative-engine/dist/index.d.ts"
+      ],
+      "@constructflow/drainage-engine": [
+        "../drainage-engine/dist/index.d.ts"
+      ],
+      "@constructflow/plumbing-engine": [
+        "../plumbing-engine/dist/index.d.ts"
+      ],
+      "@constructflow/electrical-engine": [
+        "../electrical-engine/dist/index.d.ts"
+      ],
+      "@constructflow/interior-engine": [
+        "../interior-engine/dist/index.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "src/**/*"
+  ]
+}
+

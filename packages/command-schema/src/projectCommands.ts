@@ -1,6 +1,8 @@
 // Project, Level, and Phase Mutation Command Payloads
 
 import { Phase, RemovalPhase, Level } from '@constructflow/project-model'
+import type { SavedSheetViewport } from '@constructflow/project-model'
+export interface UpdateSheetViewportInput { sheet_id: string; viewport: SavedSheetViewport }
 
 export interface CreateProjectInput {
   id: string

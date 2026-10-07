@@ -15,6 +15,7 @@ import {
 } from '@constructflow/project-model'
 import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
 import { SnapResult } from '../snapping/snapEngine.js'
+import { constructionOutputs } from '@constructflow/domain-providers'
 
 export interface UnderlayConfig {
   image: HTMLImageElement | null
@@ -41,7 +42,8 @@ export function renderPlanView(
   activeSnap: SnapResult | null,
   ghostObject: PlacementGhost | null,
   underlay?: UnderlayConfig | null,
-  calibration?: CalibrationOverlay | null
+  calibration?: CalibrationOverlay | null,
+  sourceProject: ProjectDocument = project
 ) {
   // 1. Dark CAD canvas background
   ctx.fillStyle = '#0f172a'
@@ -56,6 +58,16 @@ export function renderPlanView(
   }
 
   // 3. Structural Grid Lines & Bubbles
+  for (const out of constructionOutputs(sourceProject).filter(out=>!!project.objects[out.object_id])) {
+    const phase=out.removed_phase==='demolition'?'demolition':out.phase
+    ctx.save();ctx.strokeStyle=selectedId===out.object_id?'#fbbf24':phase==='demolition'?'#ef4444':phase==='existing'?'#94a3b8':'#38bdf8'
+    ctx.lineWidth=phase==='new_construction'?2:1;ctx.setLineDash(phase==='demolition'?[6,3]:[])
+    const lines=[...out.paths,...out.meshes.map(t=>[...t,t[0]])]
+    const seen=new Set<string>()
+    for(const points of lines){const key=points.map(v=>v.slice(0,2).join(',')).join('|');if(seen.has(key))continue;seen.add(key);ctx.beginPath();points.forEach((p,i)=>{const [x,y]=worldToScreen([p[0],p[1]],viewport);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y)});ctx.stroke()}
+    const anchor=lines[0]?.[0];if(anchor){const [x,y]=worldToScreen([anchor[0],anchor[1]],viewport);ctx.fillStyle=ctx.strokeStyle;ctx.font='11px sans-serif';ctx.fillText(out.mark,x+4,y-4)}
+    ctx.restore()
+  }
   for (const obj of Object.values(project.objects)) {
     if (isGridObject(obj)) {
       drawStructuralGrid(ctx, obj, viewport, selectedId === obj.id, hoveredId === obj.id)
