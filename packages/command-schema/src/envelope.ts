@@ -6,9 +6,12 @@ export interface CommandActor {
   role?: string
 }
 
-export interface CommandEnvelope<TInput = Record<string, any>> {
+export interface CommandEnvelope<TInput = Record<string, unknown>> {
   /** Unique command execution UUID */
   command_id: string
+
+  /** Shared identity for committed commands in one atomic batch. */
+  transaction_id?: string
 
   /** Registered command type name, e.g. "CreateColumn", "MoveColumn" */
   name: string

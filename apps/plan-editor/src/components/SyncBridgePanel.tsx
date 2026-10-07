@@ -465,7 +465,13 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
               >
                 <span style={{ color: '#38bdf8', fontWeight: 600 }}>{cmd.name}</span>
                 <span style={{ color: '#94a3b8' }}>
-                  {cmd.input.mark || cmd.input.tag || (cmd.input.object_id ? cmd.input.object_id.slice(0, 6) : '')}
+                  {typeof cmd.input.mark === 'string'
+                    ? cmd.input.mark
+                    : typeof cmd.input.tag === 'string'
+                      ? cmd.input.tag
+                      : typeof cmd.input.object_id === 'string'
+                        ? cmd.input.object_id.slice(0, 6)
+                        : ''}
                 </span>
               </div>
             ))

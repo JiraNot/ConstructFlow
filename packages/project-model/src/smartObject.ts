@@ -3,6 +3,7 @@
 
 import {
   Phase,
+  RemovalPhase,
   SmartObjectStatus,
   LevelRef,
   GridModuleData,
@@ -22,9 +23,9 @@ export type KnownModuleData =
   | WallModuleData
   | DoorModuleData
   | WindowModuleData
-  | Record<string, any>
+  | Record<string, unknown>
 
-export interface SmartObject<TData extends Record<string, any> = KnownModuleData> {
+export interface SmartObject<TData extends object = KnownModuleData> {
   /** Immutable unique identity (UUID v4/v7) — never changes across renames */
   id: string
 
@@ -41,7 +42,7 @@ export interface SmartObject<TData extends Record<string, any> = KnownModuleData
   created_phase: Phase
 
   /** Lifecycle phase when object was demolished/removed, or null if active */
-  removed_phase: Phase | null
+  removed_phase: RemovalPhase | null
 
   /** Associated building levels and vertical datums */
   level_refs: LevelRef[]
@@ -59,7 +60,7 @@ export interface SmartObject<TData extends Record<string, any> = KnownModuleData
   module_data: TData
 
   /** Optional revision metadata */
-  revision_meta?: Record<string, any>
+  revision_meta?: Record<string, unknown>
 
   /** ISO 8601 creation timestamp */
   created_at: string
@@ -68,20 +69,27 @@ export interface SmartObject<TData extends Record<string, any> = KnownModuleData
   updated_at: string
 }
 
+/** Lifecycle phase used by visual representations: removed objects render in their removal phase. */
+export function getDisplayPhase(object: Pick<SmartObject, 'created_phase' | 'removed_phase'>): Phase {
+  return object.removed_phase ?? object.created_phase
+}
+
 // -------------------------------------------------------------
 // Type Guards & Utility Helpers
 // -------------------------------------------------------------
 
 export function isSmartObject(obj: unknown): obj is SmartObject {
   if (typeof obj !== 'object' || obj === null) return false
-  const candidate = obj as Record<string, any>
+  const candidate = obj as Record<string, unknown>
   return (
     typeof candidate.id === 'string' &&
     typeof candidate.object_type === 'string' &&
     typeof candidate.owner_module === 'string' &&
     typeof candidate.created_phase === 'string' &&
     Array.isArray(candidate.level_refs) &&
-    typeof candidate.module_data === 'object'
+    typeof candidate.module_data === 'object' &&
+    candidate.module_data !== null &&
+    !Array.isArray(candidate.module_data)
   )
 }
 

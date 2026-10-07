@@ -1,10 +1,9 @@
 import React, { useState } from 'react'
 import {
   ProjectDocument,
-  Phase,
 } from '@constructflow/project-model'
-import { CommandEnvelope } from '@constructflow/command-schema'
-import { CommandBus } from '../commands/CommandBus.js'
+import { CommandEnvelope, ExtensionPresetType } from '@constructflow/command-schema'
+import { applyExtensionPreset } from '@constructflow/extension-engine'
 import {
   Sparkles,
   Car,
@@ -17,7 +16,7 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 
-export type ExtensionPresetType = 'carport' | 'kitchen' | 'terrace'
+export type { ExtensionPresetType } from '@constructflow/command-schema'
 
 interface ExtensionPresetsModalProps {
   isOpen: boolean
@@ -32,6 +31,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
   project,
   onApplyPreset,
 }) => {
+  const [generationError, setGenerationError] = useState<string | null>(null)
   const [activePreset, setActivePreset] = useState<ExtensionPresetType>('carport')
 
   // Common Placement Parameters (in METERS)
@@ -42,7 +42,6 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
 
   // Carport specific
   const [carportColumnType, setCarportColumnType] = useState<string>('SC1') // Steel H-Beam or C1
-  const [carportRoofType, setCarportRoofType] = useState<'metalsheet_pu' | 'vinyl' | 'shinkolite'>('metalsheet_pu')
 
   // Kitchen specific
   const [kitchenWallHeight_m, setKitchenWallHeight_m] = useState<number>(2.8)
@@ -52,12 +51,12 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
 
   // Terrace specific
   const [terraceElevation_m, setTerraceElevation_m] = useState<number>(0.45)
-  const [terraceIncludeSteps, setTerraceIncludeSteps] = useState<boolean>(true)
 
   if (!isOpen) return null
 
   // Handle Preset Switching with sensible default dimensions
   const handleSelectPreset = (preset: ExtensionPresetType) => {
+    setGenerationError(null)
     setActivePreset(preset)
     if (preset === 'carport') {
       setWidth_m(5.0)
@@ -77,197 +76,18 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
     }
   }
 
-  // Generation Logic via CommandBus
   const handleGenerate = () => {
-    const W_mm = Math.round(width_m * 1000)
-    const L_mm = Math.round(length_m * 1000)
-    const X_mm = Math.round(posX_m * 1000)
-    const Y_mm = Math.round(posY_m * 1000)
-
-    let currentProject = project
-    const envelopes: CommandEnvelope[] = []
-
-    const executeAndTrack = (cmdName: string, input: Record<string, any>) => {
-      const res = CommandBus.execute(currentProject, cmdName, input)
-      if (res.result.status === 'success') {
-        currentProject = res.updatedProject
-        if (res.emittedEnvelope) envelopes.push(res.emittedEnvelope)
-        return res.result.affected_object_ids[0] || null
-      }
-      return null
+    const response = applyExtensionPreset(project, {
+      preset: activePreset, posX_m, posY_m, width_m, length_m,
+      carportColumnType, kitchenWallHeight_m, kitchenIncludeDoor, kitchenIncludeWindow,
+      kitchenWallSides, terraceElevation_m,
+    })
+    if (response.status !== 'success') {
+      setGenerationError(response.errors?.join('; ') || 'ไม่สามารถสร้างส่วนต่อเติมได้')
+      return
     }
-
-    if (activePreset === 'carport') {
-      // 1. Four Columns at corners
-      const c1Id = executeAndTrack('CreateColumn', {
-        mark: carportColumnType,
-        location_mm: [X_mm, Y_mm, 0],
-        section_mm: carportColumnType === 'SC1' ? [150, 150] : [200, 200],
-        phase: 'new_construction',
-      })
-      const c2Id = executeAndTrack('CreateColumn', {
-        mark: carportColumnType,
-        location_mm: [X_mm + W_mm, Y_mm, 0],
-        section_mm: carportColumnType === 'SC1' ? [150, 150] : [200, 200],
-        phase: 'new_construction',
-      })
-      const c3Id = executeAndTrack('CreateColumn', {
-        mark: carportColumnType,
-        location_mm: [X_mm + W_mm, Y_mm + L_mm, 0],
-        section_mm: carportColumnType === 'SC1' ? [150, 150] : [200, 200],
-        phase: 'new_construction',
-      })
-      const c4Id = executeAndTrack('CreateColumn', {
-        mark: carportColumnType,
-        location_mm: [X_mm, Y_mm + L_mm, 0],
-        section_mm: carportColumnType === 'SC1' ? [150, 150] : [200, 200],
-        phase: 'new_construction',
-      })
-
-      // 2. Four Footings
-      if (c1Id) executeAndTrack('CreateFoundation', { mark: 'F1', center_mm: [X_mm, Y_mm, 0], size_mm: [800, 800, 300], column_id: c1Id, phase: 'new_construction' })
-      if (c2Id) executeAndTrack('CreateFoundation', { mark: 'F1', center_mm: [X_mm + W_mm, Y_mm, 0], size_mm: [800, 800, 300], column_id: c2Id, phase: 'new_construction' })
-      if (c3Id) executeAndTrack('CreateFoundation', { mark: 'F1', center_mm: [X_mm + W_mm, Y_mm + L_mm, 0], size_mm: [800, 800, 300], column_id: c3Id, phase: 'new_construction' })
-      if (c4Id) executeAndTrack('CreateFoundation', { mark: 'F1', center_mm: [X_mm, Y_mm + L_mm, 0], size_mm: [800, 800, 300], column_id: c4Id, phase: 'new_construction' })
-
-      // 3. Perimeter Framing Beams
-      executeAndTrack('CreateBeam', { mark: 'B1', start_point_mm: [X_mm, Y_mm, 3000], end_point_mm: [X_mm + W_mm, Y_mm, 3000], section_mm: [200, 400], phase: 'new_construction' })
-      executeAndTrack('CreateBeam', { mark: 'B1', start_point_mm: [X_mm + W_mm, Y_mm, 3000], end_point_mm: [X_mm + W_mm, Y_mm + L_mm, 3000], section_mm: [200, 400], phase: 'new_construction' })
-      executeAndTrack('CreateBeam', { mark: 'B1', start_point_mm: [X_mm + W_mm, Y_mm + L_mm, 3000], end_point_mm: [X_mm, Y_mm + L_mm, 3000], section_mm: [200, 400], phase: 'new_construction' })
-      executeAndTrack('CreateBeam', { mark: 'B1', start_point_mm: [X_mm, Y_mm + L_mm, 3000], end_point_mm: [X_mm, Y_mm, 3000], section_mm: [200, 400], phase: 'new_construction' })
-
-      // Middle Rafter if wide
-      if (W_mm >= 4500) {
-        executeAndTrack('CreateBeam', { mark: 'B2', start_point_mm: [X_mm + Math.round(W_mm / 2), Y_mm, 3000], end_point_mm: [X_mm + Math.round(W_mm / 2), Y_mm + L_mm, 3000], section_mm: [150, 350], phase: 'new_construction' })
-      }
-    } else if (activePreset === 'kitchen') {
-      const H_mm = Math.round(kitchenWallHeight_m * 1000)
-
-      // 1. Four Columns
-      const c1Id = executeAndTrack('CreateColumn', { mark: 'C1', location_mm: [X_mm, Y_mm, 0], section_mm: [200, 200], phase: 'new_construction' })
-      const c2Id = executeAndTrack('CreateColumn', { mark: 'C1', location_mm: [X_mm + W_mm, Y_mm, 0], section_mm: [200, 200], phase: 'new_construction' })
-      const c3Id = executeAndTrack('CreateColumn', { mark: 'C1', location_mm: [X_mm + W_mm, Y_mm + L_mm, 0], section_mm: [200, 200], phase: 'new_construction' })
-      const c4Id = executeAndTrack('CreateColumn', { mark: 'C1', location_mm: [X_mm, Y_mm + L_mm, 0], section_mm: [200, 200], phase: 'new_construction' })
-
-      // 2. Four Footings
-      if (c1Id) executeAndTrack('CreateFoundation', { mark: 'F1', center_mm: [X_mm, Y_mm, 0], size_mm: [800, 800, 300], column_id: c1Id, phase: 'new_construction' })
-      if (c2Id) executeAndTrack('CreateFoundation', { mark: 'F1', center_mm: [X_mm + W_mm, Y_mm, 0], size_mm: [800, 800, 300], column_id: c2Id, phase: 'new_construction' })
-      if (c3Id) executeAndTrack('CreateFoundation', { mark: 'F1', center_mm: [X_mm + W_mm, Y_mm + L_mm, 0], size_mm: [800, 800, 300], column_id: c3Id, phase: 'new_construction' })
-      if (c4Id) executeAndTrack('CreateFoundation', { mark: 'F1', center_mm: [X_mm, Y_mm + L_mm, 0], size_mm: [800, 800, 300], column_id: c4Id, phase: 'new_construction' })
-
-      // 3. Four Perimeter Beams
-      executeAndTrack('CreateBeam', { mark: 'B1', start_point_mm: [X_mm, Y_mm, 3000], end_point_mm: [X_mm + W_mm, Y_mm, 3000], section_mm: [200, 400], phase: 'new_construction' })
-      executeAndTrack('CreateBeam', { mark: 'B1', start_point_mm: [X_mm + W_mm, Y_mm, 3000], end_point_mm: [X_mm + W_mm, Y_mm + L_mm, 3000], section_mm: [200, 400], phase: 'new_construction' })
-      executeAndTrack('CreateBeam', { mark: 'B1', start_point_mm: [X_mm + W_mm, Y_mm + L_mm, 3000], end_point_mm: [X_mm, Y_mm + L_mm, 3000], section_mm: [200, 400], phase: 'new_construction' })
-      executeAndTrack('CreateBeam', { mark: 'B1', start_point_mm: [X_mm, Y_mm + L_mm, 3000], end_point_mm: [X_mm, Y_mm, 3000], section_mm: [200, 400], phase: 'new_construction' })
-
-      // 4. AAC Lightweight Walls
-      // South Wall (Front exit)
-      const w1Id = executeAndTrack('CreateWall', {
-        mark: 'W1',
-        start_point_mm: [X_mm, Y_mm, 0],
-        end_point_mm: [X_mm + W_mm, Y_mm, 0],
-        thickness_mm: 100,
-        height_mm: H_mm,
-        phase: 'new_construction',
-      })
-
-      // East Wall (Right)
-      executeAndTrack('CreateWall', {
-        mark: 'W1',
-        start_point_mm: [X_mm + W_mm, Y_mm, 0],
-        end_point_mm: [X_mm + W_mm, Y_mm + L_mm, 0],
-        thickness_mm: 100,
-        height_mm: H_mm,
-        phase: 'new_construction',
-      })
-
-      // North Wall (Back)
-      const w3Id = executeAndTrack('CreateWall', {
-        mark: 'W1',
-        start_point_mm: [X_mm + W_mm, Y_mm + L_mm, 0],
-        end_point_mm: [X_mm, Y_mm + L_mm, 0],
-        thickness_mm: 100,
-        height_mm: H_mm,
-        phase: 'new_construction',
-      })
-
-      // West Wall (if 4 sides selected)
-      if (kitchenWallSides === 4) {
-        executeAndTrack('CreateWall', {
-          mark: 'W1',
-          start_point_mm: [X_mm, Y_mm + L_mm, 0],
-          end_point_mm: [X_mm, Y_mm, 0],
-          thickness_mm: 100,
-          height_mm: H_mm,
-          phase: 'new_construction',
-        })
-      }
-
-      // 5. Openings
-      if (w1Id && kitchenIncludeDoor) {
-        executeAndTrack('CreateDoor', {
-          wall_id: w1Id,
-          mark: 'D1',
-          width_mm: 900,
-          height_mm: 2000,
-          offset_along_wall_mm: Math.round(W_mm / 2),
-          handing: 'left_out',
-          phase: 'new_construction',
-        })
-      }
-
-      if (w3Id && kitchenIncludeWindow) {
-        executeAndTrack('CreateWindow', {
-          wall_id: w3Id,
-          mark: 'W1',
-          width_mm: 1200,
-          height_mm: 1200,
-          sill_height_mm: 900,
-          offset_along_wall_mm: Math.round(W_mm / 2),
-          phase: 'new_construction',
-        })
-      }
-    } else if (activePreset === 'terrace') {
-      // 1. Six Columns / Concrete Piers (4 corners + 2 center supports)
-      const midY = Y_mm + Math.round(L_mm / 2)
-
-      const colLocs: [number, number][] = [
-        [X_mm, Y_mm],
-        [X_mm + W_mm, Y_mm],
-        [X_mm, midY],
-        [X_mm + W_mm, midY],
-        [X_mm, Y_mm + L_mm],
-        [X_mm + W_mm, Y_mm + L_mm],
-      ]
-
-      colLocs.forEach(([cx, cy]) => {
-        const cId = executeAndTrack('CreateColumn', {
-          mark: 'C1',
-          location_mm: [cx, cy, 0],
-          section_mm: [200, 200],
-          phase: 'new_construction',
-        })
-        if (cId) {
-          executeAndTrack('CreateFoundation', {
-            mark: 'F1',
-            center_mm: [cx, cy, 0],
-            size_mm: [600, 600, 250],
-            column_id: cId,
-            phase: 'new_construction',
-          })
-        }
-      })
-
-      // 2. Support Joists & Beams
-      executeAndTrack('CreateBeam', { mark: 'B1', start_point_mm: [X_mm, Y_mm, 500], end_point_mm: [X_mm + W_mm, Y_mm, 500], section_mm: [150, 300], phase: 'new_construction' })
-      executeAndTrack('CreateBeam', { mark: 'B1', start_point_mm: [X_mm, midY, 500], end_point_mm: [X_mm + W_mm, midY, 500], section_mm: [150, 300], phase: 'new_construction' })
-      executeAndTrack('CreateBeam', { mark: 'B1', start_point_mm: [X_mm, Y_mm + L_mm, 500], end_point_mm: [X_mm + W_mm, Y_mm + L_mm, 500], section_mm: [150, 300], phase: 'new_construction' })
-      executeAndTrack('CreateBeam', { mark: 'B2', start_point_mm: [X_mm, Y_mm, 500], end_point_mm: [X_mm, Y_mm + L_mm, 500], section_mm: [150, 300], phase: 'new_construction' })
-      executeAndTrack('CreateBeam', { mark: 'B2', start_point_mm: [X_mm + W_mm, Y_mm, 500], end_point_mm: [X_mm + W_mm, Y_mm + L_mm, 500], section_mm: [150, 300], phase: 'new_construction' })
-    }
-
-    onApplyPreset(currentProject, envelopes)
+    setGenerationError(null)
+    onApplyPreset(response.updatedProject, response.emittedEnvelopes)
     onClose()
   }
 
@@ -375,7 +195,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
               {activePreset === 'carport' && <Check size={16} color="#38bdf8" />}
             </div>
             <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>
-              โครงเหล็ก H-Beam / SOG วางบนดิน / ฐานราก / หลังคาเมทัลชีท PU
+              โครงเสาเหล็ก / ฐานราก / คานรอบและคานกลาง
             </div>
             <div style={{ fontSize: 10, color: '#38bdf8', marginTop: 'auto' }}>
               ค่าเริ่มต้น: 5.00 × 5.50 ม.
@@ -435,7 +255,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
               {activePreset === 'terrace' && <Check size={16} color="#22c55e" />}
             </div>
             <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>
-              ตอม่อ คสล. / ตงเหล็กกัลวาไนซ์ / ไม้พื้น WPC ซ่อนคลิปสเต็ป
+              เสา คสล. / ฐานราก / คานเหล็กรองรับระเบียง
             </div>
             <div style={{ fontSize: 10, color: '#22c55e', marginTop: 'auto' }}>
               ค่าเริ่มต้น: 3.00 × 4.00 ม.
@@ -566,22 +386,11 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                       onChange={(e) => setCarportColumnType(e.target.value)}
                       style={{ background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', borderRadius: 4, padding: '4px 8px', fontSize: 12 }}
                     >
-                      <option value="SC1">เหล็ก H-Beam SC1 (150×150 มม.)</option>
+                      <option value="SC1">เสาเหล็ก SC1 (150×150 มม.)</option>
                       <option value="C1">คอนกรีต คสล. C1 (200×200 มม.)</option>
                     </select>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: 11, color: '#94a3b8' }}>วัสดุมุงหลังคา:</label>
-                    <select
-                      value={carportRoofType}
-                      onChange={(e) => setCarportRoofType(e.target.value as any)}
-                      style={{ background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', borderRadius: 4, padding: '4px 8px', fontSize: 12 }}
-                    >
-                      <option value="metalsheet_pu">เมทัลชีทบุฉนวน PU หนา 1 นิ้ว (กันร้อน)</option>
-                      <option value="vinyl">แผ่นไวนิลท้องเรียบ (ลดเสียงดัง)</option>
-                      <option value="shinkolite">อะคริลิก Shinkolite โปร่งแสง</option>
-                    </select>
-                  </div>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>สร้างเสา ฐานราก และคาน; ยังไม่รวมพื้นและหลังคา</div>
                 </>
               )}
 
@@ -651,14 +460,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                       <span style={{ fontSize: 11, color: '#94a3b8' }}>m</span>
                     </div>
                   </div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#cbd5e1', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={terraceIncludeSteps}
-                      onChange={(e) => setTerraceIncludeSteps(e.target.checked)}
-                    />
-                    สร้างสเต็ปบันไดทางขึ้น 1-2 ขั้น
-                  </label>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>สร้างโครงรองรับ; ยังไม่รวมแผ่นพื้น WPC และบันได</div>
                 </>
               )}
             </div>
@@ -776,17 +578,19 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                 <span>รายการชิ้นส่วนที่จะถูกสร้างอัตโนมัติ:</span>
               </div>
               {activePreset === 'carport' && (
-                <div>• เสา 4 ต้น ({carportColumnType}) • ฐานราก 4 ฐาน (F1) • คาน 4-5 ช่วง (B1/B2) • พื้น Slab on Ground • เฟสงาน: ส่วนสร้างใหม่</div>
+                <div>• เสา 4 ต้น ({carportColumnType}) • ฐานราก 4 ฐาน (F1) • คาน 4-5 ช่วง (B1/B2) • เฟสงาน: ส่วนสร้างใหม่</div>
               )}
               {activePreset === 'kitchen' && (
-                <div>• เสา 4 ต้น (C1) • ฐานรากเข็ม 4 ฐาน (F1) • คาน 4 ช่วง (B1) • ผนังมวลเบา {kitchenWallSides} ด้าน (W1) {kitchenIncludeDoor ? '• ประตู D1' : ''} {kitchenIncludeWindow ? '• หน้าต่าง W1' : ''}</div>
+                <div>• เสา 4 ต้น (C1) • ฐานรากแผ่ 4 ฐาน (F1) • คาน 4 ช่วง (B1) • ผนังมวลเบา {kitchenWallSides} ด้าน (W1) {kitchenIncludeDoor ? '• ประตู D1' : ''} {kitchenIncludeWindow ? '• หน้าต่าง W1' : ''}</div>
               )}
               {activePreset === 'terrace' && (
-                <div>• ตอม่อ คสล. 6 ต้น (C1) • ฐานราก 6 ฐาน (F1) • คานตงเหล็กกัลวาไนซ์ 5 ช่วง • แผ่นพื้นระเบียงไม้เทียม WPC</div>
+                <div>• เสา คสล. 6 ต้น (C1) • ฐานราก 6 ฐาน (F1) • คานเหล็ก 5 ช่วง</div>
               )}
             </div>
           </div>
         </div>
+
+        {generationError && <div role="alert" style={{ padding: '10px 20px', color: '#fca5a5' }}>{generationError}</div>}
 
         {/* Footer Actions */}
         <div

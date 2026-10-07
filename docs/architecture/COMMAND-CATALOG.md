@@ -315,7 +315,7 @@ Inputs include cabinet/module, split axis and either explicit dimensions or equa
 
 ## Transaction and Undo
 
-Every mutation command that changes SketchUp model state must execute within a SketchUp-compatible transaction/operation. A rejected command must not leave partial geometry or partial metadata.
+Every canonical mutation command executes within the standalone runtime's transaction/history boundary. Rejected commands leave no partial semantic mutation, and supported atomic batches produce one Undo/Redo step. Derived representations rebuild from committed state. SketchUp adapter mutations additionally use native operation boundaries; adapter retries/failures do not redefine the canonical transaction contract.
 
 Undo should restore semantic metadata and geometry together.
 

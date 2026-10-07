@@ -1,6 +1,6 @@
 // Project, Level, and Phase Mutation Command Payloads
 
-import { Phase, Level } from '@constructflow/project-model'
+import { Phase, RemovalPhase, Level } from '@constructflow/project-model'
 
 export interface CreateProjectInput {
   id: string
@@ -29,4 +29,10 @@ export interface SetWorkingPhaseInput {
 
 export interface SetWorkingLevelInput {
   level_id: string
+}
+
+export interface UpdateObjectPhaseInput {
+  object_id: string
+  created_phase?: Phase
+  removed_phase?: RemovalPhase | null
 }

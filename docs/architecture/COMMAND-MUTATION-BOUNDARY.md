@@ -54,6 +54,27 @@ directly calling `entity.set_attribute` or geometry modification outside a comma
 
 ## 3. Human and AI Parity
 
+### Standalone TypeScript execution (ADR-0006)
+
+`@constructflow/command-runtime` is the shared headless command surface for the Plan Editor
+and future standalone AI/sync consumers. Existing command names/payloads remain compatible.
+Structure, Architecture/Openings and Catalog handlers live in their domain packages;
+React components present results and orchestrate calls only.
+
+`CommandBus.executeBatch(project, commands, actorKind)` evaluates isolated document drafts.
+On any rejection or exception, it returns the original document with no committed envelopes.
+Earlier per-command results are provisional diagnostics, not committed mutations. On success,
+envelopes carry a shared UUID `transaction_id`. Native adapter side effects must happen only
+after success and require their own transaction/acceptance proof.
+
+`ProjectCommandSession` records one snapshot per non-empty successful batch. Undo and redo
+restore the exact document, UUIDs and relationships. Failed commands preserve history and a
+new successful edit clears redo. Returned snapshots cannot mutate session state. This is an
+engine API; editor-wide history controls and external adapter replay remain follow-up work.
+
+The project schema remains v1. See `../STANDALONE-ENGINE-REVIEW-2026-10.md` for acceptance
+IDs AC-STAND-001 through AC-STAND-006 and explicit limits of this foundation slice.
+
 Human operators and AI actors execute the exact same semantic commands:
 
 | Domain | Semantic Command | Human Tool | AI Tool |

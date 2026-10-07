@@ -4,7 +4,7 @@ Status: Accepted foundation contract.
 
 ## Goal
 
-ConstructFlow manipulates long-lived design and construction data inside SketchUp. Tests must protect semantic data, geometry behavior, module boundaries, migrations and outputs — not only UI rendering.
+ConstructFlow owns long-lived `.cfproj` design and construction data in its standalone runtime/workbench. Tests protect semantic data, geometry behavior, module boundaries, migrations and outputs. External application tests are scoped to optional adapters.
 
 ## Test pyramid
 
@@ -40,7 +40,7 @@ Verify every module against shared contracts:
 
 ### 3. SketchUp integration tests
 
-Run inside or against a supported SketchUp test harness where feasible:
+This separate adapter suite runs inside or against a supported SketchUp test harness where feasible. It is required for SketchUp capability claims and does not block standalone engine releases:
 
 - extension loads without errors;
 - operations create intended Group/Component/Face/Edge structures;
@@ -53,7 +53,7 @@ Run inside or against a supported SketchUp test harness where feasible:
 
 ### 4. Golden project regression tests
 
-Maintain small `.skp` fixtures representing real workflows. Each fixture has expected semantic object counts, relationships, phases, levels and key quantities.
+Maintain small versioned `.cfproj` fixtures representing standalone workflows. Each fixture has expected semantic object counts, relationships, phases, levels and key quantities. Node/domain checks and web file/editing acceptance use these canonical documents. Native `.skp` fixtures are additional adapter fixtures and do not replace standalone evidence.
 
 Initial fixtures should include:
 
@@ -151,7 +151,7 @@ Parametric geometry generators must include edge cases:
 
 Track representative metrics:
 
-- extension boot time;
+- standalone runtime/workbench boot time (and adapter boot time in its own suite);
 - smart-object load/index time by object count;
 - event/dirty propagation time;
 - paving generation time by piece count;
@@ -167,14 +167,17 @@ A module's pure tests should not require unrelated domain modules. Cross-domain 
 
 ## Manual acceptance tests
 
-SketchUp interaction requires some manual validation. Maintain concise scripts for:
+Standalone browser/workbench interaction requires evidence at the actual UI/file boundaries. Maintain concise scripts for:
 
 - tool inference/snap feel;
 - direct manipulation handles;
 - sidebar/property behavior;
 - phase visibility;
 - library drag/place/swap;
-- LayOut/document export.
+- local `.cfproj` Open/edit/Save/reopen, including supported picker/download fallback behavior;
+- standalone 2D/3D consistency and vector sheet/PDF output.
+
+Optional SketchUp/LayOut adapters have separate scripts for native tools, entity persistence, operations, scenes and native document export.
 
 Manual steps should correspond to automated acceptance IDs where possible.
 

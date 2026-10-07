@@ -10,6 +10,17 @@ No production module should introduce behavior that contradicts an approved spec
 
 ## Reading order
 
+For the standalone-first amendment, read
+[`decisions/ADR-0006-standalone-first-engine.md`](decisions/ADR-0006-standalone-first-engine.md)
+and [`STANDALONE-ENGINE-REVIEW-2026-10.md`](STANDALONE-ENGINE-REVIEW-2026-10.md)
+alongside the master blueprint. The original Ruby implementation evidence remains adapter-specific.
+
+`ROADMAP.md` is the sole active product release sequence. Standalone reliability and outputs are verified without external CAD/BIM software; native application gates apply only to the optional adapter being delivered. `roadmap/PRODUCTION-ROADMAP.md` is an entrypoint to this same plan.
+
+Feature coverage against the standalone Master Specification is audited in
+[`FEATURE-PLAN-AUDIT-2026-10-07.md`](FEATURE-PLAN-AUDIT-2026-10-07.md).
+This report separates documented scope, implementation-ready contracts and missing planning work.
+
 1. `MASTER-BLUEPRINT.md` — product mission, complete domain scope and non-goals.
 2. `ROADMAP.md` — implementation sequence; it does not reduce the master scope.
 3. `OBJECT-REGISTRY.md` — canonical ownership of smart-object families.

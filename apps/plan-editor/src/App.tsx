@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import {
   ProjectDocument,
   createEmptyProjectDocument,
   serializeProject,
-  deserializeProject,
   Phase,
+  RemovalPhase,
   isGridObject,
   isColumnObject,
   isFoundationObject,
@@ -14,8 +14,8 @@ import {
   isWindowObject,
   DoorHanding,
 } from '@constructflow/project-model'
-import { CommandEnvelope } from '@constructflow/command-schema'
-import { CommandBus } from './commands/CommandBus.js'
+import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
+import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
 import { Toolbar, ToolType } from './components/Toolbar.js'
 import { PlanCanvas } from './components/PlanCanvas.js'
 import { PropertiesPanel } from './components/PropertiesPanel.js'
@@ -24,14 +24,76 @@ import { TypeManagerModal } from './components/TypeManagerModal.js'
 import { UnderlayCalibrationModal } from './components/UnderlayCalibrationModal.js'
 import { ExtensionPresetsModal } from './components/ExtensionPresetsModal.js'
 import { UnderlayConfig } from './rendering/planRenderer.js'
-import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles } from 'lucide-react'
+import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot } from 'lucide-react'
+import { calculateTakeoff } from '@constructflow/takeoff-engine'
+import { createKitchenProofProject } from '@constructflow/extension-engine'
+import { renderDrawingSetHtml } from '@constructflow/sheet-engine'
+import { readProjectFile, writeProjectFile, type LocalProjectFileHandle } from './projectFileIO.js'
+
+const headerActionStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  background: '#1e293b',
+  color: '#e2e8f0',
+  border: '1px solid #334155',
+  borderRadius: 4,
+  padding: '4px 7px',
+  fontSize: 11,
+  cursor: 'pointer',
+}
+
+const takeoffCostCenterLabels: Record<string, string> = {
+  demolition_site_prep: 'รื้อถอน/เตรียมพื้นที่',
+  new_construction: 'งานสร้างใหม่',
+  existing_to_remain: 'ของเดิมคงอยู่',
+  remodeling_joint_treatment: 'รอยต่อเดิม–ใหม่',
+}
+
+const Model3DViewport = lazy(() => import('./components/Model3DViewport.js').then(module => ({ default: module.Model3DViewport })))
+
+type ProjectSaveWindow = Window & {
+  showOpenFilePicker?: (options: {
+    multiple?: boolean
+    types: Array<{ description: string; accept: Record<string, string[]> }>
+  }) => Promise<LocalProjectFileHandle[]>
+  showSaveFilePicker?: (options: {
+    suggestedName: string
+    types: Array<{ description: string; accept: Record<string, string[]> }>
+  }) => Promise<LocalProjectFileHandle>
+}
 
 export const App: React.FC = () => {
-  const [project, setProject] = useState<ProjectDocument>(() =>
+  const [project, setProjectState] = useState<ProjectDocument>(() =>
     createEmptyProjectDocument('CF-PROJ-001', 'ConstructFlow Vertical Slice 01 & 02')
   )
+  const projectJson = useMemo(() => serializeProject(project), [project])
+  const [savedProjectJson, setSavedProjectJson] = useState<string | null>(null)
+  const [replacementBaselineJson, setReplacementBaselineJson] = useState<string | null>(null)
+  const [fileFeedback, setFileFeedback] = useState('')
+  const supportsProjectFileOpen = typeof (window as ProjectSaveWindow).showOpenFilePicker === 'function'
+  const hasUnsavedChanges = savedProjectJson !== projectJson
+  const projectSessionRef = useRef<ProjectCommandSession | null>(null)
+  const projectFileHandleRef = useRef<LocalProjectFileHandle | null>(null)
+  if (!projectSessionRef.current) projectSessionRef.current = new ProjectCommandSession(project)
+  const setProject = (next: ProjectDocument | ((current: ProjectDocument) => ProjectDocument)) => {
+    const updated = typeof next === 'function' ? next(project) : next
+    projectSessionRef.current!.commit(updated)
+    setProjectState(updated)
+  }
+  const dispatchCommandBatch = (commands: CommandRequest[]) => {
+    const result = projectSessionRef.current!.execute(commands)
+    if (result.status === 'success') {
+      setProjectState(result.updatedProject)
+      if (result.emittedEnvelopes.length > 0) {
+        setCommandQueue((queue) => [...queue, ...result.emittedEnvelopes])
+      }
+    }
+    return result
+  }
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
+  const [viewMode, setViewMode] = useState<'plan' | 'model3d'>('plan')
   const [activeColumnType, setActiveColumnType] = useState<string>('C1')
   const [activeFoundationType, setActiveFoundationType] = useState<string>('F1')
   const [activeBeamType, setActiveBeamType] = useState<string>('B1')
@@ -56,6 +118,16 @@ export const App: React.FC = () => {
   const [calibrationModalOpen, setCalibrationModalOpen] = useState<boolean>(false)
   const [measuredCalibrationDist_mm, setMeasuredCalibrationDist_mm] = useState<number>(4000)
   const [isPresetsModalOpen, setIsPresetsModalOpen] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeLeaving)
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
+  }, [hasUnsavedChanges])
 
   // Setup initial template model: Grids A, B, C & 1, 2, 3 + 9 Columns (C1) + 9 Footings (F1) + Beams (B1/B2) + Initial Walls/Door/Window
   useEffect(() => {
@@ -225,7 +297,9 @@ export const App: React.FC = () => {
       }
     }
 
-    setProject(current)
+    projectSessionRef.current!.reset(current)
+    setProjectState(current)
+    setReplacementBaselineJson(serializeProject(current))
     setCommandQueue(queue)
   }, [])
 
@@ -233,7 +307,29 @@ export const App: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
-      if (e.key === 'Escape') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        handleExportProject()
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        const session = projectSessionRef.current!
+        if (e.shiftKey) {
+          if (session.canRedo) {
+            setProjectState(session.redo())
+            setCommandQueue([])
+          }
+        } else if (session.canUndo) {
+          setProjectState(session.undo())
+          setCommandQueue([])
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        const session = projectSessionRef.current!
+        if (session.canRedo) {
+          setProjectState(session.redo())
+          setCommandQueue([])
+        }
+      } else if (e.key === 'Escape') {
         setActiveTool('select')
         setSelectedId(null)
       } else if (e.key === 's' || e.key === 'S') {
@@ -272,6 +368,33 @@ export const App: React.FC = () => {
     }
   }
 
+  const handleUpdateObjectRemovalPhase = (objectId: string, removedPhase: RemovalPhase | null) => {
+    const res = CommandBus.execute(project, 'UpdateObjectPhase', {
+      object_id: objectId,
+      removed_phase: removedPhase,
+    })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
+  const handleSetWorkingPhase = (phase: Phase) => {
+    const res = CommandBus.execute(project, 'SetWorkingPhase', { phase })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
+  const handleSetWorkingLevel = (levelId: string) => {
+    const res = CommandBus.execute(project, 'SetWorkingLevel', { level_id: levelId })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
   // Upload Underlay Image file
   const handleUploadUnderlayImage = (file: File) => {
     const url = URL.createObjectURL(file)
@@ -299,18 +422,10 @@ export const App: React.FC = () => {
 
   // Update floor-to-floor storey height
   const handleUpdateStoryHeight = (height_mm: number) => {
-    setProject((p) => {
-      const nextLevels = p.levels.map((lvl) => {
-        if (lvl.id === 'GF') {
-          return { ...lvl, height_mm }
-        }
-        if (lvl.id === 'L2') {
-          return { ...lvl, elevation_mm: height_mm }
-        }
-        return lvl
-      })
-      return { ...p, levels: nextLevels }
-    })
+    dispatchCommandBatch([
+      { name: 'UpdateLevel', input: { id: 'GF', height_mm } },
+      { name: 'UpdateLevel', input: { id: 'L2', elevation_mm: height_mm } },
+    ])
   }
 
   // Commit Column creation with active type
@@ -455,9 +570,17 @@ export const App: React.FC = () => {
 
   // Assign instance type
   const handleAssignType = (objectId: string, typeName: string) => {
+    const object = project.objects[objectId]
+    if (!object) return
+    const type = project.types.find((candidate) =>
+      candidate.object_type === object.object_type &&
+      (candidate.id.toLowerCase() === typeName.toLowerCase() || candidate.name.toLowerCase() === typeName.toLowerCase())
+    )
+    if (!type) return
     const res = CommandBus.execute(project, 'AssignInstanceType', {
       object_id: objectId,
-      type_name: typeName,
+      type_id: type.id,
+      type_name: type.name,
     })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
@@ -486,7 +609,6 @@ export const App: React.FC = () => {
   ) => {
     const res = CommandBus.execute(project, 'UpdateStructuralTypeDimensions', {
       type_id_or_name: typeName,
-      type_name: typeName,
       object_type: objectType,
       section_mm: dimensions.section_mm,
       size_mm: dimensions.size_mm,
@@ -532,6 +654,25 @@ export const App: React.FC = () => {
     }
   }
 
+  const handleRenameType = (typeId: string, name: string): boolean => {
+    const type = project.types.find((candidate) => candidate.id === typeId)
+    if (!type) return false
+    const res = CommandBus.execute(project, 'RenameCatalogType', { type_id: typeId, name })
+    if (res.result.status !== 'success') return false
+    setProject(res.updatedProject)
+    const updateActiveType = (activeType: string, setActiveType: (value: string) => void) => {
+      if (activeType.trim().toLowerCase() === type.name.trim().toLowerCase()) setActiveType(name)
+    }
+    if (type.object_type === 'structure.column') updateActiveType(activeColumnType, setActiveColumnType)
+    else if (type.object_type === 'structure.foundation') updateActiveType(activeFoundationType, setActiveFoundationType)
+    else if (type.object_type === 'structure.beam') updateActiveType(activeBeamType, setActiveBeamType)
+    else if (type.object_type === 'architecture.wall') updateActiveType(activeWallType, setActiveWallType)
+    else if (type.object_type === 'door_window.door') updateActiveType(activeDoorType, setActiveDoorType)
+    else if (type.object_type === 'door_window.window') updateActiveType(activeWindowType, setActiveWindowType)
+    if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    return true
+  }
+
   // Commit Grid creation
   const handleCommitGrid = (orientation: 'vertical' | 'horizontal', position_mm: number) => {
     const existing = Object.values(project.objects).filter(
@@ -561,15 +702,54 @@ export const App: React.FC = () => {
   }
 
   // Move Column handler (UUID stays identical!)
-  const handleMoveColumn = (objectId: string, newLocation_mm: [number, number]) => {
+  const handleMoveColumn = (objectId: string, newLocation_mm: [number, number]): boolean => {
     const res = CommandBus.execute(project, 'MoveColumn', {
       object_id: objectId,
-      location_mm: [newLocation_mm[0], newLocation_mm[1], 0],
+      location_mm: newLocation_mm,
     })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
       if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+      return true
     }
+    return false
+  }
+
+  const handleMoveWall = (objectId: string, delta_mm: [number, number]): boolean => {
+    const res = CommandBus.execute(project, 'MoveWall', { object_id: objectId, delta_mm })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+      return true
+    }
+    return false
+  }
+
+  const handleMoveFoundation = (objectId: string, center_mm: [number, number]): boolean => {
+    const foundation = project.objects[objectId]
+    if (!foundation || foundation.object_type !== 'structure.foundation') return false
+    const data = foundation.module_data as Record<string, unknown>
+    const supportedColumnId = typeof data.supported_column_id === 'string'
+      ? data.supported_column_id
+      : foundation.host_refs.find(hostId => project.objects[hostId]?.object_type === 'structure.column')
+    const column = supportedColumnId ? project.objects[supportedColumnId] : undefined
+    if (!column || column.object_type !== 'structure.column') return false
+    const columnData = column.module_data as Record<string, unknown>
+    const location = columnData.location_mm as number[]
+    const currentCenter = data.center_mm as number[]
+    const deltaX = center_mm[0] - currentCenter[0]
+    const deltaY = center_mm[1] - currentCenter[1]
+    return handleMoveColumn(column.id, [location[0] + deltaX, location[1] + deltaY])
+  }
+
+  const handleMoveOpening = (objectId: string, offset_along_wall_mm: number): boolean => {
+    const res = CommandBus.execute(project, 'MoveOpening', { object_id: objectId, offset_along_wall_mm })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+      return true
+    }
+    return false
   }
 
   // Rename Column Mark handler
@@ -618,16 +798,140 @@ export const App: React.FC = () => {
     }
   }
 
+  const confirmReplaceUnsavedProject = () => {
+    const hasProjectEdits = replacementBaselineJson !== null && projectJson !== replacementBaselineJson
+    return !hasProjectEdits || window.confirm('มีการแก้ไขโครงการที่ยังไม่ได้บันทึก ต้องการทิ้งการแก้ไขและแทนที่โครงการปัจจุบันหรือไม่?')
+  }
+
   // Export .cfproj file
-  const handleExportProject = () => {
-    const json = serializeProject(project)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
+  const handleDownloadProjectCopy = () => {
+    const json = projectJson
+    const filename = `${project.project.id || 'project'}.cfproj`
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
     const a = document.createElement('a')
     a.href = url
-    a.download = `${project.project.id || 'project'}.cfproj`
+    a.download = filename
+    a.style.display = 'none'
+    document.body.appendChild(a)
     a.click()
+    a.remove()
+    setFileFeedback(`ส่งคำขอดาวน์โหลด ${filename} แล้ว`)
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+
+  const handleExportProject = async () => {
+    const json = projectJson
+    const filename = `${project.project.id || 'project'}.cfproj`
+    const fileWindow = window as ProjectSaveWindow
+    let handle = projectFileHandleRef.current
+    if (!handle && fileWindow.showSaveFilePicker) {
+      try {
+        handle = await fileWindow.showSaveFilePicker.call(window, {
+          suggestedName: filename,
+          types: [{ description: 'ConstructFlow Project', accept: { 'application/json': ['.cfproj'] } }],
+        })
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        window.alert(`บันทึกไฟล์โครงการไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+        return
+      }
+    }
+    if (handle) {
+      try {
+        await writeProjectFile(handle, json)
+        projectFileHandleRef.current = handle
+        setSavedProjectJson(json)
+        setReplacementBaselineJson(json)
+        setFileFeedback('บันทึกไฟล์โครงการแล้ว')
+      } catch (error) {
+        window.alert(`บันทึกไฟล์โครงการไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      return
+    }
+    handleDownloadProjectCopy()
+  }
+
+  const handleExportTakeoff = () => {
+    const escape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
+    const rows = [
+      ['Cost center', 'Phase', 'Mark', 'Object type', 'Material', 'Quantity', 'Unit', 'Formula', 'Source UUIDs'],
+      ...takeoff.lines.map((line) => [
+        line.cost_center, line.phase, line.mark, line.object_type, line.material ?? '',
+        line.quantity.toFixed(3), line.unit, line.formula, line.source_object_ids.join('; '),
+      ]),
+    ]
+    const csv = `\uFEFF${rows.map((row) => row.map(escape).join(',')).join('\r\n')}`
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${project.project.id || 'project'}-takeoff.csv`
+    anchor.click()
     URL.revokeObjectURL(url)
+  }
+
+  const handleExportDrawingSet = () => {
+    const html = renderDrawingSetHtml(project)
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
+    const preview = window.open(url, '_blank')
+    if (!preview) {
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${project.project.id || 'project'}-A02-S01-A08.html`
+      anchor.click()
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+
+  const handleOpenProject = async (file?: File, fileHandle: LocalProjectFileHandle | null = null) => {
+    if (!file) return
+    try {
+      const { project: loaded, serialized: loadedJson } = await readProjectFile(file)
+      if (!confirmReplaceUnsavedProject()) return
+      projectSessionRef.current!.reset(loaded)
+      projectFileHandleRef.current = fileHandle
+      setProjectState(loaded)
+      setSavedProjectJson(loadedJson)
+      setReplacementBaselineJson(loadedJson)
+      setFileFeedback(`เปิดไฟล์ ${file.name} แล้ว`)
+      setCommandQueue([])
+      setSelectedId(null)
+    } catch (error) {
+      window.alert(`เปิดไฟล์โครงการไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  const handleChooseProject = async () => {
+    const fileWindow = window as ProjectSaveWindow
+    if (!fileWindow.showOpenFilePicker) return
+    try {
+      const handles = await fileWindow.showOpenFilePicker.call(window, {
+        multiple: false,
+        types: [{ description: 'ConstructFlow Project', accept: { 'application/json': ['.cfproj'] } }],
+      })
+      const handle = handles[0]
+      if (handle) await handleOpenProject(await handle.getFile(), handle)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      window.alert(`เปิดไฟล์โครงการไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  const handleStartKitchenProof = () => {
+    if (!confirmReplaceUnsavedProject()) return
+    const generated = createKitchenProofProject()
+    if (generated.status !== 'success') {
+      window.alert(`สร้างโมเดลครัวพิสูจน์ไม่สำเร็จ: ${generated.errors?.join('; ') ?? 'unknown error'}`)
+      return
+    }
+    projectSessionRef.current!.reset(generated.updatedProject)
+    projectFileHandleRef.current = null
+    setProjectState(generated.updatedProject)
+    setSavedProjectJson(null)
+    setReplacementBaselineJson(serializeProject(generated.updatedProject))
+    setFileFeedback('สร้างโมเดลครัวพิสูจน์แล้ว')
+    setSelectedId(null)
+    setCommandQueue(generated.emittedEnvelopes)
+    setViewMode('plan')
   }
 
   // Counts & Schedule breakdown
@@ -638,6 +942,7 @@ export const App: React.FC = () => {
   const doorCount = Object.values(project.objects).filter((o) => o.object_type === 'door_window.door').length
   const windowCount = Object.values(project.objects).filter((o) => o.object_type === 'door_window.window').length
   const gridCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.grid').length
+  const takeoff = calculateTakeoff(project)
 
   const columnTypeCounts = Object.values(project.objects)
     .filter(isColumnObject)
@@ -741,12 +1046,7 @@ export const App: React.FC = () => {
             <Layers size={14} />
             <select
               value={project.project.active_level_id}
-              onChange={(e) =>
-                setProject((p) => ({
-                  ...p,
-                  project: { ...p.project, active_level_id: e.target.value },
-                }))
-              }
+              onChange={(e) => handleSetWorkingLevel(e.target.value)}
               style={{
                 background: '#1e293b',
                 color: '#f8fafc',
@@ -797,12 +1097,7 @@ export const App: React.FC = () => {
             <History size={14} />
             <select
               value={project.project.active_phase}
-              onChange={(e) =>
-                setProject((p) => ({
-                  ...p,
-                  project: { ...p.project, active_phase: e.target.value as Phase },
-                }))
-              }
+              onChange={(e) => handleSetWorkingPhase(e.target.value as Phase)}
               style={{
                 background: '#1e293b',
                 color: '#f8fafc',
@@ -819,6 +1114,92 @@ export const App: React.FC = () => {
               ))}
             </select>
           </div>
+
+          {/* Local project file workflow and model history */}
+          <input
+            id="cfproj-open"
+            type="file"
+            accept=".cfproj,application/json"
+            aria-hidden="true"
+            tabIndex={-1}
+            style={{
+              position: 'absolute',
+              width: 1,
+              height: 1,
+              padding: 0,
+              margin: -1,
+              overflow: 'hidden',
+              clip: 'rect(0, 0, 0, 0)',
+              whiteSpace: 'nowrap',
+              border: 0,
+            }}
+            onChange={(e) => {
+              void handleOpenProject(e.currentTarget.files?.[0] ?? undefined, null)
+              e.currentTarget.value = ''
+            }}
+          />
+          {supportsProjectFileOpen ? (
+            <button
+              type="button"
+              onClick={() => void handleChooseProject()}
+              title="เปิดไฟล์โครงการ .cfproj"
+              style={headerActionStyle}
+            >
+              <FolderOpen size={14} /> เปิด
+            </button>
+          ) : (
+            <label
+              htmlFor="cfproj-open"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  document.getElementById('cfproj-open')?.click()
+                }
+              }}
+              title="เปิดไฟล์โครงการ .cfproj"
+              style={headerActionStyle}
+            >
+              <FolderOpen size={14} /> เปิด
+            </label>
+          )}
+          <button type="button" onClick={handleExportProject} title="บันทึกไฟล์โครงการ .cfproj" style={headerActionStyle}>
+            <Save size={14} /> บันทึก
+          </button>
+          <button type="button" onClick={handleDownloadProjectCopy} aria-label="ดาวน์โหลดสำเนาไฟล์โครงการ .cfproj" title="ดาวน์โหลดสำเนาไฟล์โครงการ .cfproj" style={{ ...headerActionStyle, padding: '4px 6px' }}>
+            <Download size={14} />
+          </button>
+          <span role="status" aria-live="polite" style={{ color: hasUnsavedChanges ? '#fbbf24' : '#86efac', fontSize: 11, whiteSpace: 'nowrap' }}>
+            {hasUnsavedChanges ? 'ยังไม่ได้บันทึก' : 'บันทึกแล้ว'}{fileFeedback ? ` · ${fileFeedback}` : ''}
+          </span>
+          <button type="button" onClick={handleStartKitchenProof} title="เริ่มโมเดลพิสูจน์ครัวต่อเติม 4.00 × 2.50 เมตร" style={{ ...headerActionStyle, color: '#67e8f9' }}>
+            <CookingPot size={14} /> ครัวพิสูจน์
+          </button>
+          <button
+            type="button"
+            disabled={!projectSessionRef.current!.canUndo}
+            onClick={() => {
+              setProjectState(projectSessionRef.current!.undo())
+              setCommandQueue([])
+            }}
+            title="Undo (Ctrl+Z)"
+            style={{ ...headerActionStyle, opacity: projectSessionRef.current!.canUndo ? 1 : 0.45 }}
+          >
+            <Undo2 size={14} />
+          </button>
+          <button
+            type="button"
+            disabled={!projectSessionRef.current!.canRedo}
+            onClick={() => {
+              setProjectState(projectSessionRef.current!.redo())
+              setCommandQueue([])
+            }}
+            title="Redo (Ctrl+Y)"
+            style={{ ...headerActionStyle, opacity: projectSessionRef.current!.canRedo ? 1 : 0.45 }}
+          >
+            <Redo2 size={14} />
+          </button>
 
           {/* Quick Extension Presets Modal Launcher */}
           <button
@@ -1081,8 +1462,16 @@ export const App: React.FC = () => {
 
         {/* Center Canvas Area */}
         <main style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-          {/* Floating Tool Bar */}
-          <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}>
+          <div style={{ position: 'absolute', top: 12, right: 14, zIndex: 12, display: 'flex', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden', background: '#0f172a' }}>
+            {(['plan', 'model3d'] as const).map(mode => (
+              <button key={mode} type="button" onClick={() => setViewMode(mode)} style={{ border: 0, padding: '7px 11px', color: viewMode === mode ? '#f8fafc' : '#94a3b8', background: viewMode === mode ? '#0369a1' : 'transparent', cursor: 'pointer', fontSize: 11 }}>
+                {mode === 'plan' ? '2D แปลน' : '3D โมเดล'}
+              </button>
+            ))}
+          </div>
+
+          {/* Plan tools are specific to the plan projection. */}
+          {viewMode === 'plan' && <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}>
             <Toolbar
               activeTool={activeTool}
               onSelectTool={setActiveTool}
@@ -1125,11 +1514,11 @@ export const App: React.FC = () => {
               onClearUnderlay={() => setUnderlay((u) => ({ ...u, image: null }))}
               onOpenTypeManager={() => setIsTypeManagerOpen(true)}
             />
-          </div>
+          </div>}
 
           {/* Interactive Plan Canvas */}
           <div style={{ flex: 1, position: 'relative' }}>
-            <PlanCanvas
+            {viewMode === 'plan' ? <PlanCanvas
               project={project}
               activeTool={activeTool}
               activeColumnTypeMark={activeColumnType}
@@ -1149,6 +1538,8 @@ export const App: React.FC = () => {
               onCommitWindow={handleCommitWindow}
               onCommitGrid={handleCommitGrid}
               onMoveColumn={handleMoveColumn}
+              onMoveWall={handleMoveWall}
+              onMoveOpening={handleMoveOpening}
               onFlipDoorHanding={handleFlipDoorHanding}
               onStartCalibrationModal={(dist) => {
                 setMeasuredCalibrationDist_mm(dist)
@@ -1158,7 +1549,9 @@ export const App: React.FC = () => {
                 setCursorCoords_mm(coords)
                 setSnapKind(kind)
               }}
-            />
+            /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
+              <Model3DViewport project={project} selectedId={selectedId} onSelectObject={setSelectedId} onMoveColumn={handleMoveColumn} onMoveWall={handleMoveWall} onMoveFoundation={handleMoveFoundation} onMoveOpening={handleMoveOpening} />
+            </Suspense>}
           </div>
 
           {/* Bottom Coordinate Bar */}
@@ -1189,7 +1582,7 @@ export const App: React.FC = () => {
             </div>
             <div>
               <span>
-                W: Wall • D: Door (Space: Flip) • N: Window • C: Column • F: Footing • B: Beam • R: Calibrate • Scroll: Zoom • MMB: Pan
+                W: Wall • Shift+drag: select wall under beam • D: Door (Space: Flip) • N: Window • C: Column • F: Footing • B: Beam • R: Calibrate • Scroll: Zoom • MMB: Pan
               </span>
             </div>
           </footer>
@@ -1216,11 +1609,41 @@ export const App: React.FC = () => {
             onUpdateFoundationMark={handleUpdateFoundationMark}
             onUpdateGridTag={handleUpdateGridTag}
             onUpdatePhase={handleUpdateObjectPhase}
+            onUpdateRemovalPhase={handleUpdateObjectRemovalPhase}
             onFlipDoorHanding={handleFlipDoorHanding}
             onOpenTypeManager={() => setIsTypeManagerOpen(true)}
             onAddFoundation={(colId) => handleCommitFoundation({ columnId: colId })}
             onDeleteObject={handleDeleteObject}
           />
+
+          <section style={{ border: '1px solid #334155', borderRadius: 8, padding: 10, background: '#111c31' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <strong style={{ color: '#e2e8f0', fontSize: 12 }}>ปริมาณจากโมเดล (BOQ)</strong>
+              <div style={{ display: 'flex', gap: 5 }}>
+                <button type="button" onClick={handleExportDrawingSet} title="สร้างแบบ A-02, S-01 และ A-08 จากโมเดลปัจจุบัน" style={{ ...headerActionStyle, fontSize: 10 }}>A3 Sheets</button>
+                <button type="button" onClick={handleExportTakeoff} style={{ ...headerActionStyle, fontSize: 10 }}>CSV</button>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 190, overflowY: 'auto' }}>
+              {takeoff.lines.length === 0 ? (
+                <span style={{ color: '#64748b', fontSize: 11 }}>ยังไม่มีรายการถอดปริมาณ</span>
+              ) : takeoff.lines.slice(0, 12).map((line) => (
+                <div key={line.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, color: '#94a3b8' }}>
+                  <span title={`${line.cost_center} · ${line.formula}`}>
+                    <b style={{ color: line.cost_center === 'remodeling_joint_treatment' ? '#f0abfc' : '#94a3b8' }}>
+                      {takeoffCostCenterLabels[line.cost_center] ?? line.cost_center}
+                    </b>{' '}{line.mark} · {line.phase}
+                  </span>
+                  <b style={{ color: '#cbd5e1', whiteSpace: 'nowrap' }}>{line.quantity.toFixed(3)} {line.unit}</b>
+                </div>
+              ))}
+            </div>
+            {takeoff.warnings.length > 0 && (
+              <div title={takeoff.warnings.join('\n')} style={{ color: '#fbbf24', fontSize: 10, marginTop: 7 }}>
+                ต้องตรวจสอบ {takeoff.warnings.length} รายการ
+              </div>
+            )}
+          </section>
 
           <SyncBridgePanel
             project={project}
@@ -1238,6 +1661,7 @@ export const App: React.FC = () => {
         project={project}
         onUpdateTypeDimensions={handleUpdateTypeDimensions}
         onDefineType={handleDefineType}
+        onRenameType={handleRenameType}
       />
 
       {/* Underlay Point-to-Point Scale Calibration Modal */}

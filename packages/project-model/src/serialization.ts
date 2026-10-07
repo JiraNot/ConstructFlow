@@ -1,33 +1,26 @@
-// ConstructFlow Project Document Serialization & Validation
-
-import { ProjectDocument } from './project.js'
+import type { ProjectDocument } from './project.js'
+import { migrateProjectV1ToV2, validateProjectV2, type ProjectDocumentV1 } from './migrations.js'
 
 export function serializeProject(doc: ProjectDocument): string {
+  validateProjectV2(doc)
   return JSON.stringify(doc, null, 2)
 }
 
+/** Load current files and migrate supported v1 files without losing unknown sibling data. */
 export function deserializeProject(jsonText: string): ProjectDocument {
-  const parsed = JSON.parse(jsonText)
-
-  if (typeof parsed !== 'object' || parsed === null) {
-    throw new Error('Invalid project format: payload is not an object')
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(jsonText)
+  } catch (error: unknown) {
+    throw new Error(`Invalid project JSON: ${error instanceof Error ? error.message : String(error)}`)
   }
-
-  if (parsed.schema_version !== 1) {
-    throw new Error(`Unsupported schema_version: ${parsed.schema_version}`)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid project format: payload is not an object')
+  const candidate = parsed as { schema_version?: unknown }
+  if (candidate.schema_version === 1) return migrateProjectV1ToV2(parsed as ProjectDocumentV1)
+  if (candidate.schema_version === 2) {
+    const project = parsed as ProjectDocument
+    validateProjectV2(project)
+    return project
   }
-
-  if (!parsed.project || typeof parsed.project.id !== 'string') {
-    throw new Error('Invalid project format: missing project metadata')
-  }
-
-  if (!Array.isArray(parsed.levels)) {
-    throw new Error('Invalid project format: levels array required')
-  }
-
-  if (typeof parsed.objects !== 'object' || parsed.objects === null) {
-    throw new Error('Invalid project format: objects map required')
-  }
-
-  return parsed as ProjectDocument
+  throw new Error(`Unsupported schema_version: ${String(candidate.schema_version)}`)
 }

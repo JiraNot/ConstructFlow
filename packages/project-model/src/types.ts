@@ -1,6 +1,9 @@
 // ConstructFlow Canonical Semantic Types (Millimeter Units)
 
 export type Phase = 'existing' | 'demolition' | 'new_construction'
+/** Removal is a lifecycle event represented only in the demolition phase. */
+export type RemovalPhase = 'demolition'
+export type PileSystem = 'micro_pile_i18' | 'micro_pile_i22' | 'spun_micro_pile_20' | 'spun_micro_pile_25' | 'bored_pile'
 
 export type SmartObjectStatus = 'active' | 'warning' | 'invalid' | 'archived'
 
@@ -23,7 +26,7 @@ export interface Relationship {
   source_id: string // UUID
   target_id: string // UUID
   role?: string
-  meta?: Record<string, any>
+  meta?: Record<string, unknown>
 }
 
 // -------------------------------------------------------------
@@ -38,6 +41,8 @@ export interface GridModuleData {
 }
 
 export interface ColumnModuleData {
+  type_id?: string
+  instance_overrides?: Record<string, unknown>
   mark: string // Human-readable mark, e.g. "C01"
   location_mm: [number, number, number] // [x, y, z] in mm
   section_mm: [number, number] // [width, depth] in mm
@@ -54,8 +59,14 @@ export interface ColumnModuleData {
 }
 
 export interface FoundationModuleData {
+  type_id?: string
+  instance_overrides?: Record<string, unknown>
   mark: string // Human-readable mark, e.g. "F01"
   foundation_type: 'spread_footing' | 'pile_cap'
+  pile_type?: PileSystem
+  /** Pile head offsets from the pile-cap center, in millimeters; pile lengths remain independently specified. */
+  pile_offsets_mm?: [number, number][]
+  pile_length_mm?: number
   center_mm: [number, number, number] // [x, y, z] in mm
   size_mm: [number, number, number] // [width, length, thickness] in mm
   top_elevation_mm: number
@@ -65,6 +76,8 @@ export interface FoundationModuleData {
 }
 
 export interface BeamModuleData {
+  type_id?: string
+  instance_overrides?: Record<string, unknown>
   mark: string // Human-readable mark, e.g. "B1", "B2"
   start_point_mm: [number, number, number] // [x, y, z] in mm
   end_point_mm: [number, number, number] // [x, y, z] in mm
@@ -82,6 +95,8 @@ export interface BeamModuleData {
 // -------------------------------------------------------------
 
 export interface WallModuleData {
+  type_id?: string
+  instance_overrides?: Record<string, unknown>
   mark: string // Human-readable mark, e.g. "W1", "W2"
   start_point_mm: [number, number, number] // [x, y, z] in mm
   end_point_mm: [number, number, number] // [x, y, z] in mm
@@ -91,11 +106,24 @@ export interface WallModuleData {
   level_id: string
   wall_type_id?: string
   material: 'brick_masonry' | 'lightweight_block' | 'drywall' | 'reinforced_concrete' | string
+  interface_treatments?: WallInterfaceTreatment[]
+}
+
+export type WallInterfaceTreatmentKind = 'chemical_dowel_epoxy' | 'expansion_joint_sealant' | 'roof_flashing'
+
+/** Explicitly modeled work at an existing/new wall interface; quantity derives from target wall geometry. */
+export interface WallInterfaceTreatment {
+  id: string
+  kind: WallInterfaceTreatmentKind
+  target_object_ids: string[]
+  material?: string
 }
 
 export type DoorHanding = 'left_in' | 'left_out' | 'right_in' | 'right_out'
 
 export interface DoorModuleData {
+  type_id?: string
+  instance_overrides?: Record<string, unknown>
   mark: string // Human-readable mark, e.g. "D1", "D2"
   wall_id: string // Host wall UUID
   location_mm: [number, number, number] // Center point [x, y, z] along wall in mm
@@ -108,6 +136,8 @@ export interface DoorModuleData {
 }
 
 export interface WindowModuleData {
+  type_id?: string
+  instance_overrides?: Record<string, unknown>
   mark: string // Human-readable mark, e.g. "W1", "W2"
   wall_id: string // Host wall UUID
   location_mm: [number, number, number] // Center point [x, y, z] along wall in mm

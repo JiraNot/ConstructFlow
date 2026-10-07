@@ -1,0 +1,27 @@
+{
+  "source_file": "kitchen-extension-proof.cfproj",
+  "project_id": "CF-KITCHEN-PROOF-001",
+  "sheets": [
+    {
+      "id": "A-02",
+      "file": "A-02.svg",
+      "title": "PHASED FLOOR PLAN",
+      "scale": "1:100"
+    },
+    {
+      "id": "S-01",
+      "file": "S-01.svg",
+      "title": "FOUNDATION & COLUMN PLAN",
+      "scale": "1:100"
+    },
+    {
+      "id": "A-08",
+      "file": "A-08.svg",
+      "title": "DOOR & WINDOW SCHEDULE",
+      "scale": "1:50"
+    }
+  ],
+  "warnings": [
+    "F1: micro_pile_i18 pile length is not assigned; symbols are plan-only and require engineering input."
+  ]
+}

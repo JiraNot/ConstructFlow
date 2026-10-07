@@ -127,6 +127,27 @@ Extension itself does not duplicate domain quantities. It may provide summary ar
 
 ## Acceptance criteria
 
+### Standalone preset foundation (2026-10-07)
+
+`@constructflow/extension-engine` now compiles `ExtensionPresetInput` from `command-schema`
+into public domain commands, and commits through the shared runtime's atomic batch API.
+This is a partial standalone port, not completion of the broader ExtensionIntent contract.
+AC-STAND-006 covers the following:
+
+- All generated elements use UUIDs and `created_phase: new_construction`.
+- Foundations reference columns with `supported_column_id`; hosted openings have placement
+  coordinates and explicit wall references.
+- Carport framing and terrace beams use steel metadata; kitchen walls use AAC metadata.
+- Meter input is converted to canonical millimeters; terrace beam elevation follows input.
+- Invalid dimensions/opening fit reject before committing; any command failure rolls back
+  the full batch and emits no downstream envelopes.
+- The runtime history API can undo/redo an entire planned preset as one step.
+
+Presets currently generate framing/footings and kitchen walls/openings. Slabs, roofs,
+micropiles, flashing, WPC boards, stairs and generated-from provenance remain outstanding.
+AC-EXT-005/006 below are not claimed complete: provenance and data-driven templates are
+separate milestones. No project schema migration is introduced by this port.
+
 - AC-EXT-001: create Custom extension from arbitrary closed boundary attached to existing building.
 - AC-EXT-002: resize boundary and mark/regenerate dependent architecture/roof without manual recreation.
 - AC-EXT-003: concept object can be converted to construction while retaining identity/history.

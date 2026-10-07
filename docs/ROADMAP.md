@@ -1,10 +1,12 @@
 # ConstructFlow Development Roadmap
 
-This roadmap preserves the full ConstructFlow product scope while resequencing development around a new product priority:
+This is the active product roadmap under [ADR-0006](decisions/ADR-0006-standalone-first-engine.md). ConstructFlow owns the canonical `.cfproj` document, native computation, 2D/3D workbench, takeoff and sheet compilation. External CAD/BIM tools are optional downstream adapters.
 
 > **Plan-driven modeling first: draw and edit the semantic model in plan, see 3D update immediately, and keep schedules, quantities and documents attached to the same Smart Objects.**
 
 The detailed rationale and upgrade tracks are defined in [`PLAN-DRIVEN-MODELING-UPGRADE.md`](./PLAN-DRIVEN-MODELING-UPGRADE.md).
+
+Standalone engine delivery uses S0–S5 from [`STANDALONE-ENGINE-REVIEW-2026-10.md`](STANDALONE-ENGINE-REVIEW-2026-10.md): S0 schema/history supports R0/R3; S1 takeoff supports R9; S2 native 3D/assemblies supports R1/R2/R4/R6; S3 spatial/MEP/rule inputs supports R7/QA; S4 sheets supports R5/R9; S5 adapters/MCP supports interoperability/R10. These are cross-cutting engine milestones, not a second competing product roadmap.
 
 ## Roadmap policy
 
@@ -16,25 +18,26 @@ The roadmap now favors **depth of editing behavior over breadth of object invent
 
 ---
 
-## R0 — Native Reliability Gate
+## R0 — Standalone Project Reliability Gate
 
-**Goal:** prove the existing semantic/application architecture inside real SketchUp and LayOut before expanding modeling breadth.
+**Goal:** prove canonical project persistence, command transactions and derived output consistency in ConstructFlow without external CAD/BIM software.
 
 Deliverables:
 
-- `.skp` save / close / reopen with stable Smart Object identity
-- geometry + semantic metadata in a single reliable Undo/Redo operation
-- copy/duplicate identity behavior
-- New/Open model observer behavior
-- migration fixtures against real model attributes
-- representative interactive tools and handles in SketchUp
-- native scenes/styles/section state persistence
-- LayOut template/viewport/PDF verification
-- stale/current and recovery behavior after failed/partial operations
+- `.cfproj` Open / edit / Save / close / reopen with stable Smart Object UUIDs
+- canonical schema/catalog validation and deterministic legacy migrations
+- semantic commands and atomic batch Undo/Redo with rejection/exception rollback
+- copy/duplicate identity and host/dependency relationship behavior
+- shared 2D/3D selection, level context and command-driven editing
+- takeoff and initial sheet consistency after edits and reopen
+- explicit stale/current state and recovery after failed file/output operations
+- acceptance evidence for actual supported browser file workflows
 
 Exit criteria:
 
-- a representative small residential model survives save/reopen, copy, Undo/Redo and document regeneration without semantic corruption
+- a representative local residential project survives file roundtrip, editing and Undo/Redo with the same UUIDs, relationships, phased quantities and supported drawings
+
+SketchUp/LayOut integration has separate adapter acceptance gates. Those gates do not block standalone engine releases and are required only when claiming the corresponding adapter capability.
 
 ---
 
@@ -42,18 +45,19 @@ Exit criteria:
 
 **Goal:** make plan editing a first-class production modeling environment.
 
-### Status: Core Slices Complete & Synced
+### Implemented slices and optional adapter evidence
 - [x] **Slice 01 (Structure):** Grids (A-C, 1-3), Columns (C1/C2) with intersection snapping, hosted Foundations (F1/F2), and Beams (B1/B2/RB1) with live span calculation and Type Catalog.
 - [x] **Slice 02 (Architecture):** Smart Walls (W1-W3) with thickness/material options, hosted Doors (D1-D3) with 4-quadrant swing flipping, and Windows (W1-W3) with dynamic real-time 2D wall cutouts.
-- [x] **SketchUp 3D Sync Bridge:** Automated `.cfproj` file import and 1-click Ruby sync script generator creating 3D columns, footings, beams, walls, and real cutouts into walls.
+- **Standalone 3D:** Renderer-neutral descriptors and the WebGL viewport consume the same `.cfproj` Smart Objects; editing breadth and evidence are tracked in `STATUS.md`.
+- **Optional SketchUp Sync Bridge:** `.cfproj` import and Ruby sync are adapter capabilities, separate from standalone 3D and R1 completion.
 
 ### Upcoming R1 Feature Tracks:
-- [ ] **Phasing Awareness for Renovation:** Explicit lifecycle visualization and assignment for Existing (บ้านเดิม), Demolition (ส่วนรื้อถอน), and New Construction (ส่วนสร้างใหม่).
+- **Phasing Awareness for Renovation:** Continue domain-wide lifecycle coverage for Existing (บ้านเดิม), Demolition (ส่วนรื้อถอน), and New Construction (ส่วนสร้างใหม่); existing standalone evidence is tracked in `STATUS.md`.
 - [ ] **AI Vision & Underlay Calibration:**
   - Import floor plan image (PNG/JPG) or 2D DWG as underlay.
   - Point-to-Point Scale Calibration tool (click two points, specify distance e.g. 4.00m to scale the plan accurately).
   - Floor-to-floor elevation setup (e.g. GF to L2 height prompt).
-- [ ] **Auto-Dimensioning Engine:** Automatic exterior grid-to-grid, column-to-column, and wall opening dimension strings ready for LayOut export.
+- [ ] **Auto-Dimensioning Engine:** Associative exterior grid-to-grid, column-to-column and opening dimension strings for standalone vector sheets, with optional adapter export.
 
 ---
 
@@ -427,8 +431,8 @@ Priority checks:
 
 - issue sets
 - sheet/title/revision data
-- LayOut integration
-- PDF export orchestration
+- standalone vector sheet/PDF export orchestration
+- optional LayOut integration with independent adapter acceptance
 - publication gate
 - issue history
 
@@ -475,7 +479,7 @@ AI must never receive a raw-geometry bypass path for production Smart Objects.
 
 The next focus is:
 
-1. **R0 — Native Reliability**
+1. **R0 — Standalone Project Reliability**
 2. **R1 — Plan Editor + Smart Wall 2.0**
 3. **R2 — Hosted Architecture Core**
 4. **R3 — Parametric Object + Constraint/Dependency Foundation**
@@ -489,7 +493,7 @@ Do not prioritize additional object-family breadth until these interactions are 
 
 ## North-star acceptance scenario
 
-ConstructFlow should eventually complete the following representative workflow primarily through ConstructFlow tools rather than raw SketchUp geometry commands:
+ConstructFlow should eventually complete the following representative workflow through its standalone workbench and shared command runtime:
 
 `Create Project → Create Level → Draw Walls in Plan → Place Doors/Windows → Detect/Create Rooms → Create Floors/Ceilings → Add Columns/Beams → Create Roof → Add Fixtures → Route Drainage → Generate Sections/Elevations → Generate Schedules → Generate BOQ → Publish Sheets`
 

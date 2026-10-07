@@ -1,7 +1,6 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react'
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import {
   ProjectDocument,
-  SmartObject,
   isColumnObject,
   isFoundationObject,
   isGridObject,
@@ -11,6 +10,8 @@ import {
   isWindowObject,
   DoorHanding,
 } from '@constructflow/project-model'
+import { projectPointToWallOffsetMm } from '@constructflow/architecture-engine'
+import { getPlanVisibleObjects } from '@constructflow/representation-engine'
 import { ToolType } from './Toolbar.js'
 import {
   ViewportState,
@@ -41,6 +42,8 @@ interface PlanCanvasProps {
   onCommitWindow: (wallId: string, point_mm: [number, number], offset_mm: number) => void
   onCommitGrid: (orientation: 'vertical' | 'horizontal', position_mm: number) => void
   onMoveColumn: (id: string, newLocation_mm: [number, number]) => void
+  onMoveWall: (id: string, delta_mm: [number, number]) => void
+  onMoveOpening: (id: string, offset_along_wall_mm: number) => void
   onFlipDoorHanding?: (doorId: string) => void
   onStartCalibrationModal?: (measuredDist_mm: number) => void
   onCursorChange: (coords_mm: [number, number], snapKind: string) => void
@@ -66,12 +69,19 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onCommitWindow,
   onCommitGrid,
   onMoveColumn,
+  onMoveWall,
+  onMoveOpening,
   onFlipDoorHanding,
   onStartCalibrationModal,
   onCursorChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const planVisibleObjects = useMemo(() => getPlanVisibleObjects(project), [project])
+  const planProject = useMemo<ProjectDocument>(() => ({
+    ...project,
+    objects: Object.fromEntries(planVisibleObjects.map(object => [object.id, object])) as ProjectDocument['objects'],
+  }), [project, planVisibleObjects])
 
   // Viewport state: 0.08 zoom = 1000mm -> 80px on screen.
   const [viewport, setViewport] = useState<ViewportState>({
@@ -88,8 +98,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const currentViewportRef = useRef(viewport)
   currentViewportRef.current = viewport
 
-  // Dragging selected column state
-  const [draggingColumnId, setDraggingColumnId] = useState<string | null>(null)
+  // Direct-manipulation state for objects whose geometry can move in plan.
+  const [draggingObject, setDraggingObject] = useState<{
+    id: string
+    kind: 'column' | 'wall' | 'opening'
+    startWorldMm: [number, number]
+    startScreenPx: [number, number]
+    hostStartMm?: [number, number]
+    hostEndMm?: [number, number]
+    openingWidthMm?: number
+  } | null>(null)
 
   // 2-click beam placement state (start node -> end node)
   const [beamStartNode, setBeamStartNode] = useState<{ point_mm: [number, number]; columnId?: string } | null>(null)
@@ -234,7 +252,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       ctx,
       canvas.width,
       canvas.height,
-      project,
+      planProject,
       viewport,
       selectedId,
       hoveredId,
@@ -245,6 +263,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     )
   }, [
     project,
+    planProject,
     viewport,
     selectedId,
     hoveredId,
@@ -286,13 +305,29 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     return () => window.removeEventListener('resize', resizeCanvas)
   }, [redraw])
 
-  const findHitObject = (worldPoint_mm: [number, number]): string | null => {
+  const findHitObject = (worldPoint_mm: [number, number], preferWall = false): string | null => {
     const [wx, wy] = worldPoint_mm
 
     const openingTol = Math.max(150, 16 / viewport.zoom)
 
+    // Shift-click/drag can target an architectural wall beneath a coincident beam.
+    if (preferWall) {
+      for (const obj of Object.values(planProject.objects)) {
+        if (!isWallObject(obj)) continue
+        const [x1, y1] = obj.module_data.start_point_mm
+        const [x2, y2] = obj.module_data.end_point_mm
+        const hitTol = Math.max(obj.module_data.thickness_mm / 2, 12 / viewport.zoom)
+        const lengthSquared = (x2 - x1) ** 2 + (y2 - y1) ** 2
+        if (lengthSquared <= 0) continue
+        const t = Math.max(0, Math.min(1, ((wx - x1) * (x2 - x1) + (wy - y1) * (y2 - y1)) / lengthSquared))
+        const nearestX = x1 + t * (x2 - x1)
+        const nearestY = y1 + t * (y2 - y1)
+        if ((wx - nearestX) ** 2 + (wy - nearestY) ** 2 <= hitTol * hitTol) return obj.id
+      }
+    }
+
     // 1. Doors (highest pick priority for openings: wall span + swing arc)
-    for (const obj of Object.values(project.objects)) {
+    for (const obj of Object.values(planProject.objects)) {
       if (isDoorObject(obj)) {
         const [cx, cy] = obj.module_data.location_mm
         const w = obj.module_data.width_mm
@@ -304,7 +339,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
 
     // 2. Windows
-    for (const obj of Object.values(project.objects)) {
+    for (const obj of Object.values(planProject.objects)) {
       if (isWindowObject(obj)) {
         const [cx, cy] = obj.module_data.location_mm
         const w = obj.module_data.width_mm
@@ -316,7 +351,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
 
     // 3. Columns
-    for (const obj of Object.values(project.objects)) {
+    for (const obj of Object.values(planProject.objects)) {
       if (isColumnObject(obj)) {
         const [cx, cy] = obj.module_data.location_mm
         const [w, d] = obj.module_data.section_mm
@@ -332,7 +367,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
 
     // 4. Foundations
-    for (const obj of Object.values(project.objects)) {
+    for (const obj of Object.values(planProject.objects)) {
       if (isFoundationObject(obj)) {
         const [cx, cy] = obj.module_data.center_mm
         const [w, l] = obj.module_data.size_mm
@@ -348,7 +383,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
 
     // 5. Beams
-    for (const obj of Object.values(project.objects)) {
+    for (const obj of Object.values(planProject.objects)) {
       if (isBeamObject(obj)) {
         const [x1, y1] = obj.module_data.start_point_mm
         const [x2, y2] = obj.module_data.end_point_mm
@@ -369,7 +404,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
 
     // 6. Walls
-    for (const obj of Object.values(project.objects)) {
+    for (const obj of Object.values(planProject.objects)) {
       if (isWallObject(obj)) {
         const [x1, y1] = obj.module_data.start_point_mm
         const [x2, y2] = obj.module_data.end_point_mm
@@ -390,7 +425,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
 
     // 7. Grids
-    for (const obj of Object.values(project.objects)) {
+    for (const obj of Object.values(planProject.objects)) {
       if (isGridObject(obj)) {
         const { orientation, position_mm } = obj.module_data
         const tol = 12 / viewport.zoom
@@ -430,7 +465,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           t.name.toLowerCase() === (activeTool === 'door' ? activeDoorTypeMark : activeWindowTypeMark).toLowerCase()
       )
       const openingW = typeDef?.parameters?.width_mm || (activeTool === 'door' ? 800 : 1200)
-      const wallSnap = snapToWallHost(rawWorld, project, viewport, openingW)
+      const wallSnap = snapToWallHost(rawWorld, planProject, viewport, openingW)
       setActiveWallSnap(wallSnap)
       if (wallSnap) {
         setActiveSnap({
@@ -440,13 +475,13 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         })
         onCursorChange(wallSnap.point_mm, wallSnap.description)
       } else {
-        const snap = snapPoint(rawWorld, project, viewport)
+        const snap = snapPoint(rawWorld, planProject, viewport)
         setActiveSnap(snap)
         onCursorChange(snap.point_mm, snap.description)
       }
     } else {
       setActiveWallSnap(null)
-      const snap = snapPoint(rawWorld, project, viewport)
+      const snap = snapPoint(rawWorld, planProject, viewport)
       setActiveSnap(snap)
       onCursorChange(snap.point_mm, snap.description)
     }
@@ -459,8 +494,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const hit = findHitObject(rawWorld)
     setHoveredId(hit)
 
-    // If dragging a column, update preview
-    if (draggingColumnId) {
+    // Redraw during direct manipulation so the pointer feedback remains responsive.
+    if (draggingObject) {
       redraw()
     }
   }
@@ -482,21 +517,46 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
     if (e.button === 0) {
       const rawWorld = screenToWorld([screenX, screenY], viewport)
-      const snap = snapPoint(rawWorld, project, viewport)
+      const snap = snapPoint(rawWorld, planProject, viewport)
 
       if (activeTool === 'select') {
-        const hitId = findHitObject(rawWorld)
+        const hitId = findHitObject(rawWorld, e.shiftKey)
         onSelectObject(hitId)
 
-        // If clicking on a column that is selected, start dragging
-        if (hitId && project.objects[hitId]?.object_type === 'structure.column') {
-          setDraggingColumnId(hitId)
-          e.currentTarget.setPointerCapture(e.pointerId)
+        if (hitId) {
+          const object = project.objects[hitId]
+          const startScreenPx: [number, number] = [screenX, screenY]
+          if (isColumnObject(object)) {
+            setDraggingObject({ id: hitId, kind: 'column', startWorldMm: rawWorld, startScreenPx })
+            e.currentTarget.setPointerCapture(e.pointerId)
+          } else if (isWallObject(object)) {
+            setDraggingObject({
+              id: hitId,
+              kind: 'wall',
+              startWorldMm: rawWorld,
+              startScreenPx,
+            })
+            e.currentTarget.setPointerCapture(e.pointerId)
+          } else if (isDoorObject(object) || isWindowObject(object)) {
+            const host = project.objects[object.module_data.wall_id]
+            if (host && isWallObject(host) && Number.isFinite(object.module_data.width_mm) && object.module_data.width_mm > 0) {
+              setDraggingObject({
+                id: hitId,
+                kind: 'opening',
+                startWorldMm: rawWorld,
+                startScreenPx,
+                hostStartMm: [host.module_data.start_point_mm[0], host.module_data.start_point_mm[1]],
+                hostEndMm: [host.module_data.end_point_mm[0], host.module_data.end_point_mm[1]],
+                openingWidthMm: object.module_data.width_mm,
+              })
+              e.currentTarget.setPointerCapture(e.pointerId)
+            }
+          }
         }
       } else if (activeTool === 'column') {
         onCommitColumn(snap.point_mm)
       } else if (activeTool === 'foundation') {
-        const colHit = Object.values(project.objects).find((o) => {
+        const colHit = Object.values(planProject.objects).find((o) => {
           if (!isColumnObject(o)) return false
           const [cx, cy] = o.module_data.location_mm
           const [cw, cd] = o.module_data.section_mm
@@ -505,7 +565,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         })
 
         if (colHit) {
-          const existingFnd = Object.values(project.objects).find(
+          const existingFnd = Object.values(planProject.objects).find(
             (o) => isFoundationObject(o) && (o.module_data.supported_column_id === colHit.id || o.host_refs?.includes(colHit.id))
           )
           if (existingFnd) {
@@ -517,7 +577,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           onCommitFoundation({ location_mm: snap.point_mm })
         }
       } else if (activeTool === 'beam') {
-        const clickedCol = Object.values(project.objects).find((o) => {
+        const clickedCol = Object.values(planProject.objects).find((o) => {
           if (!isColumnObject(o)) return false
           const [cx, cy] = o.module_data.location_mm
           const [cw, cd] = o.module_data.section_mm
@@ -556,7 +616,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           (t) => t.object_type === 'door_window.door' && t.name.toLowerCase() === activeDoorTypeMark.toLowerCase()
         )
         const openingW = typeDef?.parameters?.width_mm || 800
-        const wallSnap = snapToWallHost(rawWorld, project, viewport, openingW) || activeWallSnap
+        const wallSnap = snapToWallHost(rawWorld, planProject, viewport, openingW) || activeWallSnap
         if (wallSnap) {
           onCommitDoor(
             wallSnap.wall_id,
@@ -570,7 +630,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           (t) => t.object_type === 'door_window.window' && t.name.toLowerCase() === activeWindowTypeMark.toLowerCase()
         )
         const openingW = typeDef?.parameters?.width_mm || 1200
-        const wallSnap = snapToWallHost(rawWorld, project, viewport, openingW) || activeWallSnap
+        const wallSnap = snapToWallHost(rawWorld, planProject, viewport, openingW) || activeWallSnap
         if (wallSnap) {
           onCommitWindow(
             wallSnap.wall_id,
@@ -608,16 +668,30 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       return
     }
 
-    if (draggingColumnId) {
+    if (draggingObject) {
       const rect = canvasRef.current?.getBoundingClientRect()
       if (rect) {
         const screenX = e.clientX - rect.left
         const screenY = e.clientY - rect.top
         const rawWorld = screenToWorld([screenX, screenY], viewport)
-        const snap = snapPoint(rawWorld, project, viewport)
-        onMoveColumn(draggingColumnId, snap.point_mm)
+        const movedPixels = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
+        if (movedPixels >= 3) {
+          if (draggingObject.kind === 'column') {
+            const snap = snapPoint(rawWorld, planProject, viewport)
+            onMoveColumn(draggingObject.id, snap.point_mm)
+          } else if (draggingObject.kind === 'wall') {
+            const delta: [number, number] = [
+              rawWorld[0] - draggingObject.startWorldMm[0],
+              rawWorld[1] - draggingObject.startWorldMm[1],
+            ]
+            if (Math.hypot(...delta) >= 1) onMoveWall(draggingObject.id, delta)
+          } else if (draggingObject.hostStartMm && draggingObject.hostEndMm && draggingObject.openingWidthMm) {
+            const offset = projectPointToWallOffsetMm(rawWorld, draggingObject.hostStartMm, draggingObject.hostEndMm, draggingObject.openingWidthMm)
+            if (offset !== undefined) onMoveOpening(draggingObject.id, offset)
+          }
+        }
       }
-      setDraggingColumnId(null)
+      setDraggingObject(null)
       try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
     }
   }

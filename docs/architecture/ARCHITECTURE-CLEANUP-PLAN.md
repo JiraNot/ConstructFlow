@@ -1,11 +1,13 @@
-# ConstructFlow — Architecture Cleanup & Stabilization Plan
+# ConstructFlow — SketchUp Adapter Cleanup & Stabilization Plan
+
+Scope: existing Ruby adapter maintenance. Standalone engine delivery follows ADR-0006 and `../ROADMAP.md`; the completed Ruby batches below are adapter evidence only.
 
 ## 1. Context & Purpose
 
 ConstructFlow is entering an architecture stabilization phase to consolidate its modular foundation before expanding production capabilities. The focus is to:
 - Preserve and strengthen all 12 existing modules (Architecture, Openings, Door/Window, Structure, Roof, Surface, Interior, Library, Drainage, Electrical, Costing, Extension).
 - Avoid speculative rewrites or pivots to non-target platforms (Revit / Archicad).
-- Solidify SketchUp as the primary modeling and visualization host.
+- Isolate SketchUp as an optional downstream modeling/presentation adapter to the canonical standalone project.
 - Prepare seamless interoperability with AutoCAD / DWG workflows.
 
 ## 2. Phased Architecture Road Map

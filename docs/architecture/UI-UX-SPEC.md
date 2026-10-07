@@ -4,7 +4,7 @@ Status: Accepted foundation interaction contract; visual styling remains impleme
 
 ## Product UX goal
 
-ConstructFlow must reduce repetitive SketchUp modeling work while preserving the directness SketchUp users expect. The system must not become a form-heavy BIM interface that forces users to define every construction parameter before exploring design.
+ConstructFlow must make standalone plan/3D modeling direct and fast. Users can explore design before defining every construction parameter; semantic editing, validation and output currentness remain coherent through the shared command runtime. Optional CAD/BIM adapters follow the same project contracts.
 
 Primary mental model:
 

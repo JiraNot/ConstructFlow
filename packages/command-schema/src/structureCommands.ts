@@ -1,6 +1,6 @@
 // Structural Domain Mutation Command Payloads (Vertical Slice 01)
 
-import { Phase } from '@constructflow/project-model'
+import { Phase, PileSystem } from '@constructflow/project-model'
 
 export interface CreateGridInput {
   /** Immutable unique identity (UUID) */
@@ -21,6 +21,7 @@ export interface ModifyGridInput {
 export interface CreateColumnInput {
   /** Immutable unique identity (UUID) */
   id: string
+  type_id?: string
 
   /** Human-readable mark, e.g. "C01" */
   mark: string
@@ -69,6 +70,7 @@ export interface UpdateColumnMarkInput {
 export interface CreateFoundationInput {
   /** Immutable unique identity (UUID) */
   id: string
+  type_id?: string
 
   /** Human-readable mark, e.g. "F1" */
   mark?: string
@@ -78,6 +80,9 @@ export interface CreateFoundationInput {
 
   /** Foundation type */
   foundation_type?: 'spread_footing' | 'pile_cap'
+  pile_type?: PileSystem
+  pile_offsets_mm?: [number, number][]
+  pile_length_mm?: number
 
   /** Footing dimensions: [width, length, thickness] in mm */
   size_mm?: [number, number, number]
@@ -118,6 +123,7 @@ export interface DeleteObjectInput {
 export interface CreateBeamInput {
   /** Immutable unique identity (UUID) */
   id: string
+  type_id?: string
 
   /** Human-readable mark, e.g. "B1", "B2" */
   mark?: string
@@ -219,6 +225,13 @@ export interface UpdateFoundationDimensionsInput {
 
 export interface AssignInstanceTypeInput {
   object_id: string
-  type_name: string // e.g. "C2", "F2", "B2"
+  type_id?: string
+  /** @deprecated Kept for adapters while they migrate to stable type UUIDs. */
+  type_name?: string // e.g. "C2", "F2", "B2"
+}
+
+export interface RenameCatalogTypeInput {
+  type_id: string
+  name: string
 }
 

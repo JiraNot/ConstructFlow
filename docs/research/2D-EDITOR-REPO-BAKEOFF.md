@@ -6,6 +6,8 @@
 > **Target System:** ConstructFlow Dedicated 2D Plan Editor / Design App  
 > **Date:** October 2026  
 
+> **Scope amendment (2026-10-07):** Repository comparisons below remain research evidence. Product delivery follows ADR-0006 and `../ROADMAP.md`: ConstructFlow owns standalone 2D/3D and vector outputs; SketchUp is an optional downstream adapter.
+
 ---
 
 ## 1. Executive Summary
@@ -15,7 +17,7 @@ ConstructFlow currently operates as a modular BIM and construction automation sy
 - **Disconnected Palettes & Modals:** Users must navigate floating `HtmlDialog` windows, nested menus, modal `UI.inputbox` dialogs, and inconsistent tool lifecycles (some tools terminate after one object, others persist).
 - **Missing Core 2D CAD Affordances:** SketchUp's viewport lacks native real-time wall miter healing, associative dimension anchoring, lineweight visualization, live door swing arc orientation, and fast CAD-style grip editing.
 
-To resolve this, ConstructFlow is investigating a dedicated **ConstructFlow 2D Plan Editor / Design App**. Under this vision, the 2D Plan Editor becomes the primary authoring environment for project setup, storey levels, phasing, structural grids, columns, foundations, beams, walls, doors, windows, interior cabinetry, electrical circuits, and drainage networks. SketchUp is repositioned as the **3D Representation, Material, Scene, Section, and LayOut Viewport**:
+ConstructFlow's dedicated **2D/3D Plan Editor / Design App** is the primary standalone authoring environment for project setup, levels, phasing, grids, structure, architecture, interiors and MEP. Native 3D and document outputs derive from the same canonical project. SketchUp can consume downstream representations through its optional bridge:
 
 ```text
                 ConstructFlow Project
@@ -24,8 +26,8 @@ To resolve this, ConstructFlow is investigating a dedicated **ConstructFlow 2D P
                           │
          ┌────────────────┼────────────────┐
          ▼                ▼                ▼
-   2D Plan Editor     SketchUp 3D     BOQ & Schedules
-  (Semantic Design)  (Mesh & Scenes)  (Costing & Docs)
+   2D Plan Editor     Native WebGL    BOQ & Sheets
+  (Semantic Design)  (Derived Mesh)   (Native Output)
 ```
 
 To prevent rebuilding standard CAD/plan-editor infrastructure from scratch, we conducted a rigorous technical bake-off across five open-source GitHub repositories:

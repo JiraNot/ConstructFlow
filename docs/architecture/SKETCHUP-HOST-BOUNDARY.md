@@ -2,9 +2,9 @@
 
 ## 1. Architectural Intent
 
-ConstructFlow is fundamentally a **SketchUp-first** platform. However, coupling business logic, domain state validation, or quantity calculations directly to raw SketchUp C++/Ruby APIs makes unit testing fragile, introduces memory leaks, and complicates transaction rollbacks.
+ConstructFlow is a standalone-first platform under ADR-0006. This document defines only the optional SketchUp adapter's Ruby host boundary. The canonical `.cfproj` project and standalone domain runtime own product semantics; SketchUp APIs must remain isolated from those contracts.
 
-To balance native SketchUp high performance with clean software architecture, ConstructFlow establishes an explicit **Host Adapter Boundary**.
+The SketchUp integration uses an explicit **Host Adapter Boundary** for native entity attributes, operations and interaction. Adapter storage and rendering do not replace the standalone SSOT.
 
 ## 2. Boundary Layers
 
@@ -58,10 +58,13 @@ adapter.delete_attribute('constructflow.core', 'temporary_flag')
 - Acts as the central host runtime gateway for `Runtime.host`.
 - Manages active model references, observer registrations, and factory methods for entity and transaction adapters.
 
-## 4. Preserving Native SketchUp First-Class UX
+## 4. Optional Adapter Interaction and Persistence
 
-Decoupling through adapters does **not** degrade SketchUp UX:
-- Native **Undo/Redo** is 100% preserved because all commands execute inside `start_operation`.
-- Native **Selection and Inference** tools operate directly with SketchUp's input point mechanisms.
-- Native **Scenes, Layers/Tags, and Section Cuts** remain authoritative for drawing views.
-- Native **Attribute Dictionaries** remain the persistent backing store for Smart Objects.
+Adapter acceptance must verify:
+- native Undo/Redo through SketchUp operations for adapter mutations;
+- selection and inference through SketchUp input point mechanisms;
+- scenes, tags and section cuts as downstream representations of canonical drawing intent;
+- attribute dictionaries as adapter-local metadata preserving Smart Object identity;
+- UUID matching, customization preservation and explicit reconciliation through command contracts.
+
+These native capabilities have independent acceptance evidence and do not gate standalone project editing, persistence or output compilation.

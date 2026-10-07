@@ -9,5 +9,6 @@ Current records:
 - `ADR-0003-single-model-lifecycle.md` — one semantic model for Existing/Demolition/New.
 - `ADR-0004-domain-owned-derived-output.md` — domain modules own semantics; platform services aggregate providers.
 - `ADR-0005-docs-as-single-source-of-truth.md` — `docs/` is authoritative.
+- `ADR-0006-standalone-first-engine.md` — standalone semantic engine and optional downstream adapters.
 
 New cross-module breaking decisions should be recorded as the next sequential ADR rather than hidden inside implementation commits.

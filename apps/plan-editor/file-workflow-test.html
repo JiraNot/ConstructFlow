@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ConstructFlow Local File Workflow Acceptance</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body, html, #root { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #f8fafc; }
+      #workflow-result { position: fixed; z-index: 10001; right: 8px; bottom: 8px; max-width: 360px; max-height: 150px; overflow: auto; padding: 8px; border: 1px solid #38bdf8; border-radius: 6px; background: #082f49; color: #e0f2fe; font: 11px monospace; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <output id="workflow-result" aria-live="polite">Waiting for Open → edit → Save.</output>
+    <script type="module">
+      import React from 'react'
+      import ReactDOM from 'react-dom/client'
+      import { createKitchenProofProject } from '@constructflow/extension-engine'
+      import { serializeProject } from '@constructflow/project-model'
+      import { App } from './src/App.js'
+
+      const result = createKitchenProofProject('human')
+      if (result.status !== 'success') throw new Error(result.errors?.join('; ') ?? 'Kitchen Proof setup failed')
+      const source = serializeProject(result.updatedProject)
+      let committedSnapshot = ''
+      let openCount = 0
+      const query = new URLSearchParams(window.location.search)
+      const diskBacked = query.get('disk') === '1'
+      const diskEndpoint = '/__constructflow-acceptance-file'
+      const output = document.getElementById('workflow-result')
+      const handle = {
+        getFile: async () => {
+          openCount += 1
+          let text = committedSnapshot || source
+          if (diskBacked) {
+            const response = await fetch(diskEndpoint)
+            if (response.ok) text = await response.text()
+            else if (response.status !== 404) throw new Error(`Disk acceptance read failed: ${response.status}`)
+          }
+          if (openCount > 1) {
+            const reopened = JSON.parse(text)
+            output.textContent = JSON.stringify({
+              result: 'reopen-from-saved-handle', project_id: reopened.project.id,
+              active_phase: reopened.project.active_phase, object_count: Object.keys(reopened.objects).length,
+              UUIDs: Object.keys(reopened.objects).sort(),
+            })
+          }
+          return new File([text], 'CF-UI-ACCEPTANCE.cfproj', { type: 'application/json' })
+        },
+        createWritable: async () => {
+          let pending = ''
+          return {
+            write: async value => { pending = value },
+            close: async () => {
+              committedSnapshot = pending
+              let diskReceipt = null
+              if (diskBacked) {
+                const response = await fetch(diskEndpoint, { method: 'PUT', body: pending })
+                if (!response.ok) throw new Error(`Disk acceptance save failed: ${response.status}`)
+                diskReceipt = await response.json()
+              }
+              const saved = JSON.parse(committedSnapshot)
+              output.textContent = JSON.stringify({
+                result: 'save-committed', project_id: saved.project.id,
+                active_phase: saved.project.active_phase, object_count: Object.keys(saved.objects).length,
+                UUIDs: Object.keys(saved.objects).sort(), diskReceipt,
+              })
+            },
+            abort: async () => { committedSnapshot = '' },
+          }
+        },
+      }
+      const forceHtmlFileInput = query.get('fileInput') === '1'
+      if (forceHtmlFileInput) {
+        // Exercise the real local-file input route when the browser's native picker cannot be automated.
+        window.showOpenFilePicker = undefined
+        window.showSaveFilePicker = undefined
+        output.textContent = 'HTML file input mode: choose a local .cfproj; Save uses the browser download fallback.'
+      } else {
+        window.showOpenFilePicker = async () => [handle]
+        window.showSaveFilePicker = async () => handle
+        output.textContent = diskBacked
+          ? 'Disk-backed acceptance: Open → set phase Existing → Save → Open.'
+          : 'In-memory acceptance: Open → set phase Existing → Save → Open.'
+      }
+      ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App))
+    </script>
+  </body>
+</html>

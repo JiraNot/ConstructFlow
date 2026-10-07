@@ -2,6 +2,8 @@
 
 This file is the current high-level implementation dashboard. It is informational; authoritative requirements remain in the referenced specifications and accepted architecture contracts.
 
+Active delivery is standalone-first under ADR-0006 and `ROADMAP.md`. `.cfproj`, the shared command runtime and native 2D/3D/takeoff/sheet engines define the product baseline. Ruby/native entries below are adapter evidence; F0–F3 native closures are not prerequisites for standalone releases.
+
 ## Documentation foundation
 
 | Area | Status | Authoritative source |
@@ -69,6 +71,334 @@ This file is the current high-level implementation dashboard. It is informationa
 | Roadmap | Proposed sequencing | `ROADMAP.md` |
 
 ## Implementation status
+
+### Standalone semantic foundation — 2026-10-07
+
+- Added root `npm run build:standalone` and `npm run dev:standalone` entrypoints. They compile the
+  domain packages in dependency order before Plan Editor; `--install` runs each package's locked
+  `npm ci` on first setup, and subsequent builds refresh Plan Editor's local `file:` package copies
+  before bundling. The dev launcher binds Vite to localhost. The full root build command completed
+  successfully without running test suites. The dev entrypoint also started a live app
+  at `http://127.0.0.1:5175/` (5174 was already occupied); HTTP returned 200 and the browser loaded
+  Kitchen Proof with 4 columns/foundations/beams, 4 walls, one door and one window, plus separated
+  Existing-to-remain and New Construction takeoff lines.
+- `command-runtime`, `structure-engine`, `architecture-engine`, `catalog-engine` and
+  `extension-engine` execute independently of React/SketchUp (ADR-0006).
+- Atomic batches discard all draft changes and downstream envelopes after any rejection/failure.
+- `.cfproj` v2 now uses stable catalog UUIDs, instance overrides, deterministic v1 migration,
+  and schema validation at import/command commit boundaries.
+- Added a legacy Kitchen Proof `.cfproj` v1 fixture with 18 Smart Objects and 17 catalog types.
+  Its generator migrates the fixture twice and verifies deterministic v2 serialization, stable
+  Smart Object UUIDs, generated UUID v5 catalog identities, and recovery of the 150 mm Existing
+  wall as an instance override. `node scripts/generate_legacy_migration_fixture.mjs` passed.
+- v1 migration now canonicalizes UUID-form `type_id` references to lowercase before catalog
+  matching, so valid uppercase UUIDs still resolve to the canonical catalog identity.
+- Project/catalog metadata, relationship meta, Smart Object metadata, and CQRS envelope/handler
+  inputs now use explicit `unknown`-based contracts instead of `any`; catalog parameters expose
+  typed fields for current structural and opening families, with unknown extension fields.
+- Plan Editor now exposes local `.cfproj` open/save, Undo/Redo buttons, Ctrl/Cmd+Z and
+  Ctrl/Cmd+Y. History snapshots restore the same UUIDs; Undo/Redo clears queued incremental
+  sync envelopes, so a full sync is required afterward. Adapter Undo/Redo replay is not wired.
+- Browsers without the File System Access open picker now use an accessible label directly
+  associated with the local file input; it supports keyboard activation and keeps the input out
+  of the accessibility tab order. The native picker route remains available where supported.
+- The editor now warns before replacing any project with unsaved content and registers the
+  browser's standard leave-page warning while the current serialized model differs from its
+  saved snapshot. File System Access API saves clear the dirty state; download fallback keeps
+  it dirty because the browser does not confirm that the user retained the downloaded file.
+  Replacement confirmation compares against the last loaded/saved or newly generated starter
+  baseline, so a pristine in-memory starter is still labeled unsaved-to-disk but can be replaced
+  without a false data-loss prompt.
+- Added an explicit Download Copy control next to Save. It always exports the current canonical
+  `.cfproj` snapshot through the browser download path, while Save can continue using the local
+  file handle and overwrite the opened project.
+- Local file reading/writing now runs through a small editor adapter. `npm run verify:file-io`
+  verifies malformed-document rejection before replacement, canonical serialization, a real
+  temporary-disk roundtrip with persistent object UUID checks, complete write-before-close
+  ordering, identical takeoff and A-02/S-01/A-08 outputs after reopen, and abort after write or
+  close failure using a fake browser file handle.
+  A dev-only `file-workflow-test.html` harness now supplies an in-memory File System Access API
+  handle to the real Plan Editor UI. App-level Open → phase edit (dirty state) → Save → Open was
+  exercised through the visible controls: the reopened project retained `active_phase: existing`,
+  all 18 Smart Objects and their UUIDs, the 5.600 m joint-treatment BOQ line, and generated A-02,
+  S-01 and A-08 views. This verifies editor-to-adapter wiring without invoking an OS picker;
+  native picker interaction and a real browser-owned file handle remain a separate UI gate.
+  The harness also supports an opt-in disk-backed mode (`CONSTRUCTFLOW_FILE_ACCEPTANCE=1`,
+  `?disk=1`) whose Vite dev middleware writes only a randomly named project under the OS temp
+  directory. Browser UI acceptance opened, phase-edited, saved and reopened that file; disk
+  verification found 31,752 bytes, 18 persistent UUIDs and `active_phase: existing`. The reopened
+  file compiled 13 takeoff rows and A-02/S-01/A-08. This proves the UI-to-file-handle-to-disk path
+  with a test handle, while native picker selection and a user-chosen real file overwrite remain
+  unverified.
+  A separate browser acceptance run opened the real `examples/kitchen-extension-proof.cfproj`
+  through the HTML file-input fallback and confirmed its 18 Smart Objects, phase-separated BOQ and
+  pile-length warnings in the UI. A later Save-fallback run on that local file produced
+  `E:\New folder\CF-KITCHEN-PROOF-001 (7).cfproj` (31,752 bytes); `verify:kitchen-file` accepted
+  its 18 objects, 13 takeoff rows, 5.60 m joint and A-02/S-01/A-08. The browser then reopened that
+  exact downloaded copy through the HTML file-input route and showed the Existing phase and phased
+  BOQ. This closes the local download-save/reopen acceptance path; native picker and browser-owned
+  file-handle overwrite remain unverified.
+- Live localhost UI acceptance in the in-app browser created Kitchen Proof (4 columns, 4 pile
+  caps, 4 beams, 4 walls, a door and a window), switched 2D ↔ 3D, selected the Existing host wall
+  in 3D, and changed its removal phase to Demolition. The visible BOQ moved the wall's 7.00 m²
+  and 1.05 m³ from `existing_to_remain` to `demolition_site_prep`. Changing that wall from W1 to
+  W2 in the 2D properties panel updated the schedule/BOQ; two Undo actions restored the original
+  wall type and phase. Dragging a selected wall through the 3D transform gizmo emitted one
+  `MoveWall` mutation while retaining the same selected object UUID; Undo restored the clean
+  model and emptied the pending mutation queue. The viewport now suppresses the pointer-up
+  raycast after a completed transform, preventing the same drag from selecting an unrelated wall.
+- A fresh browser session on the current build created Kitchen Proof and loaded the lazy 3D view;
+  both views retained the same 4 columns, foundations, beams, 4 walls, openings and phased BOQ.
+  Download Copy displayed its requested-file status. Although the browser-control surface returned
+  no download event, the resulting 31,389-byte `.cfproj` was found in Windows' configured Downloads
+  folder and parsed through `readProjectFile` as canonical JSON with 18 objects, the expected
+  object-family counts, and 16 pile heads. `compileInitialDrawingSet` then generated A-02, S-01,
+  and A-08 from that downloaded file and verified the 4.00 × 2.50 m envelope, four foundations,
+  and ALL LEVELS schedule. A later Save-fallback artifact was opened from disk through the HTML
+  file-input route and showed the same 18-object model, Existing phase, joint line and phased BOQ.
+  Native picker selection and overwrite of a user-selected browser-owned file remain unverified.
+- Latest browser smoke includes the modeled Existing-to-New expansion joint. The BOQ displays
+  `รอยต่อเดิม–ใหม่` at 5.600 m; Download Copy produced
+  `E:\New folder\CF-KITCHEN-PROOF-001 (4).cfproj` (31,760 bytes). `verify:kitchen-file` reopened
+  that exact disk file and confirmed 18 objects, the 5.60 m joint line, and A-02/S-01/A-08.
+  Re-running `verify:kitchen-file` after Smart Object UUID enforcement still passes with 18
+  objects, 13 takeoff lines, the 5.60 m joint line, and A-02/S-01/A-08. Native picker open/reopen
+  and actual Save-handle overwrite are still separate unverified steps.
+- Kitchen Proof assembly now lives in `extension-engine` and dispatches the Existing host wall
+  plus the 4.00 × 2.50 m extension as one atomic command batch; the UI button uses this same
+  factory. A generated example `.cfproj` was written and read back through the project serializer
+  with identical canonical JSON. The editor Open/edit/Save/Open UI roundtrip has since passed with
+  a mocked File System Access handle; native picker selection and real-handle overwrite remain
+  separate unverified gates.
+- Kitchen F1 now has a preliminary I-18 pile-cap representation: four 2×2 pile-head offsets per
+  cap, four caps in the proof fixture, 16 counted pile heads total. S-01 draws plan-only symbols
+  and marks length TBD; takeoff reports counts only and warns for each foundation. Pile length,
+  capacity, soil design and engineering approval are intentionally unspecified; 3D still shows
+  pile caps only. Focused runtime acceptance passed serialization roundtrip, takeoff count and
+  S-01 content checks.
+- Preset generation now links foundations using `supported_column_id`, provides hosted opening
+  coordinates, assigns steel/AAC materials and honors terrace beam elevation input.
+- Catalog cascades are restricted by object family, preventing overlapping W1 marks from
+  updating both walls and windows.
+- Project validation now checks finite coordinates/elevations, positive type and instance
+  dimensions, wall endpoint/length consistency, known foundation kinds, beam/column links,
+  foundation/column links and hosted-opening wall bounds/height/level consistency on import
+  and command commit. Smart Object map keys must be RFC-4122 UUIDs; case-variant duplicate IDs
+  are rejected. Known catalog/override fields are also rejected when assigned to an
+  incompatible family (for example, `size_mm` on a beam or `sill_height_mm` on a wall).
+- Latest verification on Windows: `node scripts/test_standalone.mjs` rebuilt all standalone
+  packages and Plan Editor, then passed 7 project-model, 4 representation-engine, 2 architecture-engine,
+  5 clash-engine, 3 sheet-engine, 19 command-runtime and 6 extension-engine tests (46 total).
+  `npm run verify:kitchen` and `npm run verify:file-io` also pass; the latter includes a real
+  temporary-disk roundtrip and persistent UUID comparison. These checks do not cover the native
+  browser file picker, full migration/UI acceptance, or broader domain-specific takeoff coverage.
+
+### Standalone A3 drawing issue set — 2026-10-07
+
+- Added `packages/sheet-engine` to compile the current semantic project into vector A3
+  landscape sheets A-02 (phased ground plan, 1:100), S-01 (foundation/column plan, 1:100),
+  and A-08 (opening schedule and schematic type elevations, 1:50).
+- A-02 uses the Master Specification phase colors and line conventions, includes meter-based
+  overall dimensions, draws only the lowest-elevation (ground) level, and reports when the
+  fixed-scale viewport may clip model extents. S-01 is likewise limited to ground-level grids,
+  columns and hosted foundations.
+- A-02 fits all visible level objects in the viewport but dimensions the architectural wall
+  envelope, excluding foundation extents. Kitchen Proof now reports 4.00 × 2.50 m rather
+  than 4.80 × 3.30 m from the foundations' overhang.
+- A-08 reads catalog definitions and instance overrides, displays dimensions in meters, and
+  reports missing catalog families or truncated schedules. S-01 flags pile caps without a
+  modeled pile layout instead of implying pile-detail completeness.
+- A-02 opening cutouts and door/window symbols now resolve width from the same precedence
+  (instance override → instance value → type catalog) used by A-08, so catalog changes and
+  instance overrides cannot make plan symbols disagree with the schedule.
+- Sheet frame scope now follows rendered content: A-02/S-01 identify their displayed level and
+  A-08 identifies all levels, instead of always printing the project's active level.
+- Added a reproducible drawing artifact generator from `examples/kitchen-extension-proof.cfproj`.
+- Added three `sheet-engine` regressions for deterministic A3 output/scales, shared kitchen
+  envelope/opening/foundation content and warnings, and the all-level opening schedule.
+- The Type Catalog UI now renames a selected type through `RenameCatalogType`; a browser smoke
+  renamed the kitchen window type, confirmed the schedule/BOQ mark and pending mutation changed,
+  then used Undo to restore W1 and clear the queue. Successful renames also update the matching
+  active placement-tool type, avoiding creation commands that still reference the old mark.
+  Runtime acceptance verifies family-scoped cascading, persistent UUIDs, invalid-name rollback,
+  serialization/reload and Undo/Redo.
+  It writes A-02, S-01 and A-08 as A3 landscape SVGs plus a manifest. Focused compiler acceptance
+  verifies the three IDs, page dimensions, 1:100 / 1:100 / 1:50 scales, A-02 4.00 × 2.50 m
+  wall dimensions and phased openings, four foundations/four columns, four preliminary I-18 pile
+  groups, visible LENGTH TBD labels, A-08 ALL LEVELS and catalog dimensions. S-01 reports one
+  grouped warning for unspecified pile length. Re-generation produced identical SHA-256 hashes. XML parsing
+  then found an unescaped ampersand in the A-08 in-sheet heading; the compiler now escapes it, and
+  all three generated SVGs parse as XML and retain their A3 dimensions and content assertions.
+- The BOQ panel can open a browser print view for these three sheets; print-to-PDF is provided
+  by the browser. Thai text shaping/font embedding, verified print scale, official titleblock
+  compliance, complete 20-sheet coverage and PDF roundtrip validation remain open.
+- Verification: `npm run build:standalone` and XML/content validation for all generated SVGs passed.
+  Vite still reports the existing lazy Three.js vendor chunk at 602.91 kB raw / 152.18 kB gzip.
+
+### Standalone spatial bounds foundation — 2026-10-07
+
+- Added `packages/clash-engine` with conservative 3D AABBs for columns, foundations, beams and
+  walls and a packed R-tree broad phase that returns candidate intersections from the project
+  document. Bounds resolve current catalog values and instance overrides and retain lifecycle,
+  level and host metadata. The R-tree rejects non-finite or inverted query/entry bounds.
+- Added a conservative interaction classifier: explicit host-linked overlaps are
+  `intentional_connection`, near-zero penetration is `boundary_contact`, and other AABB overlaps
+  remain `overlap_candidate`. None of these is a final hard/soft clash verdict. Slanted-wall AABB
+  overreach, opening subtraction, MEP clearances and code/rule evidence still need exact or
+  domain-specific logic.
+- Verification: `npm ci --ignore-scripts --no-audit --no-fund` and `npm run build` in
+  `packages/clash-engine` passed. Five focused S3 tests now verify multi-level R-tree search
+  against brute-force AABB intersections, deterministic unique candidate pairs, and retention of
+  phase/host metadata plus catalog instance overrides. Candidate pairs remain broad-phase results.
+- Standalone build order now compiles `takeoff-engine` and `sheet-engine` before Plan Editor,
+  so the app's local package imports do not depend on ignored/stale `dist` output in a clean CI checkout.
+- The working-phase selector now dispatches the existing `SetWorkingPhase` CQRS command,
+  records the change in editor history, and emits its command envelope instead of mutating the
+  project document directly in a React event handler.
+- Initial takeoff is connected to the editor: concrete volumes for columns/beams/foundations,
+  net wall area/volume after hosted openings, opening counts and CSV output. The kitchen fixture
+  now carries UUID-linked expansion-joint treatment metadata on its Existing host wall; takeoff
+  derives 5.60 m from the two New wall heights, updates when either wall height changes, and drops
+  the quantity when the host is demolished. The BOQ visibly distinguishes demolition, new work,
+  existing-to-remain reference quantities and remodeling joints. Flashing, chemical dowels, unit
+  rates, labor and waste factors remain outside this first slice.
+- Focused catalog-to-takeoff acceptance passed on Kitchen Proof: changing B1 depth from 400 to
+  500 mm through `UpdateStructuralTypeDimensions` affected all four beam instances and changed
+  new-construction beam volume from 1.040 m³ to 1.300 m³. Serialize/deserialize preserved 1.300 m³.
+- Takeoff now reads Smart Object payloads as `unknown`, validates numeric section/size tuples,
+  resolves catalog references safely and skips invalid geometry with explicit warnings instead
+  of relying on unchecked `any` casts.
+- Takeoff now sends every object with a non-null `removed_phase` to the demolition/site-prep
+  cost center, preserving the phase in which it was removed; demolition-created objects use
+  the same center. This prevents removed existing work from being reported as existing-to-remain.
+- Kitchen acceptance now checks takeoff before and after demolition: the Existing host wall's
+  7.00 m² / 1.05 m³ moves from `existing_to_remain` to `demolition_site_prep`, while new work
+  remains in its own center. One Undo/Redo restores the corresponding phase and quantities.
+- Takeoff line aggregation now includes the computed formula in its grouping key. Kitchen Proof
+  beams with equal B1 type/material but different spans therefore report separately: 0.640 m³
+  for two 4,000 mm spans and 0.400 m³ for two 2,500 mm spans, rather than showing one span
+  formula beside a combined 1.040 m³ quantity. Browser smoke on the live standalone app showed
+  these separate values and the phase-separated wall/opening quantities from the same model.
+- Three.js/WebGL is now available as a lazy-loaded 3D view over the same model. It renders
+  phase-colored structure/architecture/openings, cuts hosted door/window holes from walls,
+  allows selection and property editing, and moves columns, walls, supported foundations, and
+  hosted openings with a transform gizmo. Opening drags project onto the host wall centerline and
+  dispatch `MoveOpening`, preserving host and object UUIDs while recalculating the wall-relative
+  offset. Foundation drags route through the linked column's `MoveColumn` command so supported
+  beams and foundations remain in the same transaction.
+- Added `packages/representation-engine` as a renderer-neutral 3D description provider. It resolves
+  geometry dimensions, catalog and instance overrides, effective phase, wall cutouts and supported
+  interactions outside React; `Model3DViewport` now only converts those descriptors to Three.js
+  meshes and routes gestures to commands. Three tests cover deterministic output, phase/identity,
+  catalog-resolved hosted cutouts and malformed-opening diagnostics.
+- Plan Canvas now directly moves selected columns, walls and hosted doors/windows. Wall drags use
+  `MoveWall` so hosted openings follow in the same transaction; opening drags project onto the
+  host centerline and clamp to a valid span before `MoveOpening`. The architecture engine owns and
+  tests the point-to-wall projection used by the UI.
+- Plan Editor now sends 2D `MoveColumn` coordinates without an explicit zero Z, preserving the
+  column's existing vertical datum while the command continues to move linked foundations/beams.
+  Runtime regression coverage verifies datum retention on a non-zero Z input.
+- Plan rendering, hit testing and snapping now share active-level visibility from
+  `representation-engine`: walls/openings and beams resolve to their assigned levels, foundations
+  to their base level, and spanning columns appear on each level between their base and top. This
+  prevents an upper-level beam from obscuring a ground-floor wall in the 2D editor.
+- Browser smoke on the Kitchen Proof model confirmed Ground Floor shows its walls/openings without
+  the L2 beams, while First Floor shows the beams and spanning columns. A 2D drag moved the host
+  wall with its door still 2.00 m from the wall start; the mutation stream contained one `MoveWall`,
+  and Undo restored the model and cleared pending events.
+- A Kitchen Proof starter creates an Existing host wall plus the 4.00 × 2.50 m kitchen preset
+  with new structure, walls, door and window. The starter is assembled from the shared command
+  runtime and can be saved as `.cfproj`.
+- The kitchen preset now places columns/foundations/walls/openings at the active level datum,
+  links columns to the next higher project level, and places perimeter beams at that level's
+  elevation. Focused runtime checks passed for the standard GF/L2 model and custom +0.250 m /
+  +3.650 m levels; the existing fixture retained all 18 object UUIDs while adding explicit
+  column/beam level references.
+- `UpdateLevel` now propagates a changed top-level elevation into dependent structural columns
+  and hosted beam endpoints in the same command transaction, reports those UUIDs as updated, and
+  remains covered by one-batch Undo. Focused runtime acceptance changed L2 from +3.000 m to
+  +3.400 m, reconciled 4 columns and 4 beams, and restored all geometry with one Undo.
+- Kitchen Proof F1 now represents four preliminary I-18 pile-head positions on each of four caps.
+  Takeoff counts 16 heads and warns per foundation that length is missing; S-01 marks symbols as
+  plan-only and labels lengths TBD. Pile lengths, geotechnical design/capacity and engineering
+  approval remain open. The 3D viewport intentionally renders only the pile caps without a length.
+- Kitchen/carport preset beams now keep start/end column UUID links; moving a column updates
+  associated beam endpoints and supported foundations in the same command transaction.
+- `MoveWall` translates a wall and its hosted opening locations in one domain command, keeping
+  UUIDs, wall-relative opening offsets and host relationships intact during 3D gizmo edits.
+- `MoveOpening` moves doors/windows along the host wall, recalculates their center coordinates,
+  rejects offsets that exceed host boundaries, and retains host links/UUIDs. Command-runtime tests
+  verify door and window movement, atomic rollback, Undo and Redo.
+- The 3D gizmo restores its preview mesh when a transform is a sub-millimeter no-op or the
+  corresponding command rejects, so a failed edit cannot leave viewport geometry out of sync with
+  the semantic project.
+- Structural movement acceptance now proves `MoveColumn` updates linked foundations and beam
+  endpoints/spans with stable UUIDs, supports Undo/Redo, and rejects a zero-span collapse without
+  partial changes. This also validates the transaction reused when dragging a supported footing.
+- Command-runtime integration tests now move both the door-host and window-host walls in the
+  Kitchen Proof fixture, check the same opening UUIDs/host links/offsets and translated geometry,
+  then Undo/Redo the whole batch. A rejected second move also proves that the first move and all
+  envelopes roll back.
+- Latest verification after Smart Object UUID import validation: `node
+  scripts/test_standalone.mjs` passes 7 project-model, 5 clash-engine, 3 sheet-engine,
+  18 command-runtime and 6 extension-engine tests (39 total) and builds the full standalone app.
+  Kitchen, local-disk file IO and drawing generation acceptances
+  pass separately; manual interaction smoke is recorded below.
+- Manual browser smoke on the 4.00 × 2.50 m Kitchen Proof: selected a wall in 3D, dragged its
+  gizmo, and confirmed its property panel still reports one hosted D1 at 2.00 m from the wall
+  start; Undo returned the pending mutation queue to zero. Changing the working phase emitted
+  `SetWorkingPhase`; Undo restored New Construction and cleared the queue.
+- Latest live-editor verification selected a 3D wall, set `REMOVAL PHASE` to Demolition, and
+  observed its quantity move immediately into `demolition_site_prep`; clearing the removal phase
+  restored Existing/New cost centers. The editor was reset to a clean Kitchen Proof afterward.
+- Follow-up browser smoke loaded Kitchen Proof and confirmed 4 columns, foundations, beams,
+  4 walls, one door and one window; Existing-to-remain and New Construction quantities appeared
+  as separate cost centers. Selecting Existing emitted `SetWorkingPhase`; Undo restored New
+  Construction and reduced the pending queue to zero. The 3D view control also mounted.
+- Fresh isolated-tab smoke created Kitchen Proof from the toolbar, switched 2D → 3D → 2D,
+  and confirmed the same 4 columns/foundations/beams, 4 walls, one door and one window with
+  Existing-to-remain and New Construction quantities still present after the view changes.
+  This confirms the live render path; it does not verify file save/reload or the A3 print path.
+- Open now uses the File System Access picker where supported and retains that file handle for
+  in-place Save; browsers without the API use the existing file-input and download fallbacks.
+  Opening a valid file or starting a replacement Kitchen Proof now warns before discarding edits
+  when the current model is both changed and has undoable history.
+  The download fallback attaches its hidden anchor to the document before clicking. In the
+  current browser test context, `showSaveFilePicker` is unavailable and no download event was
+  observable; save/reopen roundtrip therefore remains unverified. Edge's downloads page was
+  blocked by browser URL policy and was not inspected through another path.
+- The editor now compares the serialized current model with the last file opened or written via
+  a file handle and displays an accessible unsaved/saved status. The download fallback reports
+  that a download was requested but does not clear the unsaved state because disk completion
+  cannot be confirmed by that path.
+- Active-level selection now dispatches `SetWorkingLevel` through the runtime and appears in the
+  mutation stream. The floor-to-floor control updates GF height and L2 elevation with two
+  `UpdateLevel` commands in one history batch, so one Undo restores both levels. The runtime and
+  Plan Editor production builds passed; browser smoke confirmed level selection and Undo, and a
+  focused runtime invocation confirmed the paired level update and one-step Undo. Browser-driven
+  editing of the numeric spinbutton did not take effect in the current Edge control surface.
+- Browser acceptance opened the actual saved copy through the HTML file-input fallback, changed
+  phase to Existing, saved a new `.cfproj` download to disk, and reopened that exact file in the UI.
+  Save and Download Copy events remain unobservable through the browser-control event API, but the
+  written file was found on disk and passed `verify:kitchen-file`. In the reopened saved model,
+  editing a 3D beam's phase updated its BOQ row and Undo restored the clean state; dragging a 2D
+  column moved its hosted foundation and beam endpoints, updated takeoff lengths, and Undo restored
+  the saved coordinates and cleared the mutation queue. Native picker selection and overwrite of a
+  user-chosen browser-owned file remain unverified; Edge file upload automation also requires an
+  extension permission that was not enabled.
+- With the expanded validation active, the browser-loaded starter model and the 4.00 × 2.50 m
+  Kitchen Proof both initialized successfully; the kitchen still reports four columns, four
+  foundations, four beams, three new walls plus the existing host wall, one door and one window.
+- The Three.js vendor chunk is 602.91 kB uncompressed (152.18 kB gzip); it loads on demand.
+- S0 is in progress; supported foundation/column/beam/wall/opening records now receive
+  geometry and host-reference validation, and the v1 migration contract no longer exposes
+  `any`. Project-model tests now cover deterministic v1 migration, stable object UUIDs, UUID v5
+  catalog IDs, the Existing-wall instance override, UUID case normalization and ambiguous-mark
+  rejection, and UUID enforcement for imported Smart Object IDs. Catalog type rename now has UI
+  and runtime acceptance; remaining S0 gates include broader domain validation and native picker/
+  real file-handle save/reopen acceptance.
+- Full geometry/clash/takeoff/sheet engines and native adapter acceptance remain open.
+  See [the standalone review](STANDALONE-ENGINE-REVIEW-2026-10.md).
 
 ConstructFlow has achieved major end-to-end milestones with the **2D Plan Editor Web/Desktop Application** and the **SketchUp 3D Synchronization Bridge**, alongside the core SketchUp extension architecture:
 
@@ -308,7 +638,9 @@ The automated harness, RBZ packaging, preflight readiness check, and observer-ba
 
 The presence of a requirement in documentation does **not** by itself mean native integration has been verified.
 
-## Milestone gates
+## Ruby Adapter Milestone Evidence (F0–F3)
+
+These gates describe the existing Ruby/SketchUp integration. Standalone delivery gates are R0 and S0–S5 in the active roadmap and standalone engine review.
 
 ### Gate F0 — Architecture baseline
 
@@ -370,6 +702,8 @@ Status: **Production Implementation Complete in Plan Editor (`apps/plan-editor`)
 - **Renovation Phasing**:
   - Full phase visual separation on 2D Plan: `existing` (Slate neutral/muted), `demolition` (Red tint, dashed lines `[6, 4]`), and `new_construction` (vibrant primary BIM colors).
   - Live object phase switching dropdown in `PropertiesPanel` via `UpdateObjectPhase` command.
+  - Existing objects can carry `removed_phase: 'demolition'`; a shared effective display phase now keeps 2D, 3D, sheet graphics, opening schedules, and takeoff aligned. Focused runtime evidence confirms the A-02 wall renders red/dashed, the removal phase survives `.cfproj` serialization, and its quantity is assigned to `demolition_site_prep`.
+  - Constrained `removed_phase` to `demolition` in Smart Object and command types, project import validation, and CommandBus input validation. Focused runtime checks reject `existing` and `new_construction` without mutation, while demolition survives roundtrip and remains in the demolition takeoff center.
   - Plan Editor creation commands (`CreateWall`, `CreateDoor`, `CreateWindow`, `CreateColumn`, `CreateBeam`, `CreateFoundation`) automatically inherit active project phase.
 - **Underlay Image Import & Point-to-Point Calibration**:
   - Direct import of PNG/JPG/WebP floor plan drawings onto 2D canvas with adjustable opacity (10%-100%) and visibility toggle.

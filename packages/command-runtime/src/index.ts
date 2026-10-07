@@ -1,0 +1,152 @@
+import { validateProjectV2, type ProjectDocument } from '@constructflow/project-model'
+import type {
+  CommandActorKind, CommandEnvelope, CommandRequest, CommandBusResult,
+  CommandBatchResult, CommandHandlerContext,
+} from '@constructflow/command-schema'
+import { executeStructureCommand, reconcileStructuralLevelElevation } from '@constructflow/structure-engine'
+import { executeArchitectureCommand } from '@constructflow/architecture-engine'
+import { executeCatalogCommand } from '@constructflow/catalog-engine'
+import { executeProjectCommand } from './projectCommands.js'
+
+const handlers = [executeProjectCommand, executeStructureCommand, executeArchitectureCommand, executeCatalogCommand]
+const phases = new Set(['existing', 'demolition', 'new_construction'])
+
+/** Host-independent CQRS runtime. Domain handlers never receive the live document. */
+export class CommandBus {
+  static execute(
+    project: ProjectDocument,
+    commandName: string,
+    input: Record<string, unknown>,
+    actorKind: CommandActorKind = 'human',
+  ): CommandBusResult {
+    const command_id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const reject = (message: string, status: 'rejected' | 'failed' = 'rejected'): CommandBusResult => ({
+      result: { status, command_id, command_name: commandName, affected_object_ids: [], errors: [message] },
+      updatedProject: project,
+    })
+
+    try {
+      // Validate lifecycle values at the public boundary, including calls from AI/sync.
+      for (const key of ['phase', 'created_phase']) {
+        const value = input[key]
+        if (value !== undefined && (typeof value !== 'string' || !phases.has(value))) {
+          return reject(`Invalid ${key}: ${String(value)}`)
+        }
+      }
+      const removedPhase = input.removed_phase
+      if (removedPhase !== undefined && removedPhase !== null && removedPhase !== 'demolition') {
+        return reject(`Invalid removed_phase: ${String(removedPhase)}`)
+      }
+      const typeFamily: Record<string, string> = {
+        CreateColumn: 'structure.column', CreateFoundation: 'structure.foundation', CreateBeam: 'structure.beam',
+        CreateWall: 'architecture.wall', CreateDoor: 'door_window.door', CreateWindow: 'door_window.window',
+      }
+      if (typeof input.type_id === 'string' && input.type_id && typeFamily[commandName]) {
+        const type = project.types.find(candidate => candidate.id === input.type_id && candidate.object_type === typeFamily[commandName])
+        if (!type) return reject(`Catalog type UUID ${input.type_id} is missing or incompatible with ${typeFamily[commandName]}`)
+      }
+      if (commandName.startsWith('Create') && typeof input.id === 'string' && input.id && project.objects[input.id]) {
+        return reject(`Object UUID ${input.id} already exists`)
+      }
+      const updated = structuredClone(project)
+      const payload = structuredClone(input)
+      const envelope: CommandEnvelope = {
+        command_id, name: commandName, version: 1, project_id: project.project.id,
+        timestamp: now, actor: { kind: actorKind }, input: payload,
+      }
+      const context: CommandHandlerContext = {
+        project, updated, commandName, input: payload, command_id, now, envelope,
+      }
+      for (const handle of handlers) {
+        const response = handle(context)
+        if (!response) continue
+        if (response.result.status !== 'success') return { ...response, updatedProject: project }
+        if (commandName === 'UpdateLevel' && typeof input.id === 'string') {
+          const reconciledIds = reconcileStructuralLevelElevation(project, response.updatedProject, input.id, now)
+          response.result.affected_object_ids = [...new Set([...response.result.affected_object_ids, ...reconciledIds])]
+          response.result.updated_object_ids = [...new Set([...(response.result.updated_object_ids ?? []), ...reconciledIds])]
+        }
+        // A successful transaction also updates project metadata without touching the input.
+        response.updatedProject.project.updated_at = now
+        validateProjectV2(response.updatedProject)
+        return response
+      }
+      return reject(`Unknown command: ${commandName}`)
+    } catch (error: unknown) {
+      return reject(error instanceof Error ? error.message : String(error), 'failed')
+    }
+  }
+
+  static executeBatch(
+    project: ProjectDocument,
+    commands: readonly CommandRequest[],
+    actorKind: CommandActorKind = 'human',
+  ): CommandBatchResult {
+    const transaction_id = crypto.randomUUID()
+    const results: CommandBatchResult['results'] = []
+    const emittedEnvelopes: CommandEnvelope[] = []
+    let current = project
+    for (const [index, command] of commands.entries()) {
+      const response = this.execute(current, command.name, command.input, actorKind)
+      results.push(response.result)
+      if (response.result.status !== 'success') {
+        return {
+          transaction_id, status: response.result.status, updatedProject: project,
+          results, emittedEnvelopes: [], failed_command_index: index, errors: response.result.errors,
+        }
+      }
+      current = response.updatedProject
+      if (response.emittedEnvelope) emittedEnvelopes.push({ ...response.emittedEnvelope, transaction_id })
+    }
+    return { transaction_id, status: 'success', updatedProject: current, results, emittedEnvelopes }
+  }
+}
+
+/** One history entry per committed batch; redo restores the same IDs, not new creations. */
+export class ProjectCommandSession {
+  private current: ProjectDocument
+  private past: ProjectDocument[] = []
+  private future: ProjectDocument[] = []
+
+  constructor(project: ProjectDocument) { this.current = structuredClone(project) }
+  get project(): ProjectDocument { return structuredClone(this.current) }
+  get canUndo(): boolean { return this.past.length > 0 }
+  get canRedo(): boolean { return this.future.length > 0 }
+
+  /** Commit an already-executed model update as one editor history entry. */
+  commit(project: ProjectDocument): void {
+    this.past.push(this.current)
+    this.current = structuredClone(project)
+    this.future = []
+  }
+
+  /** Replace the history baseline after opening/creating a document. */
+  reset(project: ProjectDocument): void {
+    this.current = structuredClone(project)
+    this.past = []
+    this.future = []
+  }
+
+  execute(commands: readonly CommandRequest[], actorKind: CommandActorKind = 'human'): CommandBatchResult {
+    const response = CommandBus.executeBatch(this.current, commands, actorKind)
+    if (response.status === 'success' && commands.length > 0) {
+      this.past.push(this.current)
+      this.current = structuredClone(response.updatedProject)
+      this.future = []
+    }
+    return { ...response, updatedProject: structuredClone(response.updatedProject) }
+  }
+
+  undo(): ProjectDocument {
+    const previous = this.past.pop()
+    if (previous) { this.future.push(this.current); this.current = previous }
+    return this.project
+  }
+
+  redo(): ProjectDocument {
+    const next = this.future.pop()
+    if (next) { this.past.push(this.current); this.current = next }
+    return this.project
+  }
+}

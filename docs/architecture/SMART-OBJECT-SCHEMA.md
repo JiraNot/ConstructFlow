@@ -146,7 +146,7 @@ Relationships are semantic; they must not be inferred only from physical interse
 
 ## Geometry references
 
-A smart object may own one or many SketchUp entities. `geometry_refs` must be recoverable through namespaced metadata or a project index. Geometry references are implementation details; loss of one child entity should be detectable by QA rather than silently converting the smart object into raw geometry.
+A smart object exposes derived geometry/representation references that can be rebuilt from its canonical domain definition. Optional adapter mappings may reference one or many native entities, recoverable through UUID metadata or an adapter index. Geometry references are implementation details; missing native entities are adapter diagnostics and do not erase canonical semantic state.
 
 ## Catalog reference
 
@@ -188,7 +188,7 @@ Production deletion should be explicit:
 - commands must resolve or flag incoming relationships;
 - destructive deletion of objects with dependencies requires confirmation or deterministic cascading rules.
 
-Core may expose a low-level Smart Object erasure primitive (currently `SmartObjectManager#erase!`) for an owning command that is already authorized to discard a **new, unissued or generated derived object**. The primitive must erase the owned SketchUp entity and synchronize the runtime Smart Object index. When called inside a CommandBus transaction, the SketchUp mutation remains part of that command's undo operation.
+Core may expose a low-level Smart Object erasure primitive for an owning command authorized to discard a **new, unissued or generated derived object**. Canonical object removal and relationship/index updates occur inside the shared command transaction/history. The Ruby adapter's `SmartObjectManager#erase!` synchronizes its mapped entity/index within a native operation; that adapter operation does not define the standalone transaction boundary.
 
 The primitive does **not** decide construction lifecycle semantics. It must not be used as a shortcut for demolition, relocation or replacement of existing/as-built construction. The calling domain command is responsible for proving that erasure is the intended semantic operation, resolving or invalidating affected relationships/connectors, reporting removed object IDs, and invalidating downstream quantity/drawing outputs.
 
@@ -227,4 +227,4 @@ Every loaded smart object is validated for:
 
 ## Foundation acceptance
 
-The first production proof must demonstrate that a smart object can be created, saved in `.skp`, SketchUp closed, model reopened, and the same object ID/type/phase/level/domain payload recovered without manual reconstruction.
+The first production proof must demonstrate that a smart object can be created, saved in `.cfproj`, the standalone workbench closed, the project reopened, and the same UUID/type/phase/level/domain payload recovered without manual reconstruction or external CAD software. Native file roundtrip is a separate acceptance requirement for each delivered adapter.

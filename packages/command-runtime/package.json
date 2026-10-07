@@ -1,0 +1,17 @@
+{
+  "name": "@constructflow/command-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": { "build": "tsc", "test": "node --test test/*.test.mjs" },
+  "dependencies": {
+    "@constructflow/project-model": "file:../project-model",
+    "@constructflow/command-schema": "file:../command-schema",
+    "@constructflow/structure-engine": "file:../structure-engine",
+    "@constructflow/architecture-engine": "file:../architecture-engine",
+    "@constructflow/catalog-engine": "file:../catalog-engine"
+  },
+  "devDependencies": { "typescript": "^5.7.3" }
+}

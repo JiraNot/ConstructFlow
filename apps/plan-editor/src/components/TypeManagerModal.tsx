@@ -51,6 +51,7 @@ interface TypeManagerModalProps {
       sill_height_mm?: number
     }
   ) => void
+  onRenameType: (typeId: string, name: string) => boolean
 }
 
 type TabType = 'column' | 'foundation' | 'beam' | 'wall' | 'door' | 'window'
@@ -61,6 +62,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
   project,
   onUpdateTypeDimensions,
   onDefineType,
+  onRenameType,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('column')
 
@@ -98,6 +100,9 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
   const [newWindowHeight, setNewWindowHeight] = useState(1200)
   const [newWindowSill, setNewWindowSill] = useState(900)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
+  const [renameTypeId, setRenameTypeId] = useState('')
+  const [renameValue, setRenameValue] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
 
   if (!isOpen) return null
 
@@ -137,7 +142,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
     const draft = editDrafts[typeDef.id]
     const w = draft?.w ?? typeDef.parameters?.section_mm?.[0] ?? 200
     const d = draft?.d ?? typeDef.parameters?.section_mm?.[1] ?? 200
-    onUpdateTypeDimensions(typeDef.name, 'structure.column', { section_mm: [w, d] })
+    onUpdateTypeDimensions(typeDef.id, 'structure.column', { section_mm: [w, d] })
     setSaveSuccess(typeDef.name)
     setTimeout(() => setSaveSuccess(null), 2000)
   }
@@ -146,7 +151,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
     const draft = editDrafts[typeDef.id]
     const w = draft?.w ?? typeDef.parameters?.section_mm?.[0] ?? 200
     const d = draft?.d ?? typeDef.parameters?.section_mm?.[1] ?? 400
-    onUpdateTypeDimensions(typeDef.name, 'structure.beam', { section_mm: [w, d] })
+    onUpdateTypeDimensions(typeDef.id, 'structure.beam', { section_mm: [w, d] })
     setSaveSuccess(typeDef.name)
     setTimeout(() => setSaveSuccess(null), 2000)
   }
@@ -156,7 +161,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
     const w = draft?.w ?? typeDef.parameters?.size_mm?.[0] ?? 800
     const l = draft?.l ?? typeDef.parameters?.size_mm?.[1] ?? 800
     const t = draft?.t ?? typeDef.parameters?.size_mm?.[2] ?? 300
-    onUpdateTypeDimensions(typeDef.name, 'structure.foundation', { size_mm: [w, l, t] })
+    onUpdateTypeDimensions(typeDef.id, 'structure.foundation', { size_mm: [w, l, t] })
     setSaveSuccess(typeDef.name)
     setTimeout(() => setSaveSuccess(null), 2000)
   }
@@ -165,7 +170,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
     const draft = editDrafts[typeDef.id]
     const thickness_mm = draft?.thickness_mm ?? typeDef.parameters?.thickness_mm ?? 100
     const height_mm = draft?.height_mm ?? typeDef.parameters?.height_mm ?? 2800
-    onUpdateTypeDimensions(typeDef.name, 'architecture.wall', { thickness_mm, height_mm })
+    onUpdateTypeDimensions(typeDef.id, 'architecture.wall', { thickness_mm, height_mm })
     setSaveSuccess(typeDef.name)
     setTimeout(() => setSaveSuccess(null), 2000)
   }
@@ -174,7 +179,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
     const draft = editDrafts[typeDef.id]
     const width_mm = draft?.width_mm ?? typeDef.parameters?.width_mm ?? 800
     const height_mm = draft?.height_mm ?? typeDef.parameters?.height_mm ?? 2000
-    onUpdateTypeDimensions(typeDef.name, 'door_window.door', { width_mm, height_mm })
+    onUpdateTypeDimensions(typeDef.id, 'door_window.door', { width_mm, height_mm })
     setSaveSuccess(typeDef.name)
     setTimeout(() => setSaveSuccess(null), 2000)
   }
@@ -184,7 +189,7 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
     const width_mm = draft?.width_mm ?? typeDef.parameters?.width_mm ?? 1200
     const height_mm = draft?.height_mm ?? typeDef.parameters?.height_mm ?? 1200
     const sill_height_mm = draft?.sill_height_mm ?? typeDef.parameters?.sill_height_mm ?? 900
-    onUpdateTypeDimensions(typeDef.name, 'door_window.window', { width_mm, height_mm, sill_height_mm })
+    onUpdateTypeDimensions(typeDef.id, 'door_window.window', { width_mm, height_mm, sill_height_mm })
     setSaveSuccess(typeDef.name)
     setTimeout(() => setSaveSuccess(null), 2000)
   }
@@ -432,6 +437,51 @@ export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
             <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
               รายการประเภทปัจจุบันในแบบ
             </div>
+
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                const type = getCurrentTypes().find((candidate) => candidate.id === renameTypeId)
+                if (!type || !renameValue.trim()) {
+                  setRenameError('เลือกประเภทและกรอกชื่อใหม่ก่อน')
+                  return
+                }
+                if (!onRenameType(type.id, renameValue.trim())) {
+                  setRenameError('เปลี่ยนชื่อไม่สำเร็จ: ชื่ออาจว่างหรือซ้ำกับประเภทในหมวดเดียวกัน')
+                  return
+                }
+                setRenameError(null)
+                setSaveSuccess(renameValue.trim())
+                setTimeout(() => setSaveSuccess(null), 2000)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
+            >
+              <select
+                aria-label="ประเภทที่ต้องการเปลี่ยนชื่อ"
+                value={renameTypeId}
+                onChange={(event) => {
+                  const type = getCurrentTypes().find((candidate) => candidate.id === event.target.value)
+                  setRenameTypeId(event.target.value)
+                  setRenameValue(type?.name ?? '')
+                  setRenameError(null)
+                }}
+                style={{ background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '7px 8px' }}
+              >
+                <option value="">เลือก Type</option>
+                {getCurrentTypes().map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+              </select>
+              <input
+                aria-label="ชื่อ Type ใหม่"
+                value={renameValue}
+                onChange={(event) => setRenameValue(event.target.value)}
+                placeholder="ชื่อ Type ใหม่"
+                style={{ background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '7px 8px' }}
+              />
+              <button type="submit" style={{ background: '#0e7490', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 12px', cursor: 'pointer' }}>
+                เปลี่ยนชื่อ Type
+              </button>
+              {renameError && <span role="alert" style={{ color: '#fca5a5', fontSize: 12 }}>{renameError}</span>}
+            </form>
 
             {getCurrentTypes().map((t) => {
               const usageCount = getUsageCount(t.object_type, t.name)

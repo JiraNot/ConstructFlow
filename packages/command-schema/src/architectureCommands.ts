@@ -1,10 +1,11 @@
 // Architecture & Openings Domain Mutation Command Payloads (Vertical Slice 02)
 
-import { Phase, DoorHanding } from '@constructflow/project-model'
+import { Phase, DoorHanding, WallInterfaceTreatment } from '@constructflow/project-model'
 
 export interface CreateWallInput {
   /** Immutable unique identity (UUID) */
   id: string
+  type_id?: string
 
   /** Human-readable mark, e.g. "W1" */
   mark: string
@@ -26,6 +27,7 @@ export interface CreateWallInput {
 
   material?: string
   phase?: Phase
+  interface_treatments?: WallInterfaceTreatment[]
 }
 
 export interface UpdateWallMarkInput {
@@ -39,9 +41,21 @@ export interface UpdateWallDimensionsInput {
   height_mm?: number
 }
 
+export interface MoveWallInput {
+  object_id: string
+  delta_mm: [number, number]
+}
+
+/** Move a hosted door/window along its host wall centerline, preserving the relationship. */
+export interface MoveOpeningInput {
+  object_id: string
+  offset_along_wall_mm: number
+}
+
 export interface CreateDoorInput {
   /** Immutable unique identity (UUID) */
   id: string
+  type_id?: string
 
   /** Human-readable mark, e.g. "D1" */
   mark: string
@@ -89,6 +103,7 @@ export interface FlipDoorHandingInput {
 export interface CreateWindowInput {
   /** Immutable unique identity (UUID) */
   id: string
+  type_id?: string
 
   /** Human-readable mark, e.g. "W1" */
   mark: string

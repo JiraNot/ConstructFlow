@@ -4,13 +4,13 @@ Status: Accepted foundation contract.
 
 ## Purpose
 
-ConstructFlow project data must survive SketchUp save/reopen, application upgrades, module upgrades and library changes without becoming dependent on chat history or an external database being online.
+ConstructFlow canonical `.cfproj` project data must survive standalone save/reopen, application upgrades, module upgrades and library changes without depending on external CAD/BIM software, chat history or an online database.
 
 ## Persistence layers
 
-### 1. SketchUp model-local semantic data
+### 1. Canonical standalone project document
 
-Store the minimum authoritative semantic envelope and domain payload required to reopen the project in the `.skp` model using namespaced metadata and recoverable entity references.
+Store the authoritative project envelope and domain payload in the versioned `.cfproj` document. Serialization/import validation and migrations use the standalone project-model contracts. Native application entity IDs are adapter references, not canonical identity or a prerequisite for project recovery.
 
 Must include:
 
@@ -28,9 +28,13 @@ Must include:
 
 ConstructFlow may maintain model-local indexes for fast lookup of object IDs, types, relationships and dirty state. Indexes are rebuildable and must not be the only copy of irreplaceable semantic data.
 
-### 3. External/project database
+### 3. Optional downstream adapter storage
 
-Future cloud/local project databases may store richer history, rate libraries, collaboration, catalog metadata, drawing issues and analytics. The `.skp` project must still fail gracefully and remain semantically readable when external services are unavailable, subject to explicitly cloud-only features.
+SketchUp may persist mapped semantic metadata in namespaced `.skp` attributes for adapter reopening and UUID matching. That storage is a downstream snapshot; import/reconciliation is explicit and validated through command contracts. A native file does not silently replace the canonical `.cfproj` project. Adapter migration/save/reopen acceptance is independent from standalone release gates.
+
+### 4. External/project database
+
+Future cloud/local project databases may store richer history, rate libraries, collaboration, catalog metadata, drawing issues and analytics. The `.cfproj` project must remain semantically readable when external services are unavailable, subject to explicitly cloud-only features.
 
 ## Namespaces
 
@@ -126,7 +130,7 @@ Example:
 
 ## Project backup
 
-Before a destructive or non-reversible migration, ConstructFlow should provide/require a recoverable project copy or transaction-safe backup mechanism appropriate to SketchUp runtime limitations.
+Before a destructive or non-reversible migration, ConstructFlow should provide/require a recoverable `.cfproj` copy or transaction-safe backup appropriate to the standalone file workflow. Native adapters provide their own backup/recovery safeguards.
 
 ## Catalog snapshots
 

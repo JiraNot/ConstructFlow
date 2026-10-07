@@ -9,15 +9,23 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@constructflow/command-runtime": "file:../../packages/command-runtime",
     "@constructflow/command-schema": "file:../../packages/command-schema",
+    "@constructflow/architecture-engine": "file:../../packages/architecture-engine",
+    "@constructflow/extension-engine": "file:../../packages/extension-engine",
     "@constructflow/project-model": "file:../../packages/project-model",
+    "@constructflow/representation-engine": "file:../../packages/representation-engine",
+    "@constructflow/sheet-engine": "file:../../packages/sheet-engine",
+    "@constructflow/takeoff-engine": "file:../../packages/takeoff-engine",
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.7.3",
     "vite": "^6.2.0"

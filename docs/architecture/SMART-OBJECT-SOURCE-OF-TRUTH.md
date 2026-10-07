@@ -4,6 +4,8 @@
 
 In ConstructFlow, the **Smart Object** is the canonical, authoritative definition of an architectural or construction element.
 
+The canonical project is the standalone `.cfproj` document under ADR-0006. The native SketchUp reconciliation examples below apply only to the optional adapter and must use explicit validated command/import mappings; native edits never silently replace canonical state.
+
 Geometry, 2D plan linework, section graphics, schedule tables, and BOQ quantity items are **derived representations** of the Smart Object state.
 
 ```text

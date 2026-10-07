@@ -4,7 +4,7 @@
 
 ConstructFlow uses a **modular monolith with plugin-style domain modules** for its first major architecture. It is intentionally not designed as a single giant SketchUp plugin and is not split into microservices prematurely.
 
-The deployable SketchUp extension may be distributed as one product, while internal packages remain independently owned, versioned, tested, migrated and replaceable.
+The standalone web/desktop workbench and domain engines form the primary product. Optional SketchUp and other adapters are separate execution surfaces; internal packages remain independently owned, versioned, tested, migrated and replaceable.
 
 ## Layer model
 

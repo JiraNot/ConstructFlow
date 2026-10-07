@@ -6,13 +6,13 @@ This file defines cross-platform acceptance criteria. Module-specific criteria b
 
 ## Core / runtime
 
-### AC-CORE-001 — Extension boot
+### AC-CORE-001 — Standalone runtime boot
 
-Given a supported SketchUp installation, installing/loading the extension must register ConstructFlow once without duplicate menu entries or uncaught exceptions.
+Given a supported standalone environment, loading the command runtime/workbench registers the required modules once without duplicate capabilities or uncaught exceptions. Node domain execution and web project editing must not require external CAD/BIM software. SketchUp extension loading is a separate adapter acceptance case.
 
 ### AC-CORE-002 — Stable object identity
 
-A created smart object must retain the same ConstructFlow stable ID after save, SketchUp restart and reopen.
+A created smart object must retain the same ConstructFlow stable UUID after `.cfproj` save, standalone application restart and reopen. Export/sync identity preservation is verified separately for each adapter.
 
 ### AC-CORE-003 — Namespaced persistence
 

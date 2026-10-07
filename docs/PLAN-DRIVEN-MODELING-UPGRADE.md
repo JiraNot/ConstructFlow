@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This document defines the upgrade path that moves ConstructFlow from a smart-geometry / domain-automation SketchUp extension toward a **plan-driven, BIM-like construction design environment** optimized for residential renovation, extension and small-building production.
+This document defines the **standalone, plan-driven BIM construction environment** for residential renovation, extension and small-building production under ADR-0006. ConstructFlow owns the project and native 2D/3D/output engines; optional CAD/BIM adapters consume its semantic model. Release sequencing is defined in `ROADMAP.md`.
 
 The benchmark is not to copy Revit feature-for-feature. The benchmark is to match the parts of Revit's basic modeling workflow that make everyday architectural work fast and coherent—especially drawing and editing in plan while 3D, schedules, quantities and documents remain synchronized—while preserving the ConstructFlow advantages in renovation, extension, drainage, paving, joinery, BOQ and construction automation.
 
@@ -38,7 +38,7 @@ Plan views are not only drawing output. They are production editors.
 
 The R1 foundation treats the active level and plan interaction rules as shared editing context across architectural draw/edit, hosted opening/door-window, structural, and surface/paving plan tools. This keeps cursor projection, snap selection, and committed geometry on one semantic editing plane; implementation evidence is tracked separately in `docs/STATUS.md` so this Master Plan remains the target contract rather than a transient changelog.
 
-The native ConstructFlow menu also exposes `Edit Project`, `Create Level`, `Edit Level`, and `Show Levels`, so the Plan Editor workflow can establish project metadata, inspect/revise persisted datums, and draw on a storey rather than relying on an API-only setup path. Project edits use the core command/transaction boundary and emit `ProjectChanged`; existing level-dependent Smart Objects then follow the same `LevelChanged` reconciliation path.
+The standalone workbench must expose project and level setup through the same command/transaction boundary as object editing. Project edits publish documented change events; existing level-dependent Smart Objects follow the shared level reconciliation path. Equivalent SketchUp menu actions belong to the optional adapter.
 
 Users should be able to create and modify at least the following directly from plan:
 
@@ -91,9 +91,9 @@ Extension, roof, paving, drainage and joinery generators must not create opaque 
 
 Generated outputs must resolve to normal domain-owned Smart Objects that can be edited with the same tools as manually created objects.
 
-### 3.5 Native SketchUp reliability comes before breadth
+### 3.5 Standalone project reliability comes before breadth
 
-Pure-Ruby/application proofs are not sufficient to claim production readiness. Save/reopen, Undo/Redo, copy identity, observers, interactive tools, scenes/styles/sections and LayOut/PDF paths must be verified in supported native SketchUp/LayOut versions.
+Production readiness requires evidence for `.cfproj` save/reopen, stable UUIDs, atomic command history, copy identity, coordinated 2D/3D editing, quantity currentness and standalone sheet output. Browser file workflows and output rendering require evidence at their actual boundaries. External CAD/BIM application tests are separate adapter gates.
 
 ### 3.6 Match Revit-baseline primitives, not Revit enterprise breadth
 
@@ -113,22 +113,20 @@ ConstructFlow should aim to reach strong baseline behavior for everyday resident
 
 It does not need to prioritize enterprise worksharing, large-building analytical systems, advanced HVAC, or full Revit-equivalent BIM breadth.
 
-## 4. Upgrade Track A — Native Reliability Gate
+## 4. Upgrade Track A — Standalone Project Reliability Gate
 
-Before aggressive expansion, close the gap between application-level proof and native SketchUp/LayOut behavior.
+Before expanding feature breadth, verify the canonical project and command/output pipeline independently from external CAD/BIM software.
 
 ### Deliverables
 
-- Smart Object persistence through `.skp` save/close/reopen
-- stable ID recovery
-- Undo/Redo for geometry + semantic metadata as one operation
-- copy/duplicate identity rules in real SketchUp
-- model observer behavior across New/Open
-- migration fixtures against real model attributes
-- representative interactive tool and handle verification
-- scene/style/section state persistence
-- LayOut template/viewport/PDF verification
-- failure recovery and stale-state detection
+- `.cfproj` Open/edit/Save/close/reopen with stable UUIDs
+- canonical schema validation and deterministic migration fixtures
+- atomic commands/batches and one-step Undo/Redo
+- copy identity and host/dependency graph integrity
+- shared standalone 2D/3D interactions and level context
+- quantity and supported vector sheet consistency after edits/reopen
+- actual browser file-workflow acceptance
+- failure recovery and explicit stale/current state
 
 ### Exit gate
 
@@ -170,15 +168,17 @@ Create a reusable interaction foundation instead of implementing each tool indep
 - Beam Tool (B1/B2/RB1, with live span measurement)
 - Foundation Tool (F1/F2, column-hosted footings)
 
-### 2D Plan Editor Application & 3D Sync Architecture
+### Standalone 2D/3D Workbench and Optional Sync Architecture
 
-To deliver an ultra-responsive CAD/BIM drawing experience, the Plan Interaction Engine is instantiated as an interactive 2D Canvas application (`apps/plan-editor`) communicating with SketchUp via the shared `@constructflow/command-schema` and `@constructflow/project-model`:
+The Plan Interaction Engine runs in `apps/plan-editor`. Its Canvas plan and WebGL viewport consume renderer-neutral domain representations from the same project, through shared command-schema/project-model/runtime contracts:
 
 1. **Interactive Plan Canvas:**
    - Real-time pan, zoom, wheel, grid lines (A-C, 1-3) with bubble labels.
    - Dynamic 2D wall cutouts: hosted doors and windows dynamically carve clean geometric openings into wall segments without destroying wall centerline topology.
    - Door swing direction: click-to-flip between 4 quadrants (`left_in`, `left_out`, `right_in`, `right_out`).
-2. **Deterministic 3D Sync Bridge (`Core::PlanEditorSync`):**
+2. **Standalone 3D and Optional SketchUp Bridge:**
+   - Native geometry descriptors and WebGL rendering derive from the canonical project; 2D/3D edits use the same commands and history.
+   - `Core::PlanEditorSync` is a downstream adapter. Its level/entity creation is not required for standalone geometry or editing.
    - Import `.cfproj` project documents directly via SketchUp extension menu (`Extensions > ConstructFlow > 🔄 นำเข้าผังจาก Plan Editor...`) or paste 1-click self-contained Ruby script from the web UI.
    - Automatic Level Registration: registers project storeys (`GF` 0 mm, `L2` 3000 mm) in SketchUp before member generation.
    - Automatic 3D Geometry & Hole Punching: creates 3D columns, footings, beams, walls, and parametric door/window infills with real cutouts into walls while preserving exact Smart Object UUIDs.
@@ -186,11 +186,11 @@ To deliver an ultra-responsive CAD/BIM drawing experience, the Plan Interaction 
    - **Phasing Awareness:** Visual and semantic tagging for Existing (บ้านเดิม), Demolition (ส่วนรื้อถอน), and New Construction (ส่วนสร้างใหม่).
    - **Image/DWG Underlay with Point-to-Point Scale Calibration:** Click two known points on an underlay image/plan, specify real distance (e.g. 4.00 m) to accurately calibrate drawing scale.
    - **Floor-to-Floor Height Prompts:** Prompt user for floor elevations when plans lack vertical elevation markers.
-   - **LayOut Publishing & Detailing:** Direct dimension chain generation for LayOut, with hatch patterns and annotations.
+   - **Standalone Publishing & Detailing:** Vector sheet dimensions, hatch patterns and annotations, with optional LayOut adapter output.
 
 ### Exit gate
 
-A user can lay out a simple residential floor plan without relying on raw SketchUp Line / Rectangle / Push-Pull for the primary architectural model.
+A user can lay out and edit a simple residential floor plan in ConstructFlow and see its standalone 3D representation update from the same Smart Objects.
 
 ## 6. Upgrade Track C — Smart Wall 2.0
 
@@ -721,7 +721,7 @@ Do not implement every upgrade track strictly end-to-end before the next one. De
 
 | Release | Primary outcome |
 |---|---|
-| **R0 — Native Reliability** | Real SketchUp/LayOut persistence, undo, copy and publication confidence |
+| **R0 — Standalone Project Reliability** | Local `.cfproj` roundtrip, atomic history, UUID/relationship integrity and supported output consistency |
 | **R1 — Plan Editor + Wall 2.0** | Draw/stretch/join walls in plan; 3D follows |
 | **R2 — Hosted Architecture** | Door/window/opening + floor + room baseline |
 | **R3 — Parametric + Constraints** | Type/instance/formula + core dependency behavior |
@@ -737,7 +737,7 @@ Do not implement every upgrade track strictly end-to-end before the next one. De
 
 The next development focus should be:
 
-1. **R0 Native Reliability**
+1. **R0 Standalone Project Reliability**
 2. **R1 Plan Editor + Wall 2.0**
 3. **R2 Hosted Architecture**
 4. **R3 Parametric Object + Constraint/Dependency foundation**
@@ -749,7 +749,7 @@ A smaller number of deeply editable objects is more valuable than a large regist
 
 ## 25. North-star acceptance scenario
 
-ConstructFlow should pass the following representative workflow primarily through ConstructFlow tools rather than raw SketchUp geometry commands:
+ConstructFlow should pass the following representative workflow through its standalone workbench and shared command runtime:
 
 ```text
 Create Project
@@ -786,7 +786,7 @@ The system should deterministically reconcile or flag:
 
 Passing this scenario smoothly is a stronger product milestone than claiming broad Revit feature parity.
 
-Evidence boundary: application tests and native-tool contracts may prove the deterministic Smart Object chain, command validation, dependency invalidation, plan refresh requests and package integrity. They do not substitute for the native gate: the same scenario must still be exercised in a supported SketchUp/LayOut environment to prove interactive picking, visible 3D updates, real save/close/reopen persistence, native Undo/Redo, scenes/styles/sections and sheet/PDF output.
+Evidence boundary: domain/runtime tests prove semantic command and dependency behavior; browser acceptance proves interactive picking, visible native 3D updates and actual file workflows; vector/PDF checks prove supported sheet content and print behavior. SketchUp/LayOut acceptance is required only for claims about those optional adapters.
 
 ## 26. Explicit non-goals for this upgrade
 

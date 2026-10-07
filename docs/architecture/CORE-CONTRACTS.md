@@ -12,12 +12,12 @@ object_type        namespaced logical type
 owner_module       module that owns domain behavior
 schema_version     domain schema version
 created_phase      lifecycle creation phase
-removed_phase      optional lifecycle removal phase
+removed_phase      null or demolition; only architectural demolition is a removal phase
 level_refs         zero or more semantic level references
 host_refs          zero or more host relationships
 connectors         typed connection endpoints
 catalog_ref        optional library/catalog reference
-geometry_ref       SketchUp entity reference(s)
+geometry_ref       derived representation references; native entity references are adapter-local
 revision_meta      object change/audit metadata
 status             active / warning / invalid / archived
 ```

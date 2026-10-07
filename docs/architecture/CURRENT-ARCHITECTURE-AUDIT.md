@@ -1,8 +1,10 @@
-# ConstructFlow — Current Architecture Audit
+# ConstructFlow — SketchUp Adapter Architecture Audit
+
+Scope: Ruby/SketchUp implementation evidence. The standalone product architecture and active delivery plan are defined by ADR-0006, `../ROADMAP.md` and `../STANDALONE-ENGINE-REVIEW-2026-10.md`. Counts and native storage descriptions below apply to the adapter implementation inspected, not the canonical standalone runtime.
 
 ## 1. Executive Summary
 
-ConstructFlow is designed as a **SketchUp-first Residential Design & Construction Operating System**, orchestrating architecture, structural coordination, roofs, interiors/joinery, electrical circuits, drainage networks, surface/paving, bill of quantities (BOQ), and construction documentation.
+ConstructFlow is a **standalone BIM and design-to-construction platform**. Its optional SketchUp adapter has Ruby implementations covering architecture, structure, roofs, interiors, electrical, drainage, surface, BOQ and construction documentation. This audit records that adapter's architecture and does not make SketchUp a product dependency.
 
 This audit establishes the baseline architectural state of the repository as of October 2026, documenting strengths to preserve, structural coupling points, boot/runtime lifecycle characteristics, and SketchUp API leakages identified during inspection.
 

@@ -1,14 +1,18 @@
 # ConstructFlow — Master Product Blueprint v1.0
 
+Standalone-first direction is amended by [ADR-0006](decisions/ADR-0006-standalone-first-engine.md).
+The current implementation review and standalone milestones are recorded in
+[Standalone Engine Review](STANDALONE-ENGINE-REVIEW-2026-10.md).
+
 ## 1. Mission
 
-ConstructFlow is a modular design-to-construction platform centered on SketchUp. Its purpose is to let design teams move from an existing-condition model through demolition, new work, coordinated construction systems, quantity takeoff, detailed drawings, and fabrication-oriented outputs without rebuilding the same information repeatedly.
+ConstructFlow is a standalone modular BIM and design-to-construction platform. Its purpose is to let design teams move from an existing-condition model through demolition, new work, coordinated construction systems, quantity takeoff, detailed drawings, and fabrication-oriented outputs without rebuilding the same information repeatedly. SketchUp and other CAD/BIM products are optional downstream adapters.
 
 The product is optimized first for real renovation and extension workflows such as houses, carports, kitchens, multipurpose rooms, roofs, gardens, parking areas, built-ins, utility relocation, and construction documentation.
 
 ## 2. Product model
 
-ConstructFlow treats SketchUp as the model editor and geometry environment, while ConstructFlow provides construction intelligence, object semantics, rules, relationships, takeoff, documentation, validation, and automation.
+ConstructFlow owns the semantic project model, native computation and standalone workbench. It provides construction intelligence, object semantics, rules, relationships, takeoff, documentation, validation and automation. SketchUp can consume that model through its bridge; it is not required for standalone semantic command execution. Native geometry and output engines are developed incrementally.
 
 Primary flow:
 
@@ -443,7 +447,7 @@ AI produces structured command requests; modules execute them under the same rul
 
 ## 13. Non-goals for the foundation phase
 
-- Replacing SketchUp as a general 3D modeler
+- Reproducing every general-purpose SketchUp modeling feature in the foundation release
 - Building full Revit-equivalent BIM behavior in the first release
 - Letting AI directly author uncontrolled production geometry
 - Performing licensed structural engineering approval automatically
@@ -453,7 +457,7 @@ AI produces structured command requests; modules execute them under the same rul
 
 The architecture foundation is considered successful when:
 
-1. A SketchUp extension shell loads ConstructFlow.
+1. A standalone command runtime executes without SketchUp; the optional extension shell loads its bridge.
 2. Modules can register/unregister capabilities.
 3. Smart objects can persist stable IDs and namespaced data.
 4. Phase and level metadata work independently.

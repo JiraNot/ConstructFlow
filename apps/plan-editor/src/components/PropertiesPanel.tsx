@@ -15,6 +15,7 @@ import {
   isDoorObject,
   isWindowObject,
   Phase,
+  RemovalPhase,
 } from '@constructflow/project-model'
 import { Copy, Check, Trash2, PlusCircle, RefreshCw, SlidersHorizontal } from 'lucide-react'
 
@@ -26,6 +27,7 @@ interface PropertiesPanelProps {
   onUpdateFoundationMark: (objectId: string, newMark: string) => void
   onUpdateGridTag: (objectId: string, newTag: string) => void
   onUpdatePhase?: (objectId: string, newPhase: Phase) => void
+  onUpdateRemovalPhase?: (objectId: string, removedPhase: RemovalPhase | null) => void
   onFlipDoorHanding?: (doorId: string) => void
   onOpenTypeManager: () => void
   onAddFoundation: (columnId: string) => void
@@ -40,6 +42,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateFoundationMark,
   onUpdateGridTag,
   onUpdatePhase,
+  onUpdateRemovalPhase,
   onFlipDoorHanding,
   onOpenTypeManager,
   onAddFoundation,
@@ -722,6 +725,28 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <option value="new_construction">New (ส่วนสร้างใหม่)</option>
           </select>
         </div>
+      </div>
+
+      <div style={{ marginTop: 8 }}>
+        <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>REMOVAL PHASE (เฟสรื้อถอน)</label>
+        <select
+          value={selectedObj.removed_phase ?? 'none'}
+          onChange={(e) => onUpdateRemovalPhase && onUpdateRemovalPhase(selectedObj.id, e.target.value === 'none' ? null : e.target.value as RemovalPhase)}
+          style={{
+            width: '100%',
+            background: selectedObj.removed_phase === 'demolition' ? '#991b1b' : '#0f172a',
+            color: '#ffffff',
+            border: '1px solid #475569',
+            borderRadius: 4,
+            padding: '5px 8px',
+            fontSize: 11,
+            marginTop: 4,
+            cursor: 'pointer',
+          }}
+        >
+          <option value="none">Not demolished / ไม่รื้อถอน</option>
+          <option value="demolition">Demolition / รื้อถอน</option>
+        </select>
       </div>
 
       {/* Hosted Foundation Status / Action for Columns */}

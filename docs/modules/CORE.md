@@ -117,7 +117,7 @@ Core persists shared envelope and preserves unknown module namespaces. It coordi
 
 ## Transactions / Undo
 
-SketchUp model mutations must use operation boundaries. A command transaction groups semantic and geometry mutation so Undo/Redo acts coherently.
+Canonical mutations use the standalone command runtime's atomic transaction/history boundary; Undo/Redo restores semantic state and regenerates derived representations. Optional SketchUp adapter mutations use native operation boundaries and have separate synchronization/acceptance evidence.
 
 ## Developer diagnostics
 

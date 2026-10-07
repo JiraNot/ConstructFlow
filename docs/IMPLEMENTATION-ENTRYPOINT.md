@@ -4,11 +4,11 @@ This file tells a developer or coding agent where to begin after the documentati
 
 ## Current delivery target
 
-The active delivery sequence is **R0 Native Reliability → R1 Plan Editor + Smart Wall 2.0**. Begin with the native-safe project/level setup (`Edit Project`, `Create Level`, `Show Levels`), then exercise the shared Plan Interaction Engine through:
+The active delivery sequence is **R0 Standalone Project Reliability → R1 Plan Editor + Smart Wall 2.0**, mapped to S0–S5 in `STANDALONE-ENGINE-REVIEW-2026-10.md`. Begin with local `.cfproj` project/level setup, the shared command runtime and standalone 2D/3D editors, then exercise the shared Plan Interaction Engine through:
 
 `Draw → Select → Move → Stretch → Host → Join → Align → Type → Instance → Schedule → Document`
 
-The North-star native proof uses `+500 mm` as a relative major-wall dimension change. Existing Extension, Drainage, Surface/Paving, Landscape, Joinery, BOQ, QA and AI scope remains in the Master Plan and is sequenced onto the same interaction/semantic foundation.
+The standalone North-star proof uses `+500 mm` as a relative major-wall dimension change. Existing Extension, Drainage, Surface/Paving, Landscape, Joinery, BOQ, QA and AI scope remains in the Master Plan and is sequenced onto the same interaction/semantic foundation. SketchUp/LayOut proofs apply only to optional adapter delivery.
 
 ## First implementation target
 

@@ -1,5 +1,7 @@
 # ConstructFlow — System Audit & Development Plan (September 2026)
 
+Scope note (2026-10-07): the verification below is historical Ruby adapter evidence. Active standalone delivery follows ADR-0006 and `ROADMAP.md`; the development priorities below have been aligned to that plan.
+
 Scope: full-repository audit performed after unifying `feat/phases-4-12-complete` with
 `origin/main` at the **v1.0.0 Full Release** (`43f4f4d`). This document records what was
 checked, what was found, what was fixed as part of the audit, and the development plan
@@ -113,24 +115,23 @@ Each phase exits only with evidence recorded in `docs/STATUS.md`.
 9. Delete stray `test.zip`.
 10. Publish a GitHub Release for `v1.0.0` attaching the CI-built RBZ artifact.
 
-### Phase 1 — Close the R0 native gate (highest product value)
+### Phase 1 — R0 standalone project reliability
 
-Execute the native acceptance runbook checkpoints 1–8 in supported SketchUp/LayOut
-versions (save/reopen identity, native Undo/Redo, copy identity, model observers,
-migrations, interactive tools, scenes/styles/sections, LayOut/PDF), recording evidence
-via the existing automatic evidence recorder. Exit: Gate F0–F3 native closures in STATUS.md.
+Verify canonical `.cfproj` file roundtrip, UUID/host relationships, atomic command
+history, migrations, standalone 2D/3D editing and quantity/sheet consistency.
+SketchUp/LayOut runbook checkpoints are independent adapter acceptance work.
 
 ### Phase 2 — R1 completion: Plan Editor + Smart Wall 2.0
 
 Close remaining R1 deliverables from the roadmap (temporary dimensions, numeric input,
 chain drawing, L/T/X join options, wall type/location-line breadth), then prove the
-"multi-room wall plan without raw SketchUp tools" exit criterion natively.
+standalone multi-room plan-editing exit criterion with shared 2D/3D semantics.
 
 ### Phase 3 — R2 hosted architecture core
 
 Door/Window/Opening 2.0, Floors, Ceilings, Rooms — most foundations exist; finish the
 host lifecycle edge cases (host deletion/replacement resolution) and verify the
-"complete simple residential level" exit gate in native SketchUp.
+"complete simple residential level" exit gate in the standalone workbench.
 
 ### Phase 4 — R3 parametric + constraints, then R4+ per roadmap
 
