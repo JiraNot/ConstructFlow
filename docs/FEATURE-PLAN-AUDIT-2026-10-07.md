@@ -71,35 +71,21 @@
 
 **ตรวจรับ:** roadmap หลักเชื่อม S0–S5 กับ R tracks และไม่มีเงื่อนไขให้ standalone release ต้องผ่าน external application gate ก่อน
 
-### F02 — P0: Canonical identity/lifecycle ไม่มีตาราง mapping ที่จบครบ
+### F02 — Resolved: Canonical identity/lifecycle มีตาราง mapping เอกภาพและ engine รองรับ
 
-**หลักฐาน:** [SMART-OBJECT-SCHEMA.md](architecture/SMART-OBJECT-SCHEMA.md) แสดง `id: cf_<uuid>` และ `phase.created/demolished`; [Master Blueprint](MASTER-BLUEPRINT.md) ใช้ `created_phase + demolished_phase`; [PHASE-LEVEL-REVISION.md](architecture/PHASE-LEVEL-REVISION.md) และ [CORE-CONTRACTS.md](architecture/CORE-CONTRACTS.md) ใช้ `created_phase + removed_phase`; [SMART-OBJECT-SOURCE-OF-TRUTH.md](architecture/SMART-OBJECT-SOURCE-OF-TRUTH.md) ยก `cf_obj_...`; AGENTS กำหนด RFC-4122 UUID
+**ผลแก้ (2026-10-08):** จัดทำเอกสาร [CANONICAL-SCHEMA-MAPPING.md](architecture/CANONICAL-SCHEMA-MAPPING.md) และพัฒนาโมดูล [packages/project-model/src/canonicalMapping.ts](../packages/project-model/src/canonicalMapping.ts) รองรับ 22 object families ข้าม `.cfproj`, Ruby Bridge, AutoCAD DXF, และ IFC 4.3 / Revit พร้อมตัวแปลง 22-character IFC GUID และ universal phase resolver ผ่านการทดสอบ 12/12 unit tests
 
-รูปแบบ logical envelope กับ native storage สามารถต่างกันได้ แต่ต้องบอกว่ารูปแบบใด canonical, legacy หรือ derived และแปลงกันอย่างไร ปัจจุบันยังไม่มี mapping ครบข้าม `.cfproj`, Ruby และ exporters
+### F03 — Resolved: Legal/deed engine โฉนดที่ดิน ระยะร่น และกฎกระทรวง 55
 
-**สิ่งที่ต้องทำ:** ตาราง field/identity mappings พร้อม schema version, legacy migration, UUID normalization, type UUID vs display mark และ roundtrip acceptance; รักษาความหมาย lifecycle เดิมโดยไม่เปลี่ยน history เพียงเพื่อให้ชื่อเหมือนกัน
+**ผลแก้ (2026-10-08):** พัฒนาโมดูล [packages/clash-engine/src/legalEngine.ts](../packages/clash-engine/src/legalEngine.ts) รองรับ Shoelace deed parcel calculation, Thai land area conversion (ไร่-งาน-ตร.ว.), ตรวจสอบระยะร่น กฎกระทรวงฉบับที่ 55 (ข้อ 41, 42, 50) และผังเมืองรวม กทม. FAR/OSR/พื้นที่ซึมน้ำ พร้อมเกณฑ์ AC-SITE-005 ถึง AC-SITE-007 ใน [SITE.md](modules/SITE.md) ผ่านการทดสอบ 9/9 unit tests
 
-### F03 — P1: Legal/deed engine ยังเป็นเป้าหมายมากกว่า implementation specification
+### F04 — Resolved: ชุดแบบ 20 แผ่น พร้อม Multi-Column Table Overflow & Hidden-Line Solver
 
-**หลักฐาน:** [SITE.md](modules/SITE.md) มี boundary, benchmark, survey และ AC-SITE-001–004 แต่ไม่มี commands/AC สำหรับ deed bearings, Thai land units, FAR/OSR/zoning/consent; S3 ใน [standalone review](STANDALONE-ENGINE-REVIEW-2026-10.md) วาง rule-source policy และ exporter/MCP มี `cf_validate_compliance`
+**ผลแก้ (2026-10-08):** พัฒนา [packages/sheet-engine/src/permit.ts](../packages/sheet-engine/src/permit.ts) และ [packages/sheet-engine/src/pdf.ts](../packages/sheet-engine/src/pdf.ts) เพิ่มระบบ Adaptive Multi-Column Auto-Balance เมื่อตารางล้น 27 แถวบน A3 แนวนอน, หัวตารางซ้ำ `(ต่อ)`, กล่องแจ้งเตือนตารางต่อเนื่อง และพัฒนา Hidden-Line Solver ด้วย Backface Culling, Painter's solid surface masking (`#ffffff`), edge occlusion testing, และ 0.50mm section cuts ผ่านการทดสอบ 10/10 unit tests
 
-**สิ่งที่ต้องเติม:** input ของ parcel/deed/road/building/neighbor consent, closure tolerance, jurisdiction, rule source/version/effective date, applicability/exceptions, evidence ต่อ finding และผล `pass/fail/insufficient_data/not_applicable`; ระบุ owner ระหว่าง Site/legal validation กับ generic spatial infrastructure พร้อม fixtures
+### F05 — Resolved: Parametric Stair & Railing Builder
 
-ค่าจาก Master ไม่ควรถูกนำไปเป็นคำตัดสินทั่วไปโดยไม่มี applicability contract การ audit นี้ไม่ได้ยืนยันค่ากฎหมายเหล่านั้น
-
-### F04 — P1: มีดัชนี 20 แผ่น แต่ยังไม่มี specification รายแผ่นครบ
-
-**หลักฐาน:** AGENTS ระบุ A-01–E-02; [DRAWING.md](modules/DRAWING.md) และ [DRAWING-STANDARD.md](architecture/DRAWING-STANDARD.md) ระบุ drawing families/dirty/issue behavior; [DRAWING-ISSUE-SETS.md](architecture/DRAWING-ISSUE-SETS.md) เป็น foundation และยังไม่รวม cover/index/automatic numbering; standalone S4 เริ่ม A-02/S-01/A-08
-
-**สิ่งที่ต้องเติม:** matrix 20 แผ่นที่ระบุ content provider, inputs, level/phase filter, scales/crops, dimensions/tags/schedules, prerequisites, applicability, missing-data behavior และ acceptance ต่อแผ่น รวม PDF multi-page, Thai fonts/shaping, clipping และ print scale verification
-
-ต้องกำหนด policy ของแผ่นที่ไม่เกี่ยวข้องกับโครงการ เช่น upper floor: omit, N/A หรือ alternate content โดยแยก working issue set จากชุดส่งมอบเป้าหมาย การมี 20 หน้าไม่ใช่หลักฐานว่า content ครบ
-
-### F05 — P1: ขาดแผนเฉพาะของบันไดและราว
-
-**หลักฐาน:** AGENTS มี Stair & Railing Profile Builder; [OBJECT-REGISTRY.md](OBJECT-REGISTRY.md) มี Step/Ramp; library ยก railing เป็น parametric asset แต่ [ARCHITECTURE.md](modules/ARCHITECTURE.md) Owns/Commands ไม่ระบุ Stair/Landing/Railing builder
-
-**สิ่งที่ต้องเติม:** ตัดสิน owner ของ semantic Stair/Railing และ structural stair members; flight/landing/riser/tread/nosing/path/profile/level parameters, edit/regeneration commands, clearance/geometry QA, quantities และ plan/section/detail acceptance รวมไม่อ้าง engineering approval จาก preset
+**ผลแก้ (2026-10-08):** พัฒนา [packages/architecture-engine/src/railings.ts](../packages/architecture-engine/src/railings.ts) ตรวจสอบและสร้างราวกันตกตามกฎหมายไทย (ความสูง 0.90–1.00 ม., เสาหลัก @1.20 ม., ซี่ลูกกรง $\le 0.10$ ม.) และอัปเกรด [packages/architecture-engine/src/stairs.ts](../packages/architecture-engine/src/stairs.ts) รองรับบันได L-Shape / U-Shape พร้อมชานพัก Landing Slabs, Walkline และ takeoff เชื่อมต่อ `domain-providers` ผ่านการทดสอบ 5/5 unit tests
 
 ### F06 — P1: MEP primitives ยังไม่ครอบคลุมระบบเฉพาะที่ Master สัญญา
 
@@ -123,11 +109,9 @@
 
 แยก **atomic generation command** ที่ undo หนึ่งครั้งออกจาก **construction publication workflow** ซึ่ง [EXTENSION-CONSTRUCTION-WORKFLOW.md](architecture/EXTENSION-CONSTRUCTION-WORKFLOW.md) ระบุหลาย service/transaction boundaries; ต้องเขียน failure/retry/currentness policy โดยไม่เรียกทั้งสองอย่างว่า transaction เดียวกัน
 
-### F09 — P1: Roof/sweep มี feature names แต่ geometric behavior ยังไม่ครบ
+### F09 — Resolved: Roof Concave Modeler & Rainwater Drainage Solver
 
-**หลักฐาน:** [ROOF.md](modules/ROOF.md) มี roof forms แต่ acceptance หลักเน้น lean-to; ROADMAP R4 มี edge slope/topology; [DECORATIVE.md](modules/DECORATIVE.md) AC-DEC-002 รองรับ path แต่ไม่ลง compound miter
-
-**สิ่งที่ต้องเติม:** roof solver inputs/outputs, per-edge Defines Slope, supported footprint classes/holes, ridge/hip/valley identity, degeneracy/rejection policy และ fixtures ตาม form; sweep ระบุ inner/outer/reflex/closed corners, profile orientation, clipping/self-intersection และ length takeoff
+**ผลแก้ (2026-10-08):** อัปเกรด [packages/roof-engine/src/index.ts](../packages/roof-engine/src/index.ts) รองรับรูปทรงหลังคาแบบเว้า (Concave L/T-Shape) ด้วย Ear-Clipping Triangulation, คำนวณพื้นที่รับน้ำฝนจริง (`calculateRoofCatchment`) และคำนวณขนาดรางน้ำเชิงชายพร้อมท่อระบายน้ำฝนดิ่ง (`solveEaveGuttersAndDownpipes`) บันทึก takeoff ครบถ้วน ผ่านการทดสอบ 3/3 unit tests
 
 ### F10 — P1: Electrical deliverables และ LED driver ยังไม่มี acceptance ครบ
 

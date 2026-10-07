@@ -75,6 +75,8 @@ test("Track 3: computeStairGeometry produces valid linework for Straight, L-Shap
   });
   assert.equal(lShape.geometry2d.step_lines_mm.length, 17);
   assert.ok(lShape.geometry2d.landing_bounds_mm);
+  assert.ok(lShape.mesh3d.vertices.length > 0, "L-Shape 3D mesh vertices must not be empty");
+  assert.ok(lShape.mesh3d.indices.length > 0, "L-Shape 3D mesh indices must not be empty");
   assert.ok(lShape.code_check.passed);
 
   // 3. U-Shape Dog-leg Stair
@@ -93,5 +95,44 @@ test("Track 3: computeStairGeometry produces valid linework for Straight, L-Shap
   });
   assert.equal(uShape.geometry2d.step_lines_mm.length, 18);
   assert.ok(uShape.geometry2d.landing_bounds_mm);
+  assert.ok(uShape.mesh3d.vertices.length > 0, "U-Shape 3D mesh vertices must not be empty");
+  assert.ok(uShape.mesh3d.indices.length > 0, "U-Shape 3D mesh indices must not be empty");
   assert.ok(uShape.code_check.passed);
+});
+
+test("Track 3 / F05: computeRailingGeometry builds compliant handrails, posts, and balusters", async () => {
+  const { computeRailingGeometry, validateRailingCode } = await import("../dist/index.js");
+
+  // Compliant 4m railing
+  const compliantRailing = computeRailingGeometry({
+    path_mm: [
+      [0, 0, 0],
+      [4000, 0, 0],
+    ],
+    height_mm: 950,
+    style: "vertical_balusters",
+    baluster_spacing_mm: 100,
+    material: "stainless_steel",
+  });
+
+  assert.equal(compliantRailing.code_check.passed, true);
+  assert.equal(compliantRailing.mesh3d.handrail_length_m, 4.0);
+  assert.equal(compliantRailing.mesh3d.post_count, 2);
+  assert.ok(compliantRailing.mesh3d.baluster_count > 30);
+  assert.ok(compliantRailing.mesh3d.vertices.length > 0);
+
+  // Non-compliant railing (too low, balusters too wide)
+  const nonCompliant = validateRailingCode({
+    path_mm: [
+      [0, 0, 0],
+      [2000, 0, 0],
+    ],
+    height_mm: 800, // < 900
+    style: "vertical_balusters",
+    baluster_spacing_mm: 150, // > 100
+    material: "timber",
+  });
+  assert.equal(nonCompliant.passed, false);
+  assert.equal(nonCompliant.height_ok, false);
+  assert.equal(nonCompliant.spacing_ok, false);
 });

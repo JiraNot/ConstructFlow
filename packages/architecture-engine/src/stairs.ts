@@ -182,6 +182,15 @@ export function computeStairGeometry(stair: StairModuleData): {
         [stepX, y0],
         [stepX, y0 + w],
       ]);
+      const currentZ = z0 + i * r;
+      const vBase = vertices.length;
+      vertices.push(
+        [stepX, y0, currentZ],
+        [stepX + t, y0, currentZ],
+        [stepX + t, y0 + w, currentZ],
+        [stepX, y0 + w, currentZ],
+      );
+      indices.push(vBase, vBase + 1, vBase + 2, vBase, vBase + 2, vBase + 3);
     }
 
     // Landing
@@ -194,6 +203,16 @@ export function computeStairGeometry(stair: StairModuleData): {
       [lx, ly + landingDepth],
     ];
 
+    const landingZ = z0 + n1 * r;
+    const lBase = vertices.length;
+    vertices.push(
+      [lx, ly, landingZ],
+      [lx + landingDepth, ly, landingZ],
+      [lx + landingDepth, ly + landingDepth, landingZ],
+      [lx, ly + landingDepth, landingZ],
+    );
+    indices.push(lBase, lBase + 1, lBase + 2, lBase, lBase + 2, lBase + 3);
+
     // Flight 2: Along Y (turned 90 deg)
     for (let j = 0; j < n2; j++) {
       const stepY = ly + landingDepth + j * t;
@@ -201,6 +220,15 @@ export function computeStairGeometry(stair: StairModuleData): {
         [lx, stepY],
         [lx + w, stepY],
       ]);
+      const currentZ = landingZ + (j + 1) * r;
+      const vBase = vertices.length;
+      vertices.push(
+        [lx, stepY, currentZ],
+        [lx + w, stepY, currentZ],
+        [lx + w, stepY + t, currentZ],
+        [lx, stepY + t, currentZ],
+      );
+      indices.push(vBase, vBase + 1, vBase + 2, vBase, vBase + 2, vBase + 3);
     }
 
     walkline.push(
@@ -244,19 +272,49 @@ export function computeStairGeometry(stair: StairModuleData): {
         [stepX, y0],
         [stepX, y0 + w],
       ]);
+      const currentZ = z0 + i * r;
+      const vBase = vertices.length;
+      vertices.push(
+        [stepX, y0, currentZ],
+        [stepX + t, y0, currentZ],
+        [stepX + t, y0 + w, currentZ],
+        [stepX, y0 + w, currentZ],
+      );
+      indices.push(vBase, vBase + 1, vBase + 2, vBase, vBase + 2, vBase + 3);
     }
 
-    // Flight 2: Parallel return along X
+    const lx = x0 + Math.max(n1, n2) * t;
     const returnY = y0 + w + gap;
+
+    // Landing Box
+    const landingZ = z0 + n1 * r;
+    const lBase = vertices.length;
+    vertices.push(
+      [lx, y0, landingZ],
+      [lx + landingDepth, y0, landingZ],
+      [lx + landingDepth, returnY + w, landingZ],
+      [lx, returnY + w, landingZ],
+    );
+    indices.push(lBase, lBase + 1, lBase + 2, lBase, lBase + 2, lBase + 3);
+
+    // Flight 2: Parallel return along X
     for (let j = 0; j < n2; j++) {
       const stepX = x0 + (n2 - 1 - j) * t;
       step_lines.push([
         [stepX, returnY],
         [stepX, returnY + w],
       ]);
+      const currentZ = landingZ + (j + 1) * r;
+      const vBase = vertices.length;
+      vertices.push(
+        [stepX, returnY, currentZ],
+        [stepX + t, returnY, currentZ],
+        [stepX + t, returnY + w, currentZ],
+        [stepX, returnY + w, currentZ],
+      );
+      indices.push(vBase, vBase + 1, vBase + 2, vBase, vBase + 2, vBase + 3);
     }
 
-    const lx = x0 + Math.max(n1, n2) * t;
     const landingBounds: Point2Mm[] = [
       [lx, y0],
       [lx + landingDepth, y0],
@@ -400,6 +458,20 @@ export function stairOutputs(p: ProjectDocument): DomainOutput[] {
           unit: "m",
           formula: "hypot(run, rise) / 1000",
           material: "stainless_steel",
+        });
+      }
+
+      if (d.stair_type === "l_shape" || d.stair_type === "u_shape") {
+        const landingDepth_m = (d.landing_depth_mm ?? d.width_mm) / 1000;
+        const landingWidth_m = (d.stair_type === "l_shape" ? d.width_mm : d.width_mm * 2 + 100) / 1000;
+        const landingArea_m2 = Math.round(landingDepth_m * landingWidth_m * 100) / 100;
+        out.quantities.push({
+          classification: "stair.landing",
+          description: `${d.mark} Intermediate Landing Slab`,
+          quantity: landingArea_m2,
+          unit: "m2",
+          formula: "landing_width * landing_depth",
+          material: "concrete",
         });
       }
 

@@ -740,9 +740,49 @@ Status: **Production Implementation Complete across Standalone Engine, Sheet Eng
   - **OpenBIM IFC 4.3 & Revit Direct Bridge (`packages/bim-adapter`)**: Converts RFC-4122 UUIDs to 22-character buildingSMART IFC GUIDs, generates certified IFC 4.3 ADD2 STEP models, and exports native Revit transfer JSON.
   - **Pure-Node SketchUp RBZ Packager (`npm run package:sketchup`)**: Bundles 486 extension files into `output/constructflow.rbz` (727 KB) cross-platform without native zip or bash dependencies.
 
-- **Verification & Test Status**:
+- **Verification & Test Status (Baseline)**:
   - `node scripts/test_standalone.mjs`: Rebuilds all packages and passes 76 unit tests across 11 packages (7 project-model, 4 representation-engine, 3 architecture-engine, 1 drainage-engine, 2 electrical-engine, 5 clash-engine, 7 sheet-engine, 35 command-runtime, 7 extension-engine, 2 cad-adapter, 3 bim-adapter).
   - Three vertical acceptance verifiers pass: `npm run verify:kitchen`, `npm run verify:file-io`, and `npm run verify:phases` (generating 20-sheet A3 PDF, 41 Smart Objects, and 44 takeoff rows).
+
+### Core Engine Feature Track Delivery (P0 / P1 Closure) — 2026-10-08
+
+Status: **Production Implementation Complete across Core Domain Packages, Sheet Engine, and Downstream Bridges**.
+
+- **[P0] F02 Canonical Schema Mapping Engine (`packages/project-model`)**:
+  - Unified Data Schema across `.cfproj`, Ruby Bridge, AutoCAD DXF, and IFC 4.3 / Revit.
+  - Architecture spec: [`docs/architecture/CANONICAL-SCHEMA-MAPPING.md`](architecture/CANONICAL-SCHEMA-MAPPING.md).
+  - Implemented `packages/project-model/src/canonicalMapping.ts` covering 22 canonical families, AIA/วสท. layer mapping, RFC-4122 to 22-char IFC GUID generator, and universal phase resolver.
+  - Automated test coverage: 12 unit tests passing in `project-model`.
+
+- **[P1] F03 Legal & Site Survey Compliance Engine (`packages/clash-engine`)**:
+  - Implemented `packages/clash-engine/src/legalEngine.ts`:
+    - Shoelace polygon deed parcel calculation from boundary pegs (`calculateParcelFromPegs`) with perimeter and closure validation.
+    - Thai land measurement unit conversion (`convertSqMetersToThaiLand`, `formatThaiLandArea`) for Rai, Ngan, Sq.Wa, and Sq.m.
+    - Thai Building Code (กฎกระทรวงฉบับที่ 55 พ.ศ. 2543 ข้อ 41, 42, 50) setback evaluation (`evaluateThaiBuildingCompliance`).
+    - BMA Zoning (ผังเมืองรวม กทม. ย.1 - ย.10) FAR, OSR, and permeable green area ($\ge 50\%$) checks (`evaluateBmaZoning`).
+  - Documented in `docs/modules/SITE.md` (AC-SITE-005 to AC-SITE-007).
+  - Automated test coverage: 9 unit tests passing in `clash-engine`.
+
+- **[P1] F05 Parametric Stair & Railing Builder (`packages/architecture-engine`)**:
+  - Parametric Railing Builder (`packages/architecture-engine/src/railings.ts`): Thai Building Code compliance for handrail heights ($0.90$–$1.00$m), structural posts (@$1.20$m), balusters (gaps $\le 0.10$m), 3D meshes, and takeoffs.
+  - Enhanced Stair Builder (`packages/architecture-engine/src/stairs.ts`): L-Shape and U-Shape stairs with landing slabs, 3D meshes, and landing takeoff, integrated into `domain-providers`.
+  - Automated test coverage: 5 unit tests passing in `architecture-engine`.
+
+- **[P1] F09 Concave Roof Modeler & Automated Rainwater System (`packages/roof-engine`)**:
+  - Ear-clipping triangulation supporting concave (L/T-shaped) roof footprints with per-edge slope planes.
+  - Automated rainwater catchment calculation (`calculateRoofCatchment`) and eaves gutter + downpipe solver (`solveEaveGuttersAndDownpipes`) with full takeoffs in `roofOutputs`.
+  - Automated test coverage: 3 unit tests passing in `roof-engine`.
+
+- **[P1] F04 20-Sheet Drawing Engine Enhancement (`packages/sheet-engine`)**:
+  - Adaptive Schedule Table Multi-Column auto-balance layout on A3 landscape, repeating header rows with `(ต่อ)`, header background fill `#f1f5f9`, and gold continuation overflow banners for tables >70 rows.
+  - Hidden-Line Solver & Occlusion Engine: Backface culling, depth calculation, Painter's algorithm with opaque solid surface masking (`fill: "#ffffff"`), analytical edge occlusion testing, and bold 0.50mm section cuts.
+  - Full vector PDF filled path compilation using `drawSvgPath`.
+  - Automated test coverage: 10 unit tests passing in `sheet-engine`.
+
+- **Full Verification Status**:
+  - All 12 monorepo packages and `apps/plan-editor` compiled cleanly with zero errors.
+  - All unit test suites pass (86 total unit tests across all domain packages).
+  - All 3 vertical domain verifiers pass: `verify:kitchen`, `verify:file-io`, and `verify:phases`.
 
 ## How to update this file
 

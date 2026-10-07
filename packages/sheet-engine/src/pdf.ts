@@ -38,14 +38,29 @@ export async function compilePermitPdf(
     for (const p of sheet.primitives) {
       if (p.kind === "path") {
         const pts = p.closed ? [...p.points, p.points[0]] : p.points;
-        for (let i = 1; i < pts.length; i++)
-          page.drawLine({
-            start: { x: pts[i - 1][0] * PT, y: (297 - pts[i - 1][1]) * PT },
-            end: { x: pts[i][0] * PT, y: (297 - pts[i][1]) * PT },
-            thickness: p.width * PT,
-            color: color(p.color),
-            dashArray: p.dash?.map((v) => v * PT),
-          });
+        if (p.fill && p.fill !== "none" && p.closed && p.points.length >= 3) {
+          const d =
+            p.points
+              .map(
+                (pt, i) =>
+                  `${i === 0 ? "M" : "L"} ${(pt[0] * PT).toFixed(2)} ${(
+                    (297 - pt[1]) *
+                    PT
+                  ).toFixed(2)}`,
+              )
+              .join(" ") + " Z";
+          page.drawSvgPath(d, { color: color(p.fill) });
+        }
+        if (p.width > 0 && p.color !== "none") {
+          for (let i = 1; i < pts.length; i++)
+            page.drawLine({
+              start: { x: pts[i - 1][0] * PT, y: (297 - pts[i - 1][1]) * PT },
+              end: { x: pts[i][0] * PT, y: (297 - pts[i][1]) * PT },
+              thickness: p.width * PT,
+              color: color(p.color),
+              dashArray: p.dash?.map((v) => v * PT),
+            });
+        }
       } else {
         const run = face.layout(p.text),
           baseSize = p.size * PT,

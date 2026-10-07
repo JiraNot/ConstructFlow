@@ -51,6 +51,7 @@ export type VectorPrimitive =
       width: number;
       dash?: number[];
       closed?: boolean;
+      fill?: string;
     }
   | {
       kind: "text";
@@ -99,7 +100,8 @@ const colors = {
   demolition: "#ef4444",
   new_construction: "#0f172a",
 };
-const data = (o: SmartObject) => o.module_data as Record<string, unknown>;
+const data = (o: SmartObject) =>
+  ((o.module_data ?? (o as unknown as { properties?: unknown }).properties ?? {}) as Record<string, unknown>);
 const format = (v: unknown) =>
   typeof v === "number"
     ? Number.isInteger(v)
@@ -108,7 +110,7 @@ const format = (v: unknown) =>
     : String(v ?? "");
 
 export function primitivesToSvg(primitives: VectorPrimitive[]): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="420mm" height="297mm" viewBox="0 0 420 297"><rect width="420" height="297" fill="white"/>${primitives.map((p) => (p.kind === "path" ? `<path d="${p.points.map((v, i) => `${i ? "L" : "M"}${v[0]} ${v[1]}`).join(" ")}${p.closed ? " Z" : ""}" fill="none" stroke="${p.color}" stroke-width="${p.width}"${p.dash ? ` stroke-dasharray="${p.dash.join(",")}"` : ""}/>` : `<text x="${p.at[0]}" y="${p.at[1]}" font-family="Sarabun,sans-serif" font-size="${p.size}" fill="${p.color}"${p.max_width ? ` textLength="${Math.min(p.max_width, p.text.length * p.size * 0.52)}" lengthAdjust="spacingAndGlyphs"` : ""}>${esc(p.text)}</text>`)).join("")}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="420mm" height="297mm" viewBox="0 0 420 297"><rect width="420" height="297" fill="white"/>${primitives.map((p) => (p.kind === "path" ? `<path d="${p.points.map((v, i) => `${i ? "L" : "M"}${v[0]} ${v[1]}`).join(" ")}${p.closed ? " Z" : ""}" fill="${p.fill ?? "none"}" stroke="${p.color}" stroke-width="${p.width}"${p.dash ? ` stroke-dasharray="${p.dash.join(",")}"` : ""}/>` : `<text x="${p.at[0]}" y="${p.at[1]}" font-family="Sarabun,sans-serif" font-size="${p.size}" fill="${p.color}"${p.max_width ? ` textLength="${Math.min(p.max_width, p.text.length * p.size * 0.52)}" lengthAdjust="spacingAndGlyphs"` : ""}>${esc(p.text)}</text>`)).join("")}</svg>`;
 }
 
 /** Fixed-scale vector compiler. Missing inputs and clipping remain visible on every affected page. */
@@ -217,8 +219,9 @@ export function compilePermitDrawingSet(
         width = 0.25,
         dash?: number[],
         closed = false,
+        fill?: string,
       ) =>
-        primitives.push({ kind: "path", points, color, width, dash, closed });
+        primitives.push({ kind: "path", points, color, width, dash, closed, fill });
       const text = (
         at: Vec2,
         text: string,
@@ -449,42 +452,125 @@ export function compilePermitDrawingSet(
         rowH = 7.0,
       ) => {
         const totalW = widths.reduce((s, w) => s + w, 0);
-        let colOffset = 0;
-        let startRow = 0;
+        const headerRow = rows[0] ?? [];
+        const dataRows = rows.slice(1);
+        const availableW = 390 - at[0];
 
-        while (startRow < rows.length) {
-          const chunk = rows.slice(startRow, startRow + maxRows);
+        let effectiveWidths = widths;
+        let effectiveTotalW = totalW;
+        let effectiveMaxRows = maxRows;
+        let effectiveRowH = rowH;
+        let colGap = 10;
+
+        if (rows.length > maxRows) {
+          if (totalW > 185) {
+            const targetColW = Math.min(180, Math.floor((availableW - colGap) / 2));
+            const scale = targetColW / totalW;
+            effectiveWidths = widths.map((w) => Math.max(16, Math.floor(w * scale)));
+            effectiveTotalW = effectiveWidths.reduce((s, w) => s + w, 0);
+          }
+          if (dataRows.length > (maxRows - 1) * 2) {
+            effectiveRowH = 5.5;
+            effectiveMaxRows = Math.floor(189 / effectiveRowH);
+          }
+        }
+
+        let colOffset = 0;
+        let dataIndex = 0;
+        let colIndex = 0;
+
+        while (dataIndex < dataRows.length || colIndex === 0) {
+          if (at[0] + colOffset + effectiveTotalW > 392) break;
+
+          const currentHeader =
+            colIndex === 0
+              ? headerRow
+              : [
+                  headerRow[0] ? `${headerRow[0]} (ต่อ)` : "ต่อ",
+                  ...headerRow.slice(1),
+                ];
+
           let y = at[1];
+          let hx = at[0] + colOffset;
+          currentHeader.forEach((cell, i) => {
+            const w = effectiveWidths[i] ?? 30;
+            path(
+              [
+                [hx, y],
+                [hx + w, y],
+                [hx + w, y + effectiveRowH],
+                [hx, y + effectiveRowH],
+              ],
+              "#64748b",
+              0.25,
+              undefined,
+              true,
+              "#f1f5f9",
+            );
+            text([hx + 1.5, y + effectiveRowH * 0.67], cell, 2.3, "#0f172a", w - 3);
+            hx += w;
+          });
+          y += effectiveRowH;
+
+          const chunkSize = effectiveMaxRows - 1;
+          const chunk = dataRows.slice(dataIndex, dataIndex + chunkSize);
           for (const row of chunk) {
-            let x = at[0] + colOffset;
+            let rx = at[0] + colOffset;
             row.forEach((cell, i) => {
-              const w = widths[i] ?? 30;
+              const w = effectiveWidths[i] ?? 30;
               path(
                 [
-                  [x, y],
-                  [x + w, y],
-                  [x + w, y + rowH],
-                  [x, y + rowH],
+                  [rx, y],
+                  [rx + w, y],
+                  [rx + w, y + effectiveRowH],
+                  [rx, y + effectiveRowH],
                 ],
-                "#94a3b8",
+                "#cbd5e1",
                 0.15,
                 undefined,
                 true,
+                undefined,
               );
-              text([x + 1.5, y + 4.7], cell, 2.3, "#0f172a", w - 3);
-              x += w;
+              text([rx + 1.5, y + effectiveRowH * 0.67], cell, 2.2, "#0f172a", w - 3);
+              rx += w;
             });
-            y += rowH;
+            y += effectiveRowH;
           }
-          startRow += maxRows;
-          colOffset += totalW + 8;
-          if (colOffset + totalW > 390) break;
+          dataIndex += chunk.length;
+          colOffset += effectiveTotalW + colGap;
+          colIndex++;
+
+          if (dataIndex >= dataRows.length) break;
         }
 
-        if (startRow < rows.length)
-          warnings.push(
-            `Schedule overflow: ${rows.length - startRow} rows require secondary continuation sheet`,
+        if (dataIndex < dataRows.length) {
+          const remaining = dataRows.length - dataIndex;
+          const lastX = at[0] + (colIndex - 1) * (effectiveTotalW + colGap);
+          const bannerY = at[1] + effectiveMaxRows * effectiveRowH + 2;
+          path(
+            [
+              [lastX, bannerY],
+              [lastX + effectiveTotalW, bannerY],
+              [lastX + effectiveTotalW, bannerY + 6],
+              [lastX, bannerY + 6],
+            ],
+            "#f59e0b",
+            0.2,
+            undefined,
+            true,
+            "#fffbeb",
           );
+          text(
+            [lastX + 2, bannerY + 4.2],
+            `--- ตารางมีต่อในเอกสารแนบประกอบแบบ (ตารางต่ออีก ${remaining} รายการ) ---`,
+            2.1,
+            "#b45309",
+            effectiveTotalW - 4,
+          );
+          warnings.push(
+            `Schedule overflow: ${remaining} rows require secondary continuation sheet`,
+          );
+        }
       };
       if (tableSheet) {
         const rows = [
@@ -990,19 +1076,169 @@ export function compilePermitDrawingSet(
               dash,
             );
           };
+          const isElevation = mode === "xz" || mode === "yz" || mode === "iso";
+          const getDepth = (v: Vec3): number => {
+            if (mode === "xz" || mode === "section_x") {
+              return id === "A-06" ? -v[1] : v[1];
+            } else if (mode === "yz" || mode === "section_y") {
+              return id === "A-06" ? -v[0] : v[0];
+            } else if (mode === "iso") {
+              return v[0] + v[1];
+            } else {
+              return -v[2];
+            }
+          };
+
+          const viewDir: Vec3 =
+            mode === "xz" || mode === "section_x"
+              ? id === "A-06"
+                ? [0, -1, 0]
+                : [0, 1, 0]
+              : mode === "yz" || mode === "section_y"
+                ? id === "A-06"
+                  ? [-1, 0, 0]
+                  : [1, 0, 0]
+                : mode === "iso"
+                  ? [0.7071, 0.7071, -0.247]
+                  : [0, 0, -1];
+
+          interface FrontFace {
+            poly2D: Vec2[];
+            depth: number;
+            minX: number;
+            maxX: number;
+            minY: number;
+            maxY: number;
+            objectId: string;
+          }
+          const frontFaces: FrontFace[] = [];
+
+          if (isElevation) {
+            for (const { object: o, mesh } of objectsWithMesh) {
+              for (const tr of mesh) {
+                const a = [
+                  tr[1][0] - tr[0][0],
+                  tr[1][1] - tr[0][1],
+                  tr[1][2] - tr[0][2],
+                ];
+                const b = [
+                  tr[2][0] - tr[0][0],
+                  tr[2][1] - tr[0][1],
+                  tr[2][2] - tr[0][2],
+                ];
+                const n: Vec3 = [
+                  a[1] * b[2] - a[2] * b[1],
+                  a[2] * b[0] - a[0] * b[2],
+                  a[0] * b[1] - a[1] * b[0],
+                ];
+                const norm = Math.hypot(...n);
+                if (norm < 1e-9) continue;
+                const dot =
+                  (n[0] * viewDir[0] + n[1] * viewDir[1] + n[2] * viewDir[2]) /
+                  norm;
+                if (dot < -0.05) {
+                  const pts2D = tr.map(projectPoint);
+                  const xs = pts2D.map((p) => p[0]);
+                  const ys = pts2D.map((p) => p[1]);
+                  const depth =
+                    (getDepth(tr[0]) + getDepth(tr[1]) + getDepth(tr[2])) / 3;
+                  frontFaces.push({
+                    poly2D: pts2D,
+                    depth,
+                    minX: Math.min(...xs),
+                    maxX: Math.max(...xs),
+                    minY: Math.min(...ys),
+                    maxY: Math.max(...ys),
+                    objectId: o.id,
+                  });
+                }
+              }
+            }
+            frontFaces.sort((fa, fb) => fb.depth - fa.depth);
+            for (const f of frontFaces) {
+              const screenPts = f.poly2D.map(mapped);
+              if (
+                screenPts.some(
+                  (pt) =>
+                    pt[0] >= view.x - 20 &&
+                    pt[0] <= view.x + view.w + 20 &&
+                    pt[1] >= view.y - 20 &&
+                    pt[1] <= view.y + view.h + 20,
+                )
+              ) {
+                path(screenPts, "#f8fafc", 0.1, undefined, true, "#ffffff");
+              }
+            }
+          }
+
+          const isPointIn2DPoly = (pt: Vec2, poly: Vec2[]): boolean => {
+            let inside = false;
+            for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+              const xi = poly[i][0],
+                yi = poly[i][1];
+              const xj = poly[j][0],
+                yj = poly[j][1];
+              const intersect =
+                yi > pt[1] !== yj > pt[1] &&
+                pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi;
+              if (intersect) inside = !inside;
+            }
+            return inside;
+          };
+
+          const isEdgeOccluded = (
+            ea: Vec3,
+            eb: Vec3,
+            ownerId: string,
+          ): boolean => {
+            if (frontFaces.length === 0) return false;
+            const dE = (getDepth(ea) + getDepth(eb)) / 2;
+            const pa = projectPoint(ea),
+              pb = projectPoint(eb);
+            const m: Vec2 = [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2];
+            for (const f of frontFaces) {
+              if (f.objectId === ownerId) continue;
+              if (f.depth >= dE - 15) continue;
+              if (
+                m[0] < f.minX ||
+                m[0] > f.maxX ||
+                m[1] < f.minY ||
+                m[1] > f.maxY
+              )
+                continue;
+              if (isPointIn2DPoly(m, f.poly2D)) {
+                return true;
+              }
+            }
+            return false;
+          };
+
           for (const { object: o, mesh, out } of objectsWithMesh) {
             const phase = getDisplayPhase(o),
               color = colors[phase],
               width = phase === "new_construction" ? 0.35 : 0.25,
               dash = phase === "demolition" ? [2, 1] : undefined,
               seen = new Set<string>();
-            const edge = (a: Vec3, b: Vec3) => {
+            const edge = (a: Vec3, b: Vec3, isSectionCut = false) => {
               const p = projectPoint(a),
                 q = projectPoint(b),
                 key = [p.join(","), q.join(",")].sort().join("|");
               if (seen.has(key) || Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-6)
                 return;
               seen.add(key);
+              if (isSectionCut) {
+                drawSegment(p, q, color, 0.50);
+                return;
+              }
+              if (isElevation) {
+                const occluded = isEdgeOccluded(a, b, o.id);
+                if (occluded) {
+                  if (a[2] < 0 && b[2] < 0) {
+                    drawSegment(p, q, "#94a3b8", 0.20, [2, 1]);
+                  }
+                  return;
+                }
+              }
               drawSegment(p, q, color, width, dash);
             };
             for (const tr of mesh) {
@@ -1036,7 +1272,7 @@ export function compilePermitDrawingSet(
                   }
                 }
                 if (intersections.length >= 2)
-                  edge(intersections[0], intersections[1]);
+                  edge(intersections[0], intersections[1], true);
               }
             }
             if (!mode.startsWith("section_")) {

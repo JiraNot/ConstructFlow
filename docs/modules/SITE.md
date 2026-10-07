@@ -133,6 +133,9 @@ Provides:
 - AC-SITE-002: benchmark change invalidates dependent level/site output.
 - AC-SITE-003: assumed/unknown survey data remains explicitly uncertain.
 - AC-SITE-004: imported unit ambiguity requires confirmation.
+- AC-SITE-005: Title Deed parcel polygon, closure error, and Thai land units (ไร่-งาน-ตร.ว.) calculate accurately via calculateParcelFromPegs.
+- AC-SITE-006: Thai Building Code (กฎกระทรวงฉบับที่ 55 พ.ศ. 2543 ข้อ 41, 42, 50) setback validator correctly evaluates walls with openings (>= 2m or >= 3m), blind walls (>= 0.50m or 0.00m with written neighbor consent), and road setbacks.
+- AC-SITE-007: BMA Town Planning zoning (ผังเมืองรวม กทม. ย.1 - ย.10) evaluates FAR, OSR and permeable green surface area (>= 50% of open space) with structured findings.
 
 ## Deferred
 

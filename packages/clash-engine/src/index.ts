@@ -335,3 +335,5 @@ export function classifySpatialInteractions(
     return { first, second, kind, overlap_mm }
   })
 }
+
+export * from './legalEngine.js'

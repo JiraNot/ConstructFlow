@@ -10,6 +10,7 @@ import {
   validateBathroom,
   stairOutputs,
   validateStairs,
+  railingOutputs,
 } from "@constructflow/architecture-engine";
 import { roofOutputs, validateRoof } from "@constructflow/roof-engine";
 import {
@@ -38,6 +39,7 @@ export function constructionOutputs(project: ProjectDocument): DomainOutput[] {
     structureOutputs,
     bathroomOutputs,
     stairOutputs,
+    railingOutputs,
     roofOutputs,
     decorativeOutputs,
     drainageOutputs,

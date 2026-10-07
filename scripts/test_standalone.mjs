@@ -30,6 +30,7 @@ for (const directory of [
   "packages/project-model",
   "packages/representation-engine",
   "packages/architecture-engine",
+  "packages/roof-engine",
   "packages/drainage-engine",
   "packages/electrical-engine",
   "packages/clash-engine",
