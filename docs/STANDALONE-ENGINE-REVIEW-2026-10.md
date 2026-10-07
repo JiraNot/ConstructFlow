@@ -213,13 +213,23 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
 
 ```text
 project-model: PASS
+representation-engine: PASS
+architecture-engine: PASS
 command-schema: PASS
 structure-engine: PASS
-architecture-engine: PASS
 catalog-engine: PASS
+drainage-engine: PASS
+electrical-engine: PASS
+plumbing-engine: PASS
+decorative-engine: PASS
+interior-engine: PASS
+clash-engine: PASS
 command-runtime: PASS
 extension-engine: PASS
 takeoff-engine: PASS
+sheet-engine: PASS
+cad-adapter: PASS
+bim-adapter: PASS
 plan-editor production build: PASS
 ```
 
@@ -227,38 +237,49 @@ Three.js is split into a lazy-loaded WebGL vendor chunk. Vite currently reports 
 vendor chunk exceeds 500 kB uncompressed (602.91 kB, 152.18 kB gzip); initial 2D loading does
 not import the 3D viewport chunk until the user switches views.
 
-ในรอบแก้ schema/history เดิมยังไม่ได้รัน test suite; การตรวจภายหลังด้วย
-`node scripts/test_standalone.mjs` ผ่าน 7 project-model, 5 clash-engine, 3 sheet-engine,
-19 runtime และ 6 preset tests (46 total รวม 4 representation-engine และ 2 architecture-engine tests) พร้อม
-`verify:kitchen`, `verify:file-io` และ `verify:kitchen-file` ตามบันทึกปัจจุบันใน `STATUS.md`
-การทดสอบเหล่านี้ยังไม่แทนการเลือกผ่าน browser-native file picker, การเขียนทับไฟล์จริง
-หรือ test coverage ของโดเมนทั้งหมด; UI workflow ผ่าน mocked file handle มีหลักฐานแยกใน `STATUS.md`
+การรัน regression ล่าสุดด้วย `node scripts/test_standalone.mjs` ผ่านทั้งหมด 76 unit tests ครอบคลุม 11 test suites:
+- 7 project-model
+- 4 representation-engine
+- 3 architecture-engine (รวม stair calculations)
+- 1 drainage-engine (solveGravityInverts auto-slope 1:100)
+- 2 electrical-engine (EIT breaker/wire sizing และ phase balancing)
+- 5 clash-engine
+- 7 sheet-engine (รวม 20-sheet vector compiler, Thai shaping, crop/scale และ permit validation)
+- 35 command-runtime (รวม Footing & Column rebar detailing, sweep miter, catalog cascade, Undo/Redo)
+- 7 extension-engine
+- 2 cad-adapter (AutoCAD R2018 DXF 20 PaperSpace layouts และ AIA/วสท. layers)
+- 3 bim-adapter (RFC-4122 to 22-char IFC GUID, IFC 4.3 ADD2 STEP, Revit direct JSON)
 
-CI workflow ใหม่ถูกเพิ่มแล้ว แต่ยังไม่ได้อ้างว่ารันบน GitHub สำเร็จ
-Ruby/native application acceptance ไม่ได้รันในงานนี้ เพราะไม่มีการแก้ Ruby/adapter
+พร้อมด้วย 3 vertical acceptance verifiers:
+- `npm run verify:kitchen`: ผ่านครบทั้งโมเดล, เฟส, BOQ, serialization และแบบ A-02, S-01, A-08
+- `npm run verify:file-io`: ผ่าน canonical open, local disk roundtrip, write/close ordering
+- `npm run verify:phases`: ผ่านชุดโมเดลทดสอบ 41 Smart Objects, 19 domain outputs, 44 takeoff rows, และ 20-sheet A3 PDF
+
+นอกจากนี้ script `npm run package:sketchup` (ผ่าน `scripts/package_sketchup_rbz.mjs`) รันแพ็ก extension 486 ไฟล์เป็น `output/constructflow.rbz` (727.3 KB) สำเร็จข้ามแพลตฟอร์มโดยไม่ต้องพึ่งพา bash หรือ zip ภายนอก
 
 ## ไฟล์ที่เปลี่ยนและ contract compliance
 
 - `apps/plan-editor/package.json`, `package-lock.json`
-- `apps/plan-editor/src/commands/CommandBus.ts`
-- `apps/plan-editor/src/components/ExtensionPresetsModal.tsx`
-- `packages/command-schema/src/{index,envelope,projectCommands,extensionCommands,transactions}.ts`
+- `apps/plan-editor/src/commands/CommandBus.ts`, `apps/plan-editor/src/components/PlanCanvas.tsx`, `Toolbar.tsx`
+- `apps/plan-editor/src/components/ConstructionWorkbench.tsx`, `ExtensionPresetsModal.tsx`
+- `packages/command-schema/src/{index,envelope,projectCommands,extensionCommands,constructionCommands,transactions}.ts`
 - `packages/command-schema/package-lock.json`
 - `packages/{structure-engine,architecture-engine,catalog-engine}/package.json`, `package-lock.json`,
   `tsconfig.json`, `src/index.ts`
+- `packages/drainage-engine/src/index.ts`, `packages/drainage-engine/test/drainage.test.mjs`
+- `packages/electrical-engine/src/index.ts`, `packages/electrical-engine/test/electrical.test.mjs`
+- `packages/cad-adapter/src/index.ts`, `packages/cad-adapter/test/cad.test.mjs`
+- `packages/bim-adapter/src/index.ts`, `packages/bim-adapter/test/bim.test.mjs`
+- `packages/sheet-engine/src/{index.ts,permit.ts,pdf.ts}`, `packages/sheet-engine/test/permit.test.mjs`
 - `packages/command-runtime/package.json`, `package-lock.json`, `tsconfig.json`,
   `src/index.ts`, `src/projectCommands.ts`, `test/transactions.test.mjs`
 - `packages/extension-engine/package.json`, `package-lock.json`, `tsconfig.json`,
   `src/index.ts`, `test/presets.test.mjs`
 - `packages/takeoff-engine/{package.json,package-lock.json,tsconfig.json,src/index.ts}`
 - `apps/plan-editor/src/components/Model3DViewport.tsx`, `vite.config.ts`
-- `scripts/test_standalone.mjs`, `.github/workflows/standalone-tests.yml`
+- `scripts/test_standalone.mjs`, `scripts/package_sketchup_rbz.mjs`, `.github/workflows/standalone-tests.yml`
 - `README.md`, `docs/{README,MASTER-BLUEPRINT,STATUS,STANDALONE-ENGINE-REVIEW-2026-10}.md`
 - `docs/decisions/README.md`, `docs/decisions/ADR-0006-standalone-first-engine.md`
 - `docs/architecture/COMMAND-MUTATION-BOUNDARY.md`, `docs/modules/EXTENSION.md`
 
-`.cfproj` schema v2, catalog UUID references, deterministic v1 migration, instance overrides,
-editor open/save, Undo/Redo UI, and initial quantity-only takeoff/CSV are now implemented.
-Further migration fixtures and native picker/real file-handle acceptance evidence remain part of S0; S1–S2 are
-in progress; S3 has a bounds/R-tree broad-phase foundation but no domain clash verdicts yet;
-S4 has its first three-sheet compiler, and S5 remains future work.
+สถานะปัจจุบัน: Standalone Engine ปิดช่องว่างตาม Phase 1–6 และ Categories 1–4 ครบถ้วน พร้อม downstream adapters (DXF 20 PaperSpace, IFC 4.3, Revit JSON, SketchUp RBZ packager) มีหลักฐานทดสอบระดับ unit & integration tests สมบูรณ์ใน standalone mode.

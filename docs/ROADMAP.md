@@ -169,7 +169,7 @@ Deliverables:
 - custom footprint
 - ridge / hip / valley / eave / rake topology
 - slope by footprint/edge intent
-- roof openings
+- [x] roof openings & void polygon editing
 - wall attachment relationships
 - fascia / soffit / flashing integration
 - gutter / downpipe integration
@@ -178,17 +178,18 @@ Deliverables:
 
 Deliverables:
 
-- structural grid
-- piles / pile groups
-- footings / pile caps
-- ground beams
-- RC columns
-- RC beams
-- RC slabs
-- structural steel members
-- basic connection metadata
-- rebar metadata / optional higher-LOD representation
-- plan snapping to grids, columns, wall axes/faces and beam endpoints
+- [x] structural grid
+- [x] piles / pile groups (I-18 preliminary head offsets)
+- [x] footings / pile caps (spread & hosted)
+- [x] ground beams & beam drop
+- [x] RC columns & column reinforcement templates (`ConfigureColumnReinforcement`)
+- [x] RC beams & beam bending schedules (BBS)
+- [x] RC slabs (SOG, suspended, precast plank with topping)
+- [x] structural steel members (H-beam, C-channel)
+- [x] footing reinforcement templates (`ConfigureFoundationReinforcement`)
+- [x] basic connection metadata
+- [x] rebar metadata & BBS tonnage calculation
+- [x] plan snapping to grids, columns, wall axes/faces and beam endpoints
 
 Exit criteria:
 
@@ -205,17 +206,20 @@ Deliverables:
 
 ### Views
 
-- plan
-- reflected ceiling plan
-- elevation
-- section
-- detail / callout
-- schedule
-- sheet
+- [x] plan (A-02 ground, A-03 upper with stair walklines & cutlines)
+- [x] reflected ceiling plan (A-10 with 600×600 gypsum grid & cornice outlines)
+- [x] elevation (A-05, A-06 with 0.7mm ground baseline & 45° earth hatching, elevation datums)
+- [x] section (A-07 building sections with earth line & datums)
+- [x] detail / callout (A-09 bathroom plan & section callouts)
+- [x] schedule (A-08 doors/windows, S-05/S-06 structural/BBS, E-02 panelboard)
+- [x] sheet (20-Sheet A3 vector set with embedded Sarabun Thai font)
 
 ### Associative annotations
 
-- dimensions
+- [x] dimensions (overall, wall envelope, column-span)
+- [x] elevation datums & levels (triangles, targets, leaders)
+- [x] ground baseline & 45° earth hatching
+- [x] stair walklines & diagonal break lines
 - object tags
 - room tags
 - level tags
@@ -317,34 +321,32 @@ Shared concepts:
 
 Preserve and deepen:
 
-- route editing
+- [x] route editing & node topology
 - auto-route alternatives
-- editable route nodes
-- manhole relocation
-- intermediate manholes
-- slope / invert
+- [x] editable route nodes & manhole relocation
+- [x] intermediate manholes & sizing (30x40, 40x50, 60x80)
+- [x] slope / invert calculations (`solveGravityInverts` 1:100 auto-cascading slope)
 - rainwater integration
 - coordination with structure/surfaces
 
 ### Plumbing
 
-- cold water
+- [x] cold water & pump 3-valve bypass topology
 - hot water
-- waste
-- soil
-- vent
-- fixtures
-- valves / tanks / pumps where required
+- [x] waste & soil pipe slopes (1:50, 1:100)
+- [x] vent & P-trap drain logic
+- [x] fixtures & rough-in coordinates (water closet 305mm offset)
+- [x] valves / tanks / booster pumps & septic PE sizing validation
 
 ### Electrical
 
-- lighting/device placement
+- [x] lighting/device placement & mounting heights
 - switches/control links
-- general/dedicated outlets
-- panel
-- circuit
-- basic load metadata
-- schedules
+- [x] general/dedicated outlets with grounding
+- [x] panelboard / consumer unit (MDB/CU)
+- [x] circuit load calculation & วสท. breaker/wire sizing (`recommendEITBreakerAndWire`)
+- [x] 3-phase balancing (`balanceCircuitsPhase` with unbalance < 15%)
+- [x] schedules & Single Line Diagram (Sheet E-02)
 
 Exit criteria:
 

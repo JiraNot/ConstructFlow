@@ -176,8 +176,10 @@ When a user or agent modifies a Type Catalog entry (e.g. changing beam `B1` dept
 ### Domain 2: Structural Engineering & Detail Schedules
 * **Substructure & Foundation:**
   * ฐานรากแผ่ (Isolated Spread Footing), ฐานรากเสาเข็มไมโครไพล์เจาะกด (Micro-pile $I-18, I-22$, Spun Micro-pile $\varnothing 20, \varnothing 25$), ฐานรากเสาเข็มเจาะ (Bored Pile).
+  * Footing Reinforcement Detailing Template (`ConfigureFoundationReinforcement`): ตะแกรงเหล็กเสริมฐานราก 2 ทิศทาง (Bottom Mat X/Y เช่น DB12@0.15m, DB16@0.15m), เหล็กหนวดกุ้งเดือยเสา (Starter Dowels).
 * **Superstructure (Reinforced Concrete & Steel):**
   * เสา (RC Columns), คาน (RC Beams), คานลดระดับ (Drop Beams) สำหรับห้องน้ำและระเบียงซักล้าง (Drop 50–100 mm).
+  * Column Reinforcement Detailing Template (`ConfigureColumnReinforcement`): เหล็กยืนแกนหลัก (Main Bars เช่น 4-DB16, 6-DB20), เหล็กปลอกรัด (Ties / Stirrups RB6, RB9) พร้อมการแบ่งโซนระยะเรียงช่วงปลายหนาแน่น @0.10 ม. และช่วงกลาง @0.15–@0.20 ม.
   * พื้นโครงสร้าง: พื้นหล่อในที่ (Slab on Beam), พื้นคอนกรีตสำเร็จรูปท้องเรียบ (Precast Solid Plank / Hollow Core) พร้อมคอนกรีตทับหน้า (Topping 50 mm + Wire Mesh $\varnothing 4$ @0.20 ม.), พื้นวางบนดิน (Slab on Ground พร้อมแผ่นพลาสติกกันชื้น PE sheet).
   * โครงสร้างเหล็กรูปพรรณ (Structural Steel): Thai TIS standard H-Beam, I-Beam, C-Channel (แปเหล็ก), แผ่นเหล็ก Base plate ยึด Chemical Anchor เข้ากับเสา/คานเดิม.
 * **Rebar Detailing & Bar Bending Schedules (BBS):**
@@ -187,7 +189,7 @@ When a user or agent modifies a Type Catalog entry (e.g. changing beam `B1` dept
 
 ### Domain 3: Architectural Envelope & Finish Detailing
 * **Revit-Style Footprint Roof Modeler:**
-  * วาดแนวขอบชายคา (Roof Boundary Polygon) พร้อมกำหนด Slope angle ($^\circ$), Defines Slope (มี/ไม่มีความลาดเอียง) ต่อเส้นขอบ เพื่อสร้างทรงจั่ว (Gable), ปั้นหยา (Hip), เพิงหมาแหงน (Lean-to/Shed) หรือหลังคาแบน (Flat Slab).
+  * วาดแนวขอบชายคา (Roof Boundary Polygon) พร้อมช่องเปิด/ช่องเจาะ (Void Polygons) กำหนด Slope angle ($^\circ$), Defines Slope (มี/ไม่มีความลาดเอียง) ต่อเส้นขอบ เพื่อสร้างทรงจั่ว (Gable), ปั้นหยา (Hip), เพิงหมาแหงน (Lean-to/Shed) หรือหลังคาแบน (Flat Slab).
   * องค์ประกอบครบวงจร: เชิงชาย (Fascia board), ฝ้าชายคาระบายอากาศ (Vented soffit), รางน้ำสแตนเลส/ไวนิล (Box Gutters), แผ่นครอบสันหลังคา (Ridge capping), แฟลชชิ่งกันซึม (Flashing), ฉนวนกันความร้อน (PU / Glasswool).
 * **Continuous 3D Sweep Moldings (งานกรุคิ้วบัวตกแต่ง):**
   * บัวเชิงผนัง (Skirting 80–100 mm), บัวฝ้าเพดาน (Cornice 75–120 mm), บัวกลางผนัง (Dado / Chair rail 45–60 mm), บัวกรอบประตู-หน้าต่าง (Architrave 50–70 mm).
@@ -199,7 +201,9 @@ When a user or agent modifies a Type Catalog entry (e.g. changing beam `B1` dept
   * คิ้วผนังลูกฟักสไตล์คลาสสิก (Wainscoting Panels), ไม้ระแนง (Flute Slats), ผนังกรุกระเบื้อง/หินอ่อนซ่อนไฟ (Stone Cladding).
 * **Surface Tiling & Borderlines (งานปูกระเบื้องและแนวขอบ):**
   * ปรับจุดเริ่มต้นแนวปู (Tile Grid Origin & Rotation) เพื่อจัดระยะตัดเศษกระเบื้อง (Tile Cuts), งานปูแถบขอบ (Borderline Courses), คิ้วอลูมิเนียม/สเตนเลสเก็บขอบ, สโลปพื้นลดระดับห้องน้ำและโซนเปียก.
-* **Stair & Railing Profile Builder:**
+* **Interactive Stair & Railing Tool (ระบบบันไดและราวกันตก):**
+  * เครื่องมือวางบันไดแบบโต้ตอบบน Plan Canvas (คีย์ลัด `T`): ลากจุดเริ่มและจุดจบ คำนวณลูกนอน (Treads $\ge 22$ ซม.) และลูกตั้ง (Risers $\le 20$ ซม.) ตาม พ.ร.บ. ควบคุมอาคาร อัตโนมัติ.
+  * กราฟิกเขียนแบบ 2D มาตรฐาน: เส้นบอกแนวเดิน (Walkline) พร้อมหัวลูกศรทิศทาง UP, ตัวเลขลำดับขั้น, เส้นตัดทแยงมุมแสดงการขึ้นสู่ชั้นบน (Diagonal Cut Line บนแผ่น A-02/A-03).
   * บันไดแม่บันได คสล. / เหล็ก, ชานพัก (Landings), จมูกบันได (Nosing).
   * ราวบันไดปรับแต่งได้: ราวเหล็กดัดอิตาลี (Italian Wrought Iron Balusters), ราวกระจกไร้กรอบ (Frameless Glass), ราวไม้กลึง.
 
@@ -222,11 +226,11 @@ When a user or agent modifies a Type Catalog entry (e.g. changing beam `B1` dept
   * ท่ออากาศ (Vent Pipe): ท่อระบายอากาศขนาด 1.5"–2" (Stack vent / Loop vent) ป้องกันการสูญเสียดักน้ำใน P-Trap.
 * **Stormwater & Rain Drainage (ระบบระบายน้ำฝน):**
   * รางน้ำฝนชายคา (Gutters), ท่อระบายน้ำฝนดิ่ง (Rainwater Downspouts), ถังเก็บน้ำฝน, ระบบระบายน้ำผิวดิน (Surface swale & trench drain).
-* **External Underground Network (ระบบท่อภายนอกอาคาร):**
+* **External Underground Network & Auto-Slope Solver:**
   * ถังบำบัดน้ำเสียสำเร็จรูป (Septic Tank DOS/Sanko) คำนวณขนาดลิตรตามจำนวนผู้ใช้อาคาร (PE - Person Equivalent).
   * ถังดักไขมัน (Grease Trap) สำหรับพื้นที่ครัว.
   * บ่อพักคอนกรีตสำเร็จรูป (Precast Concrete Manholes): ขนาด $30\times 40$, $40\times 50$, $60\times 80$ ซม. พร้อมฝาคอนกรีต/เหล็กหล่อ.
-  * การคำนวณระดับก้นท่อ (Invert Elevation - IL) และความลาดชันจากจุดเชื่อมต่อบ้านเดิมสู่บ่อพักโครงการหน้าบ้าน.
+  * Gravity Drainage Auto-Slope Solver (`solveGravityInverts`): คำนวณระดับความลึกก้นท่อ Invert Elevation (IL) อัตโนมัติตามสโลป 1:100 และเชื่อมโยงส่งต่อระดับความลึกไปยังบ่อพักระบายน้ำแต่ละจุดอย่างแม่นยำ.
 * **Water Supply, Storage & Pump Bypass System:**
   * มิเตอร์น้ำประปา, ถังเก็บน้ำบนดิน/ใต้ดิน (Water Storage Tank).
   * ปั๊มน้ำอัตโนมัติ (Booster Pump) พร้อมระบบท่อ 3-Valve Bypass (วาล์ว Bypass เมนตรง, วาล์วหน้าปั๊ม, วาล์วหลังปั๊ม และ Check Valve กันน้ำย้อน).
@@ -234,9 +238,11 @@ When a user or agent modifies a Type Catalog entry (e.g. changing beam `B1` dept
   * ความลาดชันพื้น (Slope 1:50 ไปยัง Floor drain), คานลดระดับพื้น (Drop slab 5–10 ซม.), แนวบล็อกกั้นโซนเปียก-แห้ง (Shower curb drop 3–5 ซม.).
   * รายละเอียดตัดกระเบื้องพื้น-ผนัง, แนวทาน้ำยากันซึม (Waterproofing membrane) สูงขึ้นผนัง $\ge 30$ ซม. (โซนเปียกสูง $\ge 180$ ซม.).
   * ระยะติดตั้งสุขภัณฑ์ (Rough-in Dimensions): โถสุขภัณฑ์ (Center 305 mm จากผนัง), อ่างล้างหน้า, ฝักบัว.
-* **Electrical & Lighting Systems:**
+* **Electrical & Lighting Systems (มาตรฐาน วสท. / EIT):**
   * ดวงโคม, สวิตช์ไฟ 1 ทาง / 2 ทาง (สลับบันได) / 3 ทาง, เต้ารับไฟฟ้าพร้อมสายดิน (Grounding).
   * ตู้ควบคุมไฟฟ้า (Consumer Unit / MDB), วงจรย่อย (Sub-circuits), ท่อร้อยสายไฟ (EMT / PVC).
+  * Electrical Phase Balancing (`balanceCircuitsPhase`): คำนวณกระจายโหลดไฟฟ้า 3 เฟส (Phase A, B, C) ตรวจสอบความไม่สมดุลของเฟส (Phase Unbalance $\le 15\%$) ตามมาตรฐาน วสท.
+  * Breaker & Wire Sizing (`recommendEITBreakerAndWire`): แนะนำขนาดเซอร์กิตเบรกเกอร์ (AT/AF) และขนาดสายทองแดง THW / IEC01 ($mm^2$) ตามพิกัดกระแสปลอดภัย.
   * กำหนดระดับความสูงติดตั้งมาตรฐาน (Mounting Elevations): สวิตช์ +1.20 ม., เต้ารับทั่วไป +0.30 ม., เต้ารับเคาน์เตอร์ครัว +1.10 ม.
 
 ### Domain 6: Multi-Sheet LayOut Engine & 20-Sheet Permit Package
@@ -391,6 +397,9 @@ ConstructFlow maintains dedicated adapters to ensure flawless bi-directional syn
   * Configures A3 Paper size ($420\times 297$ mm converted to inches via `mm / 25.4`).
   * Binds exact named scenes from `.skp` file.
   * Sets Vector Render mode (`Layout::SketchUpModel::VECTOR_RENDER`) and orthographic scale (`1:100` $\rightarrow 0.01$, `1:50` $\rightarrow 0.02$).
+* **Cross-Platform Extension Packaging (`output/constructflow.rbz`):**
+  * Automated builder script `npm run package:sketchup` (via `scripts/package_sketchup_rbz.mjs`).
+  * Bundles all extension files directly into an installable `.rbz` distribution package without requiring bash or system-level zip utilities.
 
 ---
 

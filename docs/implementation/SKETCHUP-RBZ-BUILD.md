@@ -23,7 +23,23 @@ Repository-only paths such as `apps/`, `docs/`, `test/`, `.github/` and developm
 
 ## Local build
 
-From the repository root:
+### 1. Cross-Platform Node Build (Recommended for Windows, macOS & Linux)
+
+From the repository root without requiring bash or system zip:
+
+```bash
+npm run package:sketchup
+```
+
+This runs `scripts/package_sketchup_rbz.mjs` and writes the output bundle to:
+
+```text
+output/constructflow.rbz
+```
+
+### 2. Legacy Bash Build
+
+From a POSIX or WSL shell:
 
 ```bash
 bash scripts/build_rbz.sh

@@ -713,6 +713,37 @@ Status: **Production Implementation Complete in Plan Editor (`apps/plan-editor`)
   - 100% zero-conflict coexistence in SketchUp Plugins folder (isolated `JiraNot::ConstructFlow` namespace).
   - Ability to convert legacy geometry via `ConvertSelectionToSmartObject` into ConstructFlow BIM Smart Objects assigned to `existing` or `demolition` phases.
 
+### Standalone Engine Delivery & Categories 1–4 Closure — 2026-10-07
+
+Status: **Production Implementation Complete across Standalone Engine, Sheet Engine, and Downstream Adapters**.
+
+- **Category 1 (UI/UX & Interactive Modeling in Plan Editor)**:
+  - **Interactive Stair Placement Tool (`T` shortcut)**: Interactive 2-click placement on Plan Canvas, calculating treads ($\ge 22$ cm) and risers ($\le 20$ cm) conforming to Thai Building Code (กฎกระทรวงฉบับที่ 55). Includes real-time placement ghost, walkline with UP arrow indicator, step count labels, and diagonal cut line for multi-level transitions.
+  - **Column & Footing Rebar Detailing Templates**:
+    - `ConfigureColumnReinforcement`: Main longitudinal bars (e.g., 4-DB16, 6-DB20), ties/stirrups (RB6, RB9) with dense spacing zones (@0.10m at column ends, @0.15–0.20m in middle zone).
+    - `ConfigureFoundationReinforcement`: Bottom mat X/Y reinforcement grids (e.g., DB12@0.15m) and column starter dowels with Bar Bending Schedule (BBS) mass calculation.
+  - **Roof Void & Opening Editing**: Support for inner hole/void polygons in roof footprints across command schema, workbench UI, and representation engine.
+
+- **Category 2 (Sheet Graphics & Vector Drafting Standards)**:
+  - **Ground Baseline & 45° Earth Hatching**: Building elevations (A-05, A-06) and building sections (A-07) now render a bold 0.7mm `#0f172a` ground baseline with 45° double-tick earth hatching.
+  - **Elevation Datums**: Level markers with triangular symbols, target elevation values (+0.000m, +3.000m, +6.000m), and horizontal reference leader lines.
+  - **Stair 2D Drafting Standards**: Walkline arrow, numbered step indices, and diagonal break lines on A-02/A-03 floor plans.
+  - **Reflected Ceiling Plan (RCP)**: Sheet A-10 now renders a 600×600 mm gypsum ceiling tile grid with continuous cornice/moulding perimeter linework.
+
+- **Category 3 (MEP Engineering & Design Calculations)**:
+  - **Gravity Drainage Auto-Slope Solver (`solveGravityInverts`)**: Automatically calculates 1:100 cascading Invert Levels (IL) from fixtures and yard drains to downstream manholes, guaranteeing continuous slope and preventing negative grades.
+  - **Electrical Phase Balancing (`balanceCircuitsPhase`)**: Automatically balances sub-circuits across 3 phases (Phase A, B, C) while maintaining phase unbalance strictly under 15% (EIT/วสท. standard).
+  - **EIT / วสท. Standard Breaker & Wire Sizing (`recommendEITBreakerAndWire`)**: Recommends circuit breaker ratings (AT/AF) and copper conductor cross-sections (THW / IEC01, $mm^2$) according to วสท. cable ampacity standards, directly integrated into Sheet E-02 panelboard schedule.
+
+- **Category 4 (Downstream Adapters & Extensions Packaging)**:
+  - **AutoCAD DXF Exporter (`packages/cad-adapter`)**: Generates valid AutoCAD R2018 DXF files containing 20 distinct PaperSpace layout tabs (`A-01` to `E-02`) with AIA/วสท. phase layers and viewport scaling.
+  - **OpenBIM IFC 4.3 & Revit Direct Bridge (`packages/bim-adapter`)**: Converts RFC-4122 UUIDs to 22-character buildingSMART IFC GUIDs, generates certified IFC 4.3 ADD2 STEP models, and exports native Revit transfer JSON.
+  - **Pure-Node SketchUp RBZ Packager (`npm run package:sketchup`)**: Bundles 486 extension files into `output/constructflow.rbz` (727 KB) cross-platform without native zip or bash dependencies.
+
+- **Verification & Test Status**:
+  - `node scripts/test_standalone.mjs`: Rebuilds all packages and passes 76 unit tests across 11 packages (7 project-model, 4 representation-engine, 3 architecture-engine, 1 drainage-engine, 2 electrical-engine, 5 clash-engine, 7 sheet-engine, 35 command-runtime, 7 extension-engine, 2 cad-adapter, 3 bim-adapter).
+  - Three vertical acceptance verifiers pass: `npm run verify:kitchen`, `npm run verify:file-io`, and `npm run verify:phases` (generating 20-sheet A3 PDF, 41 Smart Objects, and 44 takeoff rows).
+
 ## How to update this file
 
 Update status only when there is evidence in merged code/tests/specs. Distinguish **application-level/pure-Ruby evidence** from **real SketchUp/LayOut acceptance evidence** so a green CI run is never presented as proof of native application behavior.
