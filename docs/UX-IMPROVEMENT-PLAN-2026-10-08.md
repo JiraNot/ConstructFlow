@@ -131,7 +131,7 @@ The full constraint solver, catalog thumbnails, and broader keyboard/screen-read
 
 ### Wall layer assembly follow-up
 
-- Wall catalog types now define masonry core thickness separately from inside and outside plaster thickness. W1 defaults to 100 mm masonry + 10 mm plaster on each side (120 mm overall); W2 defaults to 150 + 10 + 10 mm. Legacy wall types with no layer data retain their existing single-layer behavior.
+- Wall assembly types define the physical core/system separately from the finish on each face. The default assemblies are AAC 100 mm (100 mm core + 10 mm per face = 120 mm overall) and AAC 150 mm (150 mm core + 10 mm per face = 170 mm overall). W1/W2 are finish marks assigned to the inside/outside of the same wall instance, not separate wall assemblies. Legacy projects retain their saved types and marks.
 - Type Manager can edit the core and both plaster thicknesses and displays the computed overall wall thickness. The 2D plan, properties panel, and 3D representation expose the layer breakdown; 3D cuts each layer around hosted doors/windows.
 - Takeoff separates masonry area and volume from inside/outside plaster areas, subtracting hosted openings from each applicable quantity. Catalog edits cascade to wall instances, 3D layers, and takeoff in one command transaction.
 - Automated coverage now checks catalog creation/cascade, distinct 3D wall layers, and separated BOQ quantities. Material selection for each plaster side and visual browser inspection of a representative layered project remain open polish items.

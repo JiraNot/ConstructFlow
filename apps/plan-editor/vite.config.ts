@@ -66,7 +66,10 @@ function fileAcceptanceDiskPlugin() {
 export default defineConfig({
   plugins: [react(), fileAcceptanceDiskPlugin()],
   server: {
-    port: 5174,
+    // Expose Vite to other devices on the user's private LAN, not just loopback.
+    host: '0.0.0.0',
+    port: 5183,
+    strictPort: true,
   },
   build: {
     rollupOptions: {

@@ -39,13 +39,18 @@ records the earlier baseline.
 
 With Node.js and npm installed, run this once from the repository root to install the local
 package dependencies, build the domain engines, build Plan Editor, and start its development
-server at `http://127.0.0.1:5173` (Vite chooses the next free port if needed):
+server at `http://localhost:5183`. It listens on all network interfaces, and the fixed port makes
+the home-LAN firewall rule repeatable. Vite also prints the `Network` URL to open from another
+device on the same private Wi-Fi/LAN:
 
 ```bash
 npm run dev:standalone -- --install
 ```
 
-After dependencies are installed, use `npm run dev:standalone` for later starts. To produce a
+After dependencies are installed, use `npm run dev:standalone` for later starts, or run
+`npm run dev` from `apps/plan-editor`. Run `scripts/enable_lan_dev_firewall.ps1` once as
+Administrator on the host PC, while connected to the home Wi-Fi, so Windows allows TCP port 5183
+from the local subnet on a Private profile. To produce a
 production build without starting the server, use `npm run build:standalone`. These commands do
 not run test suites.
 

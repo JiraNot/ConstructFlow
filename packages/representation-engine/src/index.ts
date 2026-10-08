@@ -1,13 +1,17 @@
+import type { DoorFaceComponent } from '@constructflow/project-model'
 import {
   getDisplayPhase,
   resolveCatalogType,
   isColumnObject,
+  resolveWallVerticalExtent,
+  resolveOpeningVerticalExtent,
   type Phase,
   type ProjectDocument,
   type SmartObject,
 } from '@constructflow/project-model'
 import { constructionOutputs } from '@constructflow/domain-providers'
 import { tube, type Triangle } from '@constructflow/geometry-kernel'
+export { doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement } from './openingDetails.js'
 
 export type Vec3Mm = [number, number, number]
 
@@ -50,8 +54,12 @@ export type RepresentationShape =
       bottom_light_muntin_rows: number
       bottom_light_muntin_columns: number
       frame_depth_mm: number
+      frame_face_width_mm: number
+      sash_face_width_mm: number
+      door_leaf_thickness_mm: number
       frame_material: string
       panel_material?: string
+      door_face_components?: DoorFaceComponent[]
       door_leaf_style: 'flush' | 'raised_2_panel' | 'raised_4_panel' | 'raised_6_panel' | 'horizontal_grooves_3' | 'horizontal_grooves_5' | 'vertical_grooves_3' | 'louvered'
       opening_handle_style: 'lever' | 'round_knob' | 'pull_handle' | 'recessed_pull' | 'none'
       opening_hardware_finish: 'stainless' | 'matte_black' | 'satin_brass' | 'bronze'
@@ -234,7 +242,9 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
       const masonryThickness = resolveValue(project, object, data, 'masonry_thickness_mm')
       const insidePlasterThickness = resolveValue(project, object, data, 'plaster_inside_thickness_mm')
       const outsidePlasterThickness = resolveValue(project, object, data, 'plaster_outside_thickness_mm')
-      const height = resolveValue(project, object, data, 'height_mm')
+      const insideSign = resolveValue(project, object, data, 'interior_side') === 'right' ? -1 : 1
+      const vertical = resolveWallVerticalExtent(project, data)
+      const height = vertical?.height_mm
       if (!tuple3(start) || !tuple3(end) || !isPositive(thickness) || !isPositive(height)) {
         warnings.push(`${object.id}: wall endpoints, thickness or height are invalid; 3D representation omitted`)
         return undefined
@@ -252,9 +262,10 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
         const openingData = moduleData(opening)
         if (!openingData || openingData.wall_id !== object.id) continue
         const width = resolveValue(project, opening, openingData, 'width_mm')
-        const openingHeight = resolveValue(project, opening, openingData, 'height_mm')
+        const openingVertical = resolveOpeningVerticalExtent(project, openingData)
+        const openingHeight = openingVertical?.height_mm ?? resolveValue(project, opening, openingData, 'height_mm')
         const offset = openingData.offset_along_wall_mm
-        const sill = opening.object_type === 'door_window.window' ? resolveValue(project, opening, openingData, 'sill_height_mm') ?? 0 : 0
+        const sill = openingVertical ? openingVertical.base_elevation_mm - (vertical?.base_elevation_mm ?? 0) : 0
         if (!isPositive(width) || !isPositive(openingHeight) || !isFiniteNumber(offset) || !isFiniteNumber(sill) || sill < 0) {
           warnings.push(`${opening.id}: hosted opening dimensions are invalid; wall cutout omitted`)
           continue
@@ -269,12 +280,12 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
       }
       const layers = isPositive(masonryThickness)
         ? [
-            { role: 'masonry' as const, thickness_mm: masonryThickness, offset_mm: ((isPositive(outsidePlasterThickness) ? outsidePlasterThickness : 0) - (isPositive(insidePlasterThickness) ? insidePlasterThickness : 0)) / 2, material: String(resolveValue(project, object, data, 'material') ?? 'brick_masonry') },
-            ...(isPositive(insidePlasterThickness) ? [{ role: 'plaster_inside' as const, thickness_mm: insidePlasterThickness, offset_mm: thickness / 2 - insidePlasterThickness / 2, material: String(resolveValue(project, object, data, 'plaster_inside_material') ?? 'cement_plaster') }] : []),
-            ...(isPositive(outsidePlasterThickness) ? [{ role: 'plaster_outside' as const, thickness_mm: outsidePlasterThickness, offset_mm: -thickness / 2 + outsidePlasterThickness / 2, material: String(resolveValue(project, object, data, 'plaster_outside_material') ?? 'cement_plaster') }] : []),
+            { role: 'masonry' as const, thickness_mm: masonryThickness, offset_mm: insideSign * ((isPositive(outsidePlasterThickness) ? outsidePlasterThickness : 0) - (isPositive(insidePlasterThickness) ? insidePlasterThickness : 0)) / 2, material: String(resolveValue(project, object, data, 'material') ?? 'brick_masonry') },
+            ...(isPositive(insidePlasterThickness) ? [{ role: 'plaster_inside' as const, thickness_mm: insidePlasterThickness, offset_mm: insideSign * (thickness / 2 - insidePlasterThickness / 2), material: String(resolveValue(project, object, data, 'plaster_inside_material') ?? 'cement_plaster') }] : []),
+            ...(isPositive(outsidePlasterThickness) ? [{ role: 'plaster_outside' as const, thickness_mm: outsidePlasterThickness, offset_mm: -insideSign * (thickness / 2 - outsidePlasterThickness / 2), material: String(resolveValue(project, object, data, 'plaster_outside_material') ?? 'cement_plaster') }] : []),
           ]
         : undefined
-      return baseObject(object, data, [...start], Math.atan2(dy, dx),
+      return baseObject(object, data, [start[0], start[1], vertical?.base_elevation_mm ?? start[2]], Math.atan2(dy, dx),
         { kind: 'wall_extrusion', length_mm: length, thickness_mm: thickness, height_mm: height, cutouts, ...(layers ? { layers } : {}) }, { kind: 'wall' })
     }
     case 'door_window.door':
@@ -284,8 +295,10 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
       const hostData = host ? moduleData(host) : undefined
       const location = data.location_mm
       const width = resolveValue(project, object, data, 'width_mm')
-      const height = resolveValue(project, object, data, 'height_mm')
-      const sill = object.object_type === 'door_window.window' ? resolveValue(project, object, data, 'sill_height_mm') ?? 0 : 0
+      const vertical = resolveOpeningVerticalExtent(project, data)
+      const height = vertical?.height_mm ?? resolveValue(project, object, data, 'height_mm')
+      const hostVertical = hostData ? resolveWallVerticalExtent(project, hostData) : undefined
+      const sill = vertical ? vertical.base_elevation_mm - (hostVertical?.base_elevation_mm ?? 0) : (object.object_type === 'door_window.window' ? resolveValue(project, object, data, 'sill_height_mm') ?? 0 : 0)
       if (!host || host.object_type !== 'architecture.wall' || !hostData || !tuple3(hostData.start_point_mm)
         || !tuple3(hostData.end_point_mm) || !tuple3(location) || !isPositive(width) || !isPositive(height)
         || !isFiniteNumber(sill) || sill < 0 || !isFiniteNumber(data.offset_along_wall_mm)) {
@@ -331,6 +344,9 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
       const muntinRowsValue = resolveValue(project, object, data, 'muntin_rows')
       const muntinColumnsValue = resolveValue(project, object, data, 'muntin_columns')
       const frameDepthValue = resolveValue(project, object, data, 'frame_depth_mm')
+      const frameFaceWidthValue = resolveValue(project, object, data, 'frame_face_width_mm')
+      const sashFaceWidthValue = resolveValue(project, object, data, 'sash_face_width_mm')
+      const doorLeafThicknessValue = resolveValue(project, object, data, 'door_leaf_thickness_mm')
       const frameMaterialValue = resolveValue(project, object, data, 'frame_material')
       const panelMaterialValue = resolveValue(project, object, data, 'panel_material')
       const leafStyleValue = resolveValue(project, object, data, 'door_leaf_style')
@@ -344,7 +360,7 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
         : object.object_type === 'door_window.window' ? 'clear_glass' : 'none'
       const wall = project.objects[host.id]
       const wallThickness = resolveValue(project, wall, moduleData(wall)!, 'thickness_mm')
-      return baseObject(object, data, [location[0], location[1], location[2] + sill + height / 2], Math.atan2(dy, dx), {
+      return baseObject(object, data, [location[0], location[1], (vertical?.base_elevation_mm ?? location[2] + sill) + height / 2], Math.atan2(dy, dx), {
         kind: 'opening',
         opening_type: object.object_type === 'door_window.door' ? 'door' : 'window',
         width_mm: width,
@@ -364,8 +380,12 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
         bottom_light_muntin_rows: Math.max(1, Math.min(8, Math.floor(Number(resolveValue(project, object, data, 'bottom_light_muntin_rows')) || 1))),
         bottom_light_muntin_columns: Math.max(1, Math.min(8, Math.floor(Number(resolveValue(project, object, data, 'bottom_light_muntin_columns')) || 1))),
         frame_depth_mm: isPositive(frameDepthValue) ? frameDepthValue : 65,
+        frame_face_width_mm: isPositive(frameFaceWidthValue) ? frameFaceWidthValue : 50,
+        sash_face_width_mm: isPositive(sashFaceWidthValue) ? sashFaceWidthValue : 50,
+        door_leaf_thickness_mm: isPositive(doorLeafThicknessValue) ? doorLeafThicknessValue : 50,
         frame_material: typeof frameMaterialValue === 'string' ? frameMaterialValue : 'aluminium',
         panel_material: typeof panelMaterialValue === 'string' ? panelMaterialValue : undefined,
+        door_face_components: resolveValue(project, object, data, 'door_face_components') as DoorFaceComponent[] | undefined,
         door_leaf_style: ['flush', 'raised_2_panel', 'raised_4_panel', 'raised_6_panel', 'horizontal_grooves_3', 'horizontal_grooves_5', 'vertical_grooves_3', 'louvered'].includes(String(leafStyleValue)) ? leafStyleValue as 'flush' | 'raised_2_panel' | 'raised_4_panel' | 'raised_6_panel' | 'horizontal_grooves_3' | 'horizontal_grooves_5' | 'vertical_grooves_3' | 'louvered' : operation === 'louver' ? 'louvered' : 'raised_2_panel',
         opening_handle_style: ['lever', 'round_knob', 'pull_handle', 'recessed_pull', 'none'].includes(String(handleStyleValue)) ? handleStyleValue as 'lever' | 'round_knob' | 'pull_handle' | 'recessed_pull' | 'none' : operation === 'sliding' ? 'recessed_pull' : 'lever',
         opening_hardware_finish: ['stainless', 'matte_black', 'satin_brass', 'bronze'].includes(String(hardwareFinishValue)) ? hardwareFinishValue as 'stainless' | 'matte_black' | 'satin_brass' | 'bronze' : 'stainless',

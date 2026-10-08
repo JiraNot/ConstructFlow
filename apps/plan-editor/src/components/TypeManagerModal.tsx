@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { DOOR_FACE_DESIGNS, OPENING_DESIGNS } from "@constructflow/project-model";
 import type {
   ProjectDocument,
   TypeDefinition,
@@ -69,21 +70,24 @@ function loadPreferences(): Preferences {
   }
 }
 const basic: Record<string, string[]> = {
-  "structure.column": ["section_mm"],
+  "structure.column": ["section_mm", "plaster_thickness_mm"],
   "structure.beam": ["section_mm", "drop_mm"],
   "structure.foundation": ["size_mm", "foundation_type"],
   "structure.slab": ["thickness_mm", "topping_mm", "slab_system"],
   "architecture.wall": [
+    "wall_system",
     "masonry_thickness_mm",
     "plaster_inside_thickness_mm",
     "plaster_outside_thickness_mm",
+    "plaster_inside_material",
+    "plaster_outside_material",
     "height_mm",
   ],
-  "door_window.door": ["width_mm", "height_mm"],
-  "door_window.window": ["width_mm", "height_mm", "sill_height_mm"],
+  "door_window.door": ["width_mm", "height_mm", "frame_depth_mm", "frame_face_width_mm", "sash_face_width_mm", "door_leaf_thickness_mm"],
+  "door_window.window": ["width_mm", "height_mm", "sill_height_mm", "frame_depth_mm", "frame_face_width_mm", "sash_face_width_mm"],
 };
 const defaults: Record<string, TypeParameters> = {
-  "structure.column": { section_mm: [200, 200] },
+  "structure.column": { section_mm: [200, 200], plaster_thickness_mm: 15 },
   "structure.beam": { section_mm: [200, 400], drop_mm: 0 },
   "structure.foundation": {
     size_mm: [800, 800, 300],
@@ -96,14 +100,21 @@ const defaults: Record<string, TypeParameters> = {
     material: "reinforced_concrete",
   },
   "architecture.wall": {
-    masonry_thickness_mm: 100,
-    plaster_inside_thickness_mm: 0,
-    plaster_outside_thickness_mm: 0,
+    wall_system: "masonry",
+    masonry_thickness_mm: 70,
+    plaster_inside_thickness_mm: 15,
+    plaster_outside_thickness_mm: 15,
+    plaster_inside_material: "cement_plaster",
+    plaster_outside_material: "cement_plaster",
     height_mm: 2800,
   },
   "door_window.door": {
     width_mm: 900,
     height_mm: 2000,
+    frame_depth_mm: 100,
+    frame_face_width_mm: 50,
+    sash_face_width_mm: 50,
+    door_leaf_thickness_mm: 50,
     opening_operation: "hinged",
     panel_count: 1,
     panel_layout: ["hinged"],
@@ -122,6 +133,9 @@ const defaults: Record<string, TypeParameters> = {
     width_mm: 1200,
     height_mm: 1200,
     sill_height_mm: 900,
+    frame_depth_mm: 100,
+    frame_face_width_mm: 50,
+    sash_face_width_mm: 50,
     opening_operation: "sliding",
     panel_count: 2,
     panel_layout: ["sliding", "sliding"],
@@ -159,6 +173,11 @@ function CatalogDialog({
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState("all"),
     [selected, setSelected] = useState(initial?.id ?? "");
+  const [collection, setCollection] = useState("all");
+  const collections = { modern: "โมเดิร์น", classic: "คลาสสิก", natural: "อบอุ่นลายไม้", utility: "ใช้งานทั่วไป" };
+  const designs = OPENING_DESIGNS.filter(d => d.object_type === family
+    && (collection === "all" || d.collection === collection)
+    && `${d.name} ${d.key} ${d.description} ${collections[d.collection]}`.toLowerCase().includes(query.trim().toLowerCase()));
   const [preferences, setPreferences] = useState(loadPreferences);
   const makeEditor = (type: TypeDefinition, creating = false): Editor => {
     const parameters = structuredClone({
@@ -249,6 +268,7 @@ function CatalogDialog({
   }, [project]);
   const items = project.types.filter(
     (t) =>
+      filter !== "designs" &&
       t.object_type === family &&
       `${t.name} ${typeDescription(t)} ${typeSizeLabel(t)}`
         .toLowerCase()
@@ -401,6 +421,7 @@ function CatalogDialog({
     "bottom_light_muntin_rows",
     "bottom_light_muntin_columns",
     "door_leaf_style",
+    "door_face_components",
     "opening_handle_style",
     "opening_hardware_finish",
   ]);
@@ -531,11 +552,13 @@ function CatalogDialog({
                             กำหนดต่างกันรายบาน
                           </option>
                         )}
-                        {Object.entries(OPERATION_LABELS).map(([id, label]) => (
+                        {Object.entries(OPERATION_LABELS)
+                          .filter(([id]) => editor.family.endsWith(".door") || !["bifold", "pocket", "surface_sliding"].includes(id))
+                          .map(([id, label]) => (
                           <option key={id} value={id}>
                             {label}
                           </option>
-                        ))}
+                          ))}
                       </select>
                     </label>
                     <label className="cf-field">
@@ -609,13 +632,13 @@ function CatalogDialog({
                               });
                             }}
                           >
-                            {Object.entries(OPERATION_LABELS).map(
-                              ([id, label]) => (
+                            {Object.entries(OPERATION_LABELS)
+                              .filter(([id]) => editor.family.endsWith(".door") || !["bifold", "pocket", "surface_sliding"].includes(id))
+                              .map(([id, label]) => (
                                 <option key={id} value={id}>
                                   {label}
                                 </option>
-                              ),
-                            )}
+                              ))}
                           </select>
                         </label>
                         <label className="cf-field">
@@ -752,12 +775,22 @@ function CatalogDialog({
                 <summary>{editor.family.endsWith(".door") ? "หน้าบานและมือจับ" : "มือจับหน้าต่าง"}</summary>
                 <p className="cf-help">แยกเลือกลายหน้าบานจากลูกฟักกระจกและวิธีเปิด · ตัวอย่างมือจับเพื่อแสดงแบบ ไม่ใช่รหัสสินค้า</p>
                 <div className="cf-field-grid">
-                  {editor.family.endsWith(".door") && p.glazing_material === "none" && field("door_leaf_style")}
+                  {editor.family.endsWith(".door") && p.glazing_material === "none" && layout.some(operation => operation !== "louver") && field("door_leaf_style")}
                   {(p.panel_layout ?? [p.opening_operation]).some((operation) => ["hinged", "sliding", "awning", "louver"].includes(String(operation))) && <>
                     {field("opening_handle_style")}
                     {field("opening_hardware_finish")}
                   </>}
                 </div>
+                {editor.family.endsWith(".door") && p.glazing_material === "none" && layout.some(operation => operation !== "louver") && <div className="cf-face-designs">
+                  <span className="cf-field-label">ชุดลายประกอบหน้าบาน</span>
+                  <div className="cf-face-design-grid">
+                    {DOOR_FACE_DESIGNS.map(recipe => <button type="button" key={recipe.key} className={`cf-face-design ${p.door_face_components?.some((component) => component.id === recipe.components[0]?.id) ? "is-active" : ""}`} onClick={() => change("door_face_components", structuredClone(recipe.components))}>
+                      <span className="cf-face-mini" aria-hidden="true"><span className={`cf-face-mini-shape face-${recipe.key}`} /></span>
+                      <strong>{recipe.name}</strong>
+                    </button>)}
+                  </div>
+                  <p className="cf-help">เลือกชุดลายแล้วปรับขนาดบานต่อได้ · คิ้วโค้งและวงรีเป็นรายละเอียดนำเสนอ ยังไม่ใช่ขนาดผลิต</p>
+                </div>}
               </details>}
               <details className="cf-form-section" open>
                 <summary>วัสดุ</summary>
@@ -845,12 +878,6 @@ function CatalogDialog({
                     .map(field)}
                 </div>
               </details>
-              {editor.source && (
-                <details className="cf-form-section">
-                  <summary>ข้อมูลระบบ</summary>
-                  <code>{editor.source.id}</code>
-                </details>
-              )}
             </div>
             <aside className="cf-editor-preview">
               <span className="cf-eyebrow">ตัวอย่างรูปแบบ 2D</span>
@@ -917,6 +944,7 @@ function CatalogDialog({
                     setFamily(id);
                     setSelected("");
                     setQuery("");
+                    setFilter("all");
                   }}
                 >
                   {label}
@@ -960,6 +988,7 @@ function CatalogDialog({
                   ["used", "ใช้ในโครงการ"],
                   ["recent", "ล่าสุด"],
                   ["favorites", "รายการโปรด"],
+                  ...(family.startsWith("door_window.") ? [["designs", "แบบสำเร็จรูป · เลือกสไตล์"]] : []),
                 ].map(([id, label]) => (
                   <button
                     key={id}
@@ -976,6 +1005,23 @@ function CatalogDialog({
                   {feedback}
                 </p>
               )}
+              {filter === "designs" && <section className="cf-opening-designs" aria-label="แบบประตูและหน้าต่างสำเร็จรูป">
+                <div className="cf-design-intro"><span className="cf-eyebrow">OPENING COLLECTION</span><h3>เลือกแบบที่เข้ากับบ้าน</h3><p>เลือกชุดบาน วงกบ และอุปกรณ์ แล้วปรับขนาดก่อนสร้างชนิดของคุณ</p></div>
+                <div className="cf-catalog-filters" aria-label="สไตล์ประตูหน้าต่าง">
+                  {[["all", "ทุกสไตล์"], ...Object.entries(collections)].map(([id, label]) => <button key={id} aria-pressed={collection === id} className={collection === id ? "is-active" : ""} onClick={() => setCollection(id)}>{label}</button>)}
+                </div>
+                <div className="cf-design-grid">{designs.map(design => <button key={design.key} className="cf-design-card" onClick={() => {
+                  let name = design.key, suffix = 2;
+                  while (project.types.some(t => t.object_type === family && t.name.toLowerCase() === name.toLowerCase())) name = `${design.key}-${suffix++}`;
+                  openEditor({ source: null, family: design.object_type, name, parameters: structuredClone(design.parameters), creating: true });
+                }}>
+                  <div className="cf-design-art"><TypeThumbnail type={{ id: design.key, name: design.name, object_type: design.object_type, parameters: design.parameters }} /></div>
+                  <span className="cf-eyebrow">{collections[design.collection]}</span><strong>{design.name}</strong><span>{design.description}</span>
+                  <small>{((design.parameters.width_mm ?? 0) / 1000).toFixed(2)} × {((design.parameters.height_mm ?? 0) / 1000).toFixed(2)} ม. <b>ปรับแบบ →</b></small>
+                </button>)}</div>
+                {!designs.length && <p className="cf-empty-state">ไม่พบแบบในสไตล์หรือคำค้นนี้ ลองเลือกทุกสไตล์หรือล้างคำค้น</p>}
+                <p className="cf-help">แบบตั้งต้นสำหรับออกแบบ · ปรับต่อได้ทุกชุด · อุปกรณ์เป็นรูปแบบทั่วไป ยังไม่ผูกกับรุ่นสินค้า</p>
+              </section>}
               <div className="cf-type-grid">
                 {items.map((type) => (
                   <article
@@ -1023,7 +1069,7 @@ function CatalogDialog({
                   </article>
                 ))}
               </div>
-              {!items.length && (
+              {!items.length && filter !== "designs" && (
                 <div className="cf-empty-state">
                   <Search size={25} />
                   <h3>ไม่พบชนิดที่ตรงกัน</h3>

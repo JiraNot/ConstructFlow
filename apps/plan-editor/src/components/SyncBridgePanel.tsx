@@ -270,7 +270,7 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
       </div>
 
       <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>
-        ConstructFlow คำนวณโมเดล 3D และ BOQ ได้ในตัว Bridge นี้ใช้ส่งออกไป SketchUp โดยรักษา UUID
+        ConstructFlow คำนวณโมเดล 3D และ BOQ ได้ในตัว Bridge นี้ใช้ส่งออกไป SketchUp โดยคงการเชื่อมโยงชิ้นงาน
       </div>
 
       {/* Instructions Accordion */}
@@ -470,7 +470,7 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
                     : typeof cmd.input.tag === 'string'
                       ? cmd.input.tag
                       : typeof cmd.input.object_id === 'string'
-                        ? cmd.input.object_id.slice(0, 6)
+                        ? 'วัตถุ'
                         : ''}
                 </span>
               </div>

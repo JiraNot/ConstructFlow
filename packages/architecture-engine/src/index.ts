@@ -1,4 +1,4 @@
-import { SmartObject, WallModuleData, DoorModuleData, WindowModuleData, DoorHanding, resolveCatalogType, catalogInstanceOverrides, isWallObject, isDoorObject, isWindowObject } from '@constructflow/project-model'
+import { SmartObject, WallModuleData, DoorModuleData, WindowModuleData, DoorHanding, resolveCatalogType, catalogInstanceOverrides, isWallObject, isDoorObject, isWindowObject, getLevelElevation, resolveOpeningVerticalExtent } from '@constructflow/project-model'
 import { CreateWallInput, MoveWallInput, MoveOpeningInput, UpdateWallMarkInput, UpdateWallDimensionsInput, CreateDoorInput, UpdateDoorMarkInput, UpdateDoorDimensionsInput, FlipDoorHandingInput, CreateWindowInput, UpdateWindowMarkInput, UpdateWindowDimensionsInput } from '@constructflow/command-schema'
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
@@ -179,7 +179,14 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const thickness_mm = hasLayerAssembly
         ? masonry_thickness_mm + plaster_inside_thickness_mm + plaster_outside_thickness_mm
         : wallInput.thickness_mm || positiveCatalogNumber(typeDef?.parameters.thickness_mm, 100)
-      const height_mm = wallInput.height_mm || positiveCatalogNumber(typeDef?.parameters.height_mm, 2800)
+      const base_offset_mm = Number(wallInput.base_offset_mm ?? 0)
+      const top_offset_mm = Number(wallInput.top_offset_mm ?? 0)
+      const topLevelElevation = getLevelElevation(updated, wallInput.top_level_id)
+      const baseLevelElevation = getLevelElevation(updated, level_id) ?? 0
+      const height_mm = topLevelElevation !== undefined
+        ? topLevelElevation + top_offset_mm - baseLevelElevation - base_offset_mm
+        : wallInput.height_mm || positiveCatalogNumber(typeDef?.parameters.height_mm, 2800)
+      if (!Number.isFinite(height_mm) || height_mm <= 0) throw new Error('Wall top level must be above its base level')
       const material = wallInput.material || catalogString(typeDef?.parameters.material, 'brick_masonry')
       const legacyInput = wallInput as CreateWallInput & { start_node_mm?: [number, number, number]; end_node_mm?: [number, number, number] }
       const rawStart = wallInput.start_point_mm || legacyInput.start_node_mm || [0, 0, 0]
@@ -205,13 +212,13 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           plaster_outside_material: typeDef?.parameters.plaster_outside_material ?? 'cement_plaster',
         } : {}),
       }, typeDef)
+      // Overall thickness is derived from masonry plus the two finish layers;
+      // storing it as an independent override would prevent catalog edits from
+      // resizing the wall when a layer changes.
+      if (hasLayerAssembly) delete instance_overrides.thickness_mm
       if (hasLayerAssembly && Number.isFinite(wallInput.thickness_mm)
         && wallInput.thickness_mm !== typeDef?.parameters.masonry_thickness_mm) {
-        Object.assign(instance_overrides, {
-          thickness_mm, masonry_thickness_mm, plaster_inside_thickness_mm, plaster_outside_thickness_mm,
-          plaster_inside_material: typeDef?.parameters.plaster_inside_material ?? 'cement_plaster',
-          plaster_outside_material: typeDef?.parameters.plaster_outside_material ?? 'cement_plaster',
-        })
+        instance_overrides.masonry_thickness_mm = masonry_thickness_mm
       }
 
       const wallObj: SmartObject<WallModuleData> = {
@@ -245,7 +252,11 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
             plaster_inside_material: catalogString(typeDef?.parameters.plaster_inside_material, 'cement_plaster'),
             plaster_outside_material: catalogString(typeDef?.parameters.plaster_outside_material, 'cement_plaster'),
           } : {}),
+          interior_side: 'left',
           height_mm,
+          ...(wallInput.top_level_id ? { top_level_id: wallInput.top_level_id, vertical_constraint: 'top_level' as const } : {}),
+          base_offset_mm,
+          top_offset_mm,
           length_mm,
           level_id,
           material,
@@ -339,8 +350,10 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const hasLayerAssembly = target.module_data.masonry_thickness_mm !== undefined
         || target.module_data.plaster_inside_thickness_mm !== undefined
         || target.module_data.plaster_outside_thickness_mm !== undefined
-      const plasterInside = nonNegativeCatalogNumber(target.module_data.plaster_inside_thickness_mm)
-      const plasterOutside = nonNegativeCatalogNumber(target.module_data.plaster_outside_thickness_mm)
+        || wDimInput.plaster_inside_thickness_mm !== undefined
+        || wDimInput.plaster_outside_thickness_mm !== undefined
+      const plasterInside = nonNegativeCatalogNumber(wDimInput.plaster_inside_thickness_mm ?? target.module_data.plaster_inside_thickness_mm)
+      const plasterOutside = nonNegativeCatalogNumber(wDimInput.plaster_outside_thickness_mm ?? target.module_data.plaster_outside_thickness_mm)
       const masonryThickness = hasLayerAssembly ? wDimInput.thickness_mm - plasterInside - plasterOutside : undefined
       if (hasLayerAssembly && (!Number.isFinite(masonryThickness) || masonryThickness! <= 0)) {
         return {
@@ -358,6 +371,17 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       )
       const shiftedOpeningIds = shiftHostedOpenings(updated, wDimInput.object_id, adjustedSegment.shift_mm, now)
 
+      const topLevelId = wDimInput.vertical_constraint === 'fixed_height'
+        ? undefined
+        : wDimInput.top_level_id ?? target.module_data.top_level_id
+      const baseOffset = wDimInput.base_offset_mm ?? target.module_data.base_offset_mm ?? 0
+      const topOffset = wDimInput.top_offset_mm ?? target.module_data.top_offset_mm ?? 0
+      const topElevation = getLevelElevation(updated, topLevelId)
+      const baseElevation = getLevelElevation(updated, target.module_data.level_id) ?? 0
+      const wallHeight = topElevation !== undefined
+        ? topElevation + topOffset - baseElevation - baseOffset
+        : wDimInput.height_mm ?? target.module_data.height_mm
+      if (!Number.isFinite(wallHeight) || wallHeight <= 0) throw new Error('Wall top level must be above its base level')
       updated.objects[wDimInput.object_id] = {
         ...target,
         updated_at: now,
@@ -367,7 +391,17 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           end_point_mm: adjustedSegment.end,
           thickness_mm: wDimInput.thickness_mm,
           ...(hasLayerAssembly ? { masonry_thickness_mm: masonryThickness } : {}),
-          height_mm: wDimInput.height_mm ?? target.module_data.height_mm,
+          ...(wDimInput.plaster_inside_thickness_mm !== undefined ? { plaster_inside_thickness_mm: plasterInside } : {}),
+          ...(wDimInput.plaster_outside_thickness_mm !== undefined ? { plaster_outside_thickness_mm: plasterOutside } : {}),
+          ...(wDimInput.plaster_inside_material !== undefined ? { plaster_inside_material: wDimInput.plaster_inside_material } : {}),
+          ...(wDimInput.plaster_outside_material !== undefined ? { plaster_outside_material: wDimInput.plaster_outside_material } : {}),
+          ...(wDimInput.inside_finish_mark !== undefined ? { inside_finish_mark: wDimInput.inside_finish_mark } : {}),
+          ...(wDimInput.outside_finish_mark !== undefined ? { outside_finish_mark: wDimInput.outside_finish_mark } : {}),
+          ...(wDimInput.interior_side !== undefined ? { interior_side: wDimInput.interior_side } : {}),
+          height_mm: wallHeight,
+          ...(topLevelId ? { top_level_id: topLevelId, vertical_constraint: 'top_level' as const } : { top_level_id: undefined, vertical_constraint: 'fixed_height' as const }),
+          base_offset_mm: baseOffset,
+          top_offset_mm: topOffset,
           instance_overrides: {
             ...target.module_data.instance_overrides,
             thickness_mm: wDimInput.thickness_mm,
@@ -375,8 +409,11 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
               masonry_thickness_mm: masonryThickness,
               plaster_inside_thickness_mm: plasterInside,
               plaster_outside_thickness_mm: plasterOutside,
-              plaster_inside_material: target.module_data.plaster_inside_material ?? 'cement_plaster',
-              plaster_outside_material: target.module_data.plaster_outside_material ?? 'cement_plaster',
+              plaster_inside_material: wDimInput.plaster_inside_material ?? target.module_data.plaster_inside_material ?? 'cement_plaster',
+              plaster_outside_material: wDimInput.plaster_outside_material ?? target.module_data.plaster_outside_material ?? 'cement_plaster',
+              ...(wDimInput.inside_finish_mark !== undefined ? { inside_finish_mark: wDimInput.inside_finish_mark } : {}),
+              ...(wDimInput.outside_finish_mark !== undefined ? { outside_finish_mark: wDimInput.outside_finish_mark } : {}),
+              ...(wDimInput.interior_side !== undefined ? { interior_side: wDimInput.interior_side } : {}),
             } : {}),
             ...(wDimInput.height_mm !== undefined ? { height_mm: wDimInput.height_mm } : {}),
           },
@@ -402,7 +439,13 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const mark = doorInput.mark || 'D1'
       const typeDef = resolveCatalogType(updated, 'door_window.door', doorInput.type_id || mark)
       const width_mm = doorInput.width_mm || positiveCatalogNumber(typeDef?.parameters.width_mm, 800)
-      const height_mm = doorInput.height_mm || positiveCatalogNumber(typeDef?.parameters.height_mm, 2000)
+      const sill_height_mm = Number(doorInput.sill_height_mm ?? 0)
+      const headElevation = getLevelElevation(updated, doorInput.head_level_id)
+      const baseElevation = getLevelElevation(updated, doorInput.level_id) ?? 0
+      const height_mm = headElevation !== undefined
+        ? headElevation + Number(doorInput.head_offset_mm ?? 0) - baseElevation - sill_height_mm
+        : doorInput.height_mm || positiveCatalogNumber(typeDef?.parameters.height_mm, 2000)
+      if (!Number.isFinite(height_mm) || height_mm <= 0) throw new Error('Door head level must be above its sill')
       const hostWall = updated.objects[doorInput.wall_id]
       if (!hostWall || !isWallObject(hostWall)) {
         return {
@@ -448,6 +491,8 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           offset_along_wall_mm: doorInput.offset_along_wall_mm,
           width_mm,
           height_mm,
+          sill_height_mm,
+          ...(doorInput.head_level_id ? { head_level_id: doorInput.head_level_id, head_offset_mm: Number(doorInput.head_offset_mm ?? 0), vertical_constraint: 'head_level' as const } : {}),
           handing: doorInput.handing || 'left_in',
           level_id: doorInput.level_id || hostWall.module_data.level_id,
         },
@@ -548,14 +593,19 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         }
       }
 
+      const nextDoorData = {
+        ...target.module_data,
+        width_mm: dDimInput.width_mm,
+        height_mm: dDimInput.height_mm ?? target.module_data.height_mm,
+        sill_height_mm: dDimInput.sill_height_mm ?? target.module_data.sill_height_mm ?? 0,
+        ...(dDimInput.head_level_id !== undefined ? { head_level_id: dDimInput.head_level_id, head_offset_mm: Number(dDimInput.head_offset_mm ?? 0), vertical_constraint: 'head_level' as const } : {}),
+        ...(dDimInput.vertical_constraint === 'fixed_height' ? { head_level_id: undefined, vertical_constraint: 'fixed_height' as const } : {}),
+      }
+      if (dDimInput.head_level_id !== undefined && !resolveOpeningVerticalExtent(updated, nextDoorData)) throw new Error('Door head level must be above its sill')
       updated.objects[dDimInput.object_id] = {
         ...target,
         updated_at: now,
-        module_data: {
-          ...target.module_data,
-          width_mm: dDimInput.width_mm,
-          height_mm: dDimInput.height_mm ?? target.module_data.height_mm,
-        },
+        module_data: nextDoorData,
       }
 
       return {
@@ -624,8 +674,13 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const mark = winInput.mark || 'W1'
       const typeDef = resolveCatalogType(updated, 'door_window.window', winInput.type_id || mark)
       const width_mm = winInput.width_mm || positiveCatalogNumber(typeDef?.parameters.width_mm, 1200)
-      const height_mm = winInput.height_mm || positiveCatalogNumber(typeDef?.parameters.height_mm, 1200)
       const sill_height_mm = winInput.sill_height_mm ?? positiveCatalogNumber(typeDef?.parameters.sill_height_mm, 900)
+      const headElevation = getLevelElevation(updated, winInput.head_level_id)
+      const baseElevation = getLevelElevation(updated, winInput.level_id) ?? 0
+      const height_mm = headElevation !== undefined
+        ? headElevation + Number(winInput.head_offset_mm ?? 0) - baseElevation - sill_height_mm
+        : winInput.height_mm || positiveCatalogNumber(typeDef?.parameters.height_mm, 1200)
+      if (!Number.isFinite(height_mm) || height_mm <= 0) throw new Error('Window head level must be above its sill')
       const hostWall = updated.objects[winInput.wall_id]
       if (!hostWall || !isWallObject(hostWall)) {
         return {
@@ -672,6 +727,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           width_mm,
           height_mm,
           sill_height_mm,
+          ...(winInput.head_level_id ? { head_level_id: winInput.head_level_id, head_offset_mm: Number(winInput.head_offset_mm ?? 0), vertical_constraint: 'head_level' as const } : {}),
           level_id: winInput.level_id || hostWall.module_data.level_id,
         },
         created_at: now,
@@ -771,15 +827,19 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         }
       }
 
+      const nextWindowData = {
+        ...target.module_data,
+        width_mm: wDimInput.width_mm,
+        height_mm: wDimInput.height_mm ?? target.module_data.height_mm,
+        sill_height_mm: wDimInput.sill_height_mm ?? target.module_data.sill_height_mm,
+        ...(wDimInput.head_level_id !== undefined ? { head_level_id: wDimInput.head_level_id, head_offset_mm: Number(wDimInput.head_offset_mm ?? 0), vertical_constraint: 'head_level' as const } : {}),
+        ...(wDimInput.vertical_constraint === 'fixed_height' ? { head_level_id: undefined, vertical_constraint: 'fixed_height' as const } : {}),
+      }
+      if (wDimInput.head_level_id !== undefined && !resolveOpeningVerticalExtent(updated, nextWindowData)) throw new Error('Window head level must be above its sill')
       updated.objects[wDimInput.object_id] = {
         ...target,
         updated_at: now,
-        module_data: {
-          ...target.module_data,
-          width_mm: wDimInput.width_mm,
-          height_mm: wDimInput.height_mm ?? target.module_data.height_mm,
-          sill_height_mm: wDimInput.sill_height_mm ?? target.module_data.sill_height_mm,
-        },
+        module_data: nextWindowData,
       }
 
       return {

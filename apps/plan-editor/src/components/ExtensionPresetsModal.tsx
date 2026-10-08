@@ -604,7 +604,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
           }}
         >
           <div style={{ fontSize: 11, color: '#64748b' }}>
-            * ทุกชิ้นงานที่ถูกสร้างจะได้รับ Persistent UUID และสามารถปรับแต่งหรือลบแก้ไขต่อได้ทันที
+            * ทุกชิ้นงานแก้ไขหรือลบต่อได้ทันที และการเชื่อมโยงข้อมูลจะคงอยู่
           </div>
 
           <div style={{ display: 'flex', gap: 10 }}>

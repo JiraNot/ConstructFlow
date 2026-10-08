@@ -1,3 +1,4 @@
+import type { DoorFaceComponent, OpeningPlanSymbolLine } from '@constructflow/project-model'
 // Structural Domain Mutation Command Payloads (Vertical Slice 01)
 
 import { Phase, PileSystem, PlacementReference } from '@constructflow/project-model'
@@ -10,6 +11,27 @@ export interface CreateGridInput {
   position_mm: number
   extent_mm?: [number, number]
   phase?: Phase
+}
+
+export interface CreateGridSystemInput {
+  id: string
+  grid_ids?: string[]
+  orientation: 'vertical' | 'horizontal'
+  origin_mm: number
+  spacing_mm: number
+  count: number
+  first_tag: string
+  extent_mm?: [number, number]
+  phase?: Phase
+}
+
+export interface UpdateGridSystemInput {
+  system_id: string
+  grid_ids?: string[]
+  origin_mm: number
+  spacing_mm: number
+  count: number
+  first_tag: string
 }
 
 export interface ModifyGridInput {
@@ -177,6 +199,7 @@ export interface UpdateBeamDimensionsInput {
 export interface StructuralTypeParameters {
   /** Cross-section [width, depth] in mm (for column and beam) */
   section_mm?: [number, number]
+  plaster_thickness_mm?: number
   /** Dimensions [width, length, thickness] in mm (for foundation) */
   size_mm?: [number, number, number]
   /** Wall thickness in mm */
@@ -186,15 +209,16 @@ export interface StructuralTypeParameters {
   plaster_outside_thickness_mm?: number
   plaster_inside_material?: string
   plaster_outside_material?: string
+  wall_system?: string
   /** Element height in mm */
   height_mm?: number
   /** Door / Window width in mm */
   width_mm?: number
   /** Window sill height in mm */
   sill_height_mm?: number
-  opening_operation?: 'hinged' | 'sliding' | 'fixed' | 'awning' | 'louver'
+  opening_operation?: 'hinged' | 'sliding' | 'fixed' | 'awning' | 'louver' | 'bifold' | 'pocket' | 'surface_sliding'
   panel_count?: number
-  panel_layout?: Array<'hinged' | 'sliding' | 'fixed' | 'awning' | 'louver'>
+  panel_layout?: Array<'hinged' | 'sliding' | 'fixed' | 'awning' | 'louver' | 'bifold' | 'pocket' | 'surface_sliding'>
   panel_width_ratios?: number[]
   transom_height_mm?: number
   bottom_light_height_mm?: number
@@ -207,6 +231,8 @@ export interface StructuralTypeParameters {
   frame_depth_mm?: number
   frame_material?: string
   panel_material?: string
+  door_face_components?: DoorFaceComponent[]
+  plan_symbol_lines?: OpeningPlanSymbolLine[]
   door_leaf_style?: 'flush' | 'raised_2_panel' | 'raised_4_panel' | 'raised_6_panel' | 'horizontal_grooves_3' | 'horizontal_grooves_5' | 'vertical_grooves_3' | 'louvered'
   opening_handle_style?: 'lever' | 'round_knob' | 'pull_handle' | 'recessed_pull' | 'none'
   opening_hardware_finish?: 'stainless' | 'matte_black' | 'satin_brass' | 'bronze'
@@ -244,6 +270,7 @@ export interface UpdateStructuralTypeDimensionsInput {
   plaster_outside_thickness_mm?: number
   plaster_inside_material?: string
   plaster_outside_material?: string
+  wall_system?: string
   height_mm?: number
   width_mm?: number
   sill_height_mm?: number

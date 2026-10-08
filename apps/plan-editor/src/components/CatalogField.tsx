@@ -5,15 +5,20 @@ const labels: Record<string, string> = {
   width_mm: "กว้าง",
   height_mm: "สูง",
   thickness_mm: "ความหนารวม",
-  masonry_thickness_mm: "ความหนางานก่อ",
-  plaster_inside_thickness_mm: "ฉาบด้านใน",
-  plaster_outside_thickness_mm: "ฉาบด้านนอก",
+  plaster_thickness_mm: "ความหนาฉาบเสา",
+  masonry_thickness_mm: "ความหนาแกน / โครง",
+  plaster_inside_thickness_mm: "ชั้นผิวด้านใน",
+  plaster_outside_thickness_mm: "ชั้นผิวด้านนอก",
+  wall_system: "ระบบผนัง",
   sill_height_mm: "ระดับธรณี",
   transom_height_mm: "ช่องแสงบน",
   bottom_light_height_mm: "ช่องแสงล่าง",
   muntin_rows: "ลูกฟักแนวนอน",
   muntin_columns: "ลูกฟักแนวตั้ง",
   frame_depth_mm: "ความลึกวงกบ",
+  frame_face_width_mm: "หน้ากว้างวงกบ",
+  sash_face_width_mm: "หน้ากว้างบาน / กรอบบาน",
+  door_leaf_thickness_mm: "ความหนาบานประตู",
   frame_material: "วงกบ",
   panel_material: "วัสดุบาน",
   glazing_material: "กระจก",
@@ -47,8 +52,8 @@ const labels: Record<string, string> = {
   start_ratio: "เริ่มช่วง (0–1)",
   end_ratio: "จบช่วง (0–1)",
   spacing_mm: "ระยะเรียง",
-  plaster_inside_material: "วัสดุฉาบด้านใน",
-  plaster_outside_material: "วัสดุฉาบด้านนอก",
+  plaster_inside_material: "ผิวสำเร็จด้านใน",
+  plaster_outside_material: "ผิวสำเร็จด้านนอก",
 };
 const options: Record<string, [string, string][]> = {
   door_leaf_style: [
@@ -102,8 +107,21 @@ const options: Record<string, [string, string][]> = {
     ["precast_plank", "พื้นสำเร็จรูป"],
     ["hollow_core", "พื้น Hollow Core"],
   ],
+  plaster_inside_material: [
+    ["cement_plaster", "ฉาบปูน"], ["interior_paint", "สีภายใน"], ["ceramic_tile", "กระเบื้อง"],
+    ["stone_cladding", "กรุหิน"], ["timber_cladding", "กรุไม้"], ["wallpaper", "วอลล์เปเปอร์"],
+    ["exposed_masonry", "โชว์ผิวก่อ"], ["smartboard", "สมาร์ทบอร์ด"], ["fiber_cement_board", "ไฟเบอร์ซีเมนต์บอร์ด"], ["gypsum_board", "ยิปซัมบอร์ด"], ["composite_panel", "แผ่นคอมโพซิต"], ["faux_wood_panel", "แผ่นลายไม้เทียม"], ["none", "ไม่ตกแต่ง"],
+  ],
+  plaster_outside_material: [
+    ["cement_plaster", "ฉาบปูน"], ["exterior_paint", "สีภายนอก"], ["ceramic_tile", "กระเบื้อง"],
+    ["stone_cladding", "กรุหิน"], ["timber_cladding", "กรุไม้"], ["exposed_masonry", "โชว์ผิวก่อ"], ["smartboard", "สมาร์ทบอร์ด"], ["fiber_cement_board", "ไฟเบอร์ซีเมนต์บอร์ด"], ["gypsum_board", "ยิปซัมบอร์ด"], ["composite_panel", "แผ่นคอมโพซิต"], ["faux_wood_panel", "แผ่นลายไม้เทียม"], ["none", "ไม่ตกแต่ง"],
+  ],
+  wall_system: [["masonry", "ผนังก่ออิฐ / อิฐมวลเบา"], ["c_stud_smartboard", "โครงซีไลน์ + สมาร์ทบอร์ด"], ["steel_frame_board", "โครงเหล็ก + แผ่นบอร์ด"], ["composite_panel", "ผนังแผ่นคอมโพซิต"], ["faux_wood_cladding", "ผนังลายไม้เทียม"], ["custom", "ระบบผนังอื่น · กำหนดเอง"]],
   material: [
     ["reinforced_concrete", "คอนกรีตเสริมเหล็ก"],
+    ["lightweight_block", "อิฐมวลเบา"],
+    ["brick_masonry", "อิฐก่อ"],
+    ["steel_stud", "โครงคร่าวเหล็ก"],
     ["steel", "เหล็ก"],
     ["timber", "ไม้"],
     ["generic", "ทั่วไป"],
@@ -204,14 +222,16 @@ export function CatalogField({
       </label>
     );
   const choices = options[name];
+  const customWallSystem = name === "wall_system" && (value === "custom" || !choices?.some(([id]) => id === String(value)));
   return (
+    <>
     <label className="cf-field">
       <span>{label}</span>
       {choices ? (
         <select
           aria-label={label}
-          value={String(value ?? "")}
-          onChange={(e) => onChange(e.target.value)}
+          value={customWallSystem ? "custom" : String(value ?? "")}
+          onChange={(e) => onChange(name === "wall_system" && e.target.value === "custom" ? "custom" : e.target.value)}
         >
           {!choices.some(([id]) => id === String(value)) && (
             <option value={String(value ?? "")}>
@@ -240,5 +260,7 @@ export function CatalogField({
         />
       )}
     </label>
+    {customWallSystem && <label className="cf-field"><span>ชื่อระบบผนัง</span><input aria-label="ชื่อระบบผนัง" value={value === "custom" ? "" : String(value ?? "")} placeholder="เช่น โครงไม้ + แผ่นไฟเบอร์ซีเมนต์" onChange={e => onChange(e.target.value || "custom")} /></label>}
+    </>
   );
 }

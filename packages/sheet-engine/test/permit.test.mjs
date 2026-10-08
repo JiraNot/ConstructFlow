@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createEmptyProjectDocument } from "@constructflow/project-model";
+import { createEmptyProjectDocument, deserializeProject } from "@constructflow/project-model";
 import {
   compilePermitDrawingSet,
   compilePermitPdf,
@@ -87,6 +87,107 @@ test("Phase 6: saved sheet settings control the compiler and invalid coordinate 
       }),
     /center_mm/,
   );
+});
+
+test("A-02 and A-03 can each select any story without showing a wall on its top-level plan", () => {
+  const p = createEmptyProjectDocument("LEVEL-PLAN-PROOF");
+  p.levels = [
+    { id: "GF", name: "Ground", elevation_mm: 0, storey_index: 0, height_mm: 3000 },
+    { id: "L2", name: "Level 2", elevation_mm: 3000, storey_index: 1, height_mm: 3000 },
+    { id: "L3", name: "Level 3", elevation_mm: 6000, storey_index: 2, height_mm: 3000 },
+  ];
+  for (const [id, levelId] of [["wall-gf", "GF"], ["wall-l2", "L2"], ["wall-l3", "L3"]]) {
+    p.objects[id] = {
+      id, object_type: "architecture.wall", owner_module: "constructflow.architecture",
+      schema_version: 1, created_phase: "new_construction", removed_phase: null,
+      status: "active", level_refs: [{ role: "base_level", level_id: levelId }, ...(levelId === "GF" ? [{ role: "top_level", level_id: "L2" }] : [])],
+      host_refs: [], connector_refs: [], relationships: [],
+      module_data: { start_point_mm: [0, 0, 0], end_point_mm: [3000, 0, 0], thickness_mm: 100, height_mm: 3000, level_id: levelId, ...(levelId === "GF" ? { top_level_id: "L2" } : {}) },
+      created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+    };
+  }
+  const set = compilePermitDrawingSet(p, { viewports: {
+    "A-02": { scale_denominator: 100, level_id: "L3" },
+    "A-03": { scale_denominator: 100, level_id: "L2" },
+  } });
+  assert.deepEqual(set.sheets.find(s => s.id === "A-02").source_object_ids, ["wall-l3"]);
+  assert.deepEqual(set.sheets.find(s => s.id === "A-03").source_object_ids, ["wall-l2"]);
+});
+
+test("drawing set generates independent architectural and framing sheets for every unrepresented level", () => {
+  const p = createEmptyProjectDocument("AUTO-LEVEL-SHEETS");
+  p.levels = [
+    { id: "GF", name: "Ground", elevation_mm: 0, storey_index: 1, height_mm: 3000 },
+    { id: "L2", name: "Second Floor", elevation_mm: 3000, storey_index: 2, height_mm: 3000 },
+    { id: "L3", name: "Third Floor", elevation_mm: 6000, storey_index: 3, height_mm: 3000 },
+  ];
+  for (const [id, levelId] of [["wall-gf", "GF"], ["wall-l2", "L2"], ["wall-l3", "L3"]]) {
+    p.objects[id] = {
+      id, object_type: "architecture.wall", owner_module: "constructflow.architecture",
+      schema_version: 1, created_phase: "new_construction", removed_phase: null,
+      status: "active", level_refs: [{ role: "base_level", level_id: levelId }],
+      host_refs: [], connector_refs: [], relationships: [],
+      module_data: { start_point_mm: [0, 0, 0], end_point_mm: [3000, 0, 0], thickness_mm: 100, height_mm: 3000, level_id: levelId },
+      created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+    };
+  }
+  const set = compilePermitDrawingSet(p, { viewports: {
+    "A-02-L3": { scale_denominator: 50 },
+  } });
+  const byId = (id) => set.sheets.find((sheet) => sheet.id === id);
+
+  assert.equal(set.sheets.length, 22);
+  assert.deepEqual(byId("A-02").source_object_ids, ["wall-gf"]);
+  assert.deepEqual(byId("A-03").source_object_ids, ["wall-l2"]);
+  assert.deepEqual(byId("A-02-L3").source_object_ids, ["wall-l3"]);
+  assert.equal(byId("A-02-L3").viewport.level_id, "L3");
+  assert.equal(byId("A-02-L3").scale, "1:50");
+  assert.equal(byId("S-02-L3").viewport.level_id, "L3");
+  assert.ok(byId("A-02-L3").svg.includes("Third Floor"));
+});
+
+test("opening 2D overrides are stored per sheet and retain real-mm anchored lines", () => {
+  const p = createEmptyProjectDocument("OPENING-VIEW-OVERRIDE");
+  const override = {
+    hide_generated_details: true,
+    hide_generated_elevation: true,
+    lines: [{
+      id: "sash-edge",
+      start: { x_anchor: "left", x_offset_mm: 50, y_mm: -25 },
+      end: { x_anchor: "right", x_offset_mm: -50, y_mm: -25 },
+    }],
+    elevation_lines: [{
+      id: "head-frame",
+      start: { x_anchor: "left", x_offset_mm: 50, y_anchor: "top", y_mm: -50 },
+      end: { x_anchor: "right", x_offset_mm: -50, y_anchor: "top", y_mm: -50 },
+    }],
+  };
+  p.drawing_settings = { viewports: {
+    "A-02": { scale_denominator: 100, opening_overrides: { "opening-uuid": override } },
+    "A-03": { scale_denominator: 100 },
+    "A-05": { scale_denominator: 100, opening_overrides: { "opening-uuid": { elevation_lines: override.elevation_lines } } },
+  } };
+  const set = compilePermitDrawingSet(p);
+  assert.deepEqual(set.sheets.find((s) => s.id === "A-02").viewport.opening_overrides["opening-uuid"], override);
+  assert.equal(set.sheets.find((s) => s.id === "A-03").viewport.opening_overrides, undefined);
+  assert.deepEqual(set.sheets.find((s) => s.id === "A-05").viewport.opening_overrides["opening-uuid"].elevation_lines, override.elevation_lines);
+  assert.throws(() => compilePermitDrawingSet(p, { viewports: {
+    "A-02": { scale_denominator: 100, opening_overrides: { "opening-uuid": { ...override, lines: "invalid" } } },
+  } }), /plan_symbol_lines/);
+});
+
+test("opening front elevation override replaces projected details and follows opening bounds", () => {
+  const project = deserializeProject(readFileSync(new URL("../../../examples/kitchen-extension-proof.cfproj", import.meta.url), "utf8"));
+  const opening = Object.values(project.objects).find((o) => o.object_type === "door_window.window");
+  assert.ok(opening);
+  const line = { id: "elevation-sill", start: { x_anchor: "left", x_offset_mm: 50, y_anchor: "bottom", y_mm: 50 }, end: { x_anchor: "right", x_offset_mm: -50, y_anchor: "bottom", y_mm: 50 } };
+  const baseline = compilePermitDrawingSet(project).sheets.find((s) => s.id === "A-05");
+  project.drawing_settings = { viewports: { "A-05": { scale_denominator: 100, opening_overrides: { [opening.id]: { hide_generated_elevation: true, elevation_lines: [line] } } } } };
+  const adjusted = compilePermitDrawingSet(project).sheets.find((s) => s.id === "A-05");
+  assert.ok(adjusted.primitives.filter((p) => p.kind === "path").length >= baseline.primitives.filter((p) => p.kind === "path").length);
+  assert.equal(adjusted.viewport.opening_overrides[opening.id].elevation_lines[0].id, "elevation-sill");
+  const hasProjectedSillLine = adjusted.primitives.some((p) => p.kind === "path" && p.width === 0.25 && p.points.length === 2 && Math.abs(Math.hypot(p.points[1][0] - p.points[0][0], p.points[1][1] - p.points[0][1]) - 11) < 0.02);
+  assert.ok(hasProjectedSillLine, "anchored 50 mm insets should leave a 1100 mm line at 1:100");
 });
 
 test("Track 2: Permit Package evaluates legal metadata, deed boundaries, setbacks, and issue_ready", () => {

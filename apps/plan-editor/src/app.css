@@ -16,6 +16,7 @@
 }
 
 * { box-sizing: border-box; }
+.cf-app-root { height: 100vh !important; height: 100dvh !important; padding-top: env(safe-area-inset-top); }
 button, input, select { font: inherit; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
@@ -146,6 +147,29 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-view-switch button { min-width: 74px; padding: 8px 11px; border: 0; background: #fff; color: #64778d; font-size: 11px; cursor: pointer; }
 .cf-view-switch button.is-active { background: #eaf4ff; color: #0876d1; font-weight: 700; }
 .cf-plan-canvas { background: #fbfdff !important; }
+.cf-dynamic-dimensions {
+  position: absolute;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: min(310px, calc(100% - 16px));
+  padding: 6px 8px;
+  border: 1px solid #fdba74;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 97%);
+  box-shadow: 0 3px 12px rgb(124 45 18 / 14%);
+  color: #9a3412;
+  font-size: 11px;
+}
+.cf-dynamic-dimensions label { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; }
+.cf-dynamic-dimensions input { width: 82px; min-height: 30px; padding: 3px 6px; border: 1px solid #fdba74; border-radius: 5px; background: #fff; color: #7c2d12; font: 600 12px ui-monospace, monospace; }
+.cf-dynamic-dimensions input:focus { outline: 2px solid #fb923c; outline-offset: 1px; }
+.cf-dimension-reference-toggle { min-height: 30px; padding: 3px 7px; border: 1px solid #fed7aa; border-radius: 5px; background: #fff7ed; color: #9a3412; font-size: 10px; font-weight: 650; cursor: pointer; }
+.cf-dimension-reference-toggle[aria-pressed="true"] { border-color: #fb923c; background: #ffedd5; }
+.cf-dynamic-dimensions small { flex-basis: 100%; color: #64748b; font-size: 10px; }
+.cf-tape-measure-hint { position:absolute; top:58px; left:50%; z-index:10; transform:translateX(-50%); max-width:calc(100% - 24px); padding:7px 10px; border:1px solid #c4b5fd; border-radius:7px; background:rgb(255 255 255 / 96%); box-shadow:0 2px 8px #5b21b612; color:#5b21b6; font-size:11px; white-space:nowrap; pointer-events:none; }
 .cf-canvas-zoom {
   position: absolute; top: 12px; left: 12px; z-index: 11; display: inline-flex; align-items: center; gap: 3px;
   height: 36px; padding: 3px; border: 1px solid #dce5ef; border-radius: 8px; background: #fff;
@@ -179,6 +203,52 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   align-items: center;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.cf-grid-orientation-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+.cf-grid-orientation-control > span { color: #475569; font-weight: 650; }
+.cf-grid-orientation-control button {
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #475569;
+  font: inherit;
+  cursor: pointer;
+}
+.cf-grid-orientation-control button[aria-pressed="true"] {
+  border-color: #38bdf8;
+  background: #effaff;
+  color: #0369a1;
+  font-weight: 700;
+}
+.cf-grid-orientation-control button:focus-visible { outline: 2px solid #0284c7; outline-offset: 1px; }
+.cf-grid-orientation-control small { color: #64748b; }
+.cf-grid-orientation-control label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #475569;
+  font-size: 11px;
+}
+.cf-grid-orientation-control input {
+  width: 82px;
+  min-height: 30px;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #334155;
+  background: #fff;
+  font: inherit;
 }
 
 .cf-reference-control {
@@ -372,6 +442,24 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-field input:disabled { background:#f0f3f7; color:#52677d; }
 .cf-panel-row { display:grid; grid-template-columns:55px minmax(0,1fr) 125px; gap:12px; align-items:center; margin-top:15px; padding:12px; border-radius:8px; background:#f7fafc; }
 .cf-panel-row.is-selected, .cf-selected-field { outline:2px solid #1687ee; outline-offset:3px; border-radius:8px; }
+.cf-plan-symbol-editor { display:grid; gap:8px; margin-top:12px; }
+.cf-plan-symbol-toolbar { display:flex; flex-wrap:wrap; gap:6px; }
+.cf-plan-symbol-toolbar button { min-height:30px; padding:5px 8px; border:1px solid #cbd8e5; border-radius:6px; background:#fff; color:#33465b; cursor:pointer; font:inherit; font-size:11px; }
+.cf-plan-symbol-toolbar button.is-active { color:#075985; background:#e0f2fe; border-color:#38bdf8; }
+.cf-plan-symbol-toolbar button:disabled { opacity:.45; cursor:default; }
+.cf-plan-symbol-canvas { display:block; width:100%; height:auto; aspect-ratio:600 / 180; min-height:0; border:1px solid #d5e0ea; border-radius:7px; touch-action:none; user-select:none; }
+.cf-plan-symbol-canvas.is-drawing { cursor:crosshair; }
+.cf-plan-symbol-canvas > line:not([stroke-dasharray]) { stroke:#334155; stroke-width:2; vector-effect:non-scaling-stroke; pointer-events:stroke; cursor:grab; }
+.cf-plan-symbol-canvas > line.is-selected { stroke:#0284c7; stroke-width:3; }
+.cf-plan-symbol-canvas > line.cf-plan-symbol-draft { stroke:#0284c7; stroke-width:2; stroke-dasharray:5 3; pointer-events:none; }
+.cf-plan-symbol-canvas > circle { fill:#fff; stroke:#0284c7; stroke-width:2; vector-effect:non-scaling-stroke; cursor:crosshair; }
+.cf-plan-symbol-editor small { color:#52677d; }
+.cf-plan-symbol-depth { display:flex; align-items:center; gap:8px; color:#52677d; font-size:12px; }
+.cf-plan-symbol-depth input, .cf-plan-symbol-point-fields input, .cf-plan-symbol-point-fields select { min-width:0; width:100%; }
+.cf-plan-symbol-point-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.cf-plan-symbol-point-fields fieldset { display:grid; grid-template-columns:1fr; gap:7px; min-width:0; margin:0; padding:8px; border:1px solid #d5e0ea; border-radius:7px; }
+.cf-plan-symbol-point-fields legend { padding:0 4px; color:#33465b; font-size:11px; }
+.cf-plan-symbol-point-fields label { display:grid; gap:4px; color:#52677d; font-size:10px; }
 .cf-opening-part-target { cursor:pointer; }
 .cf-opening-part-target:hover rect, .cf-opening-part-target:focus rect { stroke:#087ff5; stroke-width:1.5; }
 .cf-help { font-size:12px; color:#52677d; line-height:1.8; }
@@ -430,3 +518,80 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .cf-level-row { flex-wrap:wrap; }
 }
 
+/* Opening design collection: material-led cards with a complete draft per selection. */
+.cf-design-intro { padding: 16px 0 8px; }
+.cf-design-intro h3 { margin: 5px 0; font-size: 22px; color: #263b41; }
+.cf-design-intro p { color: #52636b; margin: 6px 0 12px; }
+.cf-design-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; padding: 12px 0; }
+.cf-design-card { display: flex; flex-direction: column; text-align: left; gap: 7px; padding: 13px; border: 1px solid #d8dedc; background: #fff; border-radius: 14px; color: #34434a; cursor: pointer; font: inherit; }
+.cf-design-card:hover { border-color: #657e70; box-shadow: 0 5px 18px #20392a12; }
+.cf-design-card:focus-visible { outline: 3px solid #087ff5; outline-offset: 3px; }
+.cf-design-card strong { font-size: 16px; color: #20372c; }
+.cf-design-card > span:not(.cf-eyebrow) { font-size: 12px; line-height: 1.6; }
+.cf-design-card small { display: flex; justify-content: space-between; gap: 8px; padding-top: 7px; margin-top: auto; color: #52636b; }
+.cf-design-card small b { color: #35644a; }
+.cf-design-art { height: 190px; border-radius: 9px; overflow: hidden; background: #f4f2ed; margin-bottom: 5px; }
+.cf-design-art svg { width: 100%; height: 100%; }
+.cf-field-label { display:block; font-size:12px; font-weight:700; color:#38504a; margin:10px 0 6px; }
+.cf-face-design-grid { display:grid; grid-template-columns:repeat(4,minmax(90px,1fr)); gap:8px; }
+.cf-face-design { min-height:90px; border:1px solid #d6dfdc; border-radius:9px; background:#fbfcfa; padding:7px; display:flex; flex-direction:column; gap:5px; text-align:left; cursor:pointer; color:#3a4d45; font:inherit; }
+.cf-face-design:hover,.cf-face-design.is-active { border-color:#42745b; background:#edf6ee; box-shadow:0 0 0 2px #bcdcc5 inset; }
+.cf-face-design strong { font-size:10px; line-height:1.25; }
+.cf-face-mini { height:48px; width:32px; margin:auto; background:#a87349; border:3px solid #6e4932; position:relative; overflow:hidden; }
+.cf-face-mini-shape { position:absolute; inset:5px; border:2px solid #d4ad7a; }
+.face-plank-8,.face-plank-14 { background:repeating-linear-gradient(to bottom,#a87349 0 5px,#6e4932 6px 7px); }
+.face-reeded-full,.face-reeded-frame { background:repeating-linear-gradient(to right,#a87349 0 3px,#6e4932 4px 5px); }
+.face-asymmetric { background:linear-gradient(to right,transparent 0 25%,#6e4932 26% 28%,transparent 29%),repeating-linear-gradient(to bottom,#a87349 0 6px,#6e4932 7px 8px); }
+.face-classic-three,.face-five-panel { border-radius:2px; box-shadow:inset 0 12px 0 #a87349,inset 0 14px 0 #d4ad7a,inset 0 -16px 0 #a87349; }
+.face-arch-two { border-radius:14px 14px 2px 2px; }
+.face-capsule,.face-oval { border-radius:999px; }
+.face-circle-middle { border-radius:50%; inset:12px 8px; }
+.cf-pick-stack {
+  position: absolute;
+  left: 12px;
+  bottom: 40px;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+  padding: 8px;
+  border: 1px solid #c7d3df;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 3px 12px #0f172a18;
+  font-size: 12px;
+}
+.cf-pick-stack button, .cf-pick-stack select { min-height: 44px; min-width: 44px; }
+.cf-pick-stack small { width: 100%; color: #64748b; }
+.cf-label-mode { position:absolute; top:64px; right:16px; z-index:12; display:flex; align-items:center; gap:4px; padding:4px 6px; border:1px solid #dbe3ea; border-radius:9px; background:#fff; box-shadow:0 2px 8px #0f172a12; color:#64748b; }
+.cf-label-mode button { min-height:36px; padding:0 10px; border:0; border-radius:6px; background:transparent; color:#475569; font-size:12px; }
+.cf-label-mode button[aria-pressed="true"] { background:#e8f3ff; color:#0866af; font-weight:650; }
+@media(max-width:700px) { .cf-label-mode { top:62px; right:8px; } .cf-label-mode button { min-height:44px; padding:0 8px; font-size:11px; } }
+
+@media (max-width: 900px) {
+  .cf-workspace { position: relative; }
+  .cf-tool-rail {
+    position: absolute; inset: auto 0 0; z-index: 30; flex-direction: row; align-items: center;
+    height: calc(66px + env(safe-area-inset-bottom)); max-height: calc(66px + env(safe-area-inset-bottom));
+    overflow-x: auto; overflow-y: hidden; padding: 4px 8px calc(4px + env(safe-area-inset-bottom));
+    border-top: 1px solid #dce4ed; border-right: 0; background: rgb(255 255 255 / 96%); backdrop-filter: blur(12px);
+  }
+  .cf-rail-caption { display: none; }
+  .cf-toolbar-vertical { width: max-content; flex: 0 0 auto; flex-direction: row !important; gap: 4px !important; }
+  .cf-toolbar-vertical .cf-tool-list { width: max-content; flex-direction: row !important; gap: 3px !important; }
+  .cf-toolbar-vertical .cf-tool-button { width: 48px !important; min-height: 52px !important; }
+  .cf-toolbar-vertical .cf-toolbar-utility { width: auto; padding: 0 0 0 4px !important; border-top: 0 !important; border-left: 1px solid #edf1f5 !important; }
+  .cf-toolbar-vertical .cf-underlay-tools { flex-direction: row !important; }
+  .cf-toolbar-vertical .cf-underlay-tools > div { flex-direction: row !important; }
+  .cf-canvas-shell { padding-bottom: calc(66px + env(safe-area-inset-bottom)); min-width: 0; }
+  .cf-inspector { position: absolute; top: 0; right: 0; bottom: calc(66px + env(safe-area-inset-bottom)); z-index: 25; width: min(88vw, 380px); min-width: 0; box-shadow: -8px 0 24px rgb(15 23 42 / 12%); }
+  .cf-app-header { gap: 6px; padding-right: 8px; padding-left: 8px; }
+  .cf-header-model-controls { gap: 4px; }
+  .cf-header-field select { min-width: 78px; max-width: 92px; }
+  .cf-phase-field select { min-width: 86px; }
+  .cf-header-actions { gap: 2px; }
+  .cf-header-actions .cf-button { padding: 0 6px; }
+  .cf-authoring-controls { bottom: calc(72px + env(safe-area-inset-bottom)); }
+}

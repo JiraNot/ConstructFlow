@@ -14,6 +14,8 @@ import {
   Eye,
   EyeOff,
   Trash2,
+  Eraser,
+  Layers,
 } from 'lucide-react'
 
 const panelLayoutLabel = (layout?: string[]) => layout && layout.length > 1
@@ -31,9 +33,13 @@ export type ToolType =
   | 'wall'
   | 'door'
   | 'window'
+  | 'slab'
+  | 'slabVoid'
   | 'stair'
   | 'grid'
+  | 'measure'
   | 'calibrate'
+  | 'erase'
 
 interface ToolbarProps {
   orientation?: 'horizontal' | 'vertical'
@@ -102,12 +108,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
   const tools: { id: ToolType; label: string; icon: React.ReactNode; shortcut: string }[] = [
     { id: 'select', label: 'เลือก (S)', icon: <MousePointer size={16} />, shortcut: 'S' },
+    { id: 'erase', label: 'ยางลบ (E)', icon: <Eraser size={16} />, shortcut: 'E' },
     { id: 'column', label: 'เสา (C)', icon: <Columns size={16} />, shortcut: 'C' },
     { id: 'foundation', label: 'ฐานราก (F)', icon: <Square size={16} />, shortcut: 'F' },
     { id: 'beam', label: 'คาน (B)', icon: <Minus size={16} strokeWidth={3} />, shortcut: 'B' },
     { id: 'wall', label: 'ผนัง (W)', icon: <BrickWall size={16} />, shortcut: 'W' },
     { id: 'door', label: 'ประตู (D)', icon: <DoorOpen size={16} />, shortcut: 'D' },
     { id: 'window', label: 'หน้าต่าง (N)', icon: <AppWindow size={16} />, shortcut: 'N' },
+    { id: 'slab', label: 'พื้น (P)', icon: <Layers size={16} />, shortcut: 'P' },
     {
       id: 'stair',
       label: 'บันได (T)',
@@ -119,7 +127,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       shortcut: 'T',
     },
     { id: 'grid', label: 'แกน (G)', icon: <Hash size={16} />, shortcut: 'G' },
-    { id: 'calibrate', label: 'วัดระยะ (R)', icon: <Ruler size={16} />, shortcut: 'R' },
+    { id: 'measure', label: 'ตลับเมตร (M)', icon: <Ruler size={16} />, shortcut: 'M' },
+    { id: 'calibrate', label: 'ปรับสเกลภาพ (R)', icon: <Ruler size={16} />, shortcut: 'R' },
   ]
 
   return (
@@ -136,7 +145,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     }}>
       {/* Tool Buttons */}
       <div className="cf-tool-list" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        {tools.map((t) => {
+        {tools.filter(tool => tool.id !== 'calibrate' || (underlayHasImage && underlayVisible)).map((t) => {
           const isActive = activeTool === t.id
           return (
             <button

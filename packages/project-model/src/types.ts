@@ -39,6 +39,13 @@ export interface GridModuleData {
   orientation: 'vertical' | 'horizontal'
   position_mm: number
   extent_mm: [number, number]
+  /** Shared identity and parameters for grids created as one editable system. */
+  system_id?: string
+  system_index?: number
+  system_origin_mm?: number
+  system_spacing_mm?: number
+  system_count?: number
+  system_first_tag?: string
 }
 
 export interface ColumnModuleData {
@@ -47,6 +54,7 @@ export interface ColumnModuleData {
   mark: string // Human-readable mark, e.g. "C01"
   location_mm: [number, number, number] // [x, y, z] in mm
   section_mm: [number, number] // [width, depth] in mm
+  plaster_thickness_mm?: number
   rotation_deg: number
   base_level_id: string
   top_level_id?: string
@@ -112,7 +120,16 @@ export interface WallModuleData {
   plaster_outside_thickness_mm?: number
   plaster_inside_material?: string
   plaster_outside_material?: string
+  inside_finish_mark?: string
+  outside_finish_mark?: string
+  /** Interior face side relative to the wall's start→end direction. */
+  interior_side?: 'left' | 'right'
   height_mm: number // e.g. 2800 mm
+  /** Optional vertical constraint: derive the wall top from a storey datum. */
+  top_level_id?: string
+  base_offset_mm?: number
+  top_offset_mm?: number
+  vertical_constraint?: 'fixed_height' | 'top_level'
   length_mm: number // computed length in mm
   level_id: string
   wall_type_id?: string
@@ -141,6 +158,12 @@ export interface DoorModuleData {
   offset_along_wall_mm: number // Distance along wall from start_point_mm
   width_mm: number // e.g. 800, 900, 1000 mm
   height_mm: number // e.g. 2000, 2100 mm
+  /** Opening bottom offset from its base level; normally zero for doors. */
+  sill_height_mm?: number
+  /** When set, derive opening height so its head lands at this level + offset. */
+  head_level_id?: string
+  head_offset_mm?: number
+  vertical_constraint?: 'fixed_height' | 'head_level'
   handing: DoorHanding
   level_id: string
   door_type_id?: string
@@ -156,6 +179,10 @@ export interface WindowModuleData {
   width_mm: number // e.g. 1200, 1800, 2400 mm
   height_mm: number // e.g. 1200, 1500 mm
   sill_height_mm: number // e.g. 800, 900 mm
+  /** When set, derive opening height so its head lands at this level + offset. */
+  head_level_id?: string
+  head_offset_mm?: number
+  vertical_constraint?: 'fixed_height' | 'head_level'
   level_id: string
   window_type_id?: string
 }
@@ -172,6 +199,8 @@ export interface CatalogPlacement {
 export interface SlabModuleData extends CatalogPlacement {
   boundary_mm: Point2Mm[]
   elevation_mm: number
+  elevation_offset_mm?: number
+  voids_mm?: Point2Mm[][]
   thickness_mm: number
   topping_mm: number
   slab_system: 'slab_on_ground' | 'suspended' | 'precast_plank' | 'hollow_core'

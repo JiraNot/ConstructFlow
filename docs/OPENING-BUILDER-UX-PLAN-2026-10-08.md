@@ -133,3 +133,29 @@ Preview เดิมระบุแค่ W×H ใต้ภาพ ไม่ม�
 - สร้างคลังรุ่นสินค้าผู้ผลิตและตรวจขนาดตามแค็ตตาล็อก/เอกสารผู้ผลิต โดยแสดงแบรนด์/รุ่น/ขนาดเมื่อเลือก SKU จริง
 - เพิ่มแผงมือจับและอุปกรณ์เป็น geometry ที่แม่นกับชนิดบานเปิด, บานกระทุ้ง, มือจับเซาะฝังตามโปรไฟล์ และวัสดุวงกบ
 - เพิ่มมุม/ระยะ zoom ของ preview เพื่อแยก finish ที่ใกล้กันและตรวจรูเจาะ/ตำแหน่ง
+
+## 9. Delivery — แกลเลอรีแบบและรายละเอียดโมเดล (2026-10-08)
+
+- เพิ่มแบบตั้งต้น 16 ชุด: ประตูไม้เรียบ, ร่องนอน, ร่องตั้ง, คลาสสิกสองลูกฟัก, คู่หกลูกฟัก, เฟรนช์กระจกคู่, เลื่อนสามบาน และบานเกล็ดไม้; หน้าต่างเลื่อน, กระจกภาพวิว, คอตเทจ, กรอบไม้ช่องบน, กระทุ้งฝ้า, บานผสมสามส่วน, กริดติดตาย และเลื่อนพร้อมช่องบน/ล่าง
+- เปิดจากคลังประตู/หน้าต่าง → แบบสำเร็จรูป · เลือกสไตล์ มีตัวกรองสี่สไตล์และค้นหา เลือกแล้วเข้า draft ปรับก่อนสร้างชนิดผ่าน CommandBus; รองรับโครงการเก่าและตั้งรหัสต่อท้ายเมื่อซ้ำ
+- โมเดลบานทึบมีลูกฟักนูนพร้อมคิ้วสองชั้นทั้งสองหน้า ร่องบางและแผ่นเกล็ดเอียง; ขอบกระจกมี glazing beads; สีวัสดุ preview/3D ใช้ palette เดียวกัน ปรับ roughness/metalness ตามวัสดุ
+- แก้รายละเอียดบานเลื่อนให้ตามระยะ track และมือจับหน้าต่างให้เป็นส่วนของ sash ที่เคลื่อนที่
+- Geometry helpers อยู่ representation-engine; presets อยู่ project-model; UI จัด draft และ render ข้อมูล ไม่เพิ่ม schema/command fields หรือเปลี่ยน UUID/phasing/Undo contracts
+- Verification: command tests 4/4 (รวมวนสร้างทั้ง 16 designs, serialize/reopen, Undo และ transaction tests เดิม); representation tests 9/9; TypeScript/Vite build ผ่าน มี bundle warning >500 kB เดิม
+- Browser: ตรวจคลังที่ขนาดแคบและ 1280×800, กรองหน้าต่างคลาสสิก, สร้าง D-C01, assign ให้ประตูเดิมและเปิด 3D ได้โดยไม่มี console errors
+- งานต่อ: preview 3D ใน editor, SKU, สเปกผลิต, วัสดุแยก region, ช่องแสงเปิดได้และช่องข้างยังอยู่ในแผน
+
+ไฟล์หลัก: `packages/project-model/src/openingDesigns.ts`, `packages/representation-engine/src/openingDetails.ts`, `apps/plan-editor/src/components/TypeManagerModal.tsx`, `apps/plan-editor/src/components/catalogPresentation.tsx`, `apps/plan-editor/src/components/Model3DViewport.tsx`, `apps/plan-editor/src/app.css`; tests: `packages/command-runtime/test/opening-designs.test.mjs`, `packages/representation-engine/test/opening-details.test.mjs`.
+
+## 10. Delivery — ระบบประกอบลายหน้าบานและฮาร์ดแวร์ (2026-10-08)
+
+ภาพอ้างอิงชุดนี้ทำให้แยกความหมายของ “ลายบาน” ออกจากจำนวนลูกฟักได้ชัดเจน จึงเพิ่ม component recipe ที่เก็บตำแหน่งเป็นสัดส่วน 0–1 ภายในใบบาน แต่ละ component มี UUID ของตัวเอง ประเภท panel/grooves, contour rectangle/arch/capsule/ellipse และจำนวนเส้น/ทิศทางสำหรับร่อง
+
+- ชุดลายที่เลือกได้ใน editor: กระดานนอน 8/14 เส้น, ร่องตั้งเต็มบาน/ในกรอบ, ร่องผสม, คลาสสิกสามส่วน, โค้งบน, แคปซูล, วงรี, วงกลมกลาง, ห้าลูกฟัก และกรอบสูงเต็มบาน
+- เลือกชุดลายแล้ว 2D preview แสดงตำแหน่งจริงตามสัดส่วนบาน และ 3D วางร่อง/คิ้ว/แผ่นลายบนทั้งสองหน้าของใบบาน ทุก component ถูกตรวจให้อยู่ในกรอบก่อนบันทึก
+- มือจับ 3D เพิ่มแป้นฐาน/rose, คอจับ, ก้านโยกหรือหัวลูกบิด, จุดยึดมือจับก้านดึง, ร่องมือจับฝัง และกระบอกล็อกแยกจากตัวมือจับ สี/ผิวโลหะเดิมยังใช้ร่วมกัน
+- Component recipes เป็น design geometry สำหรับปรับแบบและการนำเสนอ ยังไม่ใช่ profile โรงงาน; ระยะคิ้ว, ร่อง, รูเจาะ, backset, lockset และ tolerance ต้องอยู่ใน vendor/product contract รอบ SKU
+
+ผลตรวจ: project-model 16/16, representation-engine 9/9, command-runtime opening/design tests 4/4 และ plan-editor TypeScript/Vite build ผ่าน (bundle warning เดิมยังอยู่). Browser ตรวจ editor จริง พบชุดลาย 12 แบบ, preview วงรี/โค้ง และการเปิดตัวเลือกผ่าน keyboard/DOM state
+
+ไฟล์เพิ่ม: `packages/project-model/src/doorFace.ts`, `packages/project-model/src/doorFaceDesigns.ts`, `packages/project-model/test/door-face.test.mjs`; ภาพ: `docs/assets/opening-designs-2026-10-08/door-face-editor.jpg`.

@@ -76,6 +76,25 @@ test('opening representations preserve upper transom and glazing muntin layouts'
   assert.deepEqual(windowShape.panel_width_ratios, [0.65, 0.35])
 })
 
+test('opening frame and sash face widths resolve from the same catalog parameters as plan types', () => {
+  const project = structuredClone(fixture)
+  const door = Object.values(project.objects).find(object => object.object_type === 'door_window.door')
+  const window = Object.values(project.objects).find(object => object.object_type === 'door_window.window')
+  const doorType = project.types.find(type => type.id === door.module_data.type_id)
+  const windowType = project.types.find(type => type.id === window.module_data.type_id)
+  doorType.parameters = { ...doorType.parameters, frame_face_width_mm: 50, sash_face_width_mm: 45, door_leaf_thickness_mm: 42 }
+  windowType.parameters = { ...windowType.parameters, frame_face_width_mm: 60, sash_face_width_mm: 42 }
+
+  const result = buildProjectRepresentations3D(project)
+  const doorShape = result.objects.find(object => object.object_id === door.id).shape
+  const windowShape = result.objects.find(object => object.object_id === window.id).shape
+  assert.equal(doorShape.frame_face_width_mm, 50)
+  assert.equal(doorShape.sash_face_width_mm, 45)
+  assert.equal(doorShape.door_leaf_thickness_mm, 42)
+  assert.equal(windowShape.frame_face_width_mm, 60)
+  assert.equal(windowShape.sash_face_width_mm, 42)
+})
+
 test('layered wall representations keep masonry core and both plaster faces distinct', () => {
   const project = structuredClone(fixture)
   const wall = Object.values(project.objects).find(object => object.object_type === 'architecture.wall')

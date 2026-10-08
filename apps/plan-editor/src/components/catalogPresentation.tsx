@@ -1,4 +1,5 @@
 import React from "react";
+import { openingMaterialAppearance, openingHandlePlacement } from "@constructflow/representation-engine";
 import type { TypeDefinition } from "@constructflow/project-model";
 import {
   resolveOpeningMuntinGrid,
@@ -6,7 +7,7 @@ import {
   type OpeningGridZone,
   measureOpeningRegions,
 } from "@constructflow/architecture-engine";
-type OpeningOperation = "hinged" | "sliding" | "fixed" | "awning" | "louver";
+type OpeningOperation = "hinged" | "sliding" | "fixed" | "awning" | "louver" | "bifold" | "pocket" | "surface_sliding";
 type GlazingMaterial =
   | "none"
   | "clear_glass"
@@ -25,6 +26,9 @@ export const CATALOG_FAMILIES = [
 export const OPERATION_LABELS: Record<string, string> = {
   hinged: "บานเปิด",
   sliding: "บานเลื่อน",
+  bifold: "บานเฟี้ยม",
+  pocket: "บานเลื่อนซ่อนผนัง",
+  surface_sliding: "บานเลื่อนรางลอย",
   fixed: "บานติดตาย",
   awning: "บานกระทุ้ง",
   louver: "บานเกล็ด",
@@ -36,6 +40,7 @@ export const TOOL_FAMILIES: Record<string, string> = {
   wall: "architecture.wall",
   door: "door_window.door",
   window: "door_window.window",
+  slab: "structure.slab",
 };
 
 export function typeDescription(type: TypeDefinition): string {
@@ -44,6 +49,7 @@ export function typeDescription(type: TypeDefinition): string {
     CATALOG_FAMILIES.find(([id]) => id === type.object_type)?.[1] ??
     type.object_type;
   if (type.object_type.startsWith("door_window.")) {
+    const allLouver = (p.panel_layout?.length ? p.panel_layout : [p.opening_operation]).every(operation => operation === "louver");
     const operations = [
       ...new Set(p.panel_layout ?? [p.opening_operation ?? "hinged"]),
     ]
@@ -53,24 +59,30 @@ export function typeDescription(type: TypeDefinition): string {
       family + operations,
       `${p.panel_count ?? 1} บาน`,
       type.object_type.endsWith(".door") && p.glazing_material === "none"
-        ? ({ flush: "หน้าบานเรียบ", raised_2_panel: "ลูกฟัก 2 ช่อง", raised_4_panel: "ลูกฟัก 4 ช่อง", raised_6_panel: "ลูกฟัก 6 ช่อง", horizontal_grooves_3: "เซาะร่องแนวนอน 3 เส้น", horizontal_grooves_5: "เซาะร่องแนวนอน 5 เส้น", vertical_grooves_3: "เซาะร่องแนวตั้ง 3 เส้น", louvered: "หน้าบานเกล็ด" } as Record<string,string>)[String(p.door_leaf_style ?? "raised_2_panel")] ?? "ลูกฟัก 2 ช่อง"
+        ? ({ flush: "หน้าบานเรียบ", raised_2_panel: "ลูกฟัก 2 ช่อง", raised_4_panel: "ลูกฟัก 4 ช่อง", raised_6_panel: "ลูกฟัก 6 ช่อง", horizontal_grooves_3: "เซาะร่องแนวนอน 3 เส้น", horizontal_grooves_5: "เซาะร่องแนวนอน 5 เส้น", vertical_grooves_3: "เซาะร่องแนวตั้ง 3 เส้น", louvered: "หน้าบานเกล็ด" } as Record<string,string>)[String(allLouver ? "louvered" : p.door_leaf_style ?? "raised_2_panel")] ?? "ลูกฟัก 2 ช่อง"
         : "",
       p.opening_handle_style && p.opening_handle_style !== "lever"
         ? ({ round_knob: "ลูกบิดกลม", pull_handle: "มือจับก้านดึง", recessed_pull: "มือจับฝัง", none: "ไม่แสดงมือจับ" } as Record<string,string>)[String(p.opening_handle_style)] ?? "มือจับก้านโยก"
         : "",
       p.transom_height_mm ? "ช่องแสงบน" : "",
       p.bottom_light_height_mm ? "ช่องแสงล่าง" : "",
-      (p.muntin_rows ?? 1) > 1 || (p.muntin_columns ?? 1) > 1
+      !allLouver && ((p.muntin_rows ?? 1) > 1 || (p.muntin_columns ?? 1) > 1)
         ? `ลูกฟักต่อบาน นอน ${(p.muntin_rows ?? 1) - 1} / ตั้ง ${(p.muntin_columns ?? 1) - 1} เส้น`
         : "",
     ]
       .filter(Boolean)
       .join(" · ");
   }
-  if (type.object_type === "architecture.wall")
-    return p.plaster_inside_thickness_mm || p.plaster_outside_thickness_mm
-      ? "ผนังงานก่อ + งานฉาบ"
-      : "ผนังงานก่อ";
+  if (type.object_type === "architecture.wall") {
+    const systems: Record<string, string> = {
+      masonry: "ผนังก่อฉาบ",
+      c_stud_smartboard: "โครงซีไลน์ + สมาร์ทบอร์ด",
+      steel_frame_board: "โครงเหล็ก + แผ่นบอร์ด",
+      composite_panel: "ผนังคอมโพซิต",
+      faux_wood_cladding: "ผนังลายไม้เทียม",
+    };
+    return systems[String(p.wall_system)] ?? "ผนังประกอบหลายชั้น";
+  }
   const materials: Record<string, string> = {
     reinforced_concrete: "คอนกรีตเสริมเหล็ก",
     steel: "เหล็ก",
@@ -189,6 +201,7 @@ interface OpeningTypeParameters {
   frame_material?: string;
   panel_material?: string;
   door_leaf_style?: string;
+  door_face_components?: Array<{ kind: 'panel' | 'grooves'; contour: 'rectangle' | 'arch' | 'capsule' | 'ellipse'; x: number; y: number; width: number; height: number; count?: number; direction?: 'horizontal' | 'vertical' }>;
   opening_handle_style?: string;
   opening_hardware_finish?: string;
   glazing_material?: GlazingMaterial;
@@ -213,7 +226,10 @@ export const OpeningPreview: React.FC<
   opening_operation = "sliding",
   panel_layout = [],
   panel_width_ratios = [],
+  frame_material = "aluminium",
+  panel_material = "timber",
   door_leaf_style = "raised_2_panel",
+  door_face_components = [],
   opening_handle_style = "lever",
   opening_hardware_finish = "stainless",
   glazing_material = "clear_glass",
@@ -251,7 +267,8 @@ export const OpeningPreview: React.FC<
       0.001
       ? panel_width_ratios
       : Array.from({ length: panels }, () => 1 / panels);
-  const line = "#83a6bd";
+  const line = openingMaterialAppearance(frame_material).color;
+  const leafColor = openingMaterialAppearance(panel_material).color;
   const glass =
     glazing_material === "frosted_glass"
       ? "#d6e9ec"
@@ -404,7 +421,7 @@ export const OpeningPreview: React.FC<
         y={y}
         width={w}
         height={h}
-        fill={glazing_material === "none" ? "#d3bfa4" : glass}
+        fill={glazing_material === "none" ? leafColor : glass}
         stroke={line}
         strokeWidth="4"
       />
@@ -457,6 +474,7 @@ export const OpeningPreview: React.FC<
         );
       })}
       {openingType === "door" && glazing_material === "none" && Array.from({ length: panels }, (_, index) => {
+        if ((panel_layout[index] ?? opening_operation) === "louver") return null;
         const left = x + w * ratios.slice(0, index).reduce((sum, value) => sum + value, 0);
         const leafWidth = w * ratios[index];
         const insetX = Math.min(leafWidth * 0.13, 4);
@@ -465,17 +483,27 @@ export const OpeningPreview: React.FC<
         const gw = Math.max(0, leafWidth - insetX * 2), gh = Math.max(0, mainBottom - mainTop - insetY * 2);
         const grids: Record<string, [number, number]> = { raised_2_panel: [2, 1], raised_4_panel: [2, 2], raised_6_panel: [3, 2] };
         const grid = grids[door_leaf_style];
+        const customFace = door_face_components.length > 0;
         return <g key={`door-face-${index}`} data-leaf-style={door_leaf_style} fill="none" stroke="#806348" strokeWidth="1.4" pointerEvents="none">
-          {(grid ? Array.from({length:grid[0]*grid[1]},(_,cell)=>{
+          {customFace && door_face_components.map((component, componentIndex) => {
+            const cx = left + leafWidth * (component.x + component.width / 2), cy = mainBottom - (mainBottom - mainTop) * (component.y + component.height / 2);
+            const cw = leafWidth * component.width, ch = (mainBottom - mainTop) * component.height;
+            if (component.kind === "grooves") {
+              const count = Math.max(1, component.count ?? 1);
+              return Array.from({ length: count }, (_, groove) => component.direction === "vertical"
+                ? <line key={`${componentIndex}-v-${groove}`} x1={left + leafWidth * (component.x + component.width * (groove + 1) / (count + 1))} x2={left + leafWidth * (component.x + component.width * (groove + 1) / (count + 1))} y1={cy - ch / 2} y2={cy + ch / 2} />
+                : <line key={`${componentIndex}-h-${groove}`} x1={cx - cw / 2} x2={cx + cw / 2} y1={cy + ch / 2 - ch * (groove + 1) / (count + 1)} y2={cy + ch / 2 - ch * (groove + 1) / (count + 1)} />);
+            }
+            const rx = component.contour === "ellipse" ? cw / 2 : component.contour === "capsule" ? Math.min(cw, ch) / 2 : component.contour === "arch" ? Math.min(cw / 2, ch * .32) : 1;
+            return <rect key={`${componentIndex}-panel`} x={cx - cw / 2} y={cy - ch / 2} width={cw} height={ch} rx={rx} />;
+          })}
+          {!customFace && (grid ? Array.from({length:grid[0]*grid[1]},(_,cell)=>{
             const row=Math.floor(cell/grid![1]), col=cell%grid![1];
             return <rect key={cell} x={gx+gw*col/grid![1]+1} y={gy+gh*row/grid![0]+1} width={Math.max(0,gw/grid![1]-2)} height={Math.max(0,gh/grid![0]-2)} rx="1" />;
           }) : door_leaf_style.startsWith("horizontal_grooves_") ? Array.from({length:door_leaf_style.endsWith("5")?5:3},(_,groove)=><line key={groove} x1={gx} x2={gx+gw} y1={gy+gh*(groove+1)/((door_leaf_style.endsWith("5")?5:3)+1)} y2={gy+gh*(groove+1)/((door_leaf_style.endsWith("5")?5:3)+1)} />)
           : door_leaf_style === "vertical_grooves_3" ? Array.from({length:3},(_,groove)=><line key={groove} y1={gy} y2={gy+gh} x1={gx+gw*(groove+1)/4} x2={gx+gw*(groove+1)/4} />)
           : door_leaf_style === "louvered" ? Array.from({length:7},(_,groove)=><line key={groove} x1={gx} x2={gx+gw} y1={gy+gh*(groove+1)/8} y2={gy+gh*(groove+1)/8} />)
           : [])}
-          {opening_handle_style !== "none" && <g data-handle-style={opening_handle_style} transform={`translate(${left+leafWidth*(panels > 1 && index % 2 === 1 ? 0.18 : 0.82)} ${(mainTop+mainBottom)/2})`} stroke={opening_hardware_finish === "matte_black" ? "#27313b" : opening_hardware_finish === "satin_brass" ? "#9f7943" : opening_hardware_finish === "bronze" ? "#75533a" : "#738594"}>
-            {opening_handle_style === "round_knob" ? <circle r="1.7" fill="#d3dce2" /> : opening_handle_style === "pull_handle" ? <path d="M -1.5 -4 Q -4 -4 -4 -2 V 3 Q -4 5 -1.5 5 M 1.5 -4 Q 4 -4 4 -2 V 3 Q 4 5 1.5 5" /> : opening_handle_style === "recessed_pull" ? <rect x="-2.5" y="-4" width="5" height="8" rx="1" fill="#e1e8ed" /> : <><circle r="1.4" fill="#d3dce2"/><line x1="1" y1="0" x2="5" y2="0" strokeWidth="1.6" /></>}
-          </g>}
         </g>;
       })}
       {Array.from({ length: panels }, (_, index) => {
@@ -547,24 +575,25 @@ export const OpeningPreview: React.FC<
           );
         return null;
       })}
-      {(openingType === "window" || glazing_material !== "none") &&
-        opening_handle_style !== "none" &&
+      {opening_handle_style !== "none" &&
         Array.from({ length: panels }, (_, index) => {
           const operation = panel_layout[index] ?? opening_operation;
           if (!["hinged", "sliding", "awning", "louver"].includes(operation)) return null;
           const left = x + w * ratios.slice(0, index).reduce((sum, value) => sum + value, 0);
           const panelWidth = w * ratios[index];
-          const hingeOnRight = operation === "hinged" && index % 2 === 1;
-          const handleX = left + panelWidth * (hingeOnRight ? 0.2 : 0.8);
-          const handleY = mainTop + (mainBottom - mainTop) * 0.58;
+          const placement = openingHandlePlacement(operation, index, width_mm * ratios[index], height_mm - dimensions.transom_height_mm - dimensions.bottom_light_height_mm, glazing_material !== "none");
+          if (!placement) return null;
+          const handleX = left + panelWidth * placement.x;
+          const handleY = mainTop + (mainBottom - mainTop) * placement.y;
           const finish = opening_hardware_finish === "matte_black" ? "#27313b" : opening_hardware_finish === "satin_brass" ? "#9f7943" : opening_hardware_finish === "bronze" ? "#75533a" : "#738594";
           return (
-            <g key={`handle-${index}`} data-handle-style={opening_handle_style} transform={`translate(${handleX} ${handleY})`} stroke={finish} fill="#d3dce2" pointerEvents="none">
-              {opening_handle_style === "round_knob" ? <circle r="1.7" /> : opening_handle_style === "pull_handle" ? <path d="M -1.5 -4 Q -4 -4 -4 -2 V 3 Q -4 5 -1.5 5 M 1.5 -4 Q 4 -4 4 -2 V 3 Q 4 5 1.5 5" fill="none" /> : opening_handle_style === "recessed_pull" ? <rect x="-2.5" y="-4" width="5" height="8" rx="1" /> : <><circle r="1.4" /><line x1="1" y1="0" x2="5" y2="0" strokeWidth="1.6" /></>}
+            <g key={`handle-${index}`} data-handle-style={opening_handle_style} transform={`translate(${handleX} ${handleY}) scale(${placement.direction} 1)`} stroke={finish} fill="#d3dce2" pointerEvents="none">
+              {opening_handle_style === "round_knob" ? <circle r="1.7" /> : opening_handle_style === "pull_handle" ? <path d="M -1.5 -4 Q -4 -4 -4 -2 V 3 Q -4 5 -1.5 5 M 1.5 -4 Q 4 -4 4 -2 V 3 Q 4 5 1.5 5" fill="none" /> : opening_handle_style === "recessed_pull" ? openingType === "window" ? <rect x={-10 * w / width_mm} y={-42.5 * h / height_mm} width={20 * w / width_mm} height={85 * h / height_mm} rx="0.3" strokeWidth="0.5" fill="#36434b" /> : <rect x="-2.5" y="-4" width="5" height="8" rx="1" /> : <><circle r="1.4" /><line x1="1" y1="0" x2="5" y2="0" strokeWidth="1.6" /></>}
             </g>
           );
         })}
       {Array.from({ length: panels }, (_, index) => {
+        if ((panel_layout[index] ?? opening_operation) === "louver") return null;
         const left =
           x + w * ratios.slice(0, index).reduce((sum, value) => sum + value, 0);
         return (

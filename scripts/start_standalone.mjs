@@ -16,7 +16,7 @@ if (buildExit !== 0) process.exit(buildExit)
 
 const appDirectory = resolve(root, 'apps/plan-editor')
 const viteCli = resolve(appDirectory, 'node_modules/vite/bin/vite.js')
-const server = spawn(node, [viteCli, '--host', '127.0.0.1'], {
+const server = spawn(node, [viteCli, '--host', '0.0.0.0'], {
   cwd: appDirectory,
   stdio: 'inherit',
 })

@@ -1,10 +1,9 @@
 import React, { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import type { ProjectDocument } from '@constructflow/project-model'
 import { resolveOpeningMuntinGrid, muntinGridPositions, type OpeningGridZone } from '@constructflow/architecture-engine'
-import { buildProjectRepresentations3D, getPlanVisibleObjects, type ObjectRepresentation3D, type RepresentationInteraction } from '@constructflow/representation-engine'
+import { buildProjectRepresentations3D, getPlanVisibleObjects, doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement, type ObjectRepresentation3D, type RepresentationInteraction } from '@constructflow/representation-engine'
 
 type ModelObject3D = THREE.Object3D & { userData: { objectId: string; objectType: string; moveable: boolean; interaction: RepresentationInteraction } }
 const mmToM = (value: number) => value / 1000
@@ -27,18 +26,18 @@ function objectColor(representation: ObjectRepresentation3D): THREE.ColorReprese
 function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
   const displayPhase = representation.display_phase
   const root = new THREE.Group() as unknown as ModelObject3D
-  const standardMaterial = (color: THREE.ColorRepresentation, options: { transparent?: boolean; opacity?: number; metalness?: number; depthWrite?: boolean } = {}) =>
+  const standardMaterial = (color: THREE.ColorRepresentation, options: { transparent?: boolean; opacity?: number; metalness?: number; roughness?: number; depthWrite?: boolean } = {}) =>
     new THREE.MeshStandardMaterial({
       side: THREE.DoubleSide,
       color,
-      roughness: 0.94,
+      roughness: options.roughness ?? 0.72,
       metalness: options.metalness ?? 0,
       transparent: options.transparent ?? displayPhase !== 'new_construction',
       opacity: options.opacity ?? (displayPhase === 'demolition' ? 0.48 : displayPhase === 'existing' ? 0.62 : 1),
       depthWrite: options.depthWrite ?? displayPhase === 'new_construction',
     })
   const addBox = (parent: THREE.Object3D, dimensions: [number, number, number], position: [number, number, number], material: THREE.Material, rotationZ = 0) => {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...dimensions.map(value => Math.max(value, 0.008)) as [number, number, number]), material)
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...dimensions.map(value => Math.max(value, 0.001)) as [number, number, number]), material)
     mesh.position.set(...position)
     mesh.rotation.z = rotationZ
     mesh.castShadow = true
@@ -53,21 +52,23 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
   if (representation.shape.kind === 'opening') {
     const shape = representation.shape
     const width = mmToM(shape.width_mm), height = mmToM(shape.height_mm)
-    const frameWidth = Math.min(0.065, Math.max(0.032, mmToM(shape.frame_depth_mm) * 0.62))
+    const frameWidth = Math.min(width * 0.22, mmToM(shape.frame_face_width_mm))
+    const sashFaceWidth = Math.min(Math.min(width, height) * 0.2, mmToM(shape.sash_face_width_mm))
     const frameDepth = Math.min(mmToM(shape.wall_thickness_mm) + 0.04, Math.max(0.055, mmToM(shape.frame_depth_mm)))
-    const panelDepth = shape.opening_type === 'door' && shape.glazing_material === 'none' ? 0.042 : 0.018
+    const panelDepth = shape.opening_type === 'door' ? mmToM(shape.door_leaf_thickness_mm) : 0.018
     const panelOperations = shape.panel_layout.length === shape.panel_count ? shape.panel_layout : Array.from({ length: shape.panel_count }, () => shape.operation)
     const panelWidthRatios = shape.panel_width_ratios.length === shape.panel_count && Math.abs(shape.panel_width_ratios.reduce((sum, value) => sum + value, 0) - 1) < 0.001
       ? shape.panel_width_ratios : Array.from({ length: shape.panel_count }, () => 1 / shape.panel_count)
     const panelStartX = (index: number) => -clearWidth / 2 + clearWidth * panelWidthRatios.slice(0, index).reduce((sum, value) => sum + value, 0)
     const panelWidthAt = (index: number) => clearWidth * panelWidthRatios[index]
     const hasSlidingPanel = panelOperations.includes('sliding')
-    const frameColor = shape.frame_material.toLowerCase().includes('timber') || shape.frame_material.toLowerCase().includes('wood') ? '#8b5e3c' : '#647b8b'
-    const phaseFrameColor = displayPhase === 'demolition' ? '#ef4444' : displayPhase === 'existing' ? '#94a3b8' : frameColor
-    const frameMaterial = standardMaterial(phaseFrameColor, { metalness: frameColor === '#647b8b' ? 0.12 : 0.01 })
-    const panelMaterialKey = shape.panel_material?.toLowerCase() ?? ''
-    const panelColor = ['timber', 'wood', 'solid_wood'].includes(panelMaterialKey) ? '#b87946' : ['hdf', 'mdf'].includes(panelMaterialKey) ? '#d4c2a7' : panelMaterialKey === 'wpc' ? '#927251' : panelMaterialKey === 'upvc' || panelMaterialKey === 'pvc' ? '#e4e8e4' : panelMaterialKey === 'aluminium' || panelMaterialKey === 'steel' ? '#788995' : '#4c6474'
-    const panelMaterial = standardMaterial(displayPhase === 'new_construction' ? panelColor : phaseColor(displayPhase), { transparent: displayPhase !== 'new_construction', opacity: displayPhase === 'new_construction' ? 1 : 0.55 })
+    const frameAppearance = openingMaterialAppearance(shape.frame_material)
+    const panelAppearance = openingMaterialAppearance(shape.panel_material)
+    const frameColor = frameAppearance.color
+    const phaseFrameColor = displayPhase === 'new_construction' ? frameColor : phaseColor(displayPhase)
+    const frameMaterial = standardMaterial(phaseFrameColor, frameAppearance)
+    const panelColor = panelAppearance.color
+    const panelMaterial = standardMaterial(displayPhase === 'new_construction' ? panelColor : phaseColor(displayPhase), panelAppearance)
     const glassColor = shape.glazing_material === 'tinted_glass' ? '#5f879b' : shape.glazing_material === 'frosted_glass' ? '#c8e1e5' : '#a5dce8'
     const glassOpacity = shape.glazing_material === 'frosted_glass' ? 0.48 : shape.glazing_material === 'tinted_glass' ? 0.34 : Math.max(0.12, Math.min(0.28, 0.34 - shape.glazing_transmission * 0.22))
     const glassMaterial = standardMaterial(displayPhase === 'new_construction' ? glassColor : phaseColor(displayPhase), {
@@ -90,14 +91,18 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
     const clearHeight = Math.max(0.03, leafHeight - frameWidth * 2)
     const yFront = mmToM(shape.wall_thickness_mm) / 2 + 0.012
     const trackDepth = Math.max(0.016, frameDepth * 0.22)
+    const beadMaterial = standardMaterial(displayPhase === 'new_construction' ? new THREE.Color(frameColor).multiplyScalar(0.7) : phaseColor(displayPhase), { roughness: 0.6 })
     const addFrameBar = (barWidth: number, barHeight: number, x: number, z: number) => addBox(root, [barWidth, frameDepth, barHeight], [x, 0, z], frameMaterial)
     const addSash = (parent: THREE.Object3D, x: number, z: number, sashWidth: number, sashHeight: number, y: number, material: THREE.Material, withGlass: boolean, zone: OpeningGridZone = 'leaf') => {
-      const rail = Math.max(0.018, frameWidth * 0.48)
+      const rail = Math.min(Math.min(sashWidth, sashHeight) * 0.25, sashFaceWidth)
       if (withGlass) addBox(parent, [Math.max(0.02, sashWidth - rail * 2), 0.012, Math.max(0.02, sashHeight - rail * 2)], [x, y + 0.004, z], glassMaterial)
       addBox(parent, [rail, frameDepth * 0.52, sashHeight], [x - sashWidth / 2 + rail / 2, y, z], material)
       addBox(parent, [rail, frameDepth * 0.52, sashHeight], [x + sashWidth / 2 - rail / 2, y, z], material)
       addBox(parent, [sashWidth, frameDepth * 0.52, rail], [x, y, z - sashHeight / 2 + rail / 2], material)
       addBox(parent, [sashWidth, frameDepth * 0.52, rail], [x, y, z + sashHeight / 2 - rail / 2], material)
+      if (withGlass) for (const bead of sashBeadDetails(sashWidth * 1000, sashHeight * 1000, frameDepth * 520, rail * 1000)) {
+        addBox(parent, bead.size_mm.map(mmToM) as [number, number, number], [x + mmToM(bead.center_mm[0]), y + mmToM(bead.center_mm[1]), z + mmToM(bead.center_mm[2])], beadMaterial)
+      }
       const mullionY = y + frameDepth * 0.3
       const grid = muntinGridPositions(resolveOpeningMuntinGrid(shape, zone))
       for (const fraction of grid.vertical) {
@@ -110,63 +115,92 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
       }
     }
     const finishColors = { stainless: '#d7dde1', matte_black: '#242a30', satin_brass: '#b49a66', bronze: '#76553b' }
-    const hardwareMaterial = standardMaterial(finishColors[shape.opening_hardware_finish] ?? finishColors.stainless, { metalness: 0.68, opacity: displayPhase === 'new_construction' ? 1 : 0.62 })
+    const hardwareMaterial = standardMaterial(finishColors[shape.opening_hardware_finish] ?? finishColors.stainless, { metalness: 0.78, roughness: 0.26, opacity: displayPhase === 'new_construction' ? 1 : 0.62 })
     const recessedDark = standardMaterial('#263744', { metalness: 0.18 })
-    const addHandle = (parent: THREE.Object3D, style: typeof shape.opening_handle_style, x: number, y: number, z: number, scale = 1) => {
+    const addCylinder = (parent: THREE.Object3D, radius: number, depth: number, position: [number, number, number], material: THREE.Material) => {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, depth, 20), material)
+      mesh.position.set(...position)
+      mesh.castShadow = true
+      parent.add(mesh)
+      return mesh
+    }
+    const addHandle = (parent: THREE.Object3D, style: typeof shape.opening_handle_style, x: number, y: number, z: number, scale = 1, direction = -1) => {
       if (style === 'none') return
       if (style === 'round_knob') {
-        const knob = new THREE.Mesh(new THREE.SphereGeometry(0.024 * scale, 16, 12), hardwareMaterial)
-        knob.position.set(x, y, z)
+        addCylinder(parent, 0.032 * scale, 0.012 * scale, [x, y, z], hardwareMaterial)
+        const knob = new THREE.Mesh(new THREE.SphereGeometry(0.034 * scale, 18, 12), hardwareMaterial)
+        knob.position.set(x, y + Math.sign(y || 1) * 0.034 * scale, z)
         parent.add(knob)
+        addCylinder(parent, 0.011 * scale, 0.025 * scale, [x, y + Math.sign(y || 1) * 0.016 * scale, z - 0.095 * scale], hardwareMaterial)
         return
       }
       if (style === 'pull_handle') {
+        addCylinder(parent, 0.035 * scale, 0.014 * scale, [x, y, z], hardwareMaterial)
         addBox(parent, [0.019 * scale, 0.023 * scale, 0.29 * scale], [x, y, z], hardwareMaterial)
         for (const dz of [-0.105, 0.105]) addBox(parent, [0.024 * scale, 0.027 * scale, 0.018 * scale], [x, y - Math.sign(y) * 0.017, z + dz * scale], hardwareMaterial)
         return
       }
       if (style === 'recessed_pull') {
+        if (shape.opening_type === 'window') {
+          const width = Math.min(0.022, Math.max(0.018, frameWidth * 0.48) * 0.85)
+          const height = Math.min(0.085, clearHeight * 0.18)
+          // The housing sits almost flush with the sash rather than floating
+          // at the stand-off used by projecting levers and pull handles.
+          const surfaceY = y - 0.017
+          addBox(parent, [width, 0.003, height], [x, surfaceY, z], hardwareMaterial)
+          addBox(parent, [width * 0.65, 0.001, height * 0.72], [x, surfaceY + 0.002, z], recessedDark)
+          addBox(parent, [width * 0.48, 0.002, 0.006], [x, surfaceY + 0.003, z - height * 0.24], hardwareMaterial)
+          return
+        }
+        addBox(parent, [0.094 * scale, 0.014 * scale, 0.20 * scale], [x, y, z], recessedDark)
         addBox(parent, [0.075 * scale, 0.009 * scale, 0.18 * scale], [x, y, z], recessedDark)
         addBox(parent, [0.058 * scale, 0.004 * scale, 0.15 * scale], [x, y + Math.sign(y) * 0.006, z], hardwareMaterial)
         return
       }
+      addCylinder(parent, 0.027 * scale, 0.012 * scale, [x, y, z], hardwareMaterial)
       addBox(parent, [0.035 * scale, 0.009 * scale, 0.085 * scale], [x, y, z], hardwareMaterial)
-      addBox(parent, [0.14 * scale, 0.018 * scale, 0.019 * scale], [x + 0.072 * scale, y + Math.sign(y) * 0.012, z], hardwareMaterial)
+      addBox(parent, [0.14 * scale, 0.018 * scale, 0.019 * scale], [x + direction * 0.072 * scale, y + Math.sign(y) * 0.012, z], hardwareMaterial)
+      addCylinder(parent, 0.012 * scale, 0.02 * scale, [x, y + Math.sign(y || 1) * 0.014, z - 0.10 * scale], hardwareMaterial)
     }
-    const addDoorLeafStyle = (parent: THREE.Object3D, centerX: number, centerZ: number, leafWidth: number, leafHeight: number, depth: number) => {
-      const style = shape.door_leaf_style
-      if (shape.opening_type !== 'door' || shape.glazing_material !== 'none' || style === 'flush') return
-      const raisedGrids: Record<string, [number, number]> = { raised_2_panel: [2, 1], raised_4_panel: [2, 2], raised_6_panel: [3, 2] }
-      const grid = raisedGrids[style]
-      const insetX = Math.min(0.055, leafWidth * 0.10)
-      const insetZ = Math.min(0.065, leafHeight * 0.055)
-      const clearWidth = Math.max(0.03, leafWidth - insetX * 2)
-      const clearHeight = Math.max(0.03, leafHeight - insetZ * 2)
-      const faceLine = standardMaterial('#765b43', { metalness: 0.02 })
-      const panelInset = standardMaterial(panelColor, { transparent: false })
-      for (const face of [-1, 1]) {
-        const faceY = face * (depth / 2 + 0.004)
-        if (grid) {
-          const gap = Math.max(0.025, leafWidth * 0.035)
-          const panelW = (clearWidth - gap * (grid[1] - 1)) / grid[1]
-          const panelH = (clearHeight - gap * (grid[0] - 1)) / grid[0]
-          for (let row = 0; row < grid[0]; row++) for (let col = 0; col < grid[1]; col++) {
-            const px = centerX - clearWidth / 2 + panelW / 2 + col * (panelW + gap)
-            const pz = centerZ + clearHeight / 2 - panelH / 2 - row * (panelH + gap)
-            addBox(parent, [panelW, 0.006, panelH], [px, faceY, pz], panelInset)
-            const frame = Math.min(0.018, panelW * 0.08, panelH * 0.08)
-            for (const zsign of [-1, 1]) addBox(parent, [panelW + frame, 0.006, frame], [px, faceY + face * 0.004, pz + zsign * (panelH / 2 + frame / 2)], faceLine)
-            for (const xsign of [-1, 1]) addBox(parent, [frame, 0.006, panelH], [px + xsign * (panelW / 2 + frame / 2), faceY + face * 0.004, pz], faceLine)
+    const detailShadow = standardMaterial(displayPhase === 'new_construction' ? new THREE.Color(panelColor).multiplyScalar(0.58) : phaseColor(displayPhase))
+    const detailMoulding = standardMaterial(displayPhase === 'new_construction' ? new THREE.Color(panelColor).multiplyScalar(1.08) : phaseColor(displayPhase), panelAppearance)
+    const addDoorFaceComponents = (parent: THREE.Object3D, centerX: number, centerZ: number, leafWidth: number, leafHeight: number, depth: number, centerY = 0) => {
+      if (!shape.door_face_components?.length) return false
+      const trimMaterial = detailMoulding
+      for (const component of shape.door_face_components) {
+        const width = leafWidth * component.width
+        const height = leafHeight * component.height
+        const x = -leafWidth / 2 + leafWidth * (component.x + component.width / 2)
+        const z = -leafHeight / 2 + leafHeight * (component.y + component.height / 2)
+        for (const face of [-1, 1]) {
+          const y = centerY + face * (depth / 2 + 0.006)
+          if (component.kind === 'grooves') {
+            const count = Math.max(1, component.count ?? 1)
+            for (let i = 1; i <= count; i++) {
+              if (component.direction === 'vertical') addBox(parent, [0.004, 0.006, height], [centerX - leafWidth / 2 + leafWidth * (component.x + component.width * i / (count + 1)), y, centerZ + z], detailShadow)
+              else addBox(parent, [width, 0.006, 0.004], [centerX + x, y, centerZ - leafHeight / 2 + leafHeight * (component.y + component.height * i / (count + 1))], detailShadow)
+            }
+            continue
           }
-        } else if (style.startsWith('horizontal_grooves_')) {
-          const count = style.endsWith('_5') ? 5 : 3
-          for (let i = 0; i < count; i++) addBox(parent, [clearWidth, 0.006, 0.006], [centerX, faceY, centerZ - clearHeight / 2 + clearHeight * (i + 1) / (count + 1)], faceLine)
-        } else if (style === 'vertical_grooves_3') {
-          for (let i = 0; i < 3; i++) addBox(parent, [0.006, 0.006, clearHeight], [centerX - clearWidth / 2 + clearWidth * (i + 1) / 4, faceY, centerZ], faceLine)
-        } else if (style === 'louvered') {
-          const count = 8
-          for (let i = 0; i < count; i++) addBox(parent, [clearWidth, 0.012, 0.022], [centerX, faceY, centerZ - clearHeight / 2 + clearHeight * (i + 0.5) / count], panelInset, -0.14)
+          const inset = Math.min(0.018, width * 0.05, height * 0.05)
+          addBox(parent, [Math.max(0.02, width - inset * 2), 0.006, Math.max(0.02, height - inset * 2)], [centerX + x, y, centerZ + z], panelMaterial)
+          const edge = component.contour === 'ellipse' || component.contour === 'capsule' ? Math.min(width, height) * 0.16 : inset
+          addBox(parent, [width, 0.006, edge], [centerX + x, y + face * 0.003, centerZ + z - height / 2 + edge / 2], trimMaterial)
+          addBox(parent, [width, 0.006, edge], [centerX + x, y + face * 0.003, centerZ + z + height / 2 - edge / 2], trimMaterial)
+          addBox(parent, [edge, 0.006, height], [centerX + x - width / 2 + edge / 2, y + face * 0.003, centerZ + z], trimMaterial)
+          addBox(parent, [edge, 0.006, height], [centerX + x + width / 2 - edge / 2, y + face * 0.003, centerZ + z], trimMaterial)
         }
+      }
+      return true
+    }
+    const addDoorLeafStyle = (parent: THREE.Object3D, centerX: number, centerZ: number, leafWidth: number, leafHeight: number, depth: number, centerY = 0) => {
+      if (shape.opening_type !== 'door' || shape.glazing_material !== 'none') return
+      if (addDoorFaceComponents(parent, centerX, centerZ, leafWidth, leafHeight, depth, centerY)) return
+      for (const detail of doorLeafDetails(shape.door_leaf_style, leafWidth * 1000, leafHeight * 1000, depth * 1000)) {
+        const material = detail.role === 'shadow' ? detailShadow : detail.role === 'moulding' ? detailMoulding : panelMaterial
+        const mesh = addBox(parent, detail.size_mm.map(mmToM) as [number, number, number],
+          [centerX + mmToM(detail.center_mm[0]), centerY + mmToM(detail.center_mm[1]), centerZ + mmToM(detail.center_mm[2])], material)
+        mesh.rotation.x = detail.rotation_x_rad ?? 0
       }
     }
 
@@ -206,8 +240,9 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
           addBox(leafPivot, [panelWidth - 0.012, panelDepth, clearHeight], [leafCenterX, 0, 0], panelMaterial)
           addDoorLeafStyle(leafPivot, leafCenterX, 0, panelWidth - 0.012, clearHeight, panelDepth)
         } else addSash(leafPivot, leafCenterX, 0, panelWidth - 0.01, clearHeight, 0, frameMaterial, true)
-        const handleX = leafCenterX + side * (panelWidth / 2 - Math.min(0.10, panelWidth * 0.18))
-        for (const face of [-1, 1]) addHandle(leafPivot, shape.opening_handle_style, handleX, face * (panelDepth / 2 + 0.018), 0)
+        const placement = openingHandlePlacement('hinged', leftHinged ? 0 : 1, (panelWidth - 0.01) * 1000, clearHeight * 1000, shape.glazing_material !== 'none')!
+        const handleX = leafCenterX + (placement.x - 0.5) * (panelWidth - 0.01)
+        for (const face of [-1, 1]) addHandle(leafPivot, shape.opening_handle_style, handleX, face * ((shape.glazing_material === 'none' ? panelDepth / 2 : frameDepth * 0.26) + 0.018), 0, 1, -side)
       }
     } else if (shape.opening_type === 'door') {
       const count = Math.max(1, shape.panel_count)
@@ -232,10 +267,11 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
             addDoorLeafStyle(pivot, centerX, 0, panelWidth - 0.012, clearHeight, panelDepth)
           }
           else addSash(pivot, centerX, 0, panelWidth - 0.01, clearHeight, 0, frameMaterial, true)
-          const handleX = centerX + side * (panelWidth / 2 - Math.min(0.1, panelWidth * 0.18))
-          for (const face of [-1, 1]) addHandle(pivot, shape.opening_handle_style, handleX, face * (panelDepth / 2 + 0.018), 0)
+          const placement = openingHandlePlacement('hinged', leftHinged ? 0 : 1, (panelWidth - 0.01) * 1000, clearHeight * 1000, shape.glazing_material !== 'none')!
+          const handleX = centerX + (placement.x - 0.5) * (panelWidth - 0.01)
+          for (const face of [-1, 1]) addHandle(pivot, shape.opening_handle_style, handleX, face * ((shape.glazing_material === 'none' ? panelDepth / 2 : frameDepth * 0.26) + 0.018), 0, 1, -side)
         } else if (panelOperation === 'louver') {
-          const rail = Math.max(0.025, frameWidth * 0.55)
+          const rail = Math.min(Math.min(panelWidth, clearHeight) * 0.25, sashFaceWidth)
           addBox(root, [rail, frameDepth * 0.7, clearHeight], [x - panelWidth / 2 + rail / 2, y, panelCenterZ], frameMaterial)
           addBox(root, [rail, frameDepth * 0.7, clearHeight], [x + panelWidth / 2 - rail / 2, y, panelCenterZ], frameMaterial)
           addBox(root, [panelWidth, frameDepth * 0.7, rail], [x, y, panelCenterZ - clearHeight / 2 + rail / 2], frameMaterial)
@@ -245,17 +281,19 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
             const z = panelCenterZ - clearHeight / 2 + clearHeight * (slat + 0.5) / slats
             addBox(root, [Math.max(0.03, panelWidth - 0.06), panelDepth * 0.7, 0.025], [x, y, z], panelMaterial, -0.14)
           }
-          const handleX = x + panelWidth / 2 - Math.min(0.07, panelWidth * 0.16)
-          for (const face of [-1, 1]) addHandle(root, shape.opening_handle_style, handleX, y + face * (panelDepth * 0.48), panelCenterZ)
+          const placement = openingHandlePlacement(panelOperation, index, panelWidth * 1000, clearHeight * 1000, false)!
+          const handleX = x + (placement.x - 0.5) * panelWidth
+          for (const face of [-1, 1]) addHandle(root, shape.opening_handle_style, handleX, y + face * (frameDepth * 0.35 + 0.018), panelCenterZ, 1, placement.direction)
         } else {
           addSash(root, x, panelCenterZ, panelWidth - 0.01, clearHeight, y, frameMaterial, shape.glazing_material !== 'none')
           if (shape.glazing_material === 'none') {
             addBox(root, [panelWidth - 0.035, panelDepth * 0.7, clearHeight - 0.035], [x, y, panelCenterZ], panelMaterial)
-            addDoorLeafStyle(root, x, panelCenterZ, panelWidth - 0.035, clearHeight - 0.035, panelDepth * 0.7)
+            addDoorLeafStyle(root, x, panelCenterZ, panelWidth - 0.035, clearHeight - 0.035, panelDepth * 0.7, y)
           }
           if (isSlidingPanel) {
-            const handleX = x + panelWidth / 2 - Math.min(0.07, panelWidth * 0.16)
-            for (const face of [-1, 1]) addHandle(root, shape.opening_handle_style, handleX, y + face * (panelDepth * 0.48), panelCenterZ)
+            const placement = openingHandlePlacement(panelOperation, index, (panelWidth - 0.01) * 1000, clearHeight * 1000, true)!
+            const handleX = x + (placement.x - 0.5) * (panelWidth - 0.01)
+            for (const face of [-1, 1]) addHandle(root, shape.opening_handle_style, handleX, y + face * (frameDepth * 0.26 + 0.018), panelCenterZ, 1, placement.direction)
           }
         }
       }
@@ -286,8 +324,9 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
             awning.rotation.z = leftHinged ? 0.16 : -0.16
             addSash(awning, leftHinged ? sashWidth / 2 : -sashWidth / 2, 0, sashWidth, clearHeight, 0, frameMaterial, shape.glazing_material !== 'none')
           }
-          const handleX = panelOperation === 'awning' ? x : x + paneWidth * (index % 2 === 0 ? 0.32 : -0.32)
-          addHandle(root, shape.opening_handle_style, handleX, yFront + frameDepth * 0.45, panelCenterZ)
+          const placement = openingHandlePlacement(panelOperation, index, sashWidth * 1000, clearHeight * 1000, true)!
+          const handleX = panelOperation === 'awning' ? 0 : (index % 2 === 0 ? sashWidth / 2 : -sashWidth / 2) + (placement.x - 0.5) * sashWidth
+          addHandle(awning, shape.opening_handle_style, handleX, frameDepth * 0.26 + 0.018, panelOperation === 'awning' ? -clearHeight * placement.y : 0, 0.65, placement.direction)
         } else if (panelOperation === 'louver' && shape.glazing_material === 'none') {
           const slatCount = Math.max(5, Math.min(14, Math.round(clearHeight / 0.09)))
           for (let slat = 0; slat < slatCount; slat++) {
@@ -295,10 +334,14 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
             addBox(root, [paneWidth - 0.025, frameDepth * 0.34, 0.022], [x, y, z], frameMaterial, -0.16)
           }
           addSash(root, x, panelCenterZ, paneWidth - 0.01, clearHeight, 0, frameMaterial, false)
-          addHandle(root, shape.opening_handle_style, x + paneWidth / 2 - 0.04, y + frameDepth * 0.48, panelCenterZ)
+          const placement = openingHandlePlacement(panelOperation, index, (paneWidth - 0.01) * 1000, clearHeight * 1000, true)!
+          addHandle(root, shape.opening_handle_style, x + (placement.x - 0.5) * (paneWidth - 0.01), y + frameDepth * 0.26 + 0.018, panelCenterZ, 0.65, placement.direction)
         } else {
           addSash(root, x, panelCenterZ, paneWidth - 0.01, clearHeight, y, frameMaterial, shape.glazing_material !== 'none')
-          if (panelOperation === 'sliding') addHandle(root, shape.opening_handle_style, x + paneWidth / 2 - 0.04, y + frameDepth * 0.48, panelCenterZ)
+          if (panelOperation === 'sliding') {
+            const placement = openingHandlePlacement(panelOperation, index, (paneWidth - 0.01) * 1000, clearHeight * 1000, true)!
+            addHandle(root, shape.opening_handle_style, x + (placement.x - 0.5) * (paneWidth - 0.01), y + frameDepth * 0.26 + 0.018, panelCenterZ, 0.65, placement.direction)
+          }
         }
       }
       if (sliding) {
@@ -352,8 +395,15 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
         const layerThickness = mmToM(layer.thickness_mm)
         const layerGeometry = new THREE.ExtrudeGeometry(shape, { depth: layerThickness, bevelEnabled: false, steps: 1, curveSegments: 1 })
         layerGeometry.translate(0, 0, mmToM(layer.offset_mm) - layerThickness / 2)
+        const finishColor: Record<string, string> = {
+          cement_plaster: '#d4d0c8', interior_paint: '#f1eee6', exterior_paint: '#e7e3da',
+          ceramic_tile: '#a8d4dc', stone_cladding: '#a99f91', timber_cladding: '#a8754b',
+          smartboard: '#c7d1d4', fiber_cement_board: '#b9c4c8', gypsum_board: '#ece9df',
+          composite_panel: '#b7c5ce', faux_wood_panel: '#a8754b',
+          wallpaper: '#c8b8cc', exposed_masonry: '#b9755d', none: '#aebdca',
+        }
         const layerColor = displayPhase === 'new_construction'
-          ? layer.role === 'masonry' ? '#aebdca' : '#c8d2dc'
+          ? layer.role === 'masonry' ? '#aebdca' : finishColor[layer.material] ?? '#c8d2dc'
           : phaseColor(displayPhase)
         const layerMesh = new THREE.Mesh(layerGeometry, standardMaterial(layerColor))
         layerMesh.castShadow = true
@@ -395,33 +445,17 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
 
 interface Model3DViewportProps {
   project: ProjectDocument
-  selectedId: string | null
   onSelectObject: (id: string | null) => void
-  onMoveColumn: (id: string, location_mm: [number, number]) => boolean
-  onMoveWall: (id: string, delta_mm: [number, number]) => boolean
-  onMoveFoundation: (id: string, center_mm: [number, number]) => boolean
-  onMoveOpening: (id: string, offset_along_wall_mm: number) => boolean
 }
 
-export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, selectedId, onSelectObject, onMoveColumn, onMoveWall, onMoveFoundation, onMoveOpening }) => {
+export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSelectObject }) => {
   const hostRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const meshByIdRef = useRef(new Map<string, ModelObject3D>())
-  const transformRef = useRef<TransformControls | null>(null)
   const orbitRef = useRef<OrbitControls | null>(null)
-  const transformOriginRef = useRef<THREE.Vector3 | null>(null)
-  const skipPointerSelectionRef = useRef(false)
-  const moveColumnRef = useRef(onMoveColumn)
-  const moveWallRef = useRef(onMoveWall)
   const selectRef = useRef(onSelectObject)
-  const moveFoundationRef = useRef(onMoveFoundation)
-  const moveOpeningRef = useRef(onMoveOpening)
-  moveColumnRef.current = onMoveColumn
-  moveWallRef.current = onMoveWall
   selectRef.current = onSelectObject
-  moveFoundationRef.current = onMoveFoundation
-  moveOpeningRef.current = onMoveOpening
 
   useEffect(() => {
     const host = hostRef.current
@@ -448,60 +482,6 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, selec
     orbit.enableDamping = true
     orbit.dampingFactor = 0.08
     orbitRef.current = orbit
-
-    const transform = new TransformControls(camera, renderer.domElement)
-    transform.setMode('translate')
-    transform.setSpace('world')
-    transform.showZ = false
-    transform.addEventListener('dragging-changed', (event) => {
-      orbit.enabled = !event.value
-      const target = transform.object as ModelObject3D | undefined
-      if (event.value) {
-        transformOriginRef.current = target?.position.clone() ?? null
-      } else if (target && transformOriginRef.current) {
-        skipPointerSelectionRef.current = true
-        const origin = transformOriginRef.current
-        const restore = () => target.position.copy(origin)
-        if (target.userData.objectType === 'structure.column') {
-          const deltaX = (target.position.x - origin.x) * 1000
-          const deltaY = (target.position.y - origin.y) * 1000
-          if (Math.hypot(deltaX, deltaY) < 1
-            || !moveColumnRef.current(target.userData.objectId, [target.position.x * 1000, target.position.y * 1000])) {
-            restore()
-          }
-        } else if (target.userData.objectType === 'architecture.wall') {
-          const delta: [number, number] = [
-            (target.position.x - origin.x) * 1000,
-            (target.position.y - origin.y) * 1000,
-          ]
-          if (Math.hypot(...delta) < 1 || !moveWallRef.current(target.userData.objectId, delta)) {
-            restore()
-          }
-        } else if (target.userData.objectType === 'structure.foundation') {
-          const deltaX = (target.position.x - origin.x) * 1000
-          const deltaY = (target.position.y - origin.y) * 1000
-          if (Math.hypot(deltaX, deltaY) < 1
-            || !moveFoundationRef.current(target.userData.objectId, [target.position.x * 1000, target.position.y * 1000])) {
-            restore()
-          }
-        } else if (target.userData.interaction.kind === 'hosted_opening') {
-          const { host_start_point_mm: start, host_end_point_mm: end, width_mm: width, offset_along_wall_mm: originalOffset } = target.userData.interaction
-          const dx = end[0] - start[0], dy = end[1] - start[1]
-          const length = Math.hypot(dx, dy)
-          if (Number.isFinite(length) && length > 0 && Number.isFinite(width) && width > 0) {
-            const rawOffset = ((target.position.x * 1000 - start[0]) * dx + (target.position.y * 1000 - start[1]) * dy) / length
-            const nextOffset = Math.max(width / 2, Math.min(length - width / 2, rawOffset))
-            if (Math.abs(nextOffset - originalOffset) < 1
-              || !moveOpeningRef.current(target.userData.objectId, nextOffset)) {
-              restore()
-            }
-          } else restore()
-        }
-      }
-      if (!event.value) transformOriginRef.current = null
-    })
-    scene.add(transform.getHelper())
-    transformRef.current = transform
 
     scene.add(new THREE.HemisphereLight('#f1f5f9', '#64748b', 1.7))
     scene.add(new THREE.AmbientLight('#ffffff', 0.22))
@@ -531,11 +511,6 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, selec
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
     const onPointerUp = (event: PointerEvent) => {
-      if (transform.dragging) return
-      if (skipPointerSelectionRef.current) {
-        skipPointerSelectionRef.current = false
-        return
-      }
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
       raycaster.setFromCamera(pointer, camera)
@@ -552,8 +527,6 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, selec
       cancelAnimationFrame(frame)
       observer.disconnect()
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
-      transform.detach()
-      transform.dispose()
       orbit.dispose()
       renderer.dispose()
       host.removeChild(renderer.domElement)
@@ -595,16 +568,9 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, selec
     }
   }, [project])
 
-  useEffect(() => {
-    const selected = selectedId ? meshByIdRef.current.get(selectedId) : undefined
-    const transform = transformRef.current
-    if (selected?.userData.moveable) transform?.attach(selected)
-    else transform?.detach()
-  }, [project, selectedId])
-
   return <div ref={hostRef} style={{ width: '100%', height: '100%', minHeight: 240, position: 'relative', background: '#080f1e' }}>
     <div style={{ position: 'absolute', left: 12, top: 10, zIndex: 1, color: '#94a3b8', background: 'rgba(8,15,30,0.76)', padding: '6px 9px', borderRadius: 4, fontSize: 11, pointerEvents: 'none' }}>
-      WebGL 3D · drag to orbit · scroll to zoom · drag columns, hosted foundations, walls or openings to edit
+      ภาพตัวอย่าง 3D · ลากเพื่อหมุน · เลื่อนเพื่อซูม · เลือกวัตถุเพื่อดูคุณสมบัติ
     </div>
   </div>
 }

@@ -1,5 +1,5 @@
 import { SmartObject, ColumnModuleData, FoundationModuleData, GridModuleData, BeamModuleData, resolveCatalogType, catalogInstanceOverrides, isColumnObject, isFoundationObject, isGridObject, isBeamObject, type ProjectDocument } from '@constructflow/project-model'
-import { CreateColumnInput, MoveColumnInput, UpdateColumnMarkInput, CreateFoundationInput, CreateGridInput, CreateBeamInput, UpdateBeamMarkInput, UpdateBeamDimensionsInput, UpdateColumnDimensionsInput, UpdateFoundationDimensionsInput } from '@constructflow/command-schema'
+import { CreateColumnInput, MoveColumnInput, UpdateColumnMarkInput, CreateFoundationInput, CreateGridInput, CreateGridSystemInput, UpdateGridSystemInput, CreateBeamInput, UpdateBeamMarkInput, UpdateBeamDimensionsInput, UpdateColumnDimensionsInput, UpdateFoundationDimensionsInput } from '@constructflow/command-schema'
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
 export * from './construction.js'
@@ -18,6 +18,18 @@ function tuple3(value: unknown, fallback: [number, number, number]): [number, nu
 
 function catalogString(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback
+}
+
+function gridSystemTag(firstTag: string, index: number): string {
+  if (/^\d+$/.test(firstTag)) return String(Number(firstTag) + index)
+  if (/^[A-Za-z]+$/.test(firstTag)) {
+    const base = firstTag.toUpperCase().split('').reduce((value, char) => value * 26 + char.charCodeAt(0) - 64, 0) - 1
+    let value = base + index
+    let tag = ''
+    do { tag = String.fromCharCode(65 + value % 26) + tag; value = Math.floor(value / 26) - 1 } while (value >= 0)
+    return tag
+  }
+  return index === 0 ? firstTag : `${firstTag}${index + 1}`
 }
 
 /** Reconcile structural objects whose vertical placement is driven by a changed level. */
@@ -112,6 +124,68 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       }
     }
 
+    case 'CreateGridSystem': {
+      const system = input as unknown as CreateGridSystemInput
+      if (!system.id || !['vertical', 'horizontal'].includes(system.orientation) || !Number.isFinite(system.origin_mm) || !Number.isFinite(system.spacing_mm) || system.spacing_mm <= 0 || !Number.isInteger(system.count) || system.count < 1 || system.count > 100 || !system.first_tag.trim()) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Grid system requires a positive spacing, 1–100 lines, and a starting tag'] }, updatedProject: project }
+      }
+      const ids: string[] = []
+      for (let index = 0; index < system.count; index++) {
+        const id = system.grid_ids?.[index] || crypto.randomUUID()
+        ids.push(id)
+        updated.objects[id] = {
+          id, object_type: 'structure.grid', owner_module: 'constructflow.structure', schema_version: 1,
+          created_phase: system.phase || project.project.active_phase, removed_phase: null,
+          level_refs: [{ role: 'host_level', level_id: project.project.active_level_id }], host_refs: [], connector_refs: [], status: 'active',
+          module_data: {
+            tag: gridSystemTag(system.first_tag.trim(), index), orientation: system.orientation,
+            position_mm: system.origin_mm + index * system.spacing_mm, extent_mm: system.extent_mm || [-10000, 15000],
+            system_id: system.id, system_index: index, system_origin_mm: system.origin_mm,
+            system_spacing_mm: system.spacing_mm, system_count: system.count, system_first_tag: system.first_tag.trim(),
+          }, created_at: now, updated_at: now,
+        }
+      }
+      return {
+        result: { status: 'success', command_id, command_name: commandName, affected_object_ids: ids, created_object_ids: ids },
+        updatedProject: updated,
+        emittedEnvelope: { ...envelope, input: { ...system, id: system.id, grid_ids: ids } },
+      }
+    }
+
+    case 'UpdateGridSystem': {
+      const system = input as unknown as UpdateGridSystemInput
+      if (!system.system_id || !Number.isFinite(system.origin_mm) || !Number.isFinite(system.spacing_mm) || system.spacing_mm <= 0 || !Number.isInteger(system.count) || system.count < 1 || system.count > 100 || !system.first_tag.trim()) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Grid system requires a positive spacing, 1–100 lines, and a starting tag'] }, updatedProject: project }
+      }
+      const members = Object.values(updated.objects).filter(isGridObject).filter(object => object.module_data.system_id === system.system_id).sort((a, b) => (a.module_data.system_index ?? 0) - (b.module_data.system_index ?? 0))
+      if (!members.length) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Grid system ${system.system_id} not found`] }, updatedProject: project }
+      const first = members[0]!
+      const ids: string[] = []
+      const count = system.count
+      for (let index = 0; index < count; index++) {
+        const existing = members[index]
+        const id = system.grid_ids?.[index] ?? existing?.id ?? crypto.randomUUID()
+        ids.push(id)
+        const module_data: GridModuleData = {
+          ...(existing?.module_data ?? first.module_data), tag: gridSystemTag(system.first_tag.trim(), index),
+          position_mm: system.origin_mm + index * system.spacing_mm, system_id: system.system_id,
+          system_index: index, system_origin_mm: system.origin_mm, system_spacing_mm: system.spacing_mm,
+          system_count: count, system_first_tag: system.first_tag.trim(),
+        }
+        updated.objects[id] = existing ? { ...existing, module_data, updated_at: now } : {
+          ...first, id, module_data, created_at: now, updated_at: now,
+        }
+      }
+      const removed = members.slice(count).map(member => member.id)
+      for (const id of removed) delete updated.objects[id]
+      const affected = [...ids, ...removed]
+      return {
+        result: { status: 'success', command_id, command_name: commandName, affected_object_ids: affected, updated_object_ids: ids, deleted_object_ids: removed },
+        updatedProject: updated,
+        emittedEnvelope: { ...envelope, input: { ...system, grid_ids: ids } },
+      }
+    }
+
     case 'CreateColumn': {
       const colInput = input as unknown as CreateColumnInput
       const id = colInput.id || crypto.randomUUID()
@@ -125,6 +199,7 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       )
       const section_mm: [number, number] = colInput.section_mm || tuple2(typeDef?.parameters.section_mm, [200, 200])
       const material = colInput.material || catalogString(typeDef?.parameters.material, 'reinforced_concrete')
+      const plaster_thickness_mm = Math.max(0, Number(typeDef?.parameters.plaster_thickness_mm ?? 0))
 
       const location_mm: [number, number, number] = colInput.location_mm.length === 2
         ? [colInput.location_mm[0], colInput.location_mm[1], 0]
@@ -144,9 +219,10 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
         module_data: {
           mark,
           type_id: typeDef?.id,
-          instance_overrides: catalogInstanceOverrides('structure.column', { section_mm, material }, typeDef),
+          instance_overrides: catalogInstanceOverrides('structure.column', { section_mm, material, plaster_thickness_mm }, typeDef),
           location_mm,
           section_mm,
+          plaster_thickness_mm,
           rotation_deg: colInput.rotation_deg || 0,
           base_level_id: colInput.base_level_id || project.project.active_level_id,
           top_level_id: colInput.top_level_id,

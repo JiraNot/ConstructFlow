@@ -109,3 +109,33 @@ test("cad-adapter: layer resolver correctly assigns AIA/วสท. phase layers"
   assert.equal(wallDemo.colorNumber, 10);
   assert.equal(wallDemo.lineType, "DASHED2");
 });
+
+test("DXF exports hosted openings, both wall finish marks, and floor cutout rings", () => {
+  const project = createEmptyProjectDocument("CAD-VERTICAL-PLAN");
+  const object = (id, object_type, module_data) => ({
+    id, object_type, created_phase: "new_construction", removed_phase: null,
+    owner_module: "constructflow.architecture", schema_version: 1, status: "active",
+    level_refs: [], host_refs: [], connector_refs: [], relationships: [],
+    module_data, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+  });
+  project.objects.wall = object("wall", "architecture.wall", {
+    start_point_mm: [0, 0, 0], end_point_mm: [5000, 0, 0], thickness_mm: 100,
+    mark: "W1", inside_finish_mark: "W2", outside_finish_mark: "W1",
+  });
+  project.objects.door = object("door", "door_window.door", {
+    wall_id: "wall", mark: "D1", offset_along_wall_mm: 1500, width_mm: 900,
+    handing: "left_in",
+  });
+  project.objects.window = object("window", "door_window.window", {
+    wall_id: "wall", mark: "W1", offset_along_wall_mm: 3700, width_mm: 1200, panel_count: 2,
+  });
+  project.objects.slab = object("slab", "structure.slab", {
+    boundary_mm: [[0, 0], [4000, 0], [4000, 3000], [0, 3000]],
+    voids_mm: [[[1500, 1000], [2500, 1000], [2500, 2000], [1500, 2000]]],
+    thickness_mm: 120, topping_mm: 0, mark: "S1", level_id: "GF",
+  });
+  const dxf = exportProjectToDxf(project).dxfContent;
+  assert.ok(dxf.includes("W2") && dxf.includes("W1"));
+  assert.ok(dxf.includes("D1"));
+  assert.ok((dxf.match(/LWPOLYLINE/g) ?? []).length >= 3, "door leaf and both slab rings are vector outlines");
+});

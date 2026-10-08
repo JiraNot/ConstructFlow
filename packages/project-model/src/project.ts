@@ -3,6 +3,8 @@
 import { Phase, Level, PileSystem, Relationship, ProjectLegalMetadata } from './types.js'
 import { SmartObject } from './smartObject.js'
 import type { DrawingSettings } from './sheetSettings.js'
+import type { DoorFaceComponent } from './doorFace.js'
+import type { OpeningPlanSymbolLine } from './openingPlanSymbol.js'
 
 export interface ProjectMetadata {
   id: string
@@ -17,7 +19,13 @@ export interface ProjectMetadata {
 
 /** Typed catalog values shared by current domains; extension fields stay explicitly unknown. */
 export interface TypeParameters {
+  door_face_components?: DoorFaceComponent[]
+  /** Reusable 2D plan detail with real-mm offsets and stable opening anchors. */
+  plan_symbol_lines?: OpeningPlanSymbolLine[]
+  /** Wall depth used to frame the symbol editor; symbol coordinates remain real mm. */
+  plan_symbol_reference_depth_mm?: number
   section_mm?: [number, number]
+  plaster_thickness_mm?: number
   size_mm?: [number, number, number]
   foundation_type?: 'spread_footing' | 'pile_cap'
   pile_type?: PileSystem
@@ -30,12 +38,13 @@ export interface TypeParameters {
   plaster_outside_thickness_mm?: number
   plaster_inside_material?: string
   plaster_outside_material?: string
+  wall_system?: string
   height_mm?: number
   width_mm?: number
   sill_height_mm?: number
-  opening_operation?: 'hinged' | 'sliding' | 'fixed' | 'awning' | 'louver'
+  opening_operation?: 'hinged' | 'sliding' | 'fixed' | 'awning' | 'louver' | 'bifold' | 'pocket' | 'surface_sliding'
   panel_count?: number
-  panel_layout?: Array<'hinged' | 'sliding' | 'fixed' | 'awning' | 'louver'>
+  panel_layout?: Array<'hinged' | 'sliding' | 'fixed' | 'awning' | 'louver' | 'bifold' | 'pocket' | 'surface_sliding'>
   panel_width_ratios?: number[]
   transom_height_mm?: number
   bottom_light_height_mm?: number
@@ -48,6 +57,12 @@ export interface TypeParameters {
   bottom_light_muntin_rows?: number
   bottom_light_muntin_columns?: number
   frame_depth_mm?: number
+  /** Visible face width of the frame profile in elevation, in real mm. */
+  frame_face_width_mm?: number
+  /** Visible face width of sash rails/stiles in elevation, in real mm. */
+  sash_face_width_mm?: number
+  /** Plan/3D thickness of an opaque hinged door leaf, in real mm. */
+  door_leaf_thickness_mm?: number
   frame_material?: string
   panel_material?: string
   /** Door face treatment; independent of leaf material and glazing. */
@@ -176,29 +191,35 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
   {
     id: 'b9edee00-81b1-5fe3-b4c3-9fb927a0f974',
     object_type: 'architecture.wall',
-    name: 'W1',
+    name: 'AAC 100 mm',
     parameters: {
       thickness_mm: 120,
       masonry_thickness_mm: 100,
       plaster_inside_thickness_mm: 10,
       plaster_outside_thickness_mm: 10,
-      plaster_inside_material: 'cement_plaster',
-      plaster_outside_material: 'cement_plaster',
+      wall_system: 'masonry',
+      plaster_inside_material: 'ceramic_tile',
+      plaster_outside_material: 'exterior_paint',
+      inside_finish_mark: 'W2',
+      outside_finish_mark: 'W1',
       height_mm: 2800,
-      material: 'brick_masonry',
+      material: 'lightweight_block',
     },
   },
   {
     id: 'cb47541b-1720-5ac6-a762-6e0c3957927f',
     object_type: 'architecture.wall',
-    name: 'W2',
+    name: 'AAC 150 mm',
     parameters: {
       thickness_mm: 170,
       masonry_thickness_mm: 150,
       plaster_inside_thickness_mm: 10,
       plaster_outside_thickness_mm: 10,
-      plaster_inside_material: 'cement_plaster',
-      plaster_outside_material: 'cement_plaster',
+      wall_system: 'masonry',
+      plaster_inside_material: 'ceramic_tile',
+      plaster_outside_material: 'exterior_paint',
+      inside_finish_mark: 'W2',
+      outside_finish_mark: 'W1',
       height_mm: 2800,
       material: 'lightweight_block',
     },
@@ -209,9 +230,31 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
     name: 'W3',
     parameters: {
       thickness_mm: 200,
+      masonry_thickness_mm: 170,
+      plaster_inside_thickness_mm: 15,
+      plaster_outside_thickness_mm: 15,
+      plaster_inside_material: 'cement_plaster',
+      plaster_outside_material: 'cement_plaster',
+      wall_system: 'masonry',
       height_mm: 2800,
       material: 'reinforced_concrete',
     },
+  },
+  {
+    id: '449e73d0-6020-4d86-a1b7-268f3b20d451', object_type: 'architecture.wall', name: 'W4',
+    parameters: { thickness_mm: 100, masonry_thickness_mm: 75, plaster_inside_thickness_mm: 12.5, plaster_outside_thickness_mm: 12.5, plaster_inside_material: 'gypsum_board', plaster_outside_material: 'smartboard', wall_system: 'c_stud_smartboard', height_mm: 2800, material: 'steel_stud' },
+  },
+  {
+    id: '84beef8e-0f01-4f2e-a89f-44dab3f27438', object_type: 'architecture.wall', name: 'W5',
+    parameters: { thickness_mm: 95.5, masonry_thickness_mm: 75, plaster_inside_thickness_mm: 12.5, plaster_outside_thickness_mm: 8, plaster_inside_material: 'gypsum_board', plaster_outside_material: 'fiber_cement_board', wall_system: 'steel_frame_board', height_mm: 2800, material: 'steel_stud' },
+  },
+  {
+    id: '7f05843d-d796-4b17-8f71-4c5e91fe0326', object_type: 'architecture.wall', name: 'W6',
+    parameters: { thickness_mm: 104, masonry_thickness_mm: 75, plaster_inside_thickness_mm: 9, plaster_outside_thickness_mm: 20, plaster_inside_material: 'gypsum_board', plaster_outside_material: 'composite_panel', wall_system: 'composite_panel', height_mm: 2800, material: 'steel_stud' },
+  },
+  {
+    id: '8be76696-95d0-471b-a1af-93f04a17b03f', object_type: 'architecture.wall', name: 'W7',
+    parameters: { thickness_mm: 103, masonry_thickness_mm: 75, plaster_inside_thickness_mm: 12, plaster_outside_thickness_mm: 16, plaster_inside_material: 'gypsum_board', plaster_outside_material: 'faux_wood_panel', wall_system: 'faux_wood_cladding', height_mm: 2800, material: 'steel_stud' },
   },
   // Doors
   {
@@ -403,14 +446,14 @@ DEFAULT_TYPES.push(
 )
 
 export const CATALOG_PARAMETER_FIELDS: Record<string, string[]> = {
-  'structure.column': ['section_mm', 'material'],
+  'structure.column': ['section_mm', 'plaster_thickness_mm', 'material'],
   'structure.foundation': ['size_mm', 'foundation_type', 'pile_type', 'pile_offsets_mm', 'pile_length_mm', 'material'],
   'structure.beam': ['section_mm', 'material', 'drop_mm', 'rebar_type', 'mass_per_m_kg'],
   'structure.slab': ['thickness_mm', 'topping_mm', 'slab_system', 'material'],
   'interior.cabinet_run': ['width_mm','height_mm','depth_mm','board_mm','back_mm','plinth_mm','front','carcass_material','front_material','back_material','countertop_material','countertop_mm'],
-  'architecture.wall': ['thickness_mm', 'height_mm', 'material', 'masonry_thickness_mm', 'plaster_inside_thickness_mm', 'plaster_outside_thickness_mm', 'plaster_inside_material', 'plaster_outside_material'],
-  'door_window.door': ['width_mm', 'height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_material', 'panel_material', 'door_leaf_style', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission'],
-  'door_window.window': ['width_mm', 'height_mm', 'sill_height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'bottom_light_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_material', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission'],
+  'architecture.wall': ['thickness_mm', 'height_mm', 'material', 'wall_system', 'masonry_thickness_mm', 'plaster_inside_thickness_mm', 'plaster_outside_thickness_mm', 'plaster_inside_material', 'plaster_outside_material', 'inside_finish_mark', 'outside_finish_mark'],
+  'door_window.door': ['width_mm', 'height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_face_width_mm', 'sash_face_width_mm', 'door_leaf_thickness_mm', 'frame_material', 'panel_material', 'door_leaf_style', 'door_face_components', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission'],
+  'door_window.window': ['width_mm', 'height_mm', 'sill_height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'bottom_light_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_face_width_mm', 'sash_face_width_mm', 'frame_material', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission', 'plan_symbol_lines', 'plan_symbol_reference_depth_mm'],
 }
 
 export function resolveCatalogType(

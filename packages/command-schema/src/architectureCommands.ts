@@ -22,6 +22,9 @@ export interface CreateWallInput {
 
   /** Wall height in mm, defaults to 2800 */
   height_mm?: number
+  top_level_id?: string
+  base_offset_mm?: number
+  top_offset_mm?: number
 
   /** Associated building level ID */
   level_id: string
@@ -40,6 +43,18 @@ export interface UpdateWallDimensionsInput {
   object_id: string
   thickness_mm: number
   height_mm?: number
+  top_level_id?: string
+  base_offset_mm?: number
+  top_offset_mm?: number
+  vertical_constraint?: 'fixed_height' | 'top_level'
+  plaster_inside_thickness_mm?: number
+  plaster_outside_thickness_mm?: number
+  plaster_inside_material?: string
+  plaster_outside_material?: string
+  inside_finish_mark?: string
+  outside_finish_mark?: string
+  /** Which side of the start→end centerline is the room/interior face. */
+  interior_side?: 'left' | 'right'
 }
 
 export interface MoveWallInput {
@@ -75,6 +90,9 @@ export interface CreateDoorInput {
 
   /** Door height in mm, defaults to 2000 */
   height_mm?: number
+  sill_height_mm?: number
+  head_level_id?: string
+  head_offset_mm?: number
 
   /** Swing handing */
   handing?: DoorHanding
@@ -94,6 +112,10 @@ export interface UpdateDoorDimensionsInput {
   object_id: string
   width_mm: number
   height_mm?: number
+  sill_height_mm?: number
+  head_level_id?: string
+  head_offset_mm?: number
+  vertical_constraint?: 'fixed_height' | 'head_level'
 }
 
 export interface FlipDoorHandingInput {
@@ -126,6 +148,8 @@ export interface CreateWindowInput {
 
   /** Window sill height in mm, defaults to 900 */
   sill_height_mm?: number
+  head_level_id?: string
+  head_offset_mm?: number
 
   /** Associated building level ID */
   level_id: string
@@ -143,4 +167,7 @@ export interface UpdateWindowDimensionsInput {
   width_mm: number
   height_mm?: number
   sill_height_mm?: number
+  head_level_id?: string
+  head_offset_mm?: number
+  vertical_constraint?: 'fixed_height' | 'head_level'
 }

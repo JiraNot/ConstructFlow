@@ -2,7 +2,7 @@ import { catalogInstanceOverrides, resolveCatalogType, type TypeDefinition, type
 import type { AssignInstanceTypeInput, CommandBusResult, CommandHandlerContext, DefineStructuralTypeInput, RenameCatalogTypeInput, UpdateStructuralTypeDimensionsInput } from '@constructflow/command-schema'
 import { preserveSegmentPlacementReference } from '@constructflow/geometry-kernel'
 
-const PARAMETER_FIELDS = ['section_mm', 'size_mm', 'thickness_mm', 'height_mm', 'width_mm', 'sill_height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'bottom_light_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_material', 'panel_material', 'door_leaf_style', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission', 'material', 'masonry_thickness_mm', 'plaster_inside_thickness_mm', 'plaster_outside_thickness_mm', 'plaster_inside_material', 'plaster_outside_material', 'foundation_type', 'topping_mm', 'slab_system', 'drop_mm', 'rebar_type', 'mass_per_m_kg', 'diameter_mm', 'cover_mm', 'grade', 'count', 'depth_mm', 'board_mm', 'back_mm', 'plinth_mm', 'front', 'carcass_material', 'front_material', 'back_material', 'countertop_material', 'countertop_mm', 'watts_per_m', 'driver_watts', 'derating_ratio'] as const
+const PARAMETER_FIELDS = ['section_mm', 'size_mm', 'thickness_mm', 'plaster_thickness_mm', 'height_mm', 'width_mm', 'sill_height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'bottom_light_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_material', 'panel_material', 'door_leaf_style', 'door_face_components', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission', 'material', 'wall_system', 'masonry_thickness_mm', 'plaster_inside_thickness_mm', 'plaster_outside_thickness_mm', 'plaster_inside_material', 'plaster_outside_material', 'inside_finish_mark', 'outside_finish_mark', 'foundation_type', 'topping_mm', 'slab_system', 'drop_mm', 'rebar_type', 'mass_per_m_kg', 'diameter_mm', 'cover_mm', 'grade', 'count', 'depth_mm', 'board_mm', 'back_mm', 'plinth_mm', 'front', 'carcass_material', 'front_material', 'back_material', 'countertop_material', 'countertop_mm', 'watts_per_m', 'driver_watts', 'derating_ratio'] as const
 
 function reject(context: CommandHandlerContext, message: string): CommandBusResult {
   return {
@@ -44,6 +44,17 @@ function updateInstances(context: CommandHandlerContext, type: TypeDefinition, u
     const nextData: Record<string, unknown> = { ...data, type_id: type.id, instance_overrides: overrides }
     for (const [field, value] of Object.entries(updates)) {
       if (value !== undefined && overrides[field] === undefined) nextData[field] = structuredClone(value)
+    }
+    const isLayeredWall = type.object_type === 'architecture.wall'
+      && typeof nextData.masonry_thickness_mm === 'number'
+      && typeof nextData.plaster_inside_thickness_mm === 'number'
+      && typeof nextData.plaster_outside_thickness_mm === 'number'
+    if (isLayeredWall) {
+      // A wall's total thickness is a derived value, even when its masonry core
+      // has a per-instance override. Recompute it from the effective layers.
+      nextData.thickness_mm = Number(nextData.masonry_thickness_mm)
+        + Number(nextData.plaster_inside_thickness_mm)
+        + Number(nextData.plaster_outside_thickness_mm)
     }
     if (type.object_type === 'architecture.wall'
       && overrides.thickness_mm === undefined
@@ -106,6 +117,14 @@ export function executeCatalogCommand(context: CommandHandlerContext): CommandBu
       for (const field of PARAMETER_FIELDS) {
         const value = (request as unknown as Record<string, unknown>)[field] ?? (request.parameters as Record<string, unknown> | undefined)?.[field]
         if (value !== undefined) updates[field] = structuredClone(value)
+      }
+      if (unambiguous.object_type === 'architecture.wall'
+        && ['masonry_thickness_mm', 'plaster_inside_thickness_mm', 'plaster_outside_thickness_mm'].some(field => updates[field] !== undefined)) {
+        const core = Number(updates.masonry_thickness_mm ?? unambiguous.parameters.masonry_thickness_mm ?? unambiguous.parameters.thickness_mm)
+        const inside = Number(updates.plaster_inside_thickness_mm ?? unambiguous.parameters.plaster_inside_thickness_mm ?? 0)
+        const outside = Number(updates.plaster_outside_thickness_mm ?? unambiguous.parameters.plaster_outside_thickness_mm ?? 0)
+        if ([core, inside, outside].every(Number.isFinite) && core > 0 && inside >= 0 && outside >= 0)
+          updates.thickness_mm = core + inside + outside
       }
       if (Object.keys(updates).length === 0) return reject(context, `No supported parameters provided for ${unambiguous.name}`)
       const previousType=structuredClone(unambiguous)

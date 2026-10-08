@@ -8,6 +8,7 @@ import {
   CommandBusResult,
   SetWorkingLevelInput,
   SetWorkingPhaseInput,
+  CreateLevelInput,
   UpdateLevelInput,
   UpdateObjectPhaseInput,
 } from '@constructflow/command-schema'
@@ -15,6 +16,21 @@ import {
 export function executeProjectCommand(context: CommandHandlerContext): CommandBusResult | undefined {
   const { project, updated, commandName, input, command_id, now, envelope } = context
   switch (commandName) {
+    case 'CreateLevel': {
+      const level = input as unknown as CreateLevelInput
+      if (!level.id || !level.name.trim()) throw new Error('Level id and name are required')
+      if (updated.levels.some(existing => existing.id === level.id)) throw new Error(`Level ${level.id} already exists`)
+      if (![level.elevation_mm, level.storey_index].every(Number.isFinite) || level.storey_index < 1) throw new Error('Level elevation and storey index must be valid')
+      if (level.height_mm !== undefined && (!Number.isFinite(level.height_mm) || level.height_mm <= 0)) throw new Error('Level height must be greater than zero')
+      if (updated.levels.some(existing => Math.abs(existing.elevation_mm - level.elevation_mm) < 1)) throw new Error('Another level already uses this elevation')
+      updated.levels.push({ ...level })
+      updated.levels.sort((a, b) => a.elevation_mm - b.elevation_mm)
+      return {
+        result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] },
+        updatedProject: updated,
+        emittedEnvelope: envelope,
+      }
+    }
     case 'UpdateSheetViewport': {
       const {sheet_id,viewport}=input as unknown as UpdateSheetViewportInput
       updated.drawing_settings={...updated.drawing_settings,viewports:{...updated.drawing_settings?.viewports,[sheet_id]:viewport}}
@@ -67,8 +83,13 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
         }
       }
       updated.levels[index] = { ...updated.levels[index], ...levelInput }
+      const dependentIds = Object.values(updated.objects).filter(object => {
+        const data = object.module_data as Record<string, unknown>
+        return object.level_refs.some(reference => reference.level_id === levelInput.id)
+          || ['level_id', 'base_level_id', 'top_level_id', 'head_level_id'].some(key => data[key] === levelInput.id)
+      }).map(object => object.id)
       return {
-        result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] },
+        result: { status: 'success', command_id, command_name: commandName, affected_object_ids: dependentIds, updated_object_ids: dependentIds },
         updatedProject: updated,
         emittedEnvelope: envelope,
       }

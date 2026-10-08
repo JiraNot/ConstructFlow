@@ -331,3 +331,13 @@ Preview ช่องเปิดเป็นรูปด้าน: บานก�
 [Opening Builder UX Plan](OPENING-BUILDER-UX-PLAN-2026-10-08.md) ระบุ sources, สิ่งที่ทำแล้ว, การวัดแบบรวมกรอบ, ผลตรวจ และงานที่ยังขาด เช่น ช่องแสงเปิดกระทุ้ง/เลื่อนได้, ช่องข้าง, per-leaf grid/material, height lock และ dimensions แบบผลิต/sheets
 
 architecture-engine tests **9/9** และ plan-editor build ผ่าน; browser ตรวจ D9/W10, mixed save/reopen, invalid height, click/key selection, ultrawide/จอเตี้ย ภาพตรวจไฟล์เต็มที่ `assets/ux-catalog-audit-2026-10-08/20-opening-dimensions-editor.jpg` รอบนี้ยังใช้ schema/commands เดิม รักษา UUID/phasing/transaction; **วัสดุกระจกยังเป็นแผนตามหัวข้อก่อนหน้า และ dimension รอบนี้อยู่ใน editor เท่านั้น**
+
+
+## Follow-up — แกลเลอรีแบบประตูหน้าต่าง
+
+เพิ่มแท็บ **แบบสำเร็จรูป · เลือกสไตล์** ในหมวดประตูและหน้าต่าง: 16 แบบตั้งต้น พร้อมค้นหาและกรองโมเดิร์น/คลาสสิก/อบอุ่นลายไม้/ใช้งานทั่วไป เลือกแล้วเปิด draft สร้างชนิดใหม่ด้วย UUID ใหม่ผ่าน transaction เดิม ไม่เขียนทับชนิดที่ใช้อยู่ สีวัสดุ preview และโมเดลใช้ข้อมูลร่วมกัน พร้อมรายละเอียดลูกฟักและขอบกระจก 3D ผลตรวจและขอบเขตใน [Opening Builder UX Plan](OPENING-BUILDER-UX-PLAN-2026-10-08.md#9-delivery--แกลเลอรีแบบและรายละเอียดโมเดล-2026-10-08)
+
+
+## Follow-up — ระบบสร้างลายหน้าบานจาก component recipes
+
+ใน editor ของประตู เพิ่มส่วน “ชุดลายประกอบหน้าบาน” พร้อม 12 recipes: ร่องนอน/ตั้ง, ลายผสม, ลูกฟักหลายช่อง, โค้ง, แคปซูล, วงรี และวงกลม เลือกแล้วเขียนค่า normalized components ลง draft เดิม; 2D preview และ 3D representation ใช้ชุดเดียวกัน. มือจับ 3D เพิ่ม rose/ฐาน, คอ, lock cylinder และจุดยึดตามชนิดมือจับ. ค่าเหล่านี้เป็น design detail และยังไม่ใช่ vendor SKU/รูเจาะผลิต.

@@ -1,7 +1,10 @@
 import { Dialog } from "./ui/Dialog.js";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { resolveCatalogType } from "@constructflow/project-model";
 import type { ProjectDocument } from "@constructflow/project-model";
 import { WorkbenchNumberInput } from "./WorkbenchNumberInput";
+import { OpeningPlanSymbolEditor } from "./OpeningPlanSymbolEditor.js";
+import type { OpeningPlanSymbolLine } from "@constructflow/project-model";
 import type {
   CommandRequest,
   CommandBatchResult,
@@ -15,7 +18,6 @@ import {
   compilePermitDrawingSet,
   compilePermitPdf,
   renderPermitDrawingSetHtml,
-  PERMIT_INDEX,
   type PermitSheetId,
   type PermitOptions,
 } from "@constructflow/sheet-engine";
@@ -536,8 +538,7 @@ function Field({
             .filter((o) => !family || o.object_type === family)
             .map((o) => (
               <option key={o.id} value={o.id}>
-                {String((o.module_data as Payload).mark ?? o.object_type)} ·{" "}
-                {o.object_type} · {o.id.slice(0, 8)}
+                {String((o.module_data as Payload).mark ?? o.object_type)} · {o.object_type}
               </option>
             ))}
         </select>
@@ -803,6 +804,7 @@ export function ConstructionWorkbench({
     [feedback, setFeedback] = useState("");
   const [sheetId, setSheetId] = useState<PermitSheetId>("A-02"),
     [scale, setScale] = useState(100),
+    [planLevelId, setPlanLevelId] = useState(project.project.active_level_id),
     [center, setCenter] = useState<[number, number]>([0, 0]),
     [useCenter, setUseCenter] = useState(false),
     [crop, setCrop] = useState<[number, number, number, number]>([
@@ -811,12 +813,42 @@ export function ConstructionWorkbench({
     [useCrop, setUseCrop] = useState(false),
     [sheetPreview, setSheetPreview] = useState("");
   const viewportOptions: PermitOptions = project.drawing_settings ?? {};
+  const availableSheets = useMemo(
+    () => compilePermitDrawingSet(project, viewportOptions).sheets,
+    [project, viewportOptions],
+  );
+  const selectedSheet = availableSheets.find((sheet) => sheet.id === sheetId);
+  const planOpenings = Object.values(project.objects).filter((o) => o.object_type === "door_window.door" || o.object_type === "door_window.window");
+  const [selectedOpeningId, setSelectedOpeningId] = useState("");
+  const [openingLines, setOpeningLines] = useState<OpeningPlanSymbolLine[]>([]);
+  const [openingElevationLines, setOpeningElevationLines] = useState<OpeningPlanSymbolLine[]>([]);
+  const openingViewKind: "plan" | "elevation" = sheetId === "A-05" || sheetId === "A-06" ? "elevation" : "plan";
+  const selectedOpening = planOpenings.find((o) => o.id === selectedOpeningId);
+  const selectedOpeningData = (selectedOpening?.module_data ?? {}) as Record<string, unknown>;
+  const selectedOpeningType = selectedOpening ? resolveCatalogType(project, selectedOpening.object_type, String(selectedOpeningData.type_id ?? selectedOpeningData.mark ?? "")) : undefined;
+  const selectedOpeningWidth = Number((selectedOpeningData.instance_overrides as Record<string, unknown> | undefined)?.width_mm ?? selectedOpeningData.width_mm ?? selectedOpeningType?.parameters.width_mm ?? 900);
+  const selectedOpeningHeight = Number((selectedOpeningData.instance_overrides as Record<string, unknown> | undefined)?.height_mm ?? selectedOpeningData.height_mm ?? selectedOpeningType?.parameters.height_mm ?? 1200);
+  const openingHost = selectedOpening ? project.objects[String(selectedOpeningData.wall_id ?? "")] : undefined;
+  const openingReferenceDepth = Number((openingHost?.module_data as Record<string, unknown> | undefined)?.thickness_mm ?? 100);
+  useEffect(() => {
+    if (!selectedOpening) { setOpeningLines([]); return; }
+    const saved = project.drawing_settings?.viewports[sheetId]?.opening_overrides?.[selectedOpening.id];
+    setOpeningLines(saved?.lines ?? []);
+    setOpeningElevationLines(saved?.elevation_lines ?? []);
+  }, [project, selectedOpeningId, sheetId]);
   useEffect(() => {
     if (tab === "sheets") {
       const saved = project.drawing_settings?.viewports[sheetId];
+      if (/^(A-02|A-03|S-02|S-03)$/.test(sheetId)) {
+        const ordered = [...project.levels].sort((a, b) => a.elevation_mm - b.elevation_mm);
+        const defaultLevel = sheetId === 'A-02' || sheetId === 'S-02' ? ordered[0]?.id : ordered[1]?.id ?? ordered[0]?.id;
+        setPlanLevelId(saved?.level_id ?? defaultLevel ?? project.project.active_level_id);
+      } else if (/^(A-02|S-02)-L\d+$/.test(sheetId)) {
+        setPlanLevelId(selectedSheet?.viewport.level_id ?? project.project.active_level_id);
+      }
       setScale(
         saved?.scale_denominator ??
-          PERMIT_INDEX.find((s) => s[0] === sheetId)![2],
+          Number(selectedSheet?.scale.split(":")[1] ?? 100),
       );
       setUseCenter(!!saved?.center_mm);
       setCenter(
@@ -832,11 +864,10 @@ export function ConstructionWorkbench({
         ]) ?? [-5, -5, 5, 5],
       );
       setSheetPreview(
-        compilePermitDrawingSet(project).sheets.find((s) => s.id === sheetId)!
-          .svg,
+        selectedSheet?.svg ?? "",
       );
     }
-  }, [project, sheetId, tab]);
+  }, [project, sheetId, tab, selectedSheet]);
   const template = templates[templateIndex];
   const execute = (commands: CommandRequest[]) => {
     try {
@@ -905,7 +936,7 @@ export function ConstructionWorkbench({
               <p style={{ fontSize: 12 }}>
                 ขนาดงานเป็นเมตร
                 ข้อมูลเหล็กและระบบเป็นข้อมูลออกแบบที่ต้องตรวจสอบก่อนก่อสร้าง
-                เลือกชิ้นงานเดิมเพื่อแก้ด้วย UUID เดิม
+                เลือกชิ้นงานเดิมเพื่อแก้ไขโดยคงการเชื่อมโยงกับแบบ
               </p>
               <select
                 style={inputStyle}
@@ -962,8 +993,7 @@ export function ConstructionWorkbench({
                     .filter((o) => o.object_type === template.family)
                     .map((o) => (
                       <option key={o.id} value={o.id}>
-                        {String((o.module_data as Payload).mark)} ·{" "}
-                        {o.id.slice(0, 8)}
+                        {String((o.module_data as Payload).mark)}
                       </option>
                     ))}
                 </select>
@@ -1091,8 +1121,6 @@ export function ConstructionWorkbench({
                     "\ufeff" +
                       [
                         [
-                          "Part UUID",
-                          "Object UUID",
                           "Phase",
                           "Part",
                           "Material",
@@ -1102,8 +1130,6 @@ export function ConstructionWorkbench({
                           "Edge band (m)",
                         ],
                         ...rows.map((p) => [
-                          p.id,
-                          p.object_id,
                           p.phase,
                           p.name,
                           p.material,
@@ -1148,14 +1174,14 @@ export function ConstructionWorkbench({
           {tab === "sheets" && (
             <>
               <p>
-                ชุดแบบร่าง 20 แผ่นจากโมเดล ข้อมูลที่ขาดและ viewport
-                ที่ตัดชิ้นงานจะแสดงคำเตือนในแผ่น
+                ชุดแบบร่าง {availableSheets.length} แผ่น · สร้างแปลนสถาปัตย์และผังคานแยกให้อัตโนมัติครบทุกชั้น
+                ข้อมูลที่ขาดและ viewport ที่ตัดชิ้นงานจะแสดงคำเตือนในแผ่น
               </p>
               <select
                 value={sheetId}
                 onChange={(e) => setSheetId(e.target.value as PermitSheetId)}
               >
-                {PERMIT_INDEX.map(([id, title]) => (
+                {availableSheets.map(({ id, title }) => (
                   <option key={id} value={id}>
                     {id} · {title}
                   </option>
@@ -1174,6 +1200,12 @@ export function ConstructionWorkbench({
                   ))}
                 </select>
               </label>
+              {(['A-02', 'A-03', 'S-02', 'S-03'].includes(sheetId)) && <label style={fieldStyle}>
+                ชั้นของแปลน
+                <select aria-label="ชั้นที่แสดงในแผ่นแปลน" value={planLevelId} onChange={e => setPlanLevelId(e.target.value)}>
+                  {[...project.levels].sort((a, b) => a.elevation_mm - b.elevation_mm).map(level => <option key={level.id} value={level.id}>{level.name} · {level.elevation_mm / 1000} ม.</option>)}
+                </select>
+              </label>}
               <label>
                 <input
                   type="checkbox"
@@ -1202,6 +1234,26 @@ export function ConstructionWorkbench({
                 project={project}
                 onChange={(v) => setCrop(v as [number, number, number, number])}
               />
+              {(/^A-(02|03)(-L\d+)?$/.test(sheetId) || ["A-05", "A-06"].includes(sheetId)) && <section style={{ marginTop: 18, borderTop: "1px solid #dbe3ed", paddingTop: 12 }}>
+                <h3>แก้เส้น 2D ช่องเปิดในแผ่นนี้</h3>
+                <p>กำลังแก้{openingViewKind === "plan" ? "แปลน" : "รูปด้าน"} · เส้นฉายจากโมเดลเป็นค่าเริ่มต้น เส้นที่แก้มีผลเฉพาะแผ่นนี้ และผูกตำแหน่งกับขนาดช่องเปิด</p>
+                <select aria-label="ช่องเปิดที่จะแก้เส้น" value={selectedOpeningId} onChange={(e) => setSelectedOpeningId(e.target.value)}>
+                  <option value="">เลือกประตูหรือหน้าต่าง</option>
+                  {planOpenings.map((o) => { const d = o.module_data as Record<string, unknown>; return <option key={o.id} value={o.id}>{String(d.mark ?? (o.object_type === "door_window.door" ? "ประตู" : "หน้าต่าง"))} · {o.object_type === "door_window.door" ? "ประตู" : "หน้าต่าง"} · {String(d.level_id ?? "")}</option>; })}
+                </select>
+                {selectedOpening && <>
+                  <OpeningPlanSymbolEditor viewKind={openingViewKind} lines={openingViewKind === "plan" ? openingLines : openingElevationLines} openingWidthMm={Math.max(1, selectedOpeningWidth)} referenceDepthMm={openingViewKind === "plan" ? openingReferenceDepth : Math.max(1, selectedOpeningHeight)} onChange={openingViewKind === "plan" ? setOpeningLines : setOpeningElevationLines} onReferenceDepthChange={() => {}} onReturnToAutomatic={() => openingViewKind === "plan" ? setOpeningLines([]) : setOpeningElevationLines([])} />
+                  <button onClick={() => {
+                    const saved = project.drawing_settings?.viewports[sheetId] ?? { scale_denominator: scale };
+                    const opening_overrides = { ...saved.opening_overrides };
+                    if (openingLines.length || openingElevationLines.length) opening_overrides[selectedOpening.id] = { hide_generated_details: openingLines.length > 0, hide_generated_elevation: openingElevationLines.length > 0, lines: openingLines, elevation_lines: openingElevationLines };
+                    else delete opening_overrides[selectedOpening.id];
+                    const viewport = { ...saved, opening_overrides };
+                    if (!execute([{ name: "UpdateSheetViewport", input: { sheet_id: sheetId, viewport } }])) return;
+                    setSheetPreview(compilePermitDrawingSet(project, { ...viewportOptions, viewports: { ...viewportOptions.viewports, [sheetId]: viewport } }).sheets.find((s) => s.id === sheetId)!.svg);
+                  }}>บันทึกเส้นแก้เฉพาะแผ่นนี้</button>
+                </>}
+              </section>}
               <button
                 onClick={() => {
                   const options = {
@@ -1210,6 +1262,8 @@ export function ConstructionWorkbench({
                       ...viewportOptions.viewports,
                       [sheetId]: {
                         scale_denominator: scale,
+                        ...((/^(A-02|A-03|S-02|S-03)$/.test(sheetId) || /^(A-02|S-02)-L\d+$/.test(sheetId)) ? { level_id: planLevelId } : {}),
+                        ...(project.drawing_settings?.viewports[sheetId]?.opening_overrides ? { opening_overrides: project.drawing_settings.viewports[sheetId].opening_overrides } : {}),
                         ...(useCenter
                           ? {
                               center_mm: center.map((v) => v * 1000) as [
@@ -1260,12 +1314,12 @@ export function ConstructionWorkbench({
                 onClick={() =>
                   download(
                     renderPermitDrawingSetHtml(project, viewportOptions),
-                    `${project.project.id}-20-sheets.html`,
+                    `${project.project.id}-${availableSheets.length}-sheets.html`,
                     "text/html",
                   )
                 }
               >
-                HTML / SVG 20 แผ่น
+                HTML / SVG ครบทุกชั้น ({availableSheets.length} แผ่น)
               </button>
               <button
                 onClick={async () => {
@@ -1278,11 +1332,11 @@ export function ConstructionWorkbench({
                     );
                     download(
                       bytes as BlobPart,
-                      `${project.project.id}-20-sheets.pdf`,
+                      `${project.project.id}-${availableSheets.length}-sheets.pdf`,
                       "application/pdf",
                     );
                     setFeedback(
-                      "สร้าง Vector PDF 20 หน้า A3 พร้อมฝัง Sarabun แล้ว",
+                      `สร้าง Vector PDF ${compilePermitDrawingSet(project, viewportOptions).sheets.length} หน้า A3 พร้อมฝัง Sarabun แล้ว`,
                     );
                   } catch (e) {
                     setFeedback(String(e));

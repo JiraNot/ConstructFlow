@@ -9,15 +9,28 @@ const execute = (project, name, input) => {
   return result.updatedProject
 }
 
+const setTenMillimetrePlaster = type => {
+  type.parameters = {
+    ...type.parameters,
+    thickness_mm: 120,
+    masonry_thickness_mm: 100,
+    plaster_inside_thickness_mm: 10,
+    plaster_outside_thickness_mm: 10,
+  }
+}
+
 test('W1 creation and catalog edits preserve the masonry/plaster assembly atomically', () => {
   const project = createEmptyProjectDocument(crypto.randomUUID())
-  const type = project.types.find(candidate => candidate.object_type === 'architecture.wall' && candidate.name === 'W1')
+  const type = project.types.find(candidate => candidate.object_type === 'architecture.wall' && candidate.name === 'AAC 100 mm')
+  setTenMillimetrePlaster(type)
   const created = execute(project, 'CreateWall', {
     id: crypto.randomUUID(), type_id: type.id, mark: 'W1', level_id: project.project.active_level_id,
     placement_reference: 'left_face',
     start_point_mm: [0, -60, 0], end_point_mm: [4000, -60, 0], thickness_mm: 100,
   })
   const wall = Object.values(created.objects).find(object => object.object_type === 'architecture.wall')
+  assert.equal(wall.module_data.mark, 'W1')
+  assert.equal(wall.module_data.type_id, type.id)
   assert.equal(wall.module_data.thickness_mm, 120)
   assert.equal(wall.module_data.masonry_thickness_mm, 100)
   assert.equal(wall.module_data.plaster_inside_thickness_mm, 10)
@@ -53,7 +66,8 @@ test('W1 creation and catalog edits preserve the masonry/plaster assembly atomic
 
 test('direct wall dimension edits keep the selected placement face fixed', () => {
   const project = createEmptyProjectDocument(crypto.randomUUID())
-  const type = project.types.find(candidate => candidate.object_type === 'architecture.wall' && candidate.name === 'W1')
+  const type = project.types.find(candidate => candidate.object_type === 'architecture.wall' && candidate.name === 'AAC 100 mm')
+  setTenMillimetrePlaster(type)
   const created = execute(project, 'CreateWall', {
     id: crypto.randomUUID(), type_id: type.id, mark: 'W1', level_id: project.project.active_level_id,
     placement_reference: 'right_face',

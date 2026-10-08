@@ -712,6 +712,13 @@ export class DxfGenerator {
       return;
     }
 
+    if (type === "structure.slab") {
+      for (const ring of [d.boundary_mm, ...(Array.isArray(d.voids_mm) ? d.voids_mm : [])]) {
+        if (Array.isArray(ring) && ring.length >= 3) this.writeLwPolyline(lines, layer.name, 0, ring.map((p: number[]) => [p[0], p[1]]), true);
+      }
+      return;
+    }
+
     // Beam: 2D centerline / bounding box
     if (type.startsWith("structure.beam")) {
       const sp = d.start_point_mm ?? [0, 0, 0];
@@ -721,34 +728,22 @@ export class DxfGenerator {
     }
 
     // Wall: 2D polyline footprint
-    if (type.startsWith("arch.wall") || type.startsWith("architecture.wall")) {
-      const sp = d.start_point_mm ?? [0, 0, 0];
-      const ep = d.end_point_mm ?? [0, 0, 0];
-      const th = d.thickness_mm ?? 100;
-      const dx = ep[0] - sp[0];
-      const dy = ep[1] - sp[1];
-      const len = Math.hypot(dx, dy) || 1;
-      const nx = (-dy / len) * (th / 2);
-      const ny = (dx / len) * (th / 2);
-
-      this.writeLwPolyline(lines, layer.name, 0, [
-        [sp[0] + nx, sp[1] + ny],
-        [ep[0] + nx, ep[1] + ny],
-        [ep[0] - nx, ep[1] - ny],
-        [sp[0] - nx, sp[1] - ny],
-      ], true);
+    if (type === "arch.wall" || type === "architecture.wall") {
+      this.writeWallPlan(lines, layer.name, obj, d);
       return;
     }
 
     // Door / Window
-    if (type.startsWith("arch.door") || type.startsWith("opening.door")) {
+    if (type === "door_window.door" || type.startsWith("arch.door") || type.startsWith("opening.door")) {
+      if (typeof d.wall_id === "string" && this.project.objects[d.wall_id]) return;
       const loc = d.location_mm ?? [0, 0, 0];
       const w = d.width_mm ?? 900;
       this.writeLine(lines, layer.name, 0, [loc[0] - w / 2, loc[1]], [loc[0] + w / 2, loc[1]]);
       return;
     }
 
-    if (type.startsWith("arch.window") || type.startsWith("opening.window")) {
+    if (type === "door_window.window" || type.startsWith("arch.window") || type.startsWith("opening.window")) {
+      if (typeof d.wall_id === "string" && this.project.objects[d.wall_id]) return;
       const loc = d.location_mm ?? [0, 0, 0];
       const w = d.width_mm ?? 1200;
       this.writeLine(lines, layer.name, 0, [loc[0] - w / 2, loc[1]], [loc[0] + w / 2, loc[1]]);
@@ -781,6 +776,92 @@ export class DxfGenerator {
     if (d.location_mm && (type.includes("manhole") || d.system)) {
       this.writeCircle(lines, layer.name, 0, [d.location_mm[0], d.location_mm[1]], 300);
       return;
+    }
+  }
+
+  private writeWallPlan(lines: string[], layer: string, wall: SmartObject, d: Record<string, any>): void {
+    const start = d.start_point_mm ?? [0, 0, 0], end = d.end_point_mm ?? [0, 0, 0];
+    const dx = end[0] - start[0], dy = end[1] - start[1], length = Math.hypot(dx, dy);
+    if (length < 1) return;
+    const tangent: [number, number] = [dx / length, dy / length];
+    const normal: [number, number] = [-tangent[1], tangent[0]];
+    const half = Number(d.thickness_mm ?? 100) / 2;
+    const openings = Object.values(this.project.objects)
+      .filter(object => (object.object_type === "door_window.door" || object.object_type === "door_window.window") && (object.module_data as Record<string, any>).wall_id === wall.id)
+      .map(object => ({ object, data: object.module_data as Record<string, any>, from: Math.max(0, Number((object.module_data as Record<string, any>).offset_along_wall_mm ?? 0) - Number((object.module_data as Record<string, any>).width_mm ?? 0) / 2), to: Math.min(length, Number((object.module_data as Record<string, any>).offset_along_wall_mm ?? 0) + Number((object.module_data as Record<string, any>).width_mm ?? 0) / 2) }))
+      .filter(item => item.to > item.from)
+      .sort((a, b) => a.from - b.from);
+    const point = (along: number, across: number): [number, number] => [start[0] + tangent[0] * along + normal[0] * across, start[1] + tangent[1] * along + normal[1] * across];
+    const merged: Array<[number, number]> = [];
+    for (const opening of openings) {
+      const last = merged.at(-1);
+      if (last && opening.from <= last[1]) last[1] = Math.max(last[1], opening.to);
+      else merged.push([opening.from, opening.to]);
+    }
+    for (const side of [-1, 1]) {
+      let cursor = 0;
+      for (const [from, to] of merged) {
+        if (from > cursor) this.writeLine(lines, layer, 0, point(cursor, side * half), point(from, side * half));
+        cursor = Math.max(cursor, to);
+      }
+      if (cursor < length) this.writeLine(lines, layer, 0, point(cursor, side * half), point(length, side * half));
+    }
+    this.writeLine(lines, layer, 0, point(0, -half), point(0, half));
+    this.writeLine(lines, layer, 0, point(length, -half), point(length, half));
+    const insideSign = d.interior_side === "right" ? -1 : 1;
+    const labelIntervals: Array<[number, number]> = [];
+    let labelCursor = 700;
+    for (const [from, to] of merged) {
+      if (from - labelCursor >= 500) labelIntervals.push([labelCursor, from - 250]);
+      labelCursor = Math.max(labelCursor, to + 250);
+    }
+    if (length - 700 > labelCursor) labelIntervals.push([labelCursor, length - 700]);
+    const middle = labelIntervals.sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0];
+    const insideMark = String(d.inside_finish_mark ?? d.mark ?? "W1");
+    const outsideMark = String(d.outside_finish_mark ?? d.mark ?? "W1");
+    if (middle) {
+      const labelAt = (middle[0] + middle[1]) / 2;
+      this.writeText(lines, layer, 0, point(labelAt, insideSign * (half + 320)), insideMark, 250);
+      this.writeText(lines, layer, 0, point(labelAt, -insideSign * (half + 320)), outsideMark, 250);
+    }
+    for (const opening of openings) {
+      const { object, data: openingData } = opening;
+      const a = opening.from, b = opening.to, width = b - a;
+      this.writeLine(lines, layer, 0, point(a, -half), point(a, half));
+      this.writeLine(lines, layer, 0, point(b, -half), point(b, half));
+      const isWindow = object.object_type === "door_window.window";
+      if (isWindow) {
+        const track = Math.min(22, half * 0.55);
+        this.writeLine(lines, layer, 0, point(a, -track), point(b, -track));
+        this.writeLine(lines, layer, 0, point(a, track), point(b, track));
+        const panelCount = Math.max(1, Math.floor(Number(openingData.panel_count ?? 2)));
+        for (let i = 0; i <= panelCount; i++) this.writeLine(lines, layer, 0, point(a + width * i / panelCount, -track), point(a + width * i / panelCount, track));
+        this.writeText(lines, layer, 0, point((a + b) / 2, half + 120), String(openingData.mark ?? "W"), 250);
+        continue;
+      }
+      const mark = String(openingData.mark ?? "D");
+      const hingeAtStart = !String(openingData.handing ?? "left_in").startsWith("right");
+      const hingeAlong = hingeAtStart ? a : b;
+      const closedFree = point(hingeAtStart ? b : a, 0);
+      const hinge = point(hingeAlong, 0);
+      const wallInteriorSide = d.interior_side === "right" ? -1 : 1;
+      const opensInside = String(openingData.handing ?? "left_in").endsWith("in");
+      const swingSide = wallInteriorSide * (opensInside ? 1 : -1);
+      const openFree = point(hingeAlong, swingSide * width);
+      const openVector: [number, number] = [openFree[0] - hinge[0], openFree[1] - hinge[1]];
+      const closedVector: [number, number] = [closedFree[0] - hinge[0], closedFree[1] - hinge[1]];
+      let startAngle = Math.atan2(closedVector[1], closedVector[0]);
+      let endAngle = Math.atan2(openVector[1], openVector[0]);
+      while (endAngle - startAngle > Math.PI) endAngle -= Math.PI * 2;
+      while (endAngle - startAngle < -Math.PI) endAngle += Math.PI * 2;
+      const arc = Array.from({ length: 17 }, (_, i) => {
+        const angle = startAngle + (endAngle - startAngle) * i / 16;
+        return [hinge[0] + width * Math.cos(angle), hinge[1] + width * Math.sin(angle)] as [number, number];
+      });
+      this.writeLwPolyline(lines, layer, 0, arc);
+      const leafPerp: [number, number] = [-openVector[1] / width * 25, openVector[0] / width * 25];
+      this.writeLwPolyline(lines, layer, 0, [[hinge[0] + leafPerp[0], hinge[1] + leafPerp[1]], [openFree[0] + leafPerp[0], openFree[1] + leafPerp[1]], [openFree[0] - leafPerp[0], openFree[1] - leafPerp[1]], [hinge[0] - leafPerp[0], hinge[1] - leafPerp[1]]], true);
+      this.writeText(lines, layer, 0, point((a + b) / 2, swingSide * (width + 140)), mark, 250);
     }
   }
 

@@ -122,7 +122,7 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
     // 4. AAC Lightweight Walls
     // South Wall (Front exit)
     const w1Id = queueCreate('CreateWall', {
-      mark: 'W1',
+      mark: 'AAC 100 mm',
       material: 'lightweight_block',
       start_point_mm: [X_mm, Y_mm, baseElevation_mm],
       end_point_mm: [X_mm + W_mm, Y_mm, baseElevation_mm],
@@ -134,7 +134,7 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
 
     // East Wall (Right)
     queueCreate('CreateWall', {
-      mark: 'W1',
+      mark: 'AAC 100 mm',
       material: 'lightweight_block',
       start_point_mm: [X_mm + W_mm, Y_mm, baseElevation_mm],
       end_point_mm: [X_mm + W_mm, Y_mm + L_mm, baseElevation_mm],
@@ -146,7 +146,7 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
 
     // North Wall (Back)
     const w3Id = queueCreate('CreateWall', {
-      mark: 'W1',
+      mark: 'AAC 100 mm',
       material: 'lightweight_block',
       start_point_mm: [X_mm + W_mm, Y_mm + L_mm, baseElevation_mm],
       end_point_mm: [X_mm, Y_mm + L_mm, baseElevation_mm],
@@ -159,7 +159,7 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
     // West Wall (if 4 sides selected)
     if (kitchenWallSides === 4) {
       queueCreate('CreateWall', {
-        mark: 'W1',
+        mark: 'AAC 100 mm',
         material: 'lightweight_block',
         start_point_mm: [X_mm, Y_mm + L_mm, baseElevation_mm],
         end_point_mm: [X_mm, Y_mm, baseElevation_mm],
@@ -189,7 +189,7 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
       queueCreate('CreateWindow', {
         wall_id: w3Id,
         location_mm: [X_mm + Math.round(W_mm / 2), Y_mm + L_mm, baseElevation_mm],
-        mark: 'W1',
+        mark: 'AAC 100 mm',
         width_mm: 1200,
         height_mm: 1200,
         sill_height_mm: 900,
@@ -270,7 +270,7 @@ export function createKitchenProofProject(actorKind: CommandActorKind = 'human')
       {
         name: 'CreateWall',
         input: {
-          id: crypto.randomUUID(), mark: 'W1', phase: 'existing', material: 'brick_masonry',
+          id: crypto.randomUUID(), mark: 'AAC 150 mm', phase: 'existing', material: 'brick_masonry',
           start_point_mm: [0, 0, 0], end_point_mm: [0, 2500, 0],
           thickness_mm: 150, height_mm: 2800, level_id: 'GF',
           interface_treatments: [{

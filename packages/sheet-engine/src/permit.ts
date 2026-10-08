@@ -2,8 +2,11 @@ import {
   getDisplayPhase,
   validateDrawingSettings,
   resolveCatalogType,
+  resolveOpeningPlanSymbolX,
+  resolveOpeningPlanSymbolY,
   type ProjectDocument,
   type SmartObject,
+  type OpeningViewOverride,
 } from "@constructflow/project-model";
 import { constructionOutputs } from "@constructflow/domain-providers";
 import { buildProjectRepresentations3D } from "@constructflow/representation-engine";
@@ -42,7 +45,8 @@ export const PERMIT_INDEX = [
   ["E-01", "แสงสว่าง / Lighting & switching", 100],
   ["E-02", "กำลังไฟฟ้า / Power & panel schedule", 100],
 ] as const;
-export type PermitSheetId = (typeof PERMIT_INDEX)[number][0];
+/** Dynamic level sheets use IDs such as A-02-L3 and S-02-L3. */
+export type PermitSheetId = string;
 export type VectorPrimitive =
   | {
       kind: "path";
@@ -63,9 +67,11 @@ export type VectorPrimitive =
     };
 export interface SheetViewport {
   scale_denominator: number;
+  level_id?: string;
   center_mm?: Vec2;
   crop_bounds_mm?: [number, number, number, number];
   section_cut_mm?: number;
+  opening_overrides?: Record<string, OpeningViewOverride>;
 }
 export interface PermitOptions {
   viewports?: Partial<Record<PermitSheetId, SheetViewport>>;
@@ -114,7 +120,7 @@ export function primitivesToSvg(primitives: VectorPrimitive[]): string {
 }
 
 /** Fixed-scale vector compiler. Missing inputs and clipping remain visible on every affected page. */
-export function compilePermitDrawingSet(
+function compilePermitDrawingSetBase(
   project: ProjectDocument,
   options: PermitOptions = {},
 ): PermitDrawingSet {
@@ -140,7 +146,10 @@ export function compilePermitDrawingSet(
     !!id &&
     (data(o).level_id === id ||
       data(o).base_level_id === id ||
-      o.level_refs.some((r) => r.level_id === id));
+      // A base-level datum owns a wall/opening in plan; its top-level reference
+      // controls height and must not make the same wall appear on both floors.
+      (!data(o).level_id && !data(o).base_level_id &&
+        o.level_refs.some((r) => r.role !== 'top_level' && r.level_id === id)));
   const triangles = (id: string): Triangle[] => {
     const r = representations.find((v) => v.object_id === id);
     if (!r) return [];
@@ -235,6 +244,11 @@ export function compilePermitDrawingSet(
       const viewport = options.viewports?.[id] ?? {
         scale_denominator: defaultScale,
       };
+      const planLevelId = id === 'A-02' || id === 'S-02'
+        ? (viewport.level_id ?? ground)
+        : id === 'A-03' || id === 'S-03'
+          ? (viewport.level_id ?? upper)
+          : undefined;
       if (![20, 25, 50, 100, 200, 500].includes(viewport.scale_denominator))
         throw new Error("Unsupported drawing scale");
       if (
@@ -259,7 +273,7 @@ export function compilePermitDrawingSet(
             return f.startsWith("land.") || f.startsWith("site.");
           case "A-02":
             return (
-              (belongs(o, ground) || f === "architecture.stair") &&
+              (belongs(o, planLevelId) || f === "architecture.stair") &&
               !f.startsWith("electrical.") &&
               !f.startsWith("drainage.") &&
               !f.startsWith("plumbing.") &&
@@ -267,7 +281,7 @@ export function compilePermitDrawingSet(
             );
           case "A-03":
             return (
-              (belongs(o, upper) || f === "architecture.stair") &&
+              (belongs(o, planLevelId) || f === "architecture.stair") &&
               !f.startsWith("electrical.") &&
               !f.startsWith("drainage.") &&
               !f.startsWith("plumbing.")
@@ -285,7 +299,7 @@ export function compilePermitDrawingSet(
             );
           case "S-02":
             return (
-              belongs(o, ground) &&
+              belongs(o, planLevelId) &&
               !(
                 f === "structure.beam" &&
                 (String(d.mark).startsWith("R") || d.roof_support === true)
@@ -296,7 +310,7 @@ export function compilePermitDrawingSet(
             );
           case "S-03":
             return (
-              belongs(o, upper) &&
+              belongs(o, planLevelId) &&
               !(
                 f === "structure.beam" &&
                 (String(d.mark).startsWith("R") || d.roof_support === true)
@@ -1217,6 +1231,7 @@ export function compilePermitDrawingSet(
           };
 
           for (const { object: o, mesh, out } of objectsWithMesh) {
+            const openingOverride = viewport.opening_overrides?.[o.id];
             const phase = getDisplayPhase(o),
               color = colors[phase],
               width = phase === "new_construction" ? 0.35 : 0.25,
@@ -1244,7 +1259,7 @@ export function compilePermitDrawingSet(
               }
               drawSegment(p, q, color, width, dash);
             };
-            for (const tr of mesh) {
+            for (const tr of isElevation && openingOverride?.hide_generated_elevation && o.object_type.startsWith("door_window.") ? [] : mesh) {
               if (mode.startsWith("section_")) {
                 const axis = mode === "section_x" ? 1 : 0,
                   world = objectsWithMesh.flatMap((v) =>
@@ -1283,7 +1298,7 @@ export function compilePermitDrawingSet(
                 string,
                 { a: Vec3; b: Vec3; normals: Vec3[] }
               >();
-              for (const tr of mesh) {
+              for (const tr of isElevation && openingOverride?.hide_generated_elevation && o.object_type.startsWith("door_window.") ? [] : mesh) {
                 const a = tr[1].map((v, i) => v - tr[0][i]),
                   b = tr[2].map((v, i) => v - tr[0][i]),
                   n: Vec3 = [
@@ -1319,7 +1334,7 @@ export function compilePermitDrawingSet(
                   )
                 )
                   edge(e.a, e.b);
-              for (const route of out?.paths ?? [])
+              for (const route of mode === "xy" && openingOverride?.hide_generated_details ? [] : out?.paths ?? [])
                 for (let i = 1; i < route.length; i++)
                   edge(route[i - 1], route[i]);
             }
@@ -1395,6 +1410,43 @@ export function compilePermitDrawingSet(
                       24,
                     );
                 }
+            }
+          }
+          if ((mode === "xy" && id.startsWith("A-") || isElevation && (id === "A-05" || id === "A-06")) && viewport.opening_overrides) {
+            for (const opening of selected.filter((o) => o.object_type === "door_window.door" || o.object_type === "door_window.window")) {
+              const override = viewport.opening_overrides[opening.id];
+              if (!override) continue;
+              const d = data(opening), host = project.objects[String(d.wall_id ?? "")];
+              if (!host) continue;
+              const wall = data(host), start = wall.start_point_mm as number[] | undefined, end = wall.end_point_mm as number[] | undefined;
+              if (!start || !end) continue;
+              const dx = end[0] - start[0], dy = end[1] - start[1], length = Math.hypot(dx, dy);
+              if (length <= 0) continue;
+              const ux = dx / length, uy = dy / length;
+              const representation = representations.find((r) => r.object_id === opening.id);
+              const shape = representation?.shape.kind === "opening" ? representation.shape : undefined;
+              const width = Number(shape?.width_mm ?? d.width_mm ?? resolveCatalogType(project, opening.object_type, String(d.type_id ?? d.mark ?? ""))?.parameters.width_mm ?? 900);
+              const height = Number(shape?.height_mm ?? d.height_mm ?? resolveCatalogType(project, opening.object_type, String(d.type_id ?? d.mark ?? ""))?.parameters.height_mm ?? 1200);
+              const center = Number(d.offset_along_wall_mm ?? 0), left = center - width / 2;
+              if (mode === "xy") {
+                for (const line of override.lines ?? []) {
+                  const x1 = left + resolveOpeningPlanSymbolX(line.start, width), x2 = left + resolveOpeningPlanSymbolX(line.end, width);
+                  const p1 = mapped([start[0] + ux * x1 - uy * line.start.y_mm, start[1] + uy * x1 + ux * line.start.y_mm]);
+                  const p2 = mapped([start[0] + ux * x2 - uy * line.end.y_mm, start[1] + uy * x2 + ux * line.end.y_mm]);
+                  path([p1, p2], colors[getDisplayPhase(opening)], 0.25);
+                }
+              } else if (isElevation && override.elevation_lines?.length) {
+                const expectedMode = Math.abs(ux) >= Math.abs(uy) ? "xz" : "yz";
+                if (mode !== expectedMode) continue;
+                const sill = Number(shape?.sill_height_mm ?? d.sill_height_mm ?? 0);
+                for (const line of override.elevation_lines) {
+                  const x1 = left + resolveOpeningPlanSymbolX(line.start, width), x2 = left + resolveOpeningPlanSymbolX(line.end, width);
+                  const z1 = sill + height / 2 + resolveOpeningPlanSymbolY(line.start, height), z2 = sill + height / 2 + resolveOpeningPlanSymbolY(line.end, height);
+                  const p1 = mapped(projectPoint([start[0] + ux * x1, start[1] + uy * x1, z1]));
+                  const p2 = mapped(projectPoint([start[0] + ux * x2, start[1] + uy * x2, z2]));
+                  path([p1, p2], colors[getDisplayPhase(opening)], 0.25);
+                }
+              }
             }
           }
           if (clipped)
@@ -1914,10 +1966,107 @@ export function compilePermitDrawingSet(
   };
 }
 
+/**
+ * Compile the fixed permit package, then add one independent architectural and
+ * structural plan for every level not already represented by the four legacy
+ * A-02/A-03/S-02/S-03 viewports. Dynamic sheets are saved as normal viewports
+ * (for example A-02-L3) and share the same vector generation path as the base
+ * sheets.
+ */
+export function compilePermitDrawingSet(
+  project: ProjectDocument,
+  options: PermitOptions = {},
+): PermitDrawingSet {
+  const base = compilePermitDrawingSetBase(project, options);
+  const levels = [...project.levels].sort(
+    (a, b) => a.elevation_mm - b.elevation_mm,
+  );
+  const savedViewports = {
+    ...project.drawing_settings?.viewports,
+    ...options.viewports,
+  };
+  const represented = {
+    architecture: new Set([
+      savedViewports["A-02"]?.level_id ?? levels[0]?.id,
+      savedViewports["A-03"]?.level_id ?? levels[1]?.id ?? levels[0]?.id,
+    ].filter((id): id is string => Boolean(id))),
+    structure: new Set([
+      savedViewports["S-02"]?.level_id ?? levels[0]?.id,
+      savedViewports["S-03"]?.level_id ?? levels[1]?.id ?? levels[0]?.id,
+    ].filter((id): id is string => Boolean(id))),
+  };
+  const extras: PermitSheet[] = [];
+
+  const compileLevelSheet = (
+    level: ProjectDocument["levels"][number],
+    levelIndex: number,
+    baseId: "A-02" | "S-02",
+  ) => {
+    const id = `${baseId}-L${levelIndex + 1}`;
+    const saved = savedViewports[id];
+    const viewport: SheetViewport = {
+      scale_denominator: saved?.scale_denominator ?? 100,
+      ...saved,
+      level_id: level.id,
+    };
+    const viewports = { ...savedViewports, [baseId]: viewport };
+    const levelOptions: PermitOptions = { ...options, viewports };
+    const template = compilePermitDrawingSetBase(project, levelOptions)
+      .sheets.find((sheet) => sheet.id === baseId);
+    if (!template) return;
+    const title = `${template.title} · ${level.name}`;
+    const primitives = template.primitives.map((primitive) =>
+      primitive.kind === "text" && primitive.at[0] === 14 && primitive.at[1] === 22
+        ? { ...primitive, text: title }
+        : primitive,
+    );
+    extras.push({
+      ...template,
+      id,
+      title,
+      primitives,
+      svg: primitivesToSvg(primitives),
+      warnings: template.warnings.map((warning) =>
+        warning.replaceAll(baseId, id),
+      ),
+      viewport,
+    });
+  };
+
+  levels.forEach((level, index) => {
+    if (!represented.architecture.has(level.id))
+      compileLevelSheet(level, index, "A-02");
+    if (!represented.structure.has(level.id))
+      compileLevelSheet(level, index, "S-02");
+  });
+
+  const totalSheets = base.sheets.length + extras.length;
+  const numberedExtras = extras.map((sheet, index) => {
+    const primitives = sheet.primitives.map((primitive) => {
+      if (primitive.kind !== "text") return primitive;
+      if (primitive.at[0] === 372 && primitive.at[1] === 270)
+        return { ...primitive, text: sheet.id };
+      if (primitive.at[0] === 372 && primitive.at[1] === 282)
+        return { ...primitive, text: `${base.sheets.length + index + 1} / ${totalSheets}` };
+      return primitive;
+    });
+    return { ...sheet, primitives, svg: primitivesToSvg(primitives) };
+  });
+  const sheets = [...base.sheets, ...numberedExtras];
+  return {
+    ...base,
+    sheets,
+    warnings: sheets.flatMap((sheet) =>
+      sheet.warnings.map((warning) => `${sheet.id}: ${warning}`),
+    ),
+    issue_ready: base.issue_ready && extras.every((sheet) => sheet.status !== "missing_data"),
+  };
+}
+
 export function renderPermitDrawingSetHtml(
   project: ProjectDocument,
   options: PermitOptions = {},
 ): string {
   const set = compilePermitDrawingSet(project, options);
-  return `<!doctype html><html lang="th"><meta charset="utf-8"><title>ConstructFlow 20-sheet draft</title><style>@font-face{font-family:Sarabun;src:url('/fonts/Sarabun-Regular.ttf')}@page{size:A3 landscape;margin:0}body{margin:0;background:#e2e8f0;font-family:Sarabun,sans-serif}header{padding:16px;background:#0f172a;color:white}.sheet{width:420mm;height:297mm;background:white;margin:12px auto;break-after:page}.sheet:last-child{break-after:auto}.sheet svg{width:100%;height:100%}@media print{header{display:none}.sheet{margin:0}body{background:white}}</style><header>ชุดแบบร่าง 20 แผ่น - ต้องตรวจข้อมูลและลงนามก่อนออกแบบยื่นอนุญาต <button onclick="print()">Print</button></header>${set.sheets.map((s) => `<section class="sheet">${s.svg}</section>`).join("")}</html>`;
+  return `<!doctype html><html lang="th"><meta charset="utf-8"><title>ConstructFlow ${set.sheets.length}-sheet drawing set</title><style>@font-face{font-family:Sarabun;src:url('/fonts/Sarabun-Regular.ttf')}@page{size:A3 landscape;margin:0}body{margin:0;background:#e2e8f0;font-family:Sarabun,sans-serif}header{padding:16px;background:#0f172a;color:white}.sheet{width:420mm;height:297mm;background:white;margin:12px auto;break-after:page}.sheet:last-child{break-after:auto}.sheet svg{width:100%;height:100%}@media print{header{display:none}.sheet{margin:0}body{background:white}}</style><header>ชุดแบบร่าง ${set.sheets.length} แผ่น รวมแปลนแยกตามชั้น - ต้องตรวจข้อมูลและลงนามก่อนออกแบบยื่นอนุญาต <button onclick="print()">Print</button></header>${set.sheets.map((s) => `<section class="sheet">${s.svg}</section>`).join("")}</html>`;
 }

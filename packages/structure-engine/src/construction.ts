@@ -4,7 +4,7 @@ import type {
   RebarModuleData,
   SmartObject,
 } from "@constructflow/project-model";
-import { legacyTypeUuid } from "@constructflow/project-model";
+import { legacyTypeUuid, resolveSlabElevation } from "@constructflow/project-model";
 import type {
   CommandHandlerContext,
   CommandBusResult,
@@ -40,10 +40,14 @@ export function decodeSlab(
   const boundary_mm = simplePolygon(
     list(d.boundary_mm, "boundary_mm", (v) => vec2(v, "boundary point"), 3),
   );
+  const voids_mm = Array.isArray(d.voids_mm)
+    ? d.voids_mm.map((ring, index) => simplePolygon(list(ring, `voids_mm[${index}]`, (v) => vec2(v, "void point"), 3)))
+    : [];
   return {
     ...placement(d, p),
     boundary_mm,
-    elevation_mm: num(d.elevation_mm, "elevation_mm"),
+    elevation_mm: resolveSlabElevation(p, d) ?? num(d.elevation_mm, "elevation_mm"),
+    ...(voids_mm.length ? { voids_mm } : {}),
     thickness_mm: positive(d.thickness_mm, "thickness_mm"),
     topping_mm: num(d.topping_mm ?? 0, "topping_mm", 0),
     slab_system: choice(
@@ -545,13 +549,13 @@ export function structureOutputs(p: ProjectDocument): DomainOutput[] {
     if (o.object_type === "structure.slab") {
       const d = decodeSlab(resolvedData(p, o), p),
         out = output(o, d),
-        area = Math.abs(signedArea(d.boundary_mm)) / 1e6;
+        area = Math.max(0, (Math.abs(signedArea(d.boundary_mm)) - (d.voids_mm ?? []).reduce((sum, ring) => sum + Math.abs(signedArea(ring)), 0)) / 1e6);
       out.meshes = extrude(
         d.boundary_mm,
         d.elevation_mm - d.thickness_mm,
         d.elevation_mm + d.topping_mm,
       );
-      out.paths = [d.boundary_mm.map((v) => [...v, d.elevation_mm] as Vec3)];
+      out.paths = [d.boundary_mm, ...(d.voids_mm ?? [])].map(ring => ring.map((v) => [...v, d.elevation_mm] as Vec3));
       out.quantities = [
         {
           classification: "slab.concrete",

@@ -1,3 +1,5 @@
+import { validateDoorFaceComponents } from './doorFace.js'
+import { validateOpeningPlanSymbolLines } from './openingPlanSymbol.js'
 import type { Phase } from './types.js'
 import type { ProjectDocument, TypeDefinition } from './project.js'
 import { validateConstructionPayloads } from './constructionValidation.js'
@@ -102,10 +104,10 @@ export function migrateProjectV1ToV2(source: ProjectDocumentV1): ProjectDocument
     if (!type) continue
     data.type_id = type.id
     const fieldMap: Record<string, string[]> = {
-      'structure.column': ['section_mm', 'material'], 'structure.foundation': ['size_mm', 'foundation_type', 'material'],
-      'structure.beam': ['section_mm', 'material'], 'architecture.wall': ['thickness_mm', 'height_mm', 'material', 'masonry_thickness_mm', 'plaster_inside_thickness_mm', 'plaster_outside_thickness_mm', 'plaster_inside_material', 'plaster_outside_material'],
-      'door_window.door': ['width_mm', 'height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_material', 'panel_material', 'door_leaf_style', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission'],
-      'door_window.window': ['width_mm', 'height_mm', 'sill_height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'bottom_light_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_material', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission'],
+      'structure.column': ['section_mm', 'plaster_thickness_mm', 'material'], 'structure.foundation': ['size_mm', 'foundation_type', 'material'],
+      'structure.beam': ['section_mm', 'material'], 'architecture.wall': ['thickness_mm', 'height_mm', 'material', 'wall_system', 'masonry_thickness_mm', 'plaster_inside_thickness_mm', 'plaster_outside_thickness_mm', 'plaster_inside_material', 'plaster_outside_material', 'inside_finish_mark', 'outside_finish_mark'],
+      'door_window.door': ['width_mm', 'height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_face_width_mm', 'sash_face_width_mm', 'door_leaf_thickness_mm', 'frame_material', 'panel_material', 'door_leaf_style', 'door_face_components', 'plan_symbol_lines', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission'],
+      'door_window.window': ['width_mm', 'height_mm', 'sill_height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'bottom_light_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_face_width_mm', 'sash_face_width_mm', 'frame_material', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission', 'plan_symbol_lines', 'plan_symbol_reference_depth_mm'],
     }
     const overrides: Record<string, unknown> = {}
     for (const field of fieldMap[object.object_type] ?? []) {
@@ -152,6 +154,7 @@ export function validateProjectV2(project: ProjectDocument): void {
   function validateFamilyParameters(values: Record<string, unknown>, objectType: string, owner: string): void {
     const allowedFamilies: Record<string, string[]> = {
       section_mm: ['structure.column', 'structure.beam'],
+      plaster_thickness_mm: ['structure.column'],
       size_mm: ['structure.foundation', 'drainage.manhole'],
       foundation_type: ['structure.foundation'],
       thickness_mm: ['architecture.wall', 'structure.slab', 'roof.system'],
@@ -160,9 +163,20 @@ export function validateProjectV2(project: ProjectDocument): void {
       plaster_outside_thickness_mm: ['architecture.wall'],
       plaster_inside_material: ['architecture.wall'],
       plaster_outside_material: ['architecture.wall'],
+      wall_system: ['architecture.wall'],
+      inside_finish_mark: ['architecture.wall'],
+      outside_finish_mark: ['architecture.wall'],
+      top_level_id: ['architecture.wall', 'structure.column'],
+      base_offset_mm: ['architecture.wall', 'structure.column'],
+      top_offset_mm: ['architecture.wall', 'structure.column'],
+      vertical_constraint: ['architecture.wall', 'structure.column', 'door_window.door', 'door_window.window'],
       width_mm: ['door_window.door', 'door_window.window', 'interior.cabinet_run'],
       height_mm: ['architecture.wall', 'door_window.door', 'door_window.window', 'interior.cabinet_run'],
-      sill_height_mm: ['door_window.window'],
+      sill_height_mm: ['door_window.door', 'door_window.window'],
+      head_level_id: ['door_window.door', 'door_window.window'],
+      head_offset_mm: ['door_window.door', 'door_window.window'],
+      elevation_offset_mm: ['structure.slab'],
+      voids_mm: ['structure.slab'],
       opening_operation: ['door_window.door', 'door_window.window'],
       panel_count: ['door_window.door', 'door_window.window'],
       panel_layout: ['door_window.door', 'door_window.window'],
@@ -176,14 +190,21 @@ export function validateProjectV2(project: ProjectDocument): void {
       bottom_light_muntin_rows: ['door_window.door', 'door_window.window'],
       bottom_light_muntin_columns: ['door_window.door', 'door_window.window'],
       frame_depth_mm: ['door_window.door', 'door_window.window'],
+      frame_face_width_mm: ['door_window.door', 'door_window.window'],
+      sash_face_width_mm: ['door_window.door', 'door_window.window'],
+      door_leaf_thickness_mm: ['door_window.door'],
       frame_material: ['door_window.door', 'door_window.window'],
       panel_material: ['door_window.door'],
       door_leaf_style: ['door_window.door'],
+      door_face_components: ['door_window.door'],
+      plan_symbol_lines: ['door_window.door', 'door_window.window'],
+      plan_symbol_reference_depth_mm: ['door_window.window'],
       opening_handle_style: ['door_window.door', 'door_window.window'],
       opening_hardware_finish: ['door_window.door', 'door_window.window'],
       glazing_material: ['door_window.door', 'door_window.window'],
       glazing_transmission: ['door_window.door', 'door_window.window'],
       placement_reference: ['structure.beam', 'architecture.wall'],
+      interior_side: ['architecture.wall'],
       drop_mm:['structure.beam','architecture.bathroom'],rebar_type:['structure.beam','structure.column'],topping_mm:['structure.slab'],slab_system:['structure.slab'],
     }
     for (const [field, families] of Object.entries(allowedFamilies)) {
@@ -193,6 +214,13 @@ export function validateProjectV2(project: ProjectDocument): void {
     }
     if (values.placement_reference !== undefined && !['centerline', 'left_face', 'right_face'].includes(String(values.placement_reference))) {
       throw new Error(`Invalid project format: ${owner} has an invalid placement reference`)
+    }
+    if (values.interior_side !== undefined && !['left', 'right'].includes(String(values.interior_side))) {
+      throw new Error(`Invalid project format: ${owner} has an invalid interior side`)
+    }
+    if (values.plaster_thickness_mm !== undefined && (typeof values.plaster_thickness_mm !== 'number' || !Number.isFinite(values.plaster_thickness_mm) || values.plaster_thickness_mm < 0)) throw new Error(`Invalid project format: ${owner} has an invalid plaster_thickness_mm`)
+    for (const field of ['inside_finish_mark', 'outside_finish_mark'] as const) {
+      if (values[field] !== undefined && typeof values[field] !== 'string') throw new Error(`Invalid project format: ${owner} has an invalid ${field}`)
     }
     if (values.material !== undefined && (typeof values.material !== 'string' || !values.material.trim())) {
       throw new Error(`Invalid project format: ${owner} has an invalid material`)
@@ -221,10 +249,17 @@ export function validateProjectV2(project: ProjectDocument): void {
         throw new Error(`Invalid project format: ${owner} has an invalid ${field}`)
       }
     }
+    if (values.door_face_components !== undefined) validateDoorFaceComponents(values.door_face_components)
+    if (values.plan_symbol_lines !== undefined) validateOpeningPlanSymbolLines(values.plan_symbol_lines)
+    if (values.plan_symbol_reference_depth_mm !== undefined) {
+      requireFinite(values.plan_symbol_reference_depth_mm, owner, 'plan_symbol_reference_depth_mm')
+      if (Number(values.plan_symbol_reference_depth_mm) < 50 || Number(values.plan_symbol_reference_depth_mm) > 1000) throw new Error(`Invalid project format: ${owner} has an invalid plan_symbol_reference_depth_mm`)
+    }
     const enumFields = {
       door_leaf_style: ['flush', 'raised_2_panel', 'raised_4_panel', 'raised_6_panel', 'horizontal_grooves_3', 'horizontal_grooves_5', 'vertical_grooves_3', 'louvered'],
       opening_handle_style: ['lever', 'round_knob', 'pull_handle', 'recessed_pull', 'none'],
       opening_hardware_finish: ['stainless', 'matte_black', 'satin_brass', 'bronze'],
+      vertical_constraint: ['fixed_height', 'top_level', 'head_level'],
     } as const
     for (const [field, valuesAllowed] of Object.entries(enumFields)) {
       if (values[field] !== undefined && !valuesAllowed.includes(String(values[field]) as never)) {
@@ -270,6 +305,16 @@ export function validateProjectV2(project: ProjectDocument): void {
       throw new Error(`Invalid project format: ${owner} fixed lights must leave a movable or clear opening section`)
     }
     if (values.frame_depth_mm !== undefined) requirePositive(values.frame_depth_mm, owner, 'frame_depth_mm')
+    for (const field of ['frame_face_width_mm', 'sash_face_width_mm'] as const) {
+      if (values[field] !== undefined) {
+        requireFinite(values[field], owner, field)
+        if (Number(values[field]) < 5 || Number(values[field]) > 200) throw new Error(`Invalid project format: ${owner} has an invalid ${field}`)
+      }
+    }
+    if (values.door_leaf_thickness_mm !== undefined) {
+      requireFinite(values.door_leaf_thickness_mm, owner, 'door_leaf_thickness_mm')
+      if (Number(values.door_leaf_thickness_mm) < 10 || Number(values.door_leaf_thickness_mm) > 120) throw new Error(`Invalid project format: ${owner} has an invalid door_leaf_thickness_mm`)
+    }
     if (values.glazing_transmission !== undefined) {
       requireFinite(values.glazing_transmission, owner, 'glazing_transmission')
       if (Number(values.glazing_transmission) < 0 || Number(values.glazing_transmission) > 1) throw new Error(`Invalid project format: ${owner} glazing transmission must be between 0 and 1`)

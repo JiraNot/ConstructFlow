@@ -28,21 +28,15 @@ export function SettingsModal({
     else onClose();
   };
   const save = () => {
-    const commands: CommandRequest[] = levels
-      .filter(
-        (level) =>
-          JSON.stringify(level) !==
-          JSON.stringify(project.levels.find((l) => l.id === level.id)),
-      )
-      .map((level) => ({
+    const commands: CommandRequest[] = levels.flatMap<CommandRequest>((level) => {
+      const existing = project.levels.find((item) => item.id === level.id)
+      if (!existing) return [{ name: "CreateLevel", input: { ...level } }]
+      if (JSON.stringify(level) === JSON.stringify(existing)) return []
+      return [{
         name: "UpdateLevel",
-        input: {
-          id: level.id,
-          name: level.name,
-          elevation_mm: level.elevation_mm,
-          height_mm: level.height_mm,
-        },
-      }));
+        input: { id: level.id, name: level.name, elevation_mm: level.elevation_mm, height_mm: level.height_mm },
+      }]
+    });
     if (!commands.length) {
       onClose();
       return;
@@ -164,6 +158,25 @@ export function SettingsModal({
                 </div>
               );
             })}
+            <button
+              type="button"
+              className="cf-button cf-button-quiet"
+              onClick={() => {
+                const ordered = [...levels].sort((a, b) => a.elevation_mm - b.elevation_mm)
+                const last = ordered.at(-1)
+                const nextIndex = Math.max(0, ...levels.map(level => level.storey_index)) + 1
+                let id = `L${nextIndex}`
+                while (levels.some(level => level.id === id)) id = `LEVEL-${crypto.randomUUID().slice(0, 8)}`
+                const height = last?.height_mm ?? 3000
+                setLevels([...levels, {
+                  id,
+                  name: `ชั้น ${nextIndex}`,
+                  elevation_mm: (last?.elevation_mm ?? 0) + height,
+                  storey_index: nextIndex,
+                  height_mm: height,
+                }].sort((a, b) => a.elevation_mm - b.elevation_mm))
+              }}
+            >+ เพิ่มชั้นบน</button>
           </>
         ) : (
           <>

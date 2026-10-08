@@ -106,9 +106,10 @@ export const App: React.FC = () => {
   const [activeColumnType, setActiveColumnType] = useState<string>('C1')
   const [activeFoundationType, setActiveFoundationType] = useState<string>('F1')
   const [activeBeamType, setActiveBeamType] = useState<string>('B1')
-  const [activeWallType, setActiveWallType] = useState<string>('W1')
+  const [activeWallType, setActiveWallType] = useState<string>('AAC 100 mm')
   const [activeDoorType, setActiveDoorType] = useState<string>('D1')
   const [activeWindowType, setActiveWindowType] = useState<string>('W1')
+  const [activeSlabType, setActiveSlabType] = useState<string>('GS')
   const previousTypesRef = useRef(project.types)
   useEffect(() => {
     const entries: Array<[string, string, (value: string) => void]> = [
@@ -118,6 +119,7 @@ export const App: React.FC = () => {
       ['architecture.wall', activeWallType, setActiveWallType],
       ['door_window.door', activeDoorType, setActiveDoorType],
       ['door_window.window', activeWindowType, setActiveWindowType],
+      ['structure.slab', activeSlabType, setActiveSlabType],
     ]
     for (const [family, name, setName] of entries) {
       if (project.types.some(type => type.object_type === family && type.name === name)) continue
@@ -131,11 +133,16 @@ export const App: React.FC = () => {
 
   const [catalogContext,setCatalogContext] = useState<{family?:string;typeId?:string;edit?:boolean;intent:'draw'|'assign'}>({intent:'draw'})
   const [isSettingsOpen,setIsSettingsOpen] = useState(false)
-  const [inspectorOpen,setInspectorOpen] = useState(true)
+  const [inspectorOpen,setInspectorOpen] = useState(() => window.innerWidth > 900)
   const [workbenchTab,setWorkbenchTab] = useState<'model'|'sheets'>('model')
   const [isTypeManagerOpen, setIsTypeManagerOpen] = useState<boolean>(false)
   const [isConstructionOpen,setIsConstructionOpen]=useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  useEffect(() => {
+    if (selectedId && !selectedIds.includes(selectedId)) setSelectedIds([selectedId])
+    else if (!selectedId && selectedIds.length) setSelectedIds([])
+  }, [selectedId])
   const [cursorCoords_mm, setCursorCoords_mm] = useState<[number, number]>([0, 0])
   const [snapKind, setSnapKind] = useState<string>('Free')
   const [commandQueue, setCommandQueue] = useState<CommandEnvelope[]>([])
@@ -148,10 +155,19 @@ export const App: React.FC = () => {
     opacity: 0.6,
     visible: true,
   })
+  const canCalibrateUnderlayRef = useRef(false)
+  canCalibrateUnderlayRef.current = !!underlay.image && underlay.visible
   const [calibrationModalOpen, setCalibrationModalOpen] = useState<boolean>(false)
   const [measuredCalibrationDist_mm, setMeasuredCalibrationDist_mm] = useState<number>(4000)
   const [isPresetsModalOpen, setIsPresetsModalOpen] = useState<boolean>(false)
   const [isLegalModalOpen, setIsLegalModalOpen] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (!underlay.image || !underlay.visible) {
+      if (activeTool === 'calibrate') setActiveTool('select')
+      setCalibrationModalOpen(false)
+    }
+  }, [underlay.image, underlay.visible, activeTool])
 
   useEffect(() => {
     if (!hasUnsavedChanges) return
@@ -270,7 +286,7 @@ export const App: React.FC = () => {
     const wallId1 = crypto.randomUUID()
     const wallRes1 = CommandBus.execute(current, 'CreateWall', {
       id: wallId1,
-      mark: 'W1',
+      mark: 'AAC 100 mm',
       start_point_mm: [0, 4000, 0],
       end_point_mm: [4000, 4000, 0],
       thickness_mm: 100,
@@ -302,7 +318,7 @@ export const App: React.FC = () => {
     const wallId2 = crypto.randomUUID()
     const wallRes2 = CommandBus.execute(current, 'CreateWall', {
       id: wallId2,
-      mark: 'W1',
+      mark: 'AAC 100 mm',
       start_point_mm: [4000, 4000, 0],
       end_point_mm: [8000, 4000, 0],
       thickness_mm: 100,
@@ -369,6 +385,8 @@ export const App: React.FC = () => {
         setSelectedId(null)
       } else if (e.key === 's' || e.key === 'S') {
         setActiveTool('select')
+      } else if (e.key === 'e' || e.key === 'E') {
+        setActiveTool('erase')
       } else if (e.key === 'c' || e.key === 'C') {
         setActiveTool('column')
       } else if (e.key === 'f' || e.key === 'F') {
@@ -383,10 +401,14 @@ export const App: React.FC = () => {
         setActiveTool('window')
       } else if (e.key === 'g' || e.key === 'G') {
         setActiveTool('grid')
+      } else if (e.key === 'm' || e.key === 'M') {
+        setActiveTool('measure')
       } else if (e.key === 'r' || e.key === 'R') {
-        setActiveTool('calibrate')
+        if (canCalibrateUnderlayRef.current) setActiveTool('calibrate')
       } else if (e.key === 't' || e.key === 'T') {
         setActiveTool('stair')
+      } else if (e.key === 'p' || e.key === 'P') {
+        setActiveTool('slab')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -526,6 +548,8 @@ export const App: React.FC = () => {
   // Commit Wall creation with active type
   const handleCommitWall = (start_point_mm: [number, number], end_point_mm: [number, number], placementReference: PlacementReference = 'centerline') => {
     const wallId = crypto.randomUUID()
+    const baseLevel = project.levels.find(level => level.id === project.project.active_level_id)
+    const topLevel = baseLevel ? project.levels.filter(level => level.elevation_mm > baseLevel.elevation_mm).sort((a, b) => a.elevation_mm - b.elevation_mm)[0] : undefined
     const res = CommandBus.execute(project, 'CreateWall', {
       id: wallId,
       mark: activeWallType,
@@ -533,11 +557,60 @@ export const App: React.FC = () => {
       start_point_mm: [start_point_mm[0], start_point_mm[1], 0],
       end_point_mm: [end_point_mm[0], end_point_mm[1], 0],
       level_id: project.project.active_level_id,
+      ...(topLevel ? { top_level_id: topLevel.id } : {}),
     })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
       setSelectedId(wallId)
       if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
+  const handleCommitSlab = (boundary_mm: [number, number][]) => {
+    const type = project.types.find(item => item.object_type === 'structure.slab' && item.name.toLowerCase() === activeSlabType.toLowerCase())
+    const level = project.levels.find(item => item.id === project.project.active_level_id)
+    if (!type || !level || boundary_mm.length < 3) return
+    const id = crypto.randomUUID()
+    const result = CommandBus.execute(project, 'CreateSlab', {
+      id,
+      type_id: type.id,
+      mark: type.name,
+      level_id: level.id,
+      boundary_mm,
+      elevation_mm: level.elevation_mm,
+      elevation_offset_mm: 0,
+      thickness_mm: Number(type.parameters.thickness_mm ?? 120),
+      topping_mm: Number(type.parameters.topping_mm ?? 0),
+      slab_system: type.parameters.slab_system ?? 'slab_on_ground',
+      material: String(type.parameters.material ?? 'reinforced_concrete'),
+    })
+    if (result.result.status === 'success') {
+      setProject(result.updatedProject)
+      setSelectedId(id)
+      if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
+    }
+  }
+
+  const handleCommitSlabVoid = (hostId: string, boundary_mm: [number, number][]) => {
+    const slab = project.objects[hostId]
+    if (!slab || slab.object_type !== 'structure.slab' || boundary_mm.length < 3) return
+    const data = slab.module_data as Record<string, unknown>
+    const inside = (point: [number, number], ring: [number, number][]) => {
+      let result = false
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i], [xj, yj] = ring[j]
+        if (((yi > point[1]) !== (yj > point[1])) && point[0] < (xj - xi) * (point[1] - yi) / (yj - yi) + xi) result = !result
+      }
+      return result
+    }
+    const boundary = data.boundary_mm as [number, number][]
+    if (!boundary || !boundary_mm.every(point => inside(point, boundary))) return
+    const voids = Array.isArray(data.voids_mm) ? data.voids_mm as [number, number][][] : []
+    const result = CommandBus.execute(project, 'UpdateSlab', { ...data, id: hostId, voids_mm: [...voids, boundary_mm] })
+    if (result.result.status === 'success') {
+      setProject(result.updatedProject)
+      setSelectedId(hostId)
+      if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
     }
   }
 
@@ -659,14 +732,14 @@ export const App: React.FC = () => {
     const entries: Array<[string,string,(value:string)=>void]> = [
       ['structure.column',activeColumnType,setActiveColumnType], ['structure.foundation',activeFoundationType,setActiveFoundationType],
       ['structure.beam',activeBeamType,setActiveBeamType], ['architecture.wall',activeWallType,setActiveWallType],
-      ['door_window.door',activeDoorType,setActiveDoorType], ['door_window.window',activeWindowType,setActiveWindowType],
+      ['door_window.door',activeDoorType,setActiveDoorType], ['door_window.window',activeWindowType,setActiveWindowType], ['structure.slab',activeSlabType,setActiveSlabType],
     ]
     for(const [family,value,setValue] of entries) if(family===type.object_type && value===type.name) setValue(name)
   }
   const openCatalog = (edit=false, fromSelection=false, familyOverride?:string) => {
     const object = fromSelection && selectedId ? project.objects[selectedId] : null
     const family = familyOverride ?? object?.object_type ?? TOOL_FAMILIES[activeTool] ?? 'structure.column'
-    const marks:Record<string,string> = {column:activeColumnType,foundation:activeFoundationType,beam:activeBeamType,wall:activeWallType,door:activeDoorType,window:activeWindowType}
+    const marks:Record<string,string> = {column:activeColumnType,foundation:activeFoundationType,beam:activeBeamType,wall:activeWallType,door:activeDoorType,window:activeWindowType,slab:activeSlabType}
     const data = object?.module_data as Record<string,unknown> | undefined
     const type = project.types.find(t=>t.object_type===family && (data ? t.id===data.type_id || t.name===data.mark : t.name===marks[activeTool]))
     setCatalogContext({family,typeId:type?.id,edit,intent:object?'assign':'draw'})
@@ -676,25 +749,16 @@ export const App: React.FC = () => {
     if(catalogContext.intent==='assign' && selectedId) { handleAssignType(selectedId,type.id); return }
     const tool = Object.entries(TOOL_FAMILIES).find(([,family])=>family===type.object_type)?.[0] as ToolType | undefined
     if(!tool) return
-    const setters:Record<string,(value:string)=>void> = {column:setActiveColumnType,foundation:setActiveFoundationType,beam:setActiveBeamType,wall:setActiveWallType,door:setActiveDoorType,window:setActiveWindowType}
+    const setters:Record<string,(value:string)=>void> = {column:setActiveColumnType,foundation:setActiveFoundationType,beam:setActiveBeamType,wall:setActiveWallType,door:setActiveDoorType,window:setActiveWindowType,slab:setActiveSlabType}
     setters[tool](type.name);setActiveTool(tool)
   }
 
   // Commit Grid creation
-  const handleCommitGrid = (orientation: 'vertical' | 'horizontal', position_mm: number) => {
-    const existing = Object.values(project.objects).filter(
-      (o) => isGridObject(o) && o.module_data.orientation === orientation
-    )
-    const tag =
-      orientation === 'vertical'
-        ? String.fromCharCode(65 + existing.length)
-        : String(existing.length + 1)
-
-    const res = CommandBus.execute(project, 'CreateGrid', {
-      id: crypto.randomUUID(),
-      tag,
-      orientation,
-      position_mm,
+  const handleCommitGrid = (orientation: 'vertical' | 'horizontal', position_mm: number, system: { spacing_mm: number; count: number; first_tag: string }) => {
+    const gridIds = Array.from({ length: system.count }, () => crypto.randomUUID())
+    const res = CommandBus.execute(project, 'CreateGridSystem', {
+      id: crypto.randomUUID(), grid_ids: gridIds, orientation, origin_mm: position_mm,
+      spacing_mm: system.spacing_mm, count: system.count, first_tag: system.first_tag,
     })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
@@ -795,15 +859,108 @@ export const App: React.FC = () => {
     }
   }
 
-  // Delete Object (cascades deletion of hosted openings if wall)
-  const handleDeleteObject = (objectId: string) => {
-    const res = CommandBus.execute(project, 'DeleteObject', { object_id: objectId })
+  const handleUpdateGridSystem = (systemId: string, changes: { origin_mm?: number; spacing_mm?: number; count?: number; first_tag?: string }) => {
+    const member = Object.values(project.objects).filter(isGridObject).find(object => object.module_data.system_id === systemId)
+    if (!member) return
+    const data = member.module_data
+    const count = changes.count ?? data.system_count ?? 1
+    const existingIds = Object.values(project.objects).filter(isGridObject)
+      .filter(object => object.module_data.system_id === systemId)
+      .sort((a, b) => (a.module_data.system_index ?? 0) - (b.module_data.system_index ?? 0))
+      .map(object => object.id)
+    const gridIds = Array.from({ length: count }, (_, index) => existingIds[index] ?? crypto.randomUUID())
+    const res = CommandBus.execute(project, 'UpdateGridSystem', {
+      system_id: systemId, grid_ids: gridIds,
+      origin_mm: changes.origin_mm ?? data.system_origin_mm ?? data.position_mm,
+      spacing_mm: changes.spacing_mm ?? data.system_spacing_mm ?? 4000,
+      count: changes.count ?? data.system_count ?? 1,
+      first_tag: changes.first_tag ?? data.system_first_tag ?? data.tag,
+    })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
-      setSelectedId(null)
+      if (res.emittedEnvelope) setCommandQueue(q => [...q, res.emittedEnvelope!])
+    }
+  }
+
+  const handleUpdateWallFace = (objectId: string, changes: {
+    plaster_inside_thickness_mm?: number
+    plaster_outside_thickness_mm?: number
+    plaster_inside_material?: string
+    plaster_outside_material?: string
+    interior_side?: 'left' | 'right'
+    top_level_id?: string
+    base_offset_mm?: number
+    top_offset_mm?: number
+    vertical_constraint?: 'fixed_height' | 'top_level'
+  }) => {
+    const wall = project.objects[objectId]
+    if (!isWallObject(wall)) return
+    const res = CommandBus.execute(project, 'UpdateWallDimensions', {
+      object_id: objectId,
+      thickness_mm: wall.module_data.thickness_mm,
+      ...changes,
+    })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
       if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
     }
   }
+
+  const handleUpdateOpeningVertical = (objectId: string, changes: {
+    sill_height_mm?: number
+    height_mm?: number
+    head_level_id?: string
+    head_offset_mm?: number
+    vertical_constraint?: 'fixed_height' | 'head_level'
+  }) => {
+    const opening = project.objects[objectId]
+    if (!opening || (!isDoorObject(opening) && !isWindowObject(opening))) return
+    const data = opening.module_data
+    const result = CommandBus.execute(project, isDoorObject(opening) ? 'UpdateDoorDimensions' : 'UpdateWindowDimensions', {
+      object_id: objectId,
+      width_mm: data.width_mm,
+      height_mm: data.height_mm,
+      ...(isWindowObject(opening) ? { sill_height_mm: data.sill_height_mm } : {}),
+      ...changes,
+    })
+    if (result.result.status === 'success') {
+      setProject(result.updatedProject)
+      if (result.emittedEnvelope) setCommandQueue((q) => [...q, result.emittedEnvelope!])
+    }
+  }
+
+  // Delete objects under a drag eraser or multi-selection; hosted dependents are removed by the normal object command.
+  const handleDeleteObjects = (objectIds: string[]) => {
+    let current = project
+    const envelopes: CommandEnvelope[] = []
+    for (const objectId of [...new Set(objectIds)]) {
+      if (!current.objects[objectId]) continue
+      const result = CommandBus.execute(current, 'DeleteObject', { object_id: objectId })
+      if (result.result.status !== 'success') continue
+      current = result.updatedProject
+      if (result.emittedEnvelope) envelopes.push(result.emittedEnvelope)
+    }
+    if (current !== project) {
+      setProject(current); setSelectedId(null); setSelectedIds([])
+      setCommandQueue(queue => [...queue, ...envelopes])
+    }
+  }
+  const handleDeleteObject = (objectId: string) => handleDeleteObjects([objectId])
+
+  // Delete the selected object from the plan without intercepting text editing.
+  useEffect(() => {
+    const handleDeleteShortcut = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return
+      if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('[role="dialog"]')) return
+      const target = e.target
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable="true"]'))) return
+      if (!selectedId && selectedIds.length === 0) return
+      e.preventDefault()
+      handleDeleteObjects(selectedIds.length ? selectedIds : selectedId ? [selectedId] : [])
+    }
+    window.addEventListener('keydown', handleDeleteShortcut)
+    return () => window.removeEventListener('keydown', handleDeleteShortcut)
+  }, [selectedId, selectedIds, project, handleDeleteObject])
 
   const confirmReplaceUnsavedProject = () => {
     const hasProjectEdits = replacementBaselineJson !== null && projectJson !== replacementBaselineJson
@@ -861,10 +1018,10 @@ export const App: React.FC = () => {
   const handleExportTakeoff = () => {
     const escape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
     const rows = [
-      ['Cost center', 'Phase', 'Mark', 'Object type', 'Material', 'Quantity', 'Unit', 'Formula', 'Source UUIDs'],
+      ['Cost center', 'Phase', 'Mark', 'Object type', 'Material', 'Quantity', 'Unit', 'Formula'],
       ...takeoff.lines.map((line) => [
         line.cost_center, line.phase, line.mark, line.object_type, line.material ?? '',
-        line.quantity.toFixed(3), line.unit, line.formula, line.source_object_ids.join('; '),
+        line.quantity.toFixed(3), line.unit, line.formula,
       ]),
     ]
     const csv = `\uFEFF${rows.map((row) => row.map(escape).join(',')).join('\r\n')}`
@@ -1000,7 +1157,7 @@ export const App: React.FC = () => {
     }, {})
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+    <div className="cf-app-root" style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       {/* Focused project header */}
       <header className="cf-app-header">
         <div className="cf-brand">
@@ -1035,8 +1192,8 @@ export const App: React.FC = () => {
           )}
           <button type="button" className="cf-button cf-button-primary" onClick={handleExportProject} title="บันทึกไฟล์โครงการ .cfproj"><Save size={16} /><span>บันทึก</span></button>
           <span role="status" aria-live="polite" className={`cf-save-status ${hasUnsavedChanges ? 'is-unsaved' : ''}`}>{hasUnsavedChanges ? 'ยังไม่ได้บันทึก' : 'บันทึกแล้ว'}{fileFeedback ? ` · ${fileFeedback}` : ''}</span>
-          <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canUndo} onClick={() => { setProjectState(projectSessionRef.current!.undo()); setCommandQueue([]) }} title="ย้อนกลับ (Ctrl+Z)" aria-label="ย้อนกลับ"><Undo2 size={17} /></button>
-          <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canRedo} onClick={() => { setProjectState(projectSessionRef.current!.redo()); setCommandQueue([]) }} title="ทำซ้ำ (Ctrl+Y)" aria-label="ทำซ้ำ"><Redo2 size={17} /></button>
+          <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canUndo} onClick={() => { setProjectState(projectSessionRef.current!.undo()); setCommandQueue([]) }} title="ย้อนกลับ (Ctrl/⌘+Z)" aria-label="ย้อนกลับ"><Undo2 size={17} /></button>
+          <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canRedo} onClick={() => { setProjectState(projectSessionRef.current!.redo()); setCommandQueue([]) }} title="ทำซ้ำ (Ctrl/⌘+Shift+Z หรือ Ctrl/⌘+Y)" aria-label="ทำซ้ำ"><Redo2 size={17} /></button>
           <details className="cf-more-menu" onClick={(event) => {
             if ((event.target as HTMLElement).closest('button')) {
               event.currentTarget.open = false;
@@ -1134,6 +1291,7 @@ export const App: React.FC = () => {
               activeWallTypeMark={activeWallType}
               activeDoorTypeMark={activeDoorType}
               activeWindowTypeMark={activeWindowType}
+              activeSlabTypeMark={activeSlabType}
               onOpenTypeManager={() => openCatalog()}
               onChangeActiveTypeMark={(mark) => {
                 if (activeTool === 'column') setActiveColumnType(mark)
@@ -1142,16 +1300,22 @@ export const App: React.FC = () => {
                 else if (activeTool === 'wall') setActiveWallType(mark)
                 else if (activeTool === 'door') setActiveDoorType(mark)
                 else if (activeTool === 'window') setActiveWindowType(mark)
+                else if (activeTool === 'slab') setActiveSlabType(mark)
               }}
               selectedId={selectedId}
+              selectedIds={selectedIds}
               underlay={underlay}
               onSelectObject={setSelectedId}
+              onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }}
+              onDeleteObjects={handleDeleteObjects}
               onCommitColumn={handleCommitColumn}
               onCommitFoundation={handleCommitFoundation}
               onCommitBeam={handleCommitBeam}
               onCommitWall={handleCommitWall}
               onCommitDoor={handleCommitDoor}
               onCommitWindow={handleCommitWindow}
+              onCommitSlab={handleCommitSlab}
+              onCommitSlabVoid={handleCommitSlabVoid}
               onCommitGrid={handleCommitGrid}
               onCommitStair={handleCommitStair}
               onMoveColumn={handleMoveColumn}
@@ -1167,7 +1331,7 @@ export const App: React.FC = () => {
                 setSnapKind(kind)
               }}
             /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
-              <Model3DViewport project={project} selectedId={selectedId} onSelectObject={setSelectedId} onMoveColumn={handleMoveColumn} onMoveWall={handleMoveWall} onMoveFoundation={handleMoveFoundation} onMoveOpening={handleMoveOpening} />
+              <Model3DViewport project={project} onSelectObject={setSelectedId} />
             </Suspense>}
           </div>
 
@@ -1208,7 +1372,7 @@ export const App: React.FC = () => {
         {/* Right Inspector & Sync Sidebar */}
         {inspectorOpen && <aside className="cf-inspector">
           <div className="cf-inspector-heading">
-            <div><strong>แผงข้อมูล</strong><span>{selectedId ? 'คุณสมบัติวัตถุและปริมาณ' : 'เลือกวัตถุบนแปลนเพื่อแก้ไข'}</span></div>
+            <div><strong>แผงข้อมูล</strong><span>{selectedIds.length > 1 ? `เลือกอยู่ ${selectedIds.length} ชิ้น · Delete เพื่อลบพร้อมกัน` : selectedId ? 'คุณสมบัติวัตถุและปริมาณ' : 'เลือกวัตถุบนแปลนเพื่อแก้ไข'}</span></div>
           </div>
           <div className="cf-inspector-tabs" role="tablist" aria-label="แผงข้อมูล">
             <button type="button" role="tab" aria-selected={rightPanelTab === 'properties'} className={rightPanelTab === 'properties' ? 'is-active' : ''} onClick={() => setRightPanelTab('properties')}>คุณสมบัติ</button>
@@ -1222,12 +1386,16 @@ export const App: React.FC = () => {
             onUpdateColumnMark={handleUpdateColumnMark}
             onUpdateFoundationMark={handleUpdateFoundationMark}
             onUpdateGridTag={handleUpdateGridTag}
+            onUpdateGridSystem={handleUpdateGridSystem}
+            onUpdateWallFace={handleUpdateWallFace}
+            onUpdateOpeningVertical={handleUpdateOpeningVertical}
             onUpdatePhase={handleUpdateObjectPhase}
             onUpdateRemovalPhase={handleUpdateObjectRemovalPhase}
             onFlipDoorHanding={handleFlipDoorHanding}
             onOpenTypeManager={() => openCatalog(true,true)}
             onAddFoundation={(colId) => handleCommitFoundation({ columnId: colId })}
             onDeleteObject={handleDeleteObject}
+            onDrawSlabVoid={(slabId) => { setSelectedId(slabId); setActiveTool('slabVoid') }}
           /></div>}
 
           {rightPanelTab === 'quantities' && <section className="cf-takeoff-panel">
