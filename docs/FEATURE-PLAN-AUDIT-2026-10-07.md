@@ -2,7 +2,7 @@
 
 วันที่ตรวจ: 7 ตุลาคม 2026
 
-สถานะ: ผล audit เอกสารและข้อเสนอ backlog; ไม่ใช่การรับรอง implementation หรือการตรวจความถูกต้องของกฎหมาย
+สถานะ: ตรวจเอกสารและโค้ด ณ 8 ตุลาคม 2026; เป็นสถานะ implementation ตามหลักฐานใน repository ไม่ใช่การรับรองความถูกต้องของกฎหมายหรือวิศวกรรม
 
 ## ข้อสรุป
 
@@ -20,7 +20,7 @@
 - ทำ inventory ของ Markdown ใต้ `docs/` จำนวน **136 ไฟล์ก่อนเพิ่มรายงานนี้** รวมไฟล์ใน `docs/modules/` 25 ไฟล์; จำนวนไฟล์ไม่ใช่คะแนนความครบ
 - อ่านเจาะลึก Master Blueprint, roadmaps, traceability, object/workflow registries, governance, acceptance/test contracts, standalone review และ module specs ที่เกี่ยวกับความต้องการทั้งหก domain
 - ค้นหาคำและแนวคิดเฉพาะของ Master Specification ข้าม Markdown ทั้งชุด แล้วตรวจบริบทของรายการที่พบ การไม่มี keyword เพียงอย่างเดียวไม่ถือเป็นหลักฐานว่าฟีเจอร์หาย
-- ประเมิน **ความครบของแผน** แยกจาก **ความครบของโค้ด** และใช้ `STATUS.md`/implementation review เป็นหลักฐานสถานะที่เอกสารรายงานเท่านั้น ไม่ได้รันทดสอบโปรแกรมใหม่ในการ audit นี้
+- ประเมิน **ความครบของแผน** แยกจาก **ความครบของโค้ด**; วันที่ 2026-10-08 ตรวจ call sites/implementation จริงและรัน `npm run test:standalone` (93 unit tests และ verifiers ทั้งสามผ่าน) ผลผ่านยืนยันเฉพาะ behavior ที่ fixtures ทดสอบ ไม่ได้ยืนยันความครบของฟีเจอร์หรือความถูกต้องทางกฎหมาย/วิศวกรรม
 - ไม่ตรวจยืนยันข้อกฎหมาย มาตรฐานวิศวกรรม หรือความสามารถปัจจุบันของ SDK ภายนอก ตัวเลขทางวิศวกรรมใน Master Specification ยังต้องมี rule-source และ applicability ก่อนนำไปทำ validator
 
 เกณฑ์ความพร้อมใช้รายการใน [docs/README.md](README.md): owner, object/schema, commands/validation, events, hosts/connectors, phase/level, LOD, quantities, drawings, QA, catalog และ acceptance/tests ที่เกี่ยวข้อง
@@ -61,6 +61,20 @@
 | Native 20-sheet A3 PDF/SVG compiler | บางส่วน | AGENTS มีดัชนี 20 แผ่น, DRAWING มี platform contract; S4 มีแผนสามแผ่นแรก ยังไม่มี per-sheet acceptance ครบ 20 |
 | UUID sync, DXF/DWG, IFC/Revit, MCP | มีฐานแผน / บางส่วน | DOWNSTREAM-ADAPTERS และ S5 มี direction/verification; backend, subset, conflicts และ release gates ยังต้องลงรายละเอียด |
 
+## สถานะโค้ดล่าสุดจากการตรวจ repository (2026-10-08)
+
+การตรวจครั้งนี้ยืนยันว่า build ผ่าน, unit tests 93 รายการผ่าน และ kitchen/file-IO/phases verifiers ผ่าน. Phase proof ปัจจุบันรายงาน 41 Smart Objects, 19 domain outputs, 46 takeoff rows, 20 หน้า A3 และ 17 missing-data warnings. ตัวเลขเหล่านี้เป็นหลักฐานการทำงานของ fixture ไม่ใช่เกณฑ์อนุมัติแบบก่อสร้าง; `issue_ready` อาจเป็น true ตาม metadata/sheet completeness แม้ยังไม่มี legal-engine gate.
+
+ประเด็นที่ต้องแก้ในโค้ดก่อนเรียกงานส่วนนี้ว่าผ่าน:
+
+- **Legal false pass:** ปิดขอบแปลงให้ครบและตรวจ closure จริง; zoning ที่ไม่รู้จัก/ข้อมูลพื้นที่ซึมน้ำที่หายต้องให้ insufficient-data หรือ reject; เชื่อม legal results และ rule evidence เข้ากับ workbench/permit issue gate.
+- **Roof void geometry:** ตัด hole polygons ออกจาก triangulated surface จริง ไม่ใช่หักเฉพาะ area; ทดสอบกรณี flat และ multi-slope.
+- **Railing authoring:** เพิ่ม create/update command และ UI flow, เรียก validator ใน project validation และวาง post spacing ตลอดแนว railing.
+- **Drawing acceptance:** ทดสอบ edge ที่ทราบว่าถูกบัง/มองเห็น และสร้าง continuation layout/page เมื่อ schedule ล้น หรือจำกัดการออกเอกสารพร้อมแจ้งชัดเจน.
+- **Canonical adapters:** ใช้ canonical mapping จริงใน exporter/importer และเพิ่ม round-trip UUID/phase tests; invalid UUID ต้องไม่กลายเป็น identity ปลอม.
+
+งานเชิงฟีเจอร์ที่ยังไม่ครบตาม Master ยังคงอยู่ใน F06–F13 เช่น MEP vent/septic/bypass, BBS reference calculations, preset/bathroom acceptance, electrical/LED sizing evidence, BOQ cost centers และ Master-to-test traceability. รายละเอียดอยู่ใน findings และ backlog ด้านล่าง.
+
 ## Findings ตามลำดับความสำคัญ
 
 ### F01 — Resolved: Roadmap และ baseline ใช้ standalone-first
@@ -71,21 +85,21 @@
 
 **ตรวจรับ:** roadmap หลักเชื่อม S0–S5 กับ R tracks และไม่มีเงื่อนไขให้ standalone release ต้องผ่าน external application gate ก่อน
 
-### F02 — Resolved: Canonical identity/lifecycle มีตาราง mapping เอกภาพและ engine รองรับ
+### F02 — Partial: มี mapping helpers แต่ adapters ยังไม่ได้ใช้ mapping กลางร่วมกัน
 
-**ผลแก้ (2026-10-08):** จัดทำเอกสาร [CANONICAL-SCHEMA-MAPPING.md](architecture/CANONICAL-SCHEMA-MAPPING.md) และพัฒนาโมดูล [packages/project-model/src/canonicalMapping.ts](../packages/project-model/src/canonicalMapping.ts) รองรับ 22 object families ข้าม `.cfproj`, Ruby Bridge, AutoCAD DXF, และ IFC 4.3 / Revit พร้อมตัวแปลง 22-character IFC GUID และ universal phase resolver ผ่านการทดสอบ 12/12 unit tests
+มีเอกสาร [CANONICAL-SCHEMA-MAPPING.md](architecture/CANONICAL-SCHEMA-MAPPING.md) และ helpers ใน [canonicalMapping.ts](../packages/project-model/src/canonicalMapping.ts) ครอบคลุม 22 object families พร้อม unit tests 12 รายการ แต่ adapters ยังใช้ mapping/IFC GUID ของตนเอง จึงยังไม่ใช่ shared mapping ที่เชื่อม round-trip จริงครบทุก adapter. Invalid UUID ยังถูกแปลงเป็นค่า hash-shaped แทนการ reject. เหลืองาน integrate adapter, round-trip fixtures และ invalid identity policy.
 
-### F03 — Resolved: Legal/deed engine โฉนดที่ดิน ระยะร่น และกฎกระทรวง 55
+### F03 — Partial: มี legal/deed functions แต่ยังมี false-pass path และไม่ได้ต่อเข้ากับ issue readiness
 
-**ผลแก้ (2026-10-08):** พัฒนาโมดูล [packages/clash-engine/src/legalEngine.ts](../packages/clash-engine/src/legalEngine.ts) รองรับ Shoelace deed parcel calculation, Thai land area conversion (ไร่-งาน-ตร.ว.), ตรวจสอบระยะร่น กฎกระทรวงฉบับที่ 55 (ข้อ 41, 42, 50) และผังเมืองรวม กทม. FAR/OSR/พื้นที่ซึมน้ำ พร้อมเกณฑ์ AC-SITE-005 ถึง AC-SITE-007 ใน [SITE.md](modules/SITE.md) ผ่านการทดสอบ 9/9 unit tests
+มีฟังก์ชันคำนวณแปลง/แปลงหน่วย/ระยะร่น/FAR/OSR/พื้นที่ซึมน้ำและ tests 9 รายการตาม [legalEngine.ts](../packages/clash-engine/src/legalEngine.ts) แต่ `calculateParcelFromPegs` ไม่ปิดขอบด้านสุดท้ายเมื่อรับพิกัดวนรอบ และ `closure_error` จึงไม่ใช่ค่าปิดรูปที่ถูกต้อง. `evaluateBmaZoning` ใช้ค่า Y2 เมื่อ zoning ไม่รู้จัก และเมื่อไม่ส่ง permeable area จะตั้ง 100%/pass; ต้องแก้เป็น insufficient-data/invalid-input. ยังไม่พบ call site จาก workbench/domain provider/permit compiler และ `issue_ready` ไม่ได้ gate ด้วยผล legal engine. ต้องระบุ rule-source/version, jurisdiction inputs และ legal evidence review ก่อนอ้าง compliance.
 
-### F04 — Resolved: ชุดแบบ 20 แผ่น พร้อม Multi-Column Table Overflow & Hidden-Line Solver
+### F04 — Partial: PDF 20 หน้าและ drawing enhancements มีแล้ว แต่ overflow/hidden-line acceptance ยังไม่ครบ
 
-**ผลแก้ (2026-10-08):** พัฒนา [packages/sheet-engine/src/permit.ts](../packages/sheet-engine/src/permit.ts) และ [packages/sheet-engine/src/pdf.ts](../packages/sheet-engine/src/pdf.ts) เพิ่มระบบ Adaptive Multi-Column Auto-Balance เมื่อตารางล้น 27 แถวบน A3 แนวนอน, หัวตารางซ้ำ `(ต่อ)`, กล่องแจ้งเตือนตารางต่อเนื่อง และพัฒนา Hidden-Line Solver ด้วย Backface Culling, Painter's solid surface masking (`#ffffff`), edge occlusion testing, และ 0.50mm section cuts ผ่านการทดสอบ 10/10 unit tests
+มี 20-sheet PDF compiler, multi-column schedules และ geometry-based line masking. ตารางเกินพื้นที่แสดง continuation banner/warning แต่ไม่ได้สร้าง continuation sheet จริง. Hidden-line ใช้ midpoint visibility และอาจซ่อน/แสดงทั้งเส้น แม้เพียงบางช่วงถูกบัง; tests ตรวจ mask/PDF compilation แต่ยังไม่ assert known hidden/visible edge. Elevations ยังระบุให้ตรวจ hidden-line/façade annotations. ต้องทำ continuation policy และ fixture ที่พิสูจน์ geometry output ต่อ sheet ก่อนระบุว่า complete.
 
-### F05 — Resolved: Parametric Stair & Railing Builder
+### F05 — Partial: stair generation ต่อกับ UI/provider แล้ว; railing ยังไม่มี authoring flow
 
-**ผลแก้ (2026-10-08):** พัฒนา [packages/architecture-engine/src/railings.ts](../packages/architecture-engine/src/railings.ts) ตรวจสอบและสร้างราวกันตกตามกฎหมายไทย (ความสูง 0.90–1.00 ม., เสาหลัก @1.20 ม., ซี่ลูกกรง $\le 0.10$ ม.) และอัปเกรด [packages/architecture-engine/src/stairs.ts](../packages/architecture-engine/src/stairs.ts) รองรับบันได L-Shape / U-Shape พร้อมชานพัก Landing Slabs, Walkline และ takeoff เชื่อมต่อ `domain-providers` ผ่านการทดสอบ 5/5 unit tests
+มี stair builder และปุ่ม/command สร้างบันได รวมถึง railing geometry/provider helpers. ยังไม่พบ `CreateRailing`/`UpdateRailing` หรือ UI authoring command และ `validateConstructionProject` ไม่เรียก railing validation; posts วางตาม vertices ของ path ไม่ได้กระจายตามระยะสูงสุดตลอดช่วง. Stair acceptance ปัจจุบันยืนยัน geometry/takeoff บางส่วน ไม่ใช่การรับรองความถูกต้องของแบบบันไดทุกกรณี. เพิ่ม authoring/validation integration และ geometric fixtures ก่อนปิด.
 
 ### F06 — P1: MEP primitives ยังไม่ครอบคลุมระบบเฉพาะที่ Master สัญญา
 
@@ -109,9 +123,9 @@
 
 แยก **atomic generation command** ที่ undo หนึ่งครั้งออกจาก **construction publication workflow** ซึ่ง [EXTENSION-CONSTRUCTION-WORKFLOW.md](architecture/EXTENSION-CONSTRUCTION-WORKFLOW.md) ระบุหลาย service/transaction boundaries; ต้องเขียน failure/retry/currentness policy โดยไม่เรียกทั้งสองอย่างว่า transaction เดียวกัน
 
-### F09 — Resolved: Roof Concave Modeler & Rainwater Drainage Solver
+### F09 — Partial: concave footprint และ rainwater helpers มีแล้ว แต่ roof void ไม่ตัด mesh
 
-**ผลแก้ (2026-10-08):** อัปเกรด [packages/roof-engine/src/index.ts](../packages/roof-engine/src/index.ts) รองรับรูปทรงหลังคาแบบเว้า (Concave L/T-Shape) ด้วย Ear-Clipping Triangulation, คำนวณพื้นที่รับน้ำฝนจริง (`calculateRoofCatchment`) และคำนวณขนาดรางน้ำเชิงชายพร้อมท่อระบายน้ำฝนดิ่ง (`solveEaveGuttersAndDownpipes`) บันทึก takeoff ครบถ้วน ผ่านการทดสอบ 3/3 unit tests
+รองรับ concave triangulation และมี catchment/gutter/downpipe helpers. ใน `roof-engine/src/index.ts` void area ถูกหักจาก metric แต่ triangles ที่คืนยังเป็นผิวทึบ จึงไม่ใช่ช่องเจาะจริงใน mesh; multi-slope area ยังเป็นสัดส่วนประมาณการ. ต้องเพิ่ม hole triangulation/mesh tests และแยกปริมาณประมาณจาก geometry-derived ก่อนปิด.
 
 ### F10 — P1: Electrical deliverables และ LED driver ยังไม่มี acceptance ครบ
 
@@ -145,14 +159,14 @@
 
 | ลำดับ | งานเอกสาร | ปิด findings | ผลลัพธ์ที่ตรวจรับได้ |
 |---|---|---|---|
-| 1 | Direction aligned; canonical schema mapping ยังเปิด | F01 ปิด / F02 เปิด | SSOT และ adapter boundary ตรงกันแล้ว; เติม mapping fields/identity ต่อ |
+| 1 | เชื่อม canonical mapping เข้ากับ adapter และ round-trip | F02 บางส่วน | ใช้ mapping กลางจริงทุก adapter, ทดสอบ UUID/phase round-trip และ reject identity ที่ไม่ถูกต้อง |
 | 2 | Expand TRACEABILITY และ acceptance/evidence columns | F12–F13 | ทุก Master item มี owner/spec/AC/milestone หรือสถานะ missing/deferred ที่มีเหตุผล |
-| 3 | Native 20-sheet content/acceptance matrix | F04 | 20 rows เชื่อม providers/prerequisites/phase/scales และ publication policy |
+| 3 | Native 20-sheet content/acceptance matrix และ continuation layout | F04 บางส่วน | 20 rows เชื่อม providers/prerequisites/phase/scales; ทดสอบ hidden/visible edges และ continuation sheet จริง |
 | 4 | Complete Kitchen assembly + bathroom package contracts | F08, F11 | BOM/relations, edit/undo/failure cases, BOQ three cost centers และ affected sheets |
-| 5 | Site/deed/compliance rules specification | F03 | deterministic input/result/evidence และ unknown/exception fixtures |
-| 6 | Structure/BBS และ roof/sweep specifications | F07, F09 | reference fixtures ตาม assembly/geometry และ expected quantities/drawings |
+| 5 | แก้ legal-engine false-pass และเชื่อม validation เข้ากับ publication gate | F03 บางส่วน | ปิด polygon, reject unknown zoning/inputs, แสดง insufficient-data และมี rule evidence/version |
+| 6 | Structure/BBS และ roof/sweep specifications | F07, F09 บางส่วน | reference fixtures พร้อม expected quantities; ตัด roof void ใน mesh จริง |
 | 7 | MEP system packages และ electrical/LED contracts | F06, F10 | network topology, formulas/catalog requirements, QA และ M/E sheet outputs |
-| 8 | Stair/railing ownership และ detailed spec | F05 | owner/object/command/phase/level/quantity/drawing/AC พร้อมก่อน coding |
+| 8 | Stair/railing authoring และ detailed spec | F05 บางส่วน | สร้าง/แก้ railing ผ่าน CommandBus, เรียก validation และทดสอบระยะโพสต์ตลอด path |
 
 ใช้ลำดับนี้เป็นงานเติมแผน ไม่ใช่คำสั่งให้หยุดงาน standalone ที่มี acceptance ชัดอยู่แล้ว การพัฒนาแต่ละ track ต้องผ่าน specification gate ของ track นั้นก่อน
 

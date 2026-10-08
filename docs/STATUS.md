@@ -4,6 +4,10 @@ This file is the current high-level implementation dashboard. It is informationa
 
 Active delivery is standalone-first under ADR-0006 and `ROADMAP.md`. `.cfproj`, the shared command runtime and native 2D/3D/takeoff/sheet engines define the product baseline. Ruby/native entries below are adapter evidence; F0–F3 native closures are not prerequisites for standalone releases.
 
+Standalone UX delivery (2026-10-08): unified visual catalog for seven families, contextual type picker, transactional draft editor with clone/assign, light inspector/workbench, grouped menus and level settings are implemented. Editor 3D preview, direct canvas placement for additional domains and full accessibility verification remain open. See [delivery evidence and remaining work](UX-CATALOG-MENUS-PLAN-2026-10-08.md#ผล-implementation--8-ตุลาคม-2026).
+
+Opening catalog update (2026-10-08): type editor now supports opening dimensions with separate transom/main/bottom regions, per-zone muntin counts, opaque door leaf profiles, selectable handle profiles and finishes; 2D preview and 3D representation use these catalog values. Plan Editor and the affected model/schema/catalog/representation packages build successfully. Hardware previews are generic design profiles, not vendor SKUs or manufacturing/installation specifications. Door/window builder gaps (including operable transoms/sidelights, per-leaf material, product hardware data and production dimensions) remain tracked in [Opening Builder UX Plan](OPENING-BUILDER-UX-PLAN-2026-10-08.md) and [Material & Glass UX Plan](GLASS-MATERIALS-UX-PLAN-2026-10-08.md).
+
 ## Documentation foundation
 
 | Area | Status | Authoritative source |
@@ -697,7 +701,7 @@ The native acceptance step is separate and must exercise this representative wor
 
 ### Slice 02 Upgrade — Renovation Phasing, Underlay Image & Scale Calibration
 
-Status: **Production Implementation Complete in Plan Editor (`apps/plan-editor`)**.
+Status: **Plan Editor implementation slice complete for the listed phase and underlay workflows; broader production acceptance remains separate.**
 
 - **Renovation Phasing**:
   - Full phase visual separation on 2D Plan: `existing` (Slate neutral/muted), `demolition` (Red tint, dashed lines `[6, 4]`), and `new_construction` (vibrant primary BIM colors).
@@ -713,16 +717,16 @@ Status: **Production Implementation Complete in Plan Editor (`apps/plan-editor`)
   - 100% zero-conflict coexistence in SketchUp Plugins folder (isolated `JiraNot::ConstructFlow` namespace).
   - Ability to convert legacy geometry via `ConvertSelectionToSmartObject` into ConstructFlow BIM Smart Objects assigned to `existing` or `demolition` phases.
 
-### Standalone Engine Delivery & Categories 1–4 Closure — 2026-10-07
+### Standalone Engine Delivery & Categories 1–4 — implementation baseline (2026-10-07)
 
-Status: **Production Implementation Complete across Standalone Engine, Sheet Engine, and Downstream Adapters**.
+Status: **Implementation slices were reported complete for the listed scope; this is not production acceptance of the full Master Specification.** The 2026-10-08 code audit below records integration and correctness gaps found in these slices.
 
 - **Category 1 (UI/UX & Interactive Modeling in Plan Editor)**:
   - **Interactive Stair Placement Tool (`T` shortcut)**: Interactive 2-click placement on Plan Canvas, calculating treads ($\ge 22$ cm) and risers ($\le 20$ cm) conforming to Thai Building Code (กฎกระทรวงฉบับที่ 55). Includes real-time placement ghost, walkline with UP arrow indicator, step count labels, and diagonal cut line for multi-level transitions.
   - **Column & Footing Rebar Detailing Templates**:
     - `ConfigureColumnReinforcement`: Main longitudinal bars (e.g., 4-DB16, 6-DB20), ties/stirrups (RB6, RB9) with dense spacing zones (@0.10m at column ends, @0.15–0.20m in middle zone).
     - `ConfigureFoundationReinforcement`: Bottom mat X/Y reinforcement grids (e.g., DB12@0.15m) and column starter dowels with Bar Bending Schedule (BBS) mass calculation.
-  - **Roof Void & Opening Editing**: Support for inner hole/void polygons in roof footprints across command schema, workbench UI, and representation engine.
+  - **Roof Void & Opening Editing**: Void polygons can be authored in command schema/workbench; current roof mesh does not subtract those holes from returned triangles (see 2026-10-08 audit below).
 
 - **Category 2 (Sheet Graphics & Vector Drafting Standards)**:
   - **Ground Baseline & 45° Earth Hatching**: Building elevations (A-05, A-06) and building sections (A-07) now render a bold 0.7mm `#0f172a` ground baseline with 45° double-tick earth hatching.
@@ -736,52 +740,52 @@ Status: **Production Implementation Complete across Standalone Engine, Sheet Eng
   - **EIT / วสท. Standard Breaker & Wire Sizing (`recommendEITBreakerAndWire`)**: Recommends circuit breaker ratings (AT/AF) and copper conductor cross-sections (THW / IEC01, $mm^2$) according to วสท. cable ampacity standards, directly integrated into Sheet E-02 panelboard schedule.
 
 - **Category 4 (Downstream Adapters & Extensions Packaging)**:
-  - **AutoCAD DXF Exporter (`packages/cad-adapter`)**: Generates valid AutoCAD R2018 DXF files containing 20 distinct PaperSpace layout tabs (`A-01` to `E-02`) with AIA/วสท. phase layers and viewport scaling.
-  - **OpenBIM IFC 4.3 & Revit Direct Bridge (`packages/bim-adapter`)**: Converts RFC-4122 UUIDs to 22-character buildingSMART IFC GUIDs, generates certified IFC 4.3 ADD2 STEP models, and exports native Revit transfer JSON.
+  - **AutoCAD DXF Exporter (`packages/cad-adapter`)**: Exports AutoCAD R2018 DXF files containing 20 PaperSpace layout tabs (`A-01` to `E-02`) with AIA/วสท. phase layers and viewport scaling.
+  - **OpenBIM IFC 4.3 & Revit Direct Bridge (`packages/bim-adapter`)**: Converts RFC-4122 UUIDs to 22-character buildingSMART IFC GUIDs, generates IFC 4.3 ADD2 STEP output (schema/application acceptance remains separate), and exports native Revit transfer JSON.
   - **Pure-Node SketchUp RBZ Packager (`npm run package:sketchup`)**: Bundles 486 extension files into `output/constructflow.rbz` (727 KB) cross-platform without native zip or bash dependencies.
 
 - **Verification & Test Status (Baseline)**:
   - `node scripts/test_standalone.mjs`: Rebuilds all packages and passes 76 unit tests across 11 packages (7 project-model, 4 representation-engine, 3 architecture-engine, 1 drainage-engine, 2 electrical-engine, 5 clash-engine, 7 sheet-engine, 35 command-runtime, 7 extension-engine, 2 cad-adapter, 3 bim-adapter).
   - Three vertical acceptance verifiers pass: `npm run verify:kitchen`, `npm run verify:file-io`, and `npm run verify:phases` (generating 20-sheet A3 PDF, 41 Smart Objects, and 44 takeoff rows).
 
-### Core Engine Feature Track Delivery (P0 / P1 Closure) — 2026-10-08
+### Core Engine Feature Track Delivery — implementation slices (2026-10-08)
 
-Status: **Production Implementation Complete across Core Domain Packages, Sheet Engine, and Downstream Bridges**.
+Status: **Core feature slices exist and pass the current fixture suite; production acceptance remains open.** Code review and `npm run test:standalone` do not imply Master Specification completion or legal/engineering approval.
 
 - **[P0] F02 Canonical Schema Mapping Engine (`packages/project-model`)**:
-  - Unified Data Schema across `.cfproj`, Ruby Bridge, AutoCAD DXF, and IFC 4.3 / Revit.
+  - Mapping helpers describe a target schema across `.cfproj`, Ruby Bridge, AutoCAD DXF, and IFC 4.3 / Revit; adapters still use independent mappings and need integration/round-trip acceptance.
   - Architecture spec: [`docs/architecture/CANONICAL-SCHEMA-MAPPING.md`](architecture/CANONICAL-SCHEMA-MAPPING.md).
   - Implemented `packages/project-model/src/canonicalMapping.ts` covering 22 canonical families, AIA/วสท. layer mapping, RFC-4122 to 22-char IFC GUID generator, and universal phase resolver.
   - Automated test coverage: 12 unit tests passing in `project-model`.
 
 - **[P1] F03 Legal & Site Survey Compliance Engine (`packages/clash-engine`)**:
   - Implemented `packages/clash-engine/src/legalEngine.ts`:
-    - Shoelace polygon deed parcel calculation from boundary pegs (`calculateParcelFromPegs`) with perimeter and closure validation.
+    - Shoelace parcel calculation from boundary pegs (`calculateParcelFromPegs`); a closing-edge/closure-error defect remains.
     - Thai land measurement unit conversion (`convertSqMetersToThaiLand`, `formatThaiLandArea`) for Rai, Ngan, Sq.Wa, and Sq.m.
     - Thai Building Code (กฎกระทรวงฉบับที่ 55 พ.ศ. 2543 ข้อ 41, 42, 50) setback evaluation (`evaluateThaiBuildingCompliance`).
-    - BMA Zoning (ผังเมืองรวม กทม. ย.1 - ย.10) FAR, OSR, and permeable green area ($\ge 50\%$) checks (`evaluateBmaZoning`).
+    - BMA zoning FAR/OSR/permeable-area checks (`evaluateBmaZoning`); unknown zoning and missing permeable-area inputs can false-pass. The legal engine is not integrated into permit issue readiness.
   - Documented in `docs/modules/SITE.md` (AC-SITE-005 to AC-SITE-007).
   - Automated test coverage: 9 unit tests passing in `clash-engine`.
 
 - **[P1] F05 Parametric Stair & Railing Builder (`packages/architecture-engine`)**:
-  - Parametric Railing Builder (`packages/architecture-engine/src/railings.ts`): Thai Building Code compliance for handrail heights ($0.90$–$1.00$m), structural posts (@$1.20$m), balusters (gaps $\le 0.10$m), 3D meshes, and takeoffs.
-  - Enhanced Stair Builder (`packages/architecture-engine/src/stairs.ts`): L-Shape and U-Shape stairs with landing slabs, 3D meshes, and landing takeoff, integrated into `domain-providers`.
+  - Railing geometry/provider helpers exist, but there is no create/update authoring command or UI workflow, project validation does not call railing validation, and post spacing follows path vertices rather than a maximum interval.
+  - Enhanced Stair Builder (`packages/architecture-engine/src/stairs.ts`): L-Shape and U-Shape stairs with landing slabs, 3D meshes, and landing takeoff, integrated into `domain-providers`; engineering and interaction acceptance remains partial.
   - Automated test coverage: 5 unit tests passing in `architecture-engine`.
 
 - **[P1] F09 Concave Roof Modeler & Automated Rainwater System (`packages/roof-engine`)**:
-  - Ear-clipping triangulation supporting concave (L/T-shaped) roof footprints with per-edge slope planes.
-  - Automated rainwater catchment calculation (`calculateRoofCatchment`) and eaves gutter + downpipe solver (`solveEaveGuttersAndDownpipes`) with full takeoffs in `roofOutputs`.
+  - Ear-clipping triangulation supports concave (L/T-shaped) roof footprints. Roof voids are subtracted from area metrics but are not cut out of returned mesh triangles; multi-slope area remains approximate.
+  - Rainwater catchment (`calculateRoofCatchment`) and eaves gutter/downpipe helpers (`solveEaveGuttersAndDownpipes`) exist; end-to-end domain and drawing acceptance remains open.
   - Automated test coverage: 3 unit tests passing in `roof-engine`.
 
 - **[P1] F04 20-Sheet Drawing Engine Enhancement (`packages/sheet-engine`)**:
-  - Adaptive Schedule Table Multi-Column auto-balance layout on A3 landscape, repeating header rows with `(ต่อ)`, header background fill `#f1f5f9`, and gold continuation overflow banners for tables >70 rows.
-  - Hidden-Line Solver & Occlusion Engine: Backface culling, depth calculation, Painter's algorithm with opaque solid surface masking (`fill: "#ffffff"`), analytical edge occlusion testing, and bold 0.50mm section cuts.
+  - Adaptive schedule multi-column auto-balance on A3 landscape, repeated `(ต่อ)` headers, and overflow banners; an actual continuation sheet is not generated yet.
+  - Hidden-line masking helpers exist, but midpoint visibility can hide/show an entire partially occluded edge; tests do not assert known hidden and visible edges.
   - Full vector PDF filled path compilation using `drawSvgPath`.
   - Automated test coverage: 10 unit tests passing in `sheet-engine`.
 
 - **Full Verification Status**:
   - All 12 monorepo packages and `apps/plan-editor` compiled cleanly with zero errors.
-  - All unit test suites pass (86 total unit tests across all domain packages).
+  - Latest `npm run test:standalone` passes: 93 unit tests across 12 suites; all three vertical verifiers pass. Phase proof: 41 Smart Objects, 19 domain outputs, 46 quantity rows, 20 A3 PDF pages, and 17 missing-data warnings. These are fixture results, not production sign-off.
   - All 3 vertical domain verifiers pass: `verify:kitchen`, `verify:file-io`, and `verify:phases`.
 
 ## How to update this file

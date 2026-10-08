@@ -1,7 +1,35 @@
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
 export type Triangle = [Vec3, Vec3, Vec3];
+export type SegmentPlacementReference = 'centerline' | 'left_face' | 'right_face';
 const EPS = 1e-8;
+
+/** Adjust a segment centerline after a thickness change while keeping its referenced face fixed. */
+export function preserveSegmentPlacementReference(
+  start: Vec3,
+  end: Vec3,
+  reference: SegmentPlacementReference | undefined,
+  previousThicknessMm: number,
+  nextThicknessMm: number,
+): { start: Vec3; end: Vec3; shift_mm: Vec2 } {
+  if (reference === undefined || reference === 'centerline'
+    || !Number.isFinite(previousThicknessMm) || !Number.isFinite(nextThicknessMm)) {
+    return { start: [...start], end: [...end], shift_mm: [0, 0] };
+  }
+  const dx = end[0] - start[0], dy = end[1] - start[1]
+  const length = Math.hypot(dx, dy)
+  if (length < EPS) return { start: [...start], end: [...end], shift_mm: [0, 0] }
+  const side = reference === 'left_face' ? -1 : 1
+  const offset = (nextThicknessMm - previousThicknessMm) / 2 * side
+  const nx = -dy / length, ny = dx / length
+  const shiftX = nx * offset, shiftY = ny * offset
+  return {
+    start: [start[0] + shiftX, start[1] + shiftY, start[2]],
+    end: [end[0] + shiftX, end[1] + shiftY, end[2]],
+    shift_mm: [shiftX, shiftY],
+  }
+}
+
 export function cross(a: Vec2, b: Vec2, c: Vec2): number {
   return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 }

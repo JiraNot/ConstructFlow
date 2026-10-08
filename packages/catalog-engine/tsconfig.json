@@ -18,6 +18,9 @@
       ],
       "@constructflow/command-schema": [
         "../command-schema/dist/index.d.ts"
+      ],
+      "@constructflow/geometry-kernel": [
+        "../geometry-kernel/dist/index.d.ts"
       ]
     }
   },

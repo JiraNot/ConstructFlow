@@ -103,8 +103,9 @@ export function migrateProjectV1ToV2(source: ProjectDocumentV1): ProjectDocument
     data.type_id = type.id
     const fieldMap: Record<string, string[]> = {
       'structure.column': ['section_mm', 'material'], 'structure.foundation': ['size_mm', 'foundation_type', 'material'],
-      'structure.beam': ['section_mm', 'material'], 'architecture.wall': ['thickness_mm', 'height_mm', 'material'],
-      'door_window.door': ['width_mm', 'height_mm'], 'door_window.window': ['width_mm', 'height_mm', 'sill_height_mm'],
+      'structure.beam': ['section_mm', 'material'], 'architecture.wall': ['thickness_mm', 'height_mm', 'material', 'masonry_thickness_mm', 'plaster_inside_thickness_mm', 'plaster_outside_thickness_mm', 'plaster_inside_material', 'plaster_outside_material'],
+      'door_window.door': ['width_mm', 'height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_material', 'panel_material', 'door_leaf_style', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission'],
+      'door_window.window': ['width_mm', 'height_mm', 'sill_height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'bottom_light_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_material', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission'],
     }
     const overrides: Record<string, unknown> = {}
     for (const field of fieldMap[object.object_type] ?? []) {
@@ -154,9 +155,35 @@ export function validateProjectV2(project: ProjectDocument): void {
       size_mm: ['structure.foundation', 'drainage.manhole'],
       foundation_type: ['structure.foundation'],
       thickness_mm: ['architecture.wall', 'structure.slab', 'roof.system'],
+      masonry_thickness_mm: ['architecture.wall'],
+      plaster_inside_thickness_mm: ['architecture.wall'],
+      plaster_outside_thickness_mm: ['architecture.wall'],
+      plaster_inside_material: ['architecture.wall'],
+      plaster_outside_material: ['architecture.wall'],
       width_mm: ['door_window.door', 'door_window.window', 'interior.cabinet_run'],
       height_mm: ['architecture.wall', 'door_window.door', 'door_window.window', 'interior.cabinet_run'],
       sill_height_mm: ['door_window.window'],
+      opening_operation: ['door_window.door', 'door_window.window'],
+      panel_count: ['door_window.door', 'door_window.window'],
+      panel_layout: ['door_window.door', 'door_window.window'],
+      panel_width_ratios: ['door_window.door', 'door_window.window'],
+      transom_height_mm: ['door_window.door', 'door_window.window'],
+      bottom_light_height_mm: ['door_window.window'],
+      muntin_rows: ['door_window.door', 'door_window.window'],
+      muntin_columns: ['door_window.door', 'door_window.window'],
+      transom_muntin_rows: ['door_window.door', 'door_window.window'],
+      transom_muntin_columns: ['door_window.door', 'door_window.window'],
+      bottom_light_muntin_rows: ['door_window.door', 'door_window.window'],
+      bottom_light_muntin_columns: ['door_window.door', 'door_window.window'],
+      frame_depth_mm: ['door_window.door', 'door_window.window'],
+      frame_material: ['door_window.door', 'door_window.window'],
+      panel_material: ['door_window.door'],
+      door_leaf_style: ['door_window.door'],
+      opening_handle_style: ['door_window.door', 'door_window.window'],
+      opening_hardware_finish: ['door_window.door', 'door_window.window'],
+      glazing_material: ['door_window.door', 'door_window.window'],
+      glazing_transmission: ['door_window.door', 'door_window.window'],
+      placement_reference: ['structure.beam', 'architecture.wall'],
       drop_mm:['structure.beam','architecture.bathroom'],rebar_type:['structure.beam','structure.column'],topping_mm:['structure.slab'],slab_system:['structure.slab'],
     }
     for (const [field, families] of Object.entries(allowedFamilies)) {
@@ -164,8 +191,88 @@ export function validateProjectV2(project: ProjectDocument): void {
         throw new Error(`Invalid project format: ${owner} has ${field} outside its ${objectType} family`)
       }
     }
+    if (values.placement_reference !== undefined && !['centerline', 'left_face', 'right_face'].includes(String(values.placement_reference))) {
+      throw new Error(`Invalid project format: ${owner} has an invalid placement reference`)
+    }
     if (values.material !== undefined && (typeof values.material !== 'string' || !values.material.trim())) {
       throw new Error(`Invalid project format: ${owner} has an invalid material`)
+    }
+    for (const field of ['plaster_inside_material', 'plaster_outside_material'] as const) {
+      if (values[field] !== undefined && (typeof values[field] !== 'string' || !values[field].trim())) throw new Error(`Invalid project format: ${owner} has an invalid ${field}`)
+    }
+    const hasWallLayers = ['masonry_thickness_mm', 'plaster_inside_thickness_mm', 'plaster_outside_thickness_mm'].some(field => values[field] !== undefined)
+    if (hasWallLayers) {
+      if (objectType !== 'architecture.wall') throw new Error(`Invalid project format: ${owner} has wall layers outside architecture.wall`)
+      requirePositive(values.masonry_thickness_mm, owner, 'masonry_thickness_mm')
+      for (const field of ['plaster_inside_thickness_mm', 'plaster_outside_thickness_mm'] as const) {
+        if (values[field] !== undefined) {
+          requireFinite(values[field], owner, field)
+          if (Number(values[field]) < 0) throw new Error(`Invalid project format: ${owner} has negative ${field}`)
+        }
+      }
+      const total = Number(values.masonry_thickness_mm) + Number(values.plaster_inside_thickness_mm ?? 0) + Number(values.plaster_outside_thickness_mm ?? 0)
+      if (!owner.endsWith('instance overrides') && values.thickness_mm !== undefined && Math.abs(Number(values.thickness_mm) - total) > 1) throw new Error(`Invalid project format: ${owner} overall thickness must equal masonry and plaster layers`)
+    }
+    if (values.opening_operation !== undefined && !['hinged', 'sliding', 'fixed', 'awning', 'louver'].includes(String(values.opening_operation))) {
+      throw new Error(`Invalid project format: ${owner} has an invalid opening operation`)
+    }
+    for (const field of ['frame_material', 'panel_material'] as const) {
+      if (values[field] !== undefined && (typeof values[field] !== 'string' || !values[field].trim())) {
+        throw new Error(`Invalid project format: ${owner} has an invalid ${field}`)
+      }
+    }
+    const enumFields = {
+      door_leaf_style: ['flush', 'raised_2_panel', 'raised_4_panel', 'raised_6_panel', 'horizontal_grooves_3', 'horizontal_grooves_5', 'vertical_grooves_3', 'louvered'],
+      opening_handle_style: ['lever', 'round_knob', 'pull_handle', 'recessed_pull', 'none'],
+      opening_hardware_finish: ['stainless', 'matte_black', 'satin_brass', 'bronze'],
+    } as const
+    for (const [field, valuesAllowed] of Object.entries(enumFields)) {
+      if (values[field] !== undefined && !valuesAllowed.includes(String(values[field]) as never)) {
+        throw new Error(`Invalid project format: ${owner} has an invalid ${field}`)
+      }
+    }
+    if (values.glazing_material !== undefined && !['none', 'clear_glass', 'frosted_glass', 'tinted_glass'].includes(String(values.glazing_material))) {
+      throw new Error(`Invalid project format: ${owner} has an invalid glazing material`)
+    }
+    if (values.panel_count !== undefined && (!Number.isInteger(values.panel_count) || Number(values.panel_count) < 1 || Number(values.panel_count) > 8)) {
+      throw new Error(`Invalid project format: ${owner} has an invalid panel count`)
+    }
+    if (values.panel_layout !== undefined) {
+      const layouts = values.panel_layout
+      const validLayouts = ['hinged', 'sliding', 'fixed', 'awning', 'louver']
+      if (!Array.isArray(layouts) || layouts.length < 1 || layouts.length > 8 || layouts.some(value => !validLayouts.includes(String(value)))) {
+        throw new Error(`Invalid project format: ${owner} has an invalid panel layout`)
+      }
+      if (values.panel_count !== undefined && layouts.length !== values.panel_count) throw new Error(`Invalid project format: ${owner} panel layout must match panel count`)
+    }
+    if (values.panel_width_ratios !== undefined) {
+      const ratios = values.panel_width_ratios
+      if (!Array.isArray(ratios) || ratios.length < 1 || ratios.length > 8 || ratios.some(value => typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > 1)) {
+        throw new Error(`Invalid project format: ${owner} has invalid panel width ratios`)
+      }
+      if (Math.abs(ratios.reduce((sum, value) => sum + value, 0) - 1) > 0.001) throw new Error(`Invalid project format: ${owner} panel width ratios must sum to 1`)
+      if (values.panel_count !== undefined && ratios.length !== values.panel_count) throw new Error(`Invalid project format: ${owner} panel width ratios must match panel count`)
+    }
+    for (const field of ['muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns'] as const) {
+      if (values[field] !== undefined && (!Number.isInteger(values[field]) || Number(values[field]) < 1 || Number(values[field]) > 8)) {
+        throw new Error(`Invalid project format: ${owner} has an invalid ${field}`)
+      }
+    }
+    if (values.transom_height_mm !== undefined) {
+      requireFinite(values.transom_height_mm, owner, 'transom_height_mm')
+      if (Number(values.transom_height_mm) < 0) throw new Error(`Invalid project format: ${owner} has negative transom_height_mm`)
+    }
+    if (values.bottom_light_height_mm !== undefined) {
+      requireFinite(values.bottom_light_height_mm, owner, 'bottom_light_height_mm')
+      if (Number(values.bottom_light_height_mm) < 0) throw new Error(`Invalid project format: ${owner} has negative bottom_light_height_mm`)
+    }
+    if (values.height_mm !== undefined && Number(values.transom_height_mm ?? 0) + Number(values.bottom_light_height_mm ?? 0) >= Number(values.height_mm)) {
+      throw new Error(`Invalid project format: ${owner} fixed lights must leave a movable or clear opening section`)
+    }
+    if (values.frame_depth_mm !== undefined) requirePositive(values.frame_depth_mm, owner, 'frame_depth_mm')
+    if (values.glazing_transmission !== undefined) {
+      requireFinite(values.glazing_transmission, owner, 'glazing_transmission')
+      if (Number(values.glazing_transmission) < 0 || Number(values.glazing_transmission) > 1) throw new Error(`Invalid project format: ${owner} glazing transmission must be between 0 and 1`)
     }
     for(const field of ['drop_mm','topping_mm'])if(values[field]!==undefined){requireFinite(values[field],owner,field);if(Number(values[field])<0)throw new Error(`Invalid project format: ${owner} has negative ${field}`)}
     if (values.rebar_type !== undefined) {
@@ -336,6 +443,7 @@ export function validateProjectV2(project: ProjectDocument): void {
         requirePositive(moduleData.thickness_mm, id, 'thickness_mm')
         requirePositive(moduleData.height_mm, id, 'height_mm')
         requirePositive(moduleData.length_mm, id, 'length_mm')
+        validateFamilyParameters(moduleData, 'architecture.wall', `wall ${id}`)
         if (typeof moduleData.level_id !== 'string' || !levelIds.has(moduleData.level_id)) throw new Error(`Invalid project format: wall ${id} references a missing level`)
         const computedLength = Math.hypot(moduleData.end_point_mm[0] - moduleData.start_point_mm[0], moduleData.end_point_mm[1] - moduleData.start_point_mm[1])
         if (computedLength <= 0 || Math.abs(computedLength - moduleData.length_mm) > 1) throw new Error(`Invalid project format: wall ${id} length does not match its endpoints`)

@@ -18,6 +18,7 @@
     "@constructflow/extension-engine": "file:../../packages/extension-engine",
     "@constructflow/project-model": "file:../../packages/project-model",
     "@constructflow/representation-engine": "file:../../packages/representation-engine",
+    "@constructflow/snapping-engine": "file:../../packages/snapping-engine",
     "@constructflow/sheet-engine": "file:../../packages/sheet-engine",
     "@constructflow/takeoff-engine": "file:../../packages/takeoff-engine",
     "constructflow-standalone": "file:../..",

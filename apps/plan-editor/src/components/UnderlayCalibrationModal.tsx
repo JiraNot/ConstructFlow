@@ -66,7 +66,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
   }
 
   return (
-    <div
+    <div className="cf-legacy-dialog"
       style={{
         position: 'fixed',
         inset: 0,
@@ -82,9 +82,9 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
       <div
         style={{
           width: 480,
-          background: '#0f172a',
+          background: '#ffffff',
           borderRadius: 12,
-          border: '1px solid #334155',
+          border: '1px solid #dce4ed',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
           overflow: 'hidden',
           display: 'flex',
@@ -95,11 +95,11 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
         <div
           style={{
             padding: '16px 20px',
-            borderBottom: '1px solid #1e293b',
+            borderBottom: '1px solid #f2f6fa',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'linear-gradient(90deg, #0f172a 0%, #1e293b 100%)',
+            background: 'linear-gradient(90deg, #ffffff 0%, #f2f6fa 100%)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -112,16 +112,16 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#38bdf8',
+                color: '#0873c4',
               }}
             >
               <Ruler size={18} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#24364b' }}>
                 เทียบสเกลแปลนพื้น (Point-to-Point Calibration)
               </h3>
-              <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>
+              <p style={{ margin: 0, fontSize: 11, color: '#52677d' }}>
                 ปรับสเกลภาพแปลน 1:1 ให้ตรงกับระยะจริงในงานก่อสร้าง (mm)
               </p>
             </div>
@@ -146,33 +146,33 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
           {/* Measured Info Card */}
           <div
             style={{
-              background: '#1e293b',
+              background: '#f2f6fa',
               borderRadius: 8,
               padding: '12px 16px',
-              border: '1px solid #334155',
+              border: '1px solid #dce4ed',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
             }}
           >
             <div>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>ระยะที่วัดได้บนภาพ (Current Measured):</div>
+              <div style={{ fontSize: 11, color: '#52677d' }}>ระยะที่วัดได้บนภาพ (Current Measured):</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#f59e0b', marginTop: 2 }}>
                 {Math.round(measuredDistance_mm).toLocaleString()} mm{' '}
-                <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>
+                <span style={{ fontSize: 12, color: '#52677d', fontWeight: 500 }}>
                   ({(measuredDistance_mm / 1000).toFixed(3)} m)
                 </span>
               </div>
             </div>
             <div style={{ textAlign: 'right', fontSize: 11, color: '#64748b' }}>
               <div>ความกว้างพิกเซล:</div>
-              <div style={{ fontFamily: 'monospace', color: '#cbd5e1' }}>{pixelDist.toFixed(1)} px</div>
+              <div style={{ fontFamily: 'monospace', color: '#40566e' }}>{pixelDist.toFixed(1)} px</div>
             </div>
           </div>
 
           {/* Real Distance Input */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc' }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#24364b' }}>
               ระยะทางจริงระหว่าง 2 จุดนี้ (มม. หรือ เมตร):
             </label>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -202,7 +202,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
                 style={{
                   alignSelf: 'center',
                   fontSize: 12,
-                  color: '#38bdf8',
+                  color: '#0873c4',
                   fontWeight: 600,
                   background: 'rgba(56, 189, 248, 0.1)',
                   padding: '8px 12px',
@@ -218,7 +218,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
 
           {/* Quick Presets */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ fontSize: 11, color: '#94a3b8' }}>ระยะยอดนิยม (Quick Presets):</div>
+            <div style={{ fontSize: 11, color: '#52677d' }}>ระยะยอดนิยม (Quick Presets):</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {['1000', '2000', '3000', '3500', '4000', '5000', '6000', '8000'].map((preset) => (
                 <button
@@ -228,9 +228,9 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
                     setErrorMsg(null)
                   }}
                   style={{
-                    background: inputValue === preset ? '#0284c7' : '#1e293b',
-                    color: inputValue === preset ? '#ffffff' : '#cbd5e1',
-                    border: '1px solid #334155',
+                    background: inputValue === preset ? '#0284c7' : '#f2f6fa',
+                    color: inputValue === preset ? '#ffffff' : '#40566e',
+                    border: '1px solid #dce4ed',
                     borderRadius: 4,
                     padding: '3px 8px',
                     fontSize: 11,
@@ -257,10 +257,10 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
               fontSize: 12,
             }}
           >
-            <div style={{ color: '#94a3b8' }}>
+            <div style={{ color: '#52677d' }}>
               อัตราส่วนสเกลใหม่:
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#38bdf8' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#0873c4' }}>
               <span>1 px = {computedScale.toFixed(3)} mm</span>
               <ArrowRight size={14} />
               <span style={{ color: '#22c55e' }}>1:1 Real Scale</span>
@@ -272,7 +272,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
         <div
           style={{
             padding: '12px 20px',
-            borderTop: '1px solid #1e293b',
+            borderTop: '1px solid #f2f6fa',
             display: 'flex',
             justifyContent: 'flex-end',
             gap: 10,
@@ -282,9 +282,9 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
           <button
             onClick={onClose}
             style={{
-              background: '#1e293b',
-              border: '1px solid #334155',
-              color: '#cbd5e1',
+              background: '#f2f6fa',
+              border: '1px solid #dce4ed',
+              color: '#40566e',
               borderRadius: 6,
               padding: '7px 14px',
               fontSize: 12,
@@ -298,7 +298,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
             onClick={handleConfirm}
             style={{
               background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
-              border: '1px solid #38bdf8',
+              border: '1px solid #0873c4',
               color: '#ffffff',
               borderRadius: 6,
               padding: '7px 18px',

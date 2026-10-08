@@ -94,7 +94,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
   };
 
   return (
-    <div
+    <div className="cf-legacy-dialog"
       style={{
         position: "fixed",
         inset: 0,
@@ -112,231 +112,231 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
           maxWidth: 720,
           maxHeight: "90vh",
           overflowY: "auto",
-          background: "#0f172a",
-          color: "#f8fafc",
+          background: "#ffffff",
+          color: "#24364b",
           borderRadius: 8,
-          border: "1px solid #334155",
+          border: "1px solid #dce4ed",
           padding: 24,
           boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <FileText size={24} color="#38bdf8" />
+            <FileText size={24} color="#0873c4" />
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>
               ข้อมูลโฉนดที่ดิน & ผู้มีส่วนได้เสีย (แบบ อ.1 Permit Set)
             </h2>
           </div>
           <button
             onClick={onClose}
-            style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer" }}
+            style={{ background: "transparent", border: "none", color: "#52677d", cursor: "pointer" }}
           >
             <X size={20} />
           </button>
         </div>
 
         {/* 1. Title Deed Section */}
-        <div style={{ marginBottom: 20, padding: 14, background: "#1e293b", borderRadius: 6 }}>
+        <div style={{ marginBottom: 20, padding: 14, background: "#f2f6fa", borderRadius: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <MapPin size={18} color="#38bdf8" />
-            <strong style={{ fontSize: 14, color: "#e2e8f0" }}>ข้อมูลโฉนดที่ดิน (น.ส. 4 จ.)</strong>
+            <MapPin size={18} color="#0873c4" />
+            <strong style={{ fontSize: 14, color: "#33465b" }}>ข้อมูลโฉนดที่ดิน (น.ส. 4 จ.)</strong>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>เลขที่โฉนด</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>เลขที่โฉนด</label>
               <input
                 type="text"
                 value={deedNo}
                 onChange={(e) => setDeedNo(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>เลขที่ดิน</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>เลขที่ดิน</label>
               <input
                 type="text"
                 value={landNo}
                 onChange={(e) => setLandNo(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>หน้าสำรวจ</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>หน้าสำรวจ</label>
               <input
                 type="text"
                 value={surveyPage}
                 onChange={(e) => setSurveyPage(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>ตำบล / แขวง</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>ตำบล / แขวง</label>
               <input
                 type="text"
                 value={subdistrict}
                 onChange={(e) => setSubdistrict(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>อำเภอ / เขต</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>อำเภอ / เขต</label>
               <input
                 type="text"
                 value={district}
                 onChange={(e) => setDistrict(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>จังหวัด</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>จังหวัด</label>
               <input
                 type="text"
                 value={province}
                 onChange={(e) => setProvince(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1.5fr", gap: 10, marginTop: 10, alignItems: "center" }}>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>ไร่</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>ไร่</label>
               <input
                 type="number"
                 value={rai}
                 onChange={(e) => setRai(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>งาน</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>งาน</label>
               <input
                 type="number"
                 value={ngan}
                 onChange={(e) => setNgan(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>ตารางวา</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>ตารางวา</label>
               <input
                 type="number"
                 value={sqWa}
                 onChange={(e) => setSqWa(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
-            <div style={{ fontSize: 12, color: "#38bdf8", paddingTop: 16 }}>
+            <div style={{ fontSize: 12, color: "#0873c4", paddingTop: 16 }}>
               รวม: {totalAreaSqm.toFixed(2)} ตร.ม.
             </div>
           </div>
         </div>
 
         {/* 2. Thai Building Code Setback & Zoning */}
-        <div style={{ marginBottom: 20, padding: 14, background: "#1e293b", borderRadius: 6 }}>
+        <div style={{ marginBottom: 20, padding: 14, background: "#f2f6fa", borderRadius: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
             <ShieldCheck size={18} color="#4ade80" />
-            <strong style={{ fontSize: 14, color: "#e2e8f0" }}>ระยะร่นตามกฎกระทรวงฉบับที่ 55 & ผังเมือง</strong>
+            <strong style={{ fontSize: 14, color: "#33465b" }}>ระยะร่นตามกฎกระทรวงฉบับที่ 55 & ผังเมือง</strong>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>ร่นด้านหน้า (ม.)</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>ร่นด้านหน้า (ม.)</label>
               <input
                 type="number"
                 step="0.1"
                 value={setbackFront}
                 onChange={(e) => setSetbackFront(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>ร่นด้านหลัง (ม.)</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>ร่นด้านหลัง (ม.)</label>
               <input
                 type="number"
                 step="0.1"
                 value={setbackRear}
                 onChange={(e) => setSetbackRear(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>ร่นด้านซ้าย (ม.)</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>ร่นด้านซ้าย (ม.)</label>
               <input
                 type="number"
                 step="0.1"
                 value={setbackLeft}
                 onChange={(e) => setSetbackLeft(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>ร่นด้านขวา (ม.)</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>ร่นด้านขวา (ม.)</label>
               <input
                 type="number"
                 step="0.1"
                 value={setbackRight}
                 onChange={(e) => setSetbackRight(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
           </div>
         </div>
 
         {/* 3. Signatories Section */}
-        <div style={{ marginBottom: 20, padding: 14, background: "#1e293b", borderRadius: 6 }}>
+        <div style={{ marginBottom: 20, padding: 14, background: "#f2f6fa", borderRadius: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <UserCheck size={18} color="#fbbf24" />
-            <strong style={{ fontSize: 14, color: "#e2e8f0" }}>ผู้เซ็นรับรองแบบ (Signatories)</strong>
+            <UserCheck size={18} color="#8f6100" />
+            <strong style={{ fontSize: 14, color: "#33465b" }}>ผู้เซ็นรับรองแบบ (Signatories)</strong>
           </div>
           <div style={{ marginBottom: 10 }}>
-            <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>เจ้าของอาคาร (Owner Name)</label>
+            <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>เจ้าของอาคาร (Owner Name)</label>
             <input
               type="text"
               value={ownerName}
               onChange={(e) => setOwnerName(e.target.value)}
-              style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+              style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
             />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 10, marginBottom: 10 }}>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>สถาปนิกผู้ออกแบบ</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>สถาปนิกผู้ออกแบบ</label>
               <input
                 type="text"
                 value={archName}
                 onChange={(e) => setArchName(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>เลขที่ใบอนุญาต ส-สถ.</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>เลขที่ใบอนุญาต ส-สถ.</label>
               <input
                 type="text"
                 value={archLicense}
                 onChange={(e) => setArchLicense(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 10 }}>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>วิศวกรโครงสร้าง</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>วิศวกรโครงสร้าง</label>
               <input
                 type="text"
                 value={engName}
                 onChange={(e) => setEngName(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: "#94a3b8", display: "block" }}>เลขที่ใบอนุญาต วส./ภย.</label>
+              <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>เลขที่ใบอนุญาต วส./ภย.</label>
               <input
                 type="text"
                 value={engLicense}
                 onChange={(e) => setEngLicense(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#0f172a", border: "1px solid #475569", color: "#fff", borderRadius: 4 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 4 }}
               />
             </div>
           </div>
@@ -359,7 +359,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <button
             onClick={onClose}
-            style={{ padding: "8px 16px", background: "#334155", color: "#e2e8f0", border: "none", borderRadius: 4, cursor: "pointer" }}
+            style={{ padding: "8px 16px", background: "#dce4ed", color: "#33465b", border: "none", borderRadius: 4, cursor: "pointer" }}
           >
             ยกเลิก
           </button>

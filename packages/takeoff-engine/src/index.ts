@@ -160,6 +160,9 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
       }
       case 'architecture.wall': {
         const thickness = valueFor(project, object.object_type, data, 'thickness_mm')
+        const masonryThickness = valueFor(project, object.object_type, data, 'masonry_thickness_mm')
+        const insidePlasterThickness = valueFor(project, object.object_type, data, 'plaster_inside_thickness_mm')
+        const outsidePlasterThickness = valueFor(project, object.object_type, data, 'plaster_outside_thickness_mm')
         const height = valueFor(project, object.object_type, data, 'height_mm')
         const start = finiteTuple(data.start_point_mm, 3)
         const end = finiteTuple(data.end_point_mm, 3)
@@ -183,8 +186,17 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
         if (openingArea > netArea) warnings.push(`${object.id}: hosted opening area exceeds gross wall area`)
         netArea = Math.max(0, netArea - openingArea)
         const material = typeof data.material === 'string' ? data.material : undefined
-        add(object, 'm2', netArea, `(${length}×${height} − hosted openings) mm²`, material)
-        add(object, 'm3', mm3ToM3(netArea * thickness * 1_000_000), `net wall area × ${thickness} mm`, material)
+        const coreThickness = finitePositive(masonryThickness) ? masonryThickness : thickness
+        add(object, 'm2', netArea, `net masonry area: ${length}×${height} − hosted openings`, material)
+        add(object, 'm3', mm3ToM3(netArea * coreThickness * 1_000_000), `net masonry area × ${coreThickness} mm`, material)
+        if (finitePositive(insidePlasterThickness)) {
+          const insideMaterial = valueFor(project, object.object_type, data, 'plaster_inside_material')
+          add(object, 'm2', netArea, `inside plaster face (${insidePlasterThickness} mm)`, typeof insideMaterial === 'string' ? insideMaterial : 'cement_plaster')
+        }
+        if (finitePositive(outsidePlasterThickness)) {
+          const outsideMaterial = valueFor(project, object.object_type, data, 'plaster_outside_material')
+          add(object, 'm2', netArea, `outside plaster face (${outsidePlasterThickness} mm)`, typeof outsideMaterial === 'string' ? outsideMaterial : 'cement_plaster')
+        }
         if (Array.isArray(data.interface_treatments)) {
           for (const rawTreatment of data.interface_treatments) {
             if (!rawTreatment || typeof rawTreatment !== 'object' || Array.isArray(rawTreatment)) {

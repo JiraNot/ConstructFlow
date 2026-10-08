@@ -262,6 +262,20 @@ test("Phase 5: LED driver capacity, finite outputs and universal phasing", () =>
   assert.strictEqual(r.updatedProject, p);
 });
 
+test('wall and beam creation persist their placement reference', () => {
+  let project = execute(empty(), 'CreateWall', {
+    mark: 'W1', start_point_mm: [0, 0, 0], end_point_mm: [4000, 0, 0], placement_reference: 'left_face',
+  })
+  const wall = Object.values(project.objects).find(object => object.object_type === 'architecture.wall')
+  assert.equal(wall.module_data.placement_reference, 'left_face')
+
+  project = execute(project, 'CreateBeam', {
+    mark: 'B1', start_point_mm: [0, 0, 0], end_point_mm: [4000, 0, 0], placement_reference: 'right_face',
+  })
+  const beam = Object.values(project.objects).find(object => object.object_type === 'structure.beam')
+  assert.equal(beam.module_data.placement_reference, 'right_face')
+})
+
 test("Phase 6: saved viewport scale/crop persist and participate in atomic undo/redo", () => {
   const session = new ProjectCommandSession(empty()),
     viewport = {

@@ -38,9 +38,13 @@ test('S4: A-02 and S-01 show the same kitchen envelope, hosted openings and foun
 })
 
 test('S4: A-08 covers all levels and schedules catalog dimensions in meters', () => {
-  const a08 = compileInitialDrawingSet(project).sheets.find(sheet => sheet.id === 'A-08')
+  const drawingSet = compileInitialDrawingSet(project)
+  const a08 = drawingSet.sheets.find(sheet => sheet.id === 'A-08')
 
   assert.ok(a08.svg.includes('ALL LEVELS'))
   assert.ok(a08.svg.includes('0.90'))
   assert.ok(a08.svg.includes('1.20'))
+  for (const type of project.types.filter(type => type.object_type.startsWith('door_window.')))
+    assert.ok(a08.svg.includes(`${type.name} ·`), `A-08 should show ${type.name} in its type elevations`)
+  assert.ok(!drawingSet.warnings.some(warning => warning.includes('catalog has') && warning.includes('opening types')))
 })

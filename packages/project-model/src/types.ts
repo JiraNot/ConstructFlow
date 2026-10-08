@@ -1,6 +1,7 @@
 // ConstructFlow Canonical Semantic Types (Millimeter Units)
 
 export type Phase = 'existing' | 'demolition' | 'new_construction'
+export type PlacementReference = 'centerline' | 'left_face' | 'right_face'
 /** Removal is a lifecycle event represented only in the demolition phase. */
 export type RemovalPhase = 'demolition'
 export type PileSystem = 'micro_pile_i18' | 'micro_pile_i22' | 'spun_micro_pile_20' | 'spun_micro_pile_25' | 'bored_pile'
@@ -76,6 +77,7 @@ export interface FoundationModuleData {
 }
 
 export interface BeamModuleData {
+  placement_reference?: PlacementReference
   drop_mm?: number
   rebar_type?: Record<string, unknown>
   mass_per_m_kg?: number
@@ -98,12 +100,18 @@ export interface BeamModuleData {
 // -------------------------------------------------------------
 
 export interface WallModuleData {
+  placement_reference?: PlacementReference
   type_id?: string
   instance_overrides?: Record<string, unknown>
   mark: string // Human-readable mark, e.g. "W1", "W2"
   start_point_mm: [number, number, number] // [x, y, z] in mm
   end_point_mm: [number, number, number] // [x, y, z] in mm
   thickness_mm: number // e.g. 100, 150, 200 mm
+  masonry_thickness_mm?: number
+  plaster_inside_thickness_mm?: number
+  plaster_outside_thickness_mm?: number
+  plaster_inside_material?: string
+  plaster_outside_material?: string
   height_mm: number // e.g. 2800 mm
   length_mm: number // computed length in mm
   level_id: string

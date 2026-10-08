@@ -28,6 +28,7 @@ for (const directory of packages) {
 }
 for (const directory of [
   "packages/project-model",
+  "packages/snapping-engine",
   "packages/representation-engine",
   "packages/architecture-engine",
   "packages/roof-engine",

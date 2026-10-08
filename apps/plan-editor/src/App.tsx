@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import {
   ProjectDocument,
+  TypeDefinition,
   createEmptyProjectDocument,
   serializeProject,
   Phase,
@@ -13,13 +14,15 @@ import {
   isDoorObject,
   isWindowObject,
   DoorHanding,
+  PlacementReference,
 } from '@constructflow/project-model'
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
 import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
 import { Toolbar, ToolType } from './components/Toolbar.js'
 import { PlanCanvas } from './components/PlanCanvas.js'
 import { PropertiesPanel } from './components/PropertiesPanel.js'
-import { SyncBridgePanel } from './components/SyncBridgePanel.js'
+import { SettingsModal } from './components/SettingsModal.js'
+import { TOOL_FAMILIES } from './components/catalogPresentation.js'
 import { TypeManagerModal } from './components/TypeManagerModal.js'
 import { UnderlayCalibrationModal } from './components/UnderlayCalibrationModal.js'
 import { ExtensionPresetsModal } from './components/ExtensionPresetsModal.js'
@@ -28,7 +31,7 @@ import { exportProjectToDxf } from '@constructflow/cad-adapter'
 import { exportProjectToIfc } from '@constructflow/bim-adapter'
 import type { ProjectLegalMetadata } from '@constructflow/project-model'
 import { UnderlayConfig } from './rendering/planRenderer.js'
-import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck } from 'lucide-react'
+import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal } from 'lucide-react'
 import { calculateTakeoff } from '@constructflow/takeoff-engine'
 import { createKitchenProofProject } from '@constructflow/extension-engine'
 import { renderPermitDrawingSetHtml } from '@constructflow/sheet-engine'
@@ -99,13 +102,37 @@ export const App: React.FC = () => {
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
   const [viewMode, setViewMode] = useState<'plan' | 'model3d'>('plan')
+  const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects'>('properties')
   const [activeColumnType, setActiveColumnType] = useState<string>('C1')
   const [activeFoundationType, setActiveFoundationType] = useState<string>('F1')
   const [activeBeamType, setActiveBeamType] = useState<string>('B1')
   const [activeWallType, setActiveWallType] = useState<string>('W1')
   const [activeDoorType, setActiveDoorType] = useState<string>('D1')
   const [activeWindowType, setActiveWindowType] = useState<string>('W1')
+  const previousTypesRef = useRef(project.types)
+  useEffect(() => {
+    const entries: Array<[string, string, (value: string) => void]> = [
+      ['structure.column', activeColumnType, setActiveColumnType],
+      ['structure.foundation', activeFoundationType, setActiveFoundationType],
+      ['structure.beam', activeBeamType, setActiveBeamType],
+      ['architecture.wall', activeWallType, setActiveWallType],
+      ['door_window.door', activeDoorType, setActiveDoorType],
+      ['door_window.window', activeWindowType, setActiveWindowType],
+    ]
+    for (const [family, name, setName] of entries) {
+      if (project.types.some(type => type.object_type === family && type.name === name)) continue
+      const previous = previousTypesRef.current.find(type => type.object_type === family && type.name === name)
+      const next = project.types.find(type => type.id === previous?.id)
+        ?? project.types.find(type => type.object_type === family)
+      if (next) setName(next.name)
+    }
+    previousTypesRef.current = project.types
+  }, [project.types])
 
+  const [catalogContext,setCatalogContext] = useState<{family?:string;typeId?:string;edit?:boolean;intent:'draw'|'assign'}>({intent:'draw'})
+  const [isSettingsOpen,setIsSettingsOpen] = useState(false)
+  const [inspectorOpen,setInspectorOpen] = useState(true)
+  const [workbenchTab,setWorkbenchTab] = useState<'model'|'sheets'>('model')
   const [isTypeManagerOpen, setIsTypeManagerOpen] = useState<boolean>(false)
   const [isConstructionOpen,setIsConstructionOpen]=useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -313,6 +340,7 @@ export const App: React.FC = () => {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (document.querySelector('[role="dialog"]')) return
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
@@ -474,12 +502,14 @@ export const App: React.FC = () => {
     start_point_mm: [number, number],
     end_point_mm: [number, number],
     startColId?: string,
-    endColId?: string
+    endColId?: string,
+    placementReference: PlacementReference = 'centerline'
   ) => {
     const beamId = crypto.randomUUID()
     const res = CommandBus.execute(project, 'CreateBeam', {
       id: beamId,
       mark: activeBeamType,
+      placement_reference: placementReference,
       start_point_mm: [start_point_mm[0], start_point_mm[1], 0],
       end_point_mm: [end_point_mm[0], end_point_mm[1], 0],
       start_column_id: startColId,
@@ -494,11 +524,12 @@ export const App: React.FC = () => {
   }
 
   // Commit Wall creation with active type
-  const handleCommitWall = (start_point_mm: [number, number], end_point_mm: [number, number]) => {
+  const handleCommitWall = (start_point_mm: [number, number], end_point_mm: [number, number], placementReference: PlacementReference = 'centerline') => {
     const wallId = crypto.randomUUID()
     const res = CommandBus.execute(project, 'CreateWall', {
       id: wallId,
       mark: activeWallType,
+      placement_reference: placementReference,
       start_point_mm: [start_point_mm[0], start_point_mm[1], 0],
       end_point_mm: [end_point_mm[0], end_point_mm[1], 0],
       level_id: project.project.active_level_id,
@@ -624,89 +655,29 @@ export const App: React.FC = () => {
     }
   }
 
-  // Update Type Dimensions (Cascades to all instances of this type)
-  const handleUpdateTypeDimensions = (
-    typeName: string,
-    objectType:
-      | 'structure.column'
-      | 'structure.foundation'
-      | 'structure.beam'
-      | 'architecture.wall'
-      | 'door_window.door'
-      | 'door_window.window',
-    dimensions: {
-      section_mm?: [number, number]
-      size_mm?: [number, number, number]
-      thickness_mm?: number
-      height_mm?: number
-      width_mm?: number
-      sill_height_mm?: number
-    }
-  ) => {
-    const res = CommandBus.execute(project, 'UpdateStructuralTypeDimensions', {
-      type_id_or_name: typeName,
-      object_type: objectType,
-      section_mm: dimensions.section_mm,
-      size_mm: dimensions.size_mm,
-      thickness_mm: dimensions.thickness_mm,
-      height_mm: dimensions.height_mm,
-      width_mm: dimensions.width_mm,
-      sill_height_mm: dimensions.sill_height_mm,
-      parameters: dimensions,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
+  const syncRenamedActiveType = (type: TypeDefinition, name: string) => {
+    const entries: Array<[string,string,(value:string)=>void]> = [
+      ['structure.column',activeColumnType,setActiveColumnType], ['structure.foundation',activeFoundationType,setActiveFoundationType],
+      ['structure.beam',activeBeamType,setActiveBeamType], ['architecture.wall',activeWallType,setActiveWallType],
+      ['door_window.door',activeDoorType,setActiveDoorType], ['door_window.window',activeWindowType,setActiveWindowType],
+    ]
+    for(const [family,value,setValue] of entries) if(family===type.object_type && value===type.name) setValue(name)
   }
-
-  // Define new type in catalog
-  const handleDefineType = (
-    objectType:
-      | 'structure.column'
-      | 'structure.foundation'
-      | 'structure.beam'
-      | 'architecture.wall'
-      | 'door_window.door'
-      | 'door_window.window',
-    name: string,
-    parameters: {
-      section_mm?: [number, number]
-      size_mm?: [number, number, number]
-      thickness_mm?: number
-      height_mm?: number
-      width_mm?: number
-      sill_height_mm?: number
-    }
-  ) => {
-    const res = CommandBus.execute(project, 'DefineStructuralType', {
-      object_type: objectType,
-      name,
-      parameters,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
+  const openCatalog = (edit=false, fromSelection=false, familyOverride?:string) => {
+    const object = fromSelection && selectedId ? project.objects[selectedId] : null
+    const family = familyOverride ?? object?.object_type ?? TOOL_FAMILIES[activeTool] ?? 'structure.column'
+    const marks:Record<string,string> = {column:activeColumnType,foundation:activeFoundationType,beam:activeBeamType,wall:activeWallType,door:activeDoorType,window:activeWindowType}
+    const data = object?.module_data as Record<string,unknown> | undefined
+    const type = project.types.find(t=>t.object_type===family && (data ? t.id===data.type_id || t.name===data.mark : t.name===marks[activeTool]))
+    setCatalogContext({family,typeId:type?.id,edit,intent:object?'assign':'draw'})
+    setIsTypeManagerOpen(true)
   }
-
-  const handleRenameType = (typeId: string, name: string): boolean => {
-    const type = project.types.find((candidate) => candidate.id === typeId)
-    if (!type) return false
-    const res = CommandBus.execute(project, 'RenameCatalogType', { type_id: typeId, name })
-    if (res.result.status !== 'success') return false
-    setProject(res.updatedProject)
-    const updateActiveType = (activeType: string, setActiveType: (value: string) => void) => {
-      if (activeType.trim().toLowerCase() === type.name.trim().toLowerCase()) setActiveType(name)
-    }
-    if (type.object_type === 'structure.column') updateActiveType(activeColumnType, setActiveColumnType)
-    else if (type.object_type === 'structure.foundation') updateActiveType(activeFoundationType, setActiveFoundationType)
-    else if (type.object_type === 'structure.beam') updateActiveType(activeBeamType, setActiveBeamType)
-    else if (type.object_type === 'architecture.wall') updateActiveType(activeWallType, setActiveWallType)
-    else if (type.object_type === 'door_window.door') updateActiveType(activeDoorType, setActiveDoorType)
-    else if (type.object_type === 'door_window.window') updateActiveType(activeWindowType, setActiveWindowType)
-    if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    return true
+  const chooseCatalogType = (type:TypeDefinition) => {
+    if(catalogContext.intent==='assign' && selectedId) { handleAssignType(selectedId,type.id); return }
+    const tool = Object.entries(TOOL_FAMILIES).find(([,family])=>family===type.object_type)?.[0] as ToolType | undefined
+    if(!tool) return
+    const setters:Record<string,(value:string)=>void> = {column:setActiveColumnType,foundation:setActiveFoundationType,beam:setActiveBeamType,wall:setActiveWallType,door:setActiveDoorType,window:setActiveWindowType}
+    setters[tool](type.name);setActiveTool(tool)
   }
 
   // Commit Grid creation
@@ -1030,544 +1001,75 @@ export const App: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      {/* Top Header */}
-      <header
-        style={{
-          height: 48,
-          background: '#0f172a',
-          borderBottom: '1px solid #1e293b',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 16px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 6,
-              background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fff',
-              fontWeight: 'bold',
-            }}
-          >
-            CF
-          </div>
-          <div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc' }}>ConstructFlow Plan</span>
-            <span
-              style={{
-                fontSize: 11,
-                color: '#38bdf8',
-                marginLeft: 8,
-                background: 'rgba(56,189,248,0.1)',
-                padding: '2px 6px',
-                borderRadius: 4,
-              }}
-            >
-              Standalone BIM · Phase 1–6
-            </span>
-          </div>
+      {/* Focused project header */}
+      <header className="cf-app-header">
+        <div className="cf-brand">
+          <span className="cf-brand-mark">CF</span>
+          <span className="cf-brand-name">ConstructFlow</span>
+          <span className="cf-brand-divider" />
+          <span className="cf-project-name" title={project.project.name}>{project.project.name}</span>
         </div>
 
-        {/* Level & Phase Selectors */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* Level Switcher */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94a3b8' }}>
-            <Layers size={14} />
-            <select
-              value={project.project.active_level_id}
-              onChange={(e) => handleSetWorkingLevel(e.target.value)}
-              style={{
-                background: '#1e293b',
-                color: '#f8fafc',
-                border: '1px solid #334155',
-                borderRadius: 4,
-                padding: '4px 8px',
-                fontSize: 12,
-              }}
-            >
-              {project.levels.map((lvl) => (
-                <option key={lvl.id} value={lvl.id}>
-                  {lvl.name} ({lvl.elevation_mm >= 0 ? '+' : ''}
-                  {lvl.elevation_mm} mm)
-                </option>
-              ))}
+        <div className="cf-header-model-controls">
+          <label className="cf-header-field">
+            <span>ชั้น</span>
+            <select value={project.project.active_level_id} onChange={(e) => handleSetWorkingLevel(e.target.value)} aria-label="ชั้นอาคาร">
+              {project.levels.map((lvl) => <option key={lvl.id} value={lvl.id}>{lvl.name} ({lvl.elevation_mm >= 0 ? '+' : ''}{lvl.elevation_mm} mm)</option>)}
             </select>
-          </div>
-
-          {/* Story Height (Floor 1 -> Floor 2 Elevation) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94a3b8' }}>
-            <ArrowUpDown size={14} color="#38bdf8" />
-            <span style={{ fontSize: 11 }}>ระดับชั้น 1→2:</span>
-            <input
-              type="number"
-              step="100"
-              min="2000"
-              max="6000"
-              value={project.levels.find((l) => l.id === 'L2')?.elevation_mm || 3000}
-              onChange={(e) => handleUpdateStoryHeight(parseInt(e.target.value) || 3000)}
-              style={{
-                width: 64,
-                background: '#1e293b',
-                color: '#38bdf8',
-                border: '1px solid #334155',
-                borderRadius: 4,
-                padding: '3px 6px',
-                fontSize: 12,
-                fontWeight: 700,
-                textAlign: 'center',
-              }}
-              title="ความสูงพื้นถึงพื้น ชั้น 1 ถึงชั้น 2 (mm)"
-            />
-            <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
-          </div>
-
-          {/* Phase Switcher */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94a3b8' }}>
-            <History size={14} />
-            <select
-              value={project.project.active_phase}
-              onChange={(e) => handleSetWorkingPhase(e.target.value as Phase)}
-              style={{
-                background: '#1e293b',
-                color: '#f8fafc',
-                border: '1px solid #334155',
-                borderRadius: 4,
-                padding: '4px 8px',
-                fontSize: 12,
-              }}
-            >
-              {project.phases.map((ph) => (
-                <option key={ph.id} value={ph.id}>
-                  {ph.name}
-                </option>
-              ))}
+          </label>
+          <label className="cf-header-field cf-phase-field">
+            <span>เฟสสร้าง</span>
+            <select value={project.project.active_phase} onChange={(e) => handleSetWorkingPhase(e.target.value as Phase)} aria-label="เฟสงาน">
+              {project.phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
             </select>
-          </div>
+          </label>
+          <span className="cf-unit-pill">หน่วย · เมตร</span>
+        </div>
 
-          {/* Local project file workflow and model history */}
-          <input
-            id="cfproj-open"
-            type="file"
-            accept=".cfproj,application/json"
-            aria-hidden="true"
-            tabIndex={-1}
-            style={{
-              position: 'absolute',
-              width: 1,
-              height: 1,
-              padding: 0,
-              margin: -1,
-              overflow: 'hidden',
-              clip: 'rect(0, 0, 0, 0)',
-              whiteSpace: 'nowrap',
-              border: 0,
-            }}
-            onChange={(e) => {
-              void handleOpenProject(e.currentTarget.files?.[0] ?? undefined, null)
-              e.currentTarget.value = ''
-            }}
-          />
+        <div className="cf-header-actions">
+          <input id="cfproj-open" type="file" accept=".cfproj,application/json" aria-hidden="true" tabIndex={-1} className="cf-visually-hidden" onChange={(e) => { void handleOpenProject(e.currentTarget.files?.[0] ?? undefined, null); e.currentTarget.value = '' }} />
           {supportsProjectFileOpen ? (
-            <button
-              type="button"
-              onClick={() => void handleChooseProject()}
-              title="เปิดไฟล์โครงการ .cfproj"
-              style={headerActionStyle}
-            >
-              <FolderOpen size={14} /> เปิด
-            </button>
+            <button type="button" className="cf-button cf-button-quiet" onClick={() => void handleChooseProject()} title="เปิดไฟล์โครงการ .cfproj"><FolderOpen size={16} /><span>เปิด</span></button>
           ) : (
-            <label
-              htmlFor="cfproj-open"
-              role="button"
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  document.getElementById('cfproj-open')?.click()
-                }
-              }}
-              title="เปิดไฟล์โครงการ .cfproj"
-              style={headerActionStyle}
-            >
-              <FolderOpen size={14} /> เปิด
-            </label>
+            <label htmlFor="cfproj-open" role="button" tabIndex={0} className="cf-button cf-button-quiet" onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); document.getElementById('cfproj-open')?.click() } }}><FolderOpen size={16} /><span>เปิด</span></label>
           )}
-          <button type="button" onClick={handleExportProject} title="บันทึกไฟล์โครงการ .cfproj" style={headerActionStyle}>
-            <Save size={14} /> บันทึก
-          </button>
-          <button type="button" onClick={handleDownloadProjectCopy} aria-label="ดาวน์โหลดสำเนาไฟล์โครงการ .cfproj" title="ดาวน์โหลดสำเนาไฟล์โครงการ .cfproj" style={{ ...headerActionStyle, padding: '4px 6px' }}>
-            <Download size={14} />
-          </button>
-          <span role="status" aria-live="polite" style={{ color: hasUnsavedChanges ? '#fbbf24' : '#86efac', fontSize: 11, whiteSpace: 'nowrap' }}>
-            {hasUnsavedChanges ? 'ยังไม่ได้บันทึก' : 'บันทึกแล้ว'}{fileFeedback ? ` · ${fileFeedback}` : ''}
-          </span>
-          <button type="button" onClick={handleStartKitchenProof} title="เริ่มโมเดลพิสูจน์ครัวต่อเติม 4.00 × 2.50 เมตร" style={{ ...headerActionStyle, color: '#67e8f9' }}>
-            <CookingPot size={14} /> ครัวพิสูจน์
-          </button>
-          <button
-            type="button"
-            disabled={!projectSessionRef.current!.canUndo}
-            onClick={() => {
-              setProjectState(projectSessionRef.current!.undo())
-              setCommandQueue([])
-            }}
-            title="Undo (Ctrl+Z)"
-            style={{ ...headerActionStyle, opacity: projectSessionRef.current!.canUndo ? 1 : 0.45 }}
-          >
-            <Undo2 size={14} />
-          </button>
-          <button
-            type="button"
-            disabled={!projectSessionRef.current!.canRedo}
-            onClick={() => {
-              setProjectState(projectSessionRef.current!.redo())
-              setCommandQueue([])
-            }}
-            title="Redo (Ctrl+Y)"
-            style={{ ...headerActionStyle, opacity: projectSessionRef.current!.canRedo ? 1 : 0.45 }}
-          >
-            <Redo2 size={14} />
-          </button>
-
-          {/* Legal & Signatures Modal Button */}
-          <button
-            onClick={() => setIsLegalModalOpen(true)}
-            style={{
-              ...headerActionStyle,
-              background: project.legal_metadata?.signatories?.issue_approved ? '#065f46' : '#1e293b',
-              color: project.legal_metadata?.signatories?.issue_approved ? '#6ee7b7' : '#e2e8f0',
-              borderColor: project.legal_metadata?.signatories?.issue_approved ? '#10b981' : '#334155',
-            }}
-            title="กรอกข้อมูลโฉนดที่ดิน ระยะร่น และผู้เซ็นแบบขออนุญาต อ.1"
-          >
-            <FileCheck size={14} />
-            <span>โฉนด & ผู้เซ็นแบบ</span>
-          </button>
-
-          {/* Export CAD 20 Layouts */}
-          <button
-            onClick={() => {
-              const res = exportProjectToDxf(project, {
-                projectName: project.project.name,
-                architectName: project.legal_metadata?.signatories?.architect_name,
-                engineerLicense: project.legal_metadata?.signatories?.structural_engineer_license_no,
-              })
-              const blob = new Blob([res.dxfContent], { type: 'application/dxf' })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = `${project.project.id || 'ConstructFlow'}_20Layouts.dxf`
-              a.click()
-              URL.revokeObjectURL(url)
-            }}
-            style={headerActionStyle}
-            title="ส่งออก AutoCAD DWG/DXF (ModelSpace 1:1 mm + 20 PaperSpace Layouts + ACAD_TABLE)"
-          >
-            <span>DXF (20 Sheets)</span>
-          </button>
-
-          {/* Export OpenBIM IFC 4.3 */}
-          <button
-            onClick={() => {
-              const res = exportProjectToIfc(project, {
-                projectName: project.project.name,
-                authorName: project.legal_metadata?.signatories?.architect_name,
-              })
-              const blob = new Blob([res.ifcContent], { type: 'application/x-step' })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = `${project.project.id || 'ConstructFlow'}.ifc`
-              a.click()
-              URL.revokeObjectURL(url)
-            }}
-            style={headerActionStyle}
-            title="ส่งออก OpenBIM IFC 4.3 ADD2 (ISO 16739-1:2024)"
-          >
-            <span>IFC 4.3</span>
-          </button>
-
-          {/* Quick Extension Presets Modal Launcher */}
-          <button style={headerActionStyle} onClick={()=>setIsConstructionOpen(true)}>Phase 1–6 · BIM & Sheets</button>
-          <button
-            onClick={() => setIsPresetsModalOpen(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: 6,
-              padding: '5px 12px',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
-              transition: 'all 0.15s ease',
-            }}
-            title="สร้างส่วนต่อเติมสำเร็จรูป 1 คลิก (โรงจอดรถ, ครัวหลังบ้าน, เทอเรสไม้เทียม)"
-          >
-            <Sparkles size={14} />
-            <span>✨ ส่วนต่อเติมสำเร็จรูป (Presets)</span>
-          </button>
+          <button type="button" className="cf-button cf-button-primary" onClick={handleExportProject} title="บันทึกไฟล์โครงการ .cfproj"><Save size={16} /><span>บันทึก</span></button>
+          <span role="status" aria-live="polite" className={`cf-save-status ${hasUnsavedChanges ? 'is-unsaved' : ''}`}>{hasUnsavedChanges ? 'ยังไม่ได้บันทึก' : 'บันทึกแล้ว'}{fileFeedback ? ` · ${fileFeedback}` : ''}</span>
+          <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canUndo} onClick={() => { setProjectState(projectSessionRef.current!.undo()); setCommandQueue([]) }} title="ย้อนกลับ (Ctrl+Z)" aria-label="ย้อนกลับ"><Undo2 size={17} /></button>
+          <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canRedo} onClick={() => { setProjectState(projectSessionRef.current!.redo()); setCommandQueue([]) }} title="ทำซ้ำ (Ctrl+Y)" aria-label="ทำซ้ำ"><Redo2 size={17} /></button>
+          <details className="cf-more-menu" onClick={(event) => {
+            if ((event.target as HTMLElement).closest('button')) {
+              event.currentTarget.open = false;
+              event.currentTarget.querySelector('summary')?.focus();
+            }
+          }}>
+            <summary className="cf-button cf-button-quiet" aria-label="เมนูโครงการ" title="เมนูโครงการ">เมนู</summary>
+            <div className="cf-more-popover">
+              <div className="cf-menu-label">โครงการ</div>
+              <button type="button" aria-label="ดาวน์โหลดสำเนา .cfproj" onClick={handleDownloadProjectCopy}><Download size={15} /> ดาวน์โหลดสำเนา .cfproj</button>
+              <button type="button" aria-label="โฉนดและผู้เซ็นแบบ" onClick={() => setIsLegalModalOpen(true)}><FileCheck size={15} /> โฉนดและผู้เซ็นแบบ</button>
+              <div className="cf-menu-label">สร้าง</div>
+              <button type="button" onClick={()=>{setWorkbenchTab('model');setIsConstructionOpen(true)}}><Layers2 size={15}/> เครื่องมืองานอาคาร</button>
+              <button type="button" onClick={()=>setIsPresetsModalOpen(true)}><Sparkles size={15}/> ส่วนต่อเติมสำเร็จรูป</button>
+              <button type="button" onClick={()=>openCatalog()}>คลังชนิด</button>
+              <div className="cf-menu-label">แบบและส่งออก</div>
+              <button type="button" onClick={()=>{setWorkbenchTab('sheets');setIsConstructionOpen(true)}}>ชุดแบบและตาราง</button>
+              <button type="button" aria-label="ส่งออก DXF 20 แผ่น" onClick={() => { const res = exportProjectToDxf(project, { projectName: project.project.name, architectName: project.legal_metadata?.signatories?.architect_name, engineerLicense: project.legal_metadata?.signatories?.structural_engineer_license_no }); const blob = new Blob([res.dxfContent], { type: 'application/dxf' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${project.project.id || 'ConstructFlow'}_20Layouts.dxf`; a.click(); URL.revokeObjectURL(url) }}>DXF · 20 แผ่น</button>
+              <button type="button" aria-label="ส่งออก IFC 4.3" onClick={() => { const res = exportProjectToIfc(project, { projectName: project.project.name, authorName: project.legal_metadata?.signatories?.architect_name }); const blob = new Blob([res.ifcContent], { type: 'application/x-step' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${project.project.id || 'ConstructFlow'}.ifc`; a.click(); URL.revokeObjectURL(url) }}>IFC 4.3</button>
+              <div className="cf-menu-label">ตั้งค่าและช่วยเหลือ</div>
+              <button type="button" onClick={()=>setIsSettingsOpen(true)}>ตั้งค่า · ชั้น/ระดับ/พื้นที่ทำงาน</button>
+              <button type="button" onClick={()=>setInspectorOpen(value=>!value)}>{inspectorOpen?'ยุบ':'แสดง'}แผงข้อมูล</button>
+              <button type="button" aria-label="เปิดโครงการตัวอย่างครัว" onClick={handleStartKitchenProof}><CookingPot size={15} /> เปิดโครงการตัวอย่างครัว</button>
+            </div>
+          </details>
         </div>
       </header>
 
       {/* Main Workspace */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Left Sidebar: Structure & Architecture Schedule */}
-        <aside
-          style={{
-            width: 210,
-            background: '#0b1329',
-            borderRight: '1px solid #1e293b',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: 12,
-            gap: 10,
-            overflowY: 'auto',
-          }}
-        >
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
-            BIM Element Schedule
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {/* Grids */}
-            <div style={{ padding: '8px', background: '#1e293b', borderRadius: 6, fontSize: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#cbd5e1', fontWeight: 600 }}>
-                <span>Grids (แกนเสา)</span>
-                <span style={{ color: '#38bdf8' }}>{gridCount} เส้น</span>
-              </div>
-            </div>
-
-            {/* Columns Breakdown */}
-            <div style={{ padding: '8px', background: '#1e293b', borderRadius: 6, fontSize: 12 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  color: '#cbd5e1',
-                  fontWeight: 600,
-                  marginBottom: 4,
-                }}
-              >
-                <span>Columns (เสา)</span>
-                <span style={{ color: '#38bdf8' }}>{columnCount} ต้น</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 4 }}>
-                {Object.keys(columnTypeCounts).length === 0 ? (
-                  <span style={{ color: '#64748b', fontSize: 11 }}>ไม่มีเสา</span>
-                ) : (
-                  Object.entries(columnTypeCounts)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([mark, count]) => (
-                      <div
-                        key={mark}
-                        style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}
-                      >
-                        <span style={{ fontWeight: 600, color: '#38bdf8' }}>{mark}</span>
-                        <span>{count} ต้น</span>
-                      </div>
-                    ))
-                )}
-              </div>
-            </div>
-
-            {/* Footings Breakdown */}
-            <div style={{ padding: '8px', background: '#1e293b', borderRadius: 6, fontSize: 12 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  color: '#cbd5e1',
-                  fontWeight: 600,
-                  marginBottom: 4,
-                }}
-              >
-                <span>Footings (ฐานราก)</span>
-                <span style={{ color: '#f59e0b' }}>{foundationCount} ฐาน</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 4 }}>
-                {Object.keys(foundationTypeCounts).length === 0 ? (
-                  <span style={{ color: '#64748b', fontSize: 11 }}>ไม่มีฐานราก</span>
-                ) : (
-                  Object.entries(foundationTypeCounts)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([mark, count]) => (
-                      <div
-                        key={mark}
-                        style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}
-                      >
-                        <span style={{ fontWeight: 600, color: '#f59e0b' }}>{mark}</span>
-                        <span>{count} ฐาน</span>
-                      </div>
-                    ))
-                )}
-              </div>
-            </div>
-
-            {/* Beams Breakdown */}
-            <div style={{ padding: '8px', background: '#1e293b', borderRadius: 6, fontSize: 12 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  color: '#cbd5e1',
-                  fontWeight: 600,
-                  marginBottom: 4,
-                }}
-              >
-                <span>Beams (คาน)</span>
-                <span style={{ color: '#a855f7' }}>{beamCount} ช่วง</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 4 }}>
-                {Object.keys(beamTypeCounts).length === 0 ? (
-                  <span style={{ color: '#64748b', fontSize: 11 }}>ไม่มีคาน</span>
-                ) : (
-                  Object.entries(beamTypeCounts)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([mark, count]) => (
-                      <div
-                        key={mark}
-                        style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}
-                      >
-                        <span style={{ fontWeight: 600, color: '#a855f7' }}>{mark}</span>
-                        <span>{count} ช่วง</span>
-                      </div>
-                    ))
-                )}
-              </div>
-            </div>
-
-            {/* Walls Breakdown */}
-            <div style={{ padding: '8px', background: '#1e293b', borderRadius: 6, fontSize: 12 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  color: '#cbd5e1',
-                  fontWeight: 600,
-                  marginBottom: 4,
-                }}
-              >
-                <span>Walls (ผนัง)</span>
-                <span style={{ color: '#10b981' }}>{wallCount} แผง</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 4 }}>
-                {Object.keys(wallTypeCounts).length === 0 ? (
-                  <span style={{ color: '#64748b', fontSize: 11 }}>ไม่มีผนัง</span>
-                ) : (
-                  Object.entries(wallTypeCounts)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([mark, count]) => (
-                      <div
-                        key={mark}
-                        style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}
-                      >
-                        <span style={{ fontWeight: 600, color: '#10b981' }}>{mark}</span>
-                        <span>{count} แผง</span>
-                      </div>
-                    ))
-                )}
-              </div>
-            </div>
-
-            {/* Doors Breakdown */}
-            <div style={{ padding: '8px', background: '#1e293b', borderRadius: 6, fontSize: 12 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  color: '#cbd5e1',
-                  fontWeight: 600,
-                  marginBottom: 4,
-                }}
-              >
-                <span>Doors (ประตู)</span>
-                <span style={{ color: '#f97316' }}>{doorCount} บาน</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 4 }}>
-                {Object.keys(doorTypeCounts).length === 0 ? (
-                  <span style={{ color: '#64748b', fontSize: 11 }}>ไม่มีประตู</span>
-                ) : (
-                  Object.entries(doorTypeCounts)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([mark, count]) => (
-                      <div
-                        key={mark}
-                        style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}
-                      >
-                        <span style={{ fontWeight: 600, color: '#f97316' }}>{mark}</span>
-                        <span>{count} บาน</span>
-                      </div>
-                    ))
-                )}
-              </div>
-            </div>
-
-            {/* Windows Breakdown */}
-            <div style={{ padding: '8px', background: '#1e293b', borderRadius: 6, fontSize: 12 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  color: '#cbd5e1',
-                  fontWeight: 600,
-                  marginBottom: 4,
-                }}
-              >
-                <span>Windows (หน้าต่าง)</span>
-                <span style={{ color: '#06b6d4' }}>{windowCount} บาน</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 4 }}>
-                {Object.keys(windowTypeCounts).length === 0 ? (
-                  <span style={{ color: '#64748b', fontSize: 11 }}>ไม่มีหน้าต่าง</span>
-                ) : (
-                  Object.entries(windowTypeCounts)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([mark, count]) => (
-                      <div
-                        key={mark}
-                        style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}
-                      >
-                        <span style={{ fontWeight: 600, color: '#06b6d4' }}>{mark}</span>
-                        <span>{count} บาน</span>
-                      </div>
-                    ))
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 'auto', fontSize: 10, color: '#64748b', lineHeight: 1.4 }}>
-            <b>Standalone workflow:</b>
-            <br />
-            Grids → Structure → Architecture → MEP → Built-in → BOQ → A3 PDF
-          </div>
-        </aside>
-
-        {/* Center Canvas Area */}
-        <main style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ position: 'absolute', top: 12, right: 14, zIndex: 12, display: 'flex', border: '1px solid #334155', borderRadius: 6, overflow: 'hidden', background: '#0f172a' }}>
-            {(['plan', 'model3d'] as const).map(mode => (
-              <button key={mode} type="button" onClick={() => setViewMode(mode)} style={{ border: 0, padding: '7px 11px', color: viewMode === mode ? '#f8fafc' : '#94a3b8', background: viewMode === mode ? '#0369a1' : 'transparent', cursor: 'pointer', fontSize: 11 }}>
-                {mode === 'plan' ? '2D แปลน' : '3D โมเดล'}
-              </button>
-            ))}
-          </div>
-
-          {/* Plan tools are specific to the plan projection. */}
-          {viewMode === 'plan' && <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}>
-            <Toolbar
+      <div className="cf-workspace">
+        <aside className="cf-tool-rail" aria-label="เครื่องมือเขียนแบบ">
+          <div className="cf-rail-caption">เครื่องมือ</div>
+            <Toolbar orientation="vertical"
               activeTool={activeTool}
               onSelectTool={setActiveTool}
               activeColumnType={activeColumnType}
@@ -1593,13 +1095,13 @@ export const App: React.FC = () => {
                 .map((t) => ({ name: t.name, section_mm: t.parameters?.section_mm }))}
               wallTypes={(project.types || [])
                 .filter((t) => t.object_type === 'architecture.wall')
-                .map((t) => ({ name: t.name, thickness_mm: t.parameters?.thickness_mm }))}
+                .map((t) => ({ name: t.name, thickness_mm: t.parameters?.thickness_mm, masonry_thickness_mm: t.parameters?.masonry_thickness_mm, plaster_inside_thickness_mm: t.parameters?.plaster_inside_thickness_mm, plaster_outside_thickness_mm: t.parameters?.plaster_outside_thickness_mm }))}
               doorTypes={(project.types || [])
                 .filter((t) => t.object_type === 'door_window.door')
-                .map((t) => ({ name: t.name, width_mm: t.parameters?.width_mm, height_mm: t.parameters?.height_mm }))}
+                  .map((t) => ({ name: t.name, width_mm: t.parameters?.width_mm, height_mm: t.parameters?.height_mm, opening_operation: t.parameters?.opening_operation, panel_count: t.parameters?.panel_count, panel_layout: Array.isArray(t.parameters?.panel_layout) ? t.parameters.panel_layout as string[] : undefined, panel_width_ratios: Array.isArray(t.parameters?.panel_width_ratios) ? t.parameters.panel_width_ratios as number[] : undefined, transom_height_mm: t.parameters?.transom_height_mm, muntin_rows: t.parameters?.muntin_rows, muntin_columns: t.parameters?.muntin_columns }))}
               windowTypes={(project.types || [])
                 .filter((t) => t.object_type === 'door_window.window')
-                .map((t) => ({ name: t.name, width_mm: t.parameters?.width_mm, height_mm: t.parameters?.height_mm }))}
+                  .map((t) => ({ name: t.name, width_mm: t.parameters?.width_mm, height_mm: t.parameters?.height_mm, opening_operation: t.parameters?.opening_operation, panel_count: t.parameters?.panel_count, panel_layout: Array.isArray(t.parameters?.panel_layout) ? t.parameters.panel_layout as string[] : undefined, panel_width_ratios: Array.isArray(t.parameters?.panel_width_ratios) ? t.parameters.panel_width_ratios as number[] : undefined, transom_height_mm: t.parameters?.transom_height_mm, bottom_light_height_mm: t.parameters?.bottom_light_height_mm, muntin_rows: t.parameters?.muntin_rows, muntin_columns: t.parameters?.muntin_columns }))}
               underlayHasImage={!!underlay.image}
               underlayVisible={underlay.visible}
               underlayOpacity={underlay.opacity}
@@ -1607,12 +1109,22 @@ export const App: React.FC = () => {
               onChangeUnderlayOpacity={(opacity) => setUnderlay((u) => ({ ...u, opacity }))}
               onUploadUnderlayImage={handleUploadUnderlayImage}
               onClearUnderlay={() => setUnderlay((u) => ({ ...u, image: null }))}
-              onOpenTypeManager={() => setIsTypeManagerOpen(true)}
+              onOpenTypeManager={() => openCatalog()}
             />
-          </div>}
+        </aside>
+
+        {/* Center Canvas Area */}
+        <main className="cf-canvas-shell">
+          <div className="cf-view-switch">
+            {(['plan', 'model3d'] as const).map(mode => (
+              <button key={mode} type="button" onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>
+                {mode === 'plan' ? '2D แปลน' : '3D โมเดล'}
+              </button>
+            ))}
+          </div>
 
           {/* Interactive Plan Canvas */}
-          <div style={{ flex: 1, position: 'relative' }}>
+          <div className="cf-viewport-stage">
             {viewMode === 'plan' ? <PlanCanvas
               project={project}
               activeTool={activeTool}
@@ -1622,6 +1134,15 @@ export const App: React.FC = () => {
               activeWallTypeMark={activeWallType}
               activeDoorTypeMark={activeDoorType}
               activeWindowTypeMark={activeWindowType}
+              onOpenTypeManager={() => openCatalog()}
+              onChangeActiveTypeMark={(mark) => {
+                if (activeTool === 'column') setActiveColumnType(mark)
+                else if (activeTool === 'foundation') setActiveFoundationType(mark)
+                else if (activeTool === 'beam') setActiveBeamType(mark)
+                else if (activeTool === 'wall') setActiveWallType(mark)
+                else if (activeTool === 'door') setActiveDoorType(mark)
+                else if (activeTool === 'window') setActiveWindowType(mark)
+              }}
               selectedId={selectedId}
               underlay={underlay}
               onSelectObject={setSelectedId}
@@ -1678,26 +1199,23 @@ export const App: React.FC = () => {
             </div>
             <div>
               <span>
-                W: Wall • Shift+drag: select wall under beam • D: Door (Space: Flip) • N: Window • C: Column • F: Footing • B: Beam • R: Calibrate • Scroll: Zoom • MMB: Pan
+                ปุ่มกลางเลื่อนแปลน · ลูกกลิ้งซูม · {activeTool === 'wall' || activeTool === 'beam' ? 'Space เปลี่ยนแนวอ้างอิง' : activeTool === 'door' ? 'Space กลับทิศประตู' : 'เลือกเครื่องมือเพื่อเริ่มวาด'}
               </span>
             </div>
           </footer>
         </main>
 
         {/* Right Inspector & Sync Sidebar */}
-        <aside
-          style={{
-            width: 320,
-            background: '#0f172a',
-            borderLeft: '1px solid #1e293b',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: 14,
-            gap: 16,
-            overflowY: 'auto',
-          }}
-        >
-          <PropertiesPanel
+        {inspectorOpen && <aside className="cf-inspector">
+          <div className="cf-inspector-heading">
+            <div><strong>แผงข้อมูล</strong><span>{selectedId ? 'คุณสมบัติวัตถุและปริมาณ' : 'เลือกวัตถุบนแปลนเพื่อแก้ไข'}</span></div>
+          </div>
+          <div className="cf-inspector-tabs" role="tablist" aria-label="แผงข้อมูล">
+            <button type="button" role="tab" aria-selected={rightPanelTab === 'properties'} className={rightPanelTab === 'properties' ? 'is-active' : ''} onClick={() => setRightPanelTab('properties')}>คุณสมบัติ</button>
+            <button type="button" role="tab" aria-selected={rightPanelTab === 'quantities'} className={rightPanelTab === 'quantities' ? 'is-active' : ''} onClick={() => setRightPanelTab('quantities')}>ปริมาณ</button>
+            <button type="button" role="tab" aria-selected={rightPanelTab === 'objects'} className={rightPanelTab === 'objects' ? 'is-active' : ''} onClick={() => setRightPanelTab('objects')}>รายการ</button>
+          </div>
+          {rightPanelTab === 'properties' && <div className="cf-inspector-content"><PropertiesPanel
             project={project}
             selectedId={selectedId}
             onAssignType={handleAssignType}
@@ -1707,12 +1225,12 @@ export const App: React.FC = () => {
             onUpdatePhase={handleUpdateObjectPhase}
             onUpdateRemovalPhase={handleUpdateObjectRemovalPhase}
             onFlipDoorHanding={handleFlipDoorHanding}
-            onOpenTypeManager={() => setIsTypeManagerOpen(true)}
+            onOpenTypeManager={() => openCatalog(true,true)}
             onAddFoundation={(colId) => handleCommitFoundation({ columnId: colId })}
             onDeleteObject={handleDeleteObject}
-          />
+          /></div>}
 
-          <section style={{ border: '1px solid #334155', borderRadius: 8, padding: 10, background: '#111c31' }}>
+          {rightPanelTab === 'quantities' && <section className="cf-takeoff-panel">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <strong style={{ color: '#e2e8f0', fontSize: 12 }}>ปริมาณจากโมเดล (BOQ)</strong>
               <div style={{ display: 'flex', gap: 5 }}>
@@ -1739,28 +1257,34 @@ export const App: React.FC = () => {
                 ต้องตรวจสอบ {takeoff.warnings.length} รายการ
               </div>
             )}
-          </section>
+          </section>}
 
-          <details style={{padding:12,color:'#94a3b8',fontSize:11}}><summary style={{cursor:'pointer'}}>Optional CAD adapters · SketchUp</summary><SyncBridgePanel
-            project={project}
-            commandQueue={commandQueue}
-            onClearQueue={() => setCommandQueue([])}
-            onExportProject={handleExportProject}
-          /></details>
-        </aside>
+          {rightPanelTab === 'objects' && <div className="cf-object-summary">
+            {[['แกนเสา', gridCount, 'เส้น'], ['เสา', columnCount, 'ต้น'], ['ฐานราก', foundationCount, 'ฐาน'], ['คาน', beamCount, 'ช่วง'], ['ผนัง', wallCount, 'แผง'], ['ประตู', doorCount, 'บาน'], ['หน้าต่าง', windowCount, 'บาน']].map(([label, count, unit]) => <div className="cf-object-row" key={String(label)}><span>{label}</span><strong>{count} {unit}</strong></div>)}
+          </div>}
+
+
+        </aside>}
       </div>
 
       {/* BIM Type Manager Modal */}
-      {isConstructionOpen&&<Suspense fallback={<div>กำลังเปิด BIM Workbench…</div>}><ConstructionWorkbench project={project} onClose={()=>setIsConstructionOpen(false)} onExecute={dispatchCommandBatch}/></Suspense>}
+      {isConstructionOpen&&<Suspense fallback={<div>กำลังเปิด BIM Workbench…</div>}><ConstructionWorkbench project={project} initialTab={workbenchTab} onOpenCatalog={()=>{setIsConstructionOpen(false);openCatalog(false,false,'structure.slab')}} onClose={()=>setIsConstructionOpen(false)} onExecute={dispatchCommandBatch}/></Suspense>}
       <TypeManagerModal
         isOpen={isTypeManagerOpen}
         onClose={() => setIsTypeManagerOpen(false)}
         project={project}
-        onUpdateTypeDimensions={handleUpdateTypeDimensions}
-        onDefineType={handleDefineType}
-        onRenameType={handleRenameType}
+        initialFamily={catalogContext.family}
+        initialTypeId={catalogContext.typeId}
+        editInitially={catalogContext.edit}
+        selectedObjectId={catalogContext.intent==='assign'?selectedId??undefined:undefined}
+        selectionIntent={catalogContext.intent}
+        selectionFamily={catalogContext.family}
+        onChoose={chooseCatalogType}
+        onExecute={dispatchCommandBatch}
+        onRenamed={syncRenamedActiveType}
       />
 
+      {isSettingsOpen && <SettingsModal project={project} onClose={()=>setIsSettingsOpen(false)} onExecute={dispatchCommandBatch} inspectorOpen={inspectorOpen} onInspectorChange={setInspectorOpen}/>}
       {/* Underlay Point-to-Point Scale Calibration Modal */}
       <UnderlayCalibrationModal
         isOpen={calibrationModalOpen}

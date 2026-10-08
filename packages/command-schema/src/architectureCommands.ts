@@ -1,6 +1,6 @@
 // Architecture & Openings Domain Mutation Command Payloads (Vertical Slice 02)
 
-import { Phase, DoorHanding, WallInterfaceTreatment } from '@constructflow/project-model'
+import { Phase, DoorHanding, WallInterfaceTreatment, PlacementReference } from '@constructflow/project-model'
 
 export interface CreateWallInput {
   /** Immutable unique identity (UUID) */
@@ -9,6 +9,7 @@ export interface CreateWallInput {
 
   /** Human-readable mark, e.g. "W1" */
   mark: string
+  placement_reference?: PlacementReference
 
   /** Start point in millimeters: [x, y] or [x, y, z] */
   start_point_mm: [number, number, number] | [number, number]

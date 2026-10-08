@@ -14,7 +14,7 @@ import {
   DoorHanding,
 } from '@constructflow/project-model'
 import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
-import { SnapResult } from '../snapping/snapEngine.js'
+import { SnapResult } from '@constructflow/snapping-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
 
 export interface UnderlayConfig {
@@ -45,8 +45,8 @@ export function renderPlanView(
   calibration?: CalibrationOverlay | null,
   sourceProject: ProjectDocument = project
 ) {
-  // 1. Dark CAD canvas background
-  ctx.fillStyle = '#0f172a'
+  // 1. Bright drafting canvas background
+  ctx.fillStyle = '#fbfdff'
   ctx.fillRect(0, 0, width, height)
 
   // 2. Background CAD unit grid (1000mm major)
@@ -146,7 +146,7 @@ function drawBackgroundCadGrid(
   const firstGridX = Math.floor(startWorldX / step_mm) * step_mm
   const firstGridY = Math.floor(startWorldY / step_mm) * step_mm
 
-  ctx.strokeStyle = '#1e293b'
+  ctx.strokeStyle = '#e5ebf2'
   ctx.lineWidth = 1
   ctx.beginPath()
 
@@ -250,7 +250,7 @@ function drawStructuralGrid(
 
   // Grid Bubble Marker
   const radius = 14
-  ctx.fillStyle = '#0f172a'
+  ctx.fillStyle = '#ffffff'
   ctx.beginPath()
   ctx.arc(bubbleX, bubbleY, radius, 0, Math.PI * 2)
   ctx.fill()
@@ -261,7 +261,7 @@ function drawStructuralGrid(
   ctx.arc(bubbleX, bubbleY, radius, 0, Math.PI * 2)
   ctx.stroke()
 
-  ctx.fillStyle = '#f8fafc'
+  ctx.fillStyle = '#33465b'
   ctx.font = 'bold 12px monospace'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -294,7 +294,7 @@ function drawFoundation(
   ctx.setLineDash([5, 5])
   ctx.strokeStyle = isSelected ? '#38bdf8' : isHovered ? '#60a5fa' : '#64748b'
   ctx.lineWidth = isSelected ? 2 : 1.5
-  ctx.fillStyle = 'rgba(30, 41, 59, 0.65)'
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.72)'
 
   ctx.beginPath()
   ctx.rect(minX, minY, screenW, screenH)
@@ -303,7 +303,7 @@ function drawFoundation(
 
   // Mark label (e.g. F1) at bottom-right or top-left of footing
   ctx.setLineDash([])
-  ctx.fillStyle = isSelected ? '#38bdf8' : '#94a3b8'
+  ctx.fillStyle = isSelected ? '#0876d1' : '#64748b'
   ctx.font = 'bold 10px monospace'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
@@ -334,8 +334,8 @@ function drawColumn(
   ctx.save()
 
   // Phase color scheme
-  let fillColor = '#0284c7' // Blue primary (new construction)
-  if (obj.created_phase === 'existing') fillColor = '#475569'
+  let fillColor = '#b9dcf7' // Blue primary (new construction)
+  if (obj.created_phase === 'existing') fillColor = '#d5dde6'
   if (obj.created_phase === 'demolition' || obj.removed_phase === 'demolition') {
     fillColor = '#ef4444'
   }
@@ -345,7 +345,7 @@ function drawColumn(
   ctx.fillRect(minX, minY, screenW, screenH)
 
   // Architectural cross hatch inside column
-  ctx.strokeStyle = '#ffffff'
+  ctx.strokeStyle = '#eaf4ff'
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(minX, minY)
@@ -355,12 +355,12 @@ function drawColumn(
   ctx.stroke()
 
   // Outline
-  ctx.strokeStyle = isSelected ? '#38bdf8' : isHovered ? '#e2e8f0' : '#0f172a'
+  ctx.strokeStyle = isSelected ? '#1682e8' : isHovered ? '#60a5fa' : '#49627a'
   ctx.lineWidth = isSelected ? 2.5 : 1.5
   ctx.strokeRect(minX, minY, screenW, screenH)
 
   // Human-readable Mark tag (e.g. "C01") rendered above column
-  ctx.fillStyle = isSelected ? '#38bdf8' : '#f8fafc'
+  ctx.fillStyle = isSelected ? '#0876d1' : '#33465b'
   ctx.font = 'bold 11px sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'bottom'
@@ -412,7 +412,7 @@ function drawBeam(
     ? 'rgba(239, 68, 68, 0.2)'
     : isExisting
     ? 'rgba(71, 85, 105, 0.5)'
-    : 'rgba(30, 41, 59, 0.85)'
+    : 'rgba(205, 218, 231, 0.82)'
   ctx.fill()
 
   // 2. Stroke beam boundary
@@ -433,7 +433,7 @@ function drawBeam(
   // 3. Centerline
   ctx.beginPath()
   ctx.setLineDash([4, 4])
-  ctx.strokeStyle = isSelected ? '#0284c7' : '#475569'
+  ctx.strokeStyle = isSelected ? '#0876d1' : '#8497aa'
   ctx.lineWidth = 1
   ctx.moveTo(sx1, sy1)
   ctx.lineTo(sx2, sy2)
@@ -459,13 +459,13 @@ function drawBeam(
   ctx.font = 'bold 10px monospace'
   const textWidth = ctx.measureText(text).width
 
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.96)'
   ctx.fillRect(-textWidth / 2 - 4, -8, textWidth + 8, 16)
-  ctx.strokeStyle = isSelected ? '#38bdf8' : '#475569'
+  ctx.strokeStyle = isSelected ? '#1682e8' : '#c7d3df'
   ctx.lineWidth = 1
   ctx.strokeRect(-textWidth / 2 - 4, -8, textWidth + 8, 16)
 
-  ctx.fillStyle = isSelected ? '#38bdf8' : '#f1f5f9'
+  ctx.fillStyle = isSelected ? '#0876d1' : '#33465b'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(text, 0, 0)
@@ -553,6 +553,10 @@ function drawWall(
   }
 
   const half_thick = thickness_mm / 2
+  const masonryThickness = wall.module_data.masonry_thickness_mm ?? thickness_mm
+  const plasterInside = wall.module_data.plaster_inside_thickness_mm ?? 0
+  const plasterOutside = wall.module_data.plaster_outside_thickness_mm ?? 0
+  const hasFinishLayers = plasterInside + plasterOutside > 0
 
   // Render solid segments
   for (const seg of subSegments) {
@@ -588,7 +592,7 @@ function drawWall(
       ? 'rgba(239, 68, 68, 0.25)'
       : isExisting
       ? 'rgba(71, 85, 105, 0.65)'
-      : 'rgba(51, 65, 85, 0.85)'
+      : 'rgba(226, 232, 240, 0.92)'
     ctx.fill()
 
     ctx.strokeStyle = isSelected
@@ -604,6 +608,20 @@ function drawWall(
     if (isDemolition) ctx.setLineDash([6, 4])
     ctx.stroke()
     ctx.setLineDash([])
+    if (hasFinishLayers) {
+      const insideFace = half_thick - plasterInside
+      const outsideFace = -half_thick + plasterOutside
+      const [si1x, si1y] = worldToScreen([p1_mm[0] + nx * insideFace, p1_mm[1] + ny * insideFace], viewport)
+      const [si2x, si2y] = worldToScreen([p2_mm[0] + nx * insideFace, p2_mm[1] + ny * insideFace], viewport)
+      const [so1x, so1y] = worldToScreen([p1_mm[0] + nx * outsideFace, p1_mm[1] + ny * outsideFace], viewport)
+      const [so2x, so2y] = worldToScreen([p2_mm[0] + nx * outsideFace, p2_mm[1] + ny * outsideFace], viewport)
+      ctx.beginPath()
+      ctx.moveTo(si1x, si1y); ctx.lineTo(si2x, si2y)
+      ctx.moveTo(so1x, so1y); ctx.lineTo(so2x, so2y)
+      ctx.strokeStyle = isSelected ? '#7dd3fc' : isDemolition ? '#fca5a5' : '#a3adb8'
+      ctx.lineWidth = 1
+      ctx.stroke()
+    }
     ctx.restore()
   }
 
@@ -631,7 +649,9 @@ function drawWall(
   ctx.translate(mx, my)
   ctx.rotate(angle)
 
-  const text = `${mark || 'W1'} (${thickness_mm}mm) [L=${(len / 1000).toFixed(2)}m]`
+  const masonry = wall.module_data.masonry_thickness_mm ?? thickness_mm
+  const layerLabel = plasterInside + plasterOutside > 0 ? ` ก${masonry}+ฉ${plasterInside}/${plasterOutside}` : ` ${thickness_mm}mm`
+  const text = `${mark || 'W1'} (${layerLabel}) [L=${(len / 1000).toFixed(2)}m]`
   ctx.font = 'bold 9px monospace'
   const textWidth = ctx.measureText(text).width
   ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'
@@ -897,6 +917,10 @@ export interface PlacementGhost {
   size_mm?: [number, number] | [number, number, number]
   mark?: string
   handing?: DoorHanding
+  operation?: string
+  panel_count?: number
+  sill_height_mm?: number
+  glazing_material?: string
   wall_id?: string
   offset_along_wall_mm?: number
 }
@@ -1059,40 +1083,64 @@ function drawPlacementGhost(
         ctx.lineTo(sj2x - nx * (thick_px / 2), sj2y - ny * (thick_px / 2))
         ctx.stroke()
 
-        const isLeft = (ghost.handing || 'left_in').startsWith('left')
-        const isOut = (ghost.handing || 'left_in').endsWith('out')
-
-        const hinge_s = isLeft ? [sj1x, sj1y] : [sj2x, sj2y]
-        const latch_s = isLeft ? [sj2x, sj2y] : [sj1x, sj1y]
-
-        const normalSign = isOut ? -1 : 1
-        const doorLeafLenPx = width_mm * viewport.zoom
-        const leafEndX = hinge_s[0] + normalSign * nx * doorLeafLenPx
-        const leafEndY = hinge_s[1] + normalSign * ny * doorLeafLenPx
-
-        // Leaf line
-        ctx.beginPath()
+        const operation = ghost.operation || 'hinged'
+        const panels = Math.max(1, Math.min(8, ghost.panel_count || 1))
         ctx.strokeStyle = '#4ade80'
         ctx.lineWidth = 2
-        ctx.moveTo(hinge_s[0], hinge_s[1])
-        ctx.lineTo(leafEndX, leafEndY)
-        ctx.stroke()
+        if (operation === 'fixed') {
+          ctx.beginPath()
+          ctx.moveTo(sj1x, sj1y); ctx.lineTo(sj2x, sj2y)
+          ctx.moveTo(sj1x + nx * thick_px * 0.3, sj1y + ny * thick_px * 0.3)
+          ctx.lineTo(sj2x + nx * thick_px * 0.3, sj2y + ny * thick_px * 0.3)
+          ctx.moveTo(sj1x, sj1y); ctx.lineTo(sj2x + nx * thick_px * 0.3, sj2y + ny * thick_px * 0.3)
+          ctx.stroke()
+        } else if (operation === 'sliding') {
+          ctx.beginPath()
+          ctx.moveTo(sj1x, sj1y); ctx.lineTo(sj2x, sj2y)
+          for (let i = 1; i < panels; i++) {
+            const t = i / panels
+            const px = sj1x + (sj2x - sj1x) * t, py = sj1y + (sj2y - sj1y) * t
+            ctx.moveTo(px + nx * thick_px * 0.28, py + ny * thick_px * 0.28)
+            ctx.lineTo(px - nx * thick_px * 0.28, py - ny * thick_px * 0.28)
+          }
+          ctx.stroke()
+          ctx.strokeStyle = 'rgba(74, 222, 128, 0.55)'
+          ctx.beginPath()
+          ctx.moveTo(sj1x + nx * thick_px * 0.24, sj1y + ny * thick_px * 0.24)
+          ctx.lineTo(sj2x + nx * thick_px * 0.24, sj2y + ny * thick_px * 0.24)
+          ctx.stroke()
+        } else if (operation === 'louver') {
+          ctx.beginPath()
+          ctx.moveTo(sj1x, sj1y); ctx.lineTo(sj2x, sj2y)
+          for (let i = 1; i <= 4; i++) {
+            const t = i / 5
+            const px = sj1x + (sj2x - sj1x) * t, py = sj1y + (sj2y - sj1y) * t
+            ctx.moveTo(px + nx * thick_px * 0.35, py + ny * thick_px * 0.35)
+            ctx.lineTo(px - nx * thick_px * 0.35, py - ny * thick_px * 0.35)
+          }
+          ctx.stroke()
+        } else {
+          const isLeft = (ghost.handing || 'left_in').startsWith('left')
+          const isOut = (ghost.handing || 'left_in').endsWith('out')
+          const hinge_s = isLeft ? [sj1x, sj1y] : [sj2x, sj2y]
+          const latch_s = isLeft ? [sj2x, sj2y] : [sj1x, sj1y]
+          const normalSign = isOut ? -1 : 1
+          const doorLeafLenPx = width_mm * viewport.zoom
+          const leafEndX = hinge_s[0] + normalSign * nx * doorLeafLenPx
+          const leafEndY = hinge_s[1] + normalSign * ny * doorLeafLenPx
+          ctx.beginPath(); ctx.moveTo(hinge_s[0], hinge_s[1]); ctx.lineTo(leafEndX, leafEndY); ctx.stroke()
+          const angleClosed = Math.atan2(latch_s[1] - hinge_s[1], latch_s[0] - hinge_s[0])
+          const angleOpen = Math.atan2(leafEndY - hinge_s[1], leafEndX - hinge_s[0])
+          const counterClockwise = (angleOpen - angleClosed + 2 * Math.PI) % (2 * Math.PI) > Math.PI
+          ctx.beginPath(); ctx.strokeStyle = 'rgba(74, 222, 128, 0.7)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3])
+          ctx.arc(hinge_s[0], hinge_s[1], doorLeafLenPx, angleClosed, angleOpen, counterClockwise)
+          ctx.stroke(); ctx.setLineDash([])
+        }
 
-        // Swing arc
-        const angleClosed = Math.atan2(latch_s[1] - hinge_s[1], latch_s[0] - hinge_s[0])
-        const angleOpen = Math.atan2(leafEndY - hinge_s[1], leafEndX - hinge_s[0])
-        const counterClockwise = (angleOpen - angleClosed + 2 * Math.PI) % (2 * Math.PI) > Math.PI
-
-        ctx.beginPath()
-        ctx.strokeStyle = 'rgba(74, 222, 128, 0.7)'
-        ctx.lineWidth = 1
-        ctx.setLineDash([3, 3])
-        ctx.arc(hinge_s[0], hinge_s[1], doorLeafLenPx, angleClosed, angleOpen, counterClockwise)
-        ctx.stroke()
-        ctx.setLineDash([])
-
-        const handingLabel = (ghost.handing || 'left_in').replace('_', ' ').toUpperCase()
-        const badgeText = `${ghost.mark || 'D1'} (${(width_mm / 1000).toFixed(2)} m) [${handingLabel} • Space: Flip]`
+        const handingLabel = operation === 'hinged' ? ` · ${(ghost.handing || 'left_in').replace('_', ' ').toUpperCase()} · Space: Flip` : ''
+        const operationLabel = operation === 'sliding' ? 'บานเลื่อน' : operation === 'louver' ? 'บานเกล็ด' : operation === 'fixed' ? 'ช่องแสง' : 'บานเปิด'
+        const panelLabel = panels > 1 ? ` · ${panels} บาน` : ''
+        const badgeText = `${ghost.mark || 'D1'} ${operationLabel}${panelLabel} (${(width_mm / 1000).toFixed(2)} m)${handingLabel}`
         ctx.font = 'bold 10px monospace'
         const bw = ctx.measureText(badgeText).width
         ctx.fillStyle = '#0f172a'
@@ -1136,6 +1184,8 @@ function drawPlacementGhost(
         const [sp2x, sp2y] = worldToScreen(p2_mm, viewport)
         const thick_px = hostWall.module_data.thickness_mm * viewport.zoom
 
+        const operation = ghost.operation || 'sliding'
+        const panels = Math.max(1, Math.min(8, ghost.panel_count || 2))
         ctx.strokeStyle = '#38bdf8'
         ctx.lineWidth = 2
         ctx.beginPath()
@@ -1145,9 +1195,32 @@ function drawPlacementGhost(
         ctx.lineTo(sp2x - nx * (thick_px / 2), sp2y - ny * (thick_px / 2))
         ctx.moveTo(sp1x, sp1y)
         ctx.lineTo(sp2x, sp2y)
+        for (let i = 1; i < panels; i++) {
+          const t = i / panels
+          const px = sp1x + (sp2x - sp1x) * t, py = sp1y + (sp2y - sp1y) * t
+          ctx.moveTo(px + nx * thick_px * 0.32, py + ny * thick_px * 0.32)
+          ctx.lineTo(px - nx * thick_px * 0.32, py - ny * thick_px * 0.32)
+        }
         ctx.stroke()
+        if (ghost.glazing_material && ghost.glazing_material !== 'none') {
+          ctx.fillStyle = ghost.glazing_material === 'frosted_glass' ? 'rgba(186, 230, 253, 0.58)' : 'rgba(125, 211, 252, 0.3)'
+          ctx.beginPath(); ctx.moveTo(sp1x, sp1y); ctx.lineTo(sp2x, sp2y); ctx.strokeStyle = 'rgba(56, 189, 248, 0.28)'; ctx.lineWidth = Math.max(4, thick_px * 0.3); ctx.stroke()
+          ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2
+        }
+        if (operation === 'louver') {
+          ctx.beginPath()
+          for (let i = 1; i <= 3; i++) {
+            const t = i / 4
+            const px = sp1x + (sp2x - sp1x) * t, py = sp1y + (sp2y - sp1y) * t
+            ctx.moveTo(px + nx * thick_px * 0.36, py + ny * thick_px * 0.36)
+            ctx.lineTo(px - nx * thick_px * 0.36, py - ny * thick_px * 0.36)
+          }
+          ctx.stroke()
+        }
 
-        const badgeText = `${ghost.mark || 'W1'} (${(width_mm / 1000).toFixed(2)} m)`
+        const operationLabel = operation === 'sliding' ? 'บานเลื่อน' : operation === 'awning' ? 'บานกระทุ้ง' : operation === 'louver' ? 'บานเกล็ด' : 'ช่องแสง'
+        const sillLabel = `${Math.round(ghost.sill_height_mm || 0)} mm`
+        const badgeText = `${ghost.mark || 'W1'} ${operationLabel} · ${panels} บาน · ธรณี ${sillLabel} · ${(width_mm / 1000).toFixed(2)} m`
         ctx.font = 'bold 10px monospace'
         const bw = ctx.measureText(badgeText).width
         ctx.fillStyle = '#0f172a'
@@ -1273,12 +1346,36 @@ function drawSnapMarker(
     ctx.strokeStyle = '#22c55e'
     ctx.lineWidth = 2
     ctx.strokeRect(x - s, y - s, s * 2, s * 2)
-  } else if (snap.kind === 'beam_node') {
-    // Purple circle for beam node
-    ctx.strokeStyle = '#c084fc'
+  } else if (snap.kind === 'parallel' || snap.kind === 'perpendicular') {
+    const s = 7
+    ctx.strokeStyle = snap.kind === 'parallel' ? '#f97316' : '#a855f7'
     ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.arc(x, y, 6, 0, Math.PI * 2)
+    ctx.moveTo(x, y - s)
+    ctx.lineTo(x + s, y)
+    ctx.lineTo(x, y + s)
+    ctx.lineTo(x - s, y)
+    ctx.closePath()
+    ctx.stroke()
+  } else if (snap.kind.includes('endpoint') || snap.kind.includes('midpoint') || snap.kind === 'intersection') {
+    // Node and midpoint marker
+    ctx.strokeStyle = snap.kind === 'intersection' ? '#eab308' : '#c084fc'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(x, y, snap.kind.includes('endpoint') ? 6 : 5, 0, Math.PI * 2)
+    ctx.stroke()
+  } else if (snap.kind === 'column_corner' || snap.kind === 'wall_corner') {
+    ctx.strokeStyle = '#22c55e'
+    ctx.lineWidth = 2
+    ctx.strokeRect(x - 5, y - 5, 10, 10)
+  } else if (snap.kind === 'column_face' || snap.kind === 'wall_face' || snap.kind === 'beam_edge' || snap.kind === 'wall_centerline' || snap.kind === 'beam_axis') {
+    ctx.strokeStyle = '#06b6d4'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(x - 6, y - 6)
+    ctx.lineTo(x + 6, y + 6)
+    ctx.moveTo(x + 6, y - 6)
+    ctx.lineTo(x - 6, y + 6)
     ctx.stroke()
   } else if (snap.kind === 'wall_endpoint') {
     // Cyan triangle for wall endpoint

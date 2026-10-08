@@ -25,9 +25,38 @@ export interface TypeParameters {
   pile_length_mm?: number
   material?: string
   thickness_mm?: number
+  masonry_thickness_mm?: number
+  plaster_inside_thickness_mm?: number
+  plaster_outside_thickness_mm?: number
+  plaster_inside_material?: string
+  plaster_outside_material?: string
   height_mm?: number
   width_mm?: number
   sill_height_mm?: number
+  opening_operation?: 'hinged' | 'sliding' | 'fixed' | 'awning' | 'louver'
+  panel_count?: number
+  panel_layout?: Array<'hinged' | 'sliding' | 'fixed' | 'awning' | 'louver'>
+  panel_width_ratios?: number[]
+  transom_height_mm?: number
+  bottom_light_height_mm?: number
+  /** Cell counts per leaf, not bar counts; UI bar counts equal cells minus one. */
+  muntin_rows?: number
+  muntin_columns?: number
+  /** Independent fixed-light cell counts; missing means no internal bars. */
+  transom_muntin_rows?: number
+  transom_muntin_columns?: number
+  bottom_light_muntin_rows?: number
+  bottom_light_muntin_columns?: number
+  frame_depth_mm?: number
+  frame_material?: string
+  panel_material?: string
+  /** Door face treatment; independent of leaf material and glazing. */
+  door_leaf_style?: 'flush' | 'raised_2_panel' | 'raised_4_panel' | 'raised_6_panel' | 'horizontal_grooves_3' | 'horizontal_grooves_5' | 'vertical_grooves_3' | 'louvered'
+  /** Visible handle profile and finish, independent of the door leaf. */
+  opening_handle_style?: 'lever' | 'round_knob' | 'pull_handle' | 'recessed_pull' | 'none'
+  opening_hardware_finish?: 'stainless' | 'matte_black' | 'satin_brass' | 'bronze'
+  glazing_material?: 'none' | 'clear_glass' | 'frosted_glass' | 'tinted_glass'
+  glazing_transmission?: number
   topping_mm?: number
   slab_system?: 'slab_on_ground' | 'suspended' | 'precast_plank' | 'hollow_core'
   drop_mm?: number
@@ -149,7 +178,12 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
     object_type: 'architecture.wall',
     name: 'W1',
     parameters: {
-      thickness_mm: 100,
+      thickness_mm: 120,
+      masonry_thickness_mm: 100,
+      plaster_inside_thickness_mm: 10,
+      plaster_outside_thickness_mm: 10,
+      plaster_inside_material: 'cement_plaster',
+      plaster_outside_material: 'cement_plaster',
       height_mm: 2800,
       material: 'brick_masonry',
     },
@@ -159,7 +193,12 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
     object_type: 'architecture.wall',
     name: 'W2',
     parameters: {
-      thickness_mm: 150,
+      thickness_mm: 170,
+      masonry_thickness_mm: 150,
+      plaster_inside_thickness_mm: 10,
+      plaster_outside_thickness_mm: 10,
+      plaster_inside_material: 'cement_plaster',
+      plaster_outside_material: 'cement_plaster',
       height_mm: 2800,
       material: 'lightweight_block',
     },
@@ -182,6 +221,13 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
     parameters: {
       width_mm: 800,
       height_mm: 2000,
+      opening_operation: 'hinged',
+      panel_count: 1,
+      frame_depth_mm: 70,
+      frame_material: 'timber',
+      panel_material: 'timber',
+      glazing_material: 'none',
+      glazing_transmission: 0,
     },
   },
   {
@@ -191,6 +237,13 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
     parameters: {
       width_mm: 900,
       height_mm: 2000,
+      opening_operation: 'hinged',
+      panel_count: 1,
+      frame_depth_mm: 70,
+      frame_material: 'timber',
+      panel_material: 'timber',
+      glazing_material: 'none',
+      glazing_transmission: 0,
     },
   },
   {
@@ -200,6 +253,13 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
     parameters: {
       width_mm: 1000,
       height_mm: 2100,
+      opening_operation: 'hinged',
+      panel_count: 1,
+      frame_depth_mm: 70,
+      frame_material: 'aluminium',
+      panel_material: 'timber',
+      glazing_material: 'none',
+      glazing_transmission: 0,
     },
   },
   // Windows
@@ -211,6 +271,12 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
       width_mm: 1200,
       height_mm: 1200,
       sill_height_mm: 900,
+      opening_operation: 'sliding',
+      panel_count: 2,
+      frame_depth_mm: 65,
+      frame_material: 'aluminium',
+      glazing_material: 'clear_glass',
+      glazing_transmission: 0.72,
     },
   },
   {
@@ -221,6 +287,12 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
       width_mm: 1800,
       height_mm: 1200,
       sill_height_mm: 900,
+      opening_operation: 'awning',
+      panel_count: 2,
+      frame_depth_mm: 65,
+      frame_material: 'aluminium',
+      glazing_material: 'frosted_glass',
+      glazing_transmission: 0.38,
     },
   },
   {
@@ -231,7 +303,96 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
       width_mm: 2400,
       height_mm: 1500,
       sill_height_mm: 800,
+      opening_operation: 'fixed',
+      panel_count: 3,
+      frame_depth_mm: 75,
+      frame_material: 'aluminium',
+      glazing_material: 'tinted_glass',
+      glazing_transmission: 0.56,
     },
+  },
+  {
+    id: '327882e7-19be-4eba-a30f-e4165da5e201',
+    object_type: 'door_window.door',
+    name: 'D4',
+    parameters: {
+      width_mm: 1600, height_mm: 2100, opening_operation: 'sliding', panel_count: 2,
+      frame_depth_mm: 90, frame_material: 'aluminium', panel_material: 'aluminium',
+      glazing_material: 'clear_glass', glazing_transmission: 0.72,
+    },
+  },
+  {
+    id: '7bdaff3c-e824-4aec-88b0-414e2133afa2',
+    object_type: 'door_window.door',
+    name: 'D5',
+    parameters: {
+      width_mm: 1600, height_mm: 2100, opening_operation: 'hinged', panel_count: 2,
+      frame_depth_mm: 75, frame_material: 'timber', panel_material: 'timber',
+      glazing_material: 'none', glazing_transmission: 0,
+    },
+  },
+  {
+    id: '4224fe56-79e6-4a0e-9755-b92e64d4e90a',
+    object_type: 'door_window.window',
+    name: 'W4',
+    parameters: {
+      width_mm: 1200, height_mm: 1200, sill_height_mm: 900, opening_operation: 'louver', panel_count: 1,
+      frame_depth_mm: 65, frame_material: 'aluminium', glazing_material: 'none', glazing_transmission: 0,
+    },
+  },
+  {
+    id: '50200632-27c1-4cf3-a54b-7f5595e4f07d',
+    object_type: 'door_window.window',
+    name: 'W5',
+    parameters: {
+      width_mm: 1800, height_mm: 1200, sill_height_mm: 900, opening_operation: 'sliding', panel_count: 3,
+      frame_depth_mm: 70, frame_material: 'aluminium', glazing_material: 'clear_glass', glazing_transmission: 0.72,
+    },
+  },
+  {
+    id: '84460d26-f977-4b4e-9bc0-0fd4fae794f0',
+    object_type: 'door_window.door', name: 'D6',
+    parameters: { width_mm: 900, height_mm: 2100, opening_operation: 'hinged', panel_count: 1, frame_depth_mm: 90, frame_material: 'aluminium', panel_material: 'aluminium', glazing_material: 'clear_glass', glazing_transmission: 0.68 },
+  },
+  {
+    id: '2b88e131-faf9-43e0-86a8-7ff4f95e324c',
+    object_type: 'door_window.door', name: 'D7',
+    parameters: { width_mm: 2400, height_mm: 2100, opening_operation: 'sliding', panel_count: 3, frame_depth_mm: 100, frame_material: 'aluminium', panel_material: 'aluminium', glazing_material: 'clear_glass', glazing_transmission: 0.72 },
+  },
+  {
+    id: '74077642-8151-47bd-9539-1e8cb473408c',
+    object_type: 'door_window.door', name: 'D8',
+    parameters: { width_mm: 800, height_mm: 2000, opening_operation: 'louver', panel_count: 1, frame_depth_mm: 70, frame_material: 'timber', panel_material: 'timber', glazing_material: 'none', glazing_transmission: 0 },
+  },
+  {
+    id: '1e3c7095-77fa-44cc-87b0-372bb8d9a835',
+    object_type: 'door_window.window', name: 'W6',
+    parameters: { width_mm: 1200, height_mm: 1200, sill_height_mm: 900, opening_operation: 'hinged', panel_count: 2, frame_depth_mm: 75, frame_material: 'aluminium', glazing_material: 'clear_glass', glazing_transmission: 0.7 },
+  },
+  {
+    id: 'bc22285a-e6a3-4bc9-a20c-53ce7a8f3d25',
+    object_type: 'door_window.window', name: 'W7',
+    parameters: { width_mm: 900, height_mm: 600, sill_height_mm: 1200, opening_operation: 'awning', panel_count: 1, frame_depth_mm: 65, frame_material: 'aluminium', glazing_material: 'frosted_glass', glazing_transmission: 0.4 },
+  },
+  {
+    id: '2cac5e2b-118a-4331-a158-1fc7b3847229',
+    object_type: 'door_window.door', name: 'D9',
+    parameters: { width_mm: 2400, height_mm: 2400, opening_operation: 'sliding', panel_count: 2, transom_height_mm: 450, muntin_rows: 1, muntin_columns: 3, frame_depth_mm: 100, frame_material: 'aluminium', panel_material: 'aluminium', glazing_material: 'clear_glass', glazing_transmission: 0.72 },
+  },
+  {
+    id: '2f84a55a-83a6-45c8-adf8-3edf4ce74a17',
+    object_type: 'door_window.window', name: 'W8',
+    parameters: { width_mm: 1500, height_mm: 1200, sill_height_mm: 900, opening_operation: 'hinged', panel_count: 2, muntin_rows: 2, muntin_columns: 2, frame_depth_mm: 75, frame_material: 'aluminium', glazing_material: 'clear_glass', glazing_transmission: 0.68 },
+  },
+  {
+    id: 'b9bbd802-6ed1-4cc4-a697-0f524d8f2d59',
+    object_type: 'door_window.window', name: 'W9',
+    parameters: { width_mm: 1800, height_mm: 1350, sill_height_mm: 800, opening_operation: 'fixed', panel_count: 3, muntin_rows: 2, muntin_columns: 3, frame_depth_mm: 75, frame_material: 'aluminium', glazing_material: 'clear_glass', glazing_transmission: 0.68 },
+  },
+  {
+    id: '9f7ec4ca-72ca-4f66-9a73-118bd854c526',
+    object_type: 'door_window.window', name: 'W10',
+    parameters: { width_mm: 1800, height_mm: 1800, sill_height_mm: 700, opening_operation: 'sliding', panel_count: 2, transom_height_mm: 300, bottom_light_height_mm: 300, muntin_rows: 1, muntin_columns: 2, frame_depth_mm: 80, frame_material: 'aluminium', glazing_material: 'clear_glass', glazing_transmission: 0.7 },
   },
 ]
 
@@ -247,9 +408,9 @@ export const CATALOG_PARAMETER_FIELDS: Record<string, string[]> = {
   'structure.beam': ['section_mm', 'material', 'drop_mm', 'rebar_type', 'mass_per_m_kg'],
   'structure.slab': ['thickness_mm', 'topping_mm', 'slab_system', 'material'],
   'interior.cabinet_run': ['width_mm','height_mm','depth_mm','board_mm','back_mm','plinth_mm','front','carcass_material','front_material','back_material','countertop_material','countertop_mm'],
-  'architecture.wall': ['thickness_mm', 'height_mm', 'material'],
-  'door_window.door': ['width_mm', 'height_mm'],
-  'door_window.window': ['width_mm', 'height_mm', 'sill_height_mm'],
+  'architecture.wall': ['thickness_mm', 'height_mm', 'material', 'masonry_thickness_mm', 'plaster_inside_thickness_mm', 'plaster_outside_thickness_mm', 'plaster_inside_material', 'plaster_outside_material'],
+  'door_window.door': ['width_mm', 'height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_material', 'panel_material', 'door_leaf_style', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission'],
+  'door_window.window': ['width_mm', 'height_mm', 'sill_height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'bottom_light_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_material', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission'],
 }
 
 export function resolveCatalogType(

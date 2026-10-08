@@ -1,6 +1,6 @@
 // Structural Domain Mutation Command Payloads (Vertical Slice 01)
 
-import { Phase, PileSystem } from '@constructflow/project-model'
+import { Phase, PileSystem, PlacementReference } from '@constructflow/project-model'
 
 export interface CreateGridInput {
   /** Immutable unique identity (UUID) */
@@ -132,6 +132,7 @@ export interface CreateBeamInput {
 
   /** Human-readable mark, e.g. "B1", "B2" */
   mark?: string
+  placement_reference?: PlacementReference
 
   /** Start node coordinate [x, y] or [x, y, z] in mm */
   start_point_mm: [number, number, number] | [number, number]
@@ -180,12 +181,37 @@ export interface StructuralTypeParameters {
   size_mm?: [number, number, number]
   /** Wall thickness in mm */
   thickness_mm?: number
+  masonry_thickness_mm?: number
+  plaster_inside_thickness_mm?: number
+  plaster_outside_thickness_mm?: number
+  plaster_inside_material?: string
+  plaster_outside_material?: string
   /** Element height in mm */
   height_mm?: number
   /** Door / Window width in mm */
   width_mm?: number
   /** Window sill height in mm */
   sill_height_mm?: number
+  opening_operation?: 'hinged' | 'sliding' | 'fixed' | 'awning' | 'louver'
+  panel_count?: number
+  panel_layout?: Array<'hinged' | 'sliding' | 'fixed' | 'awning' | 'louver'>
+  panel_width_ratios?: number[]
+  transom_height_mm?: number
+  bottom_light_height_mm?: number
+  muntin_rows?: number
+  muntin_columns?: number
+  transom_muntin_rows?: number
+  transom_muntin_columns?: number
+  bottom_light_muntin_rows?: number
+  bottom_light_muntin_columns?: number
+  frame_depth_mm?: number
+  frame_material?: string
+  panel_material?: string
+  door_leaf_style?: 'flush' | 'raised_2_panel' | 'raised_4_panel' | 'raised_6_panel' | 'horizontal_grooves_3' | 'horizontal_grooves_5' | 'vertical_grooves_3' | 'louvered'
+  opening_handle_style?: 'lever' | 'round_knob' | 'pull_handle' | 'recessed_pull' | 'none'
+  opening_hardware_finish?: 'stainless' | 'matte_black' | 'satin_brass' | 'bronze'
+  glazing_material?: 'none' | 'clear_glass' | 'frosted_glass' | 'tinted_glass'
+  glazing_transmission?: number
   material?: string
   foundation_type?: 'spread_footing' | 'pile_cap'
 }
@@ -213,6 +239,11 @@ export interface UpdateStructuralTypeDimensionsInput {
   section_mm?: [number, number]
   size_mm?: [number, number, number]
   thickness_mm?: number
+  masonry_thickness_mm?: number
+  plaster_inside_thickness_mm?: number
+  plaster_outside_thickness_mm?: number
+  plaster_inside_material?: string
+  plaster_outside_material?: string
   height_mm?: number
   width_mm?: number
   sill_height_mm?: number

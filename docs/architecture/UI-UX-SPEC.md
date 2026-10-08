@@ -46,6 +46,14 @@ A disabled/uninstalled module should not leave dead UI controls.
 
 ## Tool surfaces and shortcut codes
 
+### Standalone applicability
+
+The React standalone workbench uses its existing toolbar and canvas keyboard handlers. Show only shortcuts that those handlers implement. The unified catalog covers columns, foundations, beams, slabs, walls, doors and windows; tool-context picking and selected-instance assignment share the same catalog. Type edits remain drafts until a CommandBus transaction succeeds. Rename plus dimensions, and clone plus optional instance assignment, must each be undoable as one transaction. Menu groups are Project, Create, Drawings/Export, and Settings/Help; 2D/3D controls stay beside the canvas. Level settings identify project scope and store values in millimetres while displaying metres. See [current UX delivery](../UX-CATALOG-MENUS-PLAN-2026-10-08.md).
+
+### Legacy native adapter contract
+
+The Ruby registries, multi-letter codes and Extensions surfaces below apply to the native adapter. They do not require exposing unavailable standalone tools or adding native-adapter milestones to standalone development.
+
 Tool labels, icons and codes are defined once in `Core::ToolCatalog` (tool and stage metadata) and `Core::ShortcutManager::SHORTCUTS` (codes and actions). Every surface — the native ConstructFlow toolbar with its per-stage flyouts, the Extensions menus and the panel ribbon — must render those definitions instead of restating them.
 
 Rules:

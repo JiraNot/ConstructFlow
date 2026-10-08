@@ -3,10 +3,34 @@ import { CreateWallInput, MoveWallInput, MoveOpeningInput, UpdateWallMarkInput, 
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
 import type { ProjectDocument } from '@constructflow/project-model'
+export { measureOpeningRegions, type OpeningDimensions } from './openingDimensions.js'
+import { preserveSegmentPlacementReference } from '@constructflow/geometry-kernel'
 import { validateStairThaiBuildingCode } from './stairs.js'
+
+function shiftHostedOpenings(project: ProjectDocument, wallId: string, shiftMm: [number, number], now: string): string[] {
+  if (Math.hypot(...shiftMm) < 1e-8) return []
+  const affected: string[] = []
+  for (const [id, object] of Object.entries(project.objects)) {
+    if (!isDoorObject(object) && !isWindowObject(object)) continue
+    if (object.module_data.wall_id !== wallId) continue
+    const [x, y, z] = object.module_data.location_mm
+    project.objects[id] = {
+      ...object,
+      module_data: { ...object.module_data, location_mm: [x + shiftMm[0], y + shiftMm[1], z] },
+      updated_at: now,
+      revision_meta: { ...object.revision_meta, dirty_quantity: true, dirty_drawing: true },
+    }
+    affected.push(id)
+  }
+  return affected
+}
 
 function positiveCatalogNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+function nonNegativeCatalogNumber(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback
 }
 
 function catalogString(value: unknown, fallback: string): string {
@@ -146,7 +170,15 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const mark = wallInput.mark || 'W1'
       const level_id = wallInput.level_id || project.project.active_level_id
       const typeDef = resolveCatalogType(updated, 'architecture.wall', wallInput.type_id || mark)
-      const thickness_mm = wallInput.thickness_mm || positiveCatalogNumber(typeDef?.parameters.thickness_mm, 100)
+      const hasLayerAssembly = typeDef?.parameters.masonry_thickness_mm !== undefined
+        || typeDef?.parameters.plaster_inside_thickness_mm !== undefined
+        || typeDef?.parameters.plaster_outside_thickness_mm !== undefined
+      const masonry_thickness_mm = positiveCatalogNumber(wallInput.thickness_mm, positiveCatalogNumber(typeDef?.parameters.masonry_thickness_mm, positiveCatalogNumber(typeDef?.parameters.thickness_mm, 100)))
+      const plaster_inside_thickness_mm = nonNegativeCatalogNumber(typeDef?.parameters.plaster_inside_thickness_mm)
+      const plaster_outside_thickness_mm = nonNegativeCatalogNumber(typeDef?.parameters.plaster_outside_thickness_mm)
+      const thickness_mm = hasLayerAssembly
+        ? masonry_thickness_mm + plaster_inside_thickness_mm + plaster_outside_thickness_mm
+        : wallInput.thickness_mm || positiveCatalogNumber(typeDef?.parameters.thickness_mm, 100)
       const height_mm = wallInput.height_mm || positiveCatalogNumber(typeDef?.parameters.height_mm, 2800)
       const material = wallInput.material || catalogString(typeDef?.parameters.material, 'brick_masonry')
       const legacyInput = wallInput as CreateWallInput & { start_node_mm?: [number, number, number]; end_node_mm?: [number, number, number] }
@@ -165,6 +197,22 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const dx = end_point_mm[0] - start_point_mm[0]
       const dy = end_point_mm[1] - start_point_mm[1]
       const length_mm = Math.round(Math.sqrt(dx * dx + dy * dy))
+      const instance_overrides = catalogInstanceOverrides('architecture.wall', {
+        thickness_mm, height_mm, material,
+        ...(hasLayerAssembly ? {
+          masonry_thickness_mm, plaster_inside_thickness_mm, plaster_outside_thickness_mm,
+          plaster_inside_material: typeDef?.parameters.plaster_inside_material ?? 'cement_plaster',
+          plaster_outside_material: typeDef?.parameters.plaster_outside_material ?? 'cement_plaster',
+        } : {}),
+      }, typeDef)
+      if (hasLayerAssembly && Number.isFinite(wallInput.thickness_mm)
+        && wallInput.thickness_mm !== typeDef?.parameters.masonry_thickness_mm) {
+        Object.assign(instance_overrides, {
+          thickness_mm, masonry_thickness_mm, plaster_inside_thickness_mm, plaster_outside_thickness_mm,
+          plaster_inside_material: typeDef?.parameters.plaster_inside_material ?? 'cement_plaster',
+          plaster_outside_material: typeDef?.parameters.plaster_outside_material ?? 'cement_plaster',
+        })
+      }
 
       const wallObj: SmartObject<WallModuleData> = {
         id,
@@ -184,11 +232,19 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         status: 'active',
         module_data: {
           mark,
+          placement_reference: wallInput.placement_reference || 'centerline',
           type_id: typeDef?.id,
-          instance_overrides: catalogInstanceOverrides('architecture.wall', { thickness_mm, height_mm, material }, typeDef),
+          instance_overrides,
           start_point_mm,
           end_point_mm,
           thickness_mm,
+          ...(hasLayerAssembly ? {
+            masonry_thickness_mm,
+            plaster_inside_thickness_mm,
+            plaster_outside_thickness_mm,
+            plaster_inside_material: catalogString(typeDef?.parameters.plaster_inside_material, 'cement_plaster'),
+            plaster_outside_material: catalogString(typeDef?.parameters.plaster_outside_material, 'cement_plaster'),
+          } : {}),
           height_mm,
           length_mm,
           level_id,
@@ -280,13 +336,50 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         }
       }
 
+      const hasLayerAssembly = target.module_data.masonry_thickness_mm !== undefined
+        || target.module_data.plaster_inside_thickness_mm !== undefined
+        || target.module_data.plaster_outside_thickness_mm !== undefined
+      const plasterInside = nonNegativeCatalogNumber(target.module_data.plaster_inside_thickness_mm)
+      const plasterOutside = nonNegativeCatalogNumber(target.module_data.plaster_outside_thickness_mm)
+      const masonryThickness = hasLayerAssembly ? wDimInput.thickness_mm - plasterInside - plasterOutside : undefined
+      if (hasLayerAssembly && (!Number.isFinite(masonryThickness) || masonryThickness! <= 0)) {
+        return {
+          result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Overall wall thickness must remain greater than the combined plaster layers'] },
+          updatedProject: project,
+        }
+      }
+
+      const adjustedSegment = preserveSegmentPlacementReference(
+        target.module_data.start_point_mm,
+        target.module_data.end_point_mm,
+        target.module_data.placement_reference,
+        target.module_data.thickness_mm,
+        wDimInput.thickness_mm,
+      )
+      const shiftedOpeningIds = shiftHostedOpenings(updated, wDimInput.object_id, adjustedSegment.shift_mm, now)
+
       updated.objects[wDimInput.object_id] = {
         ...target,
         updated_at: now,
         module_data: {
           ...target.module_data,
+          start_point_mm: adjustedSegment.start,
+          end_point_mm: adjustedSegment.end,
           thickness_mm: wDimInput.thickness_mm,
+          ...(hasLayerAssembly ? { masonry_thickness_mm: masonryThickness } : {}),
           height_mm: wDimInput.height_mm ?? target.module_data.height_mm,
+          instance_overrides: {
+            ...target.module_data.instance_overrides,
+            thickness_mm: wDimInput.thickness_mm,
+            ...(hasLayerAssembly ? {
+              masonry_thickness_mm: masonryThickness,
+              plaster_inside_thickness_mm: plasterInside,
+              plaster_outside_thickness_mm: plasterOutside,
+              plaster_inside_material: target.module_data.plaster_inside_material ?? 'cement_plaster',
+              plaster_outside_material: target.module_data.plaster_outside_material ?? 'cement_plaster',
+            } : {}),
+            ...(wDimInput.height_mm !== undefined ? { height_mm: wDimInput.height_mm } : {}),
+          },
         },
       }
 
@@ -295,8 +388,8 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           status: 'success',
           command_id,
           command_name: commandName,
-          affected_object_ids: [wDimInput.object_id],
-          updated_object_ids: [wDimInput.object_id],
+          affected_object_ids: [wDimInput.object_id, ...shiftedOpeningIds],
+          updated_object_ids: [wDimInput.object_id, ...shiftedOpeningIds],
         },
         updatedProject: updated,
         emittedEnvelope: envelope,
@@ -798,3 +891,4 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
 export * from './bathroom.js'
 export * from './stairs.js'
 export * from './railings.js'
+export * from './openingMuntins.js'

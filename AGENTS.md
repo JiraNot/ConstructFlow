@@ -50,6 +50,8 @@ ConstructFlow/
 │   └── mcp-server/            # Model Context Protocol server exposing BIM tools to AI agents
 ├── packages/
 │   ├── project-model/         # Canonical Domain Models, Smart Objects, Type Catalog & Serializers
+│   ├── geometry-kernel/       # Reusable, renderer-neutral geometry primitives and algorithms
+│   ├── snapping-engine/       # BIM-aware geometric snap candidates, ranking and hosted-opening snaps
 │   ├── command-schema/        # CQRS Mutation Commands, Validation Rules, Undo/Redo Transactions
 │   ├── clash-engine/          # Spatial R-Tree, Hard/Soft Clash Detection & Legal Setback Analyzer
 │   ├── takeoff-engine/        # Phased BOQ, Area/Volume/Length formulas, Rebar Tonnage Calculator
@@ -64,6 +66,7 @@ ConstructFlow/
 ### Module Boundary Rules (Mandatory)
 * **Domain Isolation:** Never place domain-specific logic (e.g., rebar formulas, septic sizing) inside generic UI containers or Core infrastructure. Domain behavior belongs in its respective domain package.
 * **UI Purity:** React components in `apps/plan-editor` are strictly for presentation and user orchestration. Geometric algorithms, validation formulas, and pricing logic must reside in domain packages.
+* **Interactive Geometry:** BIM-aware geometric snapping belongs in `packages/snapping-engine`; keep canvas components as orchestration and rendering surfaces.
 * **Stable Identity:** Never use runtime memory pointers or CAD internal entity IDs as primary keys. All entities are keyed by persistent, RFC-4122 UUIDs.
 
 ---

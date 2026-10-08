@@ -1,13 +1,26 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { deserializeProject, serializeProject } from '../dist/index.js'
+import { DEFAULT_TYPES, deserializeProject, serializeProject } from '../dist/index.js'
 
 const fixtureUrl = new URL('../../../examples/kitchen-extension-proof-v1.cfproj', import.meta.url)
 const fixtureText = await readFile(fixtureUrl, 'utf8')
 const currentFixtureText = await readFile(new URL('../../../examples/kitchen-extension-proof.cfproj', import.meta.url), 'utf8')
 const fixture = JSON.parse(fixtureText)
 const typeUuidV5 = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+test('door and window defaults include distinct opening styles for the 3D model', () => {
+  const doors = DEFAULT_TYPES.filter(type => type.object_type === 'door_window.door')
+  const windows = DEFAULT_TYPES.filter(type => type.object_type === 'door_window.window')
+
+  assert.deepEqual(doors.map(type => type.name).sort(), ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9'])
+  assert.deepEqual(windows.map(type => type.name).sort(), ['W1', 'W10', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9'])
+  assert.ok(doors.some(type => type.parameters.opening_operation === 'sliding' && type.parameters.panel_count === 3))
+  assert.ok(doors.some(type => type.parameters.opening_operation === 'sliding' && type.parameters.transom_height_mm > 0))
+  assert.ok(doors.some(type => type.parameters.opening_operation === 'louver'))
+  assert.ok(windows.some(type => type.parameters.opening_operation === 'hinged' && type.parameters.muntin_rows > 1))
+  assert.ok(windows.some(type => type.parameters.opening_operation === 'sliding' && type.parameters.transom_height_mm > 0 && type.parameters.bottom_light_height_mm > 0))
+})
 
 test('S0: v1 migration is deterministic and preserves object UUIDs and instance overrides', () => {
   const migrated = deserializeProject(fixtureText)
@@ -66,6 +79,27 @@ test('S0: v2 import rejects catalog parameters outside their object family', () 
     () => deserializeProject(JSON.stringify(invalidV2)),
     /size_mm outside its structure\.beam family/,
   )
+})
+
+test('S0: opening families validate operation, panel count, glazing and placement references', () => {
+  const valid = deserializeProject(currentFixtureText)
+  const windowType = valid.types.find(type => type.object_type === 'door_window.window')
+  windowType.parameters.opening_operation = 'sliding'
+  windowType.parameters.panel_count = 2
+  windowType.parameters.frame_depth_mm = 65
+  windowType.parameters.glazing_material = 'clear_glass'
+  windowType.parameters.glazing_transmission = 0.72
+  const wall = Object.values(valid.objects).find(object => object.object_type === 'architecture.wall')
+  wall.module_data.placement_reference = 'left_face'
+  assert.doesNotThrow(() => deserializeProject(JSON.stringify(valid)))
+
+  const invalidTransmission = structuredClone(valid)
+  invalidTransmission.types.find(type => type.object_type === 'door_window.window').parameters.glazing_transmission = 1.2
+  assert.throws(() => deserializeProject(JSON.stringify(invalidTransmission)), /glazing transmission must be between 0 and 1/)
+
+  const invalidReference = structuredClone(valid)
+  Object.values(invalidReference.objects).find(object => object.object_type === 'architecture.wall').module_data.placement_reference = 'inside-ish'
+  assert.throws(() => deserializeProject(JSON.stringify(invalidReference)), /invalid placement reference/)
 })
 
 test('S0: v2 import requires persistent Smart Object UUIDs and rejects case-variant duplicates', () => {

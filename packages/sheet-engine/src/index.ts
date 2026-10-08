@@ -318,26 +318,25 @@ function compileOpeningSchedule(project: ProjectDocument, warnings: string[]): C
     values.forEach((value, i) => content.push(`<text x="${headerXs[i]}" y="${y}" text-anchor="${i === 8 ? 'end' : 'start'}" font-family="Arial,sans-serif" font-size="2.35">${escapeXml(value)}</text>`))
   })
   if (rows.length > 12) warnings.push(`A-08 has ${rows.length} instance groups; only the first 12 fit in the schedule band.`)
-  const elevationTypes = catalogTypes.slice(0, 6)
-  if (catalogTypes.length > 6) warnings.push(`A-08 catalog has ${catalogTypes.length} opening types; the first six elevations are shown.`)
-  const cellWidth = 63
+  const elevationTypes = catalogTypes
+  const cellWidth = 61
   const elevationContent = elevationTypes.map((type, index) => {
     const family = type.object_type
     const p = type.parameters
     const w = Number(p.width_mm ?? 900), h = Number(p.height_mm ?? 2000)
-    const x = 18 + index * (cellWidth + 3), y = 176
-    const scale = Math.min(0.035, 40 / Math.max(w, h, 1))
+    const x = 18 + (index % 6) * (cellWidth + 3), y = 176 + Math.floor(index / 6) * 51
+    const scale = Math.min(0.022, 30 / Math.max(w, h, 1))
     const dw = Math.max(w * scale, 5), dh = Math.max(h * scale, 10)
-    const left = x + (cellWidth - dw) / 2, top = y + 11
+    const left = x + (cellWidth - dw) / 2, top = y + 8
     const shape = family === 'door_window.door'
       ? `<rect x="${left}" y="${top}" width="${dw}" height="${dh}" fill="none" stroke="#0f172a" stroke-width="0.55"/><path d="M${left} ${top + dh}L${left + dw} ${top}" fill="none" stroke="#64748b" stroke-width="0.35"/>`
       : `<rect x="${left}" y="${top}" width="${dw}" height="${dh}" fill="#e0f2fe" stroke="#0f172a" stroke-width="0.55"/><path d="M${left + dw / 2} ${top}V${top + dh}M${left} ${top + dh / 2}H${left + dw}" stroke="#0f172a" stroke-width="0.35"/>`
-    return `<rect x="${x}" y="${y}" width="${cellWidth}" height="61" fill="white" stroke="#cbd5e1" stroke-width="0.3"/><text x="${x + 3}" y="${y + 6}" font-family="Arial,sans-serif" font-size="2.5" font-weight="700">${escapeXml(type.name)} · ${family.endsWith('.door') ? 'DOOR' : 'WINDOW'}</text>${shape}<text x="${x + 3}" y="${y + 56}" font-family="Arial,sans-serif" font-size="2.2">${(w / 1000).toFixed(2)} × ${(h / 1000).toFixed(2)} m</text>`
+    return `<rect x="${x}" y="${y}" width="${cellWidth}" height="47" fill="white" stroke="#cbd5e1" stroke-width="0.3"/><text x="${x + 3}" y="${y + 6}" font-family="Arial,sans-serif" font-size="2.5" font-weight="700">${escapeXml(type.name)} · ${family.endsWith('.door') ? 'DOOR' : 'WINDOW'}</text>${shape}<text x="${x + 3}" y="${y + 44}" font-family="Arial,sans-serif" font-size="2.2">${(w / 1000).toFixed(2)} × ${(h / 1000).toFixed(2)} m</text>`
   }).join('')
   const notes = `<text x="18" y="168" font-family="Arial,sans-serif" font-size="3" font-weight="700">TYPE ELEVATIONS · 1:50</text>
   ${elevationContent}
-  <text x="18" y="246" font-family="Arial,sans-serif" font-size="2.4" fill="#475569">Dimensions in meters. Schedule resolves catalog type values and instance overrides; elevation symbols are schematic.</text>
-  <text x="18" y="251" font-family="Arial,sans-serif" font-size="2.4" fill="#475569">Openings listed: ${openings.length} · Instance groups: ${rows.length} · Catalog types: ${catalogTypes.length}</text>`
+  <text x="18" y="280" font-family="Arial,sans-serif" font-size="2.4" fill="#475569">Dimensions in meters. Schedule resolves catalog type values and instance overrides; elevation symbols are schematic.</text>
+  <text x="18" y="285" font-family="Arial,sans-serif" font-size="2.4" fill="#475569">Openings listed: ${openings.length} · Instance groups: ${rows.length} · Catalog types: ${catalogTypes.length}</text>`
   return pageFrame(project, 'A-08', 'DOOR & WINDOW SCHEDULE', '1:50', content.join(''), notes, 'ALL LEVELS')
 }
 

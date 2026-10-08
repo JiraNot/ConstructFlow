@@ -92,7 +92,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
   }
 
   return (
-    <div
+    <div className="cf-legacy-dialog"
       style={{
         position: 'fixed',
         inset: 0,
@@ -110,8 +110,8 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
         style={{
           width: 860,
           maxHeight: '92vh',
-          background: '#0f172a',
-          border: '1px solid #334155',
+          background: '#ffffff',
+          border: '1px solid #dce4ed',
           borderRadius: 12,
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
           display: 'flex',
@@ -124,8 +124,8 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
         <div
           style={{
             padding: '16px 20px',
-            background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)',
-            borderBottom: '1px solid #334155',
+            background: 'linear-gradient(90deg, #f2f6fa 0%, #ffffff 100%)',
+            borderBottom: '1px solid #dce4ed',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -147,10 +147,10 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
               <Sparkles size={18} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#24364b' }}>
                 สร้างส่วนต่อเติมสำเร็จรูป (Parametric Extension Presets)
               </h2>
-              <p style={{ margin: 0, fontSize: 12, color: '#94a3b8' }}>
+              <p style={{ margin: 0, fontSize: 12, color: '#52677d' }}>
                 สั่งสร้างโครงสร้างและสถาปัตย์แบบครบวงจรใน 1 คลิก พร้อมแยกเฟสสร้างใหม่ (New Construction) อัตโนมัติ
               </p>
             </div>
@@ -160,7 +160,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             style={{
               background: 'transparent',
               border: 'none',
-              color: '#94a3b8',
+              color: '#52677d',
               cursor: 'pointer',
               padding: 4,
               borderRadius: 4,
@@ -178,8 +178,8 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             style={{
               padding: '12px 14px',
               borderRadius: 8,
-              border: activePreset === 'carport' ? '2px solid #38bdf8' : '1px solid #334155',
-              background: activePreset === 'carport' ? 'rgba(56, 189, 248, 0.1)' : '#1e293b',
+              border: activePreset === 'carport' ? '2px solid #0873c4' : '1px solid #dce4ed',
+              background: activePreset === 'carport' ? 'rgba(56, 189, 248, 0.1)' : '#f2f6fa',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
@@ -188,16 +188,16 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#f8fafc', fontSize: 13 }}>
-                <Car size={16} color="#38bdf8" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#24364b', fontSize: 13 }}>
+                <Car size={16} color="#0873c4" />
                 <span>โรงจอดรถหน้าบ้าน</span>
               </div>
-              {activePreset === 'carport' && <Check size={16} color="#38bdf8" />}
+              {activePreset === 'carport' && <Check size={16} color="#0873c4" />}
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>
+            <div style={{ fontSize: 11, color: '#52677d', lineHeight: 1.4 }}>
               โครงเสาเหล็ก / ฐานราก / คานรอบและคานกลาง
             </div>
-            <div style={{ fontSize: 10, color: '#38bdf8', marginTop: 'auto' }}>
+            <div style={{ fontSize: 10, color: '#0873c4', marginTop: 'auto' }}>
               ค่าเริ่มต้น: 5.00 × 5.50 ม.
             </div>
           </div>
@@ -208,8 +208,8 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             style={{
               padding: '12px 14px',
               borderRadius: 8,
-              border: activePreset === 'kitchen' ? '2px solid #f97316' : '1px solid #334155',
-              background: activePreset === 'kitchen' ? 'rgba(249, 115, 22, 0.1)' : '#1e293b',
+              border: activePreset === 'kitchen' ? '2px solid #f97316' : '1px solid #dce4ed',
+              background: activePreset === 'kitchen' ? 'rgba(249, 115, 22, 0.1)' : '#f2f6fa',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
@@ -218,13 +218,13 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#f8fafc', fontSize: 13 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#24364b', fontSize: 13 }}>
                 <Utensils size={16} color="#f97316" />
                 <span>ครัวไทยหลังบ้าน</span>
               </div>
               {activePreset === 'kitchen' && <Check size={16} color="#f97316" />}
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>
+            <div style={{ fontSize: 11, color: '#52677d', lineHeight: 1.4 }}>
               แยกโครงสร้างอิสระ / ฐานรากเข็ม / ผนังมวลเบา / ประตู D1 + หน้าต่าง W1
             </div>
             <div style={{ fontSize: 10, color: '#f97316', marginTop: 'auto' }}>
@@ -238,8 +238,8 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             style={{
               padding: '12px 14px',
               borderRadius: 8,
-              border: activePreset === 'terrace' ? '2px solid #22c55e' : '1px solid #334155',
-              background: activePreset === 'terrace' ? 'rgba(34, 197, 94, 0.1)' : '#1e293b',
+              border: activePreset === 'terrace' ? '2px solid #22c55e' : '1px solid #dce4ed',
+              background: activePreset === 'terrace' ? 'rgba(34, 197, 94, 0.1)' : '#f2f6fa',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
@@ -248,13 +248,13 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#f8fafc', fontSize: 13 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#24364b', fontSize: 13 }}>
                 <TreePine size={16} color="#22c55e" />
                 <span>เทอเรสระเบียงไม้เทียม</span>
               </div>
               {activePreset === 'terrace' && <Check size={16} color="#22c55e" />}
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>
+            <div style={{ fontSize: 11, color: '#52677d', lineHeight: 1.4 }}>
               เสา คสล. / ฐานราก / คานเหล็กรองรับระเบียง
             </div>
             <div style={{ fontSize: 10, color: '#22c55e', marginTop: 'auto' }}>
@@ -267,12 +267,12 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 16, padding: 20, overflowY: 'auto' }}>
           {/* Left Column: Form Controls */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ background: '#1e293b', padding: 14, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#cbd5e1' }}>1. ขนาดและตำแหน่ง (หน่วยเมตร m)</span>
+            <div style={{ background: '#f2f6fa', padding: 14, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#40566e' }}>1. ขนาดและตำแหน่ง (หน่วยเมตร m)</span>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label style={{ fontSize: 11, color: '#94a3b8' }}>ความกว้าง (Width):</label>
+                  <label style={{ fontSize: 11, color: '#52677d' }}>ความกว้าง (Width):</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                     <input
                       type="number"
@@ -283,21 +283,21 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                       onChange={(e) => setWidth_m(parseFloat(e.target.value) || 1.0)}
                       style={{
                         width: '100%',
-                        background: '#0f172a',
-                        border: '1px solid #334155',
+                        background: '#ffffff',
+                        border: '1px solid #dce4ed',
                         borderRadius: 6,
-                        color: '#f8fafc',
+                        color: '#24364b',
                         padding: '6px 10px',
                         fontSize: 13,
                         fontWeight: 600,
                       }}
                     />
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>m</span>
+                    <span style={{ fontSize: 12, color: '#52677d' }}>m</span>
                   </div>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 11, color: '#94a3b8' }}>ความยาว/ลึก (Length):</label>
+                  <label style={{ fontSize: 11, color: '#52677d' }}>ความยาว/ลึก (Length):</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                     <input
                       type="number"
@@ -308,23 +308,23 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                       onChange={(e) => setLength_m(parseFloat(e.target.value) || 1.0)}
                       style={{
                         width: '100%',
-                        background: '#0f172a',
-                        border: '1px solid #334155',
+                        background: '#ffffff',
+                        border: '1px solid #dce4ed',
                         borderRadius: 6,
-                        color: '#f8fafc',
+                        color: '#24364b',
                         padding: '6px 10px',
                         fontSize: 13,
                         fontWeight: 600,
                       }}
                     />
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>m</span>
+                    <span style={{ fontSize: 12, color: '#52677d' }}>m</span>
                   </div>
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label style={{ fontSize: 11, color: '#94a3b8' }}>พิกัดจุดเริ่มต้น X:</label>
+                  <label style={{ fontSize: 11, color: '#52677d' }}>พิกัดจุดเริ่มต้น X:</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                     <input
                       type="number"
@@ -333,21 +333,21 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                       onChange={(e) => setPosX_m(parseFloat(e.target.value) || 0)}
                       style={{
                         width: '100%',
-                        background: '#0f172a',
-                        border: '1px solid #334155',
+                        background: '#ffffff',
+                        border: '1px solid #dce4ed',
                         borderRadius: 6,
-                        color: '#f8fafc',
+                        color: '#24364b',
                         padding: '6px 10px',
                         fontSize: 13,
                         fontWeight: 600,
                       }}
                     />
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>m</span>
+                    <span style={{ fontSize: 12, color: '#52677d' }}>m</span>
                   </div>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 11, color: '#94a3b8' }}>พิกัดจุดเริ่มต้น Y:</label>
+                  <label style={{ fontSize: 11, color: '#52677d' }}>พิกัดจุดเริ่มต้น Y:</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                     <input
                       type="number"
@@ -356,48 +356,48 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                       onChange={(e) => setPosY_m(parseFloat(e.target.value) || 0)}
                       style={{
                         width: '100%',
-                        background: '#0f172a',
-                        border: '1px solid #334155',
+                        background: '#ffffff',
+                        border: '1px solid #dce4ed',
                         borderRadius: 6,
-                        color: '#f8fafc',
+                        color: '#24364b',
                         padding: '6px 10px',
                         fontSize: 13,
                         fontWeight: 600,
                       }}
                     />
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>m</span>
+                    <span style={{ fontSize: 12, color: '#52677d' }}>m</span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* 2. Specific Preset Options */}
-            <div style={{ background: '#1e293b', padding: 14, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#cbd5e1' }}>
+            <div style={{ background: '#f2f6fa', padding: 14, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#40566e' }}>
                 2. พารามิเตอร์เฉพาะส่วนต่อเติม (Specific Options)
               </span>
 
               {activePreset === 'carport' && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: 11, color: '#94a3b8' }}>สเปกเสาโครงสร้าง:</label>
+                    <label style={{ fontSize: 11, color: '#52677d' }}>สเปกเสาโครงสร้าง:</label>
                     <select
                       value={carportColumnType}
                       onChange={(e) => setCarportColumnType(e.target.value)}
-                      style={{ background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', borderRadius: 4, padding: '4px 8px', fontSize: 12 }}
+                      style={{ background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 4, padding: '4px 8px', fontSize: 12 }}
                     >
                       <option value="SC1">เสาเหล็ก SC1 (150×150 มม.)</option>
                       <option value="C1">คอนกรีต คสล. C1 (200×200 มม.)</option>
                     </select>
                   </div>
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>สร้างเสา ฐานราก และคาน; ยังไม่รวมพื้นและหลังคา</div>
+                  <div style={{ fontSize: 11, color: '#52677d' }}>สร้างเสา ฐานราก และคาน; ยังไม่รวมพื้นและหลังคา</div>
                 </>
               )}
 
               {activePreset === 'kitchen' && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: 11, color: '#94a3b8' }}>ความสูงผนัง (Wall Height):</label>
+                    <label style={{ fontSize: 11, color: '#52677d' }}>ความสูงผนัง (Wall Height):</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input
                         type="number"
@@ -406,24 +406,24 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                         max="4.0"
                         value={kitchenWallHeight_m}
                         onChange={(e) => setKitchenWallHeight_m(parseFloat(e.target.value) || 2.8)}
-                        style={{ width: 60, background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', borderRadius: 4, padding: '4px 6px', fontSize: 12, textAlign: 'center' }}
+                        style={{ width: 60, background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 4, padding: '4px 6px', fontSize: 12, textAlign: 'center' }}
                       />
-                      <span style={{ fontSize: 11, color: '#94a3b8' }}>m</span>
+                      <span style={{ fontSize: 11, color: '#52677d' }}>m</span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: 11, color: '#94a3b8' }}>จำนวนด้านผนังที่ก่อ:</label>
+                    <label style={{ fontSize: 11, color: '#52677d' }}>จำนวนด้านผนังที่ก่อ:</label>
                     <select
                       value={kitchenWallSides}
                       onChange={(e) => setKitchenWallSides(parseInt(e.target.value) as 3 | 4)}
-                      style={{ background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', borderRadius: 4, padding: '4px 8px', fontSize: 12 }}
+                      style={{ background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 4, padding: '4px 8px', fontSize: 12 }}
                     >
                       <option value="3">3 ด้าน (แนวชนบ้านเดิมแยกขาด Expansion Joint)</option>
                       <option value="4">4 ด้านอิสระ (Fully Enclosed)</option>
                     </select>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#cbd5e1', cursor: 'pointer' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#40566e', cursor: 'pointer' }}>
                       <input
                         type="checkbox"
                         checked={kitchenIncludeDoor}
@@ -431,7 +431,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                       />
                       รวมประตู D1 (0.90 ม.)
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#cbd5e1', cursor: 'pointer' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#40566e', cursor: 'pointer' }}>
                       <input
                         type="checkbox"
                         checked={kitchenIncludeWindow}
@@ -446,7 +446,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
               {activePreset === 'terrace' && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: 11, color: '#94a3b8' }}>ระดับความสูงพื้น (Elevation):</label>
+                    <label style={{ fontSize: 11, color: '#52677d' }}>ระดับความสูงพื้น (Elevation):</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input
                         type="number"
@@ -455,12 +455,12 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                         max="1.50"
                         value={terraceElevation_m}
                         onChange={(e) => setTerraceElevation_m(parseFloat(e.target.value) || 0.45)}
-                        style={{ width: 60, background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', borderRadius: 4, padding: '4px 6px', fontSize: 12, textAlign: 'center' }}
+                        style={{ width: 60, background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 4, padding: '4px 6px', fontSize: 12, textAlign: 'center' }}
                       />
-                      <span style={{ fontSize: 11, color: '#94a3b8' }}>m</span>
+                      <span style={{ fontSize: 11, color: '#52677d' }}>m</span>
                     </div>
                   </div>
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>สร้างโครงรองรับ; ยังไม่รวมแผ่นพื้น WPC และบันได</div>
+                  <div style={{ fontSize: 11, color: '#52677d' }}>สร้างโครงรองรับ; ยังไม่รวมแผ่นพื้น WPC และบันได</div>
                 </>
               )}
             </div>
@@ -468,7 +468,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
 
           {/* Right Column: Live SVG Blueprint Preview */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#cbd5e1' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#40566e' }}>
               แผนผังจำลอง (Live Schematic Preview)
             </span>
 
@@ -477,7 +477,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                 height: 240,
                 background: '#070d1e',
                 borderRadius: 8,
-                border: '1px solid #1e293b',
+                border: '1px solid #f2f6fa',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -489,7 +489,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
               <svg width="280" height="200" viewBox="0 0 280 200" style={{ overflow: 'visible' }}>
                 <defs>
                   <pattern id="gridPattern" width="20" height="20" patternUnits="userSpaceOnUse">
-                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1e293b" strokeWidth="0.5" />
+                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#f2f6fa" strokeWidth="0.5" />
                   </pattern>
                 </defs>
                 <rect width="280" height="200" fill="url(#gridPattern)" />
@@ -501,7 +501,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                   width="180"
                   height="130"
                   fill={activePreset === 'carport' ? 'rgba(56, 189, 248, 0.08)' : activePreset === 'kitchen' ? 'rgba(249, 115, 22, 0.08)' : 'rgba(34, 197, 94, 0.08)'}
-                  stroke={activePreset === 'carport' ? '#38bdf8' : activePreset === 'kitchen' ? '#f97316' : '#22c55e'}
+                  stroke={activePreset === 'carport' ? '#0873c4' : activePreset === 'kitchen' ? '#f97316' : '#22c55e'}
                   strokeWidth="2"
                   strokeDasharray={activePreset === 'terrace' ? '4,4' : 'none'}
                 />
@@ -513,18 +513,18 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                 <rect x="30" y="150" width="20" height="20" fill="rgba(245, 158, 11, 0.2)" stroke="#f59e0b" strokeWidth="1" />
 
                 {/* Columns (Blue filled squares) */}
-                <rect x="36" y="26" width="8" height="8" fill="#38bdf8" />
-                <rect x="216" y="26" width="8" height="8" fill="#38bdf8" />
-                <rect x="216" y="156" width="8" height="8" fill="#38bdf8" />
-                <rect x="36" y="156" width="8" height="8" fill="#38bdf8" />
+                <rect x="36" y="26" width="8" height="8" fill="#0873c4" />
+                <rect x="216" y="26" width="8" height="8" fill="#0873c4" />
+                <rect x="216" y="156" width="8" height="8" fill="#0873c4" />
+                <rect x="36" y="156" width="8" height="8" fill="#0873c4" />
 
                 {/* Middle Support for Terrace or Carport */}
                 {activePreset === 'terrace' && (
                   <>
                     <rect x="120" y="20" width="20" height="20" fill="rgba(245, 158, 11, 0.2)" stroke="#f59e0b" strokeWidth="1" />
                     <rect x="120" y="150" width="20" height="20" fill="rgba(245, 158, 11, 0.2)" stroke="#f59e0b" strokeWidth="1" />
-                    <rect x="126" y="26" width="8" height="8" fill="#38bdf8" />
-                    <rect x="126" y="156" width="8" height="8" fill="#38bdf8" />
+                    <rect x="126" y="26" width="8" height="8" fill="#0873c4" />
+                    <rect x="126" y="156" width="8" height="8" fill="#0873c4" />
                   </>
                 )}
 
@@ -544,18 +544,18 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
 
                 {/* Dimensions */}
                 {/* Top Width Dimension */}
-                <line x1="40" y1="15" x2="220" y2="15" stroke="#94a3b8" strokeWidth="1" />
-                <line x1="40" y1="10" x2="40" y2="20" stroke="#94a3b8" strokeWidth="1" />
-                <line x1="220" y1="10" x2="220" y2="20" stroke="#94a3b8" strokeWidth="1" />
-                <text x="130" y="10" fill="#f8fafc" fontSize="10" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                <line x1="40" y1="15" x2="220" y2="15" stroke="#52677d" strokeWidth="1" />
+                <line x1="40" y1="10" x2="40" y2="20" stroke="#52677d" strokeWidth="1" />
+                <line x1="220" y1="10" x2="220" y2="20" stroke="#52677d" strokeWidth="1" />
+                <text x="130" y="10" fill="#24364b" fontSize="10" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
                   {width_m.toFixed(2)} m
                 </text>
 
                 {/* Right Length Dimension */}
-                <line x1="245" y1="30" x2="245" y2="160" stroke="#94a3b8" strokeWidth="1" />
-                <line x1="240" y1="30" x2="250" y2="30" stroke="#94a3b8" strokeWidth="1" />
-                <line x1="240" y1="160" x2="250" y2="160" stroke="#94a3b8" strokeWidth="1" />
-                <text x="255" y="100" fill="#f8fafc" fontSize="10" fontWeight="bold" textAnchor="start" fontFamily="monospace">
+                <line x1="245" y1="30" x2="245" y2="160" stroke="#52677d" strokeWidth="1" />
+                <line x1="240" y1="30" x2="250" y2="30" stroke="#52677d" strokeWidth="1" />
+                <line x1="240" y1="160" x2="250" y2="160" stroke="#52677d" strokeWidth="1" />
+                <text x="255" y="100" fill="#24364b" fontSize="10" fontWeight="bold" textAnchor="start" fontFamily="monospace">
                   {length_m.toFixed(2)} m
                 </text>
               </svg>
@@ -565,16 +565,16 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             <div
               style={{
                 padding: '10px 12px',
-                background: '#1e293b',
+                background: '#f2f6fa',
                 borderRadius: 6,
                 fontSize: 11,
-                color: '#94a3b8',
+                color: '#52677d',
                 lineHeight: 1.5,
-                border: '1px solid #334155',
+                border: '1px solid #dce4ed',
               }}
             >
-              <div style={{ color: '#cbd5e1', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Layers size={13} color="#38bdf8" />
+              <div style={{ color: '#40566e', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Layers size={13} color="#0873c4" />
                 <span>รายการชิ้นส่วนที่จะถูกสร้างอัตโนมัติ:</span>
               </div>
               {activePreset === 'carport' && (
@@ -597,7 +597,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
           style={{
             padding: '14px 20px',
             background: '#0b1329',
-            borderTop: '1px solid #1e293b',
+            borderTop: '1px solid #f2f6fa',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -611,9 +611,9 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             <button
               onClick={onClose}
               style={{
-                background: '#1e293b',
-                border: '1px solid #334155',
-                color: '#cbd5e1',
+                background: '#f2f6fa',
+                border: '1px solid #dce4ed',
+                color: '#40566e',
                 padding: '7px 14px',
                 borderRadius: 6,
                 fontSize: 12,

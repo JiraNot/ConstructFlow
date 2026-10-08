@@ -145,6 +145,9 @@ export function compilePermitDrawingSet(
     const r = representations.find((v) => v.object_id === id);
     if (!r) return [];
     if (r.shape.kind === "triangle_mesh") return r.shape.triangles_mm;
+    // Openings are negative space already subtracted from the host wall mesh.
+    // Emitting a box here would fill the void again in downstream geometry.
+    if (r.shape.kind === "opening") return [];
     if (r.shape.kind === "wall_extrusion") {
       const { length_mm: l, thickness_mm: t, height_mm: h, cutouts } = r.shape;
       const xs = [

@@ -1,3 +1,4 @@
+import { Dialog } from "./ui/Dialog.js";
 import React, { useState, useEffect } from "react";
 import type { ProjectDocument } from "@constructflow/project-model";
 import { WorkbenchNumberInput } from "./WorkbenchNumberInput";
@@ -46,7 +47,7 @@ const templates: {
   data: Payload;
 }[] = [
   {
-    label: "Phase 2 · พื้น Slab",
+    label: "พื้น Slab",
     create: "CreateSlab",
     update: "UpdateSlab",
     family: "structure.slab",
@@ -63,7 +64,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 2 · เหล็กบน/ล่าง/ปลอก",
+    label: "เหล็กบน/ล่าง/ปลอก",
     create: "ConfigureBeamReinforcement",
     update: "ConfigureBeamReinforcement",
     family: "structure.beam",
@@ -86,14 +87,14 @@ const templates: {
     },
   },
   {
-    label: "Phase 2 · คานลดระดับ",
+    label: "คานลดระดับ",
     create: "SetBeamDrop",
     update: "SetBeamDrop",
     family: "structure.beam",
     data: { id: "", drop_mm: 75 },
   },
   {
-    label: "Phase 2 · เสาและเหล็กปลอก",
+    label: "เสาและเหล็กปลอก",
     create: "ConfigureColumnReinforcement",
     update: "ConfigureColumnReinforcement",
     family: "structure.column",
@@ -128,7 +129,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 2 · ฐานรากและตะแกรงล่าง",
+    label: "ฐานรากและตะแกรงล่าง",
     create: "ConfigureFoundationReinforcement",
     update: "ConfigureFoundationReinforcement",
     family: "structure.foundation",
@@ -158,7 +159,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 3 · Roof footprint",
+    label: "หลังคาจากแนวขอบ",
     create: "GenerateRoof",
     update: "UpdateRoof",
     family: "roof.system",
@@ -173,7 +174,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 3 · บันได คสล. & ราวกันตก",
+    label: "บันได คสล. & ราวกันตก",
     create: "CreateStair",
     update: "UpdateStair",
     family: "architecture.stair",
@@ -193,7 +194,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 3 · บัวต่อเนื่อง",
+    label: "บัวต่อเนื่อง",
     create: "CreateMouldingRun",
     update: "UpdateMouldingRun",
     family: "decorative.moulding_run",
@@ -217,7 +218,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 3 · ลูกฟักผนัง",
+    label: "ลูกฟักผนัง",
     create: "SetPanelLayout",
     update: "UpdatePanelLayout",
     family: "decorative.panel_layout",
@@ -233,7 +234,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 4 · บ่อพัก",
+    label: "บ่อพัก",
     create: "PlaceManhole",
     update: "UpdateManhole",
     family: "drainage.manhole",
@@ -246,7 +247,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 4 · ท่อสุขาภิบาล",
+    label: "ท่อสุขาภิบาล",
     create: "CreatePipeRoute",
     update: "EditPipeRoute",
     family: "drainage.pipe_route",
@@ -267,7 +268,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 4 · ท่อน้ำดี",
+    label: "ท่อน้ำดี",
     create: "CreatePipeRoute",
     update: "EditPipeRoute",
     family: "plumbing.pipe_route",
@@ -286,7 +287,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 4 · ปั๊ม 3-valve bypass",
+    label: "ปั๊ม 3-valve bypass",
     create: "CreatePumpBypass",
     update: "UpdatePumpBypass",
     family: "plumbing.pump_bypass",
@@ -300,7 +301,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 4 · ถังบำบัด / PE",
+    label: "ถังบำบัด / PE",
     create: "CreateSepticTank",
     update: "UpdateSepticTank",
     family: "drainage.septic_tank",
@@ -315,7 +316,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 4 · ห้องน้ำ",
+    label: "ห้องน้ำ",
     create: "CreateBathroom",
     update: "UpdateBathroom",
     family: "architecture.bathroom",
@@ -339,7 +340,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 5 · ตู้และวัสดุแยกชิ้น",
+    label: "ตู้และวัสดุแยกชิ้น",
     create: "CreateCabinetRun",
     update: "UpdateCabinetRun",
     family: "interior.cabinet_run",
@@ -365,7 +366,7 @@ const templates: {
     },
   },
   {
-    label: "Phase 5 · LED และ Driver",
+    label: "LED และ Driver",
     create: "CreateLEDRun",
     update: "UpdateLEDRun",
     family: "electrical.led_run",
@@ -425,7 +426,7 @@ const labels: Record<string, string> = {
   slab_system: "ระบบพื้น",
   mark: "ชื่อชิ้นงาน",
   material: "วัสดุ",
-  type_id: "ชนิดใน Catalog",
+  type_id: "ชนิดในคลัง",
   host_id: "ชิ้นงานเจ้าบ้าน",
   drop_mm: "ระยะลดระดับ",
   edges: "Slope ของขอบแต่ละเส้น",
@@ -464,8 +465,11 @@ const labels: Record<string, string> = {
   bottom_x: "เหล็กล่างแกน X",
   bottom_y: "เหล็กล่างแกน Y",
   voids_mm: "ช่องเปิด/เจาะหลังคา (X/Y)",
+  slope_ratio: "ความลาด (เช่น 0.01 = 1:100)",
+  drain_direction_deg: "ทิศทางระบายน้ำ (องศา)",
 };
 const enums: Record<string, string[]> = {
+  material: ["reinforced_concrete", "steel", "timber", "generic"],
   slab_system: ["slab_on_ground", "suspended", "precast_plank", "hollow_core"],
   grade: ["SR24", "SD40", "SD50"],
   hook_angle_deg: ["0", "90", "135"],
@@ -476,16 +480,18 @@ const enums: Record<string, string[]> = {
   stair_type: ["straight", "l_shaped", "u_shaped"],
   structure_type: ["rc_monolithic", "steel_stringer", "wood"],
 };
+const enumLabels: Record<string,string> = {reinforced_concrete:'คอนกรีตเสริมเหล็ก',steel:'เหล็ก',timber:'ไม้',generic:'ทั่วไป',slab_on_ground:'พื้นวางบนดิน',suspended:'พื้นหล่อบนคาน',precast_plank:'พื้นสำเร็จรูป',hollow_core:'พื้น Hollow Core',pump:'ใช้ปั๊ม',bypass:'ใช้เมนตรง',isolated:'แยกระบบ',waste:'น้ำเสีย',soil:'โสโครก',rainwater:'น้ำฝน',vent:'อากาศ',cold_water:'น้ำดี',hot_water:'น้ำร้อน',light:'โคมไฟ',switch:'สวิตช์',outlet:'เต้ารับ',panel:'ตู้ไฟ',solid:'บานทึบ',glass:'กระจก',open:'ช่องเปิด',straight:'ตรง',l_shaped:'รูปตัว L',u_shaped:'รูปตัว U',rc_monolithic:'คอนกรีตเสริมเหล็ก',steel_stringer:'แม่บันไดเหล็ก',wood:'ไม้'};
 const fieldStyle: React.CSSProperties = {
   display: "grid",
+  alignContent: "start",
   gap: 4,
   padding: "5px 0",
   fontSize: 12,
 };
 const inputStyle: React.CSSProperties = {
-  background: "#0f172a",
-  color: "#e2e8f0",
-  border: "1px solid #475569",
+  background: "#ffffff",
+  color: "#33465b",
+  border: "1px solid #dce4ed",
   borderRadius: 4,
   padding: 7,
   width: "100%",
@@ -550,7 +556,7 @@ function Field({
   if (Array.isArray(value) && tupleLabels[name])
     return (
       <fieldset
-        style={{ border: "1px solid #334155", margin: "6px 0", padding: 8 }}
+        style={{ border: "1px solid #dce4ed", margin: "6px 0", padding: 8 }}
       >
         <legend>
           {label}
@@ -574,7 +580,8 @@ function Field({
   if (Array.isArray(value))
     return (
       <fieldset
-        style={{ border: "1px solid #334155", margin: "6px 0", padding: 8 }}
+        className={value.every(v=>Array.isArray(v)) ? "cf-coordinate-list" : undefined}
+        style={{ border: "1px solid #dce4ed", margin: "6px 0", padding: 8, gridColumn: "1 / -1" }}
       >
         <legend>
           {label}
@@ -696,7 +703,7 @@ function Field({
     );
   if (value !== null && typeof value === "object")
     return (
-      <fieldset style={{ border: "1px solid #334155", margin: "6px 0" }}>
+      <fieldset style={{ border: "1px solid #dce4ed", margin: "6px 0" }}>
         <legend>{label}</legend>
         {Object.entries(value).map(([k, v]) => (
           <Field
@@ -737,8 +744,9 @@ function Field({
             )
           }
         >
+          {!enums[name].includes(String(value)) && <option value={String(value)}>{String(value)}</option>}
           {enums[name].map((v) => (
-            <option key={v}>{v}</option>
+            <option key={v} value={v}>{enumLabels[v] ?? v}</option>
           ))}
         </select>
       </label>
@@ -777,27 +785,22 @@ export function ConstructionWorkbench({
   project,
   onClose,
   onExecute,
+  onOpenCatalog,
+  initialTab = "model",
 }: {
   project: ProjectDocument;
+  initialTab?: "model" | "sheets";
+  onOpenCatalog: () => void;
   onClose: () => void;
   onExecute: (c: CommandRequest[]) => CommandBatchResult;
 }) {
-  const [tab, setTab] = useState<"model" | "catalog" | "sheets">("model"),
+  const [tab, setTab] = useState<"model" | "sheets">(initialTab),
     [templateIndex, setTemplateIndex] = useState(0),
     [payload, setPayload] = useState<Payload>(
       structuredClone(templates[0].data),
     ),
     [editId, setEditId] = useState(""),
     [feedback, setFeedback] = useState("");
-  const [catalogId, setCatalogId] = useState(
-      project.types.find((t) => t.object_type === "structure.slab")?.id ?? "",
-    ),
-    [catalogDraft, setCatalogDraft] = useState<Payload>({
-      thickness_mm: 120,
-      topping_mm: 0,
-      slab_system: "slab_on_ground",
-      material: "reinforced_concrete",
-    });
   const [sheetId, setSheetId] = useState<PermitSheetId>("A-02"),
     [scale, setScale] = useState(100),
     [center, setCenter] = useState<[number, number]>([0, 0]),
@@ -834,8 +837,6 @@ export function ConstructionWorkbench({
       );
     }
   }, [project, sheetId, tab]);
-  const [newCatalogName, setNewCatalogName] = useState(""),
-    [newCatalogFamily, setNewCatalogFamily] = useState("structure.slab");
   const template = templates[templateIndex];
   const execute = (commands: CommandRequest[]) => {
     try {
@@ -875,44 +876,28 @@ export function ConstructionWorkbench({
   };
   const outputs = constructionOutputs(project);
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="ConstructFlow Phase 1–6"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 50,
-        background: "#0009",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-    >
+    <Dialog title={tab === "sheets" ? "แบบและตาราง" : "เครื่องมืองานอาคาร"} subtitle="สร้างชิ้นงาน แก้รายละเอียด และจัดชุดแบบจากโครงการเดียวกัน" onClose={onClose} className="cf-workbench">
       <section
         style={{
-          width: "min(1000px,96vw)",
-          height: "92vh",
-          background: "#1e293b",
-          color: "#e2e8f0",
+          width: "100%",
+          flex: 1,
+          minHeight: 0,
+          background: "#ffffff",
+          color: "#33465b",
           borderRadius: 8,
           display: "flex",
           flexDirection: "column",
           padding: 18,
         }}
       >
-        <header style={{ display: "flex", justifyContent: "space-between" }}>
-          <h2 style={{ margin: 0, fontSize: 18 }}>ConstructFlow · Phase 1–6</h2>
-          <button onClick={onClose}>ปิด</button>
-        </header>
         <nav style={{ display: "flex", gap: 8, margin: "12px 0" }}>
-          <button onClick={() => setTab("catalog")}>
-            1 · Beam / Slab Catalog
+          <button onClick={onOpenCatalog}>
+            คลังชนิด
           </button>
-          <button onClick={() => setTab("model")}>
-            2–5 · สร้าง/แก้ชิ้นงาน
+          <button aria-pressed={tab === "model"} onClick={() => setTab("model")}>
+            สร้าง / แก้ไขชิ้นงาน
           </button>
-          <button onClick={() => setTab("sheets")}>6 · ชุดแบบ 20 แผ่น</button>
+          <button aria-pressed={tab === "sheets"} onClick={() => setTab("sheets")}>แบบและตาราง</button>
         </nav>
         <div style={{ overflow: "auto", flex: 1 }}>
           {tab === "model" && (
@@ -933,11 +918,14 @@ export function ConstructionWorkbench({
                   setFeedback("");
                 }}
               >
-                {templates.map((t, i) => (
-                  <option key={`${t.create}:${t.family}`} value={i}>
-                    {t.label}
-                  </option>
-                ))}
+                {[
+                  ['โครงสร้าง', ['structure.']], ['สถาปัตยกรรม', ['architecture.','roof.','decorative.']],
+                  ['งานระบบ', ['drainage.','plumbing.','electrical.']], ['ภายใน', ['interior.']],
+                  ['เพิ่มเติม', ['door_window.','mep.','surface.','site.','stair.']],
+                ].map(([group,prefixes]) => <optgroup key={String(group)} label={String(group)}>{templates.map((t,i) =>
+                  (prefixes as string[]).some(prefix=>t.family.startsWith(prefix)) ? <option key={`${t.create}:${t.family}`} value={i}>{t.label}</option> : null
+                )}</optgroup>)}
+
               </select>
               <label style={fieldStyle}>
                 สร้างใหม่ / แก้ชิ้นงาน
@@ -982,7 +970,7 @@ export function ConstructionWorkbench({
               </label>
               {template.family === "structure.slab" && (
                 <label style={fieldStyle}>
-                  Slab Catalog
+                  ชนิดพื้น
                   <select
                     style={inputStyle}
                     value={String(payload.type_id ?? "")}
@@ -1015,7 +1003,7 @@ export function ConstructionWorkbench({
                     width="100%"
                     height="170"
                     viewBox="-1000 -1000 7000 4500"
-                    style={{ background: "#0f172a" }}
+                    style={{ background: "#ffffff" }}
                   >
                     <polygon
                       points={(payload.boundary_mm as number[][])
@@ -1030,7 +1018,7 @@ export function ConstructionWorkbench({
                         key={i}
                         x={v[0]}
                         y={2500 - v[1]}
-                        fill="white"
+                        fill="#33465b"
                         fontSize="180"
                       >
                         {i + 1}
@@ -1091,7 +1079,7 @@ export function ConstructionWorkbench({
                 style={{ padding: 10, marginLeft: 8 }}
                 onClick={() => execute(planPhaseProof(project))}
               >
-                เพิ่มตัวอย่าง Phase 1–6 เพื่อทดสอบ
+                เพิ่มโครงการตัวอย่างทุกหมวด
               </button>
               <h3>ผลคำนวณจากโมเดล</h3>
               <button
@@ -1149,157 +1137,12 @@ export function ConstructionWorkbench({
                       ))}
                     </dl>
                     {o.warnings.map((w) => (
-                      <p key={w} style={{ color: "#fbbf24" }}>
+                      <p key={w} style={{ color: "#805200" }}>
                         {w}
                       </p>
                     ))}
                   </details>
                 ))}
-            </>
-          )}
-          {tab === "catalog" && (
-            <>
-              <details>
-                <summary>เพิ่ม Beam / Slab Type</summary>
-                <select
-                  value={newCatalogFamily}
-                  onChange={(e) => {
-                    const f = e.target.value;
-                    setNewCatalogFamily(f);
-                    setCatalogDraft(
-                      f === "structure.slab"
-                        ? {
-                            thickness_mm: 120,
-                            topping_mm: 0,
-                            slab_system: "slab_on_ground",
-                            material: "reinforced_concrete",
-                          }
-                        : {
-                            section_mm: [200, 400],
-                            material: "reinforced_concrete",
-                            drop_mm: 0,
-                          },
-                    );
-                  }}
-                >
-                  <option value="structure.slab">Slab</option>
-                  <option value="structure.beam">Beam</option>
-                </select>
-                <input
-                  value={newCatalogName}
-                  placeholder="ชื่อชนิดใหม่"
-                  onChange={(e) => setNewCatalogName(e.target.value)}
-                />
-                <button
-                  onClick={() =>
-                    execute([
-                      {
-                        name: "DefineStructuralType",
-                        input: {
-                          object_type: newCatalogFamily,
-                          name: newCatalogName,
-                          parameters: catalogDraft,
-                        },
-                      },
-                    ])
-                  }
-                >
-                  สร้างชนิดใหม่จากค่าด้านล่าง
-                </button>
-              </details>
-              <p>
-                แก้ชนิดคาน/พื้นครั้งเดียว อัปเดตชิ้นงานที่อ้าง UUID เดียวกัน
-                พร้อม 3D, BOQ และแบบ
-              </p>
-              <select
-                style={inputStyle}
-                value={catalogId}
-                onChange={(e) => {
-                  const id = e.target.value,
-                    t = project.types.find((t) => t.id === id)!;
-                  setCatalogId(id);
-                  setCatalogDraft(structuredClone(t.parameters));
-                }}
-              >
-                {project.types
-                  .filter((t) =>
-                    ["structure.slab", "structure.beam"].includes(
-                      t.object_type,
-                    ),
-                  )
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} · {t.object_type}
-                    </option>
-                  ))}
-              </select>
-              {Object.entries(catalogDraft).map(([k, v]) => (
-                <Field
-                  key={k}
-                  name={k}
-                  value={v}
-                  project={project}
-                  onChange={(next) =>
-                    setCatalogDraft((p) => ({ ...p, [k]: next }))
-                  }
-                />
-              ))}
-              <button
-                onClick={() =>
-                  execute([
-                    {
-                      name: "UpdateStructuralTypeDimensions",
-                      input: {
-                        type_id_or_name: catalogId,
-                        parameters: catalogDraft,
-                      },
-                    },
-                  ])
-                }
-              >
-                บันทึก Catalog และ Cascade
-              </button>
-              <button
-                onClick={() => {
-                  const t = project.types.find((t) => t.id === catalogId);
-                  if (t?.object_type === "structure.beam")
-                    setCatalogDraft((p) => ({
-                      ...p,
-                      drop_mm: 0,
-                      rebar_type: {
-                        top: bar,
-                        bottom: bar,
-                        stirrups: {
-                          ...bar,
-                          grade: "SR24",
-                          diameter_mm: 6,
-                          bend_radius_mm: 12,
-                          hook_angle_deg: 135,
-                          hook_extension_mm: 60,
-                          spacing_zones: [
-                            {
-                              start_ratio: 0,
-                              end_ratio: 0.25,
-                              spacing_mm: 100,
-                            },
-                            {
-                              start_ratio: 0.25,
-                              end_ratio: 0.75,
-                              spacing_mm: 150,
-                            },
-                            {
-                              start_ratio: 0.75,
-                              end_ratio: 1,
-                              spacing_mm: 100,
-                            },
-                          ],
-                        },
-                      },
-                    }));
-                }}
-              >
-                เพิ่มรายละเอียดเหล็กใน Beam Type
-              </button>
             </>
           )}
           {tab === "sheets" && (
@@ -1463,13 +1306,13 @@ export function ConstructionWorkbench({
             whiteSpace: "pre-wrap",
             maxHeight: 120,
             overflow: "auto",
-            color: "#fbbf24",
+            color: "#805200",
             fontSize: 12,
           }}
         >
           {feedback}
         </pre>
       </section>
-    </div>
+    </Dialog>
   );
 }

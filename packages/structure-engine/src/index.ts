@@ -522,6 +522,7 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
         status: 'active',
         module_data: {
           mark,
+          placement_reference: beamInput.placement_reference || 'centerline',
           type_id: typeDef?.id,
           instance_overrides: catalogInstanceOverrides('structure.beam', { section_mm, material }, typeDef),
           start_point_mm,

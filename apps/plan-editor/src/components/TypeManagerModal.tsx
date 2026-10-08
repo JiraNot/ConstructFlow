@@ -1,1607 +1,1089 @@
-import React, { useState } from 'react'
-import {
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import type {
   ProjectDocument,
   TypeDefinition,
-  isColumnObject,
-  isFoundationObject,
-  isBeamObject,
-  isWallObject,
-  isDoorObject,
-  isWindowObject,
-} from '@constructflow/project-model'
-import { X, Plus, Check, Sliders } from 'lucide-react'
+  TypeParameters,
+} from "@constructflow/project-model";
+import type {
+  CommandRequest,
+  CommandBatchResult,
+} from "@constructflow/command-schema";
+import {
+  Search,
+  Plus,
+  ArrowLeft,
+  Star,
+  Copy,
+  Pencil,
+  Check,
+} from "lucide-react";
+import { Dialog } from "./ui/Dialog.js";
+import { CatalogField } from "./CatalogField.js";
+import {
+  CATALOG_FAMILIES,
+  TOOL_FAMILIES,
+  OPERATION_LABELS,
+  TypeThumbnail,
+  typeDescription,
+  typeSizeLabel,
+  type OpeningPreviewPart,
+} from "./catalogPresentation.js";
 
-interface TypeManagerModalProps {
-  isOpen: boolean
-  onClose: () => void
-  project: ProjectDocument
-  onUpdateTypeDimensions: (
-    typeName: string,
-    objectType:
-      | 'structure.column'
-      | 'structure.foundation'
-      | 'structure.beam'
-      | 'architecture.wall'
-      | 'door_window.door'
-      | 'door_window.window',
-    dimensions: {
-      section_mm?: [number, number]
-      size_mm?: [number, number, number]
-      thickness_mm?: number
-      height_mm?: number
-      width_mm?: number
-      sill_height_mm?: number
-    }
-  ) => void
-  onDefineType: (
-    objectType:
-      | 'structure.column'
-      | 'structure.foundation'
-      | 'structure.beam'
-      | 'architecture.wall'
-      | 'door_window.door'
-      | 'door_window.window',
-    name: string,
-    parameters: {
-      section_mm?: [number, number]
-      size_mm?: [number, number, number]
-      thickness_mm?: number
-      height_mm?: number
-      width_mm?: number
-      sill_height_mm?: number
-    }
-  ) => void
-  onRenameType: (typeId: string, name: string) => boolean
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+  project: ProjectDocument;
+  initialFamily?: string;
+  initialTypeId?: string;
+  editInitially?: boolean;
+  selectionIntent?: "draw" | "assign";
+  selectionFamily?: string;
+  selectedObjectId?: string;
+  onChoose: (type: TypeDefinition) => void;
+  onExecute: (commands: CommandRequest[]) => CommandBatchResult;
+  onRenamed: (type: TypeDefinition, name: string) => void;
 }
-
-type TabType = 'column' | 'foundation' | 'beam' | 'wall' | 'door' | 'window'
-
-export const TypeManagerModal: React.FC<TypeManagerModalProps> = ({
-  isOpen,
-  onClose,
+type Editor = {
+  source: TypeDefinition | null;
+  family: string;
+  name: string;
+  parameters: TypeParameters;
+  creating: boolean;
+};
+type Preferences = { favorites: string[]; recent: string[] };
+function loadPreferences(): Preferences {
+  try {
+    const p = JSON.parse(
+      localStorage.getItem("cf-catalog-preferences") ?? "{}",
+    );
+    return {
+      favorites: Array.isArray(p.favorites)
+        ? p.favorites.filter((v: unknown) => typeof v === "string")
+        : [],
+      recent: Array.isArray(p.recent)
+        ? p.recent.filter((v: unknown) => typeof v === "string")
+        : [],
+    };
+  } catch {
+    return { favorites: [], recent: [] };
+  }
+}
+const basic: Record<string, string[]> = {
+  "structure.column": ["section_mm"],
+  "structure.beam": ["section_mm", "drop_mm"],
+  "structure.foundation": ["size_mm", "foundation_type"],
+  "structure.slab": ["thickness_mm", "topping_mm", "slab_system"],
+  "architecture.wall": [
+    "masonry_thickness_mm",
+    "plaster_inside_thickness_mm",
+    "plaster_outside_thickness_mm",
+    "height_mm",
+  ],
+  "door_window.door": ["width_mm", "height_mm"],
+  "door_window.window": ["width_mm", "height_mm", "sill_height_mm"],
+};
+const defaults: Record<string, TypeParameters> = {
+  "structure.column": { section_mm: [200, 200] },
+  "structure.beam": { section_mm: [200, 400], drop_mm: 0 },
+  "structure.foundation": {
+    size_mm: [800, 800, 300],
+    foundation_type: "spread_footing",
+  },
+  "structure.slab": {
+    thickness_mm: 120,
+    topping_mm: 0,
+    slab_system: "slab_on_ground",
+    material: "reinforced_concrete",
+  },
+  "architecture.wall": {
+    masonry_thickness_mm: 100,
+    plaster_inside_thickness_mm: 0,
+    plaster_outside_thickness_mm: 0,
+    height_mm: 2800,
+  },
+  "door_window.door": {
+    width_mm: 900,
+    height_mm: 2000,
+    opening_operation: "hinged",
+    panel_count: 1,
+    panel_layout: ["hinged"],
+    panel_width_ratios: [1],
+    frame_material: "timber",
+    panel_material: "timber",
+    door_leaf_style: "raised_2_panel",
+    opening_handle_style: "lever",
+    opening_hardware_finish: "stainless",
+    glazing_material: "none",
+    transom_height_mm: 0,
+    muntin_rows: 1,
+    muntin_columns: 1,
+  },
+  "door_window.window": {
+    width_mm: 1200,
+    height_mm: 1200,
+    sill_height_mm: 900,
+    opening_operation: "sliding",
+    panel_count: 2,
+    panel_layout: ["sliding", "sliding"],
+    panel_width_ratios: [0.5, 0.5],
+    frame_material: "aluminium",
+    opening_handle_style: "recessed_pull",
+    opening_hardware_finish: "stainless",
+    glazing_material: "clear_glass",
+    transom_height_mm: 0,
+    bottom_light_height_mm: 0,
+    muntin_rows: 1,
+    muntin_columns: 1,
+  },
+};
+export function TypeManagerModal(props: Props) {
+  return props.isOpen ? <CatalogDialog {...props} /> : null;
+}
+function CatalogDialog({
   project,
-  onUpdateTypeDimensions,
-  onDefineType,
-  onRenameType,
-}) => {
-  const [activeTab, setActiveTab] = useState<TabType>('column')
-
-  // Edit draft states for existing types: typeId -> values
-  const [editDrafts, setEditDrafts] = useState<
-    Record<
-      string,
-      {
-        w?: number
-        d?: number
-        l?: number
-        t?: number
-        thickness_mm?: number
-        height_mm?: number
-        width_mm?: number
-        sill_height_mm?: number
-      }
-    >
-  >({})
-
-  // New Type form states
-  const [newTypeName, setNewTypeName] = useState('')
-  const [newColW, setNewColW] = useState(250)
-  const [newColD, setNewColD] = useState(250)
-  const [newBeamW, setNewBeamW] = useState(200)
-  const [newBeamD, setNewBeamD] = useState(400)
-  const [newFndW, setNewFndW] = useState(1000)
-  const [newFndL, setNewFndL] = useState(1000)
-  const [newFndT, setNewFndT] = useState(350)
-  const [newWallThick, setNewWallThick] = useState(100)
-  const [newWallHeight, setNewWallHeight] = useState(2800)
-  const [newDoorWidth, setNewDoorWidth] = useState(800)
-  const [newDoorHeight, setNewDoorHeight] = useState(2000)
-  const [newWindowWidth, setNewWindowWidth] = useState(1200)
-  const [newWindowHeight, setNewWindowHeight] = useState(1200)
-  const [newWindowSill, setNewWindowSill] = useState(900)
-  const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
-  const [renameTypeId, setRenameTypeId] = useState('')
-  const [renameValue, setRenameValue] = useState('')
-  const [renameError, setRenameError] = useState<string | null>(null)
-
-  if (!isOpen) return null
-
-  const columnTypes = (project.types || []).filter((t) => t.object_type === 'structure.column')
-  const foundationTypes = (project.types || []).filter((t) => t.object_type === 'structure.foundation')
-  const beamTypes = (project.types || []).filter((t) => t.object_type === 'structure.beam')
-  const wallTypes = (project.types || []).filter((t) => t.object_type === 'architecture.wall')
-  const doorTypes = (project.types || []).filter((t) => t.object_type === 'door_window.door')
-  const windowTypes = (project.types || []).filter((t) => t.object_type === 'door_window.window')
-
-  // Count usage of each type in current project
-  const getUsageCount = (objectType: string, typeName: string) => {
-    return Object.values(project.objects).filter((o) => {
-      if (objectType === 'structure.column' && isColumnObject(o)) {
-        return o.module_data.mark.toLowerCase() === typeName.toLowerCase()
-      }
-      if (objectType === 'structure.foundation' && isFoundationObject(o)) {
-        return o.module_data.mark.toLowerCase() === typeName.toLowerCase()
-      }
-      if (objectType === 'structure.beam' && isBeamObject(o)) {
-        return o.module_data.mark.toLowerCase() === typeName.toLowerCase()
-      }
-      if (objectType === 'architecture.wall' && isWallObject(o)) {
-        return o.module_data.mark.toLowerCase() === typeName.toLowerCase()
-      }
-      if (objectType === 'door_window.door' && isDoorObject(o)) {
-        return o.module_data.mark.toLowerCase() === typeName.toLowerCase()
-      }
-      if (objectType === 'door_window.window' && isWindowObject(o)) {
-        return o.module_data.mark.toLowerCase() === typeName.toLowerCase()
-      }
-      return false
-    }).length
-  }
-
-  const handleUpdateColDimensions = (typeDef: TypeDefinition) => {
-    const draft = editDrafts[typeDef.id]
-    const w = draft?.w ?? typeDef.parameters?.section_mm?.[0] ?? 200
-    const d = draft?.d ?? typeDef.parameters?.section_mm?.[1] ?? 200
-    onUpdateTypeDimensions(typeDef.id, 'structure.column', { section_mm: [w, d] })
-    setSaveSuccess(typeDef.name)
-    setTimeout(() => setSaveSuccess(null), 2000)
-  }
-
-  const handleUpdateBeamDimensions = (typeDef: TypeDefinition) => {
-    const draft = editDrafts[typeDef.id]
-    const w = draft?.w ?? typeDef.parameters?.section_mm?.[0] ?? 200
-    const d = draft?.d ?? typeDef.parameters?.section_mm?.[1] ?? 400
-    onUpdateTypeDimensions(typeDef.id, 'structure.beam', { section_mm: [w, d] })
-    setSaveSuccess(typeDef.name)
-    setTimeout(() => setSaveSuccess(null), 2000)
-  }
-
-  const handleUpdateFndDimensions = (typeDef: TypeDefinition) => {
-    const draft = editDrafts[typeDef.id]
-    const w = draft?.w ?? typeDef.parameters?.size_mm?.[0] ?? 800
-    const l = draft?.l ?? typeDef.parameters?.size_mm?.[1] ?? 800
-    const t = draft?.t ?? typeDef.parameters?.size_mm?.[2] ?? 300
-    onUpdateTypeDimensions(typeDef.id, 'structure.foundation', { size_mm: [w, l, t] })
-    setSaveSuccess(typeDef.name)
-    setTimeout(() => setSaveSuccess(null), 2000)
-  }
-
-  const handleUpdateWallDimensions = (typeDef: TypeDefinition) => {
-    const draft = editDrafts[typeDef.id]
-    const thickness_mm = draft?.thickness_mm ?? typeDef.parameters?.thickness_mm ?? 100
-    const height_mm = draft?.height_mm ?? typeDef.parameters?.height_mm ?? 2800
-    onUpdateTypeDimensions(typeDef.id, 'architecture.wall', { thickness_mm, height_mm })
-    setSaveSuccess(typeDef.name)
-    setTimeout(() => setSaveSuccess(null), 2000)
-  }
-
-  const handleUpdateDoorDimensions = (typeDef: TypeDefinition) => {
-    const draft = editDrafts[typeDef.id]
-    const width_mm = draft?.width_mm ?? typeDef.parameters?.width_mm ?? 800
-    const height_mm = draft?.height_mm ?? typeDef.parameters?.height_mm ?? 2000
-    onUpdateTypeDimensions(typeDef.id, 'door_window.door', { width_mm, height_mm })
-    setSaveSuccess(typeDef.name)
-    setTimeout(() => setSaveSuccess(null), 2000)
-  }
-
-  const handleUpdateWindowDimensions = (typeDef: TypeDefinition) => {
-    const draft = editDrafts[typeDef.id]
-    const width_mm = draft?.width_mm ?? typeDef.parameters?.width_mm ?? 1200
-    const height_mm = draft?.height_mm ?? typeDef.parameters?.height_mm ?? 1200
-    const sill_height_mm = draft?.sill_height_mm ?? typeDef.parameters?.sill_height_mm ?? 900
-    onUpdateTypeDimensions(typeDef.id, 'door_window.window', { width_mm, height_mm, sill_height_mm })
-    setSaveSuccess(typeDef.name)
-    setTimeout(() => setSaveSuccess(null), 2000)
-  }
-
-  const handleCreateNewType = (e: React.FormEvent) => {
-    e.preventDefault()
-    const name = newTypeName.trim().toUpperCase()
-    if (!name) return
-
-    if (activeTab === 'column') {
-      onDefineType('structure.column', name, { section_mm: [newColW, newColD] })
-    } else if (activeTab === 'beam') {
-      onDefineType('structure.beam', name, { section_mm: [newBeamW, newBeamD] })
-    } else if (activeTab === 'foundation') {
-      onDefineType('structure.foundation', name, { size_mm: [newFndW, newFndL, newFndT] })
-    } else if (activeTab === 'wall') {
-      onDefineType('architecture.wall', name, { thickness_mm: newWallThick, height_mm: newWallHeight })
-    } else if (activeTab === 'door') {
-      onDefineType('door_window.door', name, { width_mm: newDoorWidth, height_mm: newDoorHeight })
-    } else if (activeTab === 'window') {
-      onDefineType('door_window.window', name, {
-        width_mm: newWindowWidth,
-        height_mm: newWindowHeight,
-        sill_height_mm: newWindowSill,
-      })
+  onClose,
+  initialFamily,
+  initialTypeId,
+  editInitially,
+  selectionIntent,
+  selectionFamily,
+  selectedObjectId,
+  onChoose,
+  onExecute,
+  onRenamed,
+}: Props) {
+  const initial = project.types.find((t) => t.id === initialTypeId);
+  const [family, setFamily] = useState(
+    initial?.object_type ?? initialFamily ?? "structure.column",
+  );
+  const [query, setQuery] = useState(""),
+    [filter, setFilter] = useState("all"),
+    [selected, setSelected] = useState(initial?.id ?? "");
+  const [preferences, setPreferences] = useState(loadPreferences);
+  const makeEditor = (type: TypeDefinition, creating = false): Editor => {
+    const parameters = structuredClone({
+      ...defaults[type.object_type],
+      ...type.parameters,
+    });
+    if (type.object_type === "architecture.wall")
+      parameters.masonry_thickness_mm =
+        type.parameters.masonry_thickness_mm ??
+        type.parameters.thickness_mm ??
+        100;
+    if (type.object_type.startsWith("door_window.")) {
+      const count = parameters.panel_count ?? 1,
+        operation = parameters.opening_operation ?? "hinged";
+      parameters.panel_layout =
+        type.parameters.panel_layout?.length === count
+          ? structuredClone(type.parameters.panel_layout)
+          : Array.from({ length: count }, () => operation);
+      parameters.panel_width_ratios =
+        type.parameters.panel_width_ratios?.length === count
+          ? [...type.parameters.panel_width_ratios]
+          : Array.from({ length: count }, () => 1 / count);
+      parameters.opening_handle_style ??= parameters.panel_layout.includes("sliding") ? "recessed_pull" : "lever";
+      parameters.opening_hardware_finish ??= "stainless";
+      if (type.object_type.endsWith(".door")) parameters.door_leaf_style ??= parameters.panel_layout.includes("louver") ? "louvered" : "raised_2_panel";
     }
-
-    setNewTypeName('')
-    setSaveSuccess(name)
-    setTimeout(() => setSaveSuccess(null), 2000)
-  }
-
-  const getCurrentTypes = () => {
-    switch (activeTab) {
-      case 'column':
-        return columnTypes
-      case 'foundation':
-        return foundationTypes
-      case 'beam':
-        return beamTypes
-      case 'wall':
-        return wallTypes
-      case 'door':
-        return doorTypes
-      case 'window':
-        return windowTypes
+    return {
+      source: type,
+      family: type.object_type,
+      name: creating ? `${type.name}-ใหม่` : type.name,
+      parameters,
+      creating,
+    };
+  };
+  const [editor, setEditor] = useState<Editor | null>(
+    initial && editInitially ? makeEditor(initial) : null,
+  );
+  const [assignNew, setAssignNew] = useState(false);
+  const [selectedPart, setSelectedPart] = useState<OpeningPreviewPart>("all");
+  const [panelsExpanded, setPanelsExpanded] = useState(false);
+  const partFields = useRef<
+    Partial<Record<OpeningPreviewPart, HTMLElement | null>>
+  >({});
+  const selectPart = (part: OpeningPreviewPart) => {
+    setSelectedPart(part);
+    if (part.startsWith("leaf-")) setPanelsExpanded(true);
+    requestAnimationFrame(() => {
+      const target = partFields.current[part];
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target
+        ?.querySelector<HTMLElement>("input, select")
+        ?.focus({ preventScroll: true });
+    });
+  };
+  const [baseline, setBaseline] = useState(
+    initial && editInitially ? JSON.stringify(makeEditor(initial)) : "",
+  );
+  const [pending, setPending] = useState<null | (() => void)>(null),
+    [feedback, setFeedback] = useState(""),
+    [error, setError] = useState("");
+  const dirty = editor !== null && JSON.stringify(editor) !== baseline;
+  const guard = (action: () => void) => {
+    if (dirty) setPending(() => action);
+    else action();
+  };
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "cf-catalog-preferences",
+        JSON.stringify(preferences),
+      );
+    } catch {
+      /* optional UI preferences */
     }
-  }
-
+  }, [preferences]);
+  const usage = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const object of Object.values(project.objects)) {
+      const d = object.module_data as Record<string, unknown>;
+      const t = project.types.find(
+        (t) =>
+          t.object_type === object.object_type &&
+          (t.id === d.type_id || (!d.type_id && t.name === d.mark)),
+      );
+      if (t) counts.set(t.id, (counts.get(t.id) ?? 0) + 1);
+    }
+    return counts;
+  }, [project]);
+  const items = project.types.filter(
+    (t) =>
+      t.object_type === family &&
+      `${t.name} ${typeDescription(t)} ${typeSizeLabel(t)}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()) &&
+      (filter === "used"
+        ? !!usage.get(t.id)
+        : filter === "favorites"
+          ? preferences.favorites.includes(t.id)
+          : filter === "recent"
+            ? preferences.recent.includes(t.id)
+            : true),
+  );
+  if (filter === "recent")
+    items.sort(
+      (a, b) =>
+        preferences.recent.indexOf(a.id) - preferences.recent.indexOf(b.id),
+    );
+  const chosen = items.find((t) => t.id === selected) ?? items[0];
+  const choose = (t: TypeDefinition) => {
+    const next = {
+      ...preferences,
+      recent: [t.id, ...preferences.recent.filter((id) => id !== t.id)].slice(
+        0,
+        20,
+      ),
+    };
+    try {
+      localStorage.setItem("cf-catalog-preferences", JSON.stringify(next));
+    } catch {}
+    setPreferences(next);
+    onChoose(t);
+    onClose();
+  };
+  const openEditor = (next: Editor) => {
+    setSelectedPart("all");
+    setPanelsExpanded(new Set(next.parameters.panel_layout).size > 1);
+    setAssignNew(false);
+    setEditor(next);
+    setBaseline(JSON.stringify(next));
+    setError("");
+    setFeedback("");
+  };
+  const change = (key: string, value: unknown) =>
+    setEditor((e) =>
+      e ? { ...e, parameters: { ...e.parameters, [key]: value } } : e,
+    );
+  const field = (key: string) => (
+    <CatalogField
+      key={key}
+      name={key}
+      value={editor!.parameters[key] ?? defaults[editor!.family]?.[key] ?? 0}
+      onChange={(value) => change(key, value)}
+    />
+  );
+  const save = () => {
+    if (!editor) return;
+    const name = editor.name.trim();
+    if (!name) {
+      setError("กรุณาระบุรหัสชนิด");
+      return;
+    }
+    const commands: CommandRequest[] = [],
+      parameters = { ...editor.parameters };
+    // Domain command resolves wall total from the edited layer values.
+    if (
+      editor.family === "architecture.wall" &&
+      parameters.masonry_thickness_mm !== undefined
+    )
+      delete parameters.thickness_mm;
+    if (editor.creating) {
+      const id = crypto.randomUUID();
+      commands.push({
+        name: "DefineStructuralType",
+        input: { id, name, object_type: editor.family, parameters },
+      });
+      if (assignNew && selectedObjectId)
+        commands.push({
+          name: "AssignInstanceType",
+          input: { object_id: selectedObjectId, type_id: id },
+        });
+    } else {
+      if (name !== editor.source!.name)
+        commands.push({
+          name: "RenameCatalogType",
+          input: { type_id: editor.source!.id, name },
+        });
+      commands.push({
+        name: "UpdateStructuralTypeDimensions",
+        input: {
+          type_id_or_name: editor.source!.id,
+          object_type: editor.family,
+          parameters,
+        },
+      });
+    }
+    try {
+      const result = onExecute(commands);
+      if (result.status !== "success") {
+        const message = (result.errors ?? []).join("\n");
+        setError(
+          message.includes("fixed lights")
+            ? "ช่องแสงบนและล่างสูงเกินไป กรุณาลดขนาดให้เหลือพื้นที่สำหรับบานหลัก"
+            : message || "บันทึกไม่สำเร็จ กรุณาตรวจค่าที่กรอก",
+        );
+        if (message.includes("fixed lights"))
+          requestAnimationFrame(() => {
+            document
+              .querySelector<HTMLInputElement>('[aria-label="ช่องแสงบน (มม.)"]')
+              ?.focus();
+          });
+        return;
+      }
+      if (!editor.creating && name !== editor.source!.name)
+        onRenamed(editor.source!, name);
+      setEditor(null);
+      setBaseline("");
+      setError("");
+      setFamily(editor.family);
+      setFilter("all");
+      setQuery("");
+      setFeedback(`บันทึก ${name} แล้ว · ปิดคลังแล้วกด Ctrl+Z เพื่อย้อนกลับ`);
+      const t = result.updatedProject.types.find(
+        (t) => t.object_type === editor.family && t.name === name,
+      );
+      if (t) setSelected(t.id);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+  const opening = editor?.family.startsWith("door_window."),
+    p = editor?.parameters ?? {},
+    count = p.panel_count ?? 1;
+  const layout =
+      p.panel_layout ??
+      Array.from({ length: count }, () => p.opening_operation ?? "sliding"),
+    ratios =
+      p.panel_width_ratios ?? Array.from({ length: count }, () => 1 / count);
+  const handled = new Set([
+    ...(basic[editor?.family ?? ""] ?? []),
+    "opening_operation",
+    "panel_count",
+    "panel_layout",
+    "panel_width_ratios",
+    "transom_height_mm",
+    "bottom_light_height_mm",
+    "muntin_rows",
+    "muntin_columns",
+    "transom_muntin_rows",
+    "transom_muntin_columns",
+    "bottom_light_muntin_rows",
+    "bottom_light_muntin_columns",
+    "door_leaf_style",
+    "opening_handle_style",
+    "opening_hardware_finish",
+  ]);
+  const materials = [
+    "material",
+    "frame_material",
+    "panel_material",
+    "glazing_material",
+    "plaster_inside_material",
+    "plaster_outside_material",
+  ];
+  const canChoose = (type: TypeDefinition) =>
+    selectionIntent === "assign"
+      ? type.object_type === selectionFamily
+      : Object.values(TOOL_FAMILIES).includes(type.object_type);
+  const preview: TypeDefinition = {
+    id: "preview",
+    name: editor?.name ?? "",
+    object_type: editor?.family ?? "",
+    parameters: p,
+  };
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.75)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 9999,
-        backdropFilter: 'blur(3px)',
-      }}
+    <Dialog
+      title={
+        editor
+          ? editor.creating
+            ? "สร้างชนิดใหม่"
+            : `แก้ไขชนิด ${editor.source?.name}`
+          : "คลังชนิด"
+      }
+      subtitle={
+        editor
+          ? "ปรับค่าตัวอย่าง แล้วบันทึกเมื่อพร้อม"
+          : "เลือกแบบที่ต้องการ แล้วนำไปวาดหรือปรับรายละเอียด"
+      }
+      onClose={() => guard(onClose)}
+      className="cf-catalog-dialog"
     >
-      <div
-        style={{
-          background: '#0f172a',
-          border: '1px solid #334155',
-          borderRadius: 12,
-          width: 760,
-          maxWidth: '94vw',
-          maxHeight: '90vh',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            padding: '16px 20px',
-            borderBottom: '1px solid #1e293b',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Sliders size={20} color="#38bdf8" />
-            <div>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', margin: 0 }}>
-                BIM Type Catalog (กำหนดประเภทและขนาดโมเดล)
-              </h2>
-              <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>
-                การปรับขนาด Type จะอัปเดตชิ้นงานทุกชิ้นที่อ้างอิงประเภทเดียวกันในโปรเจกต์โดยอัตโนมัติ (Cascading Update)
-              </p>
-            </div>
-          </div>
+      {pending && (
+        <div className="cf-draft-warning" role="alert">
+          มีการแก้ไขที่ยังไม่ได้บันทึก
           <button
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#94a3b8',
-              cursor: 'pointer',
-              padding: 4,
+            className="cf-button cf-button-quiet"
+            onClick={() => setPending(null)}
+          >
+            กลับไปแก้ต่อ
+          </button>
+          <button
+            className="cf-button"
+            onClick={() => {
+              const action = pending;
+              setPending(null);
+              action();
             }}
           >
-            <X size={20} />
+            ทิ้งการแก้ไข
           </button>
         </div>
-
-        {/* Tab Switcher */}
-        <div
-          style={{
-            display: 'flex',
-            borderBottom: '1px solid #1e293b',
-            background: '#0b1329',
-            padding: '0 16px',
-            overflowX: 'auto',
-          }}
-        >
-          <button
-            onClick={() => setActiveTab('column')}
-            style={{
-              padding: '12px 14px',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'column' ? '2px solid #38bdf8' : '2px solid transparent',
-              color: activeTab === 'column' ? '#38bdf8' : '#94a3b8',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Column (เสา) ({columnTypes.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('foundation')}
-            style={{
-              padding: '12px 14px',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'foundation' ? '2px solid #f59e0b' : '2px solid transparent',
-              color: activeTab === 'foundation' ? '#f59e0b' : '#94a3b8',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Footing (ฐานราก) ({foundationTypes.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('beam')}
-            style={{
-              padding: '12px 14px',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'beam' ? '2px solid #a855f7' : '2px solid transparent',
-              color: activeTab === 'beam' ? '#a855f7' : '#94a3b8',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Beam (คาน) ({beamTypes.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('wall')}
-            style={{
-              padding: '12px 14px',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'wall' ? '2px solid #10b981' : '2px solid transparent',
-              color: activeTab === 'wall' ? '#10b981' : '#94a3b8',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Wall (ผนัง) ({wallTypes.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('door')}
-            style={{
-              padding: '12px 14px',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'door' ? '2px solid #f97316' : '2px solid transparent',
-              color: activeTab === 'door' ? '#f97316' : '#94a3b8',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Door (ประตู) ({doorTypes.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('window')}
-            style={{
-              padding: '12px 14px',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'window' ? '2px solid #06b6d4' : '2px solid transparent',
-              color: activeTab === 'window' ? '#06b6d4' : '#94a3b8',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Window (หน้าต่าง) ({windowTypes.length})
-          </button>
-        </div>
-
-        {/* Body List */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {saveSuccess && (
-            <div
-              style={{
-                background: 'rgba(34, 197, 94, 0.15)',
-                border: '1px solid #22c55e',
-                color: '#4ade80',
-                padding: '8px 12px',
-                borderRadius: 6,
-                fontSize: 12,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <Check size={16} /> บันทึกและอัปเดตประเภท <b>{saveSuccess}</b> ไปยังชิ้นงานทุกชิ้นเรียบร้อยแล้ว
-            </div>
-          )}
-
-          {/* List of Types */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
-              รายการประเภทปัจจุบันในแบบ
-            </div>
-
-            <form
-              onSubmit={(event) => {
-                event.preventDefault()
-                const type = getCurrentTypes().find((candidate) => candidate.id === renameTypeId)
-                if (!type || !renameValue.trim()) {
-                  setRenameError('เลือกประเภทและกรอกชื่อใหม่ก่อน')
-                  return
+      )}
+      {editor ? (
+        <>
+          <div className="cf-type-editor">
+            <div className="cf-editor-form">
+              <button
+                className="cf-button"
+                onClick={() =>
+                  guard(() => {
+                    setEditor(null);
+                    setError("");
+                  })
                 }
-                if (!onRenameType(type.id, renameValue.trim())) {
-                  setRenameError('เปลี่ยนชื่อไม่สำเร็จ: ชื่ออาจว่างหรือซ้ำกับประเภทในหมวดเดียวกัน')
-                  return
-                }
-                setRenameError(null)
-                setSaveSuccess(renameValue.trim())
-                setTimeout(() => setSaveSuccess(null), 2000)
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
-            >
-              <select
-                aria-label="ประเภทที่ต้องการเปลี่ยนชื่อ"
-                value={renameTypeId}
-                onChange={(event) => {
-                  const type = getCurrentTypes().find((candidate) => candidate.id === event.target.value)
-                  setRenameTypeId(event.target.value)
-                  setRenameValue(type?.name ?? '')
-                  setRenameError(null)
-                }}
-                style={{ background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '7px 8px' }}
               >
-                <option value="">เลือก Type</option>
-                {getCurrentTypes().map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
-              </select>
-              <input
-                aria-label="ชื่อ Type ใหม่"
-                value={renameValue}
-                onChange={(event) => setRenameValue(event.target.value)}
-                placeholder="ชื่อ Type ใหม่"
-                style={{ background: '#0f172a', border: '1px solid #475569', color: '#fff', borderRadius: 4, padding: '7px 8px' }}
-              />
-              <button type="submit" style={{ background: '#0e7490', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 12px', cursor: 'pointer' }}>
-                เปลี่ยนชื่อ Type
+                <ArrowLeft size={16} /> กลับคลังชนิด
               </button>
-              {renameError && <span role="alert" style={{ color: '#fca5a5', fontSize: 12 }}>{renameError}</span>}
-            </form>
-
-            {getCurrentTypes().map((t) => {
-              const usageCount = getUsageCount(t.object_type, t.name)
-              const draft = editDrafts[t.id]
-
-              if (activeTab === 'column') {
-                const currentW = draft?.w ?? t.parameters?.section_mm?.[0] ?? 200
-                const currentD = draft?.d ?? t.parameters?.section_mm?.[1] ?? 200
-
-                return (
-                  <div
-                    key={t.id}
-                    style={{
-                      background: '#1e293b',
-                      border: '1px solid #334155',
-                      borderRadius: 8,
-                      padding: '12px 16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ minWidth: 90 }}>
-                      <span
-                        style={{
-                          background: '#0284c7',
-                          color: '#fff',
-                          fontWeight: 800,
-                          fontSize: 14,
-                          padding: '3px 10px',
-                          borderRadius: 4,
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {t.name}
-                      </span>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{usageCount} ต้นในแบบ</div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>กว้าง:</span>
-                        <input
-                          type="number"
-                          step={50}
-                          value={currentW}
-                          onChange={(e) =>
-                            setEditDrafts((d) => ({
-                              ...d,
-                              [t.id]: { ...d[t.id], w: Number(e.target.value), d: currentD },
-                            }))
-                          }
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateColDimensions(t)}
-                          style={{
-                            width: 65,
-                            background: '#0f172a',
-                            border: '1px solid #475569',
-                            color: '#fff',
-                            borderRadius: 4,
-                            padding: '4px 6px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            textAlign: 'center',
-                          }}
-                        />
-                        <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
-                      </div>
-
-                      <span style={{ color: '#64748b' }}>×</span>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>ลึก:</span>
-                        <input
-                          type="number"
-                          step={50}
-                          value={currentD}
-                          onChange={(e) =>
-                            setEditDrafts((d) => ({
-                              ...d,
-                              [t.id]: { ...d[t.id], w: currentW, d: Number(e.target.value) },
-                            }))
-                          }
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateColDimensions(t)}
-                          style={{
-                            width: 65,
-                            background: '#0f172a',
-                            border: '1px solid #475569',
-                            color: '#fff',
-                            borderRadius: 4,
-                            padding: '4px 6px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            textAlign: 'center',
-                          }}
-                        />
-                        <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleUpdateColDimensions(t)}
-                      style={{
-                        background: '#0284c7',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 6,
-                        padding: '6px 14px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      บันทึกขนาด
-                    </button>
-                  </div>
-                )
-              } else if (activeTab === 'beam') {
-                const currentW = draft?.w ?? t.parameters?.section_mm?.[0] ?? 200
-                const currentD = draft?.d ?? t.parameters?.section_mm?.[1] ?? 400
-
-                return (
-                  <div
-                    key={t.id}
-                    style={{
-                      background: '#1e293b',
-                      border: '1px solid #334155',
-                      borderRadius: 8,
-                      padding: '12px 16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ minWidth: 90 }}>
-                      <span
-                        style={{
-                          background: '#a855f7',
-                          color: '#fff',
-                          fontWeight: 800,
-                          fontSize: 14,
-                          padding: '3px 10px',
-                          borderRadius: 4,
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {t.name}
-                      </span>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{usageCount} ช่วงในแบบ</div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>กว้าง:</span>
-                        <input
-                          type="number"
-                          step={50}
-                          value={currentW}
-                          onChange={(e) =>
-                            setEditDrafts((d) => ({
-                              ...d,
-                              [t.id]: { ...d[t.id], w: Number(e.target.value), d: currentD },
-                            }))
-                          }
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateBeamDimensions(t)}
-                          style={{
-                            width: 65,
-                            background: '#0f172a',
-                            border: '1px solid #475569',
-                            color: '#fff',
-                            borderRadius: 4,
-                            padding: '4px 6px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            textAlign: 'center',
-                          }}
-                        />
-                        <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
-                      </div>
-
-                      <span style={{ color: '#64748b' }}>×</span>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>ลึก:</span>
-                        <input
-                          type="number"
-                          step={50}
-                          value={currentD}
-                          onChange={(e) =>
-                            setEditDrafts((d) => ({
-                              ...d,
-                              [t.id]: { ...d[t.id], w: currentW, d: Number(e.target.value) },
-                            }))
-                          }
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateBeamDimensions(t)}
-                          style={{
-                            width: 65,
-                            background: '#0f172a',
-                            border: '1px solid #475569',
-                            color: '#fff',
-                            borderRadius: 4,
-                            padding: '4px 6px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            textAlign: 'center',
-                          }}
-                        />
-                        <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleUpdateBeamDimensions(t)}
-                      style={{
-                        background: '#a855f7',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 6,
-                        padding: '6px 14px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      บันทึกขนาด
-                    </button>
-                  </div>
-                )
-              } else if (activeTab === 'foundation') {
-                const currentW = draft?.w ?? t.parameters?.size_mm?.[0] ?? 800
-                const currentL = draft?.l ?? t.parameters?.size_mm?.[1] ?? 800
-                const currentT = draft?.t ?? t.parameters?.size_mm?.[2] ?? 300
-
-                return (
-                  <div
-                    key={t.id}
-                    style={{
-                      background: '#1e293b',
-                      border: '1px solid #334155',
-                      borderRadius: 8,
-                      padding: '12px 16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ minWidth: 90 }}>
-                      <span
-                        style={{
-                          background: '#d97706',
-                          color: '#fff',
-                          fontWeight: 800,
-                          fontSize: 14,
-                          padding: '3px 10px',
-                          borderRadius: 4,
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {t.name}
-                      </span>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{usageCount} ฐานในแบบ</div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, justifyContent: 'center' }}>
-                      <input
-                        type="number"
-                        step={100}
-                        value={currentW}
-                        onChange={(e) =>
-                          setEditDrafts((d) => ({
-                            ...d,
-                            [t.id]: { ...d[t.id], w: Number(e.target.value), l: currentL, t: currentT },
-                          }))
-                        }
-                        onKeyDown={(e) => e.key === 'Enter' && handleUpdateFndDimensions(t)}
-                        style={{
-                          width: 58,
-                          background: '#0f172a',
-                          border: '1px solid #475569',
-                          color: '#fff',
-                          borderRadius: 4,
-                          padding: '4px 4px',
-                          fontSize: 12,
-                          textAlign: 'center',
-                        }}
-                      />
-                      <span style={{ color: '#64748b' }}>×</span>
-                      <input
-                        type="number"
-                        step={100}
-                        value={currentL}
-                        onChange={(e) =>
-                          setEditDrafts((d) => ({
-                            ...d,
-                            [t.id]: { ...d[t.id], w: currentW, l: Number(e.target.value), t: currentT },
-                          }))
-                        }
-                        onKeyDown={(e) => e.key === 'Enter' && handleUpdateFndDimensions(t)}
-                        style={{
-                          width: 58,
-                          background: '#0f172a',
-                          border: '1px solid #475569',
-                          color: '#fff',
-                          borderRadius: 4,
-                          padding: '4px 4px',
-                          fontSize: 12,
-                          textAlign: 'center',
-                        }}
-                      />
-                      <span style={{ color: '#64748b' }}>×</span>
-                      <input
-                        type="number"
-                        step={50}
-                        value={currentT}
-                        onChange={(e) =>
-                          setEditDrafts((d) => ({
-                            ...d,
-                            [t.id]: { ...d[t.id], w: currentW, l: currentL, t: Number(e.target.value) },
-                          }))
-                        }
-                        onKeyDown={(e) => e.key === 'Enter' && handleUpdateFndDimensions(t)}
-                        style={{
-                          width: 54,
-                          background: '#0f172a',
-                          border: '1px solid #475569',
-                          color: '#fff',
-                          borderRadius: 4,
-                          padding: '4px 4px',
-                          fontSize: 12,
-                          textAlign: 'center',
-                        }}
-                      />
-                      <span style={{ fontSize: 10, color: '#64748b' }}>mm</span>
-                    </div>
-
-                    <button
-                      onClick={() => handleUpdateFndDimensions(t)}
-                      style={{
-                        background: '#d97706',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 6,
-                        padding: '6px 14px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      บันทึกขนาด
-                    </button>
-                  </div>
-                )
-              } else if (activeTab === 'wall') {
-                const currentThick = draft?.thickness_mm ?? t.parameters?.thickness_mm ?? 100
-                const currentHeight = draft?.height_mm ?? t.parameters?.height_mm ?? 2800
-
-                return (
-                  <div
-                    key={t.id}
-                    style={{
-                      background: '#1e293b',
-                      border: '1px solid #334155',
-                      borderRadius: 8,
-                      padding: '12px 16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ minWidth: 90 }}>
-                      <span
-                        style={{
-                          background: '#10b981',
-                          color: '#fff',
-                          fontWeight: 800,
-                          fontSize: 14,
-                          padding: '3px 10px',
-                          borderRadius: 4,
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {t.name}
-                      </span>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{usageCount} แผงในแบบ</div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>หนา:</span>
-                        <input
-                          type="number"
-                          step={10}
-                          value={currentThick}
-                          onChange={(e) =>
-                            setEditDrafts((d) => ({
-                              ...d,
-                              [t.id]: { ...d[t.id], thickness_mm: Number(e.target.value), height_mm: currentHeight },
-                            }))
-                          }
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateWallDimensions(t)}
-                          style={{
-                            width: 65,
-                            background: '#0f172a',
-                            border: '1px solid #475569',
-                            color: '#fff',
-                            borderRadius: 4,
-                            padding: '4px 6px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            textAlign: 'center',
-                          }}
-                        />
-                        <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
-                      </div>
-
-                      <span style={{ color: '#64748b' }}>×</span>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>สูง:</span>
-                        <input
-                          type="number"
-                          step={100}
-                          value={currentHeight}
-                          onChange={(e) =>
-                            setEditDrafts((d) => ({
-                              ...d,
-                              [t.id]: { ...d[t.id], thickness_mm: currentThick, height_mm: Number(e.target.value) },
-                            }))
-                          }
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateWallDimensions(t)}
-                          style={{
-                            width: 75,
-                            background: '#0f172a',
-                            border: '1px solid #475569',
-                            color: '#fff',
-                            borderRadius: 4,
-                            padding: '4px 6px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            textAlign: 'center',
-                          }}
-                        />
-                        <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleUpdateWallDimensions(t)}
-                      style={{
-                        background: '#10b981',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 6,
-                        padding: '6px 14px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      บันทึกขนาด
-                    </button>
-                  </div>
-                )
-              } else if (activeTab === 'door') {
-                const currentWidth = draft?.width_mm ?? t.parameters?.width_mm ?? 800
-                const currentHeight = draft?.height_mm ?? t.parameters?.height_mm ?? 2000
-
-                return (
-                  <div
-                    key={t.id}
-                    style={{
-                      background: '#1e293b',
-                      border: '1px solid #334155',
-                      borderRadius: 8,
-                      padding: '12px 16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ minWidth: 90 }}>
-                      <span
-                        style={{
-                          background: '#f97316',
-                          color: '#fff',
-                          fontWeight: 800,
-                          fontSize: 14,
-                          padding: '3px 10px',
-                          borderRadius: 4,
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {t.name}
-                      </span>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{usageCount} บานในแบบ</div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>กว้าง:</span>
-                        <input
-                          type="number"
-                          step={50}
-                          value={currentWidth}
-                          onChange={(e) =>
-                            setEditDrafts((d) => ({
-                              ...d,
-                              [t.id]: { ...d[t.id], width_mm: Number(e.target.value), height_mm: currentHeight },
-                            }))
-                          }
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateDoorDimensions(t)}
-                          style={{
-                            width: 65,
-                            background: '#0f172a',
-                            border: '1px solid #475569',
-                            color: '#fff',
-                            borderRadius: 4,
-                            padding: '4px 6px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            textAlign: 'center',
-                          }}
-                        />
-                        <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
-                      </div>
-
-                      <span style={{ color: '#64748b' }}>×</span>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>สูง:</span>
-                        <input
-                          type="number"
-                          step={50}
-                          value={currentHeight}
-                          onChange={(e) =>
-                            setEditDrafts((d) => ({
-                              ...d,
-                              [t.id]: { ...d[t.id], width_mm: currentWidth, height_mm: Number(e.target.value) },
-                            }))
-                          }
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateDoorDimensions(t)}
-                          style={{
-                            width: 75,
-                            background: '#0f172a',
-                            border: '1px solid #475569',
-                            color: '#fff',
-                            borderRadius: 4,
-                            padding: '4px 6px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            textAlign: 'center',
-                          }}
-                        />
-                        <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleUpdateDoorDimensions(t)}
-                      style={{
-                        background: '#f97316',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 6,
-                        padding: '6px 14px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      บันทึกขนาด
-                    </button>
-                  </div>
-                )
-              } else if (activeTab === 'window') {
-                const currentWidth = draft?.width_mm ?? t.parameters?.width_mm ?? 1200
-                const currentHeight = draft?.height_mm ?? t.parameters?.height_mm ?? 1200
-                const currentSill = draft?.sill_height_mm ?? t.parameters?.sill_height_mm ?? 900
-
-                return (
-                  <div
-                    key={t.id}
-                    style={{
-                      background: '#1e293b',
-                      border: '1px solid #334155',
-                      borderRadius: 8,
-                      padding: '12px 16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ minWidth: 90 }}>
-                      <span
-                        style={{
-                          background: '#06b6d4',
-                          color: '#fff',
-                          fontWeight: 800,
-                          fontSize: 14,
-                          padding: '3px 10px',
-                          borderRadius: 4,
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {t.name}
-                      </span>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{usageCount} บานในแบบ</div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, justifyContent: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>ก:</span>
-                        <input
-                          type="number"
-                          step={50}
-                          value={currentWidth}
-                          onChange={(e) =>
-                            setEditDrafts((d) => ({
-                              ...d,
-                              [t.id]: {
-                                ...d[t.id],
-                                width_mm: Number(e.target.value),
-                                height_mm: currentHeight,
-                                sill_height_mm: currentSill,
-                              },
-                            }))
-                          }
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateWindowDimensions(t)}
-                          style={{
-                            width: 60,
-                            background: '#0f172a',
-                            border: '1px solid #475569',
-                            color: '#fff',
-                            borderRadius: 4,
-                            padding: '4px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            textAlign: 'center',
-                          }}
-                        />
-                      </div>
-
-                      <span style={{ color: '#64748b' }}>×</span>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>ส:</span>
-                        <input
-                          type="number"
-                          step={50}
-                          value={currentHeight}
-                          onChange={(e) =>
-                            setEditDrafts((d) => ({
-                              ...d,
-                              [t.id]: {
-                                ...d[t.id],
-                                width_mm: currentWidth,
-                                height_mm: Number(e.target.value),
-                                sill_height_mm: currentSill,
-                              },
-                            }))
-                          }
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateWindowDimensions(t)}
-                          style={{
-                            width: 60,
-                            background: '#0f172a',
-                            border: '1px solid #475569',
-                            color: '#fff',
-                            borderRadius: 4,
-                            padding: '4px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            textAlign: 'center',
-                          }}
-                        />
-                      </div>
-
-                      <span style={{ color: '#64748b' }}>|</span>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>ธรณี:</span>
-                        <input
-                          type="number"
-                          step={50}
-                          value={currentSill}
-                          onChange={(e) =>
-                            setEditDrafts((d) => ({
-                              ...d,
-                              [t.id]: {
-                                ...d[t.id],
-                                width_mm: currentWidth,
-                                height_mm: currentHeight,
-                                sill_height_mm: Number(e.target.value),
-                              },
-                            }))
-                          }
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateWindowDimensions(t)}
-                          style={{
-                            width: 55,
-                            background: '#0f172a',
-                            border: '1px solid #475569',
-                            color: '#fff',
-                            borderRadius: 4,
-                            padding: '4px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            textAlign: 'center',
-                          }}
-                        />
-                        <span style={{ fontSize: 11, color: '#64748b' }}>mm</span>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleUpdateWindowDimensions(t)}
-                      style={{
-                        background: '#06b6d4',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 6,
-                        padding: '6px 14px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      บันทึกขนาด
-                    </button>
-                  </div>
-                )
-              }
-            })}
-          </div>
-
-          {/* Create New Type Form */}
-          <div
-            style={{
-              marginTop: 10,
-              borderTop: '1px solid #1e293b',
-              paddingTop: 16,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: '#38bdf8',
-                marginBottom: 10,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <Plus size={16} /> เพิ่มประเภทใหม่ (+ New{' '}
-              {activeTab === 'column'
-                ? 'Column'
-                : activeTab === 'beam'
-                ? 'Beam'
-                : activeTab === 'wall'
-                ? 'Wall'
-                : activeTab === 'door'
-                ? 'Door'
-                : activeTab === 'window'
-                ? 'Window'
-                : 'Footing'}{' '}
-              Type)
-            </div>
-
-            <form
-              onSubmit={handleCreateNewType}
-              style={{
-                background: '#0b1329',
-                border: '1px dashed #334155',
-                borderRadius: 8,
-                padding: '14px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <label style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>ชื่อ Type Mark:</label>
-                <input
-                  type="text"
-                  placeholder={
-                    activeTab === 'column'
-                      ? 'เช่น C3, C-L'
-                      : activeTab === 'beam'
-                      ? 'เช่น B3, GB1'
-                      : activeTab === 'wall'
-                      ? 'เช่น W4, W-EXT'
-                      : activeTab === 'door'
-                      ? 'เช่น D4, D-MAIN'
-                      : activeTab === 'window'
-                      ? 'เช่น W4, WIN-01'
-                      : 'เช่น F3, F-COMBINED'
-                  }
-                  value={newTypeName}
-                  onChange={(e) => setNewTypeName(e.target.value)}
-                  style={{
-                    width: 110,
-                    background: '#0f172a',
-                    border: '1px solid #475569',
-                    color: '#fff',
-                    borderRadius: 4,
-                    padding: '6px 8px',
-                    fontSize: 12,
-                    fontWeight: 700,
-                  }}
-                  required
-                />
+              <div className="cf-form-section">
+                <h3>ขนาดและรูปแบบ</h3>
+                <label className="cf-field">
+                  <span>รหัสชนิด</span>
+                  <input
+                    autoFocus
+                    required
+                    value={editor.name}
+                    onChange={(e) =>
+                      setEditor({ ...editor, name: e.target.value })
+                    }
+                  />
+                </label>
+                <div className="cf-field-grid">
+                  {(basic[editor.family] ?? []).map(field)}
+                </div>
               </div>
-
-              {activeTab === 'column' ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <label style={{ fontSize: 12, color: '#94a3b8' }}>ขนาดหน้าตัด (mm):</label>
-                  <input
-                    type="number"
-                    step={50}
-                    value={newColW}
-                    onChange={(e) => setNewColW(Number(e.target.value))}
-                    style={{
-                      width: 60,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                  <span style={{ color: '#64748b' }}>×</span>
-                  <input
-                    type="number"
-                    step={50}
-                    value={newColD}
-                    onChange={(e) => setNewColD(Number(e.target.value))}
-                    style={{
-                      width: 60,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                </div>
-              ) : activeTab === 'beam' ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <label style={{ fontSize: 12, color: '#94a3b8' }}>ขนาดหน้าตัดคาน (mm):</label>
-                  <input
-                    type="number"
-                    step={50}
-                    value={newBeamW}
-                    onChange={(e) => setNewBeamW(Number(e.target.value))}
-                    style={{
-                      width: 60,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                  <span style={{ color: '#64748b' }}>×</span>
-                  <input
-                    type="number"
-                    step={50}
-                    value={newBeamD}
-                    onChange={(e) => setNewBeamD(Number(e.target.value))}
-                    style={{
-                      width: 60,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                </div>
-              ) : activeTab === 'wall' ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <label style={{ fontSize: 12, color: '#94a3b8' }}>หนา × สูง (mm):</label>
-                  <input
-                    type="number"
-                    step={10}
-                    value={newWallThick}
-                    onChange={(e) => setNewWallThick(Number(e.target.value))}
-                    style={{
-                      width: 55,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                  <span style={{ color: '#64748b' }}>×</span>
-                  <input
-                    type="number"
-                    step={100}
-                    value={newWallHeight}
-                    onChange={(e) => setNewWallHeight(Number(e.target.value))}
-                    style={{
-                      width: 65,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                </div>
-              ) : activeTab === 'door' ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <label style={{ fontSize: 12, color: '#94a3b8' }}>กว้าง × สูง (mm):</label>
-                  <input
-                    type="number"
-                    step={50}
-                    value={newDoorWidth}
-                    onChange={(e) => setNewDoorWidth(Number(e.target.value))}
-                    style={{
-                      width: 60,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                  <span style={{ color: '#64748b' }}>×</span>
-                  <input
-                    type="number"
-                    step={50}
-                    value={newDoorHeight}
-                    onChange={(e) => setNewDoorHeight(Number(e.target.value))}
-                    style={{
-                      width: 65,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                </div>
-              ) : activeTab === 'window' ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <label style={{ fontSize: 12, color: '#94a3b8' }}>ก × ส | ธรณี (mm):</label>
-                  <input
-                    type="number"
-                    step={50}
-                    value={newWindowWidth}
-                    onChange={(e) => setNewWindowWidth(Number(e.target.value))}
-                    style={{
-                      width: 55,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                  <span>×</span>
-                  <input
-                    type="number"
-                    step={50}
-                    value={newWindowHeight}
-                    onChange={(e) => setNewWindowHeight(Number(e.target.value))}
-                    style={{
-                      width: 55,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                  <span>|</span>
-                  <input
-                    type="number"
-                    step={50}
-                    value={newWindowSill}
-                    onChange={(e) => setNewWindowSill(Number(e.target.value))}
-                    style={{
-                      width: 50,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <label style={{ fontSize: 12, color: '#94a3b8' }}>ขนาด (mm):</label>
-                  <input
-                    type="number"
-                    step={100}
-                    value={newFndW}
-                    onChange={(e) => setNewFndW(Number(e.target.value))}
-                    style={{
-                      width: 55,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                  <span>×</span>
-                  <input
-                    type="number"
-                    step={100}
-                    value={newFndL}
-                    onChange={(e) => setNewFndL(Number(e.target.value))}
-                    style={{
-                      width: 55,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
-                  <span>×</span>
-                  <input
-                    type="number"
-                    step={50}
-                    value={newFndT}
-                    onChange={(e) => setNewFndT(Number(e.target.value))}
-                    style={{
-                      width: 50,
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      color: '#fff',
-                      borderRadius: 4,
-                      padding: '4px',
-                      fontSize: 12,
-                    }}
-                  />
+              {opening && (
+                <div className="cf-form-section">
+                  <h3>บานหลัก</h3>
+                  <p className="cf-help">
+                    เลือกวิธีเปิดและจำนวนบานก่อน
+                    แล้วเพิ่มช่องแสงหรือลูกฟักแยกได้กับทุกวิธีเปิด
+                  </p>
+                  <div className="cf-field-grid">
+                    <label className="cf-field">
+                      <span>วิธีเปิดทุกบาน</span>
+                      <select
+                        aria-label="วิธีเปิดทุกบาน"
+                        value={
+                          new Set(layout).size > 1
+                            ? "mixed"
+                            : (layout[0] ?? p.opening_operation ?? "sliding")
+                        }
+                        onChange={(e) => {
+                          const op = e.target.value as NonNullable<
+                            TypeParameters["opening_operation"]
+                          >;
+                          setEditor({
+                            ...editor,
+                            parameters: {
+                              ...p,
+                              opening_operation: op,
+                              panel_layout: Array.from(
+                                { length: count },
+                                () => op,
+                              ),
+                            },
+                          });
+                        }}
+                      >
+                        {new Set(layout).size > 1 && (
+                          <option value="mixed" disabled>
+                            กำหนดต่างกันรายบาน
+                          </option>
+                        )}
+                        {Object.entries(OPERATION_LABELS).map(([id, label]) => (
+                          <option key={id} value={id}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="cf-field">
+                      <span>จำนวนบาน</span>
+                      <select
+                        aria-label="จำนวนบาน"
+                        value={count}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          setEditor({
+                            ...editor,
+                            parameters: {
+                              ...p,
+                              panel_count: n,
+                              panel_layout: Array.from(
+                                { length: n },
+                                (_, i) =>
+                                  layout[i] ?? p.opening_operation ?? "sliding",
+                              ),
+                              panel_width_ratios: Array.from(
+                                { length: n },
+                                () => 1 / n,
+                              ),
+                            },
+                          });
+                        }}
+                      >
+                        {[1, 2, 3, 4, 5, 6].map((n) => (
+                          <option key={n}>{n}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <details
+                    className="cf-form-section"
+                    open={panelsExpanded}
+                    onToggle={(event) =>
+                      setPanelsExpanded(event.currentTarget.open)
+                    }
+                  >
+                    <summary>ปรับแต่ละบาน · วิธีเปิดและสัดส่วน</summary>
+                    {layout.map((op, i) => (
+                      <div
+                        className={`cf-panel-row${selectedPart === `leaf-${i}` ? " is-selected" : ""}`}
+                        key={i}
+                        ref={(element) => {
+                          partFields.current[`leaf-${i}`] = element;
+                        }}
+                      >
+                        <strong>บาน {i + 1}</strong>
+                        <label className="cf-field">
+                          <span>วิธีเปิด</span>
+                          <select
+                            aria-label={`วิธีเปิดบาน ${i + 1}`}
+                            value={op}
+                            onChange={(e) => {
+                              const next = layout.map((value, index) =>
+                                index === i
+                                  ? (e.target.value as typeof op)
+                                  : value,
+                              );
+                              setEditor({
+                                ...editor,
+                                parameters: {
+                                  ...p,
+                                  panel_layout: next,
+                                  ...(count === 1
+                                    ? { opening_operation: next[0] }
+                                    : {}),
+                                },
+                              });
+                            }}
+                          >
+                            {Object.entries(OPERATION_LABELS).map(
+                              ([id, label]) => (
+                                <option key={id} value={id}>
+                                  {label}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                        </label>
+                        <label className="cf-field">
+                          <span>สัดส่วนกว้าง (%)</span>
+                          <input
+                            aria-label={`สัดส่วนบาน ${i + 1}`}
+                            type="number"
+                            min={10}
+                            max={100 - 10 * (count - 1)}
+                            disabled={count === 1}
+                            value={Math.round((ratios[i] ?? 1 / count) * 100)}
+                            onChange={(e) => {
+                              const v = Number(e.target.value) / 100;
+                              change(
+                                "panel_width_ratios",
+                                Array.from({ length: count }, (_, j) =>
+                                  j === i ? v : (1 - v) / (count - 1),
+                                ),
+                              );
+                            }}
+                          />
+                        </label>
+                      </div>
+                    ))}
+                    <p className="cf-help">
+                      สัดส่วนบานที่เหลือปรับให้รวมเป็น 100% โดยอัตโนมัติ
+                    </p>
+                  </details>
+                  <section className="cf-form-section">
+                    <h3>ช่องแสง · เพิ่มได้ทุกวิธีเปิด</h3>
+                    <p className="cf-help">
+                      กรอกความสูงช่องแสงแยกจากบานหลัก · 0 = ไม่มี ·
+                      ปัจจุบันเป็นช่องแสงคงที่
+                    </p>
+                    <div className="cf-field-grid">
+                      {[
+                        "transom_height_mm",
+                        ...(editor.family.endsWith(".window")
+                          ? ["bottom_light_height_mm"]
+                          : []),
+                      ].map((key) => (
+                        <div
+                          key={key}
+                          className={
+                            selectedPart ===
+                            (key === "transom_height_mm"
+                              ? "transom"
+                              : "bottom_light")
+                              ? "cf-selected-field"
+                              : undefined
+                          }
+                          ref={(element) => {
+                            partFields.current[
+                              key === "transom_height_mm"
+                                ? "transom"
+                                : "bottom_light"
+                            ] = element;
+                          }}
+                        >
+                          {field(key)}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="cf-help">
+                      ความสูงรวมคงเดิม: เพิ่มช่องแสงจะลดความสูงส่วนบาน
+                      รวมกรอบของส่วนนั้น
+                    </p>
+                  </section>
+                  {[
+                    ["", "ลูกฟักตัวบาน · จำนวนเส้นต่อบาน", true],
+                    [
+                      "transom_",
+                      "ลูกฟักช่องแสงบน · ทั้งช่อง",
+                      Number(p.transom_height_mm) > 0,
+                    ],
+                    [
+                      "bottom_light_",
+                      "ลูกฟักช่องแสงล่าง · ทั้งช่อง",
+                      Number(p.bottom_light_height_mm) > 0,
+                    ],
+                  ]
+                    .filter(([, , visible]) => visible)
+                    .map(([prefix, title]) => (
+                      <section className="cf-form-section" key={String(prefix)}>
+                        <h3>{title}</h3>
+                        <div className="cf-field-grid">
+                          {(["rows", "columns"] as const).map((axis) => {
+                            const key = `${prefix}muntin_${axis}`;
+                            const label = `${title} · ${axis === "rows" ? "แนวนอน" : "แนวตั้ง"} (เส้น)`;
+                            return (
+                              <label className="cf-field" key={key}>
+                                <span>
+                                  {axis === "rows" ? "แนวนอน" : "แนวตั้ง"}{" "}
+                                  (เส้น)
+                                </span>
+                                <input
+                                  aria-label={label}
+                                  type="number"
+                                  min={0}
+                                  max={7}
+                                  step={1}
+                                  value={Number(p[key] ?? 1) - 1}
+                                  onChange={(event) =>
+                                    change(key, Number(event.target.value) + 1)
+                                  }
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ))}
+                  <p className="cf-help">
+                    0 = ไม่มีเส้นลูกฟัก · 1 เส้นแนวตั้ง = แบ่งครึ่งแต่ละบาน
+                    ไม่รวมเสากลางหรือวงกบ · ช่องแสงบน/ล่างตั้งค่าแยกจากตัวบาน
+                  </p>
                 </div>
               )}
-
-              <button
-                type="submit"
-                style={{
-                  background:
-                    activeTab === 'wall'
-                      ? '#10b981'
-                      : activeTab === 'door'
-                      ? '#f97316'
-                      : activeTab === 'window'
-                      ? '#06b6d4'
-                      : activeTab === 'column'
-                      ? '#0284c7'
-                      : activeTab === 'beam'
-                      ? '#a855f7'
-                      : '#d97706',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: 6,
-                  padding: '6px 14px',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  marginLeft: 'auto',
-                }}
-              >
-                + สร้าง Type ใหม่
-              </button>
-            </form>
+              {editor.creating &&
+                selectedObjectId &&
+                editor.family === selectionFamily && (
+                  <label className="cf-field">
+                    <span>
+                      <input
+                        type="checkbox"
+                        checked={assignNew}
+                        onChange={(e) => setAssignNew(e.target.checked)}
+                      />{" "}
+                      ใช้ชนิดใหม่กับชิ้นที่เลือกเมื่อบันทึก
+                    </span>
+                  </label>
+                )}
+              {opening && <details className="cf-form-section">
+                <summary>{editor.family.endsWith(".door") ? "หน้าบานและมือจับ" : "มือจับหน้าต่าง"}</summary>
+                <p className="cf-help">แยกเลือกลายหน้าบานจากลูกฟักกระจกและวิธีเปิด · ตัวอย่างมือจับเพื่อแสดงแบบ ไม่ใช่รหัสสินค้า</p>
+                <div className="cf-field-grid">
+                  {editor.family.endsWith(".door") && p.glazing_material === "none" && field("door_leaf_style")}
+                  {(p.panel_layout ?? [p.opening_operation]).some((operation) => ["hinged", "sliding", "awning", "louver"].includes(String(operation))) && <>
+                    {field("opening_handle_style")}
+                    {field("opening_hardware_finish")}
+                  </>}
+                </div>
+              </details>}
+              <details className="cf-form-section" open>
+                <summary>วัสดุ</summary>
+                <div className="cf-field-grid">
+                  {materials
+                    .filter(
+                      (key) =>
+                        p[key] !== undefined ||
+                        (opening &&
+                          [
+                            "frame_material",
+                            "glazing_material",
+                            ...(editor.family.endsWith(".door")
+                              ? ["panel_material"]
+                              : []),
+                          ].includes(key)),
+                    )
+                    .map(field)}
+                </div>
+              </details>
+              <details className="cf-form-section">
+                <summary>รายละเอียดเพิ่มเติม</summary>
+                {editor.family === "structure.beam" && !p.rebar_type && (
+                  <button
+                    type="button"
+                    className="cf-button cf-button-quiet"
+                    onClick={() => {
+                      const bar = {
+                        grade: "SD40",
+                        diameter_mm: 12,
+                        cover_mm: 30,
+                        count: 2,
+                        bend_radius_mm: 24,
+                        hook_angle_deg: 0,
+                        hook_extension_mm: 0,
+                        lap_mm: 0,
+                        legs_mm: [],
+                        spacing_zones: [],
+                      };
+                      change("rebar_type", {
+                        top: { ...bar },
+                        bottom: { ...bar },
+                        stirrups: {
+                          ...bar,
+                          grade: "SR24",
+                          diameter_mm: 6,
+                          bend_radius_mm: 12,
+                          hook_angle_deg: 135,
+                          hook_extension_mm: 60,
+                          spacing_zones: [
+                            {
+                              start_ratio: 0,
+                              end_ratio: 0.25,
+                              spacing_mm: 100,
+                            },
+                            {
+                              start_ratio: 0.25,
+                              end_ratio: 0.75,
+                              spacing_mm: 150,
+                            },
+                            {
+                              start_ratio: 0.75,
+                              end_ratio: 1,
+                              spacing_mm: 100,
+                            },
+                          ],
+                        },
+                      });
+                    }}
+                  >
+                    เพิ่มข้อมูลเหล็กเสริม
+                  </button>
+                )}
+                <div className="cf-field-grid">
+                  {Object.keys(p)
+                    .filter(
+                      (key) =>
+                        !handled.has(key) &&
+                        !materials.includes(key) &&
+                        !(
+                          editor.family === "architecture.wall" &&
+                          key === "thickness_mm"
+                        ),
+                    )
+                    .map(field)}
+                </div>
+              </details>
+              {editor.source && (
+                <details className="cf-form-section">
+                  <summary>ข้อมูลระบบ</summary>
+                  <code>{editor.source.id}</code>
+                </details>
+              )}
+            </div>
+            <aside className="cf-editor-preview">
+              <span className="cf-eyebrow">ตัวอย่างรูปแบบ 2D</span>
+              {opening && (
+                <p className="cf-help">
+                  คลิกบานหรือช่องแสงในภาพเพื่อไปยังช่องตั้งค่า
+                </p>
+              )}
+              <TypeThumbnail
+                type={preview}
+                showDimensions={!!opening}
+                selectedPart={selectedPart}
+                onSelectPart={opening ? selectPart : undefined}
+              />
+              <h3>{typeDescription(preview)}</h3>
+              <p>{typeSizeLabel(preview)}</p>
+              <p className="cf-help">
+                {opening
+                  ? "เส้นวัดเป็นขนาดรวมและส่วนแบ่งรวมกรอบ ไม่ใช่ระยะเปิดสุทธิ · ใช้กับโมเดลเมื่อบันทึก"
+                  : "ภาพแสดงรูปแบบโดยสังเขป ใช้กับโมเดลเมื่อบันทึก"}
+              </p>
+            </aside>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div
-          style={{
-            padding: '12px 20px',
-            borderTop: '1px solid #1e293b',
-            background: '#0b1329',
-            display: 'flex',
-            justifyContent: 'flex-end',
-          }}
-        >
-          <button
-            onClick={onClose}
-            style={{
-              background: '#334155',
-              color: '#f8fafc',
-              border: 'none',
-              borderRadius: 6,
-              padding: '6px 16px',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            ปิดหน้าต่าง
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+          <footer className="cf-dialog-footer">
+            <div>
+              {error ? (
+                <p className="cf-error" role="alert">
+                  {error}
+                </p>
+              ) : (
+                <p>
+                  {editor.creating
+                    ? "สร้างชนิดใหม่ · ชิ้นงานเดิมยังใช้ชนิดเดิม"
+                    : `ชนิดนี้ใช้กับ ${usage.get(editor.source!.id) ?? 0} ชิ้น — บันทึกแล้วอัปเดตทุกชิ้น`}
+                </p>
+              )}
+            </div>
+            <button
+              className="cf-button cf-button-quiet"
+              onClick={() =>
+                guard(() => {
+                  setEditor(null);
+                  setError("");
+                })
+              }
+            >
+              ยกเลิก
+            </button>
+            <button className="cf-button cf-button-primary" onClick={save}>
+              <Check size={16} />
+              {editor.creating ? "สร้างชนิด" : "บันทึกชนิด"}
+            </button>
+          </footer>
+        </>
+      ) : (
+        <>
+          <div className="cf-catalog-body">
+            <nav className="cf-catalog-categories" aria-label="หมวดชนิด">
+              {CATALOG_FAMILIES.map(([id, label]) => (
+                <button
+                  key={id}
+                  className={family === id ? "is-active" : ""}
+                  onClick={() => {
+                    setFamily(id);
+                    setSelected("");
+                    setQuery("");
+                  }}
+                >
+                  {label}
+                  <span>
+                    {project.types.filter((t) => t.object_type === id).length}
+                  </span>
+                </button>
+              ))}
+            </nav>
+            <div className="cf-catalog-main">
+              <div className="cf-catalog-toolbar">
+                <label className="cf-search">
+                  <Search size={17} />
+                  <input
+                    autoFocus
+                    aria-label="ค้นหาชนิด"
+                    placeholder="ค้นหาชื่อ รหัส หรือรูปแบบ…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                </label>
+                <button
+                  className="cf-button cf-button-primary"
+                  onClick={() =>
+                    openEditor({
+                      source: null,
+                      family,
+                      name: "",
+                      parameters: structuredClone(defaults[family] ?? {}),
+                      creating: true,
+                    })
+                  }
+                >
+                  <Plus size={16} />
+                  สร้างใหม่
+                </button>
+              </div>
+              <div className="cf-catalog-filters" aria-label="กรองชนิด">
+                {[
+                  ["all", "ทั้งหมด"],
+                  ["used", "ใช้ในโครงการ"],
+                  ["recent", "ล่าสุด"],
+                  ["favorites", "รายการโปรด"],
+                ].map(([id, label]) => (
+                  <button
+                    key={id}
+                    aria-pressed={filter === id}
+                    className={filter === id ? "is-active" : ""}
+                    onClick={() => setFilter(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {feedback && (
+                <p role="status" className="cf-success">
+                  {feedback}
+                </p>
+              )}
+              <div className="cf-type-grid">
+                {items.map((type) => (
+                  <article
+                    key={type.id}
+                    className={`cf-type-card ${chosen?.id === type.id ? "is-selected" : ""}`}
+                  >
+                    <button
+                      className="cf-type-card-select"
+                      aria-label={`เลือก ${type.name} ${typeDescription(type)}`}
+                      aria-pressed={chosen?.id === type.id}
+                      onClick={() => setSelected(type.id)}
+                      onDoubleClick={() => {
+                        if (canChoose(type)) choose(type);
+                      }}
+                    >
+                      <TypeThumbnail type={type} />
+                      <strong>{typeDescription(type)}</strong>
+                      <span>
+                        {type.name} · {typeSizeLabel(type)}
+                      </span>
+                      <small>ใช้ในแบบ {usage.get(type.id) ?? 0} ชิ้น</small>
+                    </button>
+                    <button
+                      className="cf-favorite"
+                      aria-label={`รายการโปรด ${type.name}`}
+                      aria-pressed={preferences.favorites.includes(type.id)}
+                      onClick={() =>
+                        setPreferences((p) => ({
+                          ...p,
+                          favorites: p.favorites.includes(type.id)
+                            ? p.favorites.filter((id) => id !== type.id)
+                            : [...p.favorites, type.id],
+                        }))
+                      }
+                    >
+                      <Star
+                        size={16}
+                        fill={
+                          preferences.favorites.includes(type.id)
+                            ? "currentColor"
+                            : "none"
+                        }
+                      />
+                    </button>
+                  </article>
+                ))}
+              </div>
+              {!items.length && (
+                <div className="cf-empty-state">
+                  <Search size={25} />
+                  <h3>ไม่พบชนิดที่ตรงกัน</h3>
+                  <p>ลองเปลี่ยนคำค้นหา ตัวกรอง หรือสร้างชนิดใหม่</p>
+                  <button
+                    className="cf-button cf-button-quiet"
+                    onClick={() => {
+                      setQuery("");
+                      setFilter("all");
+                    }}
+                  >
+                    แสดงทั้งหมด
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          <footer className="cf-dialog-footer">
+            <div>
+              {chosen ? (
+                <>
+                  <strong>{chosen.name}</strong>
+                  <p>
+                    {typeSizeLabel(chosen)} · ใช้ในแบบ{" "}
+                    {usage.get(chosen.id) ?? 0} ชิ้น
+                  </p>
+                </>
+              ) : (
+                <p>เลือกชนิดเพื่อดูรายละเอียด</p>
+              )}
+            </div>
+            <button
+              disabled={!chosen}
+              className="cf-button cf-button-quiet"
+              onClick={() => chosen && openEditor(makeEditor(chosen, true))}
+            >
+              <Copy size={16} />
+              สร้างจากชนิดนี้
+            </button>
+            <button
+              disabled={!chosen}
+              className="cf-button cf-button-quiet"
+              onClick={() => chosen && openEditor(makeEditor(chosen))}
+            >
+              <Pencil size={16} />
+              แก้ไขชนิด
+            </button>
+            {chosen && canChoose(chosen) && (
+              <button
+                className="cf-button cf-button-primary"
+                onClick={() => choose(chosen)}
+              >
+                {selectionIntent === "assign"
+                  ? "ใช้กับชิ้นที่เลือก"
+                  : "เลือกเพื่อวาด"}
+              </button>
+            )}
+          </footer>
+        </>
+      )}
+    </Dialog>
+  );
 }

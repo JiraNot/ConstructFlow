@@ -69,3 +69,47 @@ test('S0: invalid or duplicate catalog names reject without changing the project
   assert.equal(duplicate.status, 'rejected')
   assert.equal(serializeProject(session.project), beforeDuplicate)
 })
+
+test('opening type builder parameters save, assign and cascade to hosted instances', async () => {
+  const project = deserializeProject(await readFile(fixtureUrl, 'utf8'))
+  const session = new ProjectCommandSession(project)
+  const window = Object.values(project.objects).find(object => object.object_type === 'door_window.window')
+  assert.ok(window)
+
+  const create = session.execute([{ name: 'DefineStructuralType', input: {
+    object_type: 'door_window.window',
+    name: 'W-COMPOSITE',
+    parameters: {
+      width_mm: 1800, height_mm: 1800, sill_height_mm: 700,
+      opening_operation: 'sliding', panel_count: 2,
+      panel_layout: ['sliding', 'fixed'],
+      panel_width_ratios: [0.65, 0.35],
+      transom_height_mm: 300, bottom_light_height_mm: 300,
+      muntin_rows: 2, muntin_columns: 3,
+      frame_depth_mm: 80, frame_material: 'aluminium',
+      glazing_material: 'clear_glass', glazing_transmission: 0.72,
+    },
+  } }])
+  assert.equal(create.status, 'success')
+  const compositeType = session.project.types.find(type => type.name === 'W-COMPOSITE')
+  assert.ok(compositeType)
+
+  const assign = session.execute([{ name: 'AssignInstanceType', input: { object_id: window.id, type_id: compositeType.id } }])
+  assert.equal(assign.status, 'success')
+  assert.equal(session.project.objects[window.id].module_data.bottom_light_height_mm, 300)
+  assert.equal(session.project.objects[window.id].module_data.transom_height_mm, 300)
+  assert.equal(session.project.objects[window.id].module_data.muntin_columns, 3)
+  assert.deepEqual(session.project.objects[window.id].module_data.panel_layout, ['sliding', 'fixed'])
+  assert.deepEqual(session.project.objects[window.id].module_data.panel_width_ratios, [0.65, 0.35])
+
+  const update = session.execute([{ name: 'UpdateStructuralTypeDimensions', input: {
+    type_id_or_name: compositeType.id,
+    object_type: 'door_window.window',
+    parameters: { bottom_light_height_mm: 350, muntin_rows: 3, panel_layout: ['fixed', 'sliding'], panel_width_ratios: [0.4, 0.6] },
+  } }])
+  assert.equal(update.status, 'success')
+  assert.equal(session.project.objects[window.id].module_data.bottom_light_height_mm, 350)
+  assert.equal(session.project.objects[window.id].module_data.muntin_rows, 3)
+  assert.deepEqual(session.project.objects[window.id].module_data.panel_layout, ['fixed', 'sliding'])
+  assert.deepEqual(session.project.objects[window.id].module_data.panel_width_ratios, [0.4, 0.6])
+})
