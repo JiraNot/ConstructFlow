@@ -41,6 +41,20 @@ export interface CalibrationOverlay {
   mouse_mm?: [number, number] | null
 }
 
+export interface PlanLabelVisibility {
+  structure: boolean
+  walls: boolean
+  openings: boolean
+  grids: boolean
+}
+
+export const DEFAULT_PLAN_LABEL_VISIBILITY: PlanLabelVisibility = {
+  structure: true,
+  walls: true,
+  openings: true,
+  grids: true,
+}
+
 export function renderPlanView(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -54,7 +68,8 @@ export function renderPlanView(
   underlay?: UnderlayConfig | null,
   calibration?: CalibrationOverlay | null,
   sourceProject: ProjectDocument = project,
-  labelMode: 'name' | 'name-size' = 'name-size'
+  labelMode: 'name' | 'name-size' = 'name-size',
+  labelVisibility: PlanLabelVisibility = DEFAULT_PLAN_LABEL_VISIBILITY
 ) {
   const isSelected = (id: string) => Array.isArray(selectedId) ? selectedId.includes(id) : selectedId === id
   beginPlanLabels(ctx, viewport.zoom)
@@ -78,49 +93,49 @@ export function renderPlanView(
     const lines=[...out.paths,...out.meshes.map(t=>[...t,t[0]])]
     const seen=new Set<string>()
     for(const points of lines){const key=points.map(v=>v.slice(0,2).join(',')).join('|');if(seen.has(key))continue;seen.add(key);ctx.beginPath();points.forEach((p,i)=>{const [x,y]=worldToScreen([p[0],p[1]],viewport);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y)});ctx.stroke()}
-    const anchor=lines[0]?.[0];if(anchor){const [x,y]=worldToScreen([anchor[0],anchor[1]],viewport);ctx.font='11px sans-serif';const family=project.objects[out.object_id]?.object_type ?? '';const shape=family.endsWith('.ceiling')?'ellipse':'rect';queuePlanLabel(ctx,x+4,y-12,out.mark,String(ctx.strokeStyle),'#c7d3df',isSelected(out.object_id)?10:0,'#fbfdff',false,shape)}
+    const anchor=lines[0]?.[0];if(anchor && labelVisibility.structure){const [x,y]=worldToScreen([anchor[0],anchor[1]],viewport);ctx.font='11px sans-serif';const family=project.objects[out.object_id]?.object_type ?? '';const shape=family.endsWith('.ceiling')?'ellipse':'rect';queuePlanLabel(ctx,x+4,y-12,out.mark,String(ctx.strokeStyle),'#c7d3df',isSelected(out.object_id)?10:0,'#fbfdff',false,shape)}
     ctx.restore()
   }
   for (const obj of Object.values(project.objects)) {
     if (isGridObject(obj)) {
-      drawStructuralGrid(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id)
+      drawStructuralGrid(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.grids)
     }
   }
 
   // 4. Foundations (rendered underneath beams and columns)
   for (const obj of Object.values(project.objects)) {
     if (isFoundationObject(obj)) {
-      drawFoundation(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id)
+      drawFoundation(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.structure)
     }
   }
 
   // 5. Beams (rendered connecting columns/grids)
   for (const obj of Object.values(project.objects)) {
     if (isBeamObject(obj)) {
-      drawBeam(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id, labelMode)
+      drawBeam(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id, labelMode, labelVisibility.structure)
     }
   }
 
   // 6. Walls (rendered with opening cutouts)
   for (const obj of Object.values(project.objects)) {
     if (isWallObject(obj)) {
-      drawWall(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id)
+      drawWall(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.walls)
     }
   }
 
   // 7. Windows & Doors (infill symbols on walls)
   for (const obj of Object.values(project.objects)) {
     if (isWindowObject(obj)) {
-      drawWindow(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id)
+      drawWindow(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.openings)
     } else if (isDoorObject(obj)) {
-      drawDoor(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id)
+      drawDoor(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.openings)
     }
   }
 
   // 8. Columns (rendered with cross hatch and human-readable mark)
   for (const obj of Object.values(project.objects)) {
     if (isColumnObject(obj)) {
-      drawColumn(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id)
+      drawColumn(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.structure)
     }
   }
 
@@ -223,7 +238,8 @@ function drawStructuralGrid(
   obj: ReturnType<typeof isGridObject> extends true ? any : SmartObject<any>,
   viewport: ViewportState,
   isSelected: boolean,
-  isHovered: boolean
+  isHovered: boolean,
+  showLabel: boolean
 ) {
   const { tag, orientation, position_mm, extent_mm } = obj.module_data
   const extent = extent_mm || [-10000, 15000]
@@ -262,6 +278,7 @@ function drawStructuralGrid(
 
   ctx.setLineDash([])
 
+  if (!showLabel) { ctx.restore(); return }
   // Grid Bubble Marker
   const radius = 14
   ctx.fillStyle = '#ffffff'
@@ -289,7 +306,8 @@ function drawFoundation(
   obj: ReturnType<typeof isFoundationObject> extends true ? any : SmartObject<any>,
   viewport: ViewportState,
   isSelected: boolean,
-  isHovered: boolean
+  isHovered: boolean,
+  showLabel: boolean
 ) {
   const { mark, center_mm, size_mm } = obj.module_data
   const [cx, cy] = center_mm
@@ -325,7 +343,7 @@ function drawFoundation(
   // Tuck footing marks into the lower-left edge of the footing outline. This
   // keeps them beside their own footing instead of colliding with the column
   // mark directly above and being moved into a distant screen-space lane.
-  queuePlanLabel(ctx, minX + 8, maxY - 8, text, '#64748b', '#c7d3df', isSelected ? 10 : 3)
+  if (showLabel) queuePlanLabel(ctx, minX + 8, maxY - 8, text, '#64748b', '#c7d3df', isSelected ? 10 : 3)
 
   ctx.restore()
 }
@@ -335,7 +353,8 @@ function drawColumn(
   obj: ReturnType<typeof isColumnObject> extends true ? any : SmartObject<any>,
   viewport: ViewportState,
   isSelected: boolean,
-  isHovered: boolean
+  isHovered: boolean,
+  showLabel: boolean
 ) {
   const { mark, location_mm, section_mm } = obj.module_data
   const [cx, cy] = location_mm
@@ -383,7 +402,7 @@ function drawColumn(
   ctx.textAlign = 'center'
   ctx.textBaseline = 'bottom'
   const name = mark || 'วัตถุ'
-  queuePlanLabel(ctx, (minX + maxX) / 2, minY - 12, name, '#33465b', '#c7d3df', isSelected ? 10 : 2)
+  if (showLabel) queuePlanLabel(ctx, (minX + maxX) / 2, minY - 12, name, '#33465b', '#c7d3df', isSelected ? 10 : 2)
 
   ctx.restore()
 }
@@ -395,7 +414,8 @@ function drawBeam(
   viewport: ViewportState,
   isSelected: boolean,
   isHovered: boolean,
-  labelMode: 'name' | 'name-size'
+  labelMode: 'name' | 'name-size',
+  showLabel: boolean
 ) {
   const { mark, start_point_mm, end_point_mm, section_mm, span_mm } = obj.module_data
   const [w_mm, d_mm] = section_mm || [200, 400]
@@ -517,7 +537,7 @@ function drawBeam(
   ctx.rotate(angle)
 
   // Label badge
-  queuePlanLabel(ctx, 0, -18, text, isSelected ? '#0876d1' : '#33465b', isSelected ? '#1682e8' : '#c7d3df', isSelected ? 10 : isHovered ? 8 : 1, '#fbfdff', true)
+  if (showLabel) queuePlanLabel(ctx, 0, -18, text, isSelected ? '#0876d1' : '#33465b', isSelected ? '#1682e8' : '#c7d3df', isSelected ? 10 : isHovered ? 8 : 1, '#fbfdff', true)
 
   ctx.restore()
 }
@@ -528,7 +548,8 @@ function drawWall(
   project: ProjectDocument,
   viewport: ViewportState,
   isSelected: boolean,
-  isHovered: boolean
+  isHovered: boolean,
+  showLabel: boolean
 ) {
   const { start_point_mm, end_point_mm, thickness_mm, mark } = wall.module_data
   const [x1, y1] = start_point_mm
@@ -715,7 +736,7 @@ function drawWall(
   const labelSegment = subSegments
     .filter(segment => (segment.e - segment.s) * viewport.zoom >= tagWidthPx + 12)
     .sort((a, b) => (b.e - b.s) - (a.e - a.s))[0]
-  if (labelSegment) {
+  if (labelSegment && showLabel) {
     const labelDistance = (labelSegment.s + labelSegment.e) / 2
     const [mx, my] = worldToScreen([x1 + labelDistance * ux, y1 + labelDistance * uy], viewport)
     ctx.save()
@@ -733,7 +754,8 @@ function drawDoor(
   project: ProjectDocument,
   viewport: ViewportState,
   isSelected: boolean,
-  isHovered: boolean
+  isHovered: boolean,
+  showLabel: boolean
 ) {
   const { mark, wall_id, offset_along_wall_mm, width_mm, handing } = door.module_data
   const hostWall = project.objects[wall_id]
@@ -1055,7 +1077,7 @@ function drawDoor(
   ctx.save()
   const [tagX, tagY] = doorSwingTagPoint ?? [scx, scy]
   ctx.translate(tagX, tagY)
-  queuePlanLabel(ctx, 0, 0, text, '#15803d', isSelected ? '#1682e8' : '#22c55e', isSelected ? 10 : isHovered ? 8 : 5, '#fbfdff', true, 'circle')
+  if (showLabel) queuePlanLabel(ctx, 0, 0, text, '#15803d', isSelected ? '#1682e8' : '#22c55e', isSelected ? 10 : isHovered ? 8 : 5, '#fbfdff', true, 'circle')
   ctx.restore()
 
   ctx.restore()
@@ -1067,7 +1089,8 @@ function drawWindow(
   project: ProjectDocument,
   viewport: ViewportState,
   isSelected: boolean,
-  isHovered: boolean
+  isHovered: boolean,
+  showLabel: boolean
 ) {
   const { mark, wall_id, offset_along_wall_mm, width_mm } = win.module_data
   const hostWall = project.objects[wall_id]
@@ -1457,7 +1480,7 @@ function drawWindow(
   const windowTagScale = planLabelScale(viewport.zoom)
   const windowTagOffset = thickPx / 2 + 9 * windowTagScale + 8
   ctx.rotate(Math.atan2(-uy, ux))
-  queuePlanLabel(ctx, 0, -windowTagOffset, text, '#0369a1', isSelected ? '#1682e8' : '#0ea5e9', isSelected ? 10 : isHovered ? 8 : 5, '#fbfdff', true, 'hexagon', [0, -thickPx / 2])
+  if (showLabel) queuePlanLabel(ctx, 0, -windowTagOffset, text, '#0369a1', isSelected ? '#1682e8' : '#0ea5e9', isSelected ? 10 : isHovered ? 8 : 5, '#fbfdff', true, 'hexagon', [0, -thickPx / 2])
   ctx.restore()
 
   ctx.restore()

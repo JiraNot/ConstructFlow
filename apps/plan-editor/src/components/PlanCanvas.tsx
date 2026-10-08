@@ -24,8 +24,8 @@ import {
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
 import { constrainPointToReference, DEFAULT_SNAP_MODES, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, snapPoint, snapToWallHost, WallHostSnapResult } from '@constructflow/snapping-engine'
-import { renderPlanView, PlacementGhost, UnderlayConfig } from '../rendering/planRenderer.js'
-import { Maximize2, ZoomIn, ZoomOut, Tag } from 'lucide-react'
+import { renderPlanView, PlacementGhost, UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
+import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 
 const PLACEMENT_DIMENSION_TOOLS = new Set<ToolType>(['column', 'foundation', 'beam', 'wall', 'door', 'window', 'grid', 'stair', 'slab'])
 
@@ -39,6 +39,8 @@ interface PlanCanvasProps {
   activeDoorTypeMark: string
   activeWindowTypeMark: string
   activeSlabTypeMark: string
+  labelMode: 'name' | 'name-size'
+  labelVisibility: PlanLabelVisibility
   onOpenTypeManager: () => void
   onChangeActiveTypeMark: (typeMark: string) => void
   selectedId: string | null
@@ -250,6 +252,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   activeDoorTypeMark,
   activeWindowTypeMark,
   activeSlabTypeMark,
+  labelMode,
+  labelVisibility,
   onChangeActiveTypeMark,
   onOpenTypeManager,
   selectedId,
@@ -304,7 +308,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [dimensionAnchorY, setDimensionAnchorY] = useState<number | null>(null)
   const [dimensionKeyboardAxis, setDimensionKeyboardAxis] = useState<'x' | 'y'>('x')
   const [dimensionReferenceMode, setDimensionReferenceMode] = useState<'center' | 'edge'>('center')
-  const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
   const enabledSnapModes = useMemo(() => new Set(snapModes), [snapModes])
 
   const applyPlacementDimensions = (point: [number, number], refs: { refX?: number; refY?: number }, rawPoint: [number, number] = point): [number, number] => {
@@ -723,6 +726,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       calibrationOverlay,
       project,
       labelMode,
+      labelVisibility,
     )
     if (activeTool === 'measure' && tapeMeasure) drawTapeMeasure(ctx, tapeMeasure.start, tapeMeasure.end, viewport, tapeMeasure.complete)
     if (activeSnap && PLACEMENT_DIMENSION_TOOLS.has(activeTool)) {
@@ -767,6 +771,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   }, [
     project,
     labelMode,
+    labelVisibility,
     planProject,
     viewport,
     selectedIds,
@@ -1514,11 +1519,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         <button type="button" className="cf-dimension-reference-toggle" aria-label="สลับวัดจากกึ่งกลางหรือขอบวัตถุ" aria-pressed={dimensionReferenceMode === 'edge'} onClick={toggleDimensionReferenceMode}>วัดจาก {dimensionReferenceMode === 'center' ? 'กึ่งกลาง' : 'ขอบ'}</button>
         <small>พิมพ์ระยะแล้วคลิก · Tab กลาง/ขอบ · Shift+Tab สลับแกน</small>
       </div>}
-      <div className="cf-label-mode" role="group" aria-label="รูปแบบป้ายชื่อและขนาด" onPointerDown={event => event.stopPropagation()}>
-        <Tag size={15} aria-hidden="true" />
-        <button type="button" aria-pressed={labelMode === 'name'} onClick={() => setLabelMode('name')}>ชื่อ</button>
-        <button type="button" aria-pressed={labelMode === 'name-size'} onClick={() => setLabelMode('name-size')}>ชื่อ + ขนาดคาน</button>
-      </div>
       {activeTool === 'select' && pickCandidates.length > 1 && <div className="cf-pick-stack" role="group" aria-label="วัตถุซ้อนกัน" onPointerDown={event => event.stopPropagation()}>
         <span>วัตถุซ้อนกัน {pickCandidates.length} ชิ้น</span>
           <button type="button" onClick={() => cyclePick(true)} aria-label="เลือกวัตถุก่อนหน้า">‹</button>

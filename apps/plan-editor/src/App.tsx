@@ -30,8 +30,8 @@ import { ProjectLegalModal } from './components/ProjectLegalModal.js'
 import { exportProjectToDxf } from '@constructflow/cad-adapter'
 import { exportProjectToIfc } from '@constructflow/bim-adapter'
 import type { ProjectLegalMetadata } from '@constructflow/project-model'
-import { UnderlayConfig } from './rendering/planRenderer.js'
-import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal } from 'lucide-react'
+import { UnderlayConfig, PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
+import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag } from 'lucide-react'
 import { calculateTakeoff } from '@constructflow/takeoff-engine'
 import { createKitchenProofProject } from '@constructflow/extension-engine'
 import { renderPermitDrawingSetHtml } from '@constructflow/sheet-engine'
@@ -102,6 +102,8 @@ export const App: React.FC = () => {
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
   const [viewMode, setViewMode] = useState<'plan' | 'model3d'>('plan')
+  const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
+  const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
   const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects'>('properties')
   const [activeColumnType, setActiveColumnType] = useState<string>('C1')
   const [activeFoundationType, setActiveFoundationType] = useState<string>('F1')
@@ -1278,6 +1280,29 @@ export const App: React.FC = () => {
                 {mode === 'plan' ? '2D แปลน' : '3D โมเดล'}
               </button>
             ))}
+            {viewMode === 'plan' && <details className="cf-label-menu" onClick={event => {
+              if ((event.target as HTMLElement).closest('input')) event.stopPropagation()
+            }}>
+              <summary title="การแสดงป้ายและระยะ" aria-label="การแสดงป้ายและระยะ"><Tag size={15} aria-hidden="true" /></summary>
+              <div className="cf-label-popover" role="group" aria-label="การแสดงป้ายและระยะ">
+                <strong>ป้ายชื่อและระยะ</strong>
+                <div className="cf-label-style-toggle" role="group" aria-label="รูปแบบป้ายคาน">
+                  <button type="button" aria-pressed={labelMode === 'name'} onClick={() => setLabelMode('name')}>ชื่อ</button>
+                  <button type="button" aria-pressed={labelMode === 'name-size'} onClick={() => setLabelMode('name-size')}>ชื่อ + ขนาดคาน</button>
+                </div>
+                <div className="cf-label-category-list">
+                  {([
+                    ['structure', 'โครงสร้าง · เสา ฐานราก คาน'],
+                    ['walls', 'ผนัง · รหัสผิวสองด้าน'],
+                    ['openings', 'ประตูและหน้าต่าง'],
+                    ['grids', 'กริดไลน์'],
+                  ] as const).map(([key, label]) => <label key={key}>
+                    <input type="checkbox" checked={labelVisibility[key]} onChange={event => setLabelVisibility(current => ({ ...current, [key]: event.target.checked }))} />
+                    <span>{label}</span>
+                  </label>)}
+                </div>
+              </div>
+            </details>}
           </div>
 
           {/* Interactive Plan Canvas */}
@@ -1292,6 +1317,8 @@ export const App: React.FC = () => {
               activeDoorTypeMark={activeDoorType}
               activeWindowTypeMark={activeWindowType}
               activeSlabTypeMark={activeSlabType}
+              labelMode={labelMode}
+              labelVisibility={labelVisibility}
               onOpenTypeManager={() => openCatalog()}
               onChangeActiveTypeMark={(mark) => {
                 if (activeTool === 'column') setActiveColumnType(mark)
