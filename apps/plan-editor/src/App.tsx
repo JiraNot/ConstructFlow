@@ -3,6 +3,7 @@ import {
   ProjectDocument,
   TypeDefinition,
   createEmptyProjectDocument,
+  deserializeProject,
   serializeProject,
   Phase,
   RemovalPhase,
@@ -15,11 +16,14 @@ import {
   isWindowObject,
   DoorHanding,
   PlacementReference,
+  formatLengthMm,
+  type DisplayLengthUnit,
 } from '@constructflow/project-model'
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
 import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
 import { Toolbar, ToolType } from './components/Toolbar.js'
 import { PlanCanvas } from './components/PlanCanvas.js'
+import { ElevationCanvas, ElevationDirection } from './components/ElevationCanvas.js'
 import { PropertiesPanel } from './components/PropertiesPanel.js'
 import { SettingsModal } from './components/SettingsModal.js'
 import { TOOL_FAMILIES } from './components/catalogPresentation.js'
@@ -31,11 +35,12 @@ import { exportProjectToDxf } from '@constructflow/cad-adapter'
 import { exportProjectToIfc } from '@constructflow/bim-adapter'
 import type { ProjectLegalMetadata } from '@constructflow/project-model'
 import { UnderlayConfig, PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
-import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag } from 'lucide-react'
+import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown } from 'lucide-react'
 import { calculateTakeoff } from '@constructflow/takeoff-engine'
 import { createKitchenProofProject } from '@constructflow/extension-engine'
 import { renderPermitDrawingSetHtml } from '@constructflow/sheet-engine'
 import { readProjectFile, writeProjectFile, type LocalProjectFileHandle } from './projectFileIO.js'
+import { loadLocalProjectSnapshot, saveLocalProjectSnapshot } from './projectAutosave.js'
 
 const headerActionStyle: React.CSSProperties = {
   display: 'inline-flex',
@@ -57,6 +62,13 @@ const takeoffCostCenterLabels: Record<string, string> = {
   remodeling_joint_treatment: 'รอยต่อเดิม–ใหม่',
 }
 
+const nextHigherLevelId = (project: ProjectDocument, baseLevelId: string): string => {
+  const base = project.levels.find(level => level.id === baseLevelId)
+  return base ? [...project.levels]
+    .filter(level => level.elevation_mm > base.elevation_mm)
+    .sort((a, b) => a.elevation_mm - b.elevation_mm)[0]?.id ?? '' : ''
+}
+
 const Model3DViewport = lazy(() => import('./components/Model3DViewport.js').then(module => ({ default: module.Model3DViewport })))
 const ConstructionWorkbench=lazy(()=>import('./components/ConstructionWorkbench.js').then(m=>({default:m.ConstructionWorkbench})))
 
@@ -71,19 +83,87 @@ type ProjectSaveWindow = Window & {
   }) => Promise<LocalProjectFileHandle>
 }
 
+const projectFileName = (project: ProjectDocument) => {
+  const safeName = project.project.name.trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/[. ]+$/g, '')
+    .replace(/\.cfproj$/i, '')
+  return `${safeName || project.project.id || 'project'}.cfproj`
+}
+
 export const App: React.FC = () => {
   const [project, setProjectState] = useState<ProjectDocument>(() =>
-    createEmptyProjectDocument('CF-PROJ-001', 'ConstructFlow Vertical Slice 01 & 02')
+    createEmptyProjectDocument('CF-UNTITLED', 'Untitled Project')
   )
+  const displayUnit: DisplayLengthUnit = project.project.display_unit ?? 'm'
   const projectJson = useMemo(() => serializeProject(project), [project])
-  const [savedProjectJson, setSavedProjectJson] = useState<string | null>(null)
-  const [replacementBaselineJson, setReplacementBaselineJson] = useState<string | null>(null)
+  const [savedProjectJson, setSavedProjectJson] = useState<string | null>(projectJson)
+  const [replacementBaselineJson, setReplacementBaselineJson] = useState<string | null>(projectJson)
+  const [localAutosaveReady, setLocalAutosaveReady] = useState(false)
+  const [localAutosaveState, setLocalAutosaveState] = useState<'restoring' | 'saving' | 'saved' | 'error'>('restoring')
+  const [isProjectNameEditing, setIsProjectNameEditing] = useState(false)
+  const [projectNameDraft, setProjectNameDraft] = useState(project.project.name)
   const [fileFeedback, setFileFeedback] = useState('')
   const supportsProjectFileOpen = typeof (window as ProjectSaveWindow).showOpenFilePicker === 'function'
-  const hasUnsavedChanges = savedProjectJson !== projectJson
   const projectSessionRef = useRef<ProjectCommandSession | null>(null)
-  const projectFileHandleRef = useRef<LocalProjectFileHandle | null>(null)
+  const locallySavedProjectJsonRef = useRef<string | null>(null)
   if (!projectSessionRef.current) projectSessionRef.current = new ProjectCommandSession(project)
+  useEffect(() => {
+    let active = true
+    void loadLocalProjectSnapshot()
+      .then(snapshot => {
+        if (!active) return
+        if (!snapshot) {
+          locallySavedProjectJsonRef.current = projectJson
+          return
+        }
+        const restored = deserializeProject(snapshot.projectJson)
+        projectSessionRef.current!.reset(restored)
+        locallySavedProjectJsonRef.current = snapshot.projectJson
+        setProjectState(restored)
+        setSavedProjectJson(snapshot.savedProjectJson)
+        setReplacementBaselineJson(snapshot.replacementBaselineJson)
+        setCommandQueue([])
+        setSelectedId(null)
+        setFileFeedback(`กู้คืนงานในเครื่องเมื่อ ${new Date(snapshot.savedAt).toLocaleString()}`)
+      })
+      .catch(error => {
+        if (active) {
+          console.error('Unable to restore local ConstructFlow project', error)
+          setLocalAutosaveState('error')
+          setFileFeedback('กู้คืนงานในเครื่องไม่สำเร็จ')
+        }
+      })
+      .finally(() => {
+        if (active) setLocalAutosaveReady(true)
+      })
+    return () => { active = false }
+  }, [])
+  useEffect(() => {
+    if (!localAutosaveReady) return
+    setLocalAutosaveState('saving')
+    let saving = false
+    const persistSnapshot = () => {
+      if (saving) return
+      saving = true
+      void saveLocalProjectSnapshot({ projectJson, savedProjectJson, replacementBaselineJson })
+        .then(() => {
+          locallySavedProjectJsonRef.current = projectJson
+          setLocalAutosaveState('saved')
+        })
+        .catch(error => {
+          console.error('Unable to autosave local ConstructFlow project', error)
+          setLocalAutosaveState('error')
+        })
+    }
+    const timer = window.setTimeout(persistSnapshot, 350)
+    window.addEventListener('pagehide', persistSnapshot)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('pagehide', persistSnapshot)
+    }
+  }, [localAutosaveReady, projectJson, savedProjectJson, replacementBaselineJson])
   const setProject = (next: ProjectDocument | ((current: ProjectDocument) => ProjectDocument)) => {
     const updated = typeof next === 'function' ? next(project) : next
     projectSessionRef.current!.commit(updated)
@@ -99,13 +179,29 @@ export const App: React.FC = () => {
     }
     return result
   }
+  const handleProjectNameCommit = () => {
+    const name = projectNameDraft.trim()
+    setIsProjectNameEditing(false)
+    if (!name) {
+      setProjectNameDraft(project.project.name)
+      setFileFeedback('ชื่อโครงการห้ามเว้นว่าง')
+      return
+    }
+    if (name === project.project.name) return
+    const updated = structuredClone(project)
+    updated.project.name = name
+    updated.project.updated_at = new Date().toISOString()
+    setProject(updated)
+    setFileFeedback('แก้ชื่อโครงการแล้ว')
+  }
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
-  const [viewMode, setViewMode] = useState<'plan' | 'model3d'>('plan')
+  const [viewMode, setViewMode] = useState<'plan' | ElevationDirection | 'model3d'>('plan')
   const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
   const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
   const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects'>('properties')
   const [activeColumnType, setActiveColumnType] = useState<string>('C1')
+  const [activeColumnTopLevelId, setActiveColumnTopLevelId] = useState<string>(() => nextHigherLevelId(project, project.project.active_level_id))
   const [activeFoundationType, setActiveFoundationType] = useState<string>('F1')
   const [activeBeamType, setActiveBeamType] = useState<string>('B1')
   const [activeWallType, setActiveWallType] = useState<string>('AAC 100 mm')
@@ -156,11 +252,48 @@ export const App: React.FC = () => {
     scale_mm_per_px: 10,
     opacity: 0.6,
     visible: true,
+    rotation_deg: 0,
   })
+  const underlayKey = `${viewMode}:${project.project.active_level_id}`
+  const hydratedUnderlayRef = useRef<string | null>(null)
+  useEffect(() => {
+    const saved = project.underlays?.[underlayKey]
+    if (!saved) {
+      if (hydratedUnderlayRef.current !== underlayKey) {
+        hydratedUnderlayRef.current = underlayKey
+        setUnderlay(current => ({ ...current, image: null }))
+      }
+      return
+    }
+    if (hydratedUnderlayRef.current === `${underlayKey}:${saved.data_url}`) return
+    const image = new Image()
+    image.onload = () => {
+      image.dataset.projectSrc = saved.data_url
+      hydratedUnderlayRef.current = `${underlayKey}:${saved.data_url}`
+      setUnderlay({ image, origin_mm: saved.origin_mm, scale_mm_per_px: saved.scale_mm_per_px, rotation_deg: saved.rotation_deg, opacity: saved.opacity, visible: saved.visible })
+    }
+    image.onerror = () => { hydratedUnderlayRef.current = `${underlayKey}:${saved.data_url}` }
+    image.src = saved.data_url
+  }, [project.underlays, underlayKey])
+  useEffect(() => {
+    const image = underlay.image
+    const dataUrl = image?.dataset.projectSrc
+    if (!image || !dataUrl || !dataUrl.startsWith('data:image/')) return
+    const value = { data_url: dataUrl, origin_mm: underlay.origin_mm, scale_mm_per_px: underlay.scale_mm_per_px, rotation_deg: underlay.rotation_deg ?? 0, opacity: underlay.opacity, visible: underlay.visible }
+    const timer=window.setTimeout(()=>setProjectState(current => {
+      const existing = current.underlays?.[underlayKey]
+      if (existing && JSON.stringify(existing) === JSON.stringify(value)) return current
+      const updated = { ...current, underlays: { ...current.underlays, [underlayKey]: value } }
+      projectSessionRef.current?.commit(updated)
+      return updated
+    }),180)
+    return ()=>window.clearTimeout(timer)
+  }, [underlay, underlayKey])
   const canCalibrateUnderlayRef = useRef(false)
   canCalibrateUnderlayRef.current = !!underlay.image && underlay.visible
   const [calibrationModalOpen, setCalibrationModalOpen] = useState<boolean>(false)
   const [measuredCalibrationDist_mm, setMeasuredCalibrationDist_mm] = useState<number>(4000)
+  const calibrationPointsRef = useRef<{ first: [number, number]; second: [number, number] } | null>(null)
   const [isPresetsModalOpen, setIsPresetsModalOpen] = useState<boolean>(false)
   const [isLegalModalOpen, setIsLegalModalOpen] = useState<boolean>(false)
 
@@ -172,188 +305,14 @@ export const App: React.FC = () => {
   }, [underlay.image, underlay.visible, activeTool])
 
   useEffect(() => {
-    if (!hasUnsavedChanges) return
+    if (localAutosaveState !== 'error') return
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', warnBeforeLeaving)
     return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
-  }, [hasUnsavedChanges])
-
-  // Setup initial template model: Grids A, B, C & 1, 2, 3 + 9 Columns (C1) + 9 Footings (F1) + Beams (B1/B2) + Initial Walls/Door/Window
-  useEffect(() => {
-    let current = createEmptyProjectDocument('CF-PROJ-001', 'ConstructFlow Vertical Slice 01 & 02')
-    current.levels = [
-      { id: 'GF', name: 'Ground Floor', elevation_mm: 0, storey_index: 1, height_mm: 3000 },
-      { id: 'L2', name: 'First Floor', elevation_mm: 3000, storey_index: 2, height_mm: 3000 },
-    ]
-    current.project.active_level_id = 'GF'
-
-    const queue: CommandEnvelope[] = []
-
-    // 1. Create Grids A, B, C (vertical) & 1, 2, 3 (horizontal)
-    const grids = [
-      { tag: 'A', orientation: 'vertical' as const, position_mm: 0 },
-      { tag: 'B', orientation: 'vertical' as const, position_mm: 4000 },
-      { tag: 'C', orientation: 'vertical' as const, position_mm: 8000 },
-      { tag: '1', orientation: 'horizontal' as const, position_mm: 0 },
-      { tag: '2', orientation: 'horizontal' as const, position_mm: 4000 },
-      { tag: '3', orientation: 'horizontal' as const, position_mm: 8000 },
-    ]
-
-    for (const g of grids) {
-      const res = CommandBus.execute(current, 'CreateGrid', g)
-      if (res.result.status === 'success') {
-        current = res.updatedProject
-        if (res.emittedEnvelope) queue.push(res.emittedEnvelope)
-      }
-    }
-
-    // 2. Create 9 Columns at intersections (A-1..C-3), all with Type Mark C1
-    const intersections = [
-      { x: 0, y: 0, mark: 'C1' },
-      { x: 4000, y: 0, mark: 'C1' },
-      { x: 8000, y: 0, mark: 'C1' },
-      { x: 0, y: 4000, mark: 'C1' },
-      { x: 4000, y: 4000, mark: 'C1' },
-      { x: 8000, y: 4000, mark: 'C1' },
-      { x: 0, y: 8000, mark: 'C1' },
-      { x: 4000, y: 8000, mark: 'C1' },
-      { x: 8000, y: 8000, mark: 'C1' },
-    ]
-
-    const columnIds: string[] = []
-
-    for (const col of intersections) {
-      const colId = crypto.randomUUID()
-      const res = CommandBus.execute(current, 'CreateColumn', {
-        id: colId,
-        mark: col.mark,
-        location_mm: [col.x, col.y, 0],
-        section_mm: [200, 200],
-        base_level_id: 'GF',
-        top_level_id: 'L2',
-      })
-      if (res.result.status === 'success') {
-        current = res.updatedProject
-        columnIds.push(colId)
-        if (res.emittedEnvelope) queue.push(res.emittedEnvelope)
-      }
-    }
-
-    // 3. Create 9 Foundations hosting each column, all with Type Mark F1
-    columnIds.forEach((colId) => {
-      const fId = crypto.randomUUID()
-      const fMark = 'F1'
-      const res = CommandBus.execute(current, 'CreateFoundation', {
-        id: fId,
-        mark: fMark,
-        supported_column_id: colId,
-        size_mm: [800, 800, 300],
-      })
-      if (res.result.status === 'success') {
-        current = res.updatedProject
-        if (res.emittedEnvelope) queue.push(res.emittedEnvelope)
-      }
-    })
-
-    // 4. Create initial Beams connecting columns along Grid lines
-    const initialBeams = [
-      { start: [0, 0], end: [4000, 0], mark: 'B1' },
-      { start: [4000, 0], end: [8000, 0], mark: 'B1' },
-      { start: [0, 4000], end: [4000, 4000], mark: 'B1' },
-      { start: [4000, 4000], end: [8000, 4000], mark: 'B1' },
-      { start: [0, 0], end: [0, 4000], mark: 'B2' },
-      { start: [4000, 0], end: [4000, 4000], mark: 'B2' },
-      { start: [8000, 0], end: [8000, 4000], mark: 'B2' },
-    ]
-
-    for (const b of initialBeams) {
-      const bId = crypto.randomUUID()
-      const res = CommandBus.execute(current, 'CreateBeam', {
-        id: bId,
-        mark: b.mark,
-        start_point_mm: b.start,
-        end_point_mm: b.end,
-        level_id: 'GF',
-      })
-      if (res.result.status === 'success') {
-        current = res.updatedProject
-        if (res.emittedEnvelope) queue.push(res.emittedEnvelope)
-      }
-    }
-
-    // 5. Create initial Wall with hosted Door and Window for Slice 02 showcase
-    const wallId1 = crypto.randomUUID()
-    const wallRes1 = CommandBus.execute(current, 'CreateWall', {
-      id: wallId1,
-      mark: 'AAC 100 mm',
-      start_point_mm: [0, 4000, 0],
-      end_point_mm: [4000, 4000, 0],
-      thickness_mm: 100,
-      height_mm: 2800,
-      level_id: 'GF',
-    })
-    if (wallRes1.result.status === 'success') {
-      current = wallRes1.updatedProject
-      if (wallRes1.emittedEnvelope) queue.push(wallRes1.emittedEnvelope)
-
-      // Add Door D1 on wall 1
-      const doorId = crypto.randomUUID()
-      const doorRes = CommandBus.execute(current, 'CreateDoor', {
-        id: doorId,
-        mark: 'D1',
-        wall_id: wallId1,
-        offset_along_wall_mm: 1400,
-        location_mm: [1400, 4000, 0],
-        handing: 'left_in',
-        width_mm: 800,
-        height_mm: 2000,
-      })
-      if (doorRes.result.status === 'success') {
-        current = doorRes.updatedProject
-        if (doorRes.emittedEnvelope) queue.push(doorRes.emittedEnvelope)
-      }
-    }
-
-    const wallId2 = crypto.randomUUID()
-    const wallRes2 = CommandBus.execute(current, 'CreateWall', {
-      id: wallId2,
-      mark: 'AAC 100 mm',
-      start_point_mm: [4000, 4000, 0],
-      end_point_mm: [8000, 4000, 0],
-      thickness_mm: 100,
-      height_mm: 2800,
-      level_id: 'GF',
-    })
-    if (wallRes2.result.status === 'success') {
-      current = wallRes2.updatedProject
-      if (wallRes2.emittedEnvelope) queue.push(wallRes2.emittedEnvelope)
-
-      // Add Window W1 on wall 2
-      const winId = crypto.randomUUID()
-      const winRes = CommandBus.execute(current, 'CreateWindow', {
-        id: winId,
-        mark: 'W1',
-        wall_id: wallId2,
-        offset_along_wall_mm: 2000,
-        location_mm: [6000, 4000, 0],
-        width_mm: 1200,
-        height_mm: 1200,
-        sill_height_mm: 900,
-      })
-      if (winRes.result.status === 'success') {
-        current = winRes.updatedProject
-        if (winRes.emittedEnvelope) queue.push(winRes.emittedEnvelope)
-      }
-    }
-
-    projectSessionRef.current!.reset(current)
-    setProjectState(current)
-    setReplacementBaselineJson(serializeProject(current))
-    setCommandQueue(queue)
-  }, [])
+  }, [localAutosaveState])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -362,7 +321,7 @@ export const App: React.FC = () => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
-        handleExportProject()
+        void handleSaveLocalProject()
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         const session = projectSessionRef.current!
@@ -402,7 +361,7 @@ export const App: React.FC = () => {
       } else if (e.key === 'n' || e.key === 'N') {
         setActiveTool('window')
       } else if (e.key === 'g' || e.key === 'G') {
-        setActiveTool('grid')
+        setActiveTool(e.shiftKey ? 'gridSystem' : 'grid')
       } else if (e.key === 'm' || e.key === 'M') {
         setActiveTool('measure')
       } else if (e.key === 'r' || e.key === 'R') {
@@ -452,31 +411,62 @@ export const App: React.FC = () => {
     const res = CommandBus.execute(project, 'SetWorkingLevel', { level_id: levelId })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
+      setActiveColumnTopLevelId(nextHigherLevelId(res.updatedProject, levelId))
       if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
     }
   }
 
   // Upload Underlay Image file
   const handleUploadUnderlayImage = (file: File) => {
-    const url = URL.createObjectURL(file)
+    const reader = new FileReader()
+    reader.onerror = () => setFileFeedback('อ่านไฟล์ภาพอ้างอิงไม่สำเร็จ')
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? '')
+      if (!dataUrl.startsWith('data:image/')) { setFileFeedback('ไฟล์ที่เลือกไม่ใช่ภาพที่รองรับ'); return }
     const img = new Image()
     img.onload = () => {
+      img.dataset.projectSrc = dataUrl
+      hydratedUnderlayRef.current = `${underlayKey}:${dataUrl}`
       setUnderlay((prev) => ({
         ...prev,
         image: img,
         origin_mm: [0, 0],
         scale_mm_per_px: 10,
+        rotation_deg: 0,
         visible: true,
       }))
     }
-    img.src = url
+      img.onerror = () => setFileFeedback('เปิดภาพอ้างอิงไม่สำเร็จ')
+      img.src = dataUrl
+    }
+    reader.readAsDataURL(file)
+  }
+  const handleClearUnderlay = () => {
+    setUnderlay(current => ({ ...current, image: null }))
+    setProjectState(current => {
+      if (!current.underlays?.[underlayKey]) return current
+      const underlays={...current.underlays};delete underlays[underlayKey]
+      const updated={...current,underlays};projectSessionRef.current?.commit(updated);return updated
+    })
+    hydratedUnderlayRef.current=underlayKey
   }
 
   // Apply calibrated 1:1 scale
-  const handleApplyCalibrationScale = (newScale: number, _realDistance_mm: number) => {
+  const handleApplyCalibrationScale = (newScale: number, _realDistance_mm: number, axis: 'x' | 'y') => {
+    const points = calibrationPointsRef.current
     setUnderlay((prev) => ({
       ...prev,
       scale_mm_per_px: newScale,
+      ...(points ? (() => {
+        const dx = (points.second[0] - points.first[0]) / prev.scale_mm_per_px
+        const dy = (points.second[1] - points.first[1]) / prev.scale_mm_per_px
+        const rotation = (axis === 'x' ? 0 : Math.PI / 2) - Math.atan2(dy, dx)
+        const cos = Math.cos(rotation), sin = Math.sin(rotation)
+        const px = (points.first[0] - prev.origin_mm[0]) / prev.scale_mm_per_px
+        const py = (points.first[1] - prev.origin_mm[1]) / prev.scale_mm_per_px
+        return { rotation_deg: (prev.rotation_deg ?? 0) + rotation * 180 / Math.PI,
+          origin_mm: [points.first[0] - (px * cos - py * sin) * newScale, points.first[1] - (px * sin + py * cos) * newScale] as [number, number] }
+      })() : {}),
     }))
     setActiveTool('select')
   }
@@ -492,11 +482,17 @@ export const App: React.FC = () => {
   // Commit Column creation with active type
   const handleCommitColumn = (location_mm: [number, number]) => {
     const colId = crypto.randomUUID()
+    const baseLevelId = project.project.active_level_id
+    const baseElevation = project.levels.find(level => level.id === baseLevelId)?.elevation_mm ?? -Infinity
+    const topLevelId = project.levels.some(level => level.id === activeColumnTopLevelId && level.elevation_mm > baseElevation)
+      ? activeColumnTopLevelId
+      : nextHigherLevelId(project, baseLevelId)
     const res = CommandBus.execute(project, 'CreateColumn', {
       id: colId,
       mark: activeColumnType,
       location_mm: [location_mm[0], location_mm[1], 0],
-      base_level_id: project.project.active_level_id,
+      base_level_id: baseLevelId,
+      ...(topLevelId ? { top_level_id: topLevelId } : {}),
     })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
@@ -591,6 +587,32 @@ export const App: React.FC = () => {
       setSelectedId(id)
       if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
     }
+  }
+
+  const runArchitectureCommand = (name: string, input: Record<string, unknown>) => {
+    const result = CommandBus.execute(project, name, input)
+    if (result.result.status === 'success') {
+      setProject(result.updatedProject)
+      const created = result.result.created_object_ids?.[0] ?? result.result.affected_object_ids?.[0]
+      if (created) setSelectedId(created)
+      if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
+    } else setFileFeedback(result.result.errors?.join(' · ') ?? 'คำสั่งไม่สำเร็จ')
+  }
+  const handleCommitArchitecturalFloor = (boundary_mm: [number, number][]) => {
+    const level=project.levels.find(item=>item.id===project.project.active_level_id);if(!level)return
+    runArchitectureCommand('CreateArchitecturalFloor',{id:crypto.randomUUID(),mark:'AF1',level_id:level.id,boundary_mm,elevation_mm:level.elevation_mm,elevation_offset_mm:0,thickness_mm:50,finish_layers:[{material:'tile',thickness_mm:10,mark:'Tile'}],voids_mm:[],follows_room_boundary:false})
+  }
+  const handleCommitCeiling = (boundary_mm: [number, number][]) => {
+    const level=project.levels.find(item=>item.id===project.project.active_level_id);if(!level)return
+    runArchitectureCommand('CreateCeiling',{id:crypto.randomUUID(),mark:'CL1',level_id:level.id,boundary_mm,elevation_mm:level.elevation_mm+Number(level.height_mm??2800),elevation_offset_mm:0,thickness_mm:12,voids_mm:[],grid_mm:[600,600],follows_room_boundary:false})
+  }
+  const handleCommitRoomSeparator = (start_point_mm: [number,number],end_point_mm: [number,number]) => runArchitectureCommand('CreateRoomSeparator',{id:crypto.randomUUID(),mark:'RS',level_id:project.project.active_level_id,start_point_mm,end_point_mm})
+  const handleDetectRooms = () => runArchitectureCommand('DetectRooms',{level_id:project.project.active_level_id,default_name:'Room'})
+  const handleCreateRoomFinish = (kind: 'floor'|'ceiling', roomId: string) => {
+    const room=project.objects[roomId];if(!room||room.object_type!=='architecture.room')return
+    const data=room.module_data as Record<string,unknown>,level=project.levels.find(item=>item.id===data.level_id);if(!level)return
+    if(kind==='floor')runArchitectureCommand('CreateArchitecturalFloor',{id:crypto.randomUUID(),mark:'AF1',level_id:level.id,room_id:roomId,elevation_mm:level.elevation_mm,elevation_offset_mm:0,thickness_mm:50,finish_layers:[{material:'tile',thickness_mm:10,mark:'Tile'}],voids_mm:[],follows_room_boundary:true})
+    else runArchitectureCommand('CreateCeiling',{id:crypto.randomUUID(),mark:'CL1',level_id:level.id,room_id:roomId,elevation_mm:level.elevation_mm+Number(level.height_mm??2800),elevation_offset_mm:0,thickness_mm:12,voids_mm:[],grid_mm:[600,600],follows_room_boundary:true})
   }
 
   const handleCommitSlabVoid = (hostId: string, boundary_mm: [number, number][]) => {
@@ -755,16 +777,66 @@ export const App: React.FC = () => {
     setters[tool](type.name);setActiveTool(tool)
   }
 
-  // Commit Grid creation
-  const handleCommitGrid = (orientation: 'vertical' | 'horizontal', position_mm: number, system: { spacing_mm: number; count: number; first_tag: string }) => {
-    const gridIds = Array.from({ length: system.count }, () => crypto.randomUUID())
-    const res = CommandBus.execute(project, 'CreateGridSystem', {
-      id: crypto.randomUUID(), grid_ids: gridIds, orientation, origin_mm: position_mm,
-      spacing_mm: system.spacing_mm, count: system.count, first_tag: system.first_tag,
+  // A reference grid is a single freely angled line defined by two points.
+  const handleCommitGrid = (tag: string, start_mm: [number, number], end_mm: [number, number], sequenceStyle: 'auto' | 'alpha' | 'numeric' = 'auto') => {
+    const dx = end_mm[0] - start_mm[0], dy = end_mm[1] - start_mm[1]
+    const orientation = Math.abs(dx) <= Math.abs(dy) ? 'vertical' : 'horizontal'
+    const position_mm = orientation === 'vertical' ? (start_mm[0] + end_mm[0]) / 2 : (start_mm[1] + end_mm[1]) / 2
+    const extent_mm: [number, number] = orientation === 'vertical'
+      ? [Math.min(start_mm[1], end_mm[1]), Math.max(start_mm[1], end_mm[1])]
+      : [Math.min(start_mm[0], end_mm[0]), Math.max(start_mm[0], end_mm[0])]
+    const res = CommandBus.execute(project, 'CreateGrid', {
+      id: crypto.randomUUID(), tag, orientation, position_mm, extent_mm,
+      start_point_mm: start_mm, end_point_mm: end_mm,
+      sequence_style: sequenceStyle,
     })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
       if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+    }
+  }
+
+  const handleModifyGrid = (objectId: string, changes: { start_point_mm?: [number, number]; end_point_mm?: [number, number]; bubble_visible?: boolean; auto_tag?: boolean; sequence_style?: 'auto' | 'alpha' | 'numeric' }) => {
+    const res = CommandBus.execute(project, 'ModifyGrid', { object_id: objectId, ...changes })
+    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
+    else if (res.result.errors?.length) window.alert(res.result.errors.join('\n'))
+  }
+
+  const handleCopyGrid = (sourceId: string, start_mm: [number, number], end_mm: [number, number]) => {
+    const source = project.objects[sourceId]
+    if (!source || !isGridObject(source) || source.module_data.system_id) return
+    const dx = end_mm[0] - start_mm[0], dy = end_mm[1] - start_mm[1]
+    const orientation = Math.abs(dx) <= Math.abs(dy) ? 'vertical' : 'horizontal'
+    const position_mm = orientation === 'vertical' ? (start_mm[0] + end_mm[0]) / 2 : (start_mm[1] + end_mm[1]) / 2
+    const extent_mm: [number, number] = orientation === 'vertical' ? [Math.min(start_mm[1], end_mm[1]), Math.max(start_mm[1], end_mm[1])] : [Math.min(start_mm[0], end_mm[0]), Math.max(start_mm[0], end_mm[0])]
+    const res = CommandBus.execute(project, 'CreateGrid', { id: crypto.randomUUID(), tag: source.module_data.tag, orientation, position_mm, extent_mm, start_point_mm: start_mm, end_point_mm: end_mm, sequence_style: source.module_data.sequence_style ?? 'auto', auto_tag: true, bubble_visible: true })
+    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
+  }
+
+  // Place a coordinated pair of axes in one user action. Each axis stores its
+  // own explicit positions so every bay can have a different spacing.
+  const handleCommitGridSystem = (origin_mm: [number, number], xIntervals_mm: number[], yIntervals_mm: number[], xFirstTag: string, yFirstTag: string) => {
+    let updatedProject = project
+    const envelopes: CommandEnvelope[] = []
+    const createAxis = (orientation: 'vertical' | 'horizontal', origin: number, intervals: number[], first_tag: string) => {
+      if (!intervals.length) return
+      const positions_mm = [origin]
+      for (const interval of intervals) positions_mm.push(positions_mm[positions_mm.length - 1]! + interval)
+      const grid_ids = positions_mm.map(() => crypto.randomUUID())
+      const result = CommandBus.execute(updatedProject, 'CreateGridSystem', {
+        id: crypto.randomUUID(), grid_ids, orientation, origin_mm: origin,
+        spacing_mm: intervals[0]!, count: positions_mm.length, positions_mm, first_tag,
+      })
+      if (result.result.status === 'success') {
+        updatedProject = result.updatedProject
+        if (result.emittedEnvelope) envelopes.push(result.emittedEnvelope)
+      }
+    }
+    createAxis('vertical', origin_mm[0], xIntervals_mm, xFirstTag)
+    createAxis('horizontal', origin_mm[1], yIntervals_mm, yFirstTag)
+    if (updatedProject !== project) {
+      setProject(updatedProject)
+      if (envelopes.length) setCommandQueue(queue => [...queue, ...envelopes])
     }
   }
 
@@ -837,6 +909,22 @@ export const App: React.FC = () => {
     }
   }
 
+  const handleUpdateColumnVerticalReference = (objectId: string, changes: { base_level_id?: string; top_level_id?: string | null; base_offset_mm?: number; top_offset_mm?: number }) => {
+    const res = CommandBus.execute(project, 'UpdateColumnVerticalReference', { object_id: objectId, ...changes })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
+    } else if (res.result.errors?.length) window.alert(res.result.errors.join('\n'))
+  }
+
+  const handleUpdateBeamVerticalReference = (objectId: string, changes: { level_id?: string; base_offset_mm?: number }) => {
+    const res = CommandBus.execute(project, 'UpdateBeamVerticalReference', { object_id: objectId, ...changes })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
+    } else if (res.result.errors?.length) window.alert(res.result.errors.join('\n'))
+  }
+
   // Rename Foundation Mark handler
   const handleUpdateFoundationMark = (objectId: string, newMark: string) => {
     const res = CommandBus.execute(project, 'UpdateFoundationMark', {
@@ -861,21 +949,18 @@ export const App: React.FC = () => {
     }
   }
 
-  const handleUpdateGridSystem = (systemId: string, changes: { origin_mm?: number; spacing_mm?: number; count?: number; first_tag?: string }) => {
+  const handleUpdateGridSystem = (systemId: string, changes: { positions_mm?: number[]; first_tag?: string }) => {
     const member = Object.values(project.objects).filter(isGridObject).find(object => object.module_data.system_id === systemId)
     if (!member) return
     const data = member.module_data
-    const count = changes.count ?? data.system_count ?? 1
-    const existingIds = Object.values(project.objects).filter(isGridObject)
+    const members = Object.values(project.objects).filter(isGridObject)
       .filter(object => object.module_data.system_id === systemId)
       .sort((a, b) => (a.module_data.system_index ?? 0) - (b.module_data.system_index ?? 0))
-      .map(object => object.id)
-    const gridIds = Array.from({ length: count }, (_, index) => existingIds[index] ?? crypto.randomUUID())
+    const positions_mm = changes.positions_mm ?? members.map(object => object.module_data.position_mm)
+    const gridIds = Array.from({ length: positions_mm.length }, (_, index) => members[index]?.id ?? crypto.randomUUID())
     const res = CommandBus.execute(project, 'UpdateGridSystem', {
       system_id: systemId, grid_ids: gridIds,
-      origin_mm: changes.origin_mm ?? data.system_origin_mm ?? data.position_mm,
-      spacing_mm: changes.spacing_mm ?? data.system_spacing_mm ?? 4000,
-      count: changes.count ?? data.system_count ?? 1,
+      positions_mm,
       first_tag: changes.first_tag ?? data.system_first_tag ?? data.tag,
     })
     if (res.result.status === 'success') {
@@ -931,6 +1016,25 @@ export const App: React.FC = () => {
     }
   }
 
+  const handleMoveElevationObject = (objectId: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move'|'top') => {
+    const object=project.objects[objectId];if(!object)return
+    if(isWallObject(object)){
+      const commands:CommandRequest[]=[]
+      if(Math.hypot(...deltaWorldMm)>0.1)commands.push({name:'MoveWall',input:{object_id:objectId,delta_mm:deltaWorldMm}})
+      if(Math.abs(deltaZMm)>0.1){const d=object.module_data;const topEdit=verticalIntent==='top';commands.push({name:'UpdateWallDimensions',input:{object_id:objectId,thickness_mm:d.thickness_mm,...(topEdit?(d.vertical_constraint==='top_level'?{top_level_id:d.top_level_id,top_offset_mm:Number(d.top_offset_mm??0)+deltaZMm,vertical_constraint:'top_level'}:{height_mm:Math.max(100,Number(d.height_mm)+deltaZMm),vertical_constraint:'fixed_height'}):(d.vertical_constraint==='top_level'?{top_level_id:d.top_level_id,base_offset_mm:Number(d.base_offset_mm??0)+deltaZMm,top_offset_mm:Number(d.top_offset_mm??0)+deltaZMm,vertical_constraint:'top_level'}:{height_mm:d.height_mm,base_offset_mm:Number(d.base_offset_mm??0)+deltaZMm,vertical_constraint:'fixed_height'}))}})}
+      if(commands.length)dispatchCommandBatch(commands)
+      return
+    }
+    if(isDoorObject(object)||isWindowObject(object)){
+      const commands:CommandRequest[]=[]
+      if(Math.hypot(...deltaWorldMm)>0.1){const wall=project.objects[object.module_data.wall_id];if(isWallObject(wall)){const a=wall.module_data.start_point_mm,b=wall.module_data.end_point_mm,length=Math.hypot(b[0]-a[0],b[1]-a[1]);if(length>0){const along=(deltaWorldMm[0]*(b[0]-a[0])+deltaWorldMm[1]*(b[1]-a[1]))/length;commands.push({name:'MoveOpening',input:{object_id:objectId,offset_along_wall_mm:object.module_data.offset_along_wall_mm+along}})}}}
+      if(Math.abs(deltaZMm)>0.1){const d=object.module_data;const vertical=verticalIntent==='top'?(d.vertical_constraint==='head_level'?{head_level_id:d.head_level_id,head_offset_mm:Number(d.head_offset_mm??0)+deltaZMm,vertical_constraint:'head_level'}:{height_mm:Math.max(100,d.height_mm+deltaZMm),vertical_constraint:'fixed_height'}):{sill_height_mm:Math.max(0,Number(d.sill_height_mm??0)+deltaZMm)};commands.push({name:isDoorObject(object)?'UpdateDoorDimensions':'UpdateWindowDimensions',input:{object_id:objectId,width_mm:d.width_mm,height_mm:d.height_mm,...vertical}})}
+      if(commands.length)dispatchCommandBatch(commands)
+      return
+    }
+    if(isColumnObject(object)&&Math.hypot(...deltaWorldMm)>0.1){const [x,y]=object.module_data.location_mm;handleMoveColumn(objectId,[x+deltaWorldMm[0],y+deltaWorldMm[1]])}
+  }
+
   // Delete objects under a drag eraser or multi-selection; hosted dependents are removed by the normal object command.
   const handleDeleteObjects = (objectIds: string[]) => {
     let current = project
@@ -965,14 +1069,14 @@ export const App: React.FC = () => {
   }, [selectedId, selectedIds, project, handleDeleteObject])
 
   const confirmReplaceUnsavedProject = () => {
-    const hasProjectEdits = replacementBaselineJson !== null && projectJson !== replacementBaselineJson
-    return !hasProjectEdits || window.confirm('มีการแก้ไขโครงการที่ยังไม่ได้บันทึก ต้องการทิ้งการแก้ไขและแทนที่โครงการปัจจุบันหรือไม่?')
+    const hasUnsavedLocalEdits = locallySavedProjectJsonRef.current !== projectJson
+    return !hasUnsavedLocalEdits || window.confirm('มีการแก้ไขที่ยังไม่ได้บันทึกในเบราว์เซอร์นี้ ต้องการแทนที่โครงการปัจจุบันหรือไม่?')
   }
 
   // Export .cfproj file
   const handleDownloadProjectCopy = () => {
     const json = projectJson
-    const filename = `${project.project.id || 'project'}.cfproj`
+    const filename = projectFileName(project)
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
     const a = document.createElement('a')
     a.href = url
@@ -981,35 +1085,42 @@ export const App: React.FC = () => {
     document.body.appendChild(a)
     a.click()
     a.remove()
+    setSavedProjectJson(json)
+    setReplacementBaselineJson(json)
     setFileFeedback(`ส่งคำขอดาวน์โหลด ${filename} แล้ว`)
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
-  const handleExportProject = async () => {
+  const handleSaveLocalProject = async () => {
+    setLocalAutosaveState('saving')
+    try {
+      await saveLocalProjectSnapshot({ projectJson, savedProjectJson, replacementBaselineJson })
+      locallySavedProjectJsonRef.current = projectJson
+      setLocalAutosaveState('saved')
+      setFileFeedback('บันทึกในเบราว์เซอร์เครื่องนี้แล้ว')
+    } catch (error) {
+      console.error('Unable to save local ConstructFlow project', error)
+      setLocalAutosaveState('error')
+      setFileFeedback('บันทึกในเครื่องไม่สำเร็จ')
+    }
+  }
+
+  const handleSaveAsProject = async () => {
     const json = projectJson
-    const filename = `${project.project.id || 'project'}.cfproj`
+    const filename = projectFileName(project)
     const fileWindow = window as ProjectSaveWindow
-    let handle = projectFileHandleRef.current
-    if (!handle && fileWindow.showSaveFilePicker) {
+    if (fileWindow.showSaveFilePicker) {
       try {
-        handle = await fileWindow.showSaveFilePicker.call(window, {
+        const handle = await fileWindow.showSaveFilePicker.call(window, {
           suggestedName: filename,
           types: [{ description: 'ConstructFlow Project', accept: { 'application/json': ['.cfproj'] } }],
         })
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        window.alert(`บันทึกไฟล์โครงการไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
-        return
-      }
-    }
-    if (handle) {
-      try {
         await writeProjectFile(handle, json)
-        projectFileHandleRef.current = handle
         setSavedProjectJson(json)
         setReplacementBaselineJson(json)
-        setFileFeedback('บันทึกไฟล์โครงการแล้ว')
+        setFileFeedback(`บันทึกไฟล์ ${filename} แล้ว`)
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return
         window.alert(`บันทึกไฟล์โครงการไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
       }
       return
@@ -1048,13 +1159,12 @@ export const App: React.FC = () => {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
-  const handleOpenProject = async (file?: File, fileHandle: LocalProjectFileHandle | null = null) => {
+  const handleOpenProject = async (file?: File) => {
     if (!file) return
     try {
       const { project: loaded, serialized: loadedJson } = await readProjectFile(file)
       if (!confirmReplaceUnsavedProject()) return
       projectSessionRef.current!.reset(loaded)
-      projectFileHandleRef.current = fileHandle
       setProjectState(loaded)
       setSavedProjectJson(loadedJson)
       setReplacementBaselineJson(loadedJson)
@@ -1075,7 +1185,7 @@ export const App: React.FC = () => {
         types: [{ description: 'ConstructFlow Project', accept: { 'application/json': ['.cfproj'] } }],
       })
       const handle = handles[0]
-      if (handle) await handleOpenProject(await handle.getFile(), handle)
+      if (handle) await handleOpenProject(await handle.getFile())
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       window.alert(`เปิดไฟล์โครงการไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
@@ -1090,7 +1200,6 @@ export const App: React.FC = () => {
       return
     }
     projectSessionRef.current!.reset(generated.updatedProject)
-    projectFileHandleRef.current = null
     setProjectState(generated.updatedProject)
     setSavedProjectJson(null)
     setReplacementBaselineJson(serializeProject(generated.updatedProject))
@@ -1158,6 +1267,12 @@ export const App: React.FC = () => {
       return acc
     }, {})
 
+  if (!localAutosaveReady) return (
+    <div role="status" aria-live="polite" style={{ display: 'grid', placeItems: 'center', width: '100vw', height: '100vh', color: '#475569', fontFamily: 'sans-serif' }}>
+      กำลังตรวจและกู้คืนงานที่บันทึกไว้ในเครื่อง…
+    </div>
+  )
+
   return (
     <div className="cf-app-root" style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       {/* Focused project header */}
@@ -1166,34 +1281,74 @@ export const App: React.FC = () => {
           <span className="cf-brand-mark">CF</span>
           <span className="cf-brand-name">ConstructFlow</span>
           <span className="cf-brand-divider" />
-          <span className="cf-project-name" title={project.project.name}>{project.project.name}</span>
+          {isProjectNameEditing ? (
+            <input
+              autoFocus
+              className="cf-project-name-input"
+              aria-label="ชื่อโครงการ"
+              value={projectNameDraft}
+              onChange={event => setProjectNameDraft(event.target.value)}
+              onBlur={handleProjectNameCommit}
+              onKeyDown={event => {
+                if (event.key === 'Enter') { event.preventDefault(); handleProjectNameCommit() }
+                if (event.key === 'Escape') { setProjectNameDraft(project.project.name); setIsProjectNameEditing(false) }
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="cf-project-name"
+              title="คลิกเพื่อแก้ชื่อโครงการ"
+              aria-label={`แก้ชื่อโครงการ: ${project.project.name}`}
+              onClick={() => { setProjectNameDraft(project.project.name); setIsProjectNameEditing(true) }}
+            >{project.project.name}</button>
+          )}
         </div>
 
         <div className="cf-header-model-controls">
           <label className="cf-header-field">
             <span>ชั้น</span>
             <select value={project.project.active_level_id} onChange={(e) => handleSetWorkingLevel(e.target.value)} aria-label="ชั้นอาคาร">
-              {project.levels.map((lvl) => <option key={lvl.id} value={lvl.id}>{lvl.name} ({lvl.elevation_mm >= 0 ? '+' : ''}{lvl.elevation_mm} mm)</option>)}
+              {project.levels.map((lvl) => <option key={lvl.id} value={lvl.id}>{lvl.name} ({lvl.elevation_mm >= 0 ? '+' : ''}{formatLengthMm(lvl.elevation_mm, displayUnit)} {displayUnit})</option>)}
             </select>
           </label>
+          {activeTool === 'column' && <label className="cf-header-field">
+            <span>ยอดเสา</span>
+            <select aria-label="ระดับยอดเสาที่กำลังวาด" value={project.levels.some(level => level.id === activeColumnTopLevelId && level.elevation_mm > (project.levels.find(item => item.id === project.project.active_level_id)?.elevation_mm ?? -Infinity)) ? activeColumnTopLevelId : nextHigherLevelId(project, project.project.active_level_id)} onChange={event => setActiveColumnTopLevelId(event.target.value)}>
+              {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === project.project.active_level_id)?.elevation_mm ?? -Infinity)).map(level => <option key={level.id} value={level.id}>{level.name} (+{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit})</option>)}
+              {!project.levels.some(level => level.elevation_mm > (project.levels.find(item => item.id === project.project.active_level_id)?.elevation_mm ?? -Infinity)) && <option value="">ความสูงตามช่วงชั้น</option>}
+            </select>
+          </label>}
           <label className="cf-header-field cf-phase-field">
             <span>เฟสสร้าง</span>
             <select value={project.project.active_phase} onChange={(e) => handleSetWorkingPhase(e.target.value as Phase)} aria-label="เฟสงาน">
               {project.phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
             </select>
           </label>
-          <span className="cf-unit-pill">หน่วย · เมตร</span>
+          <label className="cf-unit-pill">หน่วย
+            <select aria-label="หน่วยความยาวของโครงการ" value={displayUnit} onChange={event => setProject(current => ({ ...current, project: { ...current.project, display_unit: event.target.value as DisplayLengthUnit } }))}>
+              <option value="m">m</option><option value="cm">cm</option><option value="mm">mm</option>
+            </select>
+          </label>
         </div>
 
         <div className="cf-header-actions">
-          <input id="cfproj-open" type="file" accept=".cfproj,application/json" aria-hidden="true" tabIndex={-1} className="cf-visually-hidden" onChange={(e) => { void handleOpenProject(e.currentTarget.files?.[0] ?? undefined, null); e.currentTarget.value = '' }} />
+          <input id="cfproj-open" type="file" accept=".cfproj,application/json" aria-hidden="true" tabIndex={-1} className="cf-visually-hidden" onChange={(e) => { void handleOpenProject(e.currentTarget.files?.[0] ?? undefined); e.currentTarget.value = '' }} />
           {supportsProjectFileOpen ? (
             <button type="button" className="cf-button cf-button-quiet" onClick={() => void handleChooseProject()} title="เปิดไฟล์โครงการ .cfproj"><FolderOpen size={16} /><span>เปิด</span></button>
           ) : (
             <label htmlFor="cfproj-open" role="button" tabIndex={0} className="cf-button cf-button-quiet" onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); document.getElementById('cfproj-open')?.click() } }}><FolderOpen size={16} /><span>เปิด</span></label>
           )}
-          <button type="button" className="cf-button cf-button-primary" onClick={handleExportProject} title="บันทึกไฟล์โครงการ .cfproj"><Save size={16} /><span>บันทึก</span></button>
-          <span role="status" aria-live="polite" className={`cf-save-status ${hasUnsavedChanges ? 'is-unsaved' : ''}`}>{hasUnsavedChanges ? 'ยังไม่ได้บันทึก' : 'บันทึกแล้ว'}{fileFeedback ? ` · ${fileFeedback}` : ''}</span>
+          <button type="button" className="cf-button cf-button-primary" onClick={() => void handleSaveLocalProject()} title="บันทึกงานในเบราว์เซอร์เครื่องนี้"><Save size={16} /><span>บันทึก</span></button>
+          <details className="cf-save-menu" onClick={(event) => {
+            if ((event.target as HTMLElement).closest('button')) event.currentTarget.open = false
+          }}>
+            <summary className="cf-icon-button" aria-label="ตัวเลือกบันทึก" title="บันทึกเป็นไฟล์"><ChevronDown size={15} /></summary>
+            <div className="cf-more-popover cf-save-popover">
+              <button type="button" aria-label="บันทึกเป็นไฟล์ .cfproj" onClick={() => void handleSaveAsProject()}><Download size={15} /> บันทึกเป็นไฟล์ (.cfproj)…</button>
+            </div>
+          </details>
+          <span role="status" aria-live="polite" className={`cf-save-status ${localAutosaveState === 'error' ? 'is-unsaved' : ''}`}>{localAutosaveState === 'saving' || localAutosaveState === 'restoring' ? 'กำลังบันทึกในเครื่อง…' : localAutosaveState === 'error' ? 'บันทึกในเครื่องไม่สำเร็จ' : 'บันทึกในเครื่องแล้ว'}{fileFeedback ? ` · ${fileFeedback}` : ''}</span>
           <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canUndo} onClick={() => { setProjectState(projectSessionRef.current!.undo()); setCommandQueue([]) }} title="ย้อนกลับ (Ctrl/⌘+Z)" aria-label="ย้อนกลับ"><Undo2 size={17} /></button>
           <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canRedo} onClick={() => { setProjectState(projectSessionRef.current!.redo()); setCommandQueue([]) }} title="ทำซ้ำ (Ctrl/⌘+Shift+Z หรือ Ctrl/⌘+Y)" aria-label="ทำซ้ำ"><Redo2 size={17} /></button>
           <details className="cf-more-menu" onClick={(event) => {
@@ -1205,7 +1360,6 @@ export const App: React.FC = () => {
             <summary className="cf-button cf-button-quiet" aria-label="เมนูโครงการ" title="เมนูโครงการ">เมนู</summary>
             <div className="cf-more-popover">
               <div className="cf-menu-label">โครงการ</div>
-              <button type="button" aria-label="ดาวน์โหลดสำเนา .cfproj" onClick={handleDownloadProjectCopy}><Download size={15} /> ดาวน์โหลดสำเนา .cfproj</button>
               <button type="button" aria-label="โฉนดและผู้เซ็นแบบ" onClick={() => setIsLegalModalOpen(true)}><FileCheck size={15} /> โฉนดและผู้เซ็นแบบ</button>
               <div className="cf-menu-label">สร้าง</div>
               <button type="button" onClick={()=>{setWorkbenchTab('model');setIsConstructionOpen(true)}}><Layers2 size={15}/> เครื่องมืองานอาคาร</button>
@@ -1261,13 +1415,13 @@ export const App: React.FC = () => {
               windowTypes={(project.types || [])
                 .filter((t) => t.object_type === 'door_window.window')
                   .map((t) => ({ name: t.name, width_mm: t.parameters?.width_mm, height_mm: t.parameters?.height_mm, opening_operation: t.parameters?.opening_operation, panel_count: t.parameters?.panel_count, panel_layout: Array.isArray(t.parameters?.panel_layout) ? t.parameters.panel_layout as string[] : undefined, panel_width_ratios: Array.isArray(t.parameters?.panel_width_ratios) ? t.parameters.panel_width_ratios as number[] : undefined, transom_height_mm: t.parameters?.transom_height_mm, bottom_light_height_mm: t.parameters?.bottom_light_height_mm, muntin_rows: t.parameters?.muntin_rows, muntin_columns: t.parameters?.muntin_columns }))}
-              underlayHasImage={!!underlay.image}
+              underlayHasImage={viewMode === 'plan' && !!underlay.image}
               underlayVisible={underlay.visible}
               underlayOpacity={underlay.opacity}
               onToggleUnderlayVisible={() => setUnderlay((u) => ({ ...u, visible: !u.visible }))}
               onChangeUnderlayOpacity={(opacity) => setUnderlay((u) => ({ ...u, opacity }))}
               onUploadUnderlayImage={handleUploadUnderlayImage}
-              onClearUnderlay={() => setUnderlay((u) => ({ ...u, image: null }))}
+              onClearUnderlay={handleClearUnderlay}
               onOpenTypeManager={() => openCatalog()}
             />
         </aside>
@@ -1275,11 +1429,13 @@ export const App: React.FC = () => {
         {/* Center Canvas Area */}
         <main className="cf-canvas-shell">
           <div className="cf-view-switch">
-            {(['plan', 'model3d'] as const).map(mode => (
-              <button key={mode} type="button" onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>
-                {mode === 'plan' ? '2D แปลน' : '3D โมเดล'}
-              </button>
+            {([
+              ['plan', 'แปลน'], ['north', 'รูปด้านเหนือ'], ['south', 'รูปด้านใต้'],
+              ['east', 'รูปด้านตะวันออก'], ['west', 'รูปด้านตะวันตก'], ['rcp', 'แปลนฝ้า RCP'], ['model3d', '3D ดูตัวอย่าง'],
+            ] as const).map(([mode, label]) => (
+              <button key={mode} type="button" onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>{label}</button>
             ))}
+            {viewMode === 'plan' && <button type="button" onClick={handleDetectRooms} title="ค้นหาห้องจากวงผนังปิด">ตรวจจับห้อง</button>}
             {viewMode === 'plan' && <details className="cf-label-menu" onClick={event => {
               if ((event.target as HTMLElement).closest('input')) event.stopPropagation()
             }}>
@@ -1309,6 +1465,7 @@ export const App: React.FC = () => {
           <div className="cf-viewport-stage">
             {viewMode === 'plan' ? <PlanCanvas
               project={project}
+              displayUnit={displayUnit}
               activeTool={activeTool}
               activeColumnTypeMark={activeColumnType}
               activeFoundationTypeMark={activeFoundationType}
@@ -1333,6 +1490,7 @@ export const App: React.FC = () => {
               selectedIds={selectedIds}
               underlay={underlay}
               onSelectObject={setSelectedId}
+              onRequestEditProperties={() => { setRightPanelTab('properties'); setInspectorOpen(true) }}
               onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }}
               onDeleteObjects={handleDeleteObjects}
               onCommitColumn={handleCommitColumn}
@@ -1342,22 +1500,30 @@ export const App: React.FC = () => {
               onCommitDoor={handleCommitDoor}
               onCommitWindow={handleCommitWindow}
               onCommitSlab={handleCommitSlab}
+              onCommitArchitecturalFloor={handleCommitArchitecturalFloor}
+              onCommitCeiling={handleCommitCeiling}
+              onCommitRoomSeparator={handleCommitRoomSeparator}
               onCommitSlabVoid={handleCommitSlabVoid}
               onCommitGrid={handleCommitGrid}
+              onCommitGridSystem={handleCommitGridSystem}
+              onModifyGrid={handleModifyGrid}
+              onCopyGrid={handleCopyGrid}
+              onActivateTool={setActiveTool}
               onCommitStair={handleCommitStair}
               onMoveColumn={handleMoveColumn}
               onMoveWall={handleMoveWall}
               onMoveOpening={handleMoveOpening}
               onFlipDoorHanding={handleFlipDoorHanding}
-              onStartCalibrationModal={(dist) => {
+              onStartCalibrationModal={(dist, first, second) => {
                 setMeasuredCalibrationDist_mm(dist)
+                calibrationPointsRef.current = { first, second }
                 setCalibrationModalOpen(true)
               }}
               onCursorChange={(coords, kind) => {
                 setCursorCoords_mm(coords)
                 setSnapKind(kind)
               }}
-            /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
+            /> : viewMode !== 'model3d' ? <ElevationCanvas project={project} direction={viewMode} selectedId={selectedId} onSelectObject={setSelectedId} underlay={underlay} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
               <Model3DViewport project={project} onSelectObject={setSelectedId} />
             </Suspense>}
           </div>
@@ -1390,7 +1556,7 @@ export const App: React.FC = () => {
             </div>
             <div>
               <span>
-                ปุ่มกลางเลื่อนแปลน · ลูกกลิ้งซูม · {activeTool === 'wall' || activeTool === 'beam' ? 'Space เปลี่ยนแนวอ้างอิง' : activeTool === 'door' ? 'Space กลับทิศประตู' : 'เลือกเครื่องมือเพื่อเริ่มวาด'}
+                คลิกขวา/แตะค้างวัตถุเพื่อแก้ไขหรือลบ · เมาส์กลางเลื่อนแปลน · แตะค้างพื้นที่ว่างเพื่อเลื่อน · ลูกกลิ้งซูม · {activeTool === 'wall' || activeTool === 'beam' ? 'Space เปลี่ยนแนวอ้างอิง' : activeTool === 'door' ? 'Space กลับทิศประตู' : 'เลือกเครื่องมือเพื่อเริ่มวาด'}
               </span>
             </div>
           </footer>
@@ -1408,11 +1574,15 @@ export const App: React.FC = () => {
           </div>
           {rightPanelTab === 'properties' && <div className="cf-inspector-content"><PropertiesPanel
             project={project}
+            displayUnit={displayUnit}
             selectedId={selectedId}
             onAssignType={handleAssignType}
             onUpdateColumnMark={handleUpdateColumnMark}
+            onUpdateColumnVerticalReference={handleUpdateColumnVerticalReference}
+            onUpdateBeamVerticalReference={handleUpdateBeamVerticalReference}
             onUpdateFoundationMark={handleUpdateFoundationMark}
             onUpdateGridTag={handleUpdateGridTag}
+            onModifyGrid={handleModifyGrid}
             onUpdateGridSystem={handleUpdateGridSystem}
             onUpdateWallFace={handleUpdateWallFace}
             onUpdateOpeningVertical={handleUpdateOpeningVertical}
@@ -1423,6 +1593,7 @@ export const App: React.FC = () => {
             onAddFoundation={(colId) => handleCommitFoundation({ columnId: colId })}
             onDeleteObject={handleDeleteObject}
             onDrawSlabVoid={(slabId) => { setSelectedId(slabId); setActiveTool('slabVoid') }}
+            onCreateRoomFinish={handleCreateRoomFinish}
           /></div>}
 
           {rightPanelTab === 'quantities' && <section className="cf-takeoff-panel">
@@ -1479,12 +1650,13 @@ export const App: React.FC = () => {
         onRenamed={syncRenamedActiveType}
       />
 
-      {isSettingsOpen && <SettingsModal project={project} onClose={()=>setIsSettingsOpen(false)} onExecute={dispatchCommandBatch} inspectorOpen={inspectorOpen} onInspectorChange={setInspectorOpen}/>}
+      {isSettingsOpen && <SettingsModal project={project} displayUnit={displayUnit} onClose={()=>setIsSettingsOpen(false)} onExecute={dispatchCommandBatch} inspectorOpen={inspectorOpen} onInspectorChange={setInspectorOpen}/>}
       {/* Underlay Point-to-Point Scale Calibration Modal */}
       <UnderlayCalibrationModal
         isOpen={calibrationModalOpen}
         onClose={() => setCalibrationModalOpen(false)}
         measuredDistance_mm={measuredCalibrationDist_mm}
+        displayUnit={displayUnit}
         currentScale_mm_per_px={underlay.scale_mm_per_px}
         onApplyScale={handleApplyCalibrationScale}
       />

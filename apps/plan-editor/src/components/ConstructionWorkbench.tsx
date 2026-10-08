@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { resolveCatalogType } from "@constructflow/project-model";
 import type { ProjectDocument } from "@constructflow/project-model";
 import { WorkbenchNumberInput } from "./WorkbenchNumberInput";
+import { formatLengthMm, parseLengthMm, type DisplayLengthUnit } from "@constructflow/project-model";
 import { OpeningPlanSymbolEditor } from "./OpeningPlanSymbolEditor.js";
 import type { OpeningPlanSymbolLine } from "@constructflow/project-model";
 import type {
@@ -512,7 +513,8 @@ function Field({
 }) {
   const label = labels[name] ?? name.replaceAll("_", " "),
     mm = name.endsWith("_mm"),
-    unit = mm ? " (m)" : "";
+    displayUnit: DisplayLengthUnit = project.project.display_unit ?? 'm',
+    unit = mm ? ` (${displayUnit})` : "";
   const selector = name.endsWith("_id") || name === "id";
   if (selector) {
     const family =
@@ -570,7 +572,7 @@ function Field({
               <WorkbenchNumberInput
                 style={inputStyle}
                 value={Number(value[i])}
-                unit={mm ? "mm" : undefined}
+                unit={mm ? displayUnit : undefined}
                 onChange={(next) => onChange(value.map((v, j) => j === i ? next : v))}
               />
             </label>
@@ -653,17 +655,16 @@ function Field({
               ) : (
                 <input
                   style={inputStyle}
-                  type={typeof v === "number" ? "number" : "text"}
-                  value={
-                    typeof v === "number" ? v / (mm ? 1000 : 1) : String(v)
-                  }
+                  type={typeof v === "number" && mm ? "text" : typeof v === "number" ? "number" : "text"}
+                  inputMode={typeof v === "number" && mm ? "decimal" : undefined}
+                  value={typeof v === "number" ? (mm ? formatLengthMm(v, displayUnit) : v) : String(v)}
                   step="any"
                   onChange={(e) =>
                     onChange(
                       value.map((p, k) =>
                         k === i
                           ? typeof v === "number"
-                            ? Number(e.target.value) * (mm ? 1000 : 1)
+                            ? mm ? parseLengthMm(e.target.value, displayUnit) ?? 0 : Number(e.target.value)
                             : e.target.value
                           : p,
                       ),
@@ -772,7 +773,7 @@ function Field({
           style={inputStyle}
           disabled={value === null}
           value={value as number | null}
-          unit={mm ? "mm" : undefined}
+          unit={mm ? (project.project.display_unit ?? 'm') : undefined}
           onChange={onChange}
         />
       ) : (
@@ -934,7 +935,7 @@ export function ConstructionWorkbench({
           {tab === "model" && (
             <>
               <p style={{ fontSize: 12 }}>
-                ขนาดงานเป็นเมตร
+                ขนาดระยะตามหน่วยโครงการ ({project.project.display_unit ?? 'm'})
                 ข้อมูลเหล็กและระบบเป็นข้อมูลออกแบบที่ต้องตรวจสอบก่อนก่อสร้าง
                 เลือกชิ้นงานเดิมเพื่อแก้ไขโดยคงการเชื่อมโยงกับแบบ
               </p>
@@ -1242,7 +1243,7 @@ export function ConstructionWorkbench({
                   {planOpenings.map((o) => { const d = o.module_data as Record<string, unknown>; return <option key={o.id} value={o.id}>{String(d.mark ?? (o.object_type === "door_window.door" ? "ประตู" : "หน้าต่าง"))} · {o.object_type === "door_window.door" ? "ประตู" : "หน้าต่าง"} · {String(d.level_id ?? "")}</option>; })}
                 </select>
                 {selectedOpening && <>
-                  <OpeningPlanSymbolEditor viewKind={openingViewKind} lines={openingViewKind === "plan" ? openingLines : openingElevationLines} openingWidthMm={Math.max(1, selectedOpeningWidth)} referenceDepthMm={openingViewKind === "plan" ? openingReferenceDepth : Math.max(1, selectedOpeningHeight)} onChange={openingViewKind === "plan" ? setOpeningLines : setOpeningElevationLines} onReferenceDepthChange={() => {}} onReturnToAutomatic={() => openingViewKind === "plan" ? setOpeningLines([]) : setOpeningElevationLines([])} />
+                  <OpeningPlanSymbolEditor viewKind={openingViewKind} displayUnit={project.project.display_unit ?? 'm'} lines={openingViewKind === "plan" ? openingLines : openingElevationLines} openingWidthMm={Math.max(1, selectedOpeningWidth)} referenceDepthMm={openingViewKind === "plan" ? openingReferenceDepth : Math.max(1, selectedOpeningHeight)} onChange={openingViewKind === "plan" ? setOpeningLines : setOpeningElevationLines} onReferenceDepthChange={() => {}} onReturnToAutomatic={() => openingViewKind === "plan" ? setOpeningLines([]) : setOpeningElevationLines([])} />
                   <button onClick={() => {
                     const saved = project.drawing_settings?.viewports[sheetId] ?? { scale_denominator: scale };
                     const opening_overrides = { ...saved.opening_overrides };

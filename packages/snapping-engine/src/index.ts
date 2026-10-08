@@ -159,6 +159,7 @@ export function snapPoint(
   const candidates: SnapCandidate[] = []
   const verticalGrids: { id: string; tag: string; pos: number }[] = []
   const horizontalGrids: { id: string; tag: string; pos: number }[] = []
+  const angledGrids: { id: string; tag: string; start: Point; end: Point }[] = []
   const segments: Segment[] = []
 
   const offer = (point: Point, kind: SnapKind, targetId: string | undefined, description: string, priority: number) => {
@@ -171,6 +172,10 @@ export function snapPoint(
   for (const object of Object.values(project.objects)) {
     if (isGridObject(object)) {
       const { tag, orientation, position_mm } = object.module_data
+      if (object.module_data.start_point_mm && object.module_data.end_point_mm) {
+        angledGrids.push({ id: object.id, tag, start: object.module_data.start_point_mm, end: object.module_data.end_point_mm })
+        continue
+      }
       if (orientation === 'vertical') verticalGrids.push({ id: object.id, tag, pos: position_mm })
       else horizontalGrids.push({ id: object.id, tag, pos: position_mm })
       continue
@@ -232,6 +237,12 @@ export function snapPoint(
     offer([vg.pos, rawWorldPoint_mm[1]], 'grid_line', vg.id, `Grid ${vg.tag}`, 2)
   }
   for (const hg of horizontalGrids) offer([rawWorldPoint_mm[0], hg.pos], 'grid_line', hg.id, `Grid ${hg.tag}`, 2)
+  for (const grid of angledGrids) {
+    const projected = projectToSegment(rawWorldPoint_mm, grid.start, grid.end)
+    offer(projected.point, 'grid_line', grid.id, `Grid ${grid.tag}`, 2)
+    offer(grid.start, 'grid_line', grid.id, `ปลายเส้นกริด ${grid.tag}`, 1)
+    offer(grid.end, 'grid_line', grid.id, `ปลายเส้นกริด ${grid.tag}`, 1)
+  }
 
   for (let i = 0; i < segments.length; i++) {
     for (let j = i + 1; j < segments.length; j++) {

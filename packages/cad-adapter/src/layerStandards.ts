@@ -255,6 +255,12 @@ export function resolveCadLayer(
   if (objectType.startsWith("decorative.") || objectType.startsWith("arch.molding")) {
     return CAD_STANDARD_LAYERS["A-FINS-NEWW"];
   }
+  if (objectType === "architecture.floor" || objectType === "architecture.ceiling") {
+    return CAD_STANDARD_LAYERS["A-FINS-NEWW"];
+  }
+  if (objectType === "architecture.room" || objectType === "architecture.room_separator") {
+    return CAD_STANDARD_LAYERS["ANNO-TEXT"];
+  }
   if (objectType.startsWith("plumbing.") || objectType.startsWith("drainage.")) {
     if (subType === "soil") return CAD_STANDARD_LAYERS["M-PLMB-SOIL"];
     if (subType === "waste") return CAD_STANDARD_LAYERS["M-PLMB-WAST"];

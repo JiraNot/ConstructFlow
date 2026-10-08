@@ -68,6 +68,23 @@ test('S3: bounds retain phase/host metadata and resolve instance section overrid
   assert.deepEqual(wallBounds.host_refs, existingWall.host_refs)
 })
 
+test('column clash bounds use the same base/top level references and offsets as 3D', () => {
+  const edited = structuredClone(project)
+  edited.levels = [
+    { id: 'GF', name: 'Ground', elevation_mm: 0, storey_index: 0, height_mm: 400 },
+    { id: 'L1', name: 'First Floor', elevation_mm: 400, storey_index: 1, height_mm: 3000 },
+    { id: 'EAVE', name: 'Eaves', elevation_mm: 3400, storey_index: 2, height_mm: 2000 },
+  ]
+  const column = Object.values(edited.objects).find(object => object.object_type === 'structure.column')
+  column.module_data.base_level_id = 'GF'
+  column.module_data.top_level_id = 'EAVE'
+  column.module_data.base_offset_mm = 100
+  column.module_data.top_offset_mm = -50
+  const bounds = analyzeProjectSpatialBounds(edited).objects.find(object => object.object_id === column.id).bounds
+  assert.equal(bounds.min[2], 100)
+  assert.equal(bounds.max[2], 3350)
+})
+
 test('S3: broad-phase interactions separate linked connections, boundary contact and unresolved overlap', () => {
   const box = (object_id, min, max, host_refs = []) => ({
     object_id, object_type: 'test.object', created_phase: 'new_construction',

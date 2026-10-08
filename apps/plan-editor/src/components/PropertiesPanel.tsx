@@ -18,17 +18,29 @@ import {
   RemovalPhase,
   resolveWallVerticalExtent,
   resolveOpeningVerticalExtent,
+  resolveColumnVerticalExtent,
+  resolveBeamBaseElevation,
+  formatLengthMm,
+  parseLengthMm,
+  type DisplayLengthUnit,
 } from '@constructflow/project-model'
 import { Trash2, PlusCircle, RefreshCw, SlidersHorizontal, MousePointer2 } from 'lucide-react'
+import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
+
+const LengthInput: React.FC<{ value: number; unit: DisplayLengthUnit; onChange: (value: number) => void; style?: React.CSSProperties; disabled?: boolean; 'aria-label'?: string }> = ({ value, unit, onChange, style, disabled, 'aria-label': ariaLabel }) => <WorkbenchNumberInput value={value} unit={unit} onChange={onChange} style={style} disabled={disabled} ariaLabel={ariaLabel} />
 
 interface PropertiesPanelProps {
   project: ProjectDocument
+  displayUnit: DisplayLengthUnit
   selectedId: string | null
   onAssignType: (objectId: string, typeName: string) => void
   onUpdateColumnMark: (objectId: string, newMark: string) => void
+  onUpdateColumnVerticalReference: (objectId: string, changes: { base_level_id?: string; top_level_id?: string | null; base_offset_mm?: number; top_offset_mm?: number }) => void
+  onUpdateBeamVerticalReference: (objectId: string, changes: { level_id?: string; base_offset_mm?: number }) => void
   onUpdateFoundationMark: (objectId: string, newMark: string) => void
   onUpdateGridTag: (objectId: string, newTag: string) => void
-  onUpdateGridSystem: (systemId: string, changes: { origin_mm?: number; spacing_mm?: number; count?: number; first_tag?: string }) => void
+  onModifyGrid: (objectId: string, changes: { start_point_mm?: [number, number]; end_point_mm?: [number, number]; bubble_visible?: boolean; auto_tag?: boolean; sequence_style?: 'auto' | 'alpha' | 'numeric' }) => void
+  onUpdateGridSystem: (systemId: string, changes: { positions_mm?: number[]; first_tag?: string }) => void
   onUpdateWallFace: (objectId: string, changes: { plaster_inside_thickness_mm?: number; plaster_outside_thickness_mm?: number; plaster_inside_material?: string; plaster_outside_material?: string; inside_finish_mark?: string; outside_finish_mark?: string; interior_side?: 'left' | 'right'; top_level_id?: string; base_offset_mm?: number; top_offset_mm?: number; vertical_constraint?: 'fixed_height' | 'top_level'; height_mm?: number }) => void
   onUpdateOpeningVertical: (objectId: string, changes: { sill_height_mm?: number; height_mm?: number; head_level_id?: string; head_offset_mm?: number; vertical_constraint?: 'fixed_height' | 'head_level' }) => void
   onUpdatePhase?: (objectId: string, newPhase: Phase) => void
@@ -38,15 +50,20 @@ interface PropertiesPanelProps {
   onAddFoundation: (columnId: string) => void
   onDeleteObject: (objectId: string) => void
   onDrawSlabVoid: (slabId: string) => void
+  onCreateRoomFinish?: (kind: 'floor' | 'ceiling', roomId: string) => void
 }
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   project,
+  displayUnit,
   selectedId,
   onAssignType,
   onUpdateColumnMark,
+  onUpdateColumnVerticalReference,
+  onUpdateBeamVerticalReference,
   onUpdateFoundationMark,
   onUpdateGridTag,
+  onModifyGrid,
   onUpdateGridSystem,
   onUpdateWallFace,
   onUpdateOpeningVertical,
@@ -57,17 +74,21 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onAddFoundation,
   onDeleteObject,
   onDrawSlabVoid,
+  onCreateRoomFinish,
 }) => {
   const selectedObj = selectedId ? project.objects[selectedId] : null
   const [editingMark, setEditingMark] = useState('')
 
   const colObj = selectedObj && isColumnObject(selectedObj) ? selectedObj : null
+  const columnVertical = colObj ? resolveColumnVerticalExtent(project, colObj) : undefined
   const fndObj = selectedObj && isFoundationObject(selectedObj) ? selectedObj : null
   const beamObj = selectedObj && isBeamObject(selectedObj) ? selectedObj : null
+  const beamBaseElevation = beamObj ? resolveBeamBaseElevation(project, beamObj) : undefined
   const wallObj = selectedObj && isWallObject(selectedObj) ? selectedObj : null
   const doorObj = selectedObj && isDoorObject(selectedObj) ? selectedObj : null
   const winObj = selectedObj && isWindowObject(selectedObj) ? selectedObj : null
   const slabObj = selectedObj?.object_type === 'structure.slab' ? selectedObj : null
+  const roomObj = selectedObj?.object_type === 'architecture.room' ? selectedObj : null
   const grdObj = selectedObj && isGridObject(selectedObj) ? selectedObj : null
 
   const currentMark = colObj
@@ -240,7 +261,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       {colObj && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>หน้าตัด (มม.)</label>
+            <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>หน้าตัด ({displayUnit})</label>
             <button
               onClick={onOpenTypeManager}
               style={{
@@ -268,15 +289,44 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             justifyContent: 'space-between',
             alignItems: 'center',
           }}>
-            <span>{colObj.module_data.section_mm[0]} × {colObj.module_data.section_mm[1]} mm</span>
+            <span>{colObj.module_data.section_mm.map(value => formatLengthMm(value, displayUnit)).join(' × ')} {displayUnit}</span>
             <span style={{ fontSize: 10, color: '#53657b', fontWeight: 500 }}>Type {colObj.module_data.mark}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#52677d' }}>
             <span>ตำแหน่ง:</span>
             <span style={{ fontFamily: 'monospace' }}>
-              ({(colObj.module_data.location_mm[0] / 1000).toFixed(3)} m, {(colObj.module_data.location_mm[1] / 1000).toFixed(3)} m)
+              ({formatLengthMm(colObj.module_data.location_mm[0], displayUnit)} {displayUnit}, {formatLengthMm(colObj.module_data.location_mm[1], displayUnit)} {displayUnit})
             </span>
           </div>
+          <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
+            <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับและความสูงเสา</strong>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระดับฐาน
+                <select aria-label="ระดับฐานเสา" value={colObj.module_data.base_level_id} onChange={event => {
+                  const baseLevelId = event.target.value
+                  const base = project.levels.find(level => level.id === baseLevelId)
+                  const next = base ? [...project.levels].filter(level => level.elevation_mm > base.elevation_mm).sort((a, b) => a.elevation_mm - b.elevation_mm)[0] : undefined
+                  onUpdateColumnVerticalReference(colObj.id, { base_level_id: baseLevelId, top_level_id: next?.id ?? null })
+                }} style={verticalSelectStyle}>
+                  {project.levels.map(level => <option key={level.id} value={level.id}>{level.name} · +{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit}</option>)}
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระดับยอด
+                <select aria-label="ระดับยอดเสา" value={colObj.module_data.top_level_id ?? (() => {
+                  const base = project.levels.find(level => level.id === colObj.module_data.base_level_id)
+                  return base ? [...project.levels].filter(level => level.elevation_mm > base.elevation_mm).sort((a, b) => a.elevation_mm - b.elevation_mm)[0]?.id ?? '' : ''
+                })()} onChange={event => onUpdateColumnVerticalReference(colObj.id, { top_level_id: event.target.value || null })} style={verticalSelectStyle}>
+                  <option value="">ใช้ระดับถัดไป / สำรองเดิม</option>
+                  {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === colObj.module_data.base_level_id)?.elevation_mm ?? -Infinity)).map(level => <option key={level.id} value={level.id}>{level.name} · +{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit}</option>)}
+                </select>
+              </label>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>เยื้องฐาน ({displayUnit})<LengthInput aria-label="ระยะเยื้องฐานเสา" value={colObj.module_data.base_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateColumnVerticalReference(colObj.id, { base_offset_mm: value })} style={verticalSelectStyle} /></label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>เยื้องยอด ({displayUnit})<LengthInput aria-label="ระยะเยื้องยอดเสา" value={colObj.module_data.top_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateColumnVerticalReference(colObj.id, { top_offset_mm: value })} style={verticalSelectStyle} /></label>
+            </div>
+            <span style={{ fontSize: 10, color: '#52677d' }}>สูง {formatLengthMm(columnVertical?.height_mm ?? 0, displayUnit)} {displayUnit} · +{formatLengthMm(columnVertical?.base_elevation_mm ?? 0, displayUnit)} ถึง +{formatLengthMm(columnVertical?.top_elevation_mm ?? 0, displayUnit)} {displayUnit}</span>
+          </section>
         </div>
       )}
 
@@ -284,7 +334,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       {fndObj && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ขนาด (มม.)</label>
+            <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ขนาด ({displayUnit})</label>
             <button
               onClick={onOpenTypeManager}
               style={{
@@ -312,13 +362,13 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             justifyContent: 'space-between',
             alignItems: 'center',
           }}>
-            <span>{fndObj.module_data.size_mm[0]} × {fndObj.module_data.size_mm[1]} × {fndObj.module_data.size_mm[2]} mm</span>
+            <span>{fndObj.module_data.size_mm.map(value => formatLengthMm(value, displayUnit)).join(' × ')} {displayUnit}</span>
             <span style={{ fontSize: 10, color: '#53657b', fontWeight: 500 }}>Type {fndObj.module_data.mark}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#52677d' }}>
             <span>Center:</span>
             <span style={{ fontFamily: 'monospace' }}>
-              ({(fndObj.module_data.center_mm[0] / 1000).toFixed(3)} m, {(fndObj.module_data.center_mm[1] / 1000).toFixed(3)} m)
+              ({formatLengthMm(fndObj.module_data.center_mm[0], displayUnit)} {displayUnit}, {formatLengthMm(fndObj.module_data.center_mm[1], displayUnit)} {displayUnit})
             </span>
           </div>
         </div>
@@ -329,7 +379,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>หน้าตัด (มม.)</label>
+              <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>หน้าตัด ({displayUnit})</label>
               <button
                 onClick={onOpenTypeManager}
                 style={{
@@ -357,10 +407,23 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span>{beamObj.module_data.section_mm[0]} × {beamObj.module_data.section_mm[1]} mm</span>
+              <span>{beamObj.module_data.section_mm.map(value => formatLengthMm(value, displayUnit)).join(' × ')} {displayUnit}</span>
               <span style={{ fontSize: 10, color: '#53657b', fontWeight: 500 }}>Type {beamObj.module_data.mark}</span>
             </div>
           </div>
+
+          <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
+            <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับวางคาน</strong>
+            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>อ้างอิงระดับ
+              <select aria-label="ระดับอ้างอิงคาน" value={beamObj.module_data.level_id} onChange={event => onUpdateBeamVerticalReference(beamObj.id, { level_id: event.target.value })} style={verticalSelectStyle}>
+                {project.levels.map(level => <option key={level.id} value={level.id}>{level.name} · {level.elevation_mm === 0 ? '±0' : `${level.elevation_mm > 0 ? '+' : ''}${formatLengthMm(level.elevation_mm, displayUnit)}`} {displayUnit}</option>)}
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระยะวางคานจากระดับ ({displayUnit})
+              <LengthInput aria-label="ระยะเยื้องคานจากระดับ" value={beamObj.module_data.base_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateBeamVerticalReference(beamObj.id, { base_offset_mm: value })} style={verticalSelectStyle} />
+            </label>
+            <span style={{ fontSize: 10, color: '#52677d' }}>ท้องคาน +{formatLengthMm((beamBaseElevation ?? 0) - Number(beamObj.module_data.drop_mm ?? 0), displayUnit)} {displayUnit} · หลังคาน +{formatLengthMm((beamBaseElevation ?? 0) + beamObj.module_data.section_mm[1] - Number(beamObj.module_data.drop_mm ?? 0), displayUnit)} {displayUnit}</span>
+          </section>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>
@@ -378,9 +441,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span>{(beamObj.module_data.span_mm / 1000).toFixed(2)} m</span>
+              <span>{formatLengthMm(beamObj.module_data.span_mm, displayUnit)} {displayUnit}</span>
               <span style={{ fontSize: 11, color: '#52677d', fontFamily: 'monospace' }}>
-                {beamObj.module_data.span_mm.toLocaleString()} mm
+                {formatLengthMm(beamObj.module_data.span_mm, displayUnit)} {displayUnit}
               </span>
             </div>
           </div>
@@ -392,7 +455,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>THICKNESS & HEIGHT (MM)</label>
+            <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ความหนาและความสูง ({displayUnit})</label>
               <button
                 onClick={onOpenTypeManager}
                 style={{
@@ -420,7 +483,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span>{wallObj.module_data.thickness_mm} mm · แกน/โครง {wallMasonryThickness} mm · ผิว {wallInsidePlaster}/{wallOutsidePlaster} mm · สูง {Math.round(wallVertical?.height_mm ?? wallObj.module_data.height_mm)} mm</span>
+              <span>{formatLengthMm(wallObj.module_data.thickness_mm, displayUnit)} {displayUnit} · แกน/โครง {formatLengthMm(wallMasonryThickness, displayUnit)} · ผิว {formatLengthMm(wallInsidePlaster, displayUnit)}/{formatLengthMm(wallOutsidePlaster, displayUnit)} · สูง {formatLengthMm(wallVertical?.height_mm ?? wallObj.module_data.height_mm, displayUnit)}</span>
               <span style={{ fontSize: 10, color: '#53657b', fontWeight: 500 }}>Type {wallObj.module_data.mark}</span>
             </div>
           </div>
@@ -432,14 +495,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 ? onUpdateWallFace(wallObj.id, { top_level_id: e.target.value, vertical_constraint: 'top_level' })
                 : onUpdateWallFace(wallObj.id, { top_level_id: undefined, vertical_constraint: 'fixed_height', height_mm: wallVertical?.height_mm ?? wallObj.module_data.height_mm })}>
                 <option value="">กำหนดความสูงเอง</option>
-                {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === wallObj.module_data.level_id)?.elevation_mm ?? 0)).map(level => <option key={level.id} value={level.id}>{level.name} · +{(level.elevation_mm / 1000).toFixed(3)} ม.</option>)}
+                {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === wallObj.module_data.level_id)?.elevation_mm ?? 0)).map(level => <option key={level.id} value={level.id}>{level.name} · +{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit}</option>)}
               </select>
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ยกจากพื้น (มม.)<input aria-label="ระยะยกฐานผนัง" type="number" value={wallObj.module_data.base_offset_mm ?? 0} onChange={e => onUpdateWallFace(wallObj.id, { base_offset_mm: Number(e.target.value) })} style={verticalSelectStyle} /></label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ลดจากระดับบน (มม.)<input aria-label="ระยะลดขอบบนผนัง" type="number" value={wallObj.module_data.top_offset_mm ?? 0} disabled={!wallObj.module_data.top_level_id} onChange={e => onUpdateWallFace(wallObj.id, { top_offset_mm: Number(e.target.value) })} style={verticalSelectStyle} /></label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ยกจากพื้น ({displayUnit})<LengthInput aria-label="ระยะยกฐานผนัง" value={wallObj.module_data.base_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { base_offset_mm: value })} style={verticalSelectStyle} /></label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ลดจากระดับบน ({displayUnit})<LengthInput aria-label="ระยะลดขอบบนผนัง" value={wallObj.module_data.top_offset_mm ?? 0} unit={displayUnit} disabled={!wallObj.module_data.top_level_id} onChange={value => onUpdateWallFace(wallObj.id, { top_offset_mm: value })} style={verticalSelectStyle} /></label>
             </div>
-            {!wallObj.module_data.top_level_id && <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ความสูงผนัง (มม.)<input aria-label="ความสูงผนัง" type="number" min="1" value={wallObj.module_data.height_mm} onChange={e => onUpdateWallFace(wallObj.id, { vertical_constraint: 'fixed_height', height_mm: Number(e.target.value) })} style={verticalSelectStyle} /></label>}
+            {!wallObj.module_data.top_level_id && <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ความสูงผนัง ({displayUnit})<LengthInput aria-label="ความสูงผนัง" value={wallObj.module_data.height_mm} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { vertical_constraint: 'fixed_height', height_mm: value })} style={verticalSelectStyle} /></label>}
           </section>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -450,7 +513,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <select aria-label="ผิวผนังด้านใน" value={wallFaceField('plaster_inside_material', 'cement_plaster')} onChange={e => onUpdateWallFace(wallObj.id, { plaster_inside_material: e.target.value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }}>
                 <option value="cement_plaster">ฉาบปูน</option><option value="interior_paint">สีภายใน</option><option value="ceramic_tile">กระเบื้อง</option><option value="stone_cladding">กรุหิน</option><option value="timber_cladding">กรุไม้</option><option value="wallpaper">วอลล์เปเปอร์</option><option value="exposed_masonry">โชว์ผิวก่อ</option><option value="smartboard">สมาร์ทบอร์ด</option><option value="fiber_cement_board">ไฟเบอร์ซีเมนต์บอร์ด</option><option value="gypsum_board">ยิปซัมบอร์ด</option><option value="composite_panel">แผ่นคอมโพซิต</option><option value="faux_wood_panel">แผ่นลายไม้เทียม</option><option value="none">ไม่ตกแต่ง</option>
               </select>
-              <input aria-label="ความหนาผิวด้านใน (มม.)" type="number" min="0" step="1" disabled={wallInsidePlaster <= 0} value={wallInsidePlaster} onChange={e => onUpdateWallFace(wallObj.id, { plaster_inside_thickness_mm: Number(e.target.value) })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
+              <LengthInput aria-label={`ความหนาผิวด้านใน (${displayUnit})`} disabled={wallInsidePlaster <= 0} value={wallInsidePlaster} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { plaster_inside_thickness_mm: value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: '#52677d', fontWeight: 600 }}>
               ผิวด้านนอก
@@ -459,7 +522,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <select aria-label="ผิวผนังด้านนอก" value={wallFaceField('plaster_outside_material', 'cement_plaster')} onChange={e => onUpdateWallFace(wallObj.id, { plaster_outside_material: e.target.value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }}>
                 <option value="cement_plaster">ฉาบปูน</option><option value="exterior_paint">สีภายนอก</option><option value="ceramic_tile">กระเบื้อง</option><option value="stone_cladding">กรุหิน</option><option value="timber_cladding">กรุไม้</option><option value="exposed_masonry">โชว์ผิวก่อ</option><option value="smartboard">สมาร์ทบอร์ด</option><option value="fiber_cement_board">ไฟเบอร์ซีเมนต์บอร์ด</option><option value="gypsum_board">ยิปซัมบอร์ด</option><option value="composite_panel">แผ่นคอมโพซิต</option><option value="faux_wood_panel">แผ่นลายไม้เทียม</option><option value="none">ไม่ตกแต่ง</option>
               </select>
-              <input aria-label="ความหนาผิวด้านนอก (มม.)" type="number" min="0" step="1" disabled={wallOutsidePlaster <= 0} value={wallOutsidePlaster} onChange={e => onUpdateWallFace(wallObj.id, { plaster_outside_thickness_mm: Number(e.target.value) })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
+              <LengthInput aria-label={`ความหนาผิวด้านนอก (${displayUnit})`} disabled={wallOutsidePlaster <= 0} value={wallOutsidePlaster} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { plaster_outside_thickness_mm: value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
             </label>
           </div>
           <datalist id="cf-wall-marks">{wallPresets.map(mark => <option key={mark} value={mark} />)}</datalist>
@@ -483,9 +546,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span>{(wallObj.module_data.length_mm / 1000).toFixed(2)} m</span>
+              <span>{formatLengthMm(wallObj.module_data.length_mm, displayUnit)} {displayUnit}</span>
               <span style={{ fontSize: 11, color: '#52677d', fontFamily: 'monospace' }}>
-                {wallObj.module_data.length_mm.toLocaleString()} mm
+                {formatLengthMm(wallObj.module_data.length_mm, displayUnit)} {displayUnit}
               </span>
             </div>
           </div>
@@ -514,8 +577,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       <span style={{ color: isDoor ? '#18764b' : '#0873c4', fontWeight: 600 }}>
                         {isDoor ? `Door ${mark}` : `Window ${mark}`}
                       </span>
-                      <span style={{ color: '#52677d' }}>
-                        {(offset / 1000).toFixed(2)}m from start
+              <span style={{ color: '#52677d' }}>
+                        {formatLengthMm(offset, displayUnit)} {displayUnit} from start
                       </span>
                     </div>
                   )
@@ -535,7 +598,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ขนาด (เมตร)</label>
+              <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ขนาด ({displayUnit})</label>
               <button
                 onClick={onOpenTypeManager}
                 style={{
@@ -563,23 +626,23 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span>{(doorObj.module_data.width_mm / 1000).toFixed(2)} × {(doorObj.module_data.height_mm / 1000).toFixed(2)} m</span>
+              <span>{formatLengthMm(doorObj.module_data.width_mm, displayUnit)} × {formatLengthMm(doorObj.module_data.height_mm, displayUnit)} {displayUnit}</span>
               <span style={{ fontSize: 10, color: '#53657b', fontWeight: 500 }}>Type {doorObj.module_data.mark}</span>
             </div>
           </div>
 
           <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับประตู</strong>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ธรณี/ยกจากพื้น (มม.)<input aria-label="ระดับธรณีประตู" type="number" min="0" value={doorObj.module_data.sill_height_mm ?? 0} onChange={e => onUpdateOpeningVertical(doorObj.id, { sill_height_mm: Number(e.target.value) })} style={verticalSelectStyle} /></label>
+            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ธรณี/ยกจากพื้น ({displayUnit})<LengthInput aria-label="ระดับธรณีประตู" value={doorObj.module_data.sill_height_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { sill_height_mm: value })} style={verticalSelectStyle} /></label>
             <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>หัวประตูจบที่ระดับ
               <select aria-label="ระดับหัวประตู" value={doorObj.module_data.head_level_id ?? ''} onChange={e => e.target.value
                 ? onUpdateOpeningVertical(doorObj.id, { head_level_id: e.target.value, head_offset_mm: 0 })
                 : onUpdateOpeningVertical(doorObj.id, { head_level_id: undefined, vertical_constraint: 'fixed_height', height_mm: doorVertical?.height_mm ?? doorObj.module_data.height_mm })} style={verticalSelectStyle}>
                 <option value="">กำหนดความสูงบานเอง</option>
-                {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === doorObj.module_data.level_id)?.elevation_mm ?? 0)).map(level => <option key={level.id} value={level.id}>{level.name} · +{(level.elevation_mm / 1000).toFixed(3)} ม.</option>)}
+                {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === doorObj.module_data.level_id)?.elevation_mm ?? 0)).map(level => <option key={level.id} value={level.id}>{level.name} · +{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit}</option>)}
               </select>
             </label>
-            {doorObj.module_data.head_level_id ? <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระยะหัวประตูจากระดับ (มม.)<input aria-label="ระยะหัวประตูจากระดับ" type="number" value={doorObj.module_data.head_offset_mm ?? 0} onChange={e => onUpdateOpeningVertical(doorObj.id, { head_offset_mm: Number(e.target.value) })} style={verticalSelectStyle} /></label> : <div style={{ fontSize: 10, color: '#52677d' }}>ความสูงช่อง {Math.round(doorVertical?.height_mm ?? doorObj.module_data.height_mm)} มม.</div>}
+            {doorObj.module_data.head_level_id ? <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระยะหัวประตูจากระดับ ({displayUnit})<LengthInput aria-label="ระยะหัวประตูจากระดับ" value={doorObj.module_data.head_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { head_offset_mm: value })} style={verticalSelectStyle} /></label> : <div style={{ fontSize: 10, color: '#52677d' }}>ความสูงช่อง {formatLengthMm(doorVertical?.height_mm ?? doorObj.module_data.height_mm, displayUnit)} {displayUnit}</div>}
           </section>
 
           {/* Door Handing with Flip button */}
@@ -622,7 +685,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#52677d' }}>
             <span>Offset along wall:</span>
-            <span style={{ fontFamily: 'monospace' }}>{(doorObj.module_data.offset_along_wall_mm / 1000).toFixed(2)} m</span>
+            <span style={{ fontFamily: 'monospace' }}>{formatLengthMm(doorObj.module_data.offset_along_wall_mm, displayUnit)} {displayUnit}</span>
           </div>
         </div>
       )}
@@ -632,7 +695,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ขนาด (เมตร)</label>
+              <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ขนาด ({displayUnit})</label>
               <button
                 onClick={onOpenTypeManager}
                 style={{
@@ -660,33 +723,33 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span>{(winObj.module_data.width_mm / 1000).toFixed(2)} × {(winObj.module_data.height_mm / 1000).toFixed(2)} m</span>
+              <span>{formatLengthMm(winObj.module_data.width_mm, displayUnit)} × {formatLengthMm(winObj.module_data.height_mm, displayUnit)} {displayUnit}</span>
               <span style={{ fontSize: 10, color: '#53657b', fontWeight: 500 }}>Type {winObj.module_data.mark}</span>
             </div>
           </div>
 
           <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับหน้าต่าง</strong>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ธรณีหน้าต่างจากพื้น (มม.)<input aria-label="ระดับธรณีหน้าต่าง" type="number" min="0" value={winObj.module_data.sill_height_mm} onChange={e => onUpdateOpeningVertical(winObj.id, { sill_height_mm: Number(e.target.value) })} style={verticalSelectStyle} /></label>
+            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ธรณีหน้าต่างจากพื้น ({displayUnit})<LengthInput aria-label="ระดับธรณีหน้าต่าง" value={winObj.module_data.sill_height_mm} unit={displayUnit} onChange={value => onUpdateOpeningVertical(winObj.id, { sill_height_mm: value })} style={verticalSelectStyle} /></label>
             <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>หัวหน้าต่างจบที่ระดับ
               <select aria-label="ระดับหัวหน้าต่าง" value={winObj.module_data.head_level_id ?? ''} onChange={e => e.target.value
                 ? onUpdateOpeningVertical(winObj.id, { head_level_id: e.target.value, head_offset_mm: 0 })
                 : onUpdateOpeningVertical(winObj.id, { head_level_id: undefined, vertical_constraint: 'fixed_height', height_mm: windowVertical?.height_mm ?? winObj.module_data.height_mm })} style={verticalSelectStyle}>
                 <option value="">กำหนดความสูงเอง</option>
-                {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === winObj.module_data.level_id)?.elevation_mm ?? 0)).map(level => <option key={level.id} value={level.id}>{level.name} · +{(level.elevation_mm / 1000).toFixed(3)} ม.</option>)}
+                {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === winObj.module_data.level_id)?.elevation_mm ?? 0)).map(level => <option key={level.id} value={level.id}>{level.name} · +{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit}</option>)}
               </select>
             </label>
-            {winObj.module_data.head_level_id ? <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระยะหัวหน้าต่างจากระดับ (มม.)<input aria-label="ระยะหัวหน้าต่างจากระดับ" type="number" value={winObj.module_data.head_offset_mm ?? 0} onChange={e => onUpdateOpeningVertical(winObj.id, { head_offset_mm: Number(e.target.value) })} style={verticalSelectStyle} /></label> : <div style={{ fontSize: 10, color: '#52677d' }}>ความสูงช่อง {Math.round(windowVertical?.height_mm ?? winObj.module_data.height_mm)} มม.</div>}
+            {winObj.module_data.head_level_id ? <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระยะหัวหน้าต่างจากระดับ ({displayUnit})<LengthInput aria-label="ระยะหัวหน้าต่างจากระดับ" value={winObj.module_data.head_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(winObj.id, { head_offset_mm: value })} style={verticalSelectStyle} /></label> : <div style={{ fontSize: 10, color: '#52677d' }}>ความสูงช่อง {formatLengthMm(windowVertical?.height_mm ?? winObj.module_data.height_mm, displayUnit)} {displayUnit}</div>}
           </section>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#52677d' }}>
             <span>Sill Height:</span>
-            <span style={{ fontFamily: 'monospace' }}>{(winObj.module_data.sill_height_mm / 1000).toFixed(2)} m</span>
+            <span style={{ fontFamily: 'monospace' }}>{formatLengthMm(winObj.module_data.sill_height_mm, displayUnit)} {displayUnit}</span>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#52677d' }}>
             <span>Offset along wall:</span>
-            <span style={{ fontFamily: 'monospace' }}>{(winObj.module_data.offset_along_wall_mm / 1000).toFixed(2)} m</span>
+            <span style={{ fontFamily: 'monospace' }}>{formatLengthMm(winObj.module_data.offset_along_wall_mm, displayUnit)} {displayUnit}</span>
           </div>
         </div>
       )}
@@ -698,36 +761,60 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             GRID LINE POSITION
           </label>
           <div style={{ background: '#f5f8fc', padding: '6px 8px', borderRadius: 6, fontSize: 12 }}>
-            {grdObj.module_data.orientation === 'vertical' ? 'X = ' : 'Y = '}
-            <b>{(grdObj.module_data.position_mm / 1000).toFixed(3)} m</b>{' '}
-            <span style={{ color: '#53657b', fontSize: 11 }}>({grdObj.module_data.position_mm} mm)</span>
+            {grdObj.module_data.start_point_mm && grdObj.module_data.end_point_mm
+              ? <>แนวอ้างอิงจาก {grdObj.module_data.start_point_mm.map(value => formatLengthMm(value, displayUnit)).join(', ')} ถึง {grdObj.module_data.end_point_mm.map(value => formatLengthMm(value, displayUnit)).join(', ')} {displayUnit}</>
+              : <>{grdObj.module_data.orientation === 'vertical' ? 'X = ' : 'Y = '}<b>{formatLengthMm(grdObj.module_data.position_mm, displayUnit)} {displayUnit}</b></>}
           </div>
-          {grdObj.module_data.system_id && <section key={`${grdObj.module_data.system_id}:${selectedId}`} style={{ display: 'grid', gap: 7, marginTop: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
-            <strong style={{ fontSize: 12 }}>ระบบกริด · {grdObj.module_data.system_count} เส้น</strong>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ตำแหน่งเส้นแรก (มม.)
-              <input aria-label="ตำแหน่งเริ่มต้นระบบกริด" type="number" defaultValue={grdObj.module_data.system_origin_mm ?? grdObj.module_data.position_mm} onBlur={event => {
-                const value = Number(event.target.value); if (Number.isFinite(value)) onUpdateGridSystem(grdObj.module_data.system_id!, { origin_mm: value })
+          {grdObj.module_data.system_id && (() => {
+            const members = Object.values(project.objects).filter(isGridObject).filter(object => object.module_data.system_id === grdObj.module_data.system_id).sort((a, b) => (a.module_data.system_index ?? 0) - (b.module_data.system_index ?? 0))
+            const positions = members.map(member => member.module_data.position_mm)
+            return <section key={`${grdObj.module_data.system_id}:${selectedId}`} style={{ display: 'grid', gap: 7, marginTop: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
+            <strong style={{ fontSize: 12 }}>ระบบ Grid Line · {members.length} เส้น</strong>
+            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ตำแหน่งทุกเส้น ({displayUnit} คั่นด้วยจุลภาค)
+              <input aria-label={`ตำแหน่งทุกเส้นในระบบกริด (${displayUnit})`} defaultValue={positions.map(value => formatLengthMm(value, displayUnit)).join(', ')} onBlur={event => {
+                const tokens = event.target.value.split(/[\s,;]+/).filter(value => value.trim() !== '')
+                const values = tokens.map(value => parseLengthMm(value.trim(), displayUnit))
+                if (values.length && values.length <= 100 && values.every(value => value !== null && Number.isFinite(value)) && values.every((value, index) => index === 0 || value! > values[index - 1]!)) onUpdateGridSystem(grdObj.module_data.system_id!, { positions_mm: values as number[] })
               }} style={verticalSelectStyle} />
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระยะห่าง (มม.)
-                <input aria-label="ระยะห่างระบบกริด" type="number" min="1" defaultValue={grdObj.module_data.system_spacing_mm ?? 4000} onBlur={event => {
-                  const value = Number(event.target.value); if (Number.isFinite(value) && value > 0) onUpdateGridSystem(grdObj.module_data.system_id!, { spacing_mm: value })
-                }} style={verticalSelectStyle} />
-              </label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>จำนวนเส้น
-                <input aria-label="จำนวนเส้นในระบบกริด" type="number" min="1" max="100" defaultValue={grdObj.module_data.system_count ?? 1} onBlur={event => {
-                  const value = Math.max(1, Math.min(100, Math.floor(Number(event.target.value)))); if (Number.isFinite(value)) onUpdateGridSystem(grdObj.module_data.system_id!, { count: value })
-                }} style={verticalSelectStyle} />
-              </label>
-            </div>
             <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ป้ายเส้นแรก
               <input aria-label="ป้ายกริดเส้นแรกในชุด" defaultValue={grdObj.module_data.system_first_tag ?? grdObj.module_data.tag} onBlur={event => {
                 const value = event.target.value.trim(); if (value) onUpdateGridSystem(grdObj.module_data.system_id!, { first_tag: value })
               }} style={verticalSelectStyle} />
             </label>
-            <small style={{ fontSize: 10, color: '#64748b' }}>แก้ข้อมูลจากเส้นใดก็ได้ในชุดนี้ ระบบจะจัดตำแหน่งและป้ายทุกเส้นใหม่</small>
-          </section>}
+            <small style={{ fontSize: 10, color: '#64748b' }}>แก้ชุดระยะและป้ายได้จากเส้นใดก็ได้ในระบบ</small>
+          </section>
+          })()}
+          {!grdObj.module_data.system_id && (() => {
+            const data = grdObj.module_data
+            const start: [number, number] = data.start_point_mm ?? (data.orientation === 'vertical' ? [data.position_mm, data.extent_mm[0]] : [data.extent_mm[0], data.position_mm])
+            const end: [number, number] = data.end_point_mm ?? (data.orientation === 'vertical' ? [data.position_mm, data.extent_mm[1]] : [data.extent_mm[1], data.position_mm])
+            const angle = Math.atan2(end[1] - start[1], end[0] - start[0]) * 180 / Math.PI
+            const rotateTo = (degrees: number) => {
+              if (!Number.isFinite(degrees)) return
+              const midpoint: [number, number] = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2]
+              const length = Math.hypot(end[0] - start[0], end[1] - start[1])
+              const radians = degrees * Math.PI / 180, dx = Math.cos(radians) * length / 2, dy = Math.sin(radians) * length / 2
+              onModifyGrid(grdObj.id, { start_point_mm: [midpoint[0] - dx, midpoint[1] - dy], end_point_mm: [midpoint[0] + dx, midpoint[1] + dy] })
+            }
+            return <section style={{ display: 'grid', gap: 8, marginTop: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
+              <strong style={{ fontSize: 12 }}>เส้นกริดอ้างอิง</strong>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>มุมเอียง (องศา)
+                <input aria-label="มุมเอียงเส้นกริดองศา" type="number" step="0.1" defaultValue={Number(angle.toFixed(1))} key={`${grdObj.id}:${Math.round(angle * 10) / 10}`} onBlur={event => rotateTo(Number(event.target.value))} style={verticalSelectStyle} />
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: '#52677d' }}><input type="checkbox" checked={data.bubble_visible !== false} onChange={event => onModifyGrid(grdObj.id, { bubble_visible: event.target.checked })} />แสดง Bubble</label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: '#52677d' }}><input type="checkbox" checked={data.auto_tag !== false} onChange={event => onModifyGrid(grdObj.id, { auto_tag: event.target.checked })} />รันป้ายอัตโนมัติ</label>
+              {data.auto_tag === false && <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ป้ายกำกับ
+                <input aria-label="ป้ายกำกับกริด" defaultValue={data.tag} onBlur={event => { if (event.target.value.trim()) onUpdateGridTag(grdObj.id, event.target.value) }} style={verticalSelectStyle} />
+              </label>}
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>รูปแบบเลข/ตัวอักษร
+                <select aria-label="รูปแบบลำดับป้ายกริด" value={data.sequence_style ?? 'auto'} onChange={event => onModifyGrid(grdObj.id, { sequence_style: event.target.value as 'auto' | 'alpha' | 'numeric' })} style={verticalSelectStyle}>
+                  <option value="auto">อัตโนมัติ (ตั้ง A / นอน 1)</option><option value="alpha">ตัวอักษร A, B, C</option><option value="numeric">ตัวเลข 1, 2, 3</option>
+                </select>
+              </label>
+              <small style={{ fontSize: 10, color: '#64748b' }}>เส้นที่ปิด Bubble จะไม่ถูกนับในลำดับอัตโนมัติ · ลากเส้นบนแปลนเพื่อย้าย</small>
+            </section>
+          })()}
         </div>
       )}
 
@@ -737,12 +824,18 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           return <section style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid #dbe3ed', borderRadius: 8 }}>
             <strong style={{ fontSize: 12 }}>พื้น {String(slabData.mark ?? '')}</strong>
             <span style={{ fontSize: 11, color: '#52677d' }}>
-              ระดับ {project.levels.find(level => level.id === slabData.level_id)?.name ?? String(slabData.level_id ?? '')} · หนา {String(slabData.thickness_mm ?? '')} มม. · ช่องเจาะ {Array.isArray(slabData.voids_mm) ? slabData.voids_mm.length : 0} ช่อง
+              ระดับ {project.levels.find(level => level.id === slabData.level_id)?.name ?? String(slabData.level_id ?? '')} · หนา {formatLengthMm(Number(slabData.thickness_mm ?? 0), displayUnit)} {displayUnit} · ช่องเจาะ {Array.isArray(slabData.voids_mm) ? slabData.voids_mm.length : 0} ช่อง
             </span>
             <button type="button" onClick={() => onDrawSlabVoid(slabObj.id)} style={verticalSelectStyle}>วาดช่องเจาะพื้น</button>
           </section>
         })()
       )}
+      {roomObj && <section style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid #dbe3ed', borderRadius: 8 }}>
+        <strong style={{ fontSize: 12 }}>ห้อง {String((roomObj.module_data as Record<string,unknown>).number ?? '')} · {String((roomObj.module_data as Record<string,unknown>).name ?? '')}</strong>
+        <span style={{ fontSize: 11, color: '#52677d' }}>พื้นที่ {(Number((roomObj.module_data as Record<string,unknown>).area_mm2 ?? 0)/1e6).toFixed(2)} ตร.ม. · ขอบเขตตามผนัง/เส้นแบ่งห้อง</span>
+        <button type="button" onClick={() => onCreateRoomFinish?.('floor', roomObj.id)} style={verticalSelectStyle}>สร้างพื้นสถาปัตย์ตามห้อง</button>
+        <button type="button" onClick={() => onCreateRoomFinish?.('ceiling', roomObj.id)} style={verticalSelectStyle}>สร้างฝ้าตามห้อง</button>
+      </section>}
 
       {/* Level and Phase */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -818,7 +911,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               fontSize: 12,
             }}>
               <div style={{ color: '#0873c4', fontWeight: 600 }}>
-                Footing {hostedFoundation.module_data.mark} ({hostedFoundation.module_data.size_mm.join(' × ')} mm)
+                Footing {hostedFoundation.module_data.mark} ({hostedFoundation.module_data.size_mm.map(value => formatLengthMm(value, displayUnit)).join(' × ')} {displayUnit})
               </div>
               <div style={{ color: '#53657b', fontSize: 10, marginTop: 2 }}>
                 ฐานรากที่เชื่อมกับเสานี้

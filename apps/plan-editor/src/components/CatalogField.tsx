@@ -1,4 +1,5 @@
 import React from "react";
+import { formatLengthMm, parseLengthMm, type DisplayLengthUnit } from "@constructflow/project-model";
 const labels: Record<string, string> = {
   section_mm: "หน้าตัด",
   size_mm: "ขนาดฐานราก",
@@ -141,14 +142,19 @@ export function CatalogField({
   name,
   value,
   onChange,
+  displayUnit = 'm',
+  inheritedLength = false,
 }: {
   name: string;
   value: unknown;
   onChange: (value: unknown) => void;
+  displayUnit?: DisplayLengthUnit;
+  inheritedLength?: boolean;
 }) {
+  const isLength = inheritedLength || name.endsWith('_mm');
   const label =
     (labels[name] ?? name.replaceAll("_", " ")) +
-    (name.endsWith("_mm") ? " (มม.)" : "");
+    (isLength ? ` (${displayUnit})` : "");
   if (Array.isArray(value))
     return (
       <fieldset className="cf-form-section">
@@ -163,6 +169,8 @@ export function CatalogField({
                     : String(i + 1)
                 }
                 value={item}
+                displayUnit={displayUnit}
+                inheritedLength={isLength}
                 onChange={(next) =>
                   onChange(value.map((v, j) => (i === j ? next : v)))
                 }
@@ -202,6 +210,7 @@ export function CatalogField({
               key={key}
               name={key}
               value={item}
+              displayUnit={displayUnit}
               onChange={(next) => onChange({ ...value, [key]: next })}
             />
           ))}
@@ -247,13 +256,14 @@ export function CatalogField({
       ) : (
         <input
           aria-label={label}
-          type={typeof value === "number" ? "number" : "text"}
+          type={typeof value === "number" && isLength ? "text" : typeof value === "number" ? "number" : "text"}
+          inputMode={typeof value === "number" && isLength ? "decimal" : undefined}
           step="any"
-          value={value == null ? "" : String(value)}
+          value={value == null ? "" : typeof value === 'number' && isLength ? formatLengthMm(value, displayUnit) : String(value)}
           onChange={(e) =>
             onChange(
               typeof value === "number"
-                ? Number(e.target.value)
+                ? isLength ? parseLengthMm(e.target.value, displayUnit) ?? 0 : Number(e.target.value)
                 : e.target.value,
             )
           }

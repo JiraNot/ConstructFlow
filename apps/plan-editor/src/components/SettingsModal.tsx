@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import type { ProjectDocument } from "@constructflow/project-model";
+import { type DisplayLengthUnit } from "@constructflow/project-model";
+import { WorkbenchNumberInput } from "./WorkbenchNumberInput.js";
 import type {
   CommandRequest,
   CommandBatchResult,
@@ -7,12 +9,14 @@ import type {
 import { Dialog } from "./ui/Dialog.js";
 export function SettingsModal({
   project,
+  displayUnit,
   onClose,
   onExecute,
   inspectorOpen,
   onInspectorChange,
 }: {
   project: ProjectDocument;
+  displayUnit: DisplayLengthUnit;
   onClose: () => void;
   onExecute: (commands: CommandRequest[]) => CommandBatchResult;
   inspectorOpen: boolean;
@@ -85,7 +89,7 @@ export function SettingsModal({
           <>
             <h3>ชั้นและระดับอาคาร</h3>
             <p className="cf-help">
-              ปรับค่าเป็นเมตร ชิ้นงานที่อ้างระดับเหล่านี้จะอัปเดตเมื่อบันทึก ·
+              ปรับระดับเป็น {displayUnit} ชิ้นงานที่อ้างระดับเหล่านี้จะอัปเดตเมื่อบันทึก ·
               ย้อนกลับได้ด้วย Undo
             </p>
             {levels.map((level, i) => {
@@ -112,47 +116,13 @@ export function SettingsModal({
                     />
                   </label>
                   <label className="cf-field">
-                    <span>ระดับจากศูนย์ (ม.)</span>
-                    <input
-                      aria-label={`ระดับ ${level.id}`}
-                      type="number"
-                      step="0.001"
-                      value={level.elevation_mm / 1000}
-                      onChange={(e) =>
-                        setLevels(
-                          levels.map((l, j) =>
-                            j === i
-                              ? {
-                                  ...l,
-                                  elevation_mm: Number(e.target.value) * 1000,
-                                }
-                              : l,
-                          ),
-                        )
-                      }
-                    />
+                    <span>ระดับจากศูนย์ ({displayUnit})</span>
+                    <WorkbenchNumberInput ariaLabel={`ระดับ ${level.id}`} unit={displayUnit} value={level.elevation_mm} onChange={value => setLevels(levels.map((l, j) => j === i ? { ...l, elevation_mm: value } : l))} />
                   </label>
                   {level.height_mm !== undefined && (
                     <label className="cf-field">
-                      <span>ความสูงชั้น (ม.)</span>
-                      <input
-                        aria-label={`ความสูงชั้น ${level.id}`}
-                        type="number"
-                        step="0.001"
-                        value={level.height_mm / 1000}
-                        onChange={(e) =>
-                          setLevels(
-                            levels.map((l, j) =>
-                              j === i
-                                ? {
-                                    ...l,
-                                    height_mm: Number(e.target.value) * 1000,
-                                  }
-                                : l,
-                            ),
-                          )
-                        }
-                      />
+                      <span>ระยะถึงชั้นถัดไป ({displayUnit})</span>
+                      <WorkbenchNumberInput ariaLabel={`ความสูงชั้น ${level.id}`} unit={displayUnit} value={level.height_mm} onChange={value => setLevels(levels.map((l, j) => j === i ? { ...l, height_mm: value } : l))} />
                     </label>
                   )}
                 </div>

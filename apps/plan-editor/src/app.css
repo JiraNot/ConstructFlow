@@ -47,7 +47,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 }
 .cf-brand-name { color: #18324f; font-size: 16px; font-weight: 750; white-space: nowrap; }
 .cf-brand-divider { width: 1px; height: 24px; background: var(--cf-line); margin: 0 2px; }
-.cf-project-name { overflow: hidden; color: #718096; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.cf-project-name { min-width: 0; overflow: hidden; padding: 4px 3px; color: #718096; border: 0; border-radius: 4px; background: transparent; font: inherit; font-size: 12px; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+.cf-project-name:hover { color: #334b66; background: #f5f8fc; }
+.cf-project-name-input { width: min(220px, 24vw); min-width: 110px; height: 30px; padding: 0 7px; color: #263548; border: 1px solid #1682e8; border-radius: 5px; background: #fff; font-size: 12px; }
 .cf-header-model-controls { gap: 12px; flex: 0 1 auto; }
 .cf-header-field { display: flex; align-items: center; gap: 7px; color: var(--cf-muted); font-size: 11px; white-space: nowrap; }
 .cf-header-field select {
@@ -55,7 +57,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   color: #33465b; border: 1px solid #dce4ed; border-radius: 7px; background: #fff;
 }
 .cf-phase-field select { min-width: 150px; }
-.cf-unit-pill { padding: 7px 10px; color: #57718b; border: 1px solid #e0e8f0; border-radius: 7px; background: #f8fafc; font-size: 11px; white-space: nowrap; }
+.cf-unit-pill { padding: 5px 8px; color: #57718b; border: 1px solid #e0e8f0; border-radius: 7px; background: #f8fafc; font-size: 11px; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+.cf-unit-pill select { border: 0; background: transparent; color: #24364b; font: inherit; font-weight: 700; outline: 0; cursor: pointer; padding: 2px; }
 .cf-header-actions { justify-content: flex-end; gap: 5px; flex: 0 0 auto; }
 .cf-button, .cf-icon-button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px;
@@ -72,6 +75,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-save-status.is-unsaved { color: #b87910; }
 .cf-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 .cf-more-menu { position: relative; }
+.cf-save-menu { position: relative; }
+.cf-save-menu > summary { list-style: none; cursor: pointer; }
+.cf-save-menu > summary::-webkit-details-marker { display: none; }
+.cf-save-menu > summary > svg { display: block; }
+.cf-save-popover { width: 230px; }
 .cf-more-menu > summary { list-style: none; font-size: 0; cursor: pointer; }
 .cf-more-menu > summary::-webkit-details-marker { display: none; }
 .cf-more-menu > summary > svg { display: block; }
@@ -160,6 +168,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-label-category-list label { display:flex; align-items:center; gap:8px; font-size:11px; cursor:pointer; }
 .cf-label-category-list input { width:14px; height:14px; margin:0; accent-color:#1682e8; }
 .cf-plan-canvas { background: #fbfdff !important; }
+.cf-plan-canvas[data-active-tool="erase"] { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M3%2015%2011.4%205a2%202%200%200%201%202.8-.3l5.7%204.8a2%202%200%200%201%20.3%202.8L14%2020H8z' fill='%23f9a8d4' stroke='%231e293b' stroke-width='1.6'/%3E%3Cpath d='m8%2020%206-7' fill='none' stroke='%231e293b' stroke-width='1.6'/%3E%3C/svg%3E") 12 12, crosshair; }
+.cf-object-context-menu { position:absolute; z-index:40; display:grid; min-width:176px; padding:5px; border:1px solid #d8e2ec; border-radius:9px; background:#fff; box-shadow:0 8px 24px rgb(15 23 42 / 18%); }
+.cf-object-context-menu button { display:flex; align-items:center; gap:9px; width:100%; min-height:36px; padding:7px 9px; border:0; border-radius:6px; background:transparent; color:#334b63; text-align:left; font:inherit; font-size:12px; cursor:pointer; }
+.cf-object-context-menu button:hover, .cf-object-context-menu button:focus-visible { background:#eff6ff; color:#075da8; outline:none; }
+.cf-object-context-menu button.is-danger { color:#b42332; }
+.cf-object-context-menu button.is-danger:hover, .cf-object-context-menu button.is-danger:focus-visible { background:#fff1f2; color:#b42332; }
 .cf-dynamic-dimensions {
   position: absolute;
   z-index: 14;
@@ -226,6 +240,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   gap: 6px;
   width: 100%;
 }
+.cf-grid-system-axis { display:flex; align-items:flex-end; gap:6px; }
+.cf-grid-system-axis label { display:grid; gap:3px; color:#52677d; font-size:10px; }
+.cf-grid-system-axis label:first-child { flex:1; }
+.cf-grid-system-axis input { min-width:90px; min-height:29px; padding:4px 6px; border:1px solid #cbd8e5; border-radius:5px; color:#334b63; font:inherit; }
 .cf-grid-orientation-control > span { color: #475569; font-weight: 650; }
 .cf-grid-orientation-control button {
   min-height: 30px;
@@ -380,7 +398,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .cf-header-field select { min-width: 110px; max-width: 145px; }
   .cf-phase-field select { min-width: 112px; }
   .cf-inspector { flex-basis: 280px; min-width: 250px; }
-  .cf-unit-pill { display: none; }
+  .cf-unit-pill { display: flex; padding: 4px 6px; font-size: 0; }
+  .cf-unit-pill select { font-size: 11px; }
 }
 @media (max-width: 850px) {
   .cf-brand-name { display: none; }

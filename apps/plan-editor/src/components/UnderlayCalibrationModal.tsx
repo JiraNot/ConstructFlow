@@ -1,53 +1,41 @@
 import React, { useState, useEffect } from 'react'
 import { Ruler, Check, X, ArrowRight } from 'lucide-react'
+import { formatLengthMm, parseLengthMm, type DisplayLengthUnit } from '@constructflow/project-model'
 
 interface UnderlayCalibrationModalProps {
   isOpen: boolean
   onClose: () => void
   measuredDistance_mm: number
+  displayUnit: DisplayLengthUnit
   currentScale_mm_per_px: number
-  onApplyScale: (newScale_mm_per_px: number, realDistance_mm: number) => void
+  onApplyScale: (newScale_mm_per_px: number, realDistance_mm: number, axis: 'x' | 'y') => void
 }
 
 export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> = ({
   isOpen,
   onClose,
   measuredDistance_mm,
+  displayUnit,
   currentScale_mm_per_px,
   onApplyScale,
 }) => {
-  const [inputValue, setInputValue] = useState<string>('4000')
+  const [inputValue, setInputValue] = useState<string>('4.000')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [axis, setAxis] = useState<'x' | 'y'>('x')
 
   useEffect(() => {
     if (isOpen) {
       // Default to rounded 100mm of measured distance if reasonable
       const rounded = Math.round(measuredDistance_mm / 100) * 100
-      setInputValue(rounded > 0 ? String(rounded) : '4000')
+      setInputValue(rounded > 0 ? formatLengthMm(rounded, displayUnit) : formatLengthMm(4000, displayUnit))
       setErrorMsg(null)
     }
-  }, [isOpen, measuredDistance_mm])
+  }, [isOpen, measuredDistance_mm, displayUnit])
 
   if (!isOpen) return null
 
-  // Parse user input (supports e.g. "4000", "4m", "4.0m", "4.5")
-  const parseDistanceMm = (text: string): number | null => {
-    const trimmed = text.trim().toLowerCase()
-    if (!trimmed) return null
-    if (trimmed.endsWith('m') && !trimmed.endsWith('mm')) {
-      const val = parseFloat(trimmed.replace('m', ''))
-      return isNaN(val) || val <= 0 ? null : Math.round(val * 1000)
-    }
-    const val = parseFloat(trimmed.replace('mm', ''))
-    if (isNaN(val) || val <= 0) return null
-    // If value is small (< 50), user likely entered meters without typing 'm' (e.g. "4.0")
-    if (val < 50) {
-      return Math.round(val * 1000)
-    }
-    return Math.round(val)
-  }
-
-  const parsedRealMm = parseDistanceMm(inputValue)
+  const parsedInput = parseLengthMm(inputValue, displayUnit)
+  const parsedRealMm = parsedInput !== null && parsedInput > 0 ? Math.round(parsedInput) : null
   // Distance in pixel coordinates on current scale
   const pixelDist = measuredDistance_mm / (currentScale_mm_per_px || 1)
   const computedScale = parsedRealMm && pixelDist > 0 ? parsedRealMm / pixelDist : currentScale_mm_per_px
@@ -61,7 +49,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
       setErrorMsg('ระยะพิกเซลที่วัดได้น้อยเกินไป กรุณาเลือก 2 จุดที่ห่างกันมากกว่านี้')
       return
     }
-    onApplyScale(computedScale, parsedRealMm)
+    onApplyScale(computedScale, parsedRealMm, axis)
     onClose()
   }
 
@@ -122,7 +110,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
                 เทียบสเกลแปลนพื้น (Point-to-Point Calibration)
               </h3>
               <p style={{ margin: 0, fontSize: 11, color: '#52677d' }}>
-                ปรับสเกลภาพแปลน 1:1 ให้ตรงกับระยะจริงในงานก่อสร้าง (mm)
+                ปรับสเกลภาพแปลน 1:1 ให้ตรงกับระยะจริงในงานก่อสร้าง ({displayUnit})
               </p>
             </div>
           </div>
@@ -157,12 +145,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
           >
             <div>
               <div style={{ fontSize: 11, color: '#52677d' }}>ระยะที่วัดได้บนภาพ (Current Measured):</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#f59e0b', marginTop: 2 }}>
-                {Math.round(measuredDistance_mm).toLocaleString()} mm{' '}
-                <span style={{ fontSize: 12, color: '#52677d', fontWeight: 500 }}>
-                  ({(measuredDistance_mm / 1000).toFixed(3)} m)
-                </span>
-              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#f59e0b', marginTop: 2 }}>{formatLengthMm(measuredDistance_mm, displayUnit)} {displayUnit}</div>
             </div>
             <div style={{ textAlign: 'right', fontSize: 11, color: '#64748b' }}>
               <div>ความกว้างพิกเซล:</div>
@@ -171,9 +154,15 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
           </div>
 
           {/* Real Distance Input */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#24364b' }}>
+            จัดแนวเส้นที่วัดให้ขนานกับแกน
+            <select value={axis} onChange={event => setAxis(event.target.value as 'x' | 'y')} style={{ padding: 6, border: '1px solid #cbd5e1', borderRadius: 5 }}>
+              <option value="x">X (แนวนอน)</option><option value="y">Y (แนวตั้ง)</option>
+            </select>
+          </label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: '#24364b' }}>
-              ระยะทางจริงระหว่าง 2 จุดนี้ (มม. หรือ เมตร):
+              ระยะจริงระหว่าง 2 จุดนี้ ({displayUnit}; ใส่ mm/cm/m ต่อท้ายได้):
             </label>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
@@ -185,7 +174,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
                   setErrorMsg(null)
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
-                placeholder="เช่น 4000 หรือ 4.0m"
+                placeholder={`เช่น ${formatLengthMm(4000, displayUnit)} ${displayUnit}`}
                 style={{
                   flex: 1,
                   background: '#0b1329',
@@ -210,7 +199,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
                   border: '1px solid rgba(56, 189, 248, 0.2)',
                 }}
               >
-                {parsedRealMm ? `${parsedRealMm.toLocaleString()} mm (${(parsedRealMm / 1000).toFixed(2)} m)` : 'ระบุตัวเลข'}
+                {parsedRealMm ? `${formatLengthMm(parsedRealMm, displayUnit)} ${displayUnit}` : 'ระบุตัวเลข'}
               </span>
             </div>
             {errorMsg && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 2 }}>{errorMsg}</div>}
@@ -220,9 +209,11 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ fontSize: 11, color: '#52677d' }}>ระยะยอดนิยม (Quick Presets):</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {['1000', '2000', '3000', '3500', '4000', '5000', '6000', '8000'].map((preset) => (
+              {[1000, 2000, 3000, 3500, 4000, 5000, 6000, 8000].map((presetMm) => {
+                const preset = formatLengthMm(presetMm, displayUnit)
+                return (
                 <button
-                  key={preset}
+                  key={presetMm}
                   onClick={() => {
                     setInputValue(preset)
                     setErrorMsg(null)
@@ -238,9 +229,10 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
                     cursor: 'pointer',
                   }}
                 >
-                  {parseInt(preset) / 1000} m ({preset})
+                  {preset} {displayUnit}
                 </button>
-              ))}
+                )
+              })}
             </div>
           </div>
 
@@ -261,7 +253,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
               อัตราส่วนสเกลใหม่:
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#0873c4' }}>
-              <span>1 px = {computedScale.toFixed(3)} mm</span>
+              <span>1 px = {formatLengthMm(computedScale, displayUnit)} {displayUnit}</span>
               <ArrowRight size={14} />
               <span style={{ color: '#22c55e' }}>1:1 Real Scale</span>
             </div>

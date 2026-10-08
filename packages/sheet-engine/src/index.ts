@@ -205,7 +205,11 @@ function compileFoundationPlan(project: ProjectDocument, warnings: string[]): Co
   const grids = levelObjects.filter(object => object.object_type === 'structure.grid')
   for (const grid of grids) {
     const data = grid.module_data as Data
-    if (data.orientation === 'vertical') {
+    if (Array.isArray(data.start_point_mm) && Array.isArray(data.end_point_mm)) {
+      const [x1, y1] = transform.map(data.start_point_mm[0], data.start_point_mm[1])
+      const [x2, y2] = transform.map(data.end_point_mm[0], data.end_point_mm[1])
+      elements.push(`<path d="M${x1},${y1}L${x2},${y2}" stroke="#cbd5e1" stroke-width="0.25" stroke-dasharray="1,1"/><circle cx="${x1}" cy="${y1}" r="3" fill="white" stroke="#64748b" stroke-width="0.3"/><text x="${x1}" y="${y1 + 0.8}" text-anchor="middle" font-size="2.1">${escapeXml(data.tag)}</text>`)
+    } else if (data.orientation === 'vertical') {
       const [x] = transform.map(data.position_mm, 0)
       elements.push(`<path d="M${x},${view.y + 12}V${view.y + view.height - 12}" stroke="#cbd5e1" stroke-width="0.25" stroke-dasharray="1,1"/><circle cx="${x}" cy="${view.y + 10}" r="3" fill="white" stroke="#64748b" stroke-width="0.3"/><text x="${x}" y="${view.y + 11}" text-anchor="middle" font-size="2.1">${escapeXml(data.tag)}</text>`)
     } else {

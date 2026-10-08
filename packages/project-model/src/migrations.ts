@@ -130,12 +130,21 @@ export function validateProjectV2(project: ProjectDocument): void {
   if (project.schema_version !== 2) throw new Error(`Unsupported schema_version: ${project.schema_version}`)
   if (!project.project || typeof project.project.id !== 'string' || !project.project.id) throw new Error('Invalid project format: missing project metadata')
   if (!PHASES.has(project.project.active_phase)) throw new Error('Invalid project format: unknown active phase')
+  if (project.project.display_unit !== undefined && !['m', 'cm', 'mm'].includes(project.project.display_unit)) throw new Error('Invalid project format: display_unit must be m, cm or mm')
   if (!Array.isArray(project.levels) || !Array.isArray(project.types) || !Array.isArray(project.phases) || !Array.isArray(project.relationships)) {
     throw new Error('Invalid project format: levels, types, phases and relationships arrays required')
   }
   if (!project.objects || typeof project.objects !== 'object' || Array.isArray(project.objects)) throw new Error('Invalid project format: objects map required')
   validateConstructionPayloads(project)
   if(project.drawing_settings!==undefined)validateDrawingSettings(project.drawing_settings)
+  if (project.underlays !== undefined) {
+    if (!project.underlays || typeof project.underlays !== 'object' || Array.isArray(project.underlays)) throw new Error('Invalid project format: underlays must be a keyed map')
+    for (const [key, underlay] of Object.entries(project.underlays)) {
+      if (!key || !underlay || typeof underlay.data_url !== 'string' || !underlay.data_url.startsWith('data:image/')) throw new Error(`Invalid project format: underlay ${key} must contain an embedded image`)
+      if (!Array.isArray(underlay.origin_mm) || underlay.origin_mm.length !== 2 || underlay.origin_mm.some(value => !Number.isFinite(value))) throw new Error(`Invalid project format: underlay ${key} has invalid origin`)
+      if (!Number.isFinite(underlay.scale_mm_per_px) || underlay.scale_mm_per_px <= 0 || !Number.isFinite(underlay.rotation_deg) || !Number.isFinite(underlay.opacity) || underlay.opacity < 0 || underlay.opacity > 1 || typeof underlay.visible !== 'boolean') throw new Error(`Invalid project format: underlay ${key} has invalid transform or visibility`)
+    }
+  }
   function requireFinite(value: unknown, objectId: string, field: string): asserts value is number {
     if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Invalid project format: object ${objectId} has a non-finite ${field}`)
   }
@@ -157,7 +166,7 @@ export function validateProjectV2(project: ProjectDocument): void {
       plaster_thickness_mm: ['structure.column'],
       size_mm: ['structure.foundation', 'drainage.manhole'],
       foundation_type: ['structure.foundation'],
-      thickness_mm: ['architecture.wall', 'structure.slab', 'roof.system'],
+      thickness_mm: ['architecture.wall', 'structure.slab', 'roof.system', 'architecture.floor', 'architecture.ceiling'],
       masonry_thickness_mm: ['architecture.wall'],
       plaster_inside_thickness_mm: ['architecture.wall'],
       plaster_outside_thickness_mm: ['architecture.wall'],
@@ -167,16 +176,16 @@ export function validateProjectV2(project: ProjectDocument): void {
       inside_finish_mark: ['architecture.wall'],
       outside_finish_mark: ['architecture.wall'],
       top_level_id: ['architecture.wall', 'structure.column'],
-      base_offset_mm: ['architecture.wall', 'structure.column'],
+      base_offset_mm: ['architecture.wall', 'structure.column', 'structure.beam'],
       top_offset_mm: ['architecture.wall', 'structure.column'],
       vertical_constraint: ['architecture.wall', 'structure.column', 'door_window.door', 'door_window.window'],
-      width_mm: ['door_window.door', 'door_window.window', 'interior.cabinet_run'],
+      width_mm: ['door_window.door', 'door_window.window', 'interior.cabinet_run', 'architecture.stair'],
       height_mm: ['architecture.wall', 'door_window.door', 'door_window.window', 'interior.cabinet_run'],
       sill_height_mm: ['door_window.door', 'door_window.window'],
       head_level_id: ['door_window.door', 'door_window.window'],
       head_offset_mm: ['door_window.door', 'door_window.window'],
-      elevation_offset_mm: ['structure.slab'],
-      voids_mm: ['structure.slab'],
+      elevation_offset_mm: ['structure.slab', 'architecture.floor', 'architecture.ceiling'],
+      voids_mm: ['structure.slab', 'architecture.floor', 'architecture.ceiling'],
       opening_operation: ['door_window.door', 'door_window.window'],
       panel_count: ['door_window.door', 'door_window.window'],
       panel_layout: ['door_window.door', 'door_window.window'],
@@ -449,6 +458,18 @@ export function validateProjectV2(project: ProjectDocument): void {
         requireTuple(moduleData.extent_mm, 2, id, 'extent_mm')
         if (moduleData.extent_mm[0] > moduleData.extent_mm[1]) throw new Error(`Invalid project format: grid ${id} has reversed extents`)
         if (moduleData.orientation !== 'vertical' && moduleData.orientation !== 'horizontal') throw new Error(`Invalid project format: grid ${id} has invalid orientation`)
+        if (moduleData.start_point_mm !== undefined || moduleData.end_point_mm !== undefined) {
+          requirePoint(moduleData.start_point_mm, id, 'start_point_mm')
+          requirePoint(moduleData.end_point_mm, id, 'end_point_mm')
+          if (Math.hypot(moduleData.end_point_mm[0] - moduleData.start_point_mm[0], moduleData.end_point_mm[1] - moduleData.start_point_mm[1]) <= 0) throw new Error(`Invalid project format: grid ${id} has zero-length reference geometry`)
+        }
+        if (moduleData.system_positions_mm !== undefined) {
+          const systemPositions = moduleData.system_positions_mm
+          if (!Array.isArray(systemPositions) || !systemPositions.length || systemPositions.length > 100 || systemPositions.some((value: unknown, index: number) => !Number.isFinite(value) || (index > 0 && Number(value) <= Number(systemPositions[index - 1])))) throw new Error(`Invalid project format: grid ${id} has invalid system positions`)
+        }
+        if (moduleData.bubble_visible !== undefined && typeof moduleData.bubble_visible !== 'boolean') throw new Error(`Invalid project format: grid ${id} has invalid bubble visibility`)
+        if (moduleData.auto_tag !== undefined && typeof moduleData.auto_tag !== 'boolean') throw new Error(`Invalid project format: grid ${id} has invalid auto-tag setting`)
+        if (moduleData.sequence_style !== undefined && !['auto', 'alpha', 'numeric'].includes(String(moduleData.sequence_style))) throw new Error(`Invalid project format: grid ${id} has invalid sequence style`)
         break
       case 'structure.column':
         requirePoint(moduleData.location_mm, id, 'location_mm')
@@ -478,6 +499,7 @@ export function validateProjectV2(project: ProjectDocument): void {
         requirePoint(moduleData.end_point_mm, id, 'end_point_mm')
         requireTuple(moduleData.section_mm, 2, id, 'section_mm', true)
         requirePositive(moduleData.span_mm, id, 'span_mm')
+        if (moduleData.base_offset_mm !== undefined) requireFinite(moduleData.base_offset_mm, id, 'base_offset_mm')
         if (typeof moduleData.level_id !== 'string' || !levelIds.has(moduleData.level_id)) throw new Error(`Invalid project format: beam ${id} references a missing level`)
         if (Math.hypot(moduleData.end_point_mm[0] - moduleData.start_point_mm[0], moduleData.end_point_mm[1] - moduleData.start_point_mm[1]) <= 0) throw new Error(`Invalid project format: beam ${id} has zero horizontal span`)
         break
@@ -511,6 +533,30 @@ export function validateProjectV2(project: ProjectDocument): void {
         }
         break
       }
+      case 'architecture.room':
+      case 'architecture.floor':
+      case 'architecture.ceiling': {
+        const ring=moduleData.boundary_mm
+        if(!Array.isArray(ring)||ring.length<3)throw new Error(`Invalid project format: ${object.object_type} ${id} needs at least three boundary points`)
+        ring.forEach((point,index)=>requireTuple(point,2,id,`boundary_mm[${index}]`))
+        const area=ring.reduce((sum,point,index)=>{const next=ring[(index+1)%ring.length] as number[];return sum+point[0]*next[1]-next[0]*point[1]},0)/2
+        if(Math.abs(area)<=0)throw new Error(`Invalid project format: ${object.object_type} ${id} boundary has zero area`)
+        if(typeof moduleData.level_id!=='string'||!levelIds.has(moduleData.level_id))throw new Error(`Invalid project format: ${object.object_type} ${id} references a missing level`)
+        if(object.object_type==='architecture.room'){
+          requirePositive(moduleData.area_mm2,id,'area_mm2')
+          if(Math.abs(Number(moduleData.area_mm2)-Math.abs(area))>1)throw new Error(`Invalid project format: room ${id} area does not match its boundary`)
+        }else{
+          requirePositive(moduleData.thickness_mm,id,'thickness_mm');requireFinite(moduleData.elevation_mm,id,'elevation_mm');requireFinite(moduleData.elevation_offset_mm,id,'elevation_offset_mm')
+          if(!Array.isArray(moduleData.voids_mm))throw new Error(`Invalid project format: ${object.object_type} ${id} voids must be an array`)
+          if(moduleData.room_id!==undefined&&(typeof moduleData.room_id!=='string'||project.objects[moduleData.room_id]?.object_type!=='architecture.room'))throw new Error(`Invalid project format: ${object.object_type} ${id} references a missing room`)
+          if(moduleData.follows_room_boundary!==undefined&&typeof moduleData.follows_room_boundary!=='boolean')throw new Error(`Invalid project format: ${object.object_type} ${id} has invalid room-boundary tracking state`)
+        }
+        break
+      }
+      case 'architecture.room_separator':
+        requireTuple(moduleData.start_point_mm,2,id,'start_point_mm');requireTuple(moduleData.end_point_mm,2,id,'end_point_mm')
+        if(typeof moduleData.level_id!=='string'||!levelIds.has(moduleData.level_id))throw new Error(`Invalid project format: room separator ${id} references a missing level`)
+        break
       case 'door_window.door':
       case 'door_window.window':
         requirePoint(moduleData.location_mm, id, 'location_mm')

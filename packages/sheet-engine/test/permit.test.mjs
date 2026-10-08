@@ -114,6 +114,30 @@ test("A-02 and A-03 can each select any story without showing a wall on its top-
   assert.deepEqual(set.sheets.find(s => s.id === "A-03").source_object_ids, ["wall-l2"]);
 });
 
+test("A-10 compiles modeled ceiling boundaries, openings, labels and grids for the selected level", () => {
+  const p = createEmptyProjectDocument("RCP-PROOF");
+  p.levels = [{ id: "GF", name: "Ground", elevation_mm: 0, storey_index: 0, height_mm: 3000 }];
+  p.project.active_level_id = "GF";
+  p.objects["ceiling-gf"] = {
+    id: "ceiling-gf", object_type: "architecture.ceiling", owner_module: "constructflow.architecture",
+    schema_version: 1, created_phase: "new_construction", removed_phase: null, status: "active",
+    level_refs: [{ role: "base_level", level_id: "GF" }], host_refs: [], connector_refs: [], relationships: [],
+    module_data: {
+      mark: "CL1", level_id: "GF", boundary_mm: [[0, 0], [3600, 0], [3600, 3000], [0, 3000]],
+      voids_mm: [[[1500, 1200], [2100, 1200], [2100, 1800], [1500, 1800]]],
+      elevation_mm: 2700, elevation_offset_mm: 0, thickness_mm: 9, grid_mm: [600, 600], follows_room_boundary: true,
+    },
+    created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+  };
+  const sheet = compilePermitDrawingSet(p).sheets.find(item => item.id === "A-10");
+  assert.ok(sheet);
+  assert.ok(sheet.source_object_ids.includes("ceiling-gf"));
+  assert.ok(sheet.primitives.some(item => item.kind === "text" && item.text.includes("CL1")));
+  assert.ok(sheet.primitives.some(item => item.kind === "text" && item.text.includes("RCP · ขอบเขตฝ้า")));
+  assert.ok(sheet.primitives.some(item => item.kind === "path" && item.color === "#7c3aed" && item.closed));
+  assert.ok(!sheet.warnings.some(warning => warning.includes("no modeled ceiling objects")));
+});
+
 test("drawing set generates independent architectural and framing sheets for every unrepresented level", () => {
   const p = createEmptyProjectDocument("AUTO-LEVEL-SHEETS");
   p.levels = [

@@ -201,6 +201,11 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
   } else if (activePreset === 'terrace') {
     // 1. Six Columns / Concrete Piers (4 corners + 2 center supports)
     const midY = Y_mm + Math.round(L_mm / 2)
+    const terraceBaseElevation_mm = project.levels.find(level => level.id === project.project.active_level_id)?.elevation_mm ?? 0
+    const terraceBeamLevel = {
+      level_id: project.project.active_level_id,
+      base_offset_mm: Math.round(terraceElevation_m * 1000) - terraceBaseElevation_mm,
+    }
 
     const colLocs: [number, number][] = [
       [X_mm, Y_mm],
@@ -230,11 +235,11 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
     })
 
     // 2. Support Joists & Beams
-    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', start_point_mm: [X_mm, Y_mm, Math.round(terraceElevation_m * 1000)], end_point_mm: [X_mm + W_mm, Y_mm, Math.round(terraceElevation_m * 1000)], section_mm: [150, 300], phase: 'new_construction' })
-    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', start_point_mm: [X_mm, midY, Math.round(terraceElevation_m * 1000)], end_point_mm: [X_mm + W_mm, midY, Math.round(terraceElevation_m * 1000)], section_mm: [150, 300], phase: 'new_construction' })
-    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', start_point_mm: [X_mm, Y_mm + L_mm, Math.round(terraceElevation_m * 1000)], end_point_mm: [X_mm + W_mm, Y_mm + L_mm, Math.round(terraceElevation_m * 1000)], section_mm: [150, 300], phase: 'new_construction' })
-    queueCreate('CreateBeam', { mark: 'B2', material: 'steel', start_point_mm: [X_mm, Y_mm, Math.round(terraceElevation_m * 1000)], end_point_mm: [X_mm, Y_mm + L_mm, Math.round(terraceElevation_m * 1000)], section_mm: [150, 300], phase: 'new_construction' })
-    queueCreate('CreateBeam', { mark: 'B2', material: 'steel', start_point_mm: [X_mm + W_mm, Y_mm, Math.round(terraceElevation_m * 1000)], end_point_mm: [X_mm + W_mm, Y_mm + L_mm, Math.round(terraceElevation_m * 1000)], section_mm: [150, 300], phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', ...terraceBeamLevel, start_point_mm: [X_mm, Y_mm, Math.round(terraceElevation_m * 1000)], end_point_mm: [X_mm + W_mm, Y_mm, Math.round(terraceElevation_m * 1000)], section_mm: [150, 300], phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', ...terraceBeamLevel, start_point_mm: [X_mm, midY, Math.round(terraceElevation_m * 1000)], end_point_mm: [X_mm + W_mm, midY, Math.round(terraceElevation_m * 1000)], section_mm: [150, 300], phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', ...terraceBeamLevel, start_point_mm: [X_mm, Y_mm + L_mm, Math.round(terraceElevation_m * 1000)], end_point_mm: [X_mm + W_mm, Y_mm + L_mm, Math.round(terraceElevation_m * 1000)], section_mm: [150, 300], phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B2', material: 'steel', ...terraceBeamLevel, start_point_mm: [X_mm, Y_mm, Math.round(terraceElevation_m * 1000)], end_point_mm: [X_mm, Y_mm + L_mm, Math.round(terraceElevation_m * 1000)], section_mm: [150, 300], phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B2', material: 'steel', ...terraceBeamLevel, start_point_mm: [X_mm + W_mm, Y_mm, Math.round(terraceElevation_m * 1000)], end_point_mm: [X_mm + W_mm, Y_mm + L_mm, Math.round(terraceElevation_m * 1000)], section_mm: [150, 300], phase: 'new_construction' })
   }
 
   return commands

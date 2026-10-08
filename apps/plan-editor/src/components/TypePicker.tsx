@@ -1,5 +1,5 @@
 import React from "react";
-import type { TypeDefinition } from "@constructflow/project-model";
+import type { DisplayLengthUnit, TypeDefinition } from "@constructflow/project-model";
 import { BookOpen } from "lucide-react";
 import {
   TypeThumbnail,
@@ -12,12 +12,14 @@ export function TypePicker({
   onChange,
   onOpenCatalog,
   label,
+  displayUnit = "m",
 }: {
   types: TypeDefinition[];
   value: string;
   onChange: (name: string) => void;
   onOpenCatalog: () => void;
   label: string;
+  displayUnit?: DisplayLengthUnit;
 }) {
   const type = types.find((t) => t.name === value);
   return (
@@ -37,7 +39,7 @@ export function TypePicker({
           {!type && <option value={value}>{value} · ไม่พบชนิดในโครงการ</option>}
           {types.map((t) => (
             <option key={t.id} value={t.name}>
-              {t.name} · {typeDescription(t)} · {typeSizeLabel(t)}
+              {t.name} · {typeDescription(t)} · {typeSizeLabel(t, displayUnit)}
             </option>
           ))}
         </select>

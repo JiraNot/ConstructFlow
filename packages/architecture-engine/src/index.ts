@@ -7,6 +7,64 @@ export { measureOpeningRegions, type OpeningDimensions } from './openingDimensio
 import { preserveSegmentPlacementReference } from '@constructflow/geometry-kernel'
 import { validateStairThaiBuildingCode } from './stairs.js'
 
+const polygonAreaMm2 = (ring: number[][]) => Math.abs(ring.reduce((sum, p, i) => { const q = ring[(i + 1) % ring.length]; return sum + p[0] * q[1] - q[0] * p[1] }, 0) / 2)
+
+/** Finds closed loops in the level's wall/separation-line graph. Endpoints within tolerance share a node. */
+export function detectClosedWallRooms(project: ProjectDocument, levelId: string, toleranceMm = 10): number[][][] {
+  const segments: Array<{ a: number[]; b: number[] }> = []
+  for (const object of Object.values(project.objects)) {
+    if (object.status === 'archived' || object.removed_phase) continue
+    const data = object.module_data as Record<string, unknown>
+    if (object.object_type === 'architecture.wall' && data.level_id === levelId) segments.push({ a: data.start_point_mm as number[], b: data.end_point_mm as number[] })
+    if (object.object_type === 'architecture.room_separator' && data.level_id === levelId) segments.push({ a: data.start_point_mm as number[], b: data.end_point_mm as number[] })
+  }
+  const nodes: number[][] = [], edges: Array<[number, number]> = []
+  const nodeId = (p: number[]) => { let index = nodes.findIndex(q => Math.hypot(q[0]-p[0],q[1]-p[1]) <= toleranceMm); if(index<0){index=nodes.length;nodes.push([p[0],p[1]])} return index }
+  for(const segment of segments){const a=nodeId(segment.a),b=nodeId(segment.b);if(a!==b)edges.push([a,b])}
+  const adjacent=nodes.map(()=>[] as number[])
+  edges.forEach(([a,b])=>{adjacent[a].push(b);adjacent[b].push(a)})
+  const rings=new Map<string,number[][]>()
+  for(let start=0;start<nodes.length;start++){
+    const visit=(current:number,path:number[])=>{
+      if(path.length>nodes.length)return
+      for(const next of adjacent[current]){
+        if(next===start&&path.length>=3){const ids=[...path];const smallest=Math.min(...ids);const idx=ids.indexOf(smallest);const forward=[...ids.slice(idx),...ids.slice(0,idx)];const reversed=[forward[0],...forward.slice(1).reverse()];const key=forward.join(',')<reversed.join(',')?forward.join(','):reversed.join(',');rings.set(key,forward.map(id=>nodes[id]));continue}
+        if(next>start&&!path.includes(next))visit(next,[...path,next])
+      }
+    };visit(start,[start])
+  }
+  return [...rings.values()].filter(ring=>polygonAreaMm2(ring)>100_000)
+}
+
+function createArchitectureObject(context: CommandHandlerContext, family: string, owner: string, moduleData: Record<string, unknown>, update: boolean) {
+  const { project, updated, commandName, input, command_id, now, envelope } = context
+  const id = String(input.id ?? crypto.randomUUID())
+  const existing = updated.objects[id]
+  if (update && (!existing || existing.object_type !== family)) throw new Error(`${family} object ${id} was not found`)
+  const levelId = String(moduleData.level_id ?? project.project.active_level_id)
+  const data = { ...moduleData }
+  if (update && (family === 'architecture.floor' || family === 'architecture.ceiling') && Array.isArray(input.boundary_mm)) data.follows_room_boundary = false
+  if (update && family === 'architecture.room') data.area_mm2 = polygonAreaMm2(data.boundary_mm as number[][])
+  const object: SmartObject = {
+    id, object_type: family, owner_module: owner, schema_version: 1,
+    created_phase: String(input.created_phase ?? input.phase ?? existing?.created_phase ?? project.project.active_phase) as SmartObject['created_phase'],
+    removed_phase: existing?.removed_phase ?? null, level_refs: [{ role: 'base_level', level_id: levelId }],
+    host_refs: typeof data.room_id === 'string' ? [data.room_id] : [], connector_refs: [], status: 'active',
+    created_at: existing?.created_at ?? now, updated_at: now, module_data: data,
+  }
+  updated.objects[id] = object
+  const affected=[id]
+  if(family==='architecture.room'&&Array.isArray(data.boundary_mm)){
+    for(const child of Object.values(updated.objects)){
+      const childData=child.module_data as Record<string,unknown>
+      if(childData.room_id!==id||childData.follows_room_boundary!==true)continue
+      updated.objects[child.id]={...child,module_data:{...childData,boundary_mm:structuredClone(data.boundary_mm)},updated_at:now}
+      affected.push(child.id)
+    }
+  }
+  return {result:{status:'success' as const,command_id,command_name:commandName,affected_object_ids:affected,updated_object_ids:affected,created_object_ids:existing?undefined:[id]},updatedProject:updated,emittedEnvelope:{...envelope,input:{...input,id}}}
+}
+
 function shiftHostedOpenings(project: ProjectDocument, wallId: string, shiftMm: [number, number], now: string): string[] {
   if (Math.hypot(...shiftMm) < 1e-8) return []
   const affected: string[] = []
@@ -64,6 +122,57 @@ export function getArchitectureDeletionDependents(project: ProjectDocument, obje
 export function executeArchitectureCommand(context: CommandHandlerContext): CommandBusResult | undefined {
   const { project, updated, commandName, input, command_id, now, envelope } = context
   switch (commandName) {
+    case 'CreateRoom': case 'UpdateRoom': case 'CreateRoomSeparator': case 'UpdateRoomSeparator':
+    case 'CreateArchitecturalFloor': case 'UpdateArchitecturalFloor': case 'CreateCeiling': case 'UpdateCeiling': {
+      const familyByCommand: Record<string,string> = {
+        CreateRoom:'architecture.room',UpdateRoom:'architecture.room',CreateRoomSeparator:'architecture.room_separator',UpdateRoomSeparator:'architecture.room_separator',
+        CreateArchitecturalFloor:'architecture.floor',UpdateArchitecturalFloor:'architecture.floor',CreateCeiling:'architecture.ceiling',UpdateCeiling:'architecture.ceiling',
+      }
+      const family=familyByCommand[commandName]
+      const update=commandName.startsWith('Update')
+      const payload={...input}
+      if((family==='architecture.floor'||family==='architecture.ceiling')&&typeof payload.room_id==='string'&&payload.boundary_mm===undefined){
+        const room=updated.objects[payload.room_id]
+        if(room?.object_type!=='architecture.room')throw new Error('A valid room is required to create a room-based floor or ceiling')
+        payload.boundary_mm=structuredClone((room.module_data as Record<string,unknown>).boundary_mm)
+        payload.level_id=(room.module_data as Record<string,unknown>).level_id
+        payload.follows_room_boundary=true
+        if(payload.elevation_mm===undefined)payload.elevation_mm=project.levels.find(level=>level.id===payload.level_id)?.elevation_mm??0
+      }
+      if(family==='architecture.room_separator'){
+        for(const field of ['start_point_mm','end_point_mm']){const p=payload[field];if(!Array.isArray(p)||p.length!==2||!p.every(Number.isFinite))throw new Error(`Room separator ${field} must be a finite 2D point`)}
+      }else{
+        const boundary=payload.boundary_mm
+        if(!Array.isArray(boundary)||boundary.length<3||boundary.some(p=>!Array.isArray(p)||p.length!==2||!p.every(Number.isFinite)))throw new Error(`${family} requires a closed boundary with at least three finite points`)
+        if(polygonAreaMm2(boundary as number[][])<=0)throw new Error(`${family} boundary has zero area`)
+        if(family==='architecture.room')payload.area_mm2=polygonAreaMm2(boundary as number[][])
+        if(family==='architecture.floor'||family==='architecture.ceiling'){
+          if(!Number.isFinite(Number(payload.thickness_mm))||Number(payload.thickness_mm)<=0)throw new Error(`${family} thickness must be positive`)
+          if(payload.voids_mm!==undefined&&(!Array.isArray(payload.voids_mm)||payload.voids_mm.some(r=>!Array.isArray(r)||r.length<3)))throw new Error(`${family} voids must be polygon rings`)
+        }
+      }
+      if(family==='architecture.floor'||family==='architecture.ceiling'){
+        payload.voids_mm ??=[]
+        payload.elevation_offset_mm ??=0
+        payload.follows_room_boundary ??=typeof payload.room_id==='string'
+        if(family==='architecture.floor')payload.finish_layers ??=[]
+      }
+      return createArchitectureObject({...context,input:payload},family,'constructflow.architecture',payload,update)
+    }
+    case 'DetectRooms': {
+      const levelId=String(input.level_id??project.project.active_level_id)
+      if(!project.levels.some(level=>level.id===levelId))throw new Error(`Unknown room detection level ${levelId}`)
+      const rings=detectClosedWallRooms(updated,levelId)
+      const existing=new Set(Object.values(updated.objects).filter(o=>o.object_type==='architecture.room'&&(o.module_data as Record<string,unknown>).level_id===levelId).map(o=>JSON.stringify((o.module_data as Record<string,unknown>).boundary_mm)))
+      const created:string[]=[]
+      for(const [index,boundary] of rings.entries()){
+        if(existing.has(JSON.stringify(boundary)))continue
+        const id=crypto.randomUUID(),name=String(input.default_name??'Room')
+        createArchitectureObject({...context,input:{id,level_id:levelId,mark:`R${index+1}`,name:`${name} ${index+1}`,number:String(index+1),boundary_mm:boundary,area_mm2:polygonAreaMm2(boundary),boundary_source:'walls'}},'architecture.room','constructflow.architecture',{level_id:levelId,mark:`R${index+1}`,name:`${name} ${index+1}`,number:String(index+1),boundary_mm:boundary,area_mm2:polygonAreaMm2(boundary),boundary_source:'walls'},false)
+        created.push(id)
+      }
+      return {result:{status:'success',command_id,command_name:commandName,affected_object_ids:created,created_object_ids:created},updatedProject:updated,emittedEnvelope:{...envelope,input:{level_id:levelId,room_ids:created}}}
+    }
     case 'MoveWall': {
       const move = input as unknown as MoveWallInput
       const target = updated.objects[move.object_id]

@@ -5,12 +5,14 @@ import {
   isColumnObject,
   resolveWallVerticalExtent,
   resolveOpeningVerticalExtent,
+  resolveColumnVerticalExtent,
+  resolveBeamBaseElevation,
   type Phase,
   type ProjectDocument,
   type SmartObject,
 } from '@constructflow/project-model'
 import { constructionOutputs } from '@constructflow/domain-providers'
-import { tube, type Triangle } from '@constructflow/geometry-kernel'
+import { box, tube, type Triangle, type Vec3 } from '@constructflow/geometry-kernel'
 export { doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement } from './openingDetails.js'
 
 export type Vec3Mm = [number, number, number]
@@ -98,6 +100,43 @@ export interface ObjectRepresentation3D {
 export interface RepresentationResult {
   objects: ObjectRepresentation3D[]
   warnings: string[]
+}
+
+/**
+ * Expand a renderer-neutral representation into world-space triangles.
+ * Elevation sheets and interactive elevation canvases use this same geometry
+ * so wall cutouts and structural outlines cannot drift between views.
+ */
+export function getRepresentationTriangles(representation: ObjectRepresentation3D): Triangle[] {
+  const { shape } = representation
+  if (shape.kind === 'triangle_mesh') return shape.triangles_mm
+  // Hosted openings are negative space already removed from their wall mesh.
+  if (shape.kind === 'opening') return []
+  if (shape.kind === 'wall_extrusion') {
+    const { length_mm: length, thickness_mm: thickness, height_mm: height, cutouts } = shape
+    const xs = [0, length, ...cutouts.flatMap(cutout => [cutout.min_x_mm, cutout.max_x_mm])].sort((a, b) => a - b)
+    const zs = [0, height, ...cutouts.flatMap(cutout => [cutout.min_z_mm, cutout.max_z_mm])].sort((a, b) => a - b)
+    const local: Triangle[] = []
+    for (let i = 1; i < xs.length; i++) for (let j = 1; j < zs.length; j++) {
+      if (xs[i] <= xs[i - 1] || zs[j] <= zs[j - 1]) continue
+      const cx = (xs[i] + xs[i - 1]) / 2, cz = (zs[j] + zs[j - 1]) / 2
+      if (cutouts.some(cutout => cx > cutout.min_x_mm && cx < cutout.max_x_mm && cz > cutout.min_z_mm && cz < cutout.max_z_mm)) continue
+      local.push(...box([xs[i - 1], -thickness / 2, zs[j - 1]], [xs[i] - xs[i - 1], thickness, zs[j] - zs[j - 1]]))
+    }
+    return local.map(triangle => triangle.map(vertex => transformRepresentationPoint(representation, vertex)) as Triangle)
+  }
+  const [width, depth, height] = shape.size_mm
+  return box([-width / 2, -depth / 2, -height / 2], [width, depth, height])
+    .map(triangle => triangle.map(vertex => transformRepresentationPoint(representation, vertex)) as Triangle)
+}
+
+function transformRepresentationPoint(representation: ObjectRepresentation3D, point: Vec3): Vec3 {
+  const c = Math.cos(representation.rotation_rad), s = Math.sin(representation.rotation_rad)
+  return [
+    representation.position_mm[0] + point[0] * c - point[1] * s,
+    representation.position_mm[1] + point[0] * s + point[1] * c,
+    representation.position_mm[2] + point[2],
+  ]
 }
 
 /** Return the Smart Objects that belong on the project's active plan level. */
@@ -192,14 +231,12 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
     case 'structure.column': {
       const location = data.location_mm
       const section = resolveValue(project, object, data, 'section_mm')
-      const base = isFiniteNumber(data.base_elevation_mm) ? data.base_elevation_mm
-        : levelElevation(project, data.base_level_id) ?? (tuple3(location) ? location[2] : 0)
-      const top = isFiniteNumber(data.top_elevation_mm) ? data.top_elevation_mm
-        : levelElevation(project, data.top_level_id) ?? base + 3000
-      if (!tuple3(location) || !positiveTuple2(section) || !isFiniteNumber(base) || !isFiniteNumber(top) || top <= base) {
+      const extent = resolveColumnVerticalExtent(project, object)
+      if (!tuple3(location) || !positiveTuple2(section) || !extent) {
         warnings.push(`${object.id}: column location, section or vertical extent is invalid; 3D representation omitted`)
         return undefined
       }
+      const { base_elevation_mm: base, top_elevation_mm: top } = extent
       const rotation = isFiniteNumber(data.rotation_deg) ? data.rotation_deg * Math.PI / 180 : 0
       return baseObject(object, data, [location[0], location[1], (base + top) / 2], rotation,
         { kind: 'box', size_mm: [section[0], section[1], top - base] }, { kind: 'column' })
@@ -223,7 +260,8 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
     case 'structure.beam': {
       const start = data.start_point_mm, end = data.end_point_mm
       const section = resolveValue(project, object, data, 'section_mm')
-      if (!tuple3(start) || !tuple3(end) || !positiveTuple2(section)) {
+      const baseElevation = resolveBeamBaseElevation(project, object)
+      if (!tuple3(start) || !tuple3(end) || !positiveTuple2(section) || baseElevation === undefined) {
         warnings.push(`${object.id}: beam endpoints or section are invalid; 3D representation omitted`)
         return undefined
       }
@@ -233,7 +271,7 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
         warnings.push(`${object.id}: beam has no horizontal span; 3D representation omitted`)
         return undefined
       }
-      return baseObject(object, data, [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2, start[2] + section[1] / 2 - (typeof data.drop_mm === 'number' ? data.drop_mm : 0)], Math.atan2(dy, dx),
+      return baseObject(object, data, [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2, baseElevation + section[1] / 2 - (typeof data.drop_mm === 'number' ? data.drop_mm : 0)], Math.atan2(dy, dx),
         { kind: 'box', size_mm: [length, section[0], section[1]] }, { kind: 'select_only' })
     }
     case 'architecture.wall': {

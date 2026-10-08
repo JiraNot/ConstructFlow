@@ -1,4 +1,4 @@
-import { resolveCatalogType, type ProjectDocument, type SmartObject } from '@constructflow/project-model'
+import { resolveBeamBaseElevation, resolveCatalogType, resolveColumnVerticalExtent, type ProjectDocument, type SmartObject } from '@constructflow/project-model'
 import { constructionOutputs } from '@constructflow/domain-providers'
 
 export type Vec3 = [number, number, number]
@@ -99,12 +99,6 @@ function assertValidBounds(value: unknown, label: string): asserts value is Spat
   if (!isValidBounds(value)) throw new Error(`${label} must contain finite 3D min/max coordinates in ascending order`)
 }
 
-function levelElevation(project: ProjectDocument, id: unknown): number | undefined {
-  if (typeof id !== 'string') return undefined
-  const elevation = project.levels.find(level => level.id === id)?.elevation_mm
-  return isFiniteNumber(elevation) ? elevation : undefined
-}
-
 function boundsFor(project: ProjectDocument, object: SmartObject, warnings: string[]): SpatialBounds | undefined {
   const data = record(object.module_data)
   if (!data) {
@@ -119,25 +113,12 @@ function boundsFor(project: ProjectDocument, object: SmartObject, warnings: stri
       warnings.push(`${object.id}: column location or section is invalid; spatial bounds omitted`)
       return undefined
     }
-    const baseLevelId = data.base_level_id ?? object.level_refs.find(ref => ref.role === 'base_level')?.level_id
-    const topLevelId = data.top_level_id ?? object.level_refs.find(ref => ref.role === 'top_level')?.level_id
-    const base = isFiniteNumber(data.base_elevation_mm)
-      ? data.base_elevation_mm
-      : (levelElevation(project, baseLevelId) ?? location[2]) + (isFiniteNumber(data.base_offset_mm) ? data.base_offset_mm : 0)
-    const explicitTop = isFiniteNumber(data.top_elevation_mm)
-      ? data.top_elevation_mm
-      : topLevelId ? levelElevation(project, topLevelId) : undefined
-    const nextLevel = project.levels
-      .filter(level => level.elevation_mm > base)
-      .sort((a, b) => a.elevation_mm - b.elevation_mm)[0]
-    const top = explicitTop !== undefined
-      ? explicitTop + (isFiniteNumber(data.top_offset_mm) ? data.top_offset_mm : 0)
-      : nextLevel ? nextLevel.elevation_mm + (isFiniteNumber(data.top_offset_mm) ? data.top_offset_mm : 0) : base + 3000
-    if (explicitTop === undefined && !nextLevel) warnings.push(`${object.id}: column height is assumed to be 3000 mm for spatial bounds`)
-    if (top <= base) {
+    const extent = resolveColumnVerticalExtent(project, object)
+    if (!extent) {
       warnings.push(`${object.id}: column top is not above its base; spatial bounds omitted`)
       return undefined
     }
+    const { base_elevation_mm: base, top_elevation_mm: top } = extent
     const rotation = isFiniteNumber(data.rotation_deg) ? data.rotation_deg * Math.PI / 180 : 0
     const halfX = (Math.abs(Math.cos(rotation)) * section[0] + Math.abs(Math.sin(rotation)) * section[1]) / 2
     const halfY = (Math.abs(Math.sin(rotation)) * section[0] + Math.abs(Math.cos(rotation)) * section[1]) / 2
@@ -160,16 +141,16 @@ function boundsFor(project: ProjectDocument, object: SmartObject, warnings: stri
     const start = tuple3(data.start_point_mm)
     const end = tuple3(data.end_point_mm)
     const section = positiveTuple2(valueFor(project, object, data, 'section_mm'))
-    if (!start || !end || !section) {
+    const baseElevation = resolveBeamBaseElevation(project, object)
+    if (!start || !end || !section || baseElevation === undefined) {
       warnings.push(`${object.id}: beam endpoints or section are invalid; spatial bounds omitted`)
       return undefined
     }
     const halfPlan = Math.max(...section) / 2
-    const halfDepth = section[1] / 2
     const drop=isFiniteNumber(data.drop_mm)?data.drop_mm:0
     return makeBounds(
-      [Math.min(start[0], end[0]) - halfPlan, Math.min(start[1], end[1]) - halfPlan, Math.min(start[2], end[2]) - halfDepth-drop],
-      [Math.max(start[0], end[0]) + halfPlan, Math.max(start[1], end[1]) + halfPlan, Math.max(start[2], end[2]) + halfDepth-drop],
+      [Math.min(start[0], end[0]) - halfPlan, Math.min(start[1], end[1]) - halfPlan, baseElevation-drop],
+      [Math.max(start[0], end[0]) + halfPlan, Math.max(start[1], end[1]) + halfPlan, baseElevation+section[1]-drop],
     )
   }
 

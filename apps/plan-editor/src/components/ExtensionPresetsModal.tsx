@@ -1,7 +1,9 @@
 import React, { useState } from 'react'
 import {
   ProjectDocument,
+  lengthUnitFactor,
 } from '@constructflow/project-model'
+import type { DisplayLengthUnit } from '@constructflow/project-model'
 import { CommandEnvelope, ExtensionPresetType } from '@constructflow/command-schema'
 import { applyExtensionPreset } from '@constructflow/extension-engine'
 import {
@@ -51,6 +53,10 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
 
   // Terrace specific
   const [terraceElevation_m, setTerraceElevation_m] = useState<number>(0.45)
+  const displayUnit: DisplayLengthUnit = project.project.display_unit ?? 'm'
+  const unitsPerMeter = 1000 / lengthUnitFactor(displayUnit)
+  const fromMeters = (meters: number) => meters * unitsPerMeter
+  const toMeters = (value: number) => value / unitsPerMeter
 
   if (!isOpen) return null
 
@@ -268,7 +274,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
           {/* Left Column: Form Controls */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ background: '#f2f6fa', padding: 14, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#40566e' }}>1. ขนาดและตำแหน่ง (หน่วยเมตร m)</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#40566e' }}>1. ขนาดและตำแหน่ง ({displayUnit})</span>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
@@ -276,11 +282,11 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                     <input
                       type="number"
-                      step="0.10"
-                      min="1.0"
-                      max="20.0"
-                      value={width_m}
-                      onChange={(e) => setWidth_m(parseFloat(e.target.value) || 1.0)}
+                      step={0.1 * unitsPerMeter}
+                      min={1 * unitsPerMeter}
+                      max={20 * unitsPerMeter}
+                      value={fromMeters(width_m)}
+                      onChange={(e) => setWidth_m(toMeters(parseFloat(e.target.value) || 1.0))}
                       style={{
                         width: '100%',
                         background: '#ffffff',
@@ -292,7 +298,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                         fontWeight: 600,
                       }}
                     />
-                    <span style={{ fontSize: 12, color: '#52677d' }}>m</span>
+                    <span style={{ fontSize: 12, color: '#52677d' }}>{displayUnit}</span>
                   </div>
                 </div>
 
@@ -301,11 +307,11 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                     <input
                       type="number"
-                      step="0.10"
-                      min="1.0"
-                      max="20.0"
-                      value={length_m}
-                      onChange={(e) => setLength_m(parseFloat(e.target.value) || 1.0)}
+                      step={0.1 * unitsPerMeter}
+                      min={1 * unitsPerMeter}
+                      max={20 * unitsPerMeter}
+                      value={fromMeters(length_m)}
+                      onChange={(e) => setLength_m(toMeters(parseFloat(e.target.value) || 1.0))}
                       style={{
                         width: '100%',
                         background: '#ffffff',
@@ -317,7 +323,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                         fontWeight: 600,
                       }}
                     />
-                    <span style={{ fontSize: 12, color: '#52677d' }}>m</span>
+                    <span style={{ fontSize: 12, color: '#52677d' }}>{displayUnit}</span>
                   </div>
                 </div>
               </div>
@@ -329,8 +335,8 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                     <input
                       type="number"
                       step="0.50"
-                      value={posX_m}
-                      onChange={(e) => setPosX_m(parseFloat(e.target.value) || 0)}
+                      value={fromMeters(posX_m)}
+                      onChange={(e) => setPosX_m(toMeters(parseFloat(e.target.value) || 0))}
                       style={{
                         width: '100%',
                         background: '#ffffff',
@@ -342,7 +348,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                         fontWeight: 600,
                       }}
                     />
-                    <span style={{ fontSize: 12, color: '#52677d' }}>m</span>
+                    <span style={{ fontSize: 12, color: '#52677d' }}>{displayUnit}</span>
                   </div>
                 </div>
 
@@ -352,8 +358,8 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                     <input
                       type="number"
                       step="0.50"
-                      value={posY_m}
-                      onChange={(e) => setPosY_m(parseFloat(e.target.value) || 0)}
+                      value={fromMeters(posY_m)}
+                      onChange={(e) => setPosY_m(toMeters(parseFloat(e.target.value) || 0))}
                       style={{
                         width: '100%',
                         background: '#ffffff',
@@ -365,7 +371,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                         fontWeight: 600,
                       }}
                     />
-                    <span style={{ fontSize: 12, color: '#52677d' }}>m</span>
+                    <span style={{ fontSize: 12, color: '#52677d' }}>{displayUnit}</span>
                   </div>
                 </div>
               </div>
@@ -401,14 +407,14 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input
                         type="number"
-                        step="0.1"
-                        min="2.0"
-                        max="4.0"
-                        value={kitchenWallHeight_m}
-                        onChange={(e) => setKitchenWallHeight_m(parseFloat(e.target.value) || 2.8)}
+                      step={0.1 * unitsPerMeter}
+                        min={2 * unitsPerMeter}
+                        max={4 * unitsPerMeter}
+                        value={fromMeters(kitchenWallHeight_m)}
+                        onChange={(e) => setKitchenWallHeight_m(toMeters(parseFloat(e.target.value) || fromMeters(2.8)))}
                         style={{ width: 60, background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 4, padding: '4px 6px', fontSize: 12, textAlign: 'center' }}
                       />
-                      <span style={{ fontSize: 11, color: '#52677d' }}>m</span>
+                      <span style={{ fontSize: 11, color: '#52677d' }}>{displayUnit}</span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -450,14 +456,14 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <input
                         type="number"
-                        step="0.05"
-                        min="0.10"
-                        max="1.50"
-                        value={terraceElevation_m}
-                        onChange={(e) => setTerraceElevation_m(parseFloat(e.target.value) || 0.45)}
+                        step={0.05 * unitsPerMeter}
+                        min={0.1 * unitsPerMeter}
+                        max={1.5 * unitsPerMeter}
+                        value={fromMeters(terraceElevation_m)}
+                        onChange={(e) => setTerraceElevation_m(toMeters(parseFloat(e.target.value) || fromMeters(0.45)))}
                         style={{ width: 60, background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 4, padding: '4px 6px', fontSize: 12, textAlign: 'center' }}
                       />
-                      <span style={{ fontSize: 11, color: '#52677d' }}>m</span>
+                      <span style={{ fontSize: 11, color: '#52677d' }}>{displayUnit}</span>
                     </div>
                   </div>
                   <div style={{ fontSize: 11, color: '#52677d' }}>สร้างโครงรองรับ; ยังไม่รวมแผ่นพื้น WPC และบันได</div>

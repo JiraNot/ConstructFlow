@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { deserializeProject } from '../../project-model/dist/index.js'
-import { buildProjectRepresentations3D, getPlanVisibleObjects } from '../dist/index.js'
+import { buildProjectRepresentations3D, getPlanVisibleObjects, getRepresentationTriangles } from '../dist/index.js'
 
 const fixture = deserializeProject(await readFile(new URL('../../../examples/kitchen-extension-proof.cfproj', import.meta.url), 'utf8'))
 
@@ -52,6 +52,55 @@ test('wall geometry contains catalog-resolved door and window cutouts', () => {
   assert.equal(windowRepresentation.shape.opening_type, 'window')
   assert.equal(windowRepresentation.shape.operation, 'sliding')
   assert.ok(windowRepresentation.shape.glazing_transmission > 0)
+})
+
+test('shared elevation mesh expansion returns world-space structural edges and keeps hosted openings as voids', () => {
+  const result = buildProjectRepresentations3D(fixture)
+  const column = result.objects.find(object => object.object_type === 'structure.column')
+  const columnTriangles = getRepresentationTriangles(column)
+  assert.equal(columnTriangles.length, 12)
+  const columnPoints = columnTriangles.flat()
+  assert.equal(Math.min(...columnPoints.map(point => point[0])), column.position_mm[0] - 100)
+  assert.equal(Math.max(...columnPoints.map(point => point[2])), column.position_mm[2] + 1500)
+
+  const door = result.objects.find(object => object.object_type === 'door_window.door')
+  assert.deepEqual(getRepresentationTriangles(door), [])
+  const wall = result.objects.find(object => object.object_id === door.interaction.host_wall_id)
+  const wallTriangles = getRepresentationTriangles(wall)
+  assert.ok(wallTriangles.length > 12)
+  assert.ok(wallTriangles.every(triangle => triangle.every(point => point.every(Number.isFinite))))
+})
+
+test('3D column spans exactly to its selected upper datum, including storeys shorter than 3 m', () => {
+  const project = structuredClone(fixture)
+  project.levels = [
+    { id: 'GF', name: 'Ground', elevation_mm: 0, storey_index: 0, height_mm: 400 },
+    { id: 'L1', name: 'First Floor', elevation_mm: 400, storey_index: 1, height_mm: 3000 },
+    { id: 'EAVE', name: 'Eaves', elevation_mm: 3400, storey_index: 2, height_mm: 2000 },
+  ]
+  const column = Object.values(project.objects).find(object => object.object_type === 'structure.column')
+  column.module_data.base_level_id = 'GF'
+  column.module_data.top_level_id = 'EAVE'
+  column.module_data.base_offset_mm = 0
+  column.module_data.top_offset_mm = 0
+  const representation = buildProjectRepresentations3D(project).objects.find(object => object.object_id === column.id)
+  assert.equal(representation.shape.size_mm[2], 3400)
+  assert.equal(representation.position_mm[2], 1700)
+})
+
+test('beam representation follows its level and embed offset even when legacy point Z is stale', () => {
+  const project = structuredClone(fixture)
+  project.levels = [
+    { id: 'GF', name: 'Ground Floor', elevation_mm: 0, storey_index: 0, height_mm: 3000 },
+    { id: 'L1', name: 'First Floor', elevation_mm: 3000, storey_index: 1, height_mm: 3000 },
+  ]
+  const beam = Object.values(project.objects).find(object => object.object_type === 'structure.beam')
+  beam.module_data.level_id = 'GF'
+  beam.module_data.base_offset_mm = -200
+  beam.module_data.start_point_mm[2] = 9000
+  beam.module_data.end_point_mm[2] = 9000
+  const representation = buildProjectRepresentations3D(project).objects.find(object => object.object_id === beam.id)
+  assert.equal(representation.position_mm[2], 0)
 })
 
 test('opening representations preserve upper transom and glazing muntin layouts', () => {

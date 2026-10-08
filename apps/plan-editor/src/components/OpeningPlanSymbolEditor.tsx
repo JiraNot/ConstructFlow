@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { makeSlidingWindowPlanSymbol, resolveOpeningPlanSymbolX, resolveOpeningPlanSymbolY } from '@constructflow/project-model'
-import type { OpeningPlanSymbolLine, OpeningPlanSymbolPoint } from '@constructflow/project-model'
+import { formatLengthMm, parseLengthMm } from '@constructflow/project-model'
+import type { DisplayLengthUnit, OpeningPlanSymbolLine, OpeningPlanSymbolPoint } from '@constructflow/project-model'
 
 interface Props {
   lines: OpeningPlanSymbolLine[]
@@ -11,6 +12,7 @@ interface Props {
   onReferenceDepthChange: (depthMm: number) => void
   onReturnToAutomatic: () => void
   viewKind?: 'plan' | 'elevation'
+  displayUnit?: DisplayLengthUnit
 }
 
 const WIDTH = 600
@@ -81,7 +83,7 @@ function reanchorPoint(point: OpeningPlanSymbolPoint, anchor: OpeningPlanSymbolP
   return { ...point, x_anchor: anchor, x_offset_mm }
 }
 
-export function OpeningPlanSymbolEditor({ lines, openingWidthMm, referenceDepthMm, onChange, onReferenceDepthChange, onReturnToAutomatic, viewKind = 'plan' }: Props) {
+export function OpeningPlanSymbolEditor({ lines, openingWidthMm, referenceDepthMm, onChange, onReferenceDepthChange, onReturnToAutomatic, viewKind = 'plan', displayUnit = 'm' }: Props) {
   const [mode, setMode] = useState<'select' | 'draw'>('select')
   const [selected, setSelected] = useState<string | null>(null)
   const [draft, setDraft] = useState<[[number, number], [number, number]] | null>(null)
@@ -155,8 +157,8 @@ export function OpeningPlanSymbolEditor({ lines, openingWidthMm, referenceDepthM
       <button type="button" onClick={() => { onChange(makeSlidingWindowPlanSymbol()); setSelected(null) }}>เริ่มจากบานเลื่อน</button>
       <button type="button" onClick={onReturnToAutomatic}>กลับแบบอัตโนมัติ</button>
     </div>
-    <label className="cf-plan-symbol-depth">{viewKind === 'elevation' ? 'ความสูงช่องเปิดอ้างอิง (มม.)' : 'ความหนาผนังอ้างอิง (มม.)'}
-      <input type="number" min={50} max={1000} step={10} value={depth} onChange={event => onReferenceDepthChange(Math.max(50, Math.min(1000, Number(event.target.value) || 50)))} />
+    <label className="cf-plan-symbol-depth">{viewKind === 'elevation' ? `ความสูงช่องเปิดอ้างอิง (${displayUnit})` : `ความหนาผนังอ้างอิง (${displayUnit})`}
+      <input type="text" inputMode="decimal" value={formatLengthMm(depth, displayUnit)} onChange={event => { const value = parseLengthMm(event.target.value, displayUnit); if (value !== null) onReferenceDepthChange(Math.max(50, Math.min(1000, value))) }} />
     </label>
     <svg className={`cf-plan-symbol-canvas ${mode === 'draw' ? 'is-drawing' : ''}`} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="application" aria-label="พื้นที่วาดเส้นหน้าต่าง 2D" onPointerDown={beginDraw} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}>
       <rect x="0" y="0" width={WIDTH} height={HEIGHT} fill="#f8fafc" />
@@ -194,10 +196,12 @@ export function OpeningPlanSymbolEditor({ lines, openingWidthMm, referenceDepthM
               <option value="left">ขอบซ้าย</option><option value="center">กึ่งกลาง</option><option value="right">ขอบขวา</option><option value="ratio">สัดส่วนความกว้าง</option>
             </select>
           </label>
-          {isRatio ? <label>ตำแหน่ง (%)<input type="number" min={0} max={100} step={1} value={Math.round((point.x_ratio ?? 0) * 100)} onChange={event => patchPoint(part, { x_ratio: Math.max(0, Math.min(1, Number(event.target.value) / 100)) })} /></label> : <label>ระยะจากจุดอ้างอิง (มม.)<input type="number" step={5} value={point.x_offset_mm} onChange={event => patchPoint(part, { x_offset_mm: Number(event.target.value) || 0 })} /></label>}
-          <label>ตำแหน่ง X จากขอบซ้าย (มม.)<input type="number" min={0} max={openingWidthMm} step={5} value={Math.round(resolveOpeningPlanSymbolX(point, openingWidthMm))} onChange={event => {
+          {isRatio ? <label>ตำแหน่ง (%)<input type="number" min={0} max={100} step={1} value={Math.round((point.x_ratio ?? 0) * 100)} onChange={event => patchPoint(part, { x_ratio: Math.max(0, Math.min(1, Number(event.target.value) / 100)) })} /></label> : <label>ระยะจากจุดอ้างอิง ({displayUnit})<input type="text" inputMode="decimal" value={formatLengthMm(point.x_offset_mm, displayUnit)} onChange={event => { const value = parseLengthMm(event.target.value, displayUnit); if (value !== null) patchPoint(part, { x_offset_mm: value }) }} /></label>}
+          <label>ตำแหน่ง X จากขอบซ้าย ({displayUnit})<input type="text" inputMode="decimal" value={formatLengthMm(Math.round(resolveOpeningPlanSymbolX(point, openingWidthMm)), displayUnit)} onChange={event => {
+            const parsed = parseLengthMm(event.target.value, displayUnit)
+            if (parsed === null) return
             const currentY = viewKind === 'elevation' ? resolveOpeningPlanSymbolY(point, depth) : point.y_mm
-            const next = movePoint(point, Math.max(0, Math.min(openingWidthMm, Number(event.target.value) || 0)), currentY, openingWidthMm, depth, viewKind)
+            const next = movePoint(point, Math.max(0, Math.min(openingWidthMm, parsed)), currentY, openingWidthMm, depth, viewKind)
             onChange(lines.map(line => line.id === selected ? { ...line, [part]: next } : line))
           }} /></label>
           {viewKind === 'elevation' && <label>จุดอ้างอิงแนวตั้ง
@@ -210,11 +214,11 @@ export function OpeningPlanSymbolEditor({ lines, openingWidthMm, referenceDepthM
             </select>
           </label>}
           {viewKind === 'elevation' && point.y_anchor === 'ratio' && <label>ตำแหน่งแนวตั้ง (%)<input type="number" min={0} max={100} value={Math.round((point.y_ratio ?? 0.5) * 100)} onChange={event => patchPoint(part, { y_ratio: Math.max(0, Math.min(1, Number(event.target.value) / 100)) })} /></label>}
-          <label>{viewKind === 'elevation' ? 'ระยะจากจุดอ้างอิงแนวตั้ง (มม.)' : 'ระยะข้ามผนัง (มม.)'}<input type="number" step={5} value={point.y_mm} onChange={event => patchPoint(part, { y_mm: Number(event.target.value) || 0 })} /></label>
+          <label>{viewKind === 'elevation' ? `ระยะจากจุดอ้างอิงแนวตั้ง (${displayUnit})` : `ระยะข้ามผนัง (${displayUnit})`}<input type="text" inputMode="decimal" value={formatLengthMm(point.y_mm, displayUnit)} onChange={event => { const value = parseLengthMm(event.target.value, displayUnit); if (value !== null) patchPoint(part, { y_mm: value }) }} /></label>
         </fieldset>
       })}
     </div>}
-    <p className="cf-help">ลากเพื่อวาด · พิกัดเป็นมิลลิเมตร · เส้นผูกกับขอบ/กึ่งกลาง/สัดส่วนของช่องเปิด จึงปรับตามมิติโมเดลเมื่อเปลี่ยนขนาด</p>
-    <small>ช่องเปิด {openingWidthMm.toLocaleString()} × {viewKind === 'elevation' ? 'สูง' : 'ผนัง'} {depth} มม. · {lines.length} เส้น</small>
+    <p className="cf-help">ลากเพื่อวาด · เส้นผูกกับขอบ/กึ่งกลาง/สัดส่วนของช่องเปิด จึงปรับตามมิติโมเดลเมื่อเปลี่ยนขนาด</p>
+    <small>ช่องเปิด {formatLengthMm(openingWidthMm, displayUnit)} × {viewKind === 'elevation' ? 'สูง' : 'ผนัง'} {formatLengthMm(depth, displayUnit)} {displayUnit} · {lines.length} เส้น</small>
   </div>
 }

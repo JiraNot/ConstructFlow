@@ -4,7 +4,7 @@ import type {
   RebarModuleData,
   SmartObject,
 } from "@constructflow/project-model";
-import { legacyTypeUuid, resolveSlabElevation } from "@constructflow/project-model";
+import { legacyTypeUuid, resolveSlabElevation, resolveColumnVerticalExtent, resolveBeamBaseElevation } from "@constructflow/project-model";
 import type {
   CommandHandlerContext,
   CommandBusResult,
@@ -76,6 +76,10 @@ function hostGeometry(
       ) as Vec3,
       b = list(d.end_point_mm, "end", (v) => num(v, "point"), 3) as Vec3,
       s = vec2(d.section_mm, "section");
+    const baseElevation = resolveBeamBaseElevation(p, o);
+    if (baseElevation === undefined) throw new Error("Beam level or vertical offset is invalid");
+    a[2] = baseElevation;
+    b[2] = baseElevation;
     const drop = num(d.drop_mm ?? 0, "drop_mm", 0);
     a[2] += s[1] / 2 - drop;
     b[2] += s[1] / 2 - drop;
@@ -95,21 +99,9 @@ function hostGeometry(
         3,
       ) as Vec3,
       s = vec2(d.section_mm, "section"),
-      base = p.levels.find((l) => l.id === d.base_level_id),
-      top = p.levels.find((l) => l.id === d.top_level_id);
-    const z = num(
-        d.base_elevation_mm ??
-          (base?.elevation_mm ?? a[2]) +
-            (typeof d.base_offset_mm === "number" ? d.base_offset_mm : 0),
-        "base",
-      ),
-      zt =
-        num(
-          d.top_elevation_mm ??
-            top?.elevation_mm ??
-            (base?.height_mm !== undefined ? z + base.height_mm : undefined),
-          "known column top",
-        ) + (typeof d.top_offset_mm === "number" ? d.top_offset_mm : 0);
+      extent = resolveColumnVerticalExtent(p, o);
+    if (!extent) throw new Error("Column top level must be higher than its base level");
+    const z = extent.base_elevation_mm, zt = extent.top_elevation_mm;
     return {
       length: positive(zt - z, "column height"),
       width: s[0],

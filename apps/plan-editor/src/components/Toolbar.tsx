@@ -35,8 +35,13 @@ export type ToolType =
   | 'window'
   | 'slab'
   | 'slabVoid'
+  | 'archFloor'
+  | 'ceiling'
+  | 'roomSeparator'
   | 'stair'
   | 'grid'
+  | 'gridSystem'
+  | 'gridCopy'
   | 'measure'
   | 'calibrate'
   | 'erase'
@@ -116,6 +121,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     { id: 'door', label: 'ประตู (D)', icon: <DoorOpen size={16} />, shortcut: 'D' },
     { id: 'window', label: 'หน้าต่าง (N)', icon: <AppWindow size={16} />, shortcut: 'N' },
     { id: 'slab', label: 'พื้น (P)', icon: <Layers size={16} />, shortcut: 'P' },
+    { id: 'archFloor', label: 'พื้นสถาปัตย์', icon: <Layers size={16} />, shortcut: '' },
+    { id: 'ceiling', label: 'ฝ้าเพดาน', icon: <Layers size={16} />, shortcut: '' },
+    { id: 'roomSeparator', label: 'เส้นแบ่งห้อง', icon: <Minus size={16} />, shortcut: '' },
     {
       id: 'stair',
       label: 'บันได (T)',
@@ -126,7 +134,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       ),
       shortcut: 'T',
     },
-    { id: 'grid', label: 'แกน (G)', icon: <Hash size={16} />, shortcut: 'G' },
+    { id: 'grid', label: 'เส้นกริด (G)', icon: <Hash size={16} />, shortcut: 'G' },
+    { id: 'gridSystem', label: 'ระบบ Grid Line (Shift+G)', icon: <Layers size={16} />, shortcut: 'Shift+G' },
     { id: 'measure', label: 'ตลับเมตร (M)', icon: <Ruler size={16} />, shortcut: 'M' },
     { id: 'calibrate', label: 'ปรับสเกลภาพ (R)', icon: <Ruler size={16} />, shortcut: 'R' },
   ]

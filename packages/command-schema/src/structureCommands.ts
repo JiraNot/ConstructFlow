@@ -10,6 +10,11 @@ export interface CreateGridInput {
   orientation: 'vertical' | 'horizontal'
   position_mm: number
   extent_mm?: [number, number]
+  start_point_mm?: [number, number]
+  end_point_mm?: [number, number]
+  bubble_visible?: boolean
+  auto_tag?: boolean
+  sequence_style?: 'auto' | 'alpha' | 'numeric'
   phase?: Phase
 }
 
@@ -21,6 +26,8 @@ export interface CreateGridSystemInput {
   spacing_mm: number
   count: number
   first_tag: string
+  /** Absolute axis coordinates; when provided, allows unequal intervals. */
+  positions_mm?: number[]
   extent_mm?: [number, number]
   phase?: Phase
 }
@@ -28,16 +35,23 @@ export interface CreateGridSystemInput {
 export interface UpdateGridSystemInput {
   system_id: string
   grid_ids?: string[]
-  origin_mm: number
-  spacing_mm: number
-  count: number
-  first_tag: string
+  origin_mm?: number
+  spacing_mm?: number
+  count?: number
+  first_tag?: string
+  positions_mm?: number[]
 }
 
 export interface ModifyGridInput {
   object_id: string // UUID
-  position_mm: number
+  position_mm?: number
   extent_mm?: [number, number]
+  start_point_mm?: [number, number]
+  end_point_mm?: [number, number]
+  tag?: string
+  bubble_visible?: boolean
+  auto_tag?: boolean
+  sequence_style?: 'auto' | 'alpha' | 'numeric'
 }
 
 export interface CreateColumnInput {
@@ -87,6 +101,15 @@ export interface UpdateColumnMarkInput {
 
   /** New human-readable mark, e.g. "C03" */
   mark: string
+}
+
+export interface UpdateColumnVerticalReferenceInput {
+  object_id: string
+  base_level_id?: string
+  /** Set null to use the next-level/legacy fallback instead of an explicit top constraint. */
+  top_level_id?: string | null
+  base_offset_mm?: number
+  top_offset_mm?: number
 }
 
 export interface CreateFoundationInput {
@@ -194,6 +217,13 @@ export interface UpdateBeamMarkInput {
 export interface UpdateBeamDimensionsInput {
   object_id: string
   section_mm: [number, number]
+}
+
+export interface UpdateBeamVerticalReferenceInput {
+  object_id: string
+  level_id?: string
+  /** Offset of the beam placement line from the referenced level; negative lowers it below the datum. */
+  base_offset_mm?: number
 }
 
 export interface StructuralTypeParameters {

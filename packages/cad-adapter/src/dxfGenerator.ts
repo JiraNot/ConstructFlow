@@ -712,6 +712,14 @@ export class DxfGenerator {
       return;
     }
 
+    if (type === "architecture.floor" || type === "architecture.ceiling" || type === "architecture.room") {
+      const ring=d.boundary_mm
+      if(Array.isArray(ring)&&ring.length>=3)this.writeLwPolyline(lines,layer.name,0,ring.map((p:number[])=>[p[0],p[1]]),true)
+      if(type!=='architecture.room')for(const hole of Array.isArray(d.voids_mm)?d.voids_mm:[])if(Array.isArray(hole)&&hole.length>=3)this.writeLwPolyline(lines,layer.name,0,hole.map((p:number[])=>[p[0],p[1]]),true)
+      if(type==='architecture.room'&&Array.isArray(ring)&&ring.length>=3){const cx=ring.reduce((s:number,p:number[])=>s+p[0],0)/ring.length,cy=ring.reduce((s:number,p:number[])=>s+p[1],0)/ring.length;this.writeText(lines,'ANNO-TEXT',0,[cx,cy],`${d.number??''} ${d.name??''} ${(Number(d.area_mm2??0)/1e6).toFixed(2)} m2`,150)}
+      return
+    }
+
     if (type === "structure.slab") {
       for (const ring of [d.boundary_mm, ...(Array.isArray(d.voids_mm) ? d.voids_mm : [])]) {
         if (Array.isArray(ring) && ring.length >= 3) this.writeLwPolyline(lines, layer.name, 0, ring.map((p: number[]) => [p[0], p[1]]), true);

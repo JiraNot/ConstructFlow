@@ -10,6 +10,8 @@ export interface ProjectMetadata {
   id: string
   name: string
   units: 'mm'
+  /** Preferred unit for entering and displaying lengths; geometry remains stored in millimeters. */
+  display_unit?: 'm' | 'cm' | 'mm'
   active_level_id: string
   active_phase: Phase
   description?: string
@@ -104,6 +106,17 @@ export interface ProjectDocument {
   relationships: Relationship[]
   drawing_settings?: DrawingSettings
   legal_metadata?: ProjectLegalMetadata
+  /** Embedded reference drawings, keyed by view and level so they travel with .cfproj. */
+  underlays?: Record<string, ProjectUnderlay>
+}
+
+export interface ProjectUnderlay {
+  data_url: string
+  origin_mm: [number, number]
+  scale_mm_per_px: number
+  rotation_deg: number
+  opacity: number
+  visible: boolean
 }
 
 export const DEFAULT_PHASES: PhaseDefinition[] = [
@@ -503,6 +516,7 @@ export function createEmptyProjectDocument(
       id,
       name,
       units: 'mm',
+      display_unit: 'm',
       active_level_id: defaultLevel.id,
       active_phase: 'new_construction',
       created_at: now,

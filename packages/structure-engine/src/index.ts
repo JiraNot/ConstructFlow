@@ -1,5 +1,5 @@
-import { SmartObject, ColumnModuleData, FoundationModuleData, GridModuleData, BeamModuleData, resolveCatalogType, catalogInstanceOverrides, isColumnObject, isFoundationObject, isGridObject, isBeamObject, type ProjectDocument } from '@constructflow/project-model'
-import { CreateColumnInput, MoveColumnInput, UpdateColumnMarkInput, CreateFoundationInput, CreateGridInput, CreateGridSystemInput, UpdateGridSystemInput, CreateBeamInput, UpdateBeamMarkInput, UpdateBeamDimensionsInput, UpdateColumnDimensionsInput, UpdateFoundationDimensionsInput } from '@constructflow/command-schema'
+import { SmartObject, ColumnModuleData, FoundationModuleData, GridModuleData, BeamModuleData, resolveCatalogType, catalogInstanceOverrides, isColumnObject, isFoundationObject, isGridObject, isBeamObject, resolveColumnVerticalExtent, resolveBeamBaseElevation, type ProjectDocument } from '@constructflow/project-model'
+import { CreateColumnInput, MoveColumnInput, UpdateColumnMarkInput, UpdateColumnVerticalReferenceInput, CreateFoundationInput, CreateGridInput, CreateGridSystemInput, UpdateGridSystemInput, ModifyGridInput, CreateBeamInput, UpdateBeamMarkInput, UpdateBeamDimensionsInput, UpdateBeamVerticalReferenceInput, UpdateColumnDimensionsInput, UpdateFoundationDimensionsInput } from '@constructflow/command-schema'
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
 export * from './construction.js'
@@ -105,6 +105,8 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
           orientation: gridInput.orientation,
           position_mm: gridInput.position_mm,
           extent_mm: gridInput.extent_mm || [-10000, 15000],
+          ...(gridInput.start_point_mm && gridInput.end_point_mm ? { start_point_mm: gridInput.start_point_mm, end_point_mm: gridInput.end_point_mm } : {}),
+          bubble_visible: gridInput.bubble_visible ?? true, auto_tag: gridInput.auto_tag ?? true, sequence_style: gridInput.sequence_style ?? 'auto',
         },
         created_at: now,
         updated_at: now,
@@ -126,11 +128,14 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
 
     case 'CreateGridSystem': {
       const system = input as unknown as CreateGridSystemInput
-      if (!system.id || !['vertical', 'horizontal'].includes(system.orientation) || !Number.isFinite(system.origin_mm) || !Number.isFinite(system.spacing_mm) || system.spacing_mm <= 0 || !Number.isInteger(system.count) || system.count < 1 || system.count > 100 || !system.first_tag.trim()) {
+      const positions = system.positions_mm ?? (Number.isFinite(system.origin_mm) && Number.isFinite(system.spacing_mm) && system.spacing_mm > 0 && Number.isInteger(system.count)
+        ? Array.from({ length: system.count }, (_, index) => system.origin_mm + index * system.spacing_mm) : [])
+      if (!system.id || !['vertical', 'horizontal'].includes(system.orientation) || !system.first_tag?.trim() || positions.length < 1 || positions.length > 100 || positions.some((position, index) => !Number.isFinite(position) || (index > 0 && position <= positions[index - 1]))) {
         return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Grid system requires a positive spacing, 1–100 lines, and a starting tag'] }, updatedProject: project }
       }
       const ids: string[] = []
-      for (let index = 0; index < system.count; index++) {
+      const spacing = positions.length > 1 ? (positions[1]! - positions[0]!) : (system.spacing_mm || 0)
+      for (let index = 0; index < positions.length; index++) {
         const id = system.grid_ids?.[index] || crypto.randomUUID()
         ids.push(id)
         updated.objects[id] = {
@@ -139,9 +144,9 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
           level_refs: [{ role: 'host_level', level_id: project.project.active_level_id }], host_refs: [], connector_refs: [], status: 'active',
           module_data: {
             tag: gridSystemTag(system.first_tag.trim(), index), orientation: system.orientation,
-            position_mm: system.origin_mm + index * system.spacing_mm, extent_mm: system.extent_mm || [-10000, 15000],
-            system_id: system.id, system_index: index, system_origin_mm: system.origin_mm,
-            system_spacing_mm: system.spacing_mm, system_count: system.count, system_first_tag: system.first_tag.trim(),
+            position_mm: positions[index]!, extent_mm: system.extent_mm || [-10000, 15000],
+            system_id: system.id, system_index: index, system_origin_mm: positions[0]!,
+            system_spacing_mm: spacing, system_count: positions.length, system_first_tag: system.first_tag.trim(), system_positions_mm: positions,
           }, created_at: now, updated_at: now,
         }
       }
@@ -154,23 +159,28 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
 
     case 'UpdateGridSystem': {
       const system = input as unknown as UpdateGridSystemInput
-      if (!system.system_id || !Number.isFinite(system.origin_mm) || !Number.isFinite(system.spacing_mm) || system.spacing_mm <= 0 || !Number.isInteger(system.count) || system.count < 1 || system.count > 100 || !system.first_tag.trim()) {
-        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Grid system requires a positive spacing, 1–100 lines, and a starting tag'] }, updatedProject: project }
-      }
       const members = Object.values(updated.objects).filter(isGridObject).filter(object => object.module_data.system_id === system.system_id).sort((a, b) => (a.module_data.system_index ?? 0) - (b.module_data.system_index ?? 0))
       if (!members.length) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Grid system ${system.system_id} not found`] }, updatedProject: project }
       const first = members[0]!
+      const firstTag = system.first_tag?.trim() || first.module_data.system_first_tag || first.module_data.tag
+      const positions = system.positions_mm ?? (Number.isFinite(system.origin_mm) && Number.isFinite(system.spacing_mm) && Number(system.spacing_mm) > 0 && Number.isInteger(system.count)
+        ? Array.from({ length: system.count! }, (_, index) => system.origin_mm! + index * system.spacing_mm!)
+        : members.map(member => member.module_data.position_mm))
+      if (!system.system_id || !firstTag || positions.length < 1 || positions.length > 100 || positions.some((position, index) => !Number.isFinite(position) || (index > 0 && position <= positions[index - 1]))) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Grid system requires increasing positions and 1–100 lines'] }, updatedProject: project }
+      }
       const ids: string[] = []
-      const count = system.count
+      const count = positions.length
+      const spacing = count > 1 ? positions[1]! - positions[0]! : Number(system.spacing_mm ?? first.module_data.system_spacing_mm ?? 0)
       for (let index = 0; index < count; index++) {
         const existing = members[index]
         const id = system.grid_ids?.[index] ?? existing?.id ?? crypto.randomUUID()
         ids.push(id)
         const module_data: GridModuleData = {
-          ...(existing?.module_data ?? first.module_data), tag: gridSystemTag(system.first_tag.trim(), index),
-          position_mm: system.origin_mm + index * system.spacing_mm, system_id: system.system_id,
-          system_index: index, system_origin_mm: system.origin_mm, system_spacing_mm: system.spacing_mm,
-          system_count: count, system_first_tag: system.first_tag.trim(),
+          ...(existing?.module_data ?? first.module_data), tag: gridSystemTag(firstTag, index),
+          position_mm: positions[index]!, system_id: system.system_id,
+          system_index: index, system_origin_mm: positions[0]!, system_spacing_mm: spacing,
+          system_count: count, system_first_tag: firstTag, system_positions_mm: positions,
         }
         updated.objects[id] = existing ? { ...existing, module_data, updated_at: now } : {
           ...first, id, module_data, created_at: now, updated_at: now,
@@ -204,6 +214,24 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       const location_mm: [number, number, number] = colInput.location_mm.length === 2
         ? [colInput.location_mm[0], colInput.location_mm[1], 0]
         : (colInput.location_mm as [number, number, number])
+      const baseLevelId = colInput.base_level_id || project.project.active_level_id
+      if (!updated.levels.some(level => level.id === baseLevelId)) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Column base level ${baseLevelId} does not exist`] }, updatedProject: project }
+      }
+      if (colInput.top_level_id && !updated.levels.some(level => level.id === colInput.top_level_id)) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Column top level ${colInput.top_level_id} does not exist`] }, updatedProject: project }
+      }
+      if (!resolveColumnVerticalExtent(updated, {
+        base_level_id: baseLevelId,
+        top_level_id: colInput.top_level_id,
+        base_offset_mm: colInput.base_offset_mm ?? 0,
+        top_offset_mm: colInput.top_offset_mm ?? 0,
+        base_elevation_mm: colInput.base_elevation_mm,
+        top_elevation_mm: colInput.top_elevation_mm,
+        location_mm,
+      })) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Column top level and offsets must result in a positive height above the base level'] }, updatedProject: project }
+      }
 
       const smartObject: SmartObject<ColumnModuleData> = {
         id,
@@ -212,7 +240,10 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
         schema_version: 1,
         created_phase: colInput.phase || project.project.active_phase,
         removed_phase: null,
-        level_refs: [{ role: 'base_level', level_id: colInput.base_level_id || project.project.active_level_id }],
+        level_refs: [
+          { role: 'base_level', level_id: baseLevelId },
+          ...(colInput.top_level_id ? [{ role: 'top_level' as const, level_id: colInput.top_level_id }] : []),
+        ],
         host_refs: [],
         connector_refs: [],
         status: 'active',
@@ -224,10 +255,12 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
           section_mm,
           plaster_thickness_mm,
           rotation_deg: colInput.rotation_deg || 0,
-          base_level_id: colInput.base_level_id || project.project.active_level_id,
-          top_level_id: colInput.top_level_id,
-          base_offset_mm: colInput.base_offset_mm || 0,
-          top_offset_mm: colInput.top_offset_mm || 0,
+          base_level_id: baseLevelId,
+          ...(colInput.top_level_id ? { top_level_id: colInput.top_level_id } : {}),
+          base_offset_mm: colInput.base_offset_mm ?? 0,
+          top_offset_mm: colInput.top_offset_mm ?? 0,
+          ...(colInput.base_elevation_mm !== undefined ? { base_elevation_mm: colInput.base_elevation_mm } : {}),
+          ...(colInput.top_elevation_mm !== undefined ? { top_elevation_mm: colInput.top_elevation_mm } : {}),
           material,
           engineering_status: colInput.engineering_status || 'preliminary',
         },
@@ -372,6 +405,43 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       }
     }
 
+    case 'UpdateColumnVerticalReference': {
+      const verticalInput = input as unknown as UpdateColumnVerticalReferenceInput
+      const target = updated.objects[verticalInput.object_id]
+      if (!target || !isColumnObject(target)) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Column UUID ${verticalInput.object_id} not found`] }, updatedProject: project }
+      }
+      const current = target.module_data
+      const baseLevelId = verticalInput.base_level_id ?? current.base_level_id
+      const topLevelId = verticalInput.top_level_id === null ? undefined : verticalInput.top_level_id ?? current.top_level_id
+      const baseOffset = verticalInput.base_offset_mm ?? current.base_offset_mm ?? 0
+      const topOffset = verticalInput.top_offset_mm ?? current.top_offset_mm ?? 0
+      if (!updated.levels.some(level => level.id === baseLevelId)) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Column base level ${baseLevelId} does not exist`] }, updatedProject: project }
+      }
+      if (topLevelId && !updated.levels.some(level => level.id === topLevelId)) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Column top level ${topLevelId} does not exist`] }, updatedProject: project }
+      }
+      const moduleData = { ...current, base_level_id: baseLevelId, ...(topLevelId ? { top_level_id: topLevelId } : {}), base_offset_mm: baseOffset, top_offset_mm: topOffset }
+      if (!topLevelId) delete moduleData.top_level_id
+      delete moduleData.base_elevation_mm
+      delete moduleData.top_elevation_mm
+      if (!resolveColumnVerticalExtent(updated, moduleData)) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Column top level and offsets must result in a positive height above the base level'] }, updatedProject: project }
+      }
+      const levelRefs = [
+        ...target.level_refs.filter(reference => reference.role !== 'base_level' && reference.role !== 'top_level'),
+        { role: 'base_level' as const, level_id: baseLevelId },
+        ...(topLevelId ? [{ role: 'top_level' as const, level_id: topLevelId }] : []),
+      ]
+      updated.objects[target.id] = { ...target, level_refs: levelRefs, module_data: moduleData, updated_at: now }
+      return {
+        result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] },
+        updatedProject: updated,
+        emittedEnvelope: envelope,
+      }
+    }
+
     case 'UpdateFoundationMark': {
       const markInput = input as unknown as { object_id: string; mark: string }
       const target = updated.objects[markInput.object_id]
@@ -410,6 +480,44 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       }
     }
 
+    case 'ModifyGrid': {
+      const changes = input as unknown as ModifyGridInput
+      const target = updated.objects[changes.object_id]
+      if (!target || !isGridObject(target)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Grid UUID ${changes.object_id} not found`] }, updatedProject: project }
+      if (target.module_data.system_id) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Edit grid-system members through the Grid Line System properties'] }, updatedProject: project }
+      const data = { ...target.module_data }
+      if (changes.start_point_mm !== undefined || changes.end_point_mm !== undefined) {
+        const start = changes.start_point_mm ?? data.start_point_mm
+        const end = changes.end_point_mm ?? data.end_point_mm
+        if (!start || !end || [...start, ...end].some(value => !Number.isFinite(value)) || Math.hypot(end[0] - start[0], end[1] - start[1]) < 1) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Grid endpoints must define a finite line at least 1 mm long'] }, updatedProject: project }
+        const dx = end[0] - start[0], dy = end[1] - start[1]
+        const orientation = Math.abs(dx) <= Math.abs(dy) ? 'vertical' : 'horizontal'
+        Object.assign(data, { start_point_mm: start, end_point_mm: end, orientation,
+          position_mm: orientation === 'vertical' ? (start[0] + end[0]) / 2 : (start[1] + end[1]) / 2,
+          extent_mm: orientation === 'vertical' ? [Math.min(start[1], end[1]), Math.max(start[1], end[1])] : [Math.min(start[0], end[0]), Math.max(start[0], end[0])] })
+      }
+      if (changes.position_mm !== undefined) {
+        if (!Number.isFinite(changes.position_mm)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Grid position must be finite'] }, updatedProject: project }
+        data.position_mm = changes.position_mm
+        if (data.start_point_mm && data.end_point_mm) {
+          const delta = changes.position_mm - (data.orientation === 'vertical' ? (data.start_point_mm[0] + data.end_point_mm[0]) / 2 : (data.start_point_mm[1] + data.end_point_mm[1]) / 2)
+          data.start_point_mm = data.orientation === 'vertical' ? [data.start_point_mm[0] + delta, data.start_point_mm[1]] : [data.start_point_mm[0], data.start_point_mm[1] + delta]
+          data.end_point_mm = data.orientation === 'vertical' ? [data.end_point_mm[0] + delta, data.end_point_mm[1]] : [data.end_point_mm[0], data.end_point_mm[1] + delta]
+        }
+      }
+      if (changes.extent_mm) {
+        if (changes.extent_mm.some(value => !Number.isFinite(value)) || changes.extent_mm[0] === changes.extent_mm[1]) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Grid extent must be finite and nonzero'] }, updatedProject: project }
+        data.extent_mm = changes.extent_mm
+        if (data.start_point_mm && data.end_point_mm) data.start_point_mm = data.orientation === 'vertical' ? [data.start_point_mm[0], changes.extent_mm[0]] : [changes.extent_mm[0], data.start_point_mm[1]], data.end_point_mm = data.orientation === 'vertical' ? [data.end_point_mm[0], changes.extent_mm[1]] : [changes.extent_mm[1], data.end_point_mm[1]]
+      }
+      if (changes.tag !== undefined) { if (!changes.tag.trim()) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Grid label cannot be empty'] }, updatedProject: project }; data.tag = changes.tag.trim(); data.auto_tag = false }
+      if (changes.bubble_visible !== undefined) data.bubble_visible = changes.bubble_visible
+      if (changes.auto_tag !== undefined) data.auto_tag = changes.auto_tag
+      if (changes.sequence_style !== undefined) data.sequence_style = changes.sequence_style
+      updated.objects[target.id] = { ...target, module_data: data, updated_at: now }
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] }, updatedProject: updated, emittedEnvelope: envelope }
+    }
+
     case 'UpdateGridTag': {
       const tagInput = input as unknown as { object_id: string; tag: string }
       const target = updated.objects[tagInput.object_id]
@@ -432,6 +540,7 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
         module_data: {
           ...target.module_data,
           tag: tagInput.tag,
+          auto_tag: false,
         },
       }
 
@@ -570,20 +679,19 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       const section_mm: [number, number] = beamInput.section_mm || tuple2(typeDef?.parameters.section_mm, [200, 400])
       const material = beamInput.material || catalogString(typeDef?.parameters.material, 'reinforced_concrete')
 
-      const start_point_mm: [number, number, number] = beamInput.start_point_mm.length === 2
-        ? [beamInput.start_point_mm[0], beamInput.start_point_mm[1], 0]
-        : (beamInput.start_point_mm as [number, number, number])
-
-      const end_point_mm: [number, number, number] = beamInput.end_point_mm.length === 2
-        ? [beamInput.end_point_mm[0], beamInput.end_point_mm[1], 0]
-        : (beamInput.end_point_mm as [number, number, number])
+      const level_id = beamInput.level_id || project.project.active_level_id
+      const levelElevation = updated.levels.find(level => level.id === level_id)?.elevation_mm
+      if (levelElevation === undefined) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Beam level ${level_id} does not exist`] }, updatedProject: project }
+      const base_offset_mm = beamInput.base_offset_mm ?? (beamInput.base_elevation_mm !== undefined ? beamInput.base_elevation_mm - levelElevation : 0)
+      if (!Number.isFinite(base_offset_mm)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Beam level offset must be finite'] }, updatedProject: project }
+      const beamElevation = levelElevation + base_offset_mm
+      const start_point_mm: [number, number, number] = [beamInput.start_point_mm[0], beamInput.start_point_mm[1], beamElevation]
+      const end_point_mm: [number, number, number] = [beamInput.end_point_mm[0], beamInput.end_point_mm[1], beamElevation]
 
       const span_mm = Math.round(Math.hypot(
         end_point_mm[0] - start_point_mm[0],
         end_point_mm[1] - start_point_mm[1]
       ))
-
-      const level_id = beamInput.level_id || project.project.active_level_id
 
       const smartObject: SmartObject<BeamModuleData> = {
         id,
@@ -606,6 +714,7 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
           section_mm,
           span_mm,
           level_id,
+          base_offset_mm,
           start_column_id: beamInput.start_column_id,
           end_column_id: beamInput.end_column_id,
           material,
@@ -769,6 +878,24 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
         updatedProject: updated,
         emittedEnvelope: envelope,
       }
+    }
+
+    case 'UpdateBeamVerticalReference': {
+      const verticalInput = input as unknown as UpdateBeamVerticalReferenceInput
+      const target = updated.objects[verticalInput.object_id]
+      if (!target || !isBeamObject(target)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Beam UUID ${verticalInput.object_id} not found`] }, updatedProject: project }
+      const levelId = verticalInput.level_id ?? target.module_data.level_id
+      const level = updated.levels.find(item => item.id === levelId)
+      const offset = verticalInput.base_offset_mm ?? target.module_data.base_offset_mm ?? 0
+      if (!level) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Beam level ${levelId} does not exist`] }, updatedProject: project }
+      if (!Number.isFinite(offset)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Beam level offset must be finite'] }, updatedProject: project }
+      const elevation = level.elevation_mm + offset
+      const start = [...target.module_data.start_point_mm] as [number, number, number]
+      const end = [...target.module_data.end_point_mm] as [number, number, number]
+      start[2] = elevation; end[2] = elevation
+      const levelRefs = [...target.level_refs.filter(reference => reference.role !== 'base_level'), { role: 'base_level' as const, level_id: levelId }]
+      updated.objects[target.id] = { ...target, level_refs: levelRefs, module_data: { ...target.module_data, level_id: levelId, base_offset_mm: offset, start_point_mm: start, end_point_mm: end }, updated_at: now }
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] }, updatedProject: updated, emittedEnvelope: envelope }
     }
 
     case 'UpdateFoundationDimensions': {

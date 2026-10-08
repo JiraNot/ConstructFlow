@@ -73,6 +73,21 @@ test('snaps to grid intersections and line projections, then returns free outsid
   assert.deepEqual(free.point_mm, [517, 900])
 })
 
+test('projects onto individually drawn angled grid references and snaps their endpoints', () => {
+  const angled = {
+    id: 'grid-angle', object_type: 'structure.grid',
+    module_data: { tag: 'A1', orientation: 'vertical', position_mm: 1000, extent_mm: [0, 1000], start_point_mm: [0, 0], end_point_mm: [1000, 1000] },
+  }
+  const onLine = snapPoint([502, 498], project(angled), view(), 8, new Set(['grid']))
+  assert.equal(onLine.kind, 'grid_line')
+  assert.equal(onLine.target_id, 'grid-angle')
+  assert.deepEqual(onLine.point_mm, [500, 500])
+
+  const endpoint = snapPoint([1000, 1000], project(angled), view(), 8, new Set(['grid']))
+  assert.equal(endpoint.kind, 'grid_line')
+  assert.deepEqual(endpoint.point_mm, [1000, 1000])
+})
+
 test('intersection mode snaps only to finite beam/wall crossings', () => {
   const projectDoc = project(beam('beam-a', [0, 500], [1000, 500]), wall('wall-b', [500, 0], [500, 1000]))
   const result = snapPoint([504, 500], projectDoc, view(), 8, new Set(['intersection']))

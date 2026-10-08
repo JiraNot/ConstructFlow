@@ -9,9 +9,8 @@ import {
   type OpeningViewOverride,
 } from "@constructflow/project-model";
 import { constructionOutputs } from "@constructflow/domain-providers";
-import { buildProjectRepresentations3D } from "@constructflow/representation-engine";
+import { buildProjectRepresentations3D, getRepresentationTriangles } from "@constructflow/representation-engine";
 import {
-  box,
   type Vec2,
   type Vec3,
   type Triangle,
@@ -152,73 +151,7 @@ function compilePermitDrawingSetBase(
         o.level_refs.some((r) => r.role !== 'top_level' && r.level_id === id)));
   const triangles = (id: string): Triangle[] => {
     const r = representations.find((v) => v.object_id === id);
-    if (!r) return [];
-    if (r.shape.kind === "triangle_mesh") return r.shape.triangles_mm;
-    // Openings are negative space already subtracted from the host wall mesh.
-    // Emitting a box here would fill the void again in downstream geometry.
-    if (r.shape.kind === "opening") return [];
-    if (r.shape.kind === "wall_extrusion") {
-      const { length_mm: l, thickness_mm: t, height_mm: h, cutouts } = r.shape;
-      const xs = [
-          0,
-          l,
-          ...cutouts.flatMap((c) => [c.min_x_mm, c.max_x_mm]),
-        ].sort((a, b) => a - b),
-        zs = [0, h, ...cutouts.flatMap((c) => [c.min_z_mm, c.max_z_mm])].sort(
-          (a, b) => a - b,
-        );
-      const mesh: Triangle[] = [];
-      for (let i = 1; i < xs.length; i++)
-        for (let j = 1; j < zs.length; j++)
-          if (
-            xs[i] > xs[i - 1] &&
-            zs[j] > zs[j - 1] &&
-            !cutouts.some(
-              (c) =>
-                (xs[i] + xs[i - 1]) / 2 > c.min_x_mm &&
-                (xs[i] + xs[i - 1]) / 2 < c.max_x_mm &&
-                (zs[j] + zs[j - 1]) / 2 > c.min_z_mm &&
-                (zs[j] + zs[j - 1]) / 2 < c.max_z_mm,
-            )
-          )
-            mesh.push(
-              ...box(
-                [xs[i - 1], -t / 2, zs[j - 1]],
-                [xs[i] - xs[i - 1], t, zs[j] - zs[j - 1]],
-              ),
-            );
-      return mesh.map(
-        (tr) =>
-          tr.map(
-            (v) =>
-              [
-                r.position_mm[0] +
-                  v[0] * Math.cos(r.rotation_rad) -
-                  v[1] * Math.sin(r.rotation_rad),
-                r.position_mm[1] +
-                  v[0] * Math.sin(r.rotation_rad) +
-                  v[1] * Math.cos(r.rotation_rad),
-                r.position_mm[2] + v[2],
-              ] as Vec3,
-          ) as Triangle,
-      );
-    }
-    const [w, d, h] = r.shape.size_mm;
-    return box([-w / 2, -d / 2, -h / 2], [w, d, h]).map(
-      (tr) =>
-        tr.map(
-          (v) =>
-            [
-              r.position_mm[0] +
-                v[0] * Math.cos(r.rotation_rad) -
-                v[1] * Math.sin(r.rotation_rad),
-              r.position_mm[1] +
-                v[0] * Math.sin(r.rotation_rad) +
-                v[1] * Math.cos(r.rotation_rad),
-              r.position_mm[2] + v[2],
-            ] as Vec3,
-        ) as Triangle,
-    );
+    return r ? getRepresentationTriangles(r) : [];
   };
   const sheets: PermitSheet[] = PERMIT_INDEX.map(
     ([id, title, defaultScale]) => {
@@ -332,7 +265,10 @@ function compilePermitDrawingSetBase(
               f.startsWith("interior.") ||
               f === "electrical.led_run" ||
               f === "electrical.fixture" ||
-              f === "architecture.wall"
+              f === "architecture.wall" ||
+              f === "architecture.room" ||
+              f === "architecture.floor" ||
+              f === "architecture.ceiling"
             );
           case "M-01":
             return f.startsWith("plumbing.");
@@ -992,12 +928,17 @@ function compilePermitDrawingSetBase(
             ? ["xz", "yz"]
             : id === "A-07"
               ? ["section_x", "section_y"]
+              : id === "A-10"
+                ? ["xy", "rcp"]
               : id === "A-09"
                 ? ["xy", "section_x"]
                 : id === "M-01"
                   ? ["iso"]
                   : ["xy"];
         for (const [viewIndex, mode] of views.entries()) {
+          const viewObjects = id === "A-10" && mode === "rcp"
+            ? objectsWithMesh.filter(({ object }) => ["architecture.room", "architecture.floor", "architecture.ceiling"].includes(object.object_type))
+            : objectsWithMesh;
           const view = {
             x: 18 + viewIndex * 195,
             y: 40,
@@ -1012,12 +953,14 @@ function compilePermitDrawingSetBase(
                 : mode === "iso"
                   ? [v[0] - v[1], v[2] + (v[0] + v[1]) * 0.35]
                   : [v[0], v[1]];
-          const pts = objectsWithMesh.flatMap((v) =>
+          const pts = viewObjects.flatMap((v) =>
             v.mesh
               .flat()
               .map(projectPoint)
               .concat((v.out?.paths ?? []).flat().map(projectPoint)),
-          );
+          ).concat(id === "A-10" && mode === "rcp" ? selected
+            .filter((object) => object.object_type === "architecture.ceiling" || object.object_type === "architecture.floor" || object.object_type === "architecture.room")
+            .flatMap((object) => (data(object).boundary_mm as Vec2[] | undefined) ?? []) : []);
           const minX = pts.length ? Math.min(...pts.map((v) => v[0])) : 0,
             maxX = pts.length ? Math.max(...pts.map((v) => v[0])) : 0,
             minY = pts.length ? Math.min(...pts.map((v) => v[1])) : 0,
@@ -1131,7 +1074,7 @@ function compilePermitDrawingSetBase(
           const frontFaces: FrontFace[] = [];
 
           if (isElevation) {
-            for (const { object: o, mesh } of objectsWithMesh) {
+            for (const { object: o, mesh } of viewObjects) {
               for (const tr of mesh) {
                 const a = [
                   tr[1][0] - tr[0][0],
@@ -1230,7 +1173,7 @@ function compilePermitDrawingSetBase(
             return false;
           };
 
-          for (const { object: o, mesh, out } of objectsWithMesh) {
+          for (const { object: o, mesh, out } of viewObjects) {
             const openingOverride = viewport.opening_overrides?.[o.id];
             const phase = getDisplayPhase(o),
               color = colors[phase],
@@ -1262,7 +1205,7 @@ function compilePermitDrawingSetBase(
             for (const tr of isElevation && openingOverride?.hide_generated_elevation && o.object_type.startsWith("door_window.") ? [] : mesh) {
               if (mode.startsWith("section_")) {
                 const axis = mode === "section_x" ? 1 : 0,
-                  world = objectsWithMesh.flatMap((v) =>
+                  world = viewObjects.flatMap((v) =>
                     v.mesh.flat().map((v) => v[axis]),
                   ),
                   bathDrain =
@@ -1693,31 +1636,73 @@ function compilePermitDrawingSetBase(
               }
             }
           }
-          if (id === "A-10" && mode === "xy" && pts.length) {
-            const stepGrid = 600;
-            const startGx = Math.ceil(minX / stepGrid) * stepGrid;
-            const startGy = Math.ceil(minY / stepGrid) * stepGrid;
-            for (let gx = startGx; gx <= maxX; gx += stepGrid) {
-              const p1 = mapped([gx, minY]);
-              const p2 = mapped([gx, maxY]);
-              if (p1[0] >= view.x && p1[0] <= view.x + view.w) {
-                path([p1, p2], "#cbd5e1", 0.12, [2, 2]);
+          if (id === "A-10" && mode === "rcp") {
+            const inside = (point: Vec2, ring: Vec2[]) => {
+              let isInside = false;
+              for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                const a = ring[i], b = ring[j];
+                if ((a[1] > point[1]) !== (b[1] > point[1]) && point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]) isInside = !isInside;
               }
+              return isInside;
+            };
+            const drawClippedGrid = (ring: Vec2[], stepX: number, stepY: number, voids: Vec2[][], color: string) => {
+              const minX = Math.min(...ring.map(point => point[0])), maxX = Math.max(...ring.map(point => point[0]));
+              const minY = Math.min(...ring.map(point => point[1])), maxY = Math.max(...ring.map(point => point[1]));
+              const drawAxis = (vertical: boolean, fixed: number, lo: number, hi: number) => {
+                const intersectionsFor = (polygon: Vec2[]) => {
+                  const values: number[] = [];
+                  for (let i = 0; i < polygon.length; i++) {
+                    const a = polygon[i], b = polygon[(i + 1) % polygon.length];
+                    const av = vertical ? a[0] : a[1], bv = vertical ? b[0] : b[1];
+                    if ((av <= fixed && bv > fixed) || (bv <= fixed && av > fixed)) {
+                      const t = (fixed - av) / (bv - av);
+                      values.push((vertical ? a[1] : a[0]) + t * ((vertical ? b[1] : b[0]) - (vertical ? a[1] : a[0])));
+                    }
+                  }
+                  return values;
+                };
+                const intersections = intersectionsFor(ring).sort((a, b) => a - b);
+                const holeIntersections = voids.flatMap(intersectionsFor).sort((a, b) => a - b);
+                for (let i = 1; i < intersections.length; i++) {
+                  const start = intersections[i - 1], end = intersections[i];
+                  const cuts = [start, ...holeIntersections.filter(value => value > start && value < end), end];
+                  for (let j = 1; j < cuts.length; j++) {
+                    const aCoord = Math.max(cuts[j - 1], lo), bCoord = Math.min(cuts[j], hi), mid = (aCoord + bCoord) / 2;
+                    const test: Vec2 = vertical ? [fixed, mid] : [mid, fixed];
+                    if (bCoord <= aCoord || !inside(test, ring) || voids.some(hole => inside(test, hole))) continue;
+                    const a: Vec2 = vertical ? [fixed, aCoord] : [aCoord, fixed];
+                    const b: Vec2 = vertical ? [fixed, bCoord] : [bCoord, fixed];
+                    path([mapped(a), mapped(b)], color, 0.12, [1.5, 1.5]);
+                  }
+                }
+              };
+              for (let x = Math.ceil(minX / stepX) * stepX; x < maxX; x += stepX) drawAxis(true, x, minY, maxY);
+              for (let y = Math.ceil(minY / stepY) * stepY; y < maxY; y += stepY) drawAxis(false, y, minX, maxX);
+            };
+            const ceilings = selected.filter(object => object.object_type === "architecture.ceiling");
+            for (const ceiling of ceilings) {
+              const d = data(ceiling), ring = d.boundary_mm as Vec2[] | undefined;
+              if (!ring || ring.length < 3) continue;
+              const voids = (d.voids_mm as Vec2[][] | undefined) ?? [];
+              path(ring.map(mapped), "#7c3aed", 0.35, undefined, true, "#f5f3ff");
+              for (const hole of voids) path(hole.map(mapped), "#7c3aed", 0.25, [2, 1], true);
+              const grid = d.grid_mm as Vec2 | undefined;
+              if (grid && grid[0] > 0 && grid[1] > 0) drawClippedGrid(ring, grid[0], grid[1], voids, "#a78bfa");
+              const center: Vec2 = [ring.reduce((sum, point) => sum + point[0], 0) / ring.length, ring.reduce((sum, point) => sum + point[1], 0) / ring.length];
+              const level = project.levels.find(item => item.id === String(d.level_id ?? ""));
+              text(mapped(center), `${String(d.mark ?? "C")}: ${String(d.material ?? "ฝ้า")}  +${((Number(d.elevation_mm ?? level?.elevation_mm ?? 0) + Number(d.elevation_offset_mm ?? 0)) / 1000).toFixed(3)} m`, 2.1, "#5b21b6", 55);
+              sourceIds.add(ceiling.id);
             }
-            for (let gy = startGy; gy <= maxY; gy += stepGrid) {
-              const p1 = mapped([minX, gy]);
-              const p2 = mapped([maxX, gy]);
-              if (p1[1] >= view.y && p1[1] <= view.y + view.h) {
-                path([p1, p2], "#cbd5e1", 0.12, [2, 2]);
-              }
+            for (const room of selected.filter(object => object.object_type === "architecture.room")) {
+              const d = data(room), ring = d.boundary_mm as Vec2[] | undefined;
+              if (!ring || ring.length < 3) continue;
+              path(ring.map(mapped), "#64748b", 0.18, [2, 1], true);
             }
-            text(
-              [view.x + 2, view.y + view.h - 3],
-              "RCP: ฝ้าเพดานยิปซัมบอร์ด 9 มม. โครง C-Line @0.60 ม. ระดับ +2.70 ม. / Grid 600x600 mm",
-              2.1,
-              "#475569",
-              240,
-            );
+            for (const floor of selected.filter(object => object.object_type === "architecture.floor")) {
+              const ring = data(floor).boundary_mm as Vec2[] | undefined;
+              if (ring && ring.length >= 3) path(ring.map(mapped), "#b45309", 0.2, [3, 1], true);
+            }
+            text([view.x + 2, view.y + view.h - 3], ceilings.length ? "RCP · ขอบเขตฝ้า ช่องเปิด และกริดตามค่าจริงของแต่ละฝ้า" : "RCP · ยังไม่มีวัตถุฝ้าในชั้นนี้", 2.1, "#475569", 240);
           }
           text(
             [view.x, 35],
@@ -1911,10 +1896,8 @@ function compilePermitDrawingSetBase(
         !selected.some((o) => o.object_type === "structure.rebar_set")
       )
         warnings.push("BBS reinforcement source objects are missing");
-      if (id === "A-10")
-        warnings.push(
-          "Finish/joinery geometry shown; reflected ceiling layout and finish annotations require project inputs",
-        );
+      if (id === "A-10" && !selected.some(object => object.object_type === "architecture.ceiling"))
+        warnings.push("RCP has no modeled ceiling objects for this level; add rooms/ceilings and set their grid and elevation");
       if (id === "A-07")
         warnings.push(
           "Sections show geometric intersections; annotation and construction detail review required",

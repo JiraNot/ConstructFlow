@@ -1,6 +1,7 @@
 import React from "react";
 import { openingMaterialAppearance, openingHandlePlacement } from "@constructflow/representation-engine";
-import type { TypeDefinition } from "@constructflow/project-model";
+import { formatLengthMm } from "@constructflow/project-model";
+import type { DisplayLengthUnit, TypeDefinition } from "@constructflow/project-model";
 import {
   resolveOpeningMuntinGrid,
   muntinGridPositions,
@@ -93,12 +94,13 @@ export function typeDescription(type: TypeDefinition): string {
     .filter(Boolean)
     .join(" · ");
 }
-export function typeSizeLabel(type: TypeDefinition): string {
+export function typeSizeLabel(type: TypeDefinition, unit: DisplayLengthUnit = "mm"): string {
   const p = type.parameters;
-  if (p.section_mm) return p.section_mm.join(" × ") + " มม.";
-  if (p.size_mm) return p.size_mm.join(" × ") + " มม.";
-  if (p.width_mm && p.height_mm) return `${p.width_mm} × ${p.height_mm} มม.`;
-  return p.thickness_mm ? `หนา ${p.thickness_mm} มม.` : "";
+  const label = (value: number) => formatLengthMm(value, unit);
+  if (p.section_mm) return p.section_mm.map(label).join(" × ") + ` ${unit}`;
+  if (p.size_mm) return p.size_mm.map(label).join(" × ") + ` ${unit}`;
+  if (p.width_mm && p.height_mm) return `${label(p.width_mm)} × ${label(p.height_mm)} ${unit}`;
+  return p.thickness_mm ? `หนา ${label(p.thickness_mm)} ${unit}` : "";
 }
 export type OpeningPreviewPart =
   | "all"

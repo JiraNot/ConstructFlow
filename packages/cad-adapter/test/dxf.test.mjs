@@ -134,8 +134,17 @@ test("DXF exports hosted openings, both wall finish marks, and floor cutout ring
     voids_mm: [[[1500, 1000], [2500, 1000], [2500, 2000], [1500, 2000]]],
     thickness_mm: 120, topping_mm: 0, mark: "S1", level_id: "GF",
   });
+  project.objects.archFloor = object("archFloor", "architecture.floor", {
+    boundary_mm: [[0,0],[4000,0],[4000,3000],[0,3000]],
+    voids_mm: [[[1000,1000],[2000,1000],[2000,2000],[1000,2000]]], mark: "AF1",
+  });
+  project.objects.room = object("room", "architecture.room", {
+    boundary_mm: [[0,0],[4000,0],[4000,3000],[0,3000]], area_mm2: 12000000,
+    mark: "R1", number: "1", name: "ห้องนั่งเล่น",
+  });
   const dxf = exportProjectToDxf(project).dxfContent;
   assert.ok(dxf.includes("W2") && dxf.includes("W1"));
   assert.ok(dxf.includes("D1"));
-  assert.ok((dxf.match(/LWPOLYLINE/g) ?? []).length >= 3, "door leaf and both slab rings are vector outlines");
+  assert.ok((dxf.match(/LWPOLYLINE/g) ?? []).length >= 5, "door leaf, structural slab rings and architectural floor rings are vector outlines");
+  assert.ok(dxf.includes("ห้องนั่งเล่น") && dxf.includes("12.00 m2"), "room annotation and area are exported as DXF text");
 });

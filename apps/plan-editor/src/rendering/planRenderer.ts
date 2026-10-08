@@ -33,6 +33,7 @@ export interface UnderlayConfig {
   scale_mm_per_px: number
   opacity: number
   visible: boolean
+  rotation_deg?: number
 }
 
 export interface CalibrationOverlay {
@@ -85,6 +86,33 @@ export function renderPlanView(
     drawUnderlayImage(ctx, underlay, viewport)
   }
 
+  // Architectural finishes and room tags are separate semantic objects from structural slabs.
+  for (const obj of Object.values(project.objects)) {
+    const data = obj.module_data as Record<string, unknown>
+    if (obj.object_type === 'architecture.room_separator') {
+      const a=data.start_point_mm as [number,number],b=data.end_point_mm as [number,number]
+      if(a?.length===2&&b?.length===2){const [ax,ay]=worldToScreen(a,viewport),[bx,by]=worldToScreen(b,viewport);ctx.save();ctx.strokeStyle=isSelected(obj.id)?'#087cf0':'#f59e0b';ctx.lineWidth=isSelected(obj.id)?2:1.4;ctx.setLineDash([5,3]);ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke();ctx.restore()}
+      continue
+    }
+    if (obj.object_type === 'architecture.floor' || obj.object_type === 'architecture.room') {
+      const ring = data.boundary_mm as [number, number][] | undefined
+      if (!ring || ring.length < 3) continue
+      ctx.save(); ctx.beginPath()
+      ring.forEach((point,index)=>{const [x,y]=worldToScreen(point,viewport);if(index===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)})
+      ctx.closePath()
+      if(obj.object_type==='architecture.floor'){
+        ctx.fillStyle=isSelected(obj.id)?'rgba(5,150,105,.22)':'rgba(16,185,129,.10)';ctx.strokeStyle=isSelected(obj.id)?'#059669':'rgba(5,150,105,.55)';ctx.lineWidth=1
+        for(const raw of (Array.isArray(data.voids_mm)?data.voids_mm:[]) as [number,number][][]){ctx.moveTo(...worldToScreen(raw[0],viewport));raw.slice(1).forEach(p=>ctx.lineTo(...worldToScreen(p,viewport)));ctx.closePath()}
+        ctx.fill('evenodd');ctx.stroke()
+      }else{
+        ctx.fillStyle='rgba(148,163,184,.04)';ctx.fill();ctx.strokeStyle='#94a3b8';ctx.lineWidth=.8;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([])
+        const center:[number,number]=[ring.reduce((s,p)=>s+p[0],0)/ring.length,ring.reduce((s,p)=>s+p[1],0)/ring.length]
+        const [x,y]=worldToScreen(center,viewport);ctx.font='11px sans-serif';ctx.textAlign='center';ctx.fillStyle='#334155';ctx.fillText(`${String(data.number??'')} ${String(data.name??'Room')} · ${(Number(data.area_mm2??0)/1e6).toFixed(2)} m²`,x,y)
+      }
+      ctx.restore()
+    }
+  }
+
   // 3. Structural Grid Lines & Bubbles
   for (const out of constructionOutputs(sourceProject).filter(out=>!!project.objects[out.object_id])) {
     const phase=out.removed_phase==='demolition'?'demolition':out.phase
@@ -96,9 +124,28 @@ export function renderPlanView(
     const anchor=lines[0]?.[0];if(anchor && labelVisibility.structure){const [x,y]=worldToScreen([anchor[0],anchor[1]],viewport);ctx.font='11px sans-serif';const family=project.objects[out.object_id]?.object_type ?? '';const shape=family.endsWith('.ceiling')?'ellipse':'rect';queuePlanLabel(ctx,x+4,y-12,out.mark,String(ctx.strokeStyle),'#c7d3df',isSelected(out.object_id)?10:0,'#fbfdff',false,shape)}
     ctx.restore()
   }
+  const standaloneGrids = Object.values(project.objects).filter(isGridObject).filter(object => !object.module_data.system_id)
+  const autoGridTags = new Map<string, string>()
+  const toAlphaTag = (index: number) => {
+    let value = index + 1, tag = ''
+    while (value > 0) { value--; tag = String.fromCharCode(65 + value % 26) + tag; value = Math.floor(value / 26) }
+    return tag
+  }
+  for (const style of ['alpha', 'numeric'] as const) {
+    const group = standaloneGrids.filter(object => object.module_data.bubble_visible !== false && object.module_data.auto_tag !== false && (object.module_data.sequence_style === style || (object.module_data.sequence_style !== 'alpha' && object.module_data.sequence_style !== 'numeric' && (object.module_data.orientation === 'vertical' ? 'alpha' : 'numeric') === style)))
+      .sort((a, b) => {
+        const point = (object: typeof a) => object.module_data.start_point_mm && object.module_data.end_point_mm
+          ? [(object.module_data.start_point_mm[0] + object.module_data.end_point_mm[0]) / 2, (object.module_data.start_point_mm[1] + object.module_data.end_point_mm[1]) / 2]
+          : object.module_data.orientation === 'vertical' ? [object.module_data.position_mm, (object.module_data.extent_mm[0] + object.module_data.extent_mm[1]) / 2] : [(object.module_data.extent_mm[0] + object.module_data.extent_mm[1]) / 2, object.module_data.position_mm]
+        const pa = point(a), pb = point(b)
+        return (a.module_data.orientation === 'vertical' ? pa[0] - pb[0] || pa[1] - pb[1] : pa[1] - pb[1] || pa[0] - pb[0]) || a.id.localeCompare(b.id)
+      })
+    group.forEach((object, index) => autoGridTags.set(object.id, style === 'alpha' ? toAlphaTag(index) : String(index + 1)))
+  }
   for (const obj of Object.values(project.objects)) {
     if (isGridObject(obj)) {
-      drawStructuralGrid(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.grids)
+      const displayTag = obj.module_data.system_id ? obj.module_data.tag : obj.module_data.auto_tag === false ? obj.module_data.tag : autoGridTags.get(obj.id) ?? obj.module_data.tag
+      drawStructuralGrid(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.grids && obj.module_data.bubble_visible !== false, displayTag)
     }
   }
 
@@ -211,24 +258,26 @@ function drawUnderlayImage(
 
   const screenW = imgW * underlay.scale_mm_per_px * viewport.zoom
   const screenH = imgH * underlay.scale_mm_per_px * viewport.zoom
-
-  ctx.drawImage(underlay.image, sx, sy, screenW, screenH)
+  const rotation = -(underlay.rotation_deg ?? 0) * Math.PI / 180
+  ctx.translate(sx, sy)
+  ctx.rotate(rotation)
+  ctx.drawImage(underlay.image, 0, 0, screenW, screenH)
 
   // Subtle boundary outline
   ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)'
   ctx.lineWidth = 1
   ctx.setLineDash([6, 6])
-  ctx.strokeRect(sx, sy, screenW, screenH)
+  ctx.strokeRect(0, 0, screenW, screenH)
   ctx.setLineDash([])
 
   // Header badge
   ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'
-  ctx.fillRect(sx, sy - 20, 210, 20)
+  ctx.fillRect(0, -20, 210, 20)
   ctx.fillStyle = '#38bdf8'
   ctx.font = 'bold 10px monospace'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
-  ctx.fillText(`📐 Underlay (1px = ${underlay.scale_mm_per_px.toFixed(2)} mm)`, sx + 6, sy - 10)
+  ctx.fillText(`📐 Underlay (1px = ${underlay.scale_mm_per_px.toFixed(2)} mm)`, 6, -10)
 
   ctx.restore()
 }
@@ -239,7 +288,8 @@ function drawStructuralGrid(
   viewport: ViewportState,
   isSelected: boolean,
   isHovered: boolean,
-  showLabel: boolean
+  showLabel: boolean,
+  displayTag = obj.module_data.tag
 ) {
   const { tag, orientation, position_mm, extent_mm } = obj.module_data
   const extent = extent_mm || [-10000, 15000]
@@ -252,7 +302,16 @@ function drawStructuralGrid(
   let bubbleX = 0
   let bubbleY = 0
 
-  if (orientation === 'vertical') {
+  if (obj.module_data.start_point_mm && obj.module_data.end_point_mm) {
+    const [x1, y1] = worldToScreen(obj.module_data.start_point_mm, viewport)
+    const [x2, y2] = worldToScreen(obj.module_data.end_point_mm, viewport)
+    ctx.beginPath()
+    ctx.moveTo(x1, y1)
+    ctx.lineTo(x2, y2)
+    ctx.stroke()
+    bubbleX = x1
+    bubbleY = y1
+  } else if (orientation === 'vertical') {
     const [sX] = worldToScreen([position_mm, 0], viewport)
     const [, sY1] = worldToScreen([0, extent[0]], viewport)
     const [, sY2] = worldToScreen([0, extent[1]], viewport)
@@ -296,7 +355,7 @@ function drawStructuralGrid(
   ctx.font = 'bold 12px monospace'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(tag, bubbleX, bubbleY)
+  ctx.fillText(displayTag, bubbleX, bubbleY)
 
   ctx.restore()
 }

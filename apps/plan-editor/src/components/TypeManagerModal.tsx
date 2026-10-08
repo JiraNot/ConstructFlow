@@ -166,6 +166,7 @@ function CatalogDialog({
   onExecute,
   onRenamed,
 }: Props) {
+  const displayUnit = project.project.display_unit ?? "m";
   const initial = project.types.find((t) => t.id === initialTypeId);
   const [family, setFamily] = useState(
     initial?.object_type ?? initialFamily ?? "structure.column",
@@ -270,7 +271,7 @@ function CatalogDialog({
     (t) =>
       filter !== "designs" &&
       t.object_type === family &&
-      `${t.name} ${typeDescription(t)} ${typeSizeLabel(t)}`
+      `${t.name} ${typeDescription(t)} ${typeSizeLabel(t, displayUnit)}`
         .toLowerCase()
         .includes(query.trim().toLowerCase()) &&
       (filter === "used"
@@ -320,6 +321,7 @@ function CatalogDialog({
       key={key}
       name={key}
       value={editor!.parameters[key] ?? defaults[editor!.family]?.[key] ?? 0}
+      displayUnit={project.project.display_unit ?? 'm'}
       onChange={(value) => change(key, value)}
     />
   );
@@ -893,7 +895,7 @@ function CatalogDialog({
                 onSelectPart={opening ? selectPart : undefined}
               />
               <h3>{typeDescription(preview)}</h3>
-              <p>{typeSizeLabel(preview)}</p>
+              <p>{typeSizeLabel(preview, displayUnit)}</p>
               <p className="cf-help">
                 {opening
                   ? "เส้นวัดเป็นขนาดรวมและส่วนแบ่งรวมกรอบ ไม่ใช่ระยะเปิดสุทธิ · ใช้กับโมเดลเมื่อบันทึก"
@@ -1040,7 +1042,7 @@ function CatalogDialog({
                       <TypeThumbnail type={type} />
                       <strong>{typeDescription(type)}</strong>
                       <span>
-                        {type.name} · {typeSizeLabel(type)}
+                        {type.name} · {typeSizeLabel(type, displayUnit)}
                       </span>
                       <small>ใช้ในแบบ {usage.get(type.id) ?? 0} ชิ้น</small>
                     </button>
@@ -1093,7 +1095,7 @@ function CatalogDialog({
                 <>
                   <strong>{chosen.name}</strong>
                   <p>
-                    {typeSizeLabel(chosen)} · ใช้ในแบบ{" "}
+                    {typeSizeLabel(chosen, displayUnit)} · ใช้ในแบบ{" "}
                     {usage.get(chosen.id) ?? 0} ชิ้น
                   </p>
                 </>

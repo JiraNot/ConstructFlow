@@ -39,6 +39,9 @@ export interface GridModuleData {
   orientation: 'vertical' | 'horizontal'
   position_mm: number
   extent_mm: [number, number]
+  /** Optional finite reference-line geometry; used for individually drawn, angled grids. */
+  start_point_mm?: Point2Mm
+  end_point_mm?: Point2Mm
   /** Shared identity and parameters for grids created as one editable system. */
   system_id?: string
   system_index?: number
@@ -46,6 +49,11 @@ export interface GridModuleData {
   system_spacing_mm?: number
   system_count?: number
   system_first_tag?: string
+  system_positions_mm?: number[]
+  /** Individual reference grid bubble and label sequencing controls. */
+  bubble_visible?: boolean
+  auto_tag?: boolean
+  sequence_style?: 'auto' | 'alpha' | 'numeric'
 }
 
 export interface ColumnModuleData {
@@ -97,6 +105,8 @@ export interface BeamModuleData {
   section_mm: [number, number] // [width, depth] in mm, e.g. [200, 400]
   span_mm: number // computed length in mm, e.g. 4000
   level_id: string
+  /** Vertical placement from the referenced level; positive is upward. */
+  base_offset_mm?: number
   start_column_id?: string // optional connected column UUID
   end_column_id?: string // optional connected column UUID
   material: 'reinforced_concrete' | 'steel' | 'timber' | 'generic' | string
@@ -207,6 +217,36 @@ export interface SlabModuleData extends CatalogPlacement {
   material: string
   slope_ratio?: number
   drain_direction_deg?: number
+}
+export interface RoomModuleData extends CatalogPlacement {
+  name: string
+  number: string
+  boundary_mm: Point2Mm[]
+  area_mm2: number
+  boundary_source: 'walls' | 'separation_lines' | 'manual'
+  finish_floor_id?: string
+  ceiling_id?: string
+}
+export interface RoomSeparatorModuleData extends CatalogPlacement { start_point_mm: Point2Mm; end_point_mm: Point2Mm }
+export interface ArchitecturalFloorModuleData extends CatalogPlacement {
+  boundary_mm: Point2Mm[]
+  voids_mm: Point2Mm[][]
+  elevation_mm: number
+  elevation_offset_mm: number
+  thickness_mm: number
+  finish_layers: Array<{ material: string; thickness_mm: number; mark?: string }>
+  room_id?: string
+  follows_room_boundary: boolean
+}
+export interface CeilingModuleData extends CatalogPlacement {
+  boundary_mm: Point2Mm[]
+  voids_mm: Point2Mm[][]
+  elevation_mm: number
+  elevation_offset_mm: number
+  thickness_mm: number
+  grid_mm?: Point2Mm
+  room_id?: string
+  follows_room_boundary: boolean
 }
 export interface RebarSpacingZone { start_mm:number; end_mm:number; spacing_mm:number }
 export interface RebarModuleData extends CatalogPlacement {

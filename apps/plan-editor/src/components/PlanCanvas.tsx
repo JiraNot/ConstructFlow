@@ -10,6 +10,9 @@ import {
   isWindowObject,
   DoorHanding,
   PlacementReference,
+  formatLengthMm,
+  parseLengthMm,
+  DisplayLengthUnit,
 } from '@constructflow/project-model'
 import { projectPointToWallOffsetMm } from '@constructflow/architecture-engine'
 import { getPlanVisibleObjects } from '@constructflow/representation-engine'
@@ -25,12 +28,13 @@ import {
 } from '../viewport/viewportTransform.js'
 import { constrainPointToReference, DEFAULT_SNAP_MODES, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, snapPoint, snapToWallHost, WallHostSnapResult } from '@constructflow/snapping-engine'
 import { renderPlanView, PlacementGhost, UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
-import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
+import { Maximize2, Pencil, Trash2, ZoomIn, ZoomOut, PlusCircle } from 'lucide-react'
 
-const PLACEMENT_DIMENSION_TOOLS = new Set<ToolType>(['column', 'foundation', 'beam', 'wall', 'door', 'window', 'grid', 'stair', 'slab'])
+const PLACEMENT_DIMENSION_TOOLS = new Set<ToolType>(['column', 'foundation', 'beam', 'wall', 'door', 'window', 'gridSystem', 'gridCopy', 'stair', 'slab'])
 
 interface PlanCanvasProps {
   project: ProjectDocument
+  displayUnit: DisplayLengthUnit
   activeTool: ToolType
   activeColumnTypeMark: string
   activeFoundationTypeMark: string
@@ -47,6 +51,7 @@ interface PlanCanvasProps {
   selectedIds?: string[]
   underlay?: UnderlayConfig | null
   onSelectObject: (id: string | null) => void
+  onRequestEditProperties?: () => void
   onSelectionChange?: (ids: string[], primaryId: string | null) => void
   onDeleteObjects?: (ids: string[]) => void
   onCommitColumn: (location_mm: [number, number]) => void
@@ -56,19 +61,30 @@ interface PlanCanvasProps {
   onCommitDoor: (wallId: string, point_mm: [number, number], offset_mm: number, handing: DoorHanding) => void
   onCommitWindow: (wallId: string, point_mm: [number, number], offset_mm: number) => void
   onCommitSlab: (boundary_mm: [number, number][]) => void
+  onCommitArchitecturalFloor?: (boundary_mm: [number, number][]) => void
+  onCommitCeiling?: (boundary_mm: [number, number][]) => void
+  onCommitRoomSeparator?: (start: [number, number], end: [number, number]) => void
   onCommitSlabVoid: (hostId: string, boundary_mm: [number, number][]) => void
-  onCommitGrid: (orientation: 'vertical' | 'horizontal', position_mm: number, system: { spacing_mm: number; count: number; first_tag: string }) => void
+  onCommitGrid: (tag: string, start_mm: [number, number], end_mm: [number, number], sequenceStyle?: 'auto' | 'alpha' | 'numeric') => void
+  onCommitGridSystem: (origin_mm: [number, number], xIntervals_mm: number[], yIntervals_mm: number[], xFirstTag: string, yFirstTag: string) => void
+  onModifyGrid?: (id: string, changes: { start_point_mm?: [number, number]; end_point_mm?: [number, number] }) => void
+  onCopyGrid?: (sourceId: string, start: [number, number], end: [number, number]) => void
+  onActivateTool?: (tool: ToolType) => void
   onCommitStair?: (location_mm: [number, number]) => void
   onMoveColumn: (id: string, newLocation_mm: [number, number]) => void
   onMoveWall: (id: string, delta_mm: [number, number]) => void
   onMoveOpening: (id: string, offset_along_wall_mm: number) => void
   onFlipDoorHanding?: (doorId: string) => void
-  onStartCalibrationModal?: (measuredDist_mm: number) => void
+  onStartCalibrationModal?: (measuredDist_mm: number, point1_mm: [number, number], point2_mm: [number, number]) => void
   onCursorChange: (coords_mm: [number, number], snapKind: string) => void
 }
 
 function getPlanObjectBounds(object: ProjectDocument['objects'][string]): [number, number, number, number] | null {
   if (isGridObject(object)) {
+    if (object.module_data.start_point_mm && object.module_data.end_point_mm) {
+      const [a, b] = [object.module_data.start_point_mm, object.module_data.end_point_mm]
+      return [Math.min(a[0], b[0]) - 50, Math.min(a[1], b[1]) - 50, Math.max(a[0], b[0]) + 50, Math.max(a[1], b[1]) + 50]
+    }
     const [a, b] = object.module_data.extent_mm
     return object.module_data.orientation === 'vertical'
       ? [object.module_data.position_mm - 1, Math.min(a, b), object.module_data.position_mm + 1, Math.max(a, b)]
@@ -98,13 +114,23 @@ function getPlanObjectBounds(object: ProjectDocument['objects'][string]): [numbe
     Math.max(...points.map(point => point[0])) + radius, Math.max(...points.map(point => point[1])) + radius]
 }
 
+function gridLineEndpoints(grid: { module_data: { orientation: 'vertical' | 'horizontal'; position_mm: number; extent_mm: [number, number]; start_point_mm?: [number, number]; end_point_mm?: [number, number] } }): [[number, number], [number, number]] {
+  const data = grid.module_data
+  if (data.start_point_mm && data.end_point_mm) return [data.start_point_mm, data.end_point_mm]
+  return data.orientation === 'vertical' ? [[data.position_mm, data.extent_mm[0]], [data.position_mm, data.extent_mm[1]]] : [[data.extent_mm[0], data.position_mm], [data.extent_mm[1], data.position_mm]]
+}
+
 function findTemporaryDimensionRefs(point: [number, number], project: ProjectDocument, skipObjectId?: string, mode: 'center' | 'edge' = 'center') {
   const xs: number[] = [], ys: number[] = []
   for (const object of Object.values(project.objects)) {
     if (object.id === skipObjectId) continue
     const data = object.module_data as unknown as Record<string, unknown>
     if (isGridObject(object)) {
-      ;(object.module_data.orientation === 'vertical' ? xs : ys).push(object.module_data.position_mm)
+      if (object.module_data.start_point_mm && object.module_data.end_point_mm) {
+        const [a, b] = [object.module_data.start_point_mm, object.module_data.end_point_mm]
+        const values = mode === 'center' ? [[(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]] : [a, b]
+        for (const [x, y] of values) { xs.push(x); ys.push(y) }
+      } else (object.module_data.orientation === 'vertical' ? xs : ys).push(object.module_data.position_mm)
       continue
     }
     if (isDoorObject(object) || isWindowObject(object)) {
@@ -189,7 +215,7 @@ function openingDimensionPoint(wallSnap: WallHostSnapResult, refs: { refX?: numb
   return [center[0] - direction * ux * openingWidthMm / 2, center[1] - direction * uy * openingWidthMm / 2]
 }
 
-function drawTemporaryDimensions(ctx: CanvasRenderingContext2D, point: [number, number], project: ProjectDocument, viewport: ViewportState, skipObjectId?: string, axisOnly?: 'x' | 'y', suppliedRefs?: { refX?: number; refY?: number }, mode: 'center' | 'edge' = 'center') {
+function drawTemporaryDimensions(ctx: CanvasRenderingContext2D, point: [number, number], project: ProjectDocument, viewport: ViewportState, skipObjectId?: string, axisOnly?: 'x' | 'y', suppliedRefs?: { refX?: number; refY?: number }, mode: 'center' | 'edge' = 'center', displayUnit: DisplayLengthUnit = 'm') {
   const refs = findTemporaryDimensionRefs(point, project, skipObjectId, mode)
   const refX = suppliedRefs?.refX ?? refs.refX
   const refY = suppliedRefs?.refY ?? refs.refY
@@ -205,18 +231,18 @@ function drawTemporaryDimensions(ctx: CanvasRenderingContext2D, point: [number, 
     const [x1] = worldToScreen([refX, point[1]], viewport)
     ctx.beginPath(); ctx.moveTo(x1, py - 16); ctx.lineTo(px, py - 16); ctx.stroke()
     ctx.beginPath(); ctx.moveTo(x1, py - 21); ctx.lineTo(x1, py - 9); ctx.moveTo(px, py - 21); ctx.lineTo(px, py - 9); ctx.stroke()
-    label(`${Math.abs(point[0] - refX).toFixed(0)} mm`, (x1 + px) / 2, py - 28)
+    label(`${formatLengthMm(Math.abs(point[0] - refX), displayUnit)} ${displayUnit}`, (x1 + px) / 2, py - 28)
   }
   if (refY !== undefined && axisOnly !== 'x') {
     const [, y1] = worldToScreen([point[0], refY], viewport)
     ctx.beginPath(); ctx.moveTo(px + 16, y1); ctx.lineTo(px + 16, py); ctx.stroke()
     ctx.beginPath(); ctx.moveTo(px + 10, y1); ctx.lineTo(px + 22, y1); ctx.moveTo(px + 10, py); ctx.lineTo(px + 22, py); ctx.stroke()
-    label(`${Math.abs(point[1] - refY).toFixed(0)} mm`, px + 54, (y1 + py) / 2)
+    label(`${formatLengthMm(Math.abs(point[1] - refY), displayUnit)} ${displayUnit}`, px + 54, (y1 + py) / 2)
   }
   ctx.restore()
 }
 
-function drawTapeMeasure(ctx: CanvasRenderingContext2D, start: [number, number], end: [number, number], viewport: ViewportState, complete: boolean) {
+function drawTapeMeasure(ctx: CanvasRenderingContext2D, start: [number, number], end: [number, number], viewport: ViewportState, complete: boolean, displayUnit: DisplayLengthUnit) {
   const [x1, y1] = worldToScreen(start, viewport), [x2, y2] = worldToScreen(end, viewport)
   const distanceMm = Math.hypot(end[0] - start[0], end[1] - start[1])
   const angle = Math.atan2(y2 - y1, x2 - x1)
@@ -232,7 +258,7 @@ function drawTapeMeasure(ctx: CanvasRenderingContext2D, start: [number, number],
     ctx.beginPath(); ctx.moveTo(x - nx * 6, y - ny * 6); ctx.lineTo(x + nx * 6, y + ny * 6); ctx.stroke()
     ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill()
   }
-  const text = `${Math.round(distanceMm).toLocaleString()} mm  ·  ${(distanceMm / 1000).toFixed(3)} m`
+  const text = `${formatLengthMm(distanceMm, displayUnit)} ${displayUnit}`
   ctx.font = '600 11px sans-serif'
   const width = ctx.measureText(text).width + 12
   const midX = (x1 + x2) / 2, midY = (y1 + y2) / 2 - 12
@@ -244,6 +270,7 @@ function drawTapeMeasure(ctx: CanvasRenderingContext2D, start: [number, number],
 
 export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   project,
+  displayUnit,
   activeTool,
   activeColumnTypeMark,
   activeFoundationTypeMark,
@@ -260,6 +287,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   selectedIds = selectedId ? [selectedId] : [],
   underlay,
   onSelectObject,
+  onRequestEditProperties,
   onSelectionChange,
   onDeleteObjects,
   onCommitColumn,
@@ -269,8 +297,15 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onCommitDoor,
   onCommitWindow,
   onCommitSlab,
+  onCommitArchitecturalFloor,
+  onCommitCeiling,
+  onCommitRoomSeparator,
   onCommitSlabVoid,
   onCommitGrid,
+  onCommitGridSystem,
+  onModifyGrid,
+  onCopyGrid,
+  onActivateTool,
   onCommitStair,
   onMoveColumn,
   onMoveWall,
@@ -283,10 +318,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hasInitialFitRef = useRef(false)
   const planVisibleObjects = useMemo(() => getPlanVisibleObjects(project), [project])
+  const planVisibleIds = useMemo(() => new Set(planVisibleObjects.map(object => object.id)), [planVisibleObjects])
+  const semanticPlanObjects = useMemo(() => Object.values(project.objects).filter(object => object.object_type === 'architecture.room' || object.object_type === 'architecture.floor' || object.object_type === 'architecture.ceiling' || object.object_type === 'architecture.room_separator'), [project.objects])
   const planProject = useMemo<ProjectDocument>(() => ({
     ...project,
-    objects: Object.fromEntries(planVisibleObjects.map(object => [object.id, object])) as ProjectDocument['objects'],
-  }), [project, planVisibleObjects])
+    objects: Object.fromEntries([...planVisibleObjects, ...semanticPlanObjects.filter(object => !planVisibleIds.has(object.id))].map(object => [object.id, object])) as ProjectDocument['objects'],
+  }), [project, planVisibleObjects, planVisibleIds, semanticPlanObjects])
 
   // Viewport state: 0.08 zoom = 1000mm -> 80px on screen.
   const [viewport, setViewport] = useState<ViewportState>({
@@ -295,10 +332,14 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     zoom: 0.08,
   })
   const [placementReference, setPlacementReference] = useState<'centerline' | 'left_face' | 'right_face'>('centerline')
-  const [gridOrientation, setGridOrientation] = useState<'vertical' | 'horizontal'>('vertical')
-  const [gridSpacing, setGridSpacing] = useState('4000')
-  const [gridCount, setGridCount] = useState('4')
-  const [gridFirstTag, setGridFirstTag] = useState('A')
+  const [gridStartPoint, setGridStartPoint] = useState<[number, number] | null>(null)
+  const [gridSequenceStyle, setGridSequenceStyle] = useState<'auto' | 'alpha' | 'numeric'>('auto')
+  const [gridCopySourceId, setGridCopySourceId] = useState<string | null>(null)
+  const [gridXIntervals, setGridXIntervals] = useState(() => [4000, 4000, 4000].map(value => formatLengthMm(value, displayUnit)).join(', '))
+  const [gridYIntervals, setGridYIntervals] = useState(() => [3000, 3000].map(value => formatLengthMm(value, displayUnit)).join(', '))
+  const [gridXFirstTag, setGridXFirstTag] = useState('A')
+  const [gridYFirstTag, setGridYFirstTag] = useState('1')
+  const [gridSystemError, setGridSystemError] = useState('')
   const [snapModes, setSnapModes] = useState<SnapMode[]>(DEFAULT_SNAP_MODES)
   const [lineConstraintMode, setLineConstraintMode] = useState<'auto' | 'none' | 'parallel' | 'perpendicular'>('auto')
   const [drawLengthMeters, setDrawLengthMeters] = useState('')
@@ -308,21 +349,49 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [dimensionAnchorY, setDimensionAnchorY] = useState<number | null>(null)
   const [dimensionKeyboardAxis, setDimensionKeyboardAxis] = useState<'x' | 'y'>('x')
   const [dimensionReferenceMode, setDimensionReferenceMode] = useState<'center' | 'edge'>('center')
+  const previousDisplayUnit = useRef(displayUnit)
   const enabledSnapModes = useMemo(() => new Set(snapModes), [snapModes])
+
+  useEffect(() => {
+    const previousUnit = previousDisplayUnit.current
+    if (previousUnit === displayUnit) return
+    const convert = (value: string) => value.split(/[,;]+/).map(part => part.trim()).filter(Boolean).map(part => {
+      const mm = parseLengthMm(part, previousUnit)
+      return mm === null ? part : formatLengthMm(mm, displayUnit)
+    }).join(', ')
+    setGridXIntervals(convert(gridXIntervals))
+    setGridYIntervals(convert(gridYIntervals))
+    setDimensionInputX(value => value.trim() ? formatLengthMm(parseLengthMm(value, previousUnit) ?? 0, displayUnit) : '')
+    setDimensionInputY(value => value.trim() ? formatLengthMm(parseLengthMm(value, previousUnit) ?? 0, displayUnit) : '')
+    setDrawLengthMeters(value => value.trim() ? formatLengthMm(parseLengthMm(value, previousUnit) ?? 0, displayUnit) : '')
+    previousDisplayUnit.current = displayUnit
+  }, [displayUnit])
 
   const applyPlacementDimensions = (point: [number, number], refs: { refX?: number; refY?: number }, rawPoint: [number, number] = point): [number, number] => {
     const result: [number, number] = [...point]
     for (const axis of ['x', 'y'] as const) {
       const valueText = axis === 'x' ? dimensionInputX : dimensionInputY
       const anchor = axis === 'x' ? dimensionAnchorX ?? refs.refX : dimensionAnchorY ?? refs.refY
-      const value = Number(valueText)
-      if (!valueText.trim() || anchor === undefined || anchor === null || !Number.isFinite(value) || value < 0) continue
+      const value = parseLengthMm(valueText, displayUnit)
+      if (!valueText.trim() || anchor === undefined || anchor === null || value === null || value < 0) continue
       const coordinate = axis === 'x' ? rawPoint[0] : rawPoint[1]
       const sign = coordinate < anchor ? -1 : 1
       if (axis === 'x') result[0] = Math.round(anchor + sign * value)
       else result[1] = Math.round(anchor + sign * value)
     }
     return result
+  }
+
+  const constrainGridCopyToParallelOffset = (point: [number, number], source: Parameters<typeof gridLineEndpoints>[0]): [number, number] => {
+    const [start, end] = gridLineEndpoints(source)
+    const dx = end[0] - start[0], dy = end[1] - start[1]
+    const length = Math.hypot(dx, dy)
+    if (length < 1) return point
+    // Shift constrains the copy displacement to the normal of the source line,
+    // so the new grid remains parallel and only its spacing changes.
+    const nx = -dy / length, ny = dx / length
+    const offset = (point[0] - start[0]) * nx + (point[1] - start[1]) * ny
+    return [Math.round(start[0] + nx * offset), Math.round(start[1] + ny * offset)]
   }
 
   const clearDimensionOverrides = () => {
@@ -344,8 +413,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const point: [number, number] = [...wallSnap.point_mm]
     const valueText = refs.axis === 'x' ? dimensionInputX : dimensionInputY
     const anchor = refs.axis === 'x' ? dimensionAnchorX ?? refs.refX : dimensionAnchorY ?? refs.refY
-    const value = Number(valueText)
-    if (valueText.trim() && anchor !== undefined && Number.isFinite(value) && value >= 0) {
+    const value = parseLengthMm(valueText, displayUnit)
+    if (valueText.trim() && anchor !== undefined && value !== null && value >= 0) {
       const rawCoordinate = refs.axis === 'x' ? rawPoint[0] : rawPoint[1]
       const direction = rawCoordinate < anchor ? -1 : 1
       const center = anchor + direction * (value + openingWidthMm / 2)
@@ -400,7 +469,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       if (Math.abs(dx) >= Math.abs(dy)) dy = 0
       else dx = 0
     }
-    const targetLengthMm = Number.parseFloat(drawLengthMeters) * 1000
+    const targetLengthMm = parseLengthMm(drawLengthMeters, displayUnit) ?? Number.NaN
     if (Number.isFinite(targetLengthMm) && targetLengthMm > 0) {
       const length = Math.hypot(dx, dy)
       if (length > 0) {
@@ -416,9 +485,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       point_mm,
       kind: constraintApplied ? constrainedSnap.kind : snap.kind,
       target_id: constraintApplied ? reference?.target_id : changed ? undefined : snap.target_id,
-      description: `${constraintApplied ? constrainedSnap.description : snap.description}${!lockAxis && lineConstraintMode !== 'none' && !reference ? ' · ไม่พบแนวอ้างอิงใกล้จุดเริ่ม' : ''}${lineConstraintMode === 'auto' && reference && !inferredMode && !lockAxis ? ' · Auto: เล็งใกล้แนวขนาน/ตั้งฉากเพื่อจัดแนว' : ''}${lockAxis ? ' · Ortho' : ''}${Number.isFinite(targetLengthMm) && targetLengthMm > 0 ? ` · ${(targetLengthMm / 1000).toFixed(2)} m` : ''}`,
+      description: `${constraintApplied ? constrainedSnap.description : snap.description}${!lockAxis && lineConstraintMode !== 'none' && !reference ? ' · ไม่พบแนวอ้างอิงใกล้จุดเริ่ม' : ''}${lineConstraintMode === 'auto' && reference && !inferredMode && !lockAxis ? ' · Auto: เล็งใกล้แนวขนาน/ตั้งฉากเพื่อจัดแนว' : ''}${lockAxis ? ' · Ortho' : ''}${Number.isFinite(targetLengthMm) && targetLengthMm > 0 ? ` · ${formatLengthMm(targetLengthMm, displayUnit)} ${displayUnit}` : ''}`,
     }
-  }, [drawLengthMeters, lineConstraintMode, viewport.zoom])
+  }, [drawLengthMeters, lineConstraintMode, viewport.zoom, displayUnit])
 
   const fitView = useCallback(() => {
     const container = containerRef.current
@@ -514,6 +583,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [activeSnap, setActiveSnap] = useState<SnapResult | null>(null)
   const [activeWallSnap, setActiveWallSnap] = useState<WallHostSnapResult | null>(null)
   const [isPanning, setIsPanning] = useState(false)
+  const [objectContextMenu, setObjectContextMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [selectionBox, setSelectionBox] = useState<{ start: [number, number]; end: [number, number] } | null>(null)
   const panStartRef = useRef<[number, number]>([0, 0])
   const selectionStartRef = useRef<[number, number] | null>(null)
@@ -531,12 +601,14 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   // Direct-manipulation state for objects whose geometry can move in plan.
   const [draggingObject, setDraggingObject] = useState<{
     id: string
-    kind: 'column' | 'wall' | 'opening'
+    kind: 'column' | 'wall' | 'opening' | 'grid'
     startWorldMm: [number, number]
     startScreenPx: [number, number]
     hostStartMm?: [number, number]
     hostEndMm?: [number, number]
     openingWidthMm?: number
+    gridStartMm?: [number, number]
+    gridEndMm?: [number, number]
   } | null>(null)
 
   // 2-click beam placement state (start node -> end node)
@@ -544,6 +616,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
   // 2-click wall placement state (start node -> end node)
   const [wallStartNode, setWallStartNode] = useState<{ point_mm: [number, number]; reference?: LinearReference } | null>(null)
+  const [roomSeparatorStart, setRoomSeparatorStart] = useState<[number,number] | null>(null)
   const [slabBoundary, setSlabBoundary] = useState<[number, number][]>([])
 
   // Calibration state (P1 -> mouse move -> P2 -> modal)
@@ -561,7 +634,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     if (activeTool !== 'wall') {
       setWallStartNode(null)
     }
-    if (activeTool !== 'slab') setSlabBoundary([])
+    if (activeTool !== 'roomSeparator') setRoomSeparatorStart(null)
+    if (activeTool !== 'grid') setGridStartPoint(null)
+    if (activeTool !== 'gridCopy') setGridCopySourceId(null)
+    if (!['slab','slabVoid','archFloor','ceiling'].includes(activeTool)) setSlabBoundary([])
     if (activeTool !== 'calibrate') {
       setCalibrationP1(null)
       setCalibrationMousePoint(null)
@@ -600,9 +676,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           }
         }
       } else if (e.key === 'Escape') {
+        setObjectContextMenu(null)
+        if (activeTool === 'grid') setGridStartPoint(null)
         if (activeTool === 'beam') setBeamStartNode(null)
         if (activeTool === 'wall') setWallStartNode(null)
-        if (activeTool === 'slab' || activeTool === 'slabVoid') setSlabBoundary([])
+        if (activeTool === 'roomSeparator') setRoomSeparatorStart(null)
+      if (activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling') setSlabBoundary([])
         setDrawLengthMeters('')
       }
     }
@@ -728,7 +807,25 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       labelMode,
       labelVisibility,
     )
-    if (activeTool === 'measure' && tapeMeasure) drawTapeMeasure(ctx, tapeMeasure.start, tapeMeasure.end, viewport, tapeMeasure.complete)
+    if (activeTool === 'grid' && gridStartPoint && activeSnap) {
+      const [x1, y1] = worldToScreen(gridStartPoint, viewport)
+      const [x2, y2] = worldToScreen(activeSnap.point_mm, viewport)
+      ctx.save(); ctx.strokeStyle = '#0284c7'; ctx.lineWidth = 1.5; ctx.setLineDash([7, 4])
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke()
+      ctx.setLineDash([]); ctx.fillStyle = '#fff'; ctx.strokeStyle = '#0284c7'
+      for (const [x, y] of [[x1, y1], [x2, y2]]) { ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke() }
+      ctx.restore()
+    }
+    if (activeTool === 'gridCopy' && gridCopySourceId && activeSnap) {
+      const source = planProject.objects[gridCopySourceId]
+      if (source && isGridObject(source)) {
+        const [start, end] = gridLineEndpoints(source)
+      const dest = activeSnap.point_mm
+        const a = worldToScreen(dest, viewport), b = worldToScreen([end[0] + dest[0] - start[0], end[1] + dest[1] - start[1]], viewport)
+        ctx.save(); ctx.strokeStyle = '#0284c7'; ctx.lineWidth = 1.5; ctx.setLineDash([7, 4]); ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke(); ctx.restore()
+      }
+    }
+    if (activeTool === 'measure' && tapeMeasure) drawTapeMeasure(ctx, tapeMeasure.start, tapeMeasure.end, viewport, tapeMeasure.complete, displayUnit)
     if (activeSnap && PLACEMENT_DIMENSION_TOOLS.has(activeTool)) {
       const openingAxis = activeWallSnap
         ? Math.abs(activeWallSnap.wall_end_mm[0] - activeWallSnap.wall_start_mm[0]) >= Math.abs(activeWallSnap.wall_end_mm[1] - activeWallSnap.wall_start_mm[1]) ? 'x' : 'y'
@@ -738,7 +835,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         ? Number(project.types.find(type => type.object_type === (activeTool === 'door' ? 'door_window.door' : 'door_window.window') && type.name.toLowerCase() === (activeTool === 'door' ? activeDoorTypeMark : activeWindowTypeMark).toLowerCase())?.parameters?.width_mm ?? (activeTool === 'door' ? 800 : 1200))
         : 0
       const dimensionPoint = openingRefs && activeWallSnap ? openingDimensionPoint(activeWallSnap, openingRefs, openingWidth) : activeSnap.point_mm
-      drawTemporaryDimensions(ctx, dimensionPoint, planProject, viewport, activeWallSnap?.wall_id, openingAxis, openingRefs, dimensionReferenceMode)
+      const copySource = activeTool === 'gridCopy' && gridCopySourceId ? planProject.objects[gridCopySourceId] : undefined
+      const copyStart = copySource && isGridObject(copySource) ? gridLineEndpoints(copySource)[0] : undefined
+      drawTemporaryDimensions(ctx, dimensionPoint, planProject, viewport, activeWallSnap?.wall_id, openingAxis, copyStart ? { refX: copyStart[0], refY: copyStart[1] } : openingRefs, dimensionReferenceMode, displayUnit)
     }
     if (selectionBox) {
       const left = Math.min(selectionBox.start[0], selectionBox.end[0]), top = Math.min(selectionBox.start[1], selectionBox.end[1])
@@ -746,10 +845,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       ctx.fillRect(left, top, Math.abs(selectionBox.end[0] - selectionBox.start[0]), Math.abs(selectionBox.end[1] - selectionBox.start[1]))
       ctx.strokeRect(left, top, Math.abs(selectionBox.end[0] - selectionBox.start[0]), Math.abs(selectionBox.end[1] - selectionBox.start[1])); ctx.restore()
     }
-    if ((activeTool === 'slab' || activeTool === 'slabVoid') && slabBoundary.length > 0) {
+    if ((activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling') && slabBoundary.length > 0) {
       ctx.save()
-      ctx.strokeStyle = activeTool === 'slabVoid' ? '#dc2626' : '#0284c7'
-      ctx.fillStyle = activeTool === 'slabVoid' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(14, 165, 233, 0.12)'
+      ctx.strokeStyle = activeTool === 'slabVoid' ? '#dc2626' : activeTool === 'ceiling' ? '#7c3aed' : activeTool === 'archFloor' ? '#059669' : '#0284c7'
+      ctx.fillStyle = activeTool === 'slabVoid' ? 'rgba(239, 68, 68, 0.12)' : activeTool === 'ceiling' ? 'rgba(124, 58, 237, 0.12)' : 'rgba(14, 165, 233, 0.12)'
       ctx.lineWidth = 1.5
       ctx.setLineDash([6, 4])
       ctx.beginPath()
@@ -770,6 +869,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
   }, [
     project,
+    displayUnit,
     labelMode,
     labelVisibility,
     planProject,
@@ -779,6 +879,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     activeSnap,
     activeWallSnap,
     activeTool,
+    gridStartPoint,
+    gridCopySourceId,
+    dimensionInputX,
+    dimensionInputY,
+    dimensionAnchorX,
+    dimensionAnchorY,
     activeColumnTypeMark,
     activeFoundationTypeMark,
     activeBeamTypeMark,
@@ -952,10 +1058,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       if (isGridObject(obj)) {
         const { orientation, position_mm } = obj.module_data
         const tol = 12 / viewport.zoom
-        if (orientation === 'vertical' && Math.abs(wx - position_mm) <= tol) {
-          return obj.id
-        }
-        if (orientation === 'horizontal' && Math.abs(wy - position_mm) <= tol) {
+        const start = obj.module_data.start_point_mm ?? (orientation === 'vertical' ? [position_mm, obj.module_data.extent_mm[0]] : [obj.module_data.extent_mm[0], position_mm])
+        const end = obj.module_data.end_point_mm ?? (orientation === 'vertical' ? [position_mm, obj.module_data.extent_mm[1]] : [obj.module_data.extent_mm[1], position_mm])
+        const dx = end[0] - start[0], dy = end[1] - start[1], lengthSq = dx * dx + dy * dy
+        const t = lengthSq ? Math.max(0, Math.min(1, ((wx - start[0]) * dx + (wy - start[1]) * dy) / lengthSq)) : 0
+        const distance = Math.hypot(wx - start[0] - t * dx, wy - start[1] - t * dy)
+        if (distance <= tol) {
           return obj.id
         }
       }
@@ -965,6 +1073,19 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       const near=(a:number[],b:number[])=>{const dx=b[0]-a[0],dy=b[1]-a[1],len=dx*dx+dy*dy,t=len?Math.max(0,Math.min(1,((wx-a[0])*dx+(wy-a[1])*dy)/len)):0;return Math.hypot(wx-a[0]-t*dx,wy-a[1]-t*dy)<12/viewport.zoom}
       if(out.paths.some(path=>path.slice(1).some((v,i)=>near(path[i],v))))return out.object_id
       for(const tr of out.meshes){const signs=tr.map((a,i)=>{const b=tr[(i+1)%3];return (b[0]-a[0])*(wy-a[1])-(b[1]-a[1])*(wx-a[0])});if(Math.abs((tr[1][0]-tr[0][0])*(tr[2][1]-tr[0][1])-(tr[1][1]-tr[0][1])*(tr[2][0]-tr[0][0]))>1&& (signs.every(v=>v>=0)||signs.every(v=>v<=0)))return out.object_id}
+    }
+    for(const object of [...pickObjects].reverse()){
+      const data=object.module_data as Record<string,unknown>
+      if(object.object_type==='architecture.room_separator'){
+        const a=data.start_point_mm as number[],b=data.end_point_mm as number[];if(!a||!b)continue
+        const l2=(b[0]-a[0])**2+(b[1]-a[1])**2,t=l2?Math.max(0,Math.min(1,((wx-a[0])*(b[0]-a[0])+(wy-a[1])*(b[1]-a[1]))/l2)):0
+        if(Math.hypot(wx-a[0]-t*(b[0]-a[0]),wy-a[1]-t*(b[1]-a[1]))<Math.max(80,10/viewport.zoom))return object.id
+      }
+      if(['architecture.room','architecture.floor','architecture.ceiling'].includes(object.object_type)){
+        const ring=data.boundary_mm as number[][]|undefined;if(!ring?.length)continue
+        let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const [xi,yi]=ring[i],[xj,yj]=ring[j];if(((yi>wy)!==(yj>wy))&&(wx<(xj-xi)*(wy-yi)/(yj-yi)+xi))inside=!inside}
+        if(inside)return object.id
+      }
     }
     return null
   }
@@ -1068,9 +1189,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes)
       if (activeTool === 'beam' && beamStartNode) snap = constrainLineSnap(snap, rawWorld, beamStartNode.point_mm, e.shiftKey, beamStartNode.reference)
       if (activeTool === 'wall' && wallStartNode) snap = constrainLineSnap(snap, rawWorld, wallStartNode.point_mm, e.shiftKey, wallStartNode.reference)
-      const point_mm = PLACEMENT_DIMENSION_TOOLS.has(activeTool)
-        ? applyPlacementDimensions(snap.point_mm, findTemporaryDimensionRefs(snap.point_mm, planProject, undefined, dimensionReferenceMode), rawWorld)
-        : snap.point_mm
+      const copySource = activeTool === 'gridCopy' && gridCopySourceId ? planProject.objects[gridCopySourceId] : undefined
+      const point_mm = activeTool === 'gridCopy' && copySource && isGridObject(copySource)
+        ? (() => {
+          const [start] = gridLineEndpoints(copySource)
+          const positioned = applyPlacementDimensions(snap.point_mm, { refX: start[0], refY: start[1] }, rawWorld)
+          return e.shiftKey ? constrainGridCopyToParallelOffset(positioned, copySource) : positioned
+        })()
+        : PLACEMENT_DIMENSION_TOOLS.has(activeTool)
+          ? applyPlacementDimensions(snap.point_mm, findTemporaryDimensionRefs(snap.point_mm, planProject, undefined, dimensionReferenceMode), rawWorld)
+          : snap.point_mm
       if (point_mm[0] !== snap.point_mm[0] || point_mm[1] !== snap.point_mm[1]) {
         snap = { ...snap, point_mm, kind: 'free', target_id: undefined, description: `${snap.description} · ระยะกำหนดเอง` }
       }
@@ -1101,6 +1229,22 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const screenX = e.clientX - rect.left
     const screenY = e.clientY - rect.top
 
+    // Right-clicking an object opens the same quick actions available to touch.
+    // Suppress the browser menu over the drawing canvas.
+    if (e.button === 2) {
+      e.preventDefault()
+      const point = screenToWorld([screenX, screenY], viewport)
+      const hitId = findHitObject(point, e.shiftKey)
+      if (hitId) {
+        onSelectionChange?.([hitId], hitId)
+        onSelectObject(hitId)
+        setObjectContextMenu({ id: hitId, x: screenX, y: screenY })
+      } else {
+        setObjectContextMenu(null)
+      }
+      return
+    }
+
     if (e.pointerType === 'touch') {
       pointerPositionsRef.current.set(e.pointerId, [screenX, screenY])
       try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
@@ -1119,14 +1263,25 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         longPressTimerRef.current = window.setTimeout(() => {
           const point = longPressStartRef.current?.point
           if (!point) return
+          longPressTimerRef.current = null
+          const world = screenToWorld(point, viewport)
+          const hitId = findHitObject(world, false)
           setDraggingObject(null); selectionStartRef.current = null; setSelectionBox(null)
-          panStartRef.current = point; setIsPanning(true)
+          if (hitId) {
+            onSelectionChange?.([hitId], hitId)
+            onSelectObject(hitId)
+            setObjectContextMenu({ id: hitId, x: point[0], y: point[1] })
+          } else {
+            setObjectContextMenu(null)
+            panStartRef.current = point
+            setIsPanning(true)
+          }
         }, 500)
       }
     }
 
-    // Middle click or Alt+Left triggers pan
-    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    // Middle mouse button is the desktop pan gesture.
+    if (e.button === 1) {
       setIsPanning(true)
       panStartRef.current = [screenX, screenY]
       e.currentTarget.setPointerCapture(e.pointerId)
@@ -1134,6 +1289,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
 
     if (e.button === 0) {
+      setObjectContextMenu(null)
       const rawWorld = screenToWorld([screenX, screenY], viewport)
       let snap = e.ctrlKey
         ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
@@ -1141,7 +1297,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       if (activeTool === 'beam' && beamStartNode) snap = constrainLineSnap(snap, rawWorld, beamStartNode.point_mm, e.shiftKey, beamStartNode.reference)
       if (activeTool === 'wall' && wallStartNode) snap = constrainLineSnap(snap, rawWorld, wallStartNode.point_mm, e.shiftKey, wallStartNode.reference)
 
-      if (activeTool === 'erase') {
+      if (activeTool === 'gridCopy' && gridCopySourceId) {
+        const source = planProject.objects[gridCopySourceId]
+        if (source && isGridObject(source)) {
+          const [start, end] = gridLineEndpoints(source)
+          const positioned = applyPlacementDimensions(snap.point_mm, { refX: start[0], refY: start[1] }, rawWorld)
+          const destination = e.shiftKey ? constrainGridCopyToParallelOffset(positioned, source) : positioned
+          onCopyGrid?.(source.id, destination, [end[0] + destination[0] - start[0], end[1] + destination[1] - start[1]])
+          clearDimensionOverrides()
+        }
+      } else if (activeTool === 'erase') {
         eraseActiveRef.current = true
         erasedIdsRef.current.clear()
         for (const id of findCandidates(rawWorld, true)) {
@@ -1179,6 +1344,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
               startWorldMm: rawWorld,
               startScreenPx,
             })
+            e.currentTarget.setPointerCapture(e.pointerId)
+          } else if (isGridObject(object) && !object.module_data.system_id) {
+            const [gridStartMm, gridEndMm] = gridLineEndpoints(object)
+            setDraggingObject({ id: hitId, kind: 'grid', startWorldMm: rawWorld, startScreenPx, gridStartMm, gridEndMm })
             e.currentTarget.setPointerCapture(e.pointerId)
           } else if (isDoorObject(object) || isWindowObject(object)) {
             const host = project.objects[object.module_data.wall_id]
@@ -1294,24 +1463,36 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           )
           clearDimensionOverrides()
         }
-      } else if (activeTool === 'slab' || activeTool === 'slabVoid') {
+      } else if (activeTool === 'roomSeparator') {
+        if (!roomSeparatorStart) setRoomSeparatorStart(snap.point_mm)
+        else { onCommitRoomSeparator?.(roomSeparatorStart, snap.point_mm); setRoomSeparatorStart(null) }
+      } else if (activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling') {
         const closeDistance = Math.max(150, 18 / viewport.zoom)
         const closesAtStart = slabBoundary.length >= 3 && Math.hypot(snap.point_mm[0] - slabBoundary[0][0], snap.point_mm[1] - slabBoundary[0][1]) <= closeDistance
         if ((e.detail >= 2 || closesAtStart) && slabBoundary.length >= 3) {
           if (activeTool === 'slab') onCommitSlab(slabBoundary)
+          else if (activeTool === 'archFloor') onCommitArchitecturalFloor?.(slabBoundary)
+          else if (activeTool === 'ceiling') onCommitCeiling?.(slabBoundary)
           else if (selectedId && planProject.objects[selectedId]?.object_type === 'structure.slab') onCommitSlabVoid(selectedId, slabBoundary)
           setSlabBoundary([])
         } else if (e.detail < 2) setSlabBoundary(current => [...current, snap.point_mm])
       } else if (activeTool === 'grid') {
-        const orientation = e.shiftKey
-          ? (gridOrientation === 'vertical' ? 'horizontal' : 'vertical')
-          : gridOrientation
-        const pos = orientation === 'vertical' ? Math.round(snap.point_mm[0] / 500) * 500 : Math.round(snap.point_mm[1] / 500) * 500
-        onCommitGrid(orientation, pos, {
-          spacing_mm: Number(gridSpacing),
-          count: Math.max(1, Math.min(100, Math.floor(Number(gridCount) || 1))),
-          first_tag: gridFirstTag.trim() || (orientation === 'vertical' ? 'A' : '1'),
-        })
+        if (!gridStartPoint) setGridStartPoint(snap.point_mm)
+        else {
+          const dx = snap.point_mm[0] - gridStartPoint[0], dy = snap.point_mm[1] - gridStartPoint[1]
+          if (Math.hypot(dx, dy) >= 100) onCommitGrid('A', gridStartPoint, snap.point_mm, gridSequenceStyle)
+          setGridStartPoint(null)
+        }
+      } else if (activeTool === 'gridSystem') {
+        const parseIntervals = (value: string) => value.split(/[,;]+/).map(item => item.trim()).filter(Boolean).map(item => parseLengthMm(item, displayUnit))
+        const xIntervals = parseIntervals(gridXIntervals), yIntervals = parseIntervals(gridYIntervals)
+        const allIntervals = [...xIntervals, ...yIntervals]
+        if (!allIntervals.length) setGridSystemError('กรอกระยะอย่างน้อยหนึ่งแนว')
+        else if (xIntervals.length > 99 || yIntervals.length > 99 || allIntervals.some(value => value === null || !Number.isFinite(value) || value <= 0)) setGridSystemError('ระยะแต่ละช่วงต้องมากกว่า 0 และแต่ละแนวสร้างได้ไม่เกิน 100 เส้น')
+        else {
+          setGridSystemError('')
+          onCommitGridSystem(snap.point_mm, xIntervals as number[], yIntervals as number[], gridXFirstTag.trim() || 'A', gridYFirstTag.trim() || '1')
+        }
       } else if (activeTool === 'measure') {
         if (!tapeMeasure || tapeMeasure.complete) setTapeMeasure({ start: snap.point_mm, end: snap.point_mm, complete: false })
         else setTapeMeasure({ ...tapeMeasure, end: snap.point_mm, complete: true })
@@ -1324,7 +1505,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             snap.point_mm[1] - calibrationP1[1]
           )
           if (dist >= 10 && onStartCalibrationModal) {
-            onStartCalibrationModal(dist)
+            onStartCalibrationModal(dist, calibrationP1, snap.point_mm)
           }
           setCalibrationP1(null)
           setCalibrationMousePoint(null)
@@ -1407,6 +1588,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
               rawWorld[1] - draggingObject.startWorldMm[1],
             ]
             if (Math.hypot(...delta) >= 1) onMoveWall(draggingObject.id, delta)
+          } else if (draggingObject.kind === 'grid' && draggingObject.gridStartMm && draggingObject.gridEndMm) {
+            const delta: [number, number] = [rawWorld[0] - draggingObject.startWorldMm[0], rawWorld[1] - draggingObject.startWorldMm[1]]
+            if (Math.hypot(...delta) >= 1) onModifyGrid?.(draggingObject.id, {
+              start_point_mm: [draggingObject.gridStartMm[0] + delta[0], draggingObject.gridStartMm[1] + delta[1]],
+              end_point_mm: [draggingObject.gridEndMm[0] + delta[0], draggingObject.gridEndMm[1] + delta[1]],
+            })
           } else if (draggingObject.hostStartMm && draggingObject.hostEndMm && draggingObject.openingWidthMm) {
             const offset = projectPointToWallOffsetMm(rawWorld, draggingObject.hostStartMm, draggingObject.hostEndMm, draggingObject.openingWidthMm)
             if (offset !== undefined) onMoveOpening(draggingObject.id, offset)
@@ -1433,8 +1620,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const dimensionHostAxis = activeWallSnap
     ? Math.abs(activeWallSnap.wall_end_mm[0] - activeWallSnap.wall_start_mm[0]) >= Math.abs(activeWallSnap.wall_end_mm[1] - activeWallSnap.wall_start_mm[1]) ? 'x' : 'y'
     : null
+  const copyDimensionSource = activeTool === 'gridCopy' && gridCopySourceId ? planProject.objects[gridCopySourceId] : null
+  const copyDimensionStart = copyDimensionSource && isGridObject(copyDimensionSource) ? gridLineEndpoints(copyDimensionSource)[0] : null
   const dimensionReferences = activeSnap
-    ? activeWallSnap ? openingDimensionRefs(activeSnap.point_mm, planProject, activeWallSnap, dimensionReferenceMode) : findTemporaryDimensionRefs(activeSnap.point_mm, planProject, undefined, dimensionReferenceMode)
+    ? copyDimensionStart ? { refX: copyDimensionStart[0], refY: copyDimensionStart[1] } : activeWallSnap ? openingDimensionRefs(activeSnap.point_mm, planProject, activeWallSnap, dimensionReferenceMode) : findTemporaryDimensionRefs(activeSnap.point_mm, planProject, undefined, dimensionReferenceMode)
     : { refX: undefined, refY: undefined }
   const showXDimension = !!activeSnap && (dimensionHostAxis ? dimensionHostAxis === 'x' : dimensionReferences.refX !== undefined)
   const showYDimension = !!activeSnap && (dimensionHostAxis ? dimensionHostAxis === 'y' : dimensionReferences.refY !== undefined)
@@ -1444,8 +1633,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     ? Number(project.types.find(type => type.object_type === (activeTool === 'door' ? 'door_window.door' : 'door_window.window') && type.name.toLowerCase() === (activeTool === 'door' ? activeDoorTypeMark : activeWindowTypeMark).toLowerCase())?.parameters?.width_mm ?? (activeTool === 'door' ? 800 : 1200))
     : 0
   const dimensionPoint = activeSnap && activeWallSnap ? openingDimensionPoint(activeWallSnap, dimensionReferences as { refX?: number; refY?: number; axis: 'x' | 'y' }, activeOpeningWidth) : activeSnap?.point_mm
-  const xDimensionDisplay = dimensionInputX || (dimensionPoint && xDimensionAnchor !== undefined ? String(Math.round(Math.abs(dimensionPoint[0] - xDimensionAnchor))) : '')
-  const yDimensionDisplay = dimensionInputY || (dimensionPoint && yDimensionAnchor !== undefined ? String(Math.round(Math.abs(dimensionPoint[1] - yDimensionAnchor))) : '')
+  const xDimensionDisplay = dimensionInputX || (dimensionPoint && xDimensionAnchor !== undefined ? formatLengthMm(Math.abs(dimensionPoint[0] - xDimensionAnchor), displayUnit) : '')
+  const yDimensionDisplay = dimensionInputY || (dimensionPoint && yDimensionAnchor !== undefined ? formatLengthMm(Math.abs(dimensionPoint[1] - yDimensionAnchor), displayUnit) : '')
   const dimensionOverlayPosition = activeSnap ? worldToScreen(activeSnap.point_mm, viewport) : null
   const supportsPlacementDimensions = PLACEMENT_DIMENSION_TOOLS.has(activeTool)
 
@@ -1462,12 +1651,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     if (/^\d$/.test(event.key) || (event.key === '.' && !(axis === 'x' ? dimensionInputX : dimensionInputY).includes('.'))) {
       if (anchor === undefined) return
       event.preventDefault()
+      event.stopPropagation()
       if (axis === 'x') { setDimensionAnchorX(anchor); setDimensionInputX(value => value + event.key) }
       else { setDimensionAnchorY(anchor); setDimensionInputY(value => value + event.key) }
-    } else if (event.key === 'Backspace' && anchor !== undefined) {
+    } else if (event.key === 'Backspace') {
       event.preventDefault()
-      if (axis === 'x') setDimensionInputX(value => value.slice(0, -1))
-      else setDimensionInputY(value => value.slice(0, -1))
+      event.stopPropagation()
+      if (anchor !== undefined) {
+        if (axis === 'x') setDimensionInputX(value => value.slice(0, -1))
+        else setDimensionInputY(value => value.slice(0, -1))
+      }
     }
   }
 
@@ -1484,6 +1677,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   return (
     <div
       className="cf-plan-canvas"
+      data-active-tool={activeTool}
       ref={containerRef}
       style={{
         position: 'absolute',
@@ -1492,30 +1686,56 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         height: '100%',
         overflow: 'hidden',
         background: '#fbfdff',
-        cursor: isPanning ? 'grabbing' : activeTool === 'select' ? 'default' : activeTool === 'erase' ? 'not-allowed' : 'crosshair',
+        cursor: isPanning ? 'grabbing' : activeTool === 'select' ? 'default' : 'crosshair',
       }}
     >
       <canvas
         ref={canvasRef}
         tabIndex={0}
-        aria-label="แปลน: กด Tab เพื่อสลับวัตถุที่ซ้อนกัน และ Shift Tab เพื่อย้อนกลับ"
+        aria-label="แปลน: คลิกขวาหรือแตะค้างบนวัตถุเพื่อเปิดเมนูแก้ไขและลบ; กด Tab เพื่อสลับวัตถุที่ซ้อนกัน"
         onPointerMove={handlePointerMove}
         onPointerDown={handlePointerDown}
+        onContextMenu={event => event.preventDefault()}
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
         onKeyDown={handleCanvasDimensionKeyDown}
         onPointerCancel={handlePointerUp}
         style={{ position: 'absolute', inset: 0, display: 'block', width: '100%', height: '100%', touchAction: 'none' }}
       />
+      {objectContextMenu && planProject.objects[objectContextMenu.id] && <div
+        className="cf-object-context-menu"
+        role="menu"
+        aria-label="คำสั่งวัตถุ"
+        onPointerDown={event => event.stopPropagation()}
+        style={{
+          left: Math.max(8, Math.min(objectContextMenu.x, (containerRef.current?.clientWidth ?? 800) - 184)),
+          top: Math.max(8, Math.min(objectContextMenu.y, (containerRef.current?.clientHeight ?? 600) - 92)),
+        }}
+      >
+        {(() => { const object = planProject.objects[objectContextMenu.id]; return object && isGridObject(object) && !object.module_data.system_id ? <button type="button" role="menuitem" onClick={() => {
+          setGridCopySourceId(object.id); onSelectionChange?.([object.id], object.id); onSelectObject(object.id); onActivateTool?.('gridCopy'); setObjectContextMenu(null)
+        }}><PlusCircle size={15} />ทำสำเนาแล้ววาง</button> : null })()}
+        <button type="button" role="menuitem" onClick={() => {
+          onSelectionChange?.([objectContextMenu.id], objectContextMenu.id)
+          onSelectObject(objectContextMenu.id)
+          onRequestEditProperties?.()
+          setObjectContextMenu(null)
+        }}><Pencil size={15} />แก้ไขคุณสมบัติ</button>
+        <button type="button" role="menuitem" className="is-danger" onClick={() => {
+          onDeleteObjects?.([objectContextMenu.id])
+          setObjectContextMenu(null)
+        }}><Trash2 size={15} />ลบวัตถุ</button>
+      </div>}
       {activeTool === 'measure' && <div className="cf-tape-measure-hint" aria-live="polite">
         ตลับเมตร · {tapeMeasure?.complete ? 'คลิกเพื่อเริ่มวัดเส้นใหม่' : tapeMeasure ? 'คลิกจุดปลาย' : 'คลิกจุดเริ่ม'} · Esc ออก
       </div>}
+      {activeTool === 'gridCopy' && <div className="cf-tape-measure-hint" aria-live="polite">วางสำเนาเส้นกริด · กด Shift เพื่อล็อกแนวขนาน · คลิกวางต่อเนื่อง · Esc กลับเลือกวัตถุ</div>}
       {supportsPlacementDimensions && dimensionOverlayPosition && (showXDimension || showYDimension) && <div className="cf-dynamic-dimensions" role="group" aria-label="ระยะอ้างอิงระหว่างวางวัตถุ" onPointerDown={event => event.stopPropagation()} style={{
         left: Math.max(8, Math.min(dimensionOverlayPosition[0] + 14, (containerRef.current?.clientWidth ?? 800) - 300)),
         top: Math.max(8, Math.min(dimensionOverlayPosition[1] + 20, (containerRef.current?.clientHeight ?? 600) - 70)),
       }}>
-        {showXDimension && <label><span>X</span><input aria-label="ระยะจากแนวอ้างอิง X มิลลิเมตร" type="number" min="0" step="1" value={xDimensionDisplay} onFocus={event => { if (dimensionReferences.refX !== undefined) setDimensionAnchorX(dimensionAnchorX ?? dimensionReferences.refX); setDimensionKeyboardAxis('x'); event.currentTarget.select() }} onChange={event => { setDimensionAnchorX(dimensionAnchorX ?? dimensionReferences.refX ?? null); setDimensionInputX(event.target.value) }} onKeyDown={handleDimensionInputKeyDown} /></label>}
-        {showYDimension && <label><span>Y</span><input aria-label="ระยะจากแนวอ้างอิง Y มิลลิเมตร" type="number" min="0" step="1" value={yDimensionDisplay} onFocus={event => { if (dimensionReferences.refY !== undefined) setDimensionAnchorY(dimensionAnchorY ?? dimensionReferences.refY); setDimensionKeyboardAxis('y'); event.currentTarget.select() }} onChange={event => { setDimensionAnchorY(dimensionAnchorY ?? dimensionReferences.refY ?? null); setDimensionInputY(event.target.value) }} onKeyDown={handleDimensionInputKeyDown} /></label>}
+        {showXDimension && <label><span>X · {displayUnit}</span><input aria-label={`ระยะจากแนวอ้างอิง X (${displayUnit})`} type="text" inputMode="decimal" value={xDimensionDisplay} onFocus={event => { if (dimensionReferences.refX !== undefined) setDimensionAnchorX(dimensionAnchorX ?? dimensionReferences.refX); setDimensionKeyboardAxis('x'); event.currentTarget.select() }} onChange={event => { setDimensionAnchorX(dimensionAnchorX ?? dimensionReferences.refX ?? null); setDimensionInputX(event.target.value) }} onKeyDown={handleDimensionInputKeyDown} /></label>}
+        {showYDimension && <label><span>Y · {displayUnit}</span><input aria-label={`ระยะจากแนวอ้างอิง Y (${displayUnit})`} type="text" inputMode="decimal" value={yDimensionDisplay} onFocus={event => { if (dimensionReferences.refY !== undefined) setDimensionAnchorY(dimensionAnchorY ?? dimensionReferences.refY); setDimensionKeyboardAxis('y'); event.currentTarget.select() }} onChange={event => { setDimensionAnchorY(dimensionAnchorY ?? dimensionReferences.refY ?? null); setDimensionInputY(event.target.value) }} onKeyDown={handleDimensionInputKeyDown} /></label>}
         <button type="button" className="cf-dimension-reference-toggle" aria-label="สลับวัดจากกึ่งกลางหรือขอบวัตถุ" aria-pressed={dimensionReferenceMode === 'edge'} onClick={toggleDimensionReferenceMode}>วัดจาก {dimensionReferenceMode === 'center' ? 'กึ่งกลาง' : 'ขอบ'}</button>
         <small>พิมพ์ระยะแล้วคลิก · Tab กลาง/ขอบ · Shift+Tab สลับแกน</small>
       </div>}
@@ -1535,14 +1755,27 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         <small>Tab / Shift+Tab · iPad แตะลูกศรหรือเลือกจากรายการ</small>
       </div>}
       <div className="cf-authoring-controls" onPointerDown={(event) => event.stopPropagation()}>
-        {activeTool === 'grid' && <div className="cf-grid-orientation-control" role="group" aria-label="แนวกริดที่จะสร้าง">
-          <span>แนวกริด</span>
-          <button type="button" aria-pressed={gridOrientation === 'vertical'} onClick={() => { setGridOrientation('vertical'); setGridFirstTag('A') }}>แนวตั้ง · A/B</button>
-          <button type="button" aria-pressed={gridOrientation === 'horizontal'} onClick={() => { setGridOrientation('horizontal'); setGridFirstTag('1') }}>แนวนอน · 1/2</button>
-          <label>ระยะ (มม.)<input aria-label="ระยะห่างระหว่างกริด" type="number" min="1" step="100" value={gridSpacing} onChange={event => setGridSpacing(event.target.value)} /></label>
-          <label>จำนวนเส้น<input aria-label="จำนวนเส้นกริด" type="number" min="1" max="100" value={gridCount} onChange={event => setGridCount(event.target.value)} /></label>
-          <label>ป้ายเส้นแรก<input aria-label="ป้ายกริดเส้นแรก" value={gridFirstTag} onChange={event => setGridFirstTag(event.target.value)} /></label>
-          <small>คลิกแปลนเพื่อสร้างทั้งชุด · แก้ระยะ จำนวน และป้ายได้ภายหลังเมื่อเลือกเส้นในชุด</small>
+        {activeTool === 'grid' && <div className="cf-grid-orientation-control" role="group" aria-label="วาดเส้นกริดอ้างอิง">
+          <strong>เส้นกริดอ้างอิง · เส้นเดี่ยว</strong>
+          <label>ลำดับป้าย
+            <select aria-label="ลำดับป้ายเส้นกริดอ้างอิง" value={gridSequenceStyle} onChange={event => setGridSequenceStyle(event.target.value as typeof gridSequenceStyle)}>
+              <option value="auto">อัตโนมัติ (ตั้ง A / นอน 1)</option><option value="alpha">ตัวอักษร A, B, C</option><option value="numeric">ตัวเลข 1, 2, 3</option>
+            </select>
+          </label>
+          <small>{gridStartPoint ? 'คลิกจุดปลายเพื่อกำหนดแนวและมุมเอียง · Esc ยกเลิก' : 'คลิกจุดเริ่มและจุดปลาย · ปรับย้าย คัดลอก และตั้ง bubble ได้ภายหลัง'}</small>
+        </div>}
+        {activeTool === 'gridSystem' && <div className="cf-grid-orientation-control" role="group" aria-label="สร้างระบบ Grid Line">
+          <strong>ระบบ Grid Line · ระยะเป็นช่วงจากเส้นก่อนหน้า ({displayUnit})</strong>
+          <div className="cf-grid-system-axis">
+            <label>แนวตั้ง · ระยะ X<input aria-label={`ระยะช่วงแนวตั้งของระบบกริด (${displayUnit})`} value={gridXIntervals} onChange={event => { setGridXIntervals(event.target.value); setGridSystemError('') }} placeholder={`4, 3.5, 5 ${displayUnit}`} /></label>
+            <label>ป้ายแรก<input aria-label="ป้ายเริ่มต้นแนวตั้ง" value={gridXFirstTag} onChange={event => setGridXFirstTag(event.target.value)} /></label>
+          </div>
+          <div className="cf-grid-system-axis">
+            <label>แนวนอน · ระยะ Y<input aria-label={`ระยะช่วงแนวนอนของระบบกริด (${displayUnit})`} value={gridYIntervals} onChange={event => { setGridYIntervals(event.target.value); setGridSystemError('') }} placeholder={`3, 4.2 ${displayUnit}`} /></label>
+            <label>ป้ายแรก<input aria-label="ป้ายเริ่มต้นแนวนอน" value={gridYFirstTag} onChange={event => setGridYFirstTag(event.target.value)} /></label>
+          </div>
+            <small>คั่นแต่ละช่วงด้วยจุลภาค · คลิกจุดกำเนิดหนึ่งครั้งเพื่อสร้างได้ทั้งสองแนว · ลบช่องระยะของแนวที่ไม่ใช้</small>
+            {gridSystemError && <small role="alert" style={{ color: '#b42332' }}>{gridSystemError}</small>}
         </div>}
         {(['column', 'foundation', 'beam', 'wall', 'door', 'window', 'slab'] as ToolType[]).includes(activeTool) && (() => {
           const familyByTool: Partial<Record<ToolType, string>> = {
@@ -1558,7 +1791,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           const label = activeTool === 'column' ? 'เสา' : activeTool === 'foundation' ? 'ฐานราก'
             : activeTool === 'beam' ? 'คาน' : activeTool === 'wall' ? 'ผนัง'
               : activeTool === 'door' ? 'ประตู' : activeTool === 'window' ? 'หน้าต่าง' : 'พื้น'
-          return <TypePicker types={availableTypes} value={activeTypeMark} label={label} onChange={onChangeActiveTypeMark} onOpenCatalog={onOpenTypeManager}/>
+          return <TypePicker types={availableTypes} value={activeTypeMark} label={label} displayUnit={displayUnit} onChange={onChangeActiveTypeMark} onOpenCatalog={onOpenTypeManager}/>
         })()}
         {(activeTool === 'wall' || activeTool === 'beam') && <label className="cf-reference-control">
           <span>แนวอ้างอิง</span>
@@ -1583,17 +1816,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           </span>}
         </label>}
         {(beamStartNode || wallStartNode) && <label className="cf-reference-control">
-          <span>กำหนดความยาว (ม.)</span>
+          <span>กำหนดความยาว ({displayUnit})</span>
           <input
-            aria-label="ความยาวช่วงที่วาดเป็นเมตร"
-            type="number"
-            min="0.1"
-            step="0.01"
+            aria-label={`ความยาวช่วงที่วาด (${displayUnit})`}
+            type="text"
+            inputMode="decimal"
             value={drawLengthMeters}
             placeholder="ตามตำแหน่งเมาส์"
             onChange={(event) => setDrawLengthMeters(event.target.value)}
           />
-          <span className="cf-snap-hint">Shift ล็อกแกนนอน/ตั้ง · คลิกต่อวาดช่วงถัดไป · Esc ยกเลิก</span>
+          <span className="cf-snap-hint">ใส่ระยะ {displayUnit} · Shift ล็อกแกนนอน/ตั้ง · คลิกต่อวาดช่วงถัดไป · Esc ยกเลิก</span>
         </label>}
         <details className="cf-snap-details"><summary>Snap · {snapModes.length ? `เปิด ${snapModes.length} ประเภท` : 'วางอิสระ'} · ตั้งค่า</summary><div className="cf-snap-controls" role="group" aria-label="ประเภทจุด Snap">
           <span>Snap</span>

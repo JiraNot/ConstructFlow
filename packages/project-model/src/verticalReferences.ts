@@ -39,6 +39,45 @@ export function resolveWallVerticalExtent(project: ProjectDocument, object: Smar
   return { base_elevation_mm: base, top_elevation_mm: top, height_mm: height, base_offset_mm: baseOffset, top_offset_mm: topOffset }
 }
 
+/** Resolve a structural column against storey datums, with a deterministic legacy fallback. */
+export function resolveColumnVerticalExtent(project: ProjectDocument, object: SmartObject | Data): VerticalExtent | undefined {
+  const data = dataOf(object)
+  const location = Array.isArray(data.location_mm) ? data.location_mm : undefined
+  const baseLevel = project.levels.find(level => level.id === data.base_level_id)
+  if (typeof data.base_level_id === 'string' && !baseLevel) return undefined
+  const constrainedTop = project.levels.find(level => level.id === data.top_level_id)
+  if (typeof data.top_level_id === 'string' && !constrainedTop) return undefined
+  const baseOffset = Number(data.base_offset_mm ?? 0)
+  const topOffset = Number(data.top_offset_mm ?? 0)
+  if (![baseOffset, topOffset].every(Number.isFinite)) return undefined
+  const baseDatum = baseLevel?.elevation_mm ?? (typeof data.base_elevation_mm === 'number' ? data.base_elevation_mm : Number(location?.[2] ?? 0))
+  const base = baseDatum + baseOffset
+  const nextLevel = baseLevel
+    ? [...project.levels].filter(level => level.elevation_mm > baseLevel.elevation_mm).sort((a, b) => a.elevation_mm - b.elevation_mm)[0]
+    : undefined
+  const explicitTop = typeof data.top_elevation_mm === 'number' && Number.isFinite(data.top_elevation_mm)
+    ? data.top_elevation_mm
+    : undefined
+  const fallbackTop = nextLevel?.elevation_mm
+    ?? (baseLevel?.height_mm !== undefined && baseLevel.height_mm > 0 ? baseDatum + baseLevel.height_mm : base + 3000)
+  const top = (constrainedTop?.elevation_mm ?? explicitTop ?? fallbackTop) + topOffset
+  const height = top - base
+  if (![base, top, height].every(Number.isFinite) || height <= 0) return undefined
+  return { base_elevation_mm: base, top_elevation_mm: top, height_mm: height, base_offset_mm: baseOffset, top_offset_mm: topOffset }
+}
+
+/** Resolve a beam's placement line from its storey datum and optional vertical offset. */
+export function resolveBeamBaseElevation(project: ProjectDocument, object: SmartObject | Data): number | undefined {
+  const data = dataOf(object)
+  const level = project.levels.find(item => item.id === data.level_id)
+  if (typeof data.level_id === 'string' && !level) return undefined
+  const points = Array.isArray(data.start_point_mm) ? data.start_point_mm : undefined
+  const datum = level?.elevation_mm ?? Number(points?.[2] ?? data.base_elevation_mm ?? 0)
+  const offset = Number(data.base_offset_mm ?? 0)
+  const elevation = datum + offset
+  return Number.isFinite(elevation) ? elevation : undefined
+}
+
 /** Resolve a hosted opening's bottom and head from level datums or legacy sill/height values. */
 export function resolveOpeningVerticalExtent(project: ProjectDocument, object: SmartObject | Data): VerticalExtent | undefined {
   const data = dataOf(object)

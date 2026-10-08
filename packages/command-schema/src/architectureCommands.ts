@@ -1,6 +1,19 @@
 // Architecture & Openings Domain Mutation Command Payloads (Vertical Slice 02)
 
-import { Phase, DoorHanding, WallInterfaceTreatment, PlacementReference } from '@constructflow/project-model'
+import { Phase, DoorHanding, WallInterfaceTreatment, PlacementReference, RoomModuleData, RoomSeparatorModuleData, ArchitecturalFloorModuleData, CeilingModuleData } from '@constructflow/project-model'
+
+export type ArchitectureObjectInput<T extends object> = T & { id?: string; created_phase?: Phase; phase?: Phase }
+export interface ArchitectureRoomCommands {
+  CreateRoom: ArchitectureObjectInput<RoomModuleData>
+  UpdateRoom: ArchitectureObjectInput<RoomModuleData>
+  CreateRoomSeparator: ArchitectureObjectInput<RoomSeparatorModuleData>
+  UpdateRoomSeparator: ArchitectureObjectInput<RoomSeparatorModuleData>
+  CreateArchitecturalFloor: ArchitectureObjectInput<ArchitecturalFloorModuleData>
+  UpdateArchitecturalFloor: ArchitectureObjectInput<ArchitecturalFloorModuleData>
+  CreateCeiling: ArchitectureObjectInput<CeilingModuleData>
+  UpdateCeiling: ArchitectureObjectInput<CeilingModuleData>
+  DetectRooms: { level_id: string; default_name?: string }
+}
 
 export interface CreateWallInput {
   /** Immutable unique identity (UUID) */

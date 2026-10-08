@@ -70,6 +70,12 @@ const schemas: Record<
     lists: "boundary_mm:2:3",
     text: "mark",
   },
+  "architecture.stair": {
+    positive: "total_rise_mm width_mm num_risers riser_height_mm tread_depth_mm handrail_height_mm",
+    nonnegative: "landing_depth_mm",
+    points: "start_point_mm",
+    text: "mark stair_type structure_type",
+  },
   "electrical.fixture": {
     nonnegative: "watts",
     points: "location_mm",
