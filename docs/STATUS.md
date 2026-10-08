@@ -1,5 +1,7 @@
 # ConstructFlow Specification Status
 
+Plan placement dimensions and measurement tools (2026-10-09): temporary X/Y dimensions and numeric entry are shown only while placing supported model objects, not while using Select or Erase. Tab switches the placement reference between center and edge; doors/windows default to measuring from the opening edge and ignore the host wall itself as a dimension target. A dedicated Tape Measure (M) uses two snapped points to display a temporary distance in mm/m; it creates no model or sheet dimension. Underlay scale calibration (R) is a separate point-to-point workflow and is available only while an imported reference image is visible. This implements the existing interaction plan's temporary-dimension and underlay-calibration tracks; it does not replace model-derived geometry, associative dimensions, or the Smart Object source of truth. Plan Editor build passed; browser controls were checked. Physical mobile acceptance and persistent drawing dimensions remain separate work.
+
 This file is the current high-level implementation dashboard. It is informational; authoritative requirements remain in the referenced specifications and accepted architecture contracts.
 
 Active delivery is standalone-first under ADR-0006 and `ROADMAP.md`. `.cfproj`, the shared command runtime and native 2D/3D/takeoff/sheet engines define the product baseline. Ruby/native entries below are adapter evidence; F0–F3 native closures are not prerequisites for standalone releases.
