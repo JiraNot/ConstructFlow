@@ -21,6 +21,8 @@ export const CATALOG_FAMILIES = [
   ["structure.beam", "คาน"],
   ["structure.slab", "พื้น"],
   ["architecture.wall", "ผนัง"],
+  ["architecture.floor", "พื้นสถาปัตย์"],
+  ["architecture.ceiling", "ฝ้าเพดาน"],
   ["door_window.door", "ประตู"],
   ["door_window.window", "หน้าต่าง"],
 ] as const;

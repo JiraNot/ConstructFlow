@@ -1,5 +1,6 @@
-import { getDisplayPhase, isMasonryWallPlanHatch, resolveCatalogType, type ProjectDocument } from '@constructflow/project-model'
+import { getDisplayPhase, isMasonryWallPlanHatch, resolveCatalogType, type Phase, type ProjectDocument } from '@constructflow/project-model'
 import { wallMasonryHatchSegments } from '@constructflow/geometry-kernel'
+import { resolvePlanPhaseStyle } from '@constructflow/representation-engine'
 export * from './permit.js'
 /** Load font shaping and PDF libraries only when PDF export is requested. */
 export async function compilePermitPdf(...args: Parameters<typeof import('./pdf.js').compilePermitPdf>) {
@@ -13,7 +14,6 @@ type Data = Record<string, any>
 
 const PAGE_W = 420
 const PAGE_H = 297
-const colors = { existing: '#94a3b8', demolition: '#ef4444', new_construction: '#0f172a' }
 const escapeXml = (value: unknown) => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 
 function objectsAtLevel(project: ProjectDocument, levelId: string) {
@@ -86,9 +86,11 @@ function planTransform(project: ProjectDocument, view: { x: number; y: number; w
   }
 }
 
-function phaseStyle(phase: string): { color: string; dash: string; width: number; opacity: number } {
+function phaseStyle(phase: Phase): { color: string; fill: string; dash: string; width: number; opacity: number } {
+  const shared = resolvePlanPhaseStyle(phase)
   return {
-    color: colors[phase as keyof typeof colors] ?? colors.new_construction,
+    color: shared.stroke,
+    fill: shared.fill,
     dash: phase === 'demolition' ? ' stroke-dasharray="1.5,0.75"' : '',
     width: phase === 'demolition' ? 1.5 : phase === 'new_construction' ? 2 : 1,
     opacity: phase === 'existing' ? 0.6 : 1,
@@ -146,7 +148,7 @@ function compileArchitecturePlan(project: ProjectDocument, warnings: string[]): 
       const nx = -uy, ny = ux, half = wallWidth / 2
       const ax = x1 + ux * from, ay = y1 + uy * from, bx = x1 + ux * to, by = y1 + uy * to
       const path = `M${ax + nx * half},${ay + ny * half} L${bx + nx * half},${by + ny * half} L${bx - nx * half},${by - ny * half} L${ax - nx * half},${ay - ny * half} Z`
-      const fill = displayPhase === 'demolition' ? 'url(#demo-hatch)' : displayPhase === 'existing' ? '#ffffff' : '#e2e8f0'
+      const fill = displayPhase === 'demolition' ? 'url(#demo-hatch)' : style.fill
       elements.push(`<path d="${path}" fill="${fill}" stroke="${style.color}" stroke-opacity="${style.opacity}" stroke-width="${Math.max(style.width * 0.2, 0.18)}"${style.dash}/>`)
     }
     for (const [start, end] of intervals) { drawSegment(cursor, start); cursor = Math.max(cursor, end) }

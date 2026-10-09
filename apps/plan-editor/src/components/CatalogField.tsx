@@ -1,6 +1,13 @@
 import React from "react";
 import { formatLengthMm, parseLengthMm, type DisplayLengthUnit } from "@constructflow/project-model";
 const labels: Record<string, string> = {
+  mark: "รหัส / ชื่อ",
+  finish_layers: "ชั้นวัสดุปูพื้น",
+  finish_pattern_mm: "ขนาดลายปู",
+  finish_pattern_origin_mm: "จุดเริ่มแนวลาย",
+  finish_pattern_rotation_deg: "มุมหมุนแนวลาย (องศา)",
+  grid_mm: "ระยะกริดฝ้า",
+  quantity_unit: "หน่วยปริมาณ",
   section_mm: "หน้าตัด",
   size_mm: "ขนาดฐานราก",
   width_mm: "กว้าง",
@@ -122,11 +129,18 @@ const options: Record<string, [string, string][]> = {
     ["reinforced_concrete", "คอนกรีตเสริมเหล็ก"],
     ["lightweight_block", "อิฐมวลเบา"],
     ["brick_masonry", "อิฐก่อ"],
+    ["ceramic_tile", "กระเบื้องเซรามิก"],
+    ["porcelain_tile", "กระเบื้องพอร์ซเลน"],
+    ["vinyl_flooring", "พื้นไวนิล"],
+    ["timber_flooring", "พื้นไม้"],
     ["steel_stud", "โครงคร่าวเหล็ก"],
     ["steel", "เหล็ก"],
     ["timber", "ไม้"],
+    ["gypsum_board", "แผ่นยิปซัม"],
+    ["fiber_cement_board", "แผ่นไฟเบอร์ซีเมนต์"],
     ["generic", "ทั่วไป"],
   ],
+  quantity_unit: [["m2", "ตารางเมตร (m²)"], ["m3", "ลูกบาศก์เมตร (m³)"]],
   foundation_type: [
     ["spread_footing", "ฐานรากแผ่"],
     ["pile_cap", "ฐานรากเสาเข็ม"],

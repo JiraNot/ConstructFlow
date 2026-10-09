@@ -27,6 +27,7 @@ import {
 } from '@constructflow/project-model'
 import { Trash2, PlusCircle, RefreshCw, SlidersHorizontal, MousePointer2 } from 'lucide-react'
 import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
+import { formatRoomAreaM2 } from '../roomLabel.mjs'
 
 const LengthInput: React.FC<{ value: number; unit: DisplayLengthUnit; onChange: (value: number) => void; style?: React.CSSProperties; disabled?: boolean; 'aria-label'?: string }> = ({ value, unit, onChange, style, disabled, 'aria-label': ariaLabel }) => <WorkbenchNumberInput value={value} unit={unit} onChange={onChange} style={style} disabled={disabled} ariaLabel={ariaLabel} />
 
@@ -66,7 +67,7 @@ interface PropertiesPanelProps {
   onOpenTypeManager: () => void
   onAddFoundation: (columnId: string) => void
   onDeleteObject: (objectId: string) => void
-  onDrawSlabVoid: (slabId: string) => void
+  onDrawSurfaceVoid: (surfaceId: string) => void
   onCreateRoomFinish?: (kind: 'floor' | 'ceiling', roomId: string) => void
 }
 
@@ -94,7 +95,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onOpenTypeManager,
   onAddFoundation,
   onDeleteObject,
-  onDrawSlabVoid,
+  onDrawSurfaceVoid,
   onCreateRoomFinish,
 }) => {
   const selectedObj = selectedId ? project.objects[selectedId] : null
@@ -125,6 +126,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const slabObj = selectedObj?.object_type === 'structure.slab' ? selectedObj : null
   const architectureSurfaceObj = selectedObj && (selectedObj.object_type === 'architecture.floor' || selectedObj.object_type === 'architecture.ceiling') ? selectedObj : null
   const roomObj = selectedObj?.object_type === 'architecture.room' ? selectedObj : null
+  const roomData = roomObj?.module_data as Record<string, unknown> | undefined
+  const roomBoundaryOpen = roomData?.boundary_status === 'unclosed'
+  const roomAreaLabel = formatRoomAreaM2(roomData?.area_mm2, roomData?.boundary_status)
+  const roomLastKnownAreaLabel = roomBoundaryOpen ? formatRoomAreaM2(roomData?.area_mm2, 'closed') : roomAreaLabel
   const grdObj = selectedObj && isGridObject(selectedObj) ? selectedObj : null
 
   const currentMark = colObj
@@ -896,7 +901,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <span style={{ fontSize: 11, color: '#52677d' }}>
               ระดับ {project.levels.find(level => level.id === slabData.level_id)?.name ?? String(slabData.level_id ?? '')} · หนา {formatLengthMm(Number(slabData.thickness_mm ?? 0), displayUnit)} {displayUnit} · ช่องเจาะ {Array.isArray(slabData.voids_mm) ? slabData.voids_mm.length : 0} ช่อง
             </span>
-            <button type="button" onClick={() => onDrawSlabVoid(slabObj.id)} style={verticalSelectStyle}>วาดช่องเจาะพื้น</button>
+            <button type="button" onClick={() => onDrawSurfaceVoid(slabObj.id)} style={verticalSelectStyle}>วาดช่องเจาะพื้น</button>
           </section>
         })()
       )}
@@ -911,6 +916,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const update = (changes: Parameters<NonNullable<typeof onUpdateArchitectureSurface>>[1]) => onUpdateArchitectureSurface?.(architectureSurfaceObj.id, changes)
         return <section style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid #dbe3ed', borderRadius: 8 }}>
           <strong style={{ fontSize: 12 }}>{isFloor ? 'พื้นสถาปัตย์' : 'ฝ้าเพดาน'} {String(data.mark ?? '')}</strong>
+          <button type="button" onClick={onOpenTypeManager} style={verticalSelectStyle}>{data.type_id ? 'เลือก / แก้ไขชนิดในคลัง' : 'เลือกชนิดจากคลัง'}</button>
+          <button type="button" onClick={() => onDrawSurfaceVoid(architectureSurfaceObj.id)} style={verticalSelectStyle}>{isFloor ? 'วาดช่องเจาะพื้นสถาปัตย์' : 'วาดช่องเจาะฝ้า'}</button>
           <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>อ้างอิงระดับชั้น
             <select aria-label="ระดับอ้างอิงพื้นหรือฝ้า" value={levelId} disabled={!onUpdateArchitectureSurface || (data.follows_room_boundary === true && typeof data.room_id === 'string')} onChange={event => update({ level_id: event.target.value })} style={verticalSelectStyle}>
               {project.levels.map(item => <option key={item.id} value={item.id}>{item.name} · {(item.elevation_mm / 1000).toFixed(3)} m</option>)}
@@ -978,9 +985,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       })()}
       {roomObj && <section style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid #dbe3ed', borderRadius: 8 }}>
         <strong style={{ fontSize: 12 }}>ห้อง {String((roomObj.module_data as Record<string,unknown>).number ?? '')} · {String((roomObj.module_data as Record<string,unknown>).name ?? '')}</strong>
-        <span style={{ fontSize: 11, color: '#52677d' }}>พื้นที่ {(Number((roomObj.module_data as Record<string,unknown>).area_mm2 ?? 0)/1e6).toFixed(2)} ตร.ม. · ขอบเขตตามผนัง/เส้นแบ่งห้อง</span>
-        <button type="button" onClick={() => onCreateRoomFinish?.('floor', roomObj.id)} style={verticalSelectStyle}>สร้างพื้นสถาปัตย์ตามห้อง</button>
-        <button type="button" onClick={() => onCreateRoomFinish?.('ceiling', roomObj.id)} style={verticalSelectStyle}>สร้างฝ้าตามห้อง</button>
+        <span style={{ fontSize: 11, color: roomBoundaryOpen ? '#b91c1c' : '#52677d' }}>{roomBoundaryOpen ? `วงผนังเปิด · พื้นที่ล่าสุด ${roomLastKnownAreaLabel ?? 'ไม่ระบุ'} ตร.ม. ใช้เป็นค่าปัจจุบันไม่ได้` : `พื้นที่ ${roomAreaLabel ?? 'ไม่ระบุ'} ตร.ม. · ขอบเขตตามผนัง/เส้นแบ่งห้อง`}</span>
+        <button type="button" disabled={roomBoundaryOpen} title={roomBoundaryOpen ? 'ปิดวงผนังและตรวจพื้นที่ก่อนสร้างพื้นตามห้อง' : undefined} onClick={() => onCreateRoomFinish?.('floor', roomObj.id)} style={verticalSelectStyle}>สร้างพื้นสถาปัตย์ตามห้อง</button>
+        <button type="button" disabled={roomBoundaryOpen} title={roomBoundaryOpen ? 'ปิดวงผนังและตรวจพื้นที่ก่อนสร้างฝ้าตามห้อง' : undefined} onClick={() => onCreateRoomFinish?.('ceiling', roomObj.id)} style={verticalSelectStyle}>สร้างฝ้าตามห้อง</button>
       </section>}
 
       {/* Level and Phase */}

@@ -186,6 +186,11 @@ export function validateProjectV2(project: ProjectDocument): void {
       head_offset_mm: ['door_window.door', 'door_window.window'],
       elevation_offset_mm: ['structure.slab', 'architecture.floor', 'architecture.ceiling'],
       voids_mm: ['structure.slab', 'architecture.floor', 'architecture.ceiling'],
+      finish_layers: ['architecture.floor'],
+      finish_pattern_mm: ['architecture.floor'],
+      finish_pattern_origin_mm: ['architecture.floor'],
+      finish_pattern_rotation_deg: ['architecture.floor'],
+      grid_mm: ['architecture.ceiling'],
       opening_operation: ['door_window.door', 'door_window.window'],
       panel_count: ['door_window.door', 'door_window.window'],
       panel_layout: ['door_window.door', 'door_window.window'],
@@ -221,6 +226,21 @@ export function validateProjectV2(project: ProjectDocument): void {
         throw new Error(`Invalid project format: ${owner} has ${field} outside its ${objectType} family`)
       }
     }
+    if (values.finish_layers !== undefined) {
+      if (!Array.isArray(values.finish_layers)) throw new Error(`Invalid project format: ${owner} finish_layers must be a list`)
+      values.finish_layers.forEach((rawLayer, index) => {
+        if (!rawLayer || typeof rawLayer !== 'object' || Array.isArray(rawLayer)) throw new Error(`Invalid project format: ${owner} finish layer ${index + 1} is invalid`)
+        const layer = rawLayer as Record<string, unknown>
+        if (typeof layer.material !== 'string' || !layer.material.trim()) throw new Error(`Invalid project format: ${owner} finish layer ${index + 1} has no material`)
+        requirePositive(layer.thickness_mm, owner, `finish_layers[${index}].thickness_mm`)
+        if (layer.mark !== undefined && (typeof layer.mark !== 'string' || !layer.mark.trim())) throw new Error(`Invalid project format: ${owner} finish layer ${index + 1} has an invalid mark`)
+        if (layer.quantity_unit !== undefined && layer.quantity_unit !== 'm2' && layer.quantity_unit !== 'm3') throw new Error(`Invalid project format: ${owner} finish layer ${index + 1} has an invalid quantity unit`)
+      })
+    }
+    if (values.finish_pattern_mm !== undefined) requireTuple(values.finish_pattern_mm, 2, owner, 'finish_pattern_mm', true)
+    if (values.finish_pattern_origin_mm !== undefined) requireTuple(values.finish_pattern_origin_mm, 2, owner, 'finish_pattern_origin_mm')
+    if (values.finish_pattern_rotation_deg !== undefined) requireFinite(values.finish_pattern_rotation_deg, owner, 'finish_pattern_rotation_deg')
+    if (values.grid_mm !== undefined) requireTuple(values.grid_mm, 2, owner, 'grid_mm', true)
     if (values.placement_reference !== undefined && !['centerline', 'left_face', 'right_face'].includes(String(values.placement_reference))) {
       throw new Error(`Invalid project format: ${owner} has an invalid placement reference`)
     }

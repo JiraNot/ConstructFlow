@@ -34,6 +34,26 @@ test('prefers a wall corner over its parallel face when both are near the cursor
   assert.deepEqual(result.point_mm, [0, 50])
 })
 
+test('editing handles ignore their own snap points but retain other-wall centerlines and intersections', () => {
+  const moving = wall('wall-moving', [0, 0], [1000, 0])
+  const stationary = wall('wall-stationary', [500, -1000], [500, 1000])
+  const projectDoc = project(moving, stationary)
+
+  const selfOnly = snapPoint([498, 4], project(moving), view(), 16, new Set(['centerline']), moving.id)
+  assert.equal(selfOnly.kind, 'free', 'the moving wall centerline must not pull its endpoint back during a drag')
+  assert.deepEqual(selfOnly.point_mm, [498, 4])
+
+  const otherCenterline = snapPoint([498, 4], projectDoc, view(), 16, new Set(['centerline']), moving.id)
+  assert.equal(otherCenterline.kind, 'wall_centerline')
+  assert.equal(otherCenterline.target_id, stationary.id)
+  assert.deepEqual(otherCenterline.point_mm, [500, 4])
+
+  const crossing = snapPoint([500, 2], projectDoc, view(), 16, new Set(['intersection']), moving.id)
+  assert.equal(crossing.kind, 'intersection', 'excluding direct self-snaps must retain live cross-object junctions')
+  assert.equal(crossing.target_id, 'wall-moving:wall-stationary')
+  assert.deepEqual(crossing.point_mm, [500, 0])
+})
+
 test('projects onto a column face and onto beam edges and axes', () => {
   const columnFace = snapPoint([904, 965], project(column()), view(), 8, new Set(['face']))
   assert.equal(columnFace.kind, 'column_face')
@@ -98,12 +118,16 @@ test('projects onto individually drawn angled grid references and snaps their en
 })
 
 test('intersection mode snaps only to finite beam/wall crossings', () => {
-  const projectDoc = project(beam('beam-a', [0, 500], [1000, 500]), wall('wall-b', [500, 0], [500, 1000]))
+  const beamObject = beam('beam-a', [0, 500], [1000, 500])
+  const wallObject = wall('wall-b', [500, 0], [500, 1000])
+  const projectDoc = project(beamObject, wallObject)
   const result = snapPoint([504, 500], projectDoc, view(), 8, new Set(['intersection']))
+  const reversed = snapPoint([504, 500], project(wallObject, beamObject), view(), 8, new Set(['intersection']))
 
   assert.equal(result.kind, 'intersection')
   assert.equal(result.target_id, 'beam-a:wall-b')
   assert.deepEqual(result.point_mm, [500, 500])
+  assert.deepEqual(reversed, result, 'intersection provenance must not depend on project object insertion order')
 
   const outside = snapPoint([1100, 500], projectDoc, view(), 8, new Set(['intersection']))
   assert.equal(outside.kind, 'free')
@@ -116,6 +140,19 @@ test('snaps hosted openings to the nearest wall and enforces end clearance', () 
   assert.equal(result.offset_along_wall_mm, 420)
   assert.deepEqual(result.point_mm, [420, 0])
   assert.equal(snapToWallHost([1500, 200], projectDoc, view(), 800), null)
+  assert.equal(snapToWallHost([1500, 0], project(wall('short-wall', [0, 0], [700, 0], 100)), view(), 800), null,
+    'a host shorter than the opening must not appear as a valid placement target')
+  assert.equal(snapToWallHost([1500, 0], projectDoc, view(), 0), null, 'invalid opening widths cannot create a host snap')
+})
+
+test('hosted-opening snaps choose a stable wall when parallel hosts are equidistant', () => {
+  const lower = wall('wall-a', [0, -50], [3000, -50], 100)
+  const upper = wall('wall-z', [0, 50], [3000, 50], 100)
+  const forward = snapToWallHost([1500, 0], project(upper, lower), view(), 800)
+  const reverse = snapToWallHost([1500, 0], project(lower, upper), view(), 800)
+
+  assert.equal(forward.wall_id, 'wall-a')
+  assert.deepEqual(reverse, forward, 'project object enumeration order must not change the chosen host')
 })
 
 test('parallel and perpendicular constraints use the nearest stable beam/wall reference', () => {

@@ -82,3 +82,24 @@ test('AC-STAND-003/006: entire preset is one undo step and redo preserves host l
   assert.equal(Object.keys(session.undo().objects).length, 0)
   assert.deepEqual(session.redo(), built)
 })
+
+test('AC-STAND-006: every extension preset remains editable through ordinary UUID-preserving commands', () => {
+  for (const preset of ['carport', 'kitchen', 'terrace']) {
+    const created = applyExtensionPreset(document(), { ...options, preset })
+    assert.equal(created.status, 'success', created.errors?.join('; '))
+    const session = new ProjectCommandSession(created.updatedProject)
+    const before = session.project
+    const column = Object.values(before.objects).find(object => object.object_type === 'structure.column')
+    const oldLocation = column.module_data.location_mm
+    const movedLocation = [oldLocation[0] + 125, oldLocation[1], oldLocation[2]]
+    const result = session.execute([{ name: 'MoveColumn', input: { object_id: column.id, location_mm: movedLocation } }])
+    assert.equal(result.status, 'success', `${preset}: ${result.errors?.join('; ')}`)
+    assert.deepEqual(session.project.objects[column.id].module_data.location_mm, movedLocation)
+    assert.equal(session.project.objects[column.id].created_phase, 'new_construction')
+    const footing = Object.values(session.project.objects).find(object => object.object_type === 'structure.foundation' && object.module_data.supported_column_id === column.id)
+    assert.ok(footing, `${preset} retains the hosted footing relationship`)
+    assert.deepEqual(footing.module_data.center_mm.slice(0, 2), movedLocation.slice(0, 2))
+    assert.deepEqual(session.undo(), before)
+    assert.deepEqual(session.redo(), result.updatedProject)
+  }
+})

@@ -9,6 +9,16 @@ export interface OpeningViewOverride {
   /** Front elevation linework (vertical y coordinates anchored to opening height). */
   elevation_lines?: OpeningPlanSymbolLine[]
 }
+/**
+ * A saved placement for a model-derived automatic dimension. The dimension
+ * value and geometry stay associative; only its paper-space position moves.
+ */
+export interface DimensionViewOverride {
+  /** Paper-space displacement from the automatic placement, in millimeters. */
+  offset_mm: [number, number]
+  /** True once the user has explicitly positioned the dimension. */
+  locked: true
+}
 export interface SavedSheetViewport {
   scale_denominator: number;
   /** Selects the story shown by a level plan sheet. */
@@ -18,6 +28,8 @@ export interface SavedSheetViewport {
   section_cut_mm?: number;
   /** 2D drafting overrides keyed by persistent opening object UUID. */
   opening_overrides?: Record<string, OpeningViewOverride>;
+  /** Locked auto-dimension placements keyed by stable source-object references. */
+  dimension_overrides?: Record<string, DimensionViewOverride>;
 }
 export interface DrawingSettings {
   viewports: Record<string, SavedSheetViewport>;
@@ -70,6 +82,13 @@ export function validateDrawingSettings(
         if (override.lines !== undefined) validateOpeningPlanSymbolLines(override.lines)
         if (override.elevation_lines !== undefined) validateOpeningPlanSymbolLines(override.elevation_lines)
         if (override.lines === undefined && override.elevation_lines === undefined) throw new Error('Opening view override must contain plan or elevation lines')
+      }
+    }
+    if (v.dimension_overrides !== undefined) {
+      if (!v.dimension_overrides || typeof v.dimension_overrides !== 'object' || Array.isArray(v.dimension_overrides)) throw new Error('Invalid dimension view overrides')
+      for (const [dimensionId, override] of Object.entries(v.dimension_overrides)) {
+        if (!dimensionId || dimensionId.length > 500 || !override || typeof override !== 'object' || Array.isArray(override)) throw new Error('Invalid dimension view override')
+        if (override.locked !== true || !Array.isArray(override.offset_mm) || override.offset_mm.length !== 2 || override.offset_mm.some(value => typeof value !== 'number' || !Number.isFinite(value))) throw new Error('Invalid locked dimension placement')
       }
     }
   }

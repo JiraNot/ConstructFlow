@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { getDisplayPhase, resolveBeamBaseElevation, resolveColumnVerticalExtent, resolveOpeningVerticalExtent, resolveSlabElevation, resolveWallVerticalExtent, type ProjectDocument } from '@constructflow/project-model'
-import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getPlanVisibleObjects } from '@constructflow/representation-engine'
-import { clippedGridSegments, polygonInteriorPoint } from '@constructflow/geometry-kernel'
-import { getElevationWallStyle, packElevationLevelLabelCenters, panElevationView, resolveElevationWallFaceMark, zoomElevationViewAtPoint, zoomElevationViewFromCenter } from '../elevationLabelLayout.mjs'
+import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getPlanVisibleObjects, getVisibleElevationMeshEdges, resolveCeilingGridStyle, resolvePlanPhaseStyle } from '@constructflow/representation-engine'
+import { clippedGridSegments, polygonDiagonalHatchSegments, polygonInteriorPoint } from '@constructflow/geometry-kernel'
+import { getElevationWallStyle, getVisibleElevationLevelRows, layoutElevationTags, packElevationLevelLabelCenters, panElevationView, resolveElevationWallFaceMark, sortElevationObjectsForDrawing, zoomElevationViewAtPoint, zoomElevationViewFromCenter } from '../elevationLabelLayout.mjs'
+import { formatRoomAreaM2 } from '../roomLabel.mjs'
 
 import type { UnderlayConfig } from '../rendering/planRenderer.js'
 
@@ -77,8 +78,8 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
       ctx.fillStyle = '#fbfdff'; ctx.fillRect(0, 0, width, height)
       if (direction === 'rcp') {
         const activePlanObjects=getPlanVisibleObjects(project)
-        const rooms=activePlanObjects.filter(o=>o.object_type==='architecture.room'&&o.status!=='archived'&&!o.removed_phase)
-        const ceilings=activePlanObjects.filter(o=>o.object_type==='architecture.ceiling'&&o.status!=='archived'&&!o.removed_phase)
+        const rooms=activePlanObjects.filter(o=>o.object_type==='architecture.room'&&o.status!=='archived')
+        const ceilings=activePlanObjects.filter(o=>o.object_type==='architecture.ceiling'&&o.status!=='archived')
         const points=[...rooms,...ceilings].flatMap(o=>(o.module_data as Record<string,unknown>).boundary_mm as number[][] ?? [])
         if(!points.length){ctx.fillStyle='#64748b';ctx.font='14px sans-serif';ctx.fillText('ยังไม่มีห้องหรือฝ้า · ใช้คำสั่งตรวจจับห้องจากผนังเพื่อเริ่มต้น',24,40);return}
         const minX=Math.min(...points.map(p=>p[0])),maxX=Math.max(...points.map(p=>p[0])),minY=Math.min(...points.map(p=>p[1])),maxY=Math.max(...points.map(p=>p[1]))
@@ -87,37 +88,53 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
         const sx=(x:number)=>ox+(x-minX)*scale,sy=(y:number)=>height-(oy+(y-minY)*scale)
         if(underlay?.visible&&underlay.image){ctx.save();ctx.globalAlpha=Math.max(.05,Math.min(1,underlay.opacity));const rotation=-(underlay.rotation_deg??0)*Math.PI/180;ctx.translate(sx(underlay.origin_mm[0]),sy(underlay.origin_mm[1]));ctx.rotate(rotation);ctx.drawImage(underlay.image,0,0,underlay.image.width*underlay.scale_mm_per_px*scale,underlay.image.height*underlay.scale_mm_per_px*scale);ctx.restore()}
         hitRegions.current=[]
-        for(const room of rooms){const d=room.module_data as Record<string,unknown>,ring=d.boundary_mm as [number,number][],boundaryOpen=d.boundary_status==='unclosed';ctx.beginPath();ring.forEach((p,i)=>i?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));ctx.closePath();ctx.fillStyle=boundaryOpen?'rgba(239,68,68,.10)':'rgba(148,163,184,.08)';ctx.fill();ctx.strokeStyle=boundaryOpen?'#dc2626':'#64748b';ctx.lineWidth=1.2;ctx.setLineDash([5,3]);ctx.stroke();ctx.setLineDash([]);const [cx,cy]=polygonInteriorPoint(ring)??[ring.reduce((s,p)=>s+p[0],0)/ring.length,ring.reduce((s,p)=>s+p[1],0)/ring.length];ctx.fillStyle=boundaryOpen?'#b91c1c':'#334155';ctx.font='12px sans-serif';ctx.fillText(`${String(d.number??'')} ${String(d.name??'Room')} · ${(Number(d.area_mm2??0)/1e6).toFixed(2)} m²${boundaryOpen?' · วงผนังเปิด':''}`,sx(cx),sy(cy));const px=ring.map(p=>sx(p[0])),py=ring.map(p=>sy(p[1])),minX=Math.min(...px),minY=Math.min(...py);hitRegions.current.push({id:room.id,x:minX,y:minY,w:Math.max(...px)-minX,h:Math.max(...py)-minY})}
+        const roomLabels:Array<{x:number;y:number;text:string;color:string}> = []
+        for(const room of rooms){const d=room.module_data as Record<string,unknown>,ring=d.boundary_mm as [number,number][],boundaryOpen=d.boundary_status==='unclosed',phaseStyle=resolvePlanPhaseStyle(getDisplayPhase(room));ctx.beginPath();ring.forEach((p,i)=>i?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));ctx.closePath();ctx.fillStyle=boundaryOpen?'rgba(239,68,68,.10)':getDisplayPhase(room)==='existing'?'rgba(148,163,184,.4)':phaseStyle.fill;ctx.fill();ctx.strokeStyle=boundaryOpen?'#dc2626':phaseStyle.stroke;ctx.lineWidth=phaseStyle.dash.length?1.5:1.2;ctx.setLineDash(boundaryOpen?[5,3]:phaseStyle.dash);ctx.stroke();ctx.setLineDash([]);const [cx,cy]=polygonInteriorPoint(ring)??[ring.reduce((s,p)=>s+p[0],0)/ring.length,ring.reduce((s,p)=>s+p[1],0)/ring.length];const areaLabel=formatRoomAreaM2(d.area_mm2,d.boundary_status);roomLabels.push({x:sx(cx),y:sy(cy),text:`${String(d.number??'')} ${String(d.name??'Room')}${areaLabel?` · ${areaLabel} m²`:''}${boundaryOpen?' · วงผนังเปิด':''}`,color:boundaryOpen?'#b91c1c':phaseStyle.stroke});const px=ring.map(p=>sx(p[0])),py=ring.map(p=>sy(p[1])),minX=Math.min(...px),minY=Math.min(...py);hitRegions.current.push({id:room.id,x:minX,y:minY,w:Math.max(...px)-minX,h:Math.max(...py)-minY})}
         for (const ceiling of ceilings) {
           const d = ceiling.module_data as Record<string, unknown>
           const ring = d.boundary_mm as number[][] | undefined
           if (!ring || ring.length < 3) continue
           const voids = (d.voids_mm as number[][][] | undefined) ?? []
           const boundaryOpen = d.room_boundary_status === 'unclosed'
+          const displayPhase = getDisplayPhase(ceiling)
+          const phaseStyle = resolvePlanPhaseStyle(displayPhase)
           const traceRing = (points: number[][]) => {
             points.forEach((point, index) => index ? ctx.lineTo(sx(point[0]), sy(point[1])) : ctx.moveTo(sx(point[0]), sy(point[1])))
             ctx.closePath()
           }
           ctx.beginPath(); traceRing(ring)
-          ctx.strokeStyle = boundaryOpen ? '#dc2626' : selectedId === ceiling.id ? '#7c3aed' : '#8b5cf6'
-          ctx.lineWidth = 1.6; ctx.setLineDash(boundaryOpen ? [5, 3] : []); ctx.stroke(); ctx.setLineDash([])
+          ctx.fillStyle = boundaryOpen ? 'rgba(239,68,68,.10)' : displayPhase === 'existing' ? 'rgba(148,163,184,.4)' : phaseStyle.fill
+          ctx.fill()
+          ctx.strokeStyle = boundaryOpen ? '#dc2626' : selectedId === ceiling.id ? '#7c3aed' : phaseStyle.stroke
+          ctx.lineWidth = phaseStyle.dash.length ? 1.5 : 1.6; ctx.setLineDash(boundaryOpen ? [5, 3] : phaseStyle.dash); ctx.stroke(); ctx.setLineDash([])
           for (const hole of voids) {
             if (!Array.isArray(hole) || hole.length < 3) continue
-            ctx.beginPath(); traceRing(hole)
-            ctx.strokeStyle = boundaryOpen ? '#dc2626' : '#7c3aed'; ctx.lineWidth = 1; ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([])
+            ctx.beginPath(); traceRing(hole); ctx.fillStyle = '#fbfdff'; ctx.fill()
+            ctx.strokeStyle = boundaryOpen ? '#dc2626' : phaseStyle.stroke; ctx.lineWidth = 1.2; ctx.setLineDash(boundaryOpen ? [4, 2] : phaseStyle.dash); ctx.stroke(); ctx.setLineDash([])
           }
-          const grid = d.grid_mm as number[] | undefined
-          if (grid && grid[0] > 0 && grid[1] > 0) {
-            ctx.beginPath()
-            ctx.strokeStyle = boundaryOpen ? 'rgba(220,38,38,.38)' : 'rgba(124,58,237,.36)'; ctx.lineWidth = .7
-            for (const [a, b] of clippedGridSegments(ring as [number, number][], grid[0], grid[1], voids as [number, number][][])) {
+          if (displayPhase === 'demolition') {
+            ctx.beginPath(); ctx.strokeStyle = '#ef4444'; ctx.lineWidth = .75
+            for (const [a, b] of polygonDiagonalHatchSegments(ring as [number, number][], 250, voids as [number, number][][])) {
               ctx.moveTo(sx(a[0]), sy(a[1])); ctx.lineTo(sx(b[0]), sy(b[1]))
             }
             ctx.stroke()
           }
+          const grid = d.grid_mm as number[] | undefined
+          if (grid && grid[0] > 0 && grid[1] > 0) {
+            ctx.beginPath()
+            const gridStyle = resolveCeilingGridStyle(displayPhase)
+            ctx.strokeStyle = boundaryOpen ? '#dc2626' : gridStyle.stroke; ctx.lineWidth = .7; ctx.setLineDash(boundaryOpen ? [5, 3] : gridStyle.dash)
+            for (const [a, b] of clippedGridSegments(ring as [number, number][], grid[0], grid[1], voids as [number, number][][])) {
+              ctx.moveTo(sx(a[0]), sy(a[1])); ctx.lineTo(sx(b[0]), sy(b[1]))
+            }
+            ctx.stroke(); ctx.setLineDash([])
+          }
           const xs = ring.map(point => sx(point[0])), ys = ring.map(point => sy(point[1]))
           hitRegions.current.push({ id: ceiling.id, x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) })
         }
+        // Keep room tags above ceiling fills and grids; otherwise only fragments outside
+        // the ceiling boundary remain visible in the reflected ceiling plan.
+        for(const label of roomLabels){ctx.save();ctx.font='12px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';const width=ctx.measureText(label.text).width;ctx.fillStyle='rgba(251,253,255,.92)';ctx.fillRect(label.x-width/2-4,label.y-9,width+8,18);ctx.fillStyle=label.color;ctx.fillText(label.text,label.x,label.y);ctx.restore()}
         ctx.fillStyle='#64748b';ctx.font='12px sans-serif';ctx.fillText('แปลนฝ้า RCP · คลิกเลือกห้องหรือฝ้า',12,20);return
       }
       const isEastWest = direction === 'east' || direction === 'west'
@@ -128,7 +145,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
       const visibleWallIds = getElevationVisibleWallIds(project, direction)
       const visibleOpeningIds = getElevationVisibleOpeningIds(project, direction)
       const items = Object.values(project.objects).filter(object =>
-        object.status !== 'archived' && object.removed_phase == null &&
+        object.status !== 'archived' &&
         (object.object_type !== 'architecture.wall' || visibleWallIds.has(object.id)) &&
         (!object.object_type.startsWith('door_window.') || visibleOpeningIds.has(object.id)),
       )
@@ -161,6 +178,15 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           const ring=d.boundary_mm as number[][]; if (!ring) continue
           for(const p of ring){bounds[0]=Math.min(bounds[0],horizontalCoordinate(p));bounds[1]=Math.max(bounds[1],horizontalCoordinate(p))}
           const z=resolveSlabElevation(project, object);if(z===undefined)continue;bounds[2]=Math.min(bounds[2],z-Number(d.thickness_mm??120));bounds[3]=Math.max(bounds[3],z)
+        } else if (object.object_type === 'roof.system') {
+          const shape = representations.get(object.id)?.shape
+          if (shape?.kind !== 'triangle_mesh') continue
+          for (const triangle of shape.triangles_mm) for (const point of triangle) {
+            bounds[0] = Math.min(bounds[0], horizontalCoordinate(point))
+            bounds[1] = Math.max(bounds[1], horizontalCoordinate(point))
+            bounds[2] = Math.min(bounds[2], point[2])
+            bounds[3] = Math.max(bounds[3], point[2])
+          }
         }
       }
       if (!Number.isFinite(bounds[0])) { ctx.fillStyle='#64748b';ctx.font='14px sans-serif';ctx.fillText('ยังไม่มีวัตถุสำหรับรูปด้านนี้',24,40);return }
@@ -171,7 +197,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
       const offsetX = (width-spanX*scale)/2+elevationView.panX, offsetY = (height-spanZ*scale)/2+elevationView.panY
       const sx=(x:number)=>offsetX+(x-bounds[0])*scale, sy=(z:number)=>height-(offsetY+(z-bounds[2])*scale)
       if(underlay?.visible&&underlay.image){ctx.save();ctx.globalAlpha=Math.max(.05,Math.min(1,underlay.opacity));const hOrigin=(isEastWest?underlay.origin_mm[1]:underlay.origin_mm[0])*(reversed?-1:1);ctx.translate(sx(hOrigin),sy(underlay.origin_mm[1]));if(reversed)ctx.scale(-1,1);ctx.rotate(-(underlay.rotation_deg??0)*Math.PI/180);ctx.drawImage(underlay.image,0,0,underlay.image.width*underlay.scale_mm_per_px*scale,underlay.image.height*underlay.scale_mm_per_px*scale);ctx.restore()}
-      const levelRows=project.levels.map(level=>({level,y:sy(level.elevation_mm)})).sort((a,b)=>a.y-b.y)
+      const levelRows=getVisibleElevationLevelRows(project.levels,level=>sy(level.elevation_mm),height)
       // Keep level labels inside the viewport and close to their real datum.
       // When storeys are tightly spaced, pack labels without changing their order
       // and draw a leader back to each actual level line instead of letting the
@@ -195,11 +221,8 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
         }
       }
       const groundY=sy(0)
-      const orderedItems=[...items].sort((a,b)=>{
-        const priority=(type:string)=>type==='structure.column'||type==='structure.beam'||type==='structure.slab'?0:type==='architecture.wall'?1:(type==='door_window.door'||type==='door_window.window')?2:3
-        return priority(a.object_type)-priority(b.object_type)
-      })
-      const elevationTags:Array<{x:number;y:number;text:string;shape:'hexagon'|'circle'|'triangle';selected:boolean}> = []
+      const orderedItems=sortElevationObjectsForDrawing(items,direction)
+      const elevationTags:Array<{x:number;y:number;width:number;height:number;text:string;shape:'hexagon'|'circle'|'triangle';selected:boolean}> = []
       let groundDrawn=false
       const drawGroundHatch=()=>{
         ctx.save();ctx.beginPath();ctx.rect(0,groundY,width,Math.max(0,height-groundY));ctx.clip();ctx.fillStyle='#aeb5bf';ctx.fillRect(0,groundY,width,height-groundY);ctx.strokeStyle='#858f9c';ctx.lineWidth=.7
@@ -230,7 +253,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           let cursor=left,best:[number,number]=[left,left]
           for(const [a0,a1] of openings){if(a0-cursor>best[1]-best[0])best=[cursor,a0];cursor=Math.max(cursor,a1)}
           if(right-cursor>best[1]-best[0])best=[cursor,right]
-          if(best[1]-best[0]>=markWidth+8)elevationTags.push({x:(best[0]+best[1])/2,y:(top+bottom)/2,text:markText,shape:'triangle',selected:selectedId===o.id})
+          if(best[1]-best[0]>=markWidth+8)elevationTags.push({x:(best[0]+best[1])/2,y:(top+bottom)/2,width:markWidth,height:18,text:markText,shape:'triangle',selected:selectedId===o.id})
         }else if(o.object_type==='structure.column'){
           const p=d.location_mm as number[];if(!p)continue;const extent=resolveColumnVerticalExtent(project,o);if(!extent)continue;const half=Number((d.section_mm as number[]|undefined)?.[isEastWest?0:1]??200)/2,base=extent.base_elevation_mm,topElevation=extent.top_elevation_mm
           left=sx(horizontalCoordinate(p)-half);right=sx(horizontalCoordinate(p)+half);bottom=sy(topElevation);top=sy(base);fill='#b9d6e8'
@@ -259,14 +282,37 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
             ctx.lineWidth=selectedId===o.id?Math.max(1.2,path.line_width_mm*scale):Math.max(.7,path.line_width_mm*scale)
             ctx.stroke()
           }
-          elevationTags.push({x,y:top-17,text:String(d.mark??''),shape:o.object_type==='door_window.window'?'hexagon':'circle',selected:selectedId===o.id})
+          ctx.font='bold 10px sans-serif'
+          const tagText=String(d.mark??'')
+          elevationTags.push({x,y:top-17,width:Math.max(26,ctx.measureText(tagText).width+12),height:18,text:tagText,shape:o.object_type==='door_window.window'?'hexagon':'circle',selected:selectedId===o.id})
+        }else if(o.object_type==='roof.system'){
+          const shape=representations.get(o.id)?.shape
+          if(shape?.kind!=='triangle_mesh')continue
+          const style=getElevationWallStyle(getDisplayPhase(o),selectedId===o.id)
+          const visibleEdges=new Map<string,[[number,number],[number,number]]>()
+          for(const [a,b] of getVisibleElevationMeshEdges(shape.triangles_mm,direction as Exclude<ElevationDirection,'rcp'>,scale)){
+            const start:[number,number]=[sx(horizontalCoordinate(a)),sy(a[2])]
+            const end:[number,number]=[sx(horizontalCoordinate(b)),sy(b[2])]
+            if(Math.hypot(end[0]-start[0],end[1]-start[1])<.5)continue
+            const pointKey=(point:[number,number])=>point.map(value=>Math.round(value*10)/10).join(',')
+            const keys=[pointKey(start),pointKey(end)].sort()
+            visibleEdges.set(keys.join('|'),keys[0]===pointKey(start)?[start,end]:[end,start])
+          }
+          ctx.beginPath();ctx.strokeStyle=style.stroke;ctx.lineWidth=selectedId===o.id?2:1.6;ctx.setLineDash(style.dash)
+          for(const [start,end] of visibleEdges.values()){ctx.moveTo(start[0],start[1]);ctx.lineTo(end[0],end[1])}
+          ctx.stroke();ctx.setLineDash([])
+          const projected=shape.triangles_mm.flat().map(point=>[sx(horizontalCoordinate(point)),sy(point[2])])
+          left=Math.min(...projected.map(point=>point[0]));right=Math.max(...projected.map(point=>point[0]));top=Math.min(...projected.map(point=>point[1]));bottom=Math.max(...projected.map(point=>point[1]))
         }else continue
         hitRegions.current.push({id:o.id,x:left,y:Math.min(top,bottom),w:Math.max(5,right-left),h:Math.max(5,Math.abs(bottom-top))})
       }
       if(!groundDrawn)drawGroundHatch()
       // Draw semantic marks after every facade fill so a coplanar/overlapping
       // wall cannot erase the finish or opening tag that belongs to another object.
-      for(const tag of elevationTags)drawTag(ctx,tag.x,tag.y,tag.text,tag.shape,tag.selected)
+      for(const tag of layoutElevationTags(elevationTags,width,height)){
+        if(tag.displaced){ctx.strokeStyle='#64748b';ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(tag.anchorX,tag.anchorY);ctx.lineTo(tag.x,tag.y);ctx.stroke()}
+        drawTag(ctx,tag.x,tag.y,tag.text,tag.shape,tag.selected)
+      }
       // Level labels are annotation, so keep them above facade fills, columns,
       // and the earth hatch. Datum lines remain behind the model geometry.
       drawLevelLabels()
@@ -323,11 +369,16 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
       if(start.clearOnTap&&Math.hypot(dx,dy)<=3)onSelectObject(null)
       return
     }
-    if(start.id&&Math.hypot(dx,dy)>3&&onMoveObject){const view=viewTransform.current,horizontal=(dx/view.scale)*(view.reversed?-1:1);onMoveObject(start.id,view.isEastWest?[0,horizontal]:[horizontal,0],-dy/view.scale,start.verticalIntent);onSelectObject(start.id)}
+    if(start.id&&project.objects[start.id]?.object_type!=='roof.system'&&Math.hypot(dx,dy)>3&&onMoveObject){const view=viewTransform.current,horizontal=(dx/view.scale)*(view.reversed?-1:1);onMoveObject(start.id,view.isEastWest?[0,horizontal]:[horizontal,0],-dy/view.scale,start.verticalIntent);onSelectObject(start.id)}
     else onSelectObject(start.id)
   }}/>
     <div role="group" aria-label="ควบคุมสเกลรูปด้าน" style={{position:'absolute',bottom:10,right:10,display:'flex',alignItems:'center',gap:5,padding:4,border:'1px solid #dbe3ec',borderRadius:8,background:'rgba(248,250,252,.94)',boxShadow:'0 2px 8px rgba(15,23,42,.08)'}}>
       <button type="button" aria-label="ย่อรูปด้าน" title="ย่อ" style={controlStyle} onClick={()=>zoomBy(1/1.25)}>−</button>
+      <input type="range" min={20} max={800} step={5} value={Math.round(viewState.current[direction].zoom*100)} aria-label="เปอร์เซ็นต์ซูมรูปด้าน" aria-valuetext={`${Math.round(viewState.current[direction].zoom*100)}% จากภาพพอดี`} title="ปรับซูมจากภาพพอดี · 20–800%" style={{width:84,accentColor:'#2563eb',cursor:'ew-resize'}} onChange={event=>{
+        const currentView=viewState.current[direction]
+        viewState.current[direction]=zoomElevationViewFromCenter(currentView,Number(event.currentTarget.value)/100)
+        setViewRevision(value=>value+1)
+      }}/>
       <span aria-live="polite" style={{minWidth:42,textAlign:'center',fontSize:11,fontVariantNumeric:'tabular-nums',color:'#475569'}}>{Math.round(viewState.current[direction].zoom*100)}%</span>
       <button type="button" aria-label="ขยายรูปด้าน" title="ขยาย" style={controlStyle} onClick={()=>zoomBy(1.25)}>+</button>
       <button type="button" aria-label="จัดภาพให้พอดี" title="จัดภาพให้พอดี" style={{...controlStyle,width:'auto',padding:'0 8px',fontSize:11}} onClick={fitView}>พอดี</button>

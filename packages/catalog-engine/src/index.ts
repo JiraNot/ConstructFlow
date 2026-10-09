@@ -1,8 +1,10 @@
-import { catalogInstanceOverrides, resolveCatalogType, type TypeDefinition, type ProjectDocument } from '@constructflow/project-model'
+import { CATALOG_PARAMETER_FIELDS, catalogInstanceOverrides, resolveCatalogType, type TypeDefinition, type ProjectDocument } from '@constructflow/project-model'
 import type { AssignInstanceTypeInput, CommandBusResult, CommandHandlerContext, DefineStructuralTypeInput, RenameCatalogTypeInput, UpdateStructuralTypeDimensionsInput } from '@constructflow/command-schema'
 import { preserveSegmentPlacementReference } from '@constructflow/geometry-kernel'
 
-const PARAMETER_FIELDS = ['section_mm', 'size_mm', 'thickness_mm', 'plaster_thickness_mm', 'height_mm', 'width_mm', 'sill_height_mm', 'opening_operation', 'panel_count', 'panel_layout', 'panel_width_ratios', 'transom_height_mm', 'bottom_light_height_mm', 'muntin_rows', 'muntin_columns', 'transom_muntin_rows', 'transom_muntin_columns', 'bottom_light_muntin_rows', 'bottom_light_muntin_columns', 'frame_depth_mm', 'frame_material', 'panel_material', 'door_leaf_style', 'door_face_components', 'opening_handle_style', 'opening_hardware_finish', 'glazing_material', 'glazing_transmission', 'material', 'wall_system', 'masonry_thickness_mm', 'plaster_inside_thickness_mm', 'plaster_outside_thickness_mm', 'plaster_inside_material', 'plaster_outside_material', 'inside_finish_mark', 'outside_finish_mark', 'foundation_type', 'topping_mm', 'slab_system', 'drop_mm', 'rebar_type', 'mass_per_m_kg', 'diameter_mm', 'cover_mm', 'grade', 'count', 'depth_mm', 'board_mm', 'back_mm', 'plinth_mm', 'front', 'carcass_material', 'front_material', 'back_material', 'countertop_material', 'countertop_mm', 'watts_per_m', 'driver_watts', 'derating_ratio'] as const
+// Keep type assignment and cascades in lockstep with the family fields exposed
+// by the canonical catalog, including newer opening frame/symbol parameters.
+const PARAMETER_FIELDS = [...new Set(Object.values(CATALOG_PARAMETER_FIELDS).flat())]
 
 function reject(context: CommandHandlerContext, message: string): CommandBusResult {
   return {

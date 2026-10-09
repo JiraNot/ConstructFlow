@@ -813,12 +813,15 @@ export function ConstructionWorkbench({
     ]),
     [useCrop, setUseCrop] = useState(false),
     [sheetPreview, setSheetPreview] = useState("");
+  const [selectedDimensionId, setSelectedDimensionId] = useState(""),
+    [dimensionOffsetMm, setDimensionOffsetMm] = useState<[number, number]>([0, 0]);
   const viewportOptions: PermitOptions = project.drawing_settings ?? {};
   const availableSheets = useMemo(
     () => compilePermitDrawingSet(project, viewportOptions).sheets,
     [project, viewportOptions],
   );
   const selectedSheet = availableSheets.find((sheet) => sheet.id === sheetId);
+  const dimensionLabels = (selectedSheet?.primitives ?? []).filter((primitive) => primitive.kind === "text" && primitive.dimension_id);
   const planOpenings = Object.values(project.objects).filter((o) => o.object_type === "door_window.door" || o.object_type === "door_window.window");
   const [selectedOpeningId, setSelectedOpeningId] = useState("");
   const [openingLines, setOpeningLines] = useState<OpeningPlanSymbolLine[]>([]);
@@ -837,6 +840,12 @@ export function ConstructionWorkbench({
     setOpeningLines(saved?.lines ?? []);
     setOpeningElevationLines(saved?.elevation_lines ?? []);
   }, [project, selectedOpeningId, sheetId]);
+  useEffect(() => {
+    const saved = selectedDimensionId
+      ? project.drawing_settings?.viewports[sheetId]?.dimension_overrides?.[selectedDimensionId]
+      : undefined;
+    setDimensionOffsetMm(saved?.offset_mm ?? [0, 0]);
+  }, [project, selectedDimensionId, sheetId]);
   useEffect(() => {
     if (tab === "sheets") {
       const saved = project.drawing_settings?.viewports[sheetId];
@@ -1235,6 +1244,34 @@ export function ConstructionWorkbench({
                 project={project}
                 onChange={(v) => setCrop(v as [number, number, number, number])}
               />
+              {(/^A-(02|03)(-L\d+)?$/.test(sheetId)) && <section style={{ marginTop: 18, borderTop: "1px solid #dbe3ed", paddingTop: 12 }}>
+                <h3>ตำแหน่งมิติอัตโนมัติ</h3>
+                <p>เลื่อนตำแหน่งเส้นและข้อความเป็นมม. ค่าระยะยังคำนวณจากโมเดลเสมอ</p>
+                <select aria-label="มิติที่ต้องการล็อกตำแหน่ง" value={selectedDimensionId} onChange={(event) => setSelectedDimensionId(event.target.value)}>
+                  <option value="">เลือกมิติในแผ่นนี้</option>
+                  {dimensionLabels.map((primitive) => primitive.kind === "text" && primitive.dimension_id ? <option key={primitive.dimension_id} value={primitive.dimension_id}>{primitive.text} · {primitive.dimension_id}</option> : null)}
+                </select>
+                {selectedDimensionId && <>
+                  <label style={fieldStyle}>Offset X (mm)<input aria-label="ตำแหน่งมิติ Offset X มม." type="number" value={dimensionOffsetMm[0]} onChange={(event) => setDimensionOffsetMm([Number(event.target.value), dimensionOffsetMm[1]])} /></label>
+                  <label style={fieldStyle}>Offset Y (mm)<input aria-label="ตำแหน่งมิติ Offset Y มม." type="number" value={dimensionOffsetMm[1]} onChange={(event) => setDimensionOffsetMm([dimensionOffsetMm[0], Number(event.target.value)])} /></label>
+                  <button onClick={() => {
+                    const saved = project.drawing_settings?.viewports[sheetId] ?? { scale_denominator: scale };
+                    const dimension_overrides = { ...saved.dimension_overrides, [selectedDimensionId]: { offset_mm: dimensionOffsetMm, locked: true as const } };
+                    const viewport = { ...saved, dimension_overrides };
+                    if (!execute([{ name: "UpdateSheetViewport", input: { sheet_id: sheetId, viewport } }])) return;
+                    setSheetPreview(compilePermitDrawingSet(project, { ...viewportOptions, viewports: { ...viewportOptions.viewports, [sheetId]: viewport } }).sheets.find((sheet) => sheet.id === sheetId)!.svg);
+                  }}>ล็อกตำแหน่งมิติ</button>
+                  <button onClick={() => {
+                    const saved = project.drawing_settings?.viewports[sheetId] ?? { scale_denominator: scale };
+                    const dimension_overrides = { ...saved.dimension_overrides };
+                    delete dimension_overrides[selectedDimensionId];
+                    const viewport = { ...saved, dimension_overrides };
+                    if (!execute([{ name: "UpdateSheetViewport", input: { sheet_id: sheetId, viewport } }])) return;
+                    setDimensionOffsetMm([0, 0]);
+                    setSheetPreview(compilePermitDrawingSet(project, { ...viewportOptions, viewports: { ...viewportOptions.viewports, [sheetId]: viewport } }).sheets.find((sheet) => sheet.id === sheetId)!.svg);
+                  }}>คืนตำแหน่งอัตโนมัติ</button>
+                </>}
+              </section>}
               {(/^A-(02|03)(-L\d+)?$/.test(sheetId) || ["A-05", "A-06"].includes(sheetId)) && <section style={{ marginTop: 18, borderTop: "1px solid #dbe3ed", paddingTop: 12 }}>
                 <h3>แก้เส้น 2D ช่องเปิดในแผ่นนี้</h3>
                 <p>กำลังแก้{openingViewKind === "plan" ? "แปลน" : "รูปด้าน"} · เส้นฉายจากโมเดลเป็นค่าเริ่มต้น เส้นที่แก้มีผลเฉพาะแผ่นนี้ และผูกตำแหน่งกับขนาดช่องเปิด</p>
@@ -1265,6 +1302,7 @@ export function ConstructionWorkbench({
                         scale_denominator: scale,
                         ...((/^(A-02|A-03|S-02|S-03)$/.test(sheetId) || /^(A-02|S-02)-L\d+$/.test(sheetId)) ? { level_id: planLevelId } : {}),
                         ...(project.drawing_settings?.viewports[sheetId]?.opening_overrides ? { opening_overrides: project.drawing_settings.viewports[sheetId].opening_overrides } : {}),
+                        ...(project.drawing_settings?.viewports[sheetId]?.dimension_overrides ? { dimension_overrides: project.drawing_settings.viewports[sheetId].dimension_overrides } : {}),
                         ...(useCenter
                           ? {
                               center_mm: center.map((v) => v * 1000) as [

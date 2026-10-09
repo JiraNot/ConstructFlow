@@ -13,6 +13,7 @@
       "@constructflow/geometry-kernel": ["../geometry-kernel/dist/index.d.ts"],
       "@constructflow/structure-engine": ["../structure-engine/dist/index.d.ts"],
       "@constructflow/representation-engine": ["../representation-engine/dist/index.d.ts"],
+      "@constructflow/sheet-engine": ["../sheet-engine/dist/index.d.ts"],
       "@constructflow/domain-providers": ["../domain-providers/dist/index.d.ts"],
       "@constructflow/takeoff-engine": ["../takeoff-engine/dist/index.d.ts"]
     }

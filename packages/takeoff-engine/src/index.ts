@@ -1,7 +1,8 @@
 import { resolveCatalogType, type ProjectDocument, type Phase } from '@constructflow/project-model'
 import { constructionOutputs } from '@constructflow/domain-providers'
 
-export type TakeoffCostCenter = 'demolition_site_prep' | 'new_construction' | 'existing_to_remain' | 'remodeling_joint_treatment'
+export type TakeoffCostCenter = 'demolition_site_prep' | 'new_construction' | 'remodeling_joint_treatment'
+type ClassificationCostCenter = TakeoffCostCenter | 'existing_to_remain'
 export type QuantityUnit = 'item' | 'm' | 'm2' | 'm3' | 'kg'
 
 export interface TakeoffLine {
@@ -28,7 +29,7 @@ export interface TakeoffReport {
 
 interface TakeoffClassification {
   phase: Phase
-  cost_center: TakeoffCostCenter
+  cost_center: ClassificationCostCenter
   object_type?: string
   mark?: string
 }
@@ -178,7 +179,7 @@ function valueFor(project: ProjectDocument, objectType: string, data: Data, fiel
   return resolveCatalogType(project, objectType, reference)?.parameters[field]
 }
 
-function phaseAndCostCenter(created: Phase, removed: 'demolition' | null): { phase: Phase; cost_center: TakeoffCostCenter } {
+function phaseAndCostCenter(created: Phase, removed: 'demolition' | null): { phase: Phase; cost_center: ClassificationCostCenter } {
   if (created === 'demolition') return { phase: 'demolition', cost_center: 'demolition_site_prep' }
   if (removed === 'demolition') return { phase: 'demolition', cost_center: 'demolition_site_prep' }
   if (created === 'new_construction') return { phase: 'new_construction', cost_center: 'new_construction' }
@@ -203,10 +204,14 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
     }
     const data = object.module_data as Data
     const defaults = phaseAndCostCenter(object.created_phase, object.removed_phase)
+    const costCenter = classification?.cost_center ?? defaults.cost_center
+    // Existing-to-remain objects are model context, not priced work. They only
+    // enter the takeoff when classified as demolition or joint-treatment work.
+    if (costCenter === 'existing_to_remain') return
     const typeId = typeof data.type_id === 'string' ? data.type_id : undefined
     const dimensions = {
       phase: classification?.phase ?? defaults.phase,
-      cost_center: classification?.cost_center ?? defaults.cost_center,
+      cost_center: costCenter,
       object_type: classification?.object_type ?? object.object_type,
       type_id: typeId,
       mark: classification?.mark ?? (typeof data.mark === 'string' && data.mark.trim() ? data.mark : object.object_type),
@@ -349,6 +354,10 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
       }
       case 'architecture.floor':
       case 'architecture.ceiling': {
+        if (data.follows_room_boundary === true && data.room_boundary_status === 'unclosed') {
+          warnings.push(`${object.id}: room boundary is unclosed; ${object.object_type === 'architecture.floor' ? 'floor' : 'ceiling'} quantity was omitted pending review`)
+          break
+        }
         const netAreaMm2 = netBoundaryAreaMm2(data, object.id, warnings)
         if (netAreaMm2 === undefined) break
         const netArea = mm2ToM2(netAreaMm2)
@@ -406,7 +415,6 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
   const totals: TakeoffReport['totals_by_cost_center'] = {
     demolition_site_prep: { item: 0, m: 0, m2: 0, m3: 0, kg:0 },
     new_construction: { item: 0, m: 0, m2: 0, m3: 0, kg:0 },
-    existing_to_remain: { item: 0, m: 0, m2: 0, m3: 0, kg:0 },
     remodeling_joint_treatment: { item: 0, m: 0, m2: 0, m3: 0, kg:0 },
   }
   const sorted = [...lines.values()].sort((a, b) => a.phase.localeCompare(b.phase) || a.object_type.localeCompare(b.object_type) || a.mark.localeCompare(b.mark))

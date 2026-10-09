@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { createEmptyProjectDocument, deserializeProject } from '../../project-model/dist/index.js'
-import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getPlanViewProject, getPlanVisibleObjects, getRepresentationTriangles, isWallFacadeForElevation, resolveElevationWallPhaseStyle } from '../dist/index.js'
+import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getPlanViewProject, getPlanVisibleObjects, getRepresentationTriangles, getVisibleElevationMeshEdges, isWallFacadeForElevation, resolveCeilingGridStyle, resolveElevationWallPhaseStyle, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '../dist/index.js'
 
 const fixture = deserializeProject(await readFile(new URL('../../../examples/kitchen-extension-proof.cfproj', import.meta.url), 'utf8'))
 
@@ -10,6 +10,23 @@ test('elevation wall phase palette is shared and distinguishes existing, new and
   assert.deepEqual(resolveElevationWallPhaseStyle('existing'), { fill: '#ffffff', stroke: '#64748b', dash: [] })
   assert.deepEqual(resolveElevationWallPhaseStyle('new_construction'), { fill: '#e3e8ed', stroke: '#334155', dash: [] })
   assert.deepEqual(resolveElevationWallPhaseStyle('demolition'), { fill: '#fee2e2', stroke: '#ef4444', dash: [6, 3] })
+})
+
+test('plan wall phase palette matches permit/CAD colors and line patterns', () => {
+  assert.deepEqual(resolvePlanWallPhaseStyle('existing'), { fill: '#ffffff', stroke: '#94a3b8', dash: [] })
+  assert.deepEqual(resolvePlanWallPhaseStyle('new_construction'), { fill: '#e3e8ed', stroke: '#0f172a', dash: [] })
+  assert.deepEqual(resolvePlanWallPhaseStyle('demolition'), { fill: '#fee2e2', stroke: '#ef4444', dash: [6, 3] })
+})
+
+test('shared plan phase palette resolves removals to the red dashed demolition style', () => {
+  assert.deepEqual(resolvePlanPhaseStyle('demolition'), resolvePlanWallPhaseStyle('demolition'))
+  assert.deepEqual(resolvePlanPhaseStyle('demolition'), { fill: '#fee2e2', stroke: '#ef4444', dash: [6, 3] })
+})
+
+test('reflected ceiling grid styling stays light for existing and new work and follows demolition dashes', () => {
+  assert.deepEqual(resolveCeilingGridStyle('existing'), { stroke: '#cbd5e1', dash: [] })
+  assert.deepEqual(resolveCeilingGridStyle('new_construction'), { stroke: '#94a3b8', dash: [] })
+  assert.deepEqual(resolveCeilingGridStyle('demolition'), { stroke: '#ef4444', dash: [6, 3] })
 })
 
 test('3D representations are deterministic and keep phase and supported interactions', () => {
@@ -321,6 +338,37 @@ test('elevation projection suppresses fully covered rear walls but retains stepp
   project.objects['north-front'] = wall('north-front', [0, 5000, 0], [2000, 5000, 0])
   assert.deepEqual(new Set(getElevationVisibleWallIds(project, 'north')), new Set(['north-front', 'south-rear']),
     'a farther wall must remain when part of its projected facade is exposed')
+})
+
+test('elevation projection retains demolition walls and their hosted openings', () => {
+  const project = createEmptyProjectDocument('ELEVATION-DEMOLITION', 'Elevation demolition')
+  project.objects['demo-wall'] = {
+    id: 'demo-wall', object_type: 'architecture.wall', created_phase: 'existing', removed_phase: 'demolition', level_refs: [], host_refs: [],
+    module_data: { mark: 'W-D1', start_point_mm: [0, 5000, 0], end_point_mm: [4000, 5000, 0], thickness_mm: 150, height_mm: 3000 },
+  }
+  project.objects['demo-window'] = {
+    id: 'demo-window', object_type: 'door_window.window', created_phase: 'existing', removed_phase: 'demolition', level_refs: [], host_refs: [],
+    module_data: { mark: 'W-D1', wall_id: 'demo-wall', location_mm: [2000, 5000, 0], width_mm: 1000, height_mm: 1200, sill_height_mm: 900 },
+  }
+
+  assert.deepEqual([...getElevationVisibleWallIds(project, 'north')], ['demo-wall'])
+  assert.ok(getElevationVisibleOpeningIds(project, 'north').has('demo-window'))
+})
+
+test('orthographic roof edges are hidden by nearer triangles and exposed from the opposite side', () => {
+  const triangles = [
+    [[0, 1000, 0], [1000, 1000, 0], [500, 1000, 500]],
+    [[400, 0, 100], [600, 0, 100], [500, 0, 200]],
+  ]
+  const hasRearEave = (edges) => edges.some(([a, b]) =>
+    Math.abs(a[0] - 400) < .1 && Math.abs(a[2] - 100) < .1
+      && Math.abs(b[0] - 600) < .1 && Math.abs(b[2] - 100) < .1
+    || Math.abs(b[0] - 400) < .1 && Math.abs(b[2] - 100) < .1
+      && Math.abs(a[0] - 600) < .1 && Math.abs(a[2] - 100) < .1,
+  )
+
+  assert.equal(hasRearEave(getVisibleElevationMeshEdges(triangles, 'north')), false)
+  assert.equal(hasRearEave(getVisibleElevationMeshEdges(triangles, 'south')), true)
 })
 
 test('orthographic elevations include only walls whose long axis forms that facade', () => {

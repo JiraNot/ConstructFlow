@@ -26,6 +26,23 @@ test('catalog editor saves rename and dimensions as one undoable transaction', a
   assert.equal(serializeProject(session.redo()), saved)
 })
 
+test('catalog cascades include exposed opening frame parameters while preserving instance overrides', async () => {
+  const project = await fixture()
+  const type = project.types.find(t => t.object_type === 'door_window.window' && t.name === 'W1')
+  const instances = Object.values(project.objects).filter(o => o.module_data.type_id === type.id)
+  const overridden = instances[0]
+  overridden.module_data.instance_overrides = { ...(overridden.module_data.instance_overrides ?? {}), frame_face_width_mm: 55 }
+  const session = new ProjectCommandSession(project)
+  const result = session.execute([{ name: 'UpdateStructuralTypeDimensions', input: { type_id_or_name: type.id, parameters: { frame_face_width_mm: 70 } } }])
+  assert.equal(result.status, 'success', result.errors?.join('\n'))
+  for (const object of instances) {
+    const updated = result.updatedProject.objects[object.id].module_data
+    if (object.id === overridden.id) assert.equal(updated.instance_overrides.frame_face_width_mm, 55)
+    else assert.equal(updated.frame_face_width_mm, 70)
+  }
+  assert.equal(session.undo().objects[overridden.id].module_data.instance_overrides.frame_face_width_mm, 55)
+})
+
 test('invalid dimensions roll back a preceding rename and do not add undo history', async () => {
   const project = await fixture(), session = new ProjectCommandSession(project)
   const type = project.types.find(t => t.object_type === 'door_window.window' && t.name === 'W1')

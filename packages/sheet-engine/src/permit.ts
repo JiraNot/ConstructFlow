@@ -10,14 +10,19 @@ import {
   type ProjectDocument,
   type SmartObject,
   type OpeningViewOverride,
+  type DimensionViewOverride,
 } from "@constructflow/project-model";
 import { constructionOutputs } from "@constructflow/domain-providers";
-import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getOpeningElevationLinework, getRepresentationTriangles, isWallFacadeForElevation, resolveElevationWallPhaseStyle } from "@constructflow/representation-engine";
+import { resolveArchitecturalFloorPatternKind } from "@constructflow/architecture-engine";
+import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getOpeningElevationLinework, getRepresentationTriangles, getVisibleElevationMeshEdges, isWallFacadeForElevation, resolveCeilingGridStyle, resolveElevationWallPhaseStyle, resolvePlanPhaseStyle } from "@constructflow/representation-engine";
 import {
   type Vec2,
   type Vec3,
   type Triangle,
   clippedGridSegments,
+  clippedStaggeredPlankSegments,
+  polygonDiagonalHatchSegments,
+  polygonSectionIntervals,
   wallMasonryHatchSegments,
 } from "@constructflow/geometry-kernel";
 import { polygonInteriorPoint } from "@constructflow/geometry-kernel";
@@ -71,6 +76,7 @@ export type VectorPrimitive =
       size: number;
       color: string;
       max_width?: number;
+      dimension_id?: string;
     };
 export interface SheetViewport {
   scale_denominator: number;
@@ -79,6 +85,7 @@ export interface SheetViewport {
   crop_bounds_mm?: [number, number, number, number];
   section_cut_mm?: number;
   opening_overrides?: Record<string, OpeningViewOverride>;
+  dimension_overrides?: Record<string, DimensionViewOverride>;
 }
 export interface PermitOptions {
   viewports?: Partial<Record<PermitSheetId, SheetViewport>>;
@@ -193,6 +200,9 @@ function compilePermitDrawingSetBase(
           : id === 'A-10'
             ? (viewport.level_id ?? project.project.active_level_id ?? ground)
           : undefined;
+      const displayTitle = id === "A-10" && planLevelId
+        ? `${title} · ${project.levels.find(level => level.id === planLevelId)?.name ?? planLevelId}`
+        : title;
       if (![20, 25, 50, 100, 200, 500].includes(viewport.scale_denominator))
         throw new Error("Unsupported drawing scale");
       if (
@@ -416,7 +426,7 @@ function compilePermitDrawingSetBase(
         "#0f172a",
         370,
       );
-      text([14, 22], title, 3.5, "#0f172a", 370);
+      text([14, 22], displayTitle, 3.5, "#0f172a", 370);
       path([
         [7, 255],
         [413, 255],
@@ -1276,6 +1286,20 @@ function compilePermitDrawingSetBase(
             return inside;
           };
 
+          const isPointOn2DPolyBoundary = (pt: Vec2, poly: Vec2[]): boolean => {
+            const toleranceMm = 1e-3;
+            for (let i = 0; i < poly.length; i++) {
+              const a = poly[i], b = poly[(i + 1) % poly.length];
+              const dx = b[0] - a[0], dy = b[1] - a[1];
+              const lengthSquared = dx * dx + dy * dy;
+              if (lengthSquared < 1e-12) continue;
+              const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / lengthSquared));
+              const nearestX = a[0] + t * dx, nearestY = a[1] + t * dy;
+              if (Math.hypot(pt[0] - nearestX, pt[1] - nearestY) <= toleranceMm) return true;
+            }
+            return false;
+          };
+
           const isEdgeOccluded = (
             ea: Vec3,
             eb: Vec3,
@@ -1324,7 +1348,7 @@ function compilePermitDrawingSetBase(
                 facadeWallIds.has(face.objectId) &&
                 point[0] >= face.minX && point[0] <= face.maxX &&
                 point[1] >= face.minY && point[1] <= face.maxY &&
-                isPointIn2DPoly(point, face.poly2D),
+                (isPointIn2DPoly(point, face.poly2D) || isPointOn2DPolyBoundary(point, face.poly2D)),
               );
             });
           };
@@ -1349,6 +1373,30 @@ function compilePermitDrawingSetBase(
                   return [[Math.min(...points.map((point) => point[0])), Math.min(...points.map((point) => point[1])), Math.max(...points.map((point) => point[0])), Math.max(...points.map((point) => point[1]))] as [number, number, number, number]];
                 })
               : [];
+          const planLabelGeometryBoxes = (id === "A-02" || id === "A-03" || id === "A-10") && mode === "xy"
+            ? viewObjects.flatMap(({ object, mesh, out }) => {
+                if (![
+                  "architecture.wall", "architecture.stair", "structure.column", "structure.beam",
+                  "door_window.door", "door_window.window", "electrical.fixture", "electrical.led_run",
+                  "interior.cabinet_run", "plumbing.fixture", "drainage.manhole",
+                ].includes(object.object_type)) return [];
+                const points = [
+                  ...mesh.flat(),
+                  ...((out?.paths ?? []).flat() as Vec3[]),
+                ].filter((point): point is Vec3 => Array.isArray(point) && point.length >= 2 && point.slice(0, 3).every(Number.isFinite));
+                if (!points.length) return [];
+                const screenPoints = points.map((point) => mapped(projectPoint(point)));
+                return [{
+                  objectId: object.id,
+                  box: [
+                    Math.min(...screenPoints.map((point) => point[0])) - 0.2,
+                    Math.min(...screenPoints.map((point) => point[1])) - 0.2,
+                    Math.max(...screenPoints.map((point) => point[0])) + 0.2,
+                    Math.max(...screenPoints.map((point) => point[1])) + 0.2,
+                  ] as [number, number, number, number],
+                }];
+              })
+            : [];
           if (isBuildingElevation) {
             for (const { object } of viewObjects) {
               if (object.object_type !== "door_window.door" && object.object_type !== "door_window.window") continue;
@@ -1378,13 +1426,16 @@ function compilePermitDrawingSetBase(
               ?? project.types.find((candidate) => candidate.object_type === wall.object_type && candidate.name.toLowerCase() === String(d.mark ?? "").toLowerCase());
             return String(override?.[`${face}_finish_mark`] ?? d[`${face}_finish_mark`] ?? type?.parameters[`${face}_finish_mark`] ?? d.mark ?? "");
           };
-          const placeElevationMark = (at: Vec2, label: string, color: string) => {
+          const placeElevationMark = (at: Vec2, label: string, color: string, preferOffset = false): boolean => {
             const width = Math.min(18, Math.max(6, label.length * 1.35));
-            const offsets: Vec2[] = [
+            const centeredOffsets: Vec2[] = [
               [0, 0], [0, -4], [0, 4], [0, -8], [0, 8],
               [-8, -4], [8, -4], [-8, 4], [8, 4], [-12, 0], [12, 0],
               [-16, -8], [16, -8], [-16, 8], [16, 8], [0, -12], [0, 12],
             ];
+            const offsets = preferOffset
+              ? [...centeredOffsets.slice(1), centeredOffsets[0]]
+              : centeredOffsets;
             const candidates = offsets.map(([dx, dy]) => [at[0] + dx, at[1] + dy] as Vec2);
             for (const [x, y] of candidates) {
               const box: [number, number, number, number] = [x - width / 2, y - 2, x + width / 2, y + 2];
@@ -1402,8 +1453,9 @@ function compilePermitDrawingSetBase(
               elevationWallLabelBoxes.push(box);
               if (Math.hypot(x - at[0], y - at[1]) > 2) path([at, [x, y]], "#94a3b8", 0.15);
               text([box[0], y + 0.8], label, 2.2, color, width);
-              return;
+              return true;
             }
+            return false;
           };
           const placeOpeningElevationMark = (at: Vec2, label: string, color: string) => {
             const width = Math.min(18, Math.max(6, label.length * 1.35)), height = 4;
@@ -1434,6 +1486,8 @@ function compilePermitDrawingSetBase(
               [0, -4.8], [0, 4.8], [width / 2 + 2, 0], [-width / 2 - 2, 0],
               [width / 2 + 2, -4.8], [-width / 2 - 2, -4.8],
               [width / 2 + 2, 4.8], [-width / 2 - 2, 4.8], [0, -9], [0, 9],
+              [0, -13], [0, 13], [width / 2 + 6, 0], [-width / 2 - 6, 0],
+              [width / 2 + 6, -6], [-width / 2 - 6, -6], [width / 2 + 6, 6], [-width / 2 - 6, 6],
             ];
             for (const [dx, dy] of offsets) {
               const center: Vec2 = [at[0] + dx, at[1] + dy];
@@ -1441,13 +1495,18 @@ function compilePermitDrawingSetBase(
               if (box[0] < view.x || box[2] > view.x + view.w || box[1] < view.y || box[3] > view.y + view.h) continue;
               const isStairMark = project.objects[objectId]?.object_type === "architecture.stair";
               if (!isStairMark && planStairFootprintBoxes.some(([left, top, right, bottom]) => box[0] < right + 0.4 && box[2] > left - 0.4 && box[1] < bottom + 0.4 && box[3] > top - 0.4)) continue;
+              const hitsGeometry = planLabelGeometryBoxes.some(({ objectId: obstacleId, box: obstacle }) =>
+                (id === "A-10" || obstacleId !== objectId) &&
+                box[0] < obstacle[2] && box[2] > obstacle[0] && box[1] < obstacle[3] && box[3] > obstacle[1],
+              );
+              if (hitsGeometry) continue;
               if (planObjectLabelBoxes.some(([left, top, right, bottom]) => box[0] < right + 0.8 && box[2] > left - 0.8 && box[1] < bottom + 0.5 && box[3] > top - 0.5)) continue;
               planObjectLabelBoxes.push(box);
               if (Math.hypot(dx, dy) > 2) path([at, center], "#94a3b8", 0.1);
               text([box[0], center[1] + 0.8], label, 2.2, color, width);
               return;
             }
-            warnings.push(`A-10: could not place ${label} without overlap (${objectId})`);
+            warnings.push(`${id}: could not place ${label} without overlap (${objectId})`);
           };
           const planObjectLabelAnchor = (object: SmartObject, fallback: Vec2): Vec2 => {
             const d = data(object), start = d.start_point_mm as Vec3 | undefined, end = d.end_point_mm as Vec3 | undefined;
@@ -1592,7 +1651,63 @@ function compilePermitDrawingSetBase(
           // boundary edge through several Smart Objects. De-duplicate those
           // rendered segments at the view level so a flush wall join stays a
           // single clean CAD line instead of a darker doubled seam.
+          const planSurfacePatternPrimitives: VectorPrimitive[] = [];
+          const planGeometryInsertionIndex = primitives.length;
           const emittedProjectionEdges = new Set<string>();
+          const emittedSectionMarks = new Set<string>();
+          const sectionAxis = mode === "section_x" ? 1 : 0;
+          const sectionCoordinates = mode.startsWith("section_") ? viewObjects.flatMap(({ object, mesh }) => [
+            ...mesh.flat().map(point => point[sectionAxis]),
+            ...(object.object_type === "architecture.floor" || object.object_type === "architecture.ceiling"
+              ? ((data(object).boundary_mm as Vec2[] | undefined) ?? []).map(point => point[sectionAxis])
+              : []),
+          ]) : [];
+          const defaultSectionCut = sectionCoordinates.length
+            ? (Math.min(...sectionCoordinates) + Math.max(...sectionCoordinates)) / 2
+            : 0;
+          const resolveSectionCut = (object: SmartObject) => {
+            const bathDrain = id === "A-09" ? (data(object).drain_mm as number[] | undefined)?.[sectionAxis] : undefined;
+            return viewport.section_cut_mm ?? bathDrain ?? defaultSectionCut;
+          };
+          if (id === "A-07" && mode.startsWith("section_")) {
+            for (const { object: surface } of viewObjects) {
+              if (surface.object_type !== "architecture.floor" && surface.object_type !== "architecture.ceiling") continue;
+              const d = data(surface), boundary = d.boundary_mm as Vec2[] | undefined;
+              if (!boundary || boundary.length < 3) continue;
+              const elevation = resolveArchitectureSurfaceElevation(project, surface);
+              const thickness = Number(d.thickness_mm ?? (surface.object_type === "architecture.floor" ? 50 : 12));
+              if (elevation === undefined || !Number.isFinite(thickness) || thickness <= 0) {
+                warnings.push(`${String(d.mark ?? surface.id)}: surface level/elevation reference is invalid in section`);
+                continue;
+              }
+              const intervals = polygonSectionIntervals(
+                boundary,
+                (Array.isArray(d.voids_mm) ? d.voids_mm : []) as Vec2[][],
+                sectionAxis,
+                resolveSectionCut(surface),
+              );
+              const isFloor = surface.object_type === "architecture.floor";
+              const lower = isFloor ? elevation - thickness : elevation;
+              const upper = isFloor ? elevation : elevation + thickness;
+              const phase = getDisplayPhase(surface), style = resolveElevationWallPhaseStyle(phase);
+              for (const [from, to] of intervals) {
+                const cut = resolveSectionCut(surface);
+                const start: Vec3 = sectionAxis === 1 ? [from, cut, lower] : [cut, from, lower];
+                const end: Vec3 = sectionAxis === 1 ? [to, cut, lower] : [cut, to, lower];
+                const upperEnd: Vec3 = sectionAxis === 1 ? [to, cut, upper] : [cut, to, upper];
+                const upperStart: Vec3 = sectionAxis === 1 ? [from, cut, upper] : [cut, from, upper];
+                path(
+                  [mapped(projectPoint(start)), mapped(projectPoint(end)), mapped(projectPoint(upperEnd)), mapped(projectPoint(upperStart))],
+                  style.stroke,
+                  0.25,
+                  style.dash.length ? [2, 1] : undefined,
+                  true,
+                  style.fill,
+                );
+              }
+              sourceIds.add(surface.id);
+            }
+          }
           for (const { object: o, mesh, out } of viewObjects) {
             const openingOverride = viewport.opening_overrides?.[o.id];
             const phase = getDisplayPhase(o),
@@ -1630,10 +1745,11 @@ function compilePermitDrawingSetBase(
               emittedProjectionEdges.add(projectedKey);
               drawSegment(p, q, color, width, dash);
             };
-            // Use the shared model-space hatch geometry so Canvas, PDF and DXF
-            // share the same 45-degree direction, pitch and opening cutouts.
-            if ((id === "A-02" || id === "A-03") && mode === "xy" &&
-                o.object_type === "architecture.wall" && phase === "new_construction" && isMasonryWallPlanHatch(o, project.types)) {
+            // Keep phase hatches in shared model-space coordinates so Canvas,
+            // PDF and DXF use the same 45-degree direction and opening cutouts.
+            const demolitionWall = o.object_type === "architecture.wall" && phase === "demolition";
+            const newMasonryWall = o.object_type === "architecture.wall" && phase === "new_construction" && isMasonryWallPlanHatch(o, project.types);
+            if ((id === "A-02" || id === "A-03") && mode === "xy" && (demolitionWall || newMasonryWall)) {
               const wall = data(o), start = wall.start_point_mm as Vec3 | undefined, end = wall.end_point_mm as Vec3 | undefined;
               if (start && end) {
                 const dx = end[0] - start[0], dy = end[1] - start[1], length = Math.hypot(dx, dy);
@@ -1646,7 +1762,8 @@ function compilePermitDrawingSetBase(
                   });
                 for (const [hatchStart, hatchEnd] of wallMasonryHatchSegments(
                   [start[0], start[1]], [end[0], end[1]], Number(wall.thickness_mm ?? 100), openingSpans,
-                )) drawSegment(hatchStart, hatchEnd, "#9aa6b4", 0.15);
+                  demolitionWall ? 250 : 140,
+                )) drawSegment(hatchStart, hatchEnd, demolitionWall ? colors.demolition : "#9aa6b4", 0.15);
               }
             }
             if (isBuildingElevation && (o.object_type === "door_window.door" || o.object_type === "door_window.window")) {
@@ -1678,20 +1795,8 @@ function compilePermitDrawingSetBase(
             }
             for (const tr of isElevation && openingOverride?.hide_generated_elevation && o.object_type.startsWith("door_window.") ? [] : mesh) {
               if (mode.startsWith("section_")) {
-                const axis = mode === "section_x" ? 1 : 0,
-                  world = viewObjects.flatMap((v) =>
-                    v.mesh.flat().map((v) => v[axis]),
-                  ),
-                  bathDrain =
-                    id === "A-09"
-                      ? (data(o).drain_mm as number[] | undefined)?.[axis]
-                      : undefined,
-                  cut =
-                    viewport.section_cut_mm ??
-                    bathDrain ??
-                    (world.length
-                      ? (Math.min(...world) + Math.max(...world)) / 2
-                      : 0),
+                const axis = sectionAxis,
+                  cut = resolveSectionCut(o),
                   intersections: Vec3[] = [];
                 for (let i = 0; i < 3; i++) {
                   const a = tr[i],
@@ -1717,7 +1822,10 @@ function compilePermitDrawingSetBase(
               >();
               const omitEndOnWall = isBuildingElevation && o.object_type === "architecture.wall" && !facadeWallIds.has(o.id);
               const omitGeneratedOpening = isElevation && openingOverride?.hide_generated_elevation && o.object_type.startsWith("door_window.");
-              for (const tr of omitEndOnWall || omitGeneratedOpening ? [] : mesh) {
+              const visibleRoofEdges = isBuildingElevation && o.object_type === "roof.system"
+                ? getVisibleElevationMeshEdges(mesh, facadeDirection, 1 / viewport.scale_denominator)
+                : undefined;
+              for (const tr of omitEndOnWall || omitGeneratedOpening || visibleRoofEdges ? [] : mesh) {
                 const a = tr[1].map((v, i) => v - tr[0][i]),
                   b = tr[2].map((v, i) => v - tr[0][i]),
                   n: Vec3 = [
@@ -1741,18 +1849,22 @@ function compilePermitDrawingSetBase(
                   edges.set(key, e);
                 }
               }
-              for (const e of edges.values())
-                if (
-                  e.normals.length === 1 ||
-                  e.normals.some(
-                    (n) =>
-                      Math.abs(
-                        n.reduce((s, v, i) => s + v * e.normals[0][i], 0),
-                      ) <
-                      1 - 1e-8,
+              if (visibleRoofEdges) {
+                for (const [a, b] of visibleRoofEdges) edge(a, b);
+              } else {
+                for (const e of edges.values())
+                  if (
+                    e.normals.length === 1 ||
+                    e.normals.some(
+                      (n) =>
+                        Math.abs(
+                          n.reduce((s, v, i) => s + v * e.normals[0][i], 0),
+                        ) <
+                        1 - 1e-8,
+                    )
                   )
-                )
-                  edge(e.a, e.b);
+                    edge(e.a, e.b);
+              }
               for (const route of mode === "xy" && openingOverride?.hide_generated_details ? [] : out?.paths ?? [])
                 for (let i = 1; i < route.length; i++)
                   edge(route[i - 1], route[i]);
@@ -1817,6 +1929,13 @@ function compilePermitDrawingSetBase(
                 // Room number/name/area are placed together inside the room below.
               } else if ((id === "A-02" || id === "A-03" || id === "A-10") && mode === "xy" && !hiddenStructureMark) {
                 placePlanObjectLabel(planObjectLabelAnchor(o, a), String(data(o).mark ?? o.object_type), color, o.id);
+              } else if (id === "A-07" && mode.startsWith("section_") && !hiddenStructureMark && a[0] >= view.x && a[0] < view.x + view.w && a[1] >= view.y && a[1] < view.y + view.h) {
+                const mark = String(data(o).mark ?? o.object_type);
+                const key = `${mark}|${a.map(value => value.toFixed(2)).join(",")}`;
+                if (!emittedSectionMarks.has(key)) {
+                  emittedSectionMarks.add(key);
+                  if (!placeElevationMark(a, mark, color, true)) warnings.push(`A-07: could not place section mark without overlap (${mark})`);
+                }
               } else if (
                 !isBuildingElevation &&
                 !hiddenStructureMark &&
@@ -1892,14 +2011,28 @@ function compilePermitDrawingSetBase(
               for (const { object: floor } of viewObjects.filter(({ object }) => object.object_type === "architecture.floor")) {
                 const d = data(floor), ring = d.boundary_mm as Vec2[] | undefined;
                 const layers = Array.isArray(d.finish_layers) ? d.finish_layers as Array<{ material?: string }> : [];
-                if (!ring || ring.length < 3 || !layers.some(layer => /tile|porcelain|ceramic|กระเบื้อง/i.test(String(layer.material ?? "")))) continue;
+                if (!ring || ring.length < 3) continue;
+                const phase = getDisplayPhase(floor), phaseStyle = resolvePlanPhaseStyle(phase);
+                const voids = (Array.isArray(d.voids_mm) ? d.voids_mm : []) as Vec2[][];
+                if (phase === "demolition") {
+                  for (const [a, b] of polygonDiagonalHatchSegments(ring, 250, voids))
+                    planSurfacePatternPrimitives.push({ kind: "path", points: [mapped(a), mapped(b)], color: phaseStyle.stroke, width: 0.15 });
+                }
+                const patternKind = resolveArchitecturalFloorPatternKind(layers);
+                if (!patternKind) continue;
                 const spacing = d.finish_pattern_mm as Vec2 | undefined;
                 const origin = d.finish_pattern_origin_mm as Vec2 | undefined;
                 const stepX = spacing?.[0] ?? 600, stepY = spacing?.[1] ?? 600;
-                const voids = (Array.isArray(d.voids_mm) ? d.voids_mm : []) as Vec2[][];
-                for (const [a, b] of clippedGridSegments(ring, stepX, stepY, voids, origin ?? [0, 0], Number(d.finish_pattern_rotation_deg ?? 0)))
-                  path([mapped(a), mapped(b)], "#9aa6b4", 0.12);
+                const pattern = patternKind === "staggered_plank"
+                  ? clippedStaggeredPlankSegments(ring, stepX, stepY, voids, origin ?? [0, 0], Number(d.finish_pattern_rotation_deg ?? 0))
+                  : clippedGridSegments(ring, stepX, stepY, voids, origin ?? [0, 0], Number(d.finish_pattern_rotation_deg ?? 0));
+                for (const [a, b] of pattern)
+                  planSurfacePatternPrimitives.push({ kind: "path", points: [mapped(a), mapped(b)], color: phase === "demolition" ? phaseStyle.stroke : "#cbd5e1", width: 0.1, dash: phase === "demolition" ? [2, 1] : undefined });
               }
+              // Floor hatches and tile courses are surface underlays. Emit them
+              // before wall, stair, opening, and structural linework so patterns
+              // cannot print across foreground geometry and annotations.
+              primitives.splice(planGeometryInsertionIndex, 0, ...planSurfacePatternPrimitives);
               const pointInRoom = (point: Vec2, ring: Vec2[]) => {
                 let inside = false;
                 for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
@@ -1915,9 +2048,11 @@ function compilePermitDrawingSetBase(
                   ?? [ring.reduce((sum, point) => sum + point[0], 0) / ring.length, ring.reduce((sum, point) => sum + point[1], 0) / ring.length];
                 const number = String(d.number ?? d.mark ?? "").trim();
                 const name = String(d.name ?? "Room").trim();
-                const title = [number, name].filter(Boolean).join("  ");
+                const boundaryOpen = d.boundary_status === "unclosed";
+                if (boundaryOpen) warnings.push(`${String(d.mark ?? room.id)}: wall loop no longer closes; room area omitted from the plan tag`);
+                const title = [number, name, boundaryOpen ? "วงผนังเปิด" : ""].filter(Boolean).join("  ");
                 const area = Number(d.area_mm2);
-                const areaText = Number.isFinite(area) && area > 0 ? `${(area / 1e6).toFixed(2)} m²` : "";
+                const areaText = !boundaryOpen && Number.isFinite(area) && area > 0 ? `${(area / 1e6).toFixed(2)} m²` : "";
                 const titleWidth = Math.max(8, title.length * 1.15), areaWidth = Math.max(8, areaText.length * 1.05);
                 const tagWidth = Math.max(titleWidth, areaWidth), tagHeight = areaText ? 6 : 3.8;
                 const offsets: Vec2[] = [[0, 0], [0, 8], [0, -8], [-8, 0], [8, 0], [0, 14], [0, -14], [-12, 8], [12, 8], [-12, -8], [12, -8]];
@@ -1930,7 +2065,7 @@ function compilePermitDrawingSetBase(
                   const hitsLabel = planObjectLabelBoxes.some(([left, top, right, bottom]) => box[0] < right + 0.8 && box[2] > left - 0.8 && box[1] < bottom + 0.5 && box[3] > top - 0.5);
                   const hitsStair = planStairFootprintBoxes.some(([left, top, right, bottom]) => box[0] < right + 0.4 && box[2] > left - 0.4 && box[1] < bottom + 0.4 && box[3] > top - 0.4);
                   if (!inView || !pointInRoom(candidateWorld, ring) || hitsLabel || hitsStair) continue;
-                  text([anchor[0] - titleWidth / 2, anchor[1] - 0.3], title, 2.2, colors[getDisplayPhase(room)], titleWidth);
+                  text([anchor[0] - titleWidth / 2, anchor[1] - 0.3], title, 2.2, boundaryOpen ? "#b91c1c" : colors[getDisplayPhase(room)], titleWidth);
                   if (areaText) text([anchor[0] - areaWidth / 2, anchor[1] + 2.2], areaText, 1.8, "#475569", areaWidth);
                   planObjectLabelBoxes.push(box);
                   placed = true;
@@ -2128,7 +2263,7 @@ function compilePermitDrawingSetBase(
                 );
               }
               text(
-                [view.x + 2, glY - 2],
+                [view.x + 2, glY - 5],
                 "±0.000 GL (ระดับดินเดิม)",
                 2.3,
                 "#0f172a",
@@ -2167,7 +2302,7 @@ function compilePermitDrawingSetBase(
                   0.3,
                 );
                 const elevStr = `${level.elevation_mm >= 0 ? "+" : ""}${(level.elevation_mm / 1000).toFixed(2)} ${level.name}`;
-                text([datumX + 2, a[1] - 1.2], elevStr, 2.2, "#0f172a");
+                text([datumX + 2, a[1] - 4], elevStr, 2.2, "#0f172a");
               }
             }
           }
@@ -2226,15 +2361,7 @@ function compilePermitDrawingSetBase(
                   const cutEnd3: Vec3 = [cutEnd[0] + 120, cutEnd[1] + 80, cutEnd[2]];
                   const c1 = mapped(projectPoint(cutStart3));
                   const c2 = mapped(projectPoint(cutEnd3));
-                  path([c1, c2], "#0f172a", 0.45);
-                  path(
-                    [
-                      mapped(projectPoint([cutStart[0] - 80, cutStart[1] - 80, cutStart[2]])),
-                      mapped(projectPoint([cutEnd[0] + 160, cutEnd[1] + 80, cutEnd[2]])),
-                    ],
-                    "#0f172a",
-                    0.45,
-                  );
+                  path([c1, c2], "#0f172a", 0.25, [2, 1]);
                   const label = "แนวตัดบันได 1FL", labelWidth = 21;
                   const labelCandidates: Array<{ at: Vec2; leader: Vec2[] }> = [
                     { at: [(stairBounds[0] + stairBounds[2] - labelWidth) / 2, stairBounds[3] + 5], leader: [[(c1[0] + c2[0]) / 2, (c1[1] + c2[1]) / 2], [(c1[0] + c2[0]) / 2, stairBounds[3] + 3]] },
@@ -2260,40 +2387,199 @@ function compilePermitDrawingSetBase(
           }
           if (id === "A-10" && mode === "rcp") {
             const ceilings = selected.filter(object => object.object_type === "architecture.ceiling");
+            const rcpCeilingLabels: Array<{ box: Vec2[]; at: Vec2; text: string; size: number; color: string; maxWidth: number }> = [];
             for (const ceiling of ceilings) {
               const d = data(ceiling), ring = d.boundary_mm as Vec2[] | undefined;
+              const phase = getDisplayPhase(ceiling), phaseStyle = resolvePlanPhaseStyle(phase);
               if (d.room_boundary_status === "unclosed") warnings.push(`${String(d.mark ?? ceiling.id)}: source room boundary is open; verify ceiling extent before issue`);
               if (!ring || ring.length < 3) continue;
               const voids = (d.voids_mm as Vec2[][] | undefined) ?? [];
-              path(ring.map(mapped), "#7c3aed", 0.35, undefined, true, "#f5f3ff");
+              const phaseDash = phase === "demolition" ? [2, 1] : undefined;
+              path(ring.map(mapped), phaseStyle.stroke, phase === "new_construction" ? 0.5 : phase === "demolition" ? 0.35 : 0.25,
+                phaseDash, true, phase === "existing" ? "#ffffff" : phaseStyle.fill);
               // Knock the opening out of the ceiling poche before drawing its
               // outline. The grid is clipped around voids below, so leaving
               // the fill intact here made a shaft/skylight look like a solid
               // ceiling on A-10 even though the grid stopped at its boundary.
-              for (const hole of voids) path(hole.map(mapped), "#7c3aed", 0.25, [2, 1], true, "#ffffff");
+              for (const hole of voids) path(hole.map(mapped), phaseStyle.stroke, 0.25, [2, 1], true, "#ffffff");
+              if (phase === "demolition") {
+                for (const [a, b] of polygonDiagonalHatchSegments(ring, 250, voids))
+                  path([mapped(a), mapped(b)], phaseStyle.stroke, 0.15);
+              }
               const grid = d.grid_mm as Vec2 | undefined;
               if (grid && grid[0] > 0 && grid[1] > 0) {
+                const gridStyle = resolveCeilingGridStyle(phase);
                 for (const [a, b] of clippedGridSegments(ring, grid[0], grid[1], voids))
-                  path([mapped(a), mapped(b)], "#a78bfa", 0.12, [1.5, 1.5]);
+                  path([mapped(a), mapped(b)], gridStyle.stroke, 0.12, gridStyle.dash);
               }
               const center: Vec2 = polygonInteriorPoint(ring) ?? [ring.reduce((sum, point) => sum + point[0], 0) / ring.length, ring.reduce((sum, point) => sum + point[1], 0) / ring.length];
               const resolvedElevation = resolveArchitectureSurfaceElevation(project, ceiling);
               if (resolvedElevation === undefined) warnings.push(`${String(d.mark ?? ceiling.id)}: ceiling level/elevation reference is invalid`);
-              text(mapped(center), `${String(d.mark ?? "C")}: ${String(d.material ?? "ฝ้า")}  ${resolvedElevation === undefined ? "ระดับไม่ถูกต้อง" : `+${(resolvedElevation / 1000).toFixed(3)} m`}`, 2.1, "#5b21b6", 55);
+              const ceilingLabel = `${String(d.mark ?? "C")}: ${String(d.material ?? "ฝ้า")}  ${resolvedElevation === undefined ? "ระดับไม่ถูกต้อง" : `+${(resolvedElevation / 1000).toFixed(3)} m`}`;
+              const labelSize = 2.1, labelMaxWidth = 55;
+              const labelWidth = Math.min(labelMaxWidth, [...ceilingLabel].length * labelSize * 0.62);
+              const labelWidthMm = labelWidth * viewport.scale_denominator;
+              const labelHeightMm = (labelSize + 1.2) * viewport.scale_denominator;
+              const gridStep = grid && grid[0] > 0 && grid[1] > 0 ? grid : [600, 600];
+              const labelOffsets: Vec2[] = [[0, 0]];
+              for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0], [-2, 0], [2, 0], [0, -2], [0, 2]])
+                labelOffsets.push([dx * Math.max(gridStep[0], labelWidthMm * 0.7), dy * Math.max(gridStep[1], labelHeightMm)]);
+              const voidBounds = voids.map(hole => ({
+                left: Math.min(...hole.map(point => point[0])), right: Math.max(...hole.map(point => point[0])),
+                bottom: Math.min(...hole.map(point => point[1])), top: Math.max(...hole.map(point => point[1])),
+              }));
+              const labelAnchor = labelOffsets
+                .map(([dx, dy]) => [center[0] + dx, center[1] + dy] as Vec2)
+                .find(([x, y]) => {
+                  const left = x - labelWidthMm / 2, right = x + labelWidthMm / 2;
+                  const bottom = y - labelHeightMm / 2, top = y + labelHeightMm / 2;
+                  const corners: Vec2[] = [[left, bottom], [right, bottom], [right, top], [left, top]];
+                  return corners.every(corner => isPointIn2DPoly(corner, ring)) &&
+                    !voidBounds.some(hole => left < hole.right && right > hole.left && bottom < hole.top && top > hole.bottom);
+                });
+              if (!labelAnchor) warnings.push(`${String(d.mark ?? ceiling.id)}: no clear RCP label area outside ceiling openings`);
+              const labelCenter = mapped(labelAnchor ?? center);
+              const labelAt: Vec2 = [labelCenter[0] - labelWidth / 2, labelCenter[1]];
+              const labelBox: Vec2[] = [
+                [labelAt[0] - 0.8, labelAt[1] - labelSize - 0.4],
+                [labelAt[0] + labelWidth + 0.8, labelAt[1] - labelSize - 0.4],
+                [labelAt[0] + labelWidth + 0.8, labelAt[1] + 0.4],
+                [labelAt[0] - 0.8, labelAt[1] + 0.4],
+              ];
+              // Draw every ceiling's outline, voids, and grid before any labels.
+              // Otherwise a later adjacent ceiling can draw its grid over an
+              // earlier label's white knockout and reduce print legibility.
+              rcpCeilingLabels.push({ box: labelBox, at: labelAt, text: ceilingLabel, size: labelSize, color: phaseStyle.stroke, maxWidth: labelWidth });
               sourceIds.add(ceiling.id);
             }
+            for (const label of rcpCeilingLabels) path(label.box, "#ffffff", 0, undefined, true, "#ffffff");
+            for (const label of rcpCeilingLabels) text(label.at, label.text, label.size, label.color, label.maxWidth);
             for (const room of selected.filter(object => object.object_type === "architecture.room")) {
               const d = data(room), ring = d.boundary_mm as Vec2[] | undefined;
+              const phase = getDisplayPhase(room), phaseStyle = resolvePlanPhaseStyle(phase);
               if (d.boundary_status === "unclosed") warnings.push(`${String(d.mark ?? room.id)}: wall loop no longer closes; displayed room area is last known`);
               if (!ring || ring.length < 3) continue;
-              path(ring.map(mapped), "#64748b", 0.18, [2, 1], true);
+              path(ring.map(mapped), phaseStyle.stroke, 0.18, phase === "demolition" ? [2, 1] : undefined, true);
             }
             for (const floor of selected.filter(object => object.object_type === "architecture.floor")) {
               const d = data(floor), ring = d.boundary_mm as Vec2[] | undefined;
+              const phase = getDisplayPhase(floor), phaseStyle = resolvePlanPhaseStyle(phase);
               if (d.room_boundary_status === "unclosed") warnings.push(`${String(d.mark ?? floor.id)}: source room boundary is open; verify floor extent before issue`);
-              if (ring && ring.length >= 3) path(ring.map(mapped), "#b45309", 0.2, [3, 1], true);
+              if (ring && ring.length >= 3) path(ring.map(mapped), phaseStyle.stroke, 0.2, phase === "demolition" ? [2, 1] : [3, 1], true);
             }
             text([view.x + 2, view.y + view.h - 3], ceilings.length ? "RCP · ขอบเขตฝ้า ช่องเปิด และกริดตามค่าจริงของแต่ละฝ้า" : "RCP · ยังไม่มีวัตถุฝ้าในชั้นนี้", 2.1, "#475569", 240);
+          }
+          if ((id === "A-02" || id === "A-03") && mode === "xy") {
+            const dimensionColor = "#475569";
+            const drawDimension = (dimensionId: string, a: Vec2, b: Vec2, label: string, witnessA?: Vec2, witnessB?: Vec2) => {
+              const override = viewport.dimension_overrides?.[dimensionId];
+              const delta = override?.locked ? override.offset_mm : [0, 0];
+              const baseA = mapped(a), baseB = mapped(b);
+              const pa: Vec2 = [baseA[0] + delta[0], baseA[1] + delta[1]];
+              const pb: Vec2 = [baseB[0] + delta[0], baseB[1] + delta[1]];
+              if (witnessA) path([mapped(witnessA), pa], dimensionColor, 0.1);
+              if (witnessB) path([mapped(witnessB), pb], dimensionColor, 0.1);
+              const dx = pb[0] - pa[0], dy = pb[1] - pa[1], length = Math.hypot(dx, dy);
+              if (length < 1e-6) return;
+              const tangent: Vec2 = [dx / length, dy / length], normal: Vec2 = [-tangent[1], tangent[0]];
+              const width = Math.max(5, [...label].length * 0.88), halfGap = width / 2 + 0.8;
+              const center: Vec2 = [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2];
+              if (length / 2 > halfGap) {
+                path([pa, [center[0] - tangent[0] * halfGap, center[1] - tangent[1] * halfGap]], dimensionColor, 0.14);
+                path([[center[0] + tangent[0] * halfGap, center[1] + tangent[1] * halfGap], pb], dimensionColor, 0.14);
+              } else path([pa, pb], dimensionColor, 0.14);
+              for (const point of [pa, pb]) path([
+                [point[0] - tangent[0] * 0.8 - normal[0] * 0.8, point[1] - tangent[1] * 0.8 - normal[1] * 0.8],
+                [point[0] + tangent[0] * 0.8 + normal[0] * 0.8, point[1] + tangent[1] * 0.8 + normal[1] * 0.8],
+              ], dimensionColor, 0.18);
+              text([center[0] - width / 2, center[1] - 0.8], label, 1.7, dimensionColor, width);
+              const labelPrimitive = primitives.at(-1);
+              if (labelPrimitive?.kind === "text") labelPrimitive.dimension_id = dimensionId;
+            };
+            const planPoints = viewObjects.filter(({ object }) => object.object_type !== "structure.grid")
+              .flatMap(({ mesh, out }) => [...mesh.flat(), ...((out?.paths ?? []).flat() as Vec3[])])
+              .filter(point => Array.isArray(point) && point.length >= 2 && point.slice(0, 3).every(Number.isFinite))
+              .map(projectPoint);
+            if (planPoints.length) {
+              const bounds = {
+                minX: Math.min(...planPoints.map(point => point[0])), maxX: Math.max(...planPoints.map(point => point[0])),
+                minY: Math.min(...planPoints.map(point => point[1])), maxY: Math.max(...planPoints.map(point => point[1])),
+              };
+              const gridObjects = viewObjects.filter(({ object }) => object.object_type === "structure.grid");
+              const gridX = gridObjects.filter(({ object }) => data(object).orientation === "vertical")
+                .map(({ object }) => ({ id: object.id, position: Number(data(object).position_mm) })).filter(item => Number.isFinite(item.position)).sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+              const gridY = gridObjects.filter(({ object }) => data(object).orientation === "horizontal")
+                .map(({ object }) => ({ id: object.id, position: Number(data(object).position_mm) })).filter(item => Number.isFinite(item.position)).sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+              for (let index = 0; index + 1 < gridX.length; index++) {
+                const from = gridX[index]!, to = gridX[index + 1]!, a = from.position, b = to.position, y = bounds.minY - 350;
+                drawDimension(`grid-x:${from.id}:${to.id}`, [a, y], [b, y], `${((b - a) / 1000).toFixed(2)} m`, [a, bounds.minY], [b, bounds.minY]);
+              }
+              for (let index = 0; index + 1 < gridY.length; index++) {
+                const from = gridY[index]!, to = gridY[index + 1]!, a = from.position, b = to.position, x = bounds.minX - 350;
+                drawDimension(`grid-y:${from.id}:${to.id}`, [x, a], [x, b], `${((b - a) / 1000).toFixed(2)} m`, [bounds.minX, a], [bounds.minX, b]);
+              }
+              {
+                const rows = new Map<number, Array<{ x: number; id: string }>>();
+                for (const { object } of viewObjects.filter(({ object }) => object.object_type === "structure.column")) {
+                  const location = data(object).location_mm as Vec3 | undefined;
+                  if (!location || !location.slice(0, 2).every(Number.isFinite)) continue;
+                  const key = Math.round(location[1]); rows.set(key, [...(rows.get(key) ?? []), { x: location[0], id: object.id }]);
+                }
+                const row = [...rows.entries()].sort((a, b) => b[1].length - a[1].length)[0];
+                if (row && row[1].length > 1) {
+                  const y = row[0] - (gridX.length > 1 ? 600 : 350), points = [...new Map(row[1].map(point => [`${point.x}:${point.id}`, point])).values()].sort((a, b) => a.x - b.x || a.id.localeCompare(b.id));
+                  for (let index = 0; index + 1 < points.length; index++) {
+                    const from = points[index]!, to = points[index + 1]!, a = from.x, b = to.x;
+                    drawDimension(`columns-x:${from.id}:${to.id}`, [a, y], [b, y], `${((b - a) / 1000).toFixed(2)} m`, [a, row[0]], [b, row[0]]);
+                  }
+                }
+              }
+              {
+                const columnsByLine = new Map<number, Array<{ y: number; id: string }>>();
+                for (const { object } of viewObjects.filter(({ object }) => object.object_type === "structure.column")) {
+                  const location = data(object).location_mm as Vec3 | undefined;
+                  if (!location || !location.slice(0, 2).every(Number.isFinite)) continue;
+                  const key = Math.round(location[0]); columnsByLine.set(key, [...(columnsByLine.get(key) ?? []), { y: location[1], id: object.id }]);
+                }
+                const column = [...columnsByLine.entries()].sort((a, b) => b[1].length - a[1].length)[0];
+                if (column && column[1].length > 1) {
+                  const x = column[0] - (gridY.length > 1 ? 600 : 350), points = [...new Map(column[1].map(point => [`${point.y}:${point.id}`, point])).values()].sort((a, b) => a.y - b.y || a.id.localeCompare(b.id));
+                  for (let index = 0; index + 1 < points.length; index++) {
+                    const from = points[index]!, to = points[index + 1]!, a = from.y, b = to.y;
+                    drawDimension(`columns-y:${from.id}:${to.id}`, [x, a], [x, b], `${((b - a) / 1000).toFixed(2)} m`, [column[0], a], [column[0], b]);
+                  }
+                }
+              }
+              const boundIds = viewObjects.filter(({ object }) => object.object_type === "architecture.wall").map(({ object }) => object.id).sort().join(":");
+              drawDimension(`overall-x:${boundIds}`, [bounds.minX, bounds.minY - 900], [bounds.maxX, bounds.minY - 900], `${((bounds.maxX - bounds.minX) / 1000).toFixed(2)} m`, [bounds.minX, bounds.minY], [bounds.maxX, bounds.minY]);
+              drawDimension(`overall-y:${boundIds}`, [bounds.minX - 900, bounds.minY], [bounds.minX - 900, bounds.maxY], `${((bounds.maxY - bounds.minY) / 1000).toFixed(2)} m`, [bounds.minX, bounds.minY], [bounds.minX, bounds.maxY]);
+
+              const openingOffsetByWall = new Map<string, number>();
+              for (const { object: opening } of viewObjects.filter(({ object }) => object.object_type === "door_window.door" || object.object_type === "door_window.window")) {
+                const openingData = resolvedData(project, opening), hostId = String(openingData.wall_id ?? ""), host = project.objects[hostId];
+                if (!host || host.object_type !== "architecture.wall") continue;
+                const wall = data(host), start = wall.start_point_mm as Vec3 | undefined, end = wall.end_point_mm as Vec3 | undefined;
+                if (!start || !end) continue;
+                const dx = end[0] - start[0], dy = end[1] - start[1], length = Math.hypot(dx, dy);
+                const width = Number(openingData.width_mm ?? data(opening).width_mm), height = Number(openingData.height_mm ?? data(opening).height_mm);
+                const offsetAlong = Number(openingData.offset_along_wall_mm ?? data(opening).offset_along_wall_mm);
+                if (!(length > 0 && width > 0 && width <= length && Number.isFinite(offsetAlong))) continue;
+                const tangent: Vec2 = [dx / length, dy / length], normal: Vec2 = [-tangent[1], tangent[0]];
+                const center: Vec2 = [start[0] + tangent[0] * offsetAlong, start[1] + tangent[1] * offsetAlong];
+                const half = width / 2;
+                const planCenter: Vec2 = [(bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2];
+                const sign = (center[0] - planCenter[0]) * normal[0] + (center[1] - planCenter[1]) * normal[1] < 0 ? 1 : -1;
+                const offset = 450 + (openingOffsetByWall.get(hostId) ?? 0);
+                openingOffsetByWall.set(hostId, (openingOffsetByWall.get(hostId) ?? 0) + 250);
+                const jambA: Vec2 = [center[0] - tangent[0] * half, center[1] - tangent[1] * half];
+                const jambB: Vec2 = [center[0] + tangent[0] * half, center[1] + tangent[1] * half];
+                const dimA: Vec2 = [jambA[0] + normal[0] * sign * offset, jambA[1] + normal[1] * sign * offset];
+                const dimB: Vec2 = [jambB[0] + normal[0] * sign * offset, jambB[1] + normal[1] * sign * offset];
+                const mark = String(openingData.mark ?? data(opening).mark ?? "Opening");
+                const label = `${mark} ${ (width / 1000).toFixed(2) }×${Number.isFinite(height) ? (height / 1000).toFixed(2) : "?"} m`;
+                drawDimension(`opening:${opening.id}:width`, dimA, dimB, label, jambA, jambB);
+              }
+            }
           }
           text(
             [view.x, 35],
@@ -2493,20 +2779,36 @@ function compilePermitDrawingSetBase(
         warnings.push(
           "Framing source is incomplete: add modeled beams/slabs or explicitly confirm this sheet is not applicable",
         );
-      if (
-        id === "S-06" &&
-        !selected.some((o) => o.object_type === "structure.rebar_set")
-      )
-        warnings.push("BBS reinforcement source objects are missing");
+      const s06Beams = id === "S-06"
+        ? selected.filter((o) => o.object_type === "structure.beam")
+        : [];
+      const s06RebarRoles = new Map<string, Set<string>>();
+      if (id === "S-06") for (const o of selected) {
+        if (o.object_type !== "structure.rebar_set") continue;
+        const d = data(o), hostId = d.host_id, role = d.role;
+        if (typeof hostId !== "string" || typeof role !== "string") continue;
+        const roles = s06RebarRoles.get(hostId) ?? new Set<string>();
+        roles.add(role);
+        s06RebarRoles.set(hostId, roles);
+      }
+      const s06RequiredRoles = ["top", "bottom", "stirrups"];
+      const s06IncompleteBeams = s06Beams.filter((beam) => {
+        const roles = s06RebarRoles.get(beam.id);
+        return !roles || s06RequiredRoles.some((role) => !roles.has(role));
+      });
+      const s06BbsMissing = id === "S-06" && (
+        s06Beams.length === 0 || s06IncompleteBeams.length > 0
+      );
+      if (s06BbsMissing) warnings.push(
+        s06Beams.length === 0
+          ? "BBS requires modeled beams with top, bottom, and stirrup reinforcement sets"
+          : `BBS reinforcement is incomplete for ${s06IncompleteBeams.length} of ${s06Beams.length} modeled beams; add top, bottom, and stirrup sets to each beam`,
+      );
       if (id === "A-10" && !selected.some(object => object.object_type === "architecture.ceiling"))
         warnings.push("RCP has no modeled ceiling objects for this level; add rooms/ceilings and set their grid and elevation");
       if (id === "A-07")
         warnings.push(
           "Sections show geometric intersections; annotation and construction detail review required",
-        );
-      if (id === "A-05" || id === "A-06")
-        warnings.push(
-          "Projected vector edges; hidden-line / façade annotation review required",
         );
       for (const [i, w] of [...new Set(warnings)].slice(0, 3).entries())
         text([18, 235 + i * 5], w, 2.3, "#b45309", 375);
@@ -2517,12 +2819,12 @@ function compilePermitDrawingSetBase(
       );
       const isA01Missing = id === "A-01" && !isLegalComplete;
       const status: "draft" | "missing_data" | "issued" =
-        isA01Missing || (!selected.length && id !== "A-01") || missingRequired
+        isA01Missing || (!selected.length && id !== "A-01") || missingRequired || s06BbsMissing
           ? "missing_data"
           : (project.legal_metadata?.signatories?.issue_approved ? "issued" : "draft");
       return {
         id,
-        title,
+        title: displayTitle,
         scale: `1:${viewport.scale_denominator}`,
         primitives,
         svg: primitivesToSvg(primitives),
@@ -2626,18 +2928,23 @@ export function compilePermitDrawingSet(
   });
 
   const totalSheets = base.sheets.length + extras.length;
-  const numberedExtras = extras.map((sheet, index) => {
+  const numberedExtras = extras.map((sheet) => {
     const primitives = sheet.primitives.map((primitive) => {
       if (primitive.kind !== "text") return primitive;
       if (primitive.at[0] === 372 && primitive.at[1] === 270)
         return { ...primitive, text: sheet.id };
-      if (primitive.at[0] === 372 && primitive.at[1] === 282)
-        return { ...primitive, text: `${base.sheets.length + index + 1} / ${totalSheets}` };
       return primitive;
     });
     return { ...sheet, primitives, svg: primitivesToSvg(primitives) };
   });
-  const sheets = [...base.sheets, ...numberedExtras];
+  const sheets = [...base.sheets, ...numberedExtras].map((sheet, index) => {
+    const primitives = sheet.primitives.map((primitive) =>
+      primitive.kind === "text" && primitive.at[0] === 372 && primitive.at[1] === 282
+        ? { ...primitive, text: `${index + 1} / ${totalSheets}` }
+        : primitive,
+    );
+    return { ...sheet, primitives, svg: primitivesToSvg(primitives) };
+  });
   return {
     ...base,
     sheets,

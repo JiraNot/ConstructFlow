@@ -74,6 +74,8 @@ const basic: Record<string, string[]> = {
   "structure.beam": ["section_mm", "drop_mm"],
   "structure.foundation": ["size_mm", "foundation_type"],
   "structure.slab": ["thickness_mm", "topping_mm", "slab_system"],
+  "architecture.floor": ["thickness_mm", "finish_layers", "finish_pattern_mm", "finish_pattern_origin_mm", "finish_pattern_rotation_deg"],
+  "architecture.ceiling": ["thickness_mm", "grid_mm"],
   "architecture.wall": [
     "wall_system",
     "masonry_thickness_mm",
@@ -99,6 +101,14 @@ const defaults: Record<string, TypeParameters> = {
     slab_system: "slab_on_ground",
     material: "reinforced_concrete",
   },
+  "architecture.floor": {
+    thickness_mm: 50,
+    finish_layers: [{ mark: "Tile", material: "porcelain_tile", thickness_mm: 10, quantity_unit: "m2" }],
+    finish_pattern_mm: [600, 600],
+    finish_pattern_origin_mm: [0, 0],
+    finish_pattern_rotation_deg: 0,
+  },
+  "architecture.ceiling": { thickness_mm: 12, material: "gypsum_board", grid_mm: [600, 600] },
   "architecture.wall": {
     wall_system: "masonry",
     masonry_thickness_mm: 70,

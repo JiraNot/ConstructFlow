@@ -65,7 +65,7 @@ interface PlanCanvasProps {
   onCommitArchitecturalFloor?: (boundary_mm: [number, number][]) => void
   onCommitCeiling?: (boundary_mm: [number, number][]) => void
   onCommitRoomSeparator?: (start: [number, number], end: [number, number]) => void
-  onCommitSlabVoid: (hostId: string, boundary_mm: [number, number][]) => void
+  onCommitSurfaceVoid: (hostId: string, boundary_mm: [number, number][]) => void
   onCommitGrid: (tag: string, start_mm: [number, number], end_mm: [number, number], sequenceStyle?: 'auto' | 'alpha' | 'numeric') => void
   onCommitGridSystem: (origin_mm: [number, number], xIntervals_mm: number[], yIntervals_mm: number[], xFirstTag: string, yFirstTag: string) => void
   onModifyGrid?: (id: string, changes: { start_point_mm?: [number, number]; end_point_mm?: [number, number] }) => void
@@ -340,7 +340,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onCommitArchitecturalFloor,
   onCommitCeiling,
   onCommitRoomSeparator,
-  onCommitSlabVoid,
+  onCommitSurfaceVoid,
   onCommitGrid,
   onCommitGridSystem,
   onModifyGrid,
@@ -1390,7 +1390,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       setActiveWallSnap(null)
       let snap = e.ctrlKey
         ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
-        : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes)
+        : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject?.id)
       if (activeTool === 'beam' && beamStartNode) snap = constrainLineSnap(snap, rawWorld, beamStartNode.point_mm, e.shiftKey, beamStartNode.reference)
       if (activeTool === 'wall' && wallStartNode) snap = constrainLineSnap(snap, rawWorld, wallStartNode.point_mm, e.shiftKey, wallStartNode.reference)
       if (activeTool === 'grid' && gridStartPoint) snap = constrainLineSnap(snap, rawWorld, gridStartPoint, e.shiftKey)
@@ -1706,7 +1706,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           if (activeTool === 'slab') onCommitSlab(slabBoundary)
           else if (activeTool === 'archFloor') onCommitArchitecturalFloor?.(slabBoundary)
           else if (activeTool === 'ceiling') onCommitCeiling?.(slabBoundary)
-          else if (selectedId && planProject.objects[selectedId]?.object_type === 'structure.slab') onCommitSlabVoid(selectedId, slabBoundary)
+          else if (selectedId && ['structure.slab', 'architecture.floor', 'architecture.ceiling'].includes(planProject.objects[selectedId]?.object_type ?? '')) onCommitSurfaceVoid(selectedId, slabBoundary)
           setSlabBoundary([])
           setDrawLengthMeters(''); setDrawAngleDegrees('')
           clearDimensionOverrides()
@@ -1816,22 +1816,22 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         const movedPixels = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
         if (movedPixels >= 3) {
           if ((draggingObject.kind === 'column-corner' || draggingObject.kind === 'foundation-corner') && draggingObject.centerMm) {
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
             const size: [number, number] = [Math.max(100, Math.round(2 * Math.abs(point[0] - draggingObject.centerMm[0]))), Math.max(100, Math.round(2 * Math.abs(point[1] - draggingObject.centerMm[1])))]
             if (draggingObject.kind === 'column-corner') onResizeColumn?.(draggingObject.id, size)
             else onResizeFoundation?.(draggingObject.id, size)
           } else if (draggingObject.kind === 'polygon-vertex' && draggingObject.boundaryPointsMm && draggingObject.endpointIndex !== undefined) {
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
             const boundary: [number, number][] = structuredClone(draggingObject.boundaryPointsMm)
             boundary[draggingObject.endpointIndex] = point
             onUpdateBoundaryVertex?.(draggingObject.id, boundary)
           } else if (draggingObject.kind === 'wall-endpoint' && draggingObject.startPointMm && draggingObject.endPointMm && draggingObject.endpointIndex !== undefined) {
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
             const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
             if (draggingObject.endpointIndex === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
             onUpdateWallEndpoints?.(draggingObject.id, start, end)
           } else if (draggingObject.kind === 'beam-endpoint' && draggingObject.startPointMm && draggingObject.endPointMm && draggingObject.endpointIndex !== undefined) {
-            const snap = e.ctrlKey ? { point_mm: rawWorld, target_id: undefined } : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes)
+            const snap = e.ctrlKey ? { point_mm: rawWorld, target_id: undefined } : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id)
             let point: [number, number] = snap.point_mm
             const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
             const targetColumn = snap.target_id ? planProject.objects[snap.target_id] : undefined
@@ -1843,12 +1843,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             const oldEndColumn = beam && isBeamObject(beam) ? beam.module_data.end_column_id ?? null : null
             onUpdateBeamEndpoints?.(draggingObject.id, start, end, draggingObject.endpointIndex === 0 ? columnId : oldStartColumn, draggingObject.endpointIndex === 1 ? columnId : oldEndColumn)
           } else if (draggingObject.kind === 'grid-endpoint' && draggingObject.startPointMm && draggingObject.endPointMm && draggingObject.endpointIndex !== undefined) {
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
             const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
             if (draggingObject.endpointIndex === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
             onModifyGrid?.(draggingObject.id, { start_point_mm: start, end_point_mm: end })
           } else if (draggingObject.kind === 'separator-endpoint' && draggingObject.startPointMm && draggingObject.endPointMm && draggingObject.endpointIndex !== undefined) {
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
             const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
             if (draggingObject.endpointIndex === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
             onUpdateRoomSeparator?.(draggingObject.id, start, end)
@@ -1863,7 +1863,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           } else if (draggingObject.kind === 'column') {
             const snap = e.ctrlKey
               ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
-              : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes)
+              : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id)
             onMoveColumn(draggingObject.id, snap.point_mm)
           } else if (draggingObject.kind === 'wall') {
             const delta: [number, number] = [
@@ -1949,7 +1949,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     if (activeTool === 'slab') onCommitSlab(slabBoundary)
     else if (activeTool === 'archFloor') onCommitArchitecturalFloor?.(slabBoundary)
     else if (activeTool === 'ceiling') onCommitCeiling?.(slabBoundary)
-    else if (activeTool === 'slabVoid' && selectedId && planProject.objects[selectedId]?.object_type === 'structure.slab') onCommitSlabVoid(selectedId, slabBoundary)
+    else if (activeTool === 'slabVoid' && selectedId && ['structure.slab', 'architecture.floor', 'architecture.ceiling'].includes(planProject.objects[selectedId]?.object_type ?? '')) onCommitSurfaceVoid(selectedId, slabBoundary)
     else return false
     setSlabBoundary([])
     clearDimensionOverrides()

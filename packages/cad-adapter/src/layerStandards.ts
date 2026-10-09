@@ -14,7 +14,7 @@ export const CAD_STANDARD_LAYERS: Record<string, CadLayerDefinition> = {
   // Structure Discipline (S-)
   "S-COLN-NEWW": {
     name: "S-COLN-NEWW",
-    colorNumber: 4, // Cyan
+    colorNumber: 7, // New construction palette: black/white
     lineType: "CONTINUOUS",
     lineWeightHundredthsMm: 50,
     description: "Structural Columns (New)",
@@ -26,9 +26,16 @@ export const CAD_STANDARD_LAYERS: Record<string, CadLayerDefinition> = {
     lineWeightHundredthsMm: 25,
     description: "Structural Columns (Existing)",
   },
+  "S-COLN-DEMO": {
+    name: "S-COLN-DEMO",
+    colorNumber: 1,
+    lineType: "DASHED2",
+    lineWeightHundredthsMm: 35,
+    description: "Structural Columns (Demolition)",
+  },
   "S-BEAM-NEWW": {
     name: "S-BEAM-NEWW",
-    colorNumber: 5, // Blue
+    colorNumber: 7,
     lineType: "CONTINUOUS",
     lineWeightHundredthsMm: 40,
     description: "Structural Beams (New)",
@@ -40,20 +47,31 @@ export const CAD_STANDARD_LAYERS: Record<string, CadLayerDefinition> = {
     lineWeightHundredthsMm: 25,
     description: "Structural Beams (Existing)",
   },
+  "S-BEAM-DEMO": {
+    name: "S-BEAM-DEMO",
+    colorNumber: 1,
+    lineType: "DASHED2",
+    lineWeightHundredthsMm: 35,
+    description: "Structural Beams (Demolition)",
+  },
   "S-FNDN-NEWW": {
     name: "S-FNDN-NEWW",
-    colorNumber: 6, // Magenta
+    colorNumber: 7,
     lineType: "CONTINUOUS",
     lineWeightHundredthsMm: 50,
     description: "Foundations & Footings (New)",
   },
+  "S-FNDN-EXST": { name: "S-FNDN-EXST", colorNumber: 8, lineType: "CONTINUOUS", lineWeightHundredthsMm: 25, description: "Foundations & Footings (Existing)" },
+  "S-FNDN-DEMO": { name: "S-FNDN-DEMO", colorNumber: 1, lineType: "DASHED2", lineWeightHundredthsMm: 35, description: "Foundations & Footings (Demolition)" },
   "S-SLAB-NEWW": {
     name: "S-SLAB-NEWW",
-    colorNumber: 3, // Green
+    colorNumber: 7,
     lineType: "CONTINUOUS",
     lineWeightHundredthsMm: 35,
     description: "Structural Slabs (New)",
   },
+  "S-SLAB-EXST": { name: "S-SLAB-EXST", colorNumber: 8, lineType: "CONTINUOUS", lineWeightHundredthsMm: 25, description: "Structural Slabs (Existing)" },
+  "S-SLAB-DEMO": { name: "S-SLAB-DEMO", colorNumber: 1, lineType: "DASHED2", lineWeightHundredthsMm: 35, description: "Structural Slabs (Demolition)" },
   "S-REBR-NEWW": {
     name: "S-REBR-NEWW",
     colorNumber: 1, // Red
@@ -79,39 +97,45 @@ export const CAD_STANDARD_LAYERS: Record<string, CadLayerDefinition> = {
   },
   "A-WALL-DEMO": {
     name: "A-WALL-DEMO",
-    colorNumber: 10, // Bright Red
+    colorNumber: 1, // Red
     lineType: "DASHED2",
     lineWeightHundredthsMm: 35,
     description: "Architectural Walls (Demolition)",
   },
   "A-DOOR-NEWW": {
     name: "A-DOOR-NEWW",
-    colorNumber: 2, // Yellow
+    colorNumber: 7,
     lineType: "CONTINUOUS",
     lineWeightHundredthsMm: 30,
     description: "Doors and Swings",
   },
+  "A-DOOR-EXST": { name: "A-DOOR-EXST", colorNumber: 8, lineType: "CONTINUOUS", lineWeightHundredthsMm: 25, description: "Doors and Swings (Existing)" },
+  "A-DOOR-DEMO": { name: "A-DOOR-DEMO", colorNumber: 1, lineType: "DASHED2", lineWeightHundredthsMm: 35, description: "Doors and Swings (Demolition)" },
   "A-WIND-NEWW": {
     name: "A-WIND-NEWW",
-    colorNumber: 4, // Cyan
+    colorNumber: 7,
     lineType: "CONTINUOUS",
     lineWeightHundredthsMm: 30,
     description: "Windows and Glazing",
   },
+  "A-WIND-EXST": { name: "A-WIND-EXST", colorNumber: 8, lineType: "CONTINUOUS", lineWeightHundredthsMm: 25, description: "Windows and Glazing (Existing)" },
+  "A-WIND-DEMO": { name: "A-WIND-DEMO", colorNumber: 1, lineType: "DASHED2", lineWeightHundredthsMm: 35, description: "Windows and Glazing (Demolition)" },
   "A-ROOF-NEWW": {
     name: "A-ROOF-NEWW",
-    colorNumber: 3, // Green
+    colorNumber: 7,
     lineType: "CONTINUOUS",
     lineWeightHundredthsMm: 35,
     description: "Roof Perimeter & Ridges",
   },
   "A-FINS-NEWW": {
     name: "A-FINS-NEWW",
-    colorNumber: 9, // Light Gray
+    colorNumber: 7,
     lineType: "CONTINUOUS",
     lineWeightHundredthsMm: 25,
     description: "Moldings, Wainscot & Finish",
   },
+  "A-FINS-EXST": { name: "A-FINS-EXST", colorNumber: 8, lineType: "CONTINUOUS", lineWeightHundredthsMm: 25, description: "Architectural Finishes (Existing)" },
+  "A-FINS-DEMO": { name: "A-FINS-DEMO", colorNumber: 1, lineType: "DASHED2", lineWeightHundredthsMm: 35, description: "Architectural Finishes (Demolition)" },
 
   // MEP Discipline (M- & E-)
   "M-PLMB-COLD": {
@@ -243,48 +267,41 @@ export function resolveCadLayer(
       : phase === "existing"
         ? "EXST"
         : "NEWW";
+  const phaseLayer = (prefix: string) =>
+    CAD_STANDARD_LAYERS[`${prefix}-${suffix}`] ?? CAD_STANDARD_LAYERS[`${prefix}-NEWW`];
 
   if (objectType.startsWith("structure.column")) {
-    return (
-      CAD_STANDARD_LAYERS[`S-COLN-${suffix}`] ??
-      CAD_STANDARD_LAYERS["S-COLN-NEWW"]
-    );
+    return phaseLayer("S-COLN");
   }
   if (objectType.startsWith("structure.beam")) {
-    return (
-      CAD_STANDARD_LAYERS[`S-BEAM-${suffix}`] ??
-      CAD_STANDARD_LAYERS["S-BEAM-NEWW"]
-    );
+    return phaseLayer("S-BEAM");
   }
   if (objectType.startsWith("structure.foundation")) {
-    return CAD_STANDARD_LAYERS["S-FNDN-NEWW"];
+    return phaseLayer("S-FNDN");
   }
   if (objectType.startsWith("structure.slab")) {
-    return CAD_STANDARD_LAYERS["S-SLAB-NEWW"];
+    return phaseLayer("S-SLAB");
   }
   if (objectType.startsWith("structure.rebar")) {
     return CAD_STANDARD_LAYERS["S-REBR-NEWW"];
   }
   if (objectType.startsWith("arch.wall") || objectType.startsWith("architecture.wall")) {
-    return (
-      CAD_STANDARD_LAYERS[`A-WALL-${suffix}`] ??
-      CAD_STANDARD_LAYERS["A-WALL-NEWW"]
-    );
+    return phaseLayer("A-WALL");
   }
-  if (objectType.startsWith("arch.door") || objectType.startsWith("opening.door")) {
-    return CAD_STANDARD_LAYERS["A-DOOR-NEWW"];
+  if (objectType === "door_window.door" || objectType.startsWith("arch.door") || objectType.startsWith("opening.door")) {
+    return phaseLayer("A-DOOR");
   }
-  if (objectType.startsWith("arch.window") || objectType.startsWith("opening.window")) {
-    return CAD_STANDARD_LAYERS["A-WIND-NEWW"];
+  if (objectType === "door_window.window" || objectType.startsWith("arch.window") || objectType.startsWith("opening.window")) {
+    return phaseLayer("A-WIND");
   }
   if (objectType.startsWith("roof.")) {
     return CAD_STANDARD_LAYERS["A-ROOF-NEWW"];
   }
   if (objectType.startsWith("decorative.") || objectType.startsWith("arch.molding")) {
-    return CAD_STANDARD_LAYERS["A-FINS-NEWW"];
+    return phaseLayer("A-FINS");
   }
   if (objectType === "architecture.floor" || objectType === "architecture.ceiling") {
-    return CAD_STANDARD_LAYERS["A-FINS-NEWW"];
+    return phaseLayer("A-FINS");
   }
   if (objectType === "architecture.room" || objectType === "architecture.room_separator") {
     return CAD_STANDARD_LAYERS["ANNO-TEXT"];

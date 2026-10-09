@@ -42,11 +42,17 @@ test('A-02 distinguishes new masonry hatch from existing white wall poche', () =
   const walls = Object.values(phased.objects).filter(object => object.object_type === 'architecture.wall')
   walls[0].created_phase = 'existing'
   walls[1].created_phase = 'new_construction'
+  walls[2].created_phase = 'demolition'
   const a02 = compileInitialDrawingSet(phased).sheets.find(sheet => sheet.id === 'A-02')
   assert.match(a02.svg, /fill="none" stroke="#9aa6b4" stroke-width="0\.18"/,
     'new masonry hatch should compile as editable model-space line segments')
+  assert.match(a02.svg, /fill="#e3e8ed" stroke="#0f172a"/,
+    'new wall poche and outline should use the shared plan phase palette')
+  assert.match(a02.svg, /fill="#ffffff" stroke="#94a3b8"/,
+    'existing wall poche and outline should use the shared plan phase palette')
+  assert.match(a02.svg, /fill="url\(#demo-hatch\)" stroke="#ef4444"[^>]*stroke-dasharray=/,
+    'demolition wall hatch, outline color and dash should remain distinct')
   assert.ok(!a02.svg.includes('url(#masonry-hatch)'), 'legacy A-02 should not use a separate SVG pattern hatch')
-  assert.ok(a02.svg.includes('fill="#ffffff"'))
 })
 
 test('A-02 draws adjustable tile finish lines clipped around architectural floor voids', () => {

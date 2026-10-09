@@ -1,8 +1,9 @@
 // ConstructFlow Native DXF Engine (AutoCAD R2018 / AC1032)
 // Smart Object geometry stays in real-world ModelSpace coordinates (mm);
-// the 20 PaperSpace layouts mirror PermitDrawingSet vectors at page scale.
+// PaperSpace layouts mirror PermitDrawingSet vectors at page scale, including
+// the per-storey plan sheets generated for taller projects.
 
-import { isMasonryWallPlanHatch, type ProjectDocument, type SmartObject } from "@constructflow/project-model";
+import { getDisplayPhase, isMasonryWallPlanHatch, type ProjectDocument, type SmartObject } from "@constructflow/project-model";
 import { compilePermitDrawingSet, type PermitSheet, type VectorPrimitive } from "@constructflow/sheet-engine";
 import { wallMasonryHatchSegments } from "@constructflow/geometry-kernel";
 import { CAD_STANDARD_LAYERS, resolveCadLayer } from "./layerStandards.js";
@@ -44,11 +45,17 @@ export const LAYOUT_DEFS = [
   { id: "E-02", name: "E-02_Power_Panel", title: "กำลังไฟฟ้า / Power & Panel Schedule", scale: 100, discipline: "E" },
 ] as const;
 
+type LayoutDefinition = { id: string; name: string; title: string; scale: number; discipline: string };
+
 export class DxfGenerator {
   private handleCounter: number = 0x100;
   private project: ProjectDocument;
   private options: DxfGeneratorOptions;
   private compiledSheets: Map<string, PermitSheet>;
+  private layouts: LayoutDefinition[];
+  private modelSpaceBlockRecordHandle: string;
+  private paperSpaceBlockRecordHandles: string[];
+  private layoutObjectHandles: string[];
 
   constructor(project: ProjectDocument, options: DxfGeneratorOptions = {}) {
     this.project = project;
@@ -57,6 +64,27 @@ export class DxfGenerator {
       revision: options.revision,
       author: options.architectName,
     }).sheets.map(sheet => [sheet.id, sheet]));
+    const baseLayoutIds = new Set(LAYOUT_DEFS.map(layout => layout.id));
+    const additionalLayouts = [...this.compiledSheets.values()]
+      .filter(sheet => !baseLayoutIds.has(sheet.id as typeof LAYOUT_DEFS[number]["id"]))
+      .map((sheet): LayoutDefinition => {
+        const level = sheet.id.match(/-L(\d+)$/)?.[1];
+        return {
+          id: sheet.id,
+          name: `${sheet.id}${level ? `_Level_${level}` : ""}`,
+          title: sheet.title,
+          scale: Number(sheet.scale.match(/\d+/)?.[0] ?? 100),
+          discipline: sheet.id.startsWith("S-") ? "S" : "A",
+        };
+      });
+    this.layouts = [...LAYOUT_DEFS, ...additionalLayouts];
+    this.modelSpaceBlockRecordHandle = this.nextHandle();
+    this.paperSpaceBlockRecordHandles = this.layouts.map(() => this.nextHandle());
+    this.layoutObjectHandles = this.layouts.map(() => this.nextHandle());
+  }
+
+  public get layoutsCount(): number {
+    return this.layouts.length;
   }
 
   private nextHandle(): string {
@@ -78,7 +106,7 @@ export class DxfGenerator {
     // 3. TABLES SECTION (LTypes, Layers, Styles, Views, UCS, AppID, BlockRecords)
     parts.push(this.generateTablesSection());
 
-    // 4. BLOCKS SECTION (*MODEL_SPACE, *PAPER_SPACE, and 20 Layout block definitions)
+    // 4. BLOCKS SECTION (*MODEL_SPACE, *PAPER_SPACE, and compiled layout blocks)
     parts.push(this.generateBlocksSection());
 
     // 5. ENTITIES SECTION (ModelSpace real-world geometry & PaperSpace viewports/titles)
@@ -94,17 +122,17 @@ export class DxfGenerator {
   }
 
   /**
-   * Generates batch publish script (SCR) for plotting all 20 layouts to A3 PDF.
+   * Generates batch publish script (SCR) for plotting every layout to A3 PDF.
    */
   public generateBatchPublishScript(): string {
     const lines: string[] = [
       "; ConstructFlow Batch Publish Script for AutoCAD",
-      "; Automatically plots all 20 PaperSpace layouts to A3 PDF",
+      `; Automatically plots all ${this.layouts.length} PaperSpace layouts to A3 PDF`,
       "-PLOT",
       "No", // Detailed plot configuration? No
     ];
 
-    for (const layout of LAYOUT_DEFS) {
+    for (const layout of this.layouts) {
       lines.push(
         `-LAYOUT Set ${layout.name}`,
         `-PLOT`,
@@ -403,7 +431,7 @@ export class DxfGenerator {
       " 42",
       "2.5",
       "  3",
-      "txt",
+      "tahoma.ttf",
       "  4",
       "",
       "  0",
@@ -483,7 +511,7 @@ export class DxfGenerator {
     );
 
     // 8. BLOCK_RECORD
-    // Needs *MODEL_SPACE, *PAPER_SPACE, and layout block records
+    // One paper-space BLOCK_RECORD is associated with each LAYOUT object.
     lines.push(
       "  0",
       "TABLE",
@@ -494,47 +522,49 @@ export class DxfGenerator {
       "100",
       "AcDbSymbolTable",
       " 70",
-      (2 + LAYOUT_DEFS.length).toString(),
+      (1 + this.layouts.length).toString(),
       "  0",
       "BLOCK_RECORD",
       "  5",
-      this.nextHandle(),
+      this.modelSpaceBlockRecordHandle,
       "100",
       "AcDbSymbolTableRecord",
       "100",
       "AcDbBlockTableRecord",
       "  2",
       "*MODEL_SPACE",
-      "  0",
-      "BLOCK_RECORD",
-      "  5",
-      this.nextHandle(),
-      "100",
-      "AcDbSymbolTableRecord",
-      "100",
-      "AcDbBlockTableRecord",
-      "  2",
-      "*PAPER_SPACE",
     );
 
-    for (let i = 0; i < LAYOUT_DEFS.length; i++) {
+    for (let i = 0; i < this.layouts.length; i++) {
       lines.push(
         "  0",
         "BLOCK_RECORD",
         "  5",
-        this.nextHandle(),
+        this.paperSpaceBlockRecordHandles[i],
         "100",
         "AcDbSymbolTableRecord",
         "100",
         "AcDbBlockTableRecord",
         "  2",
-        `*Paper_Space${i}`,
+        this.paperSpaceBlockName(i),
+        "340",
+        this.layoutObjectHandles[i],
       );
     }
     lines.push("  0", "ENDTAB");
 
     lines.push("  0", "ENDSEC\n");
     return lines.join("\n");
+  }
+
+  private paperSpaceBlockName(layoutIndex: number): string {
+    return layoutIndex === 0 ? "*PAPER_SPACE" : `*PAPER_SPACE${layoutIndex - 1}`;
+  }
+
+  private blockRecordHandle(space: number, layoutName?: string): string {
+    if (space !== 1) return this.modelSpaceBlockRecordHandle;
+    const layoutIndex = layoutName ? this.layouts.findIndex(layout => layout.name === layoutName) : 0;
+    return this.paperSpaceBlockRecordHandles[Math.max(0, layoutIndex)] ?? this.paperSpaceBlockRecordHandles[0];
   }
 
   private generateBlocksSection(): string {
@@ -546,6 +576,8 @@ export class DxfGenerator {
       "BLOCK",
       "  5",
       this.nextHandle(),
+      "330",
+      this.modelSpaceBlockRecordHandle,
       "100",
       "AcDbEntity",
       "  8",
@@ -570,44 +602,8 @@ export class DxfGenerator {
       "ENDBLK",
       "  5",
       this.nextHandle(),
-      "100",
-      "AcDbEntity",
-      "  8",
-      "0",
-      "100",
-      "AcDbBlockEnd",
-    );
-
-    // *PAPER_SPACE Block
-    lines.push(
-      "  0",
-      "BLOCK",
-      "  5",
-      this.nextHandle(),
-      "100",
-      "AcDbEntity",
-      "  8",
-      "0",
-      "100",
-      "AcDbBlockBegin",
-      "  2",
-      "*PAPER_SPACE",
-      " 70",
-      "0",
-      " 10",
-      "0.0",
-      " 20",
-      "0.0",
-      " 30",
-      "0.0",
-      "  3",
-      "*PAPER_SPACE",
-      "  1",
-      "",
-      "  0",
-      "ENDBLK",
-      "  5",
-      this.nextHandle(),
+      "330",
+      this.modelSpaceBlockRecordHandle,
       "100",
       "AcDbEntity",
       "  8",
@@ -617,13 +613,15 @@ export class DxfGenerator {
     );
 
     // Layout blocks
-    for (let i = 0; i < LAYOUT_DEFS.length; i++) {
-      const blkName = `*Paper_Space${i}`;
+    for (let i = 0; i < this.layouts.length; i++) {
+      const blkName = this.paperSpaceBlockName(i);
       lines.push(
         "  0",
         "BLOCK",
         "  5",
         this.nextHandle(),
+        "330",
+        this.paperSpaceBlockRecordHandles[i],
         "100",
         "AcDbEntity",
         "  8",
@@ -644,10 +642,17 @@ export class DxfGenerator {
         blkName,
         "  1",
         "",
+      );
+      // The active layout (first tab) stores its entities in ENTITIES. All
+      // inactive layouts store their content inside their PaperSpace BLOCK.
+      if (i > 0) this.writePaperSpaceLayoutEntities(lines, this.layouts[i], i);
+      lines.push(
         "  0",
         "ENDBLK",
         "  5",
         this.nextHandle(),
+        "330",
+        this.paperSpaceBlockRecordHandles[i],
         "100",
         "AcDbEntity",
         "  8",
@@ -665,18 +670,15 @@ export class DxfGenerator {
     const lines: string[] = ["  0", "SECTION", "  2", "ENTITIES"];
 
     // ==========================================
-    // 1. MODELSPACE ENTITIES (1:1 mm)
+    // 1. ACTIVE PAPERSPACE ENTITIES (inactive layouts live in BLOCKS)
+    // ==========================================
+    if (this.layouts.length > 0) this.writePaperSpaceLayoutEntities(lines, this.layouts[0], 0);
+
+    // ==========================================
+    // 2. MODELSPACE ENTITIES (1:1 mm)
     // ==========================================
     for (const obj of Object.values(this.project.objects)) {
       this.writeModelSpaceEntity(lines, obj);
-    }
-
-    // ==========================================
-    // 2. PAPERSPACE ENTITIES (All 20 Layouts)
-    // ==========================================
-    for (let i = 0; i < LAYOUT_DEFS.length; i++) {
-      const layout = LAYOUT_DEFS[i];
-      this.writePaperSpaceLayoutEntities(lines, layout, i);
     }
 
     lines.push("  0", "ENDSEC\n");
@@ -684,7 +686,7 @@ export class DxfGenerator {
   }
 
   private writeModelSpaceEntity(lines: string[], obj: SmartObject): void {
-    const phase = obj.created_phase;
+    const phase = getDisplayPhase(obj);
     const type = obj.object_type;
     const layer = resolveCadLayer(type, phase);
     const d = obj.module_data as Record<string, any>;
@@ -817,9 +819,15 @@ export class DxfGenerator {
     let solidCursor = 0;
     for (const [from, to] of merged) { if (from > solidCursor) intervals.push([solidCursor, from]); solidCursor = Math.max(solidCursor, to); }
     if (solidCursor < length) intervals.push([solidCursor, length]);
-    if (wall.created_phase === "existing") {
+    const phase = getDisplayPhase(wall);
+    if (phase === "existing") {
       for (const [from, to] of intervals) this.writeSolid(lines, layer, 0, [point(from, -half), point(to, -half), point(to, half), point(from, half)], 7);
-    } else if (wall.created_phase === "new_construction" && isMasonryWallPlanHatch(wall, this.project.types)) {
+    } else if (phase === "demolition") {
+      for (const [from, to] of wallMasonryHatchSegments(
+        [start[0], start[1]], [end[0], end[1]], Number(d.thickness_mm ?? 100),
+        openings.map(opening => [opening.from, opening.to]), 250,
+      )) this.writeLine(lines, layer, 0, from, to);
+    } else if (phase === "new_construction" && isMasonryWallPlanHatch(wall, this.project.types)) {
       // Keep phase hatch editable and identical to Canvas/PDF model-space lines.
       for (const [from, to] of wallMasonryHatchSegments(
         [start[0], start[1]], [end[0], end[1]], Number(d.thickness_mm ?? 100),
@@ -906,7 +914,7 @@ export class DxfGenerator {
 
   private writePaperSpaceLayoutEntities(
     lines: string[],
-    layout: (typeof LAYOUT_DEFS)[number],
+    layout: LayoutDefinition,
     _layoutIndex: number,
   ): void {
     const compiledSheet = this.compiledSheets.get(layout.id);
@@ -914,8 +922,8 @@ export class DxfGenerator {
       this.writeCompiledSheetEntities(lines, layout, compiledSheet);
       return;
     }
-    const ownerHandle = "0"; // Will be linked in layout context
     const spaceFlag = 1; // PaperSpace
+    const ownerHandle = this.blockRecordHandle(spaceFlag, layout.name);
 
     // 1. A3 Sheet Border & Title Block (420 x 297 mm)
     // Margin: Left 15mm, Top 10mm, Right 10mm, Bottom 10mm
@@ -930,7 +938,7 @@ export class DxfGenerator {
       [x1, y0],
       [x1, y1],
       [x0, y1],
-    ], true);
+    ], true, layout.name);
 
     // Title Block Box (Bottom Right: 260 -> 410, 10 -> 45)
     this.writeLwPolyline(lines, "ANNO-TTLB", spaceFlag, [
@@ -938,7 +946,7 @@ export class DxfGenerator {
       [410.0, 10.0],
       [410.0, 45.0],
       [260.0, 45.0],
-    ], true);
+    ], true, layout.name);
 
     // Title Block Fields
     const projName = this.options.projectName ?? this.project.project.name ?? "CONSTRUCTFLOW PROJECT";
@@ -946,12 +954,12 @@ export class DxfGenerator {
     const engLicense = this.options.engineerLicense ?? "วิศวกรโครงสร้าง (วส. 8888)";
     const date = this.options.issueDate ?? new Date().toISOString().split("T")[0];
 
-    this.writeText(lines, "ANNO-TTLB", spaceFlag, [265, 38], projName, 3.2);
-    this.writeText(lines, "ANNO-TTLB", spaceFlag, [265, 30], layout.title, 2.8);
-    this.writeText(lines, "ANNO-TTLB", spaceFlag, [265, 23], `SCALE 1:${layout.scale} | A3`, 2.2);
-    this.writeText(lines, "ANNO-TTLB", spaceFlag, [265, 17], `ARCH: ${archName}`, 2.0);
-    this.writeText(lines, "ANNO-TTLB", spaceFlag, [265, 12], `ENG: ${engLicense} | ${date}`, 2.0);
-    this.writeText(lines, "ANNO-TTLB", spaceFlag, [385, 20], layout.id, 6.0);
+    this.writeText(lines, "ANNO-TTLB", spaceFlag, [265, 38], projName, 3.2, layout.name);
+    this.writeText(lines, "ANNO-TTLB", spaceFlag, [265, 30], layout.title, 2.8, layout.name);
+    this.writeText(lines, "ANNO-TTLB", spaceFlag, [265, 23], `SCALE 1:${layout.scale} | A3`, 2.2, layout.name);
+    this.writeText(lines, "ANNO-TTLB", spaceFlag, [265, 17], `ARCH: ${archName}`, 2.0, layout.name);
+    this.writeText(lines, "ANNO-TTLB", spaceFlag, [265, 12], `ENG: ${engLicense} | ${date}`, 2.0, layout.name);
+    this.writeText(lines, "ANNO-TTLB", spaceFlag, [385, 20], layout.id, 6.0, layout.name);
 
     // 2. Floating VIEWPORT Entity
     // Centered in printable area: (200, 155) with size 350 x 210
@@ -1020,24 +1028,24 @@ export class DxfGenerator {
 
     // 3. Genuine ACAD_TABLE for Schedules (A-08, S-05/S-06, E-02)
     if (layout.id === "A-08") {
-      this.writeDoorWindowSchedule(lines, spaceFlag);
+      this.writeDoorWindowSchedule(lines, spaceFlag, layout.name);
     } else if (layout.id === "S-06" || layout.id === "S-05") {
-      this.writeBbsSchedule(lines, spaceFlag);
+      this.writeBbsSchedule(lines, spaceFlag, layout.name);
     } else if (layout.id === "E-02") {
-      this.writeElectricalPanelSchedule(lines, spaceFlag);
+      this.writeElectricalPanelSchedule(lines, spaceFlag, layout.name);
     }
   }
 
   /** Emit the same page-space vector primitives used by SVG/PDF into the matching DXF layout. */
   private writeCompiledSheetEntities(
     lines: string[],
-    layout: (typeof LAYOUT_DEFS)[number],
+    layout: LayoutDefinition,
     sheet: PermitSheet,
   ): void {
     const layer = `${layout.discipline}-VIEW`;
     for (const primitive of sheet.primitives) {
       if (primitive.kind === "text") {
-        this.writeText(lines, "ANNO-TEXT", 1, primitive.at, primitive.text, primitive.size, layout.name, this.toAciColor(primitive.color));
+        this.writeText(lines, "ANNO-TEXT", 1, [primitive.at[0], 297 - primitive.at[1]], primitive.text, primitive.size, layout.name, this.toAciColor(primitive.color), primitive.max_width);
         continue;
       }
       this.writeSheetPath(lines, layer, layout.name, primitive);
@@ -1050,7 +1058,9 @@ export class DxfGenerator {
     layoutName: string,
     primitive: Extract<VectorPrimitive, { kind: "path" }>,
   ): void {
-    const points = primitive.points.map(point => [point[0], point[1]] as [number, number]);
+    // Sheet-engine vectors use top-down page coordinates for the PDF compiler;
+    // DXF PaperSpace uses a bottom-left origin with positive Y upward.
+    const points = primitive.points.map(point => [point[0], 297 - point[1]] as [number, number]);
     if (points.length < 2) return;
     const color = this.toAciColor(primitive.color);
     const lineweight = Math.max(0, Math.min(211, Math.round(primitive.width * 100)));
@@ -1059,7 +1069,8 @@ export class DxfGenerator {
       // Sheet fills are emitted in source order, so opaque facade masks cover
       // rear geometry exactly as they do in the PDF compiler.
       for (let index = 1; index < points.length - 1; index++) {
-        this.writeSolid(lines, layer, 1, [points[0], points[index], points[index + 1], points[index + 1]], fillColor, layoutName);
+        const fillTrueColor = this.toTrueColor(primitive.fill);
+        this.writeSolid(lines, layer, 1, [points[0], points[index], points[index + 1], points[index + 1]], fillColor, layoutName, fillTrueColor);
       }
     }
     if (primitive.width > 0 && !(primitive.color.toLowerCase() === "#ffffff" && primitive.fill === "#ffffff")) {
@@ -1070,14 +1081,32 @@ export class DxfGenerator {
   private toAciColor(color: string): number {
     const normalized = color.toLowerCase();
     if (normalized === "#ef4444" || normalized === "#ff0000" || normalized === "red") return 1;
-    if (normalized === "#94a3b8" || normalized === "#64748b" || normalized === "#808080") return 8;
+    if (normalized === "#94a3b8" || normalized === "#64748b" || normalized === "#808080" || normalized === "#9aa6b4") return 8;
+    if (normalized === "#cbd5e1") return 9;
     if (normalized === "#0f172a" || normalized === "#000000" || normalized === "#ffffff" || normalized === "white") return 7;
     if (normalized === "#087cf0" || normalized === "#0284c7" || normalized === "#0000ff") return 5;
     if (normalized === "#22c55e" || normalized === "#008000") return 3;
     return 7;
   }
 
-  private writeDoorWindowSchedule(lines: string[], spaceFlag: number): void {
+  private toTrueColor(color: string): number | undefined {
+    const match = /^#([0-9a-f]{6})$/i.exec(color);
+    return match ? Number.parseInt(match[1], 16) : undefined;
+  }
+
+  private encodeDxfText(text: string): string {
+    return [...text].map(character => {
+      const codePoint = character.codePointAt(0)!;
+      if (codePoint <= 0x7f) return character;
+      if (codePoint <= 0xffff) return `\\U+${codePoint.toString(16).toUpperCase().padStart(4, "0")}`;
+      const adjusted = codePoint - 0x10000;
+      const high = 0xd800 + (adjusted >> 10);
+      const low = 0xdc00 + (adjusted & 0x3ff);
+      return `\\U+${high.toString(16).toUpperCase()}\\U+${low.toString(16).toUpperCase()}`;
+    }).join("");
+  }
+
+  private writeDoorWindowSchedule(lines: string[], spaceFlag: number, layoutName: string): void {
     const tableData: CadTableData = {
       title: "DOOR & WINDOW SCHEDULE",
       insertionPointMm: [25, 230, 0],
@@ -1136,16 +1165,17 @@ export class DxfGenerator {
     };
 
     // Serializes genuine ACAD_TABLE entity
-    const acadTable = formatAcadTableDxf(tableData, this.nextHandle(), "0");
+    const ownerHandle = this.blockRecordHandle(spaceFlag, layoutName);
+    const acadTable = formatAcadTableDxf(tableData, this.nextHandle(), ownerHandle);
     lines.push(acadTable);
 
     // Also adds line fallback so non-enabler viewers render it perfectly
-    const fallback = formatTableLinesFallbackDxf(tableData, this.handleCounter, "0");
+    const fallback = formatTableLinesFallbackDxf(tableData, this.handleCounter, ownerHandle);
     this.handleCounter = fallback.nextHandle;
     lines.push(fallback.dxf);
   }
 
-  private writeBbsSchedule(lines: string[], spaceFlag: number): void {
+  private writeBbsSchedule(lines: string[], spaceFlag: number, layoutName: string): void {
     const tableData: CadTableData = {
       title: "STRUCTURAL BAR BENDING SCHEDULE (BBS)",
       insertionPointMm: [25, 230, 0],
@@ -1210,15 +1240,16 @@ export class DxfGenerator {
       ],
     };
 
-    const acadTable = formatAcadTableDxf(tableData, this.nextHandle(), "0");
+    const ownerHandle = this.blockRecordHandle(spaceFlag, layoutName);
+    const acadTable = formatAcadTableDxf(tableData, this.nextHandle(), ownerHandle);
     lines.push(acadTable);
 
-    const fallback = formatTableLinesFallbackDxf(tableData, this.handleCounter, "0");
+    const fallback = formatTableLinesFallbackDxf(tableData, this.handleCounter, ownerHandle);
     this.handleCounter = fallback.nextHandle;
     lines.push(fallback.dxf);
   }
 
-  private writeElectricalPanelSchedule(lines: string[], spaceFlag: number): void {
+  private writeElectricalPanelSchedule(lines: string[], spaceFlag: number, layoutName: string): void {
     const tableData: CadTableData = {
       title: "PANEL BOARD SCHEDULE (LP-1)",
       insertionPointMm: [25, 230, 0],
@@ -1276,10 +1307,11 @@ export class DxfGenerator {
       ],
     };
 
-    const acadTable = formatAcadTableDxf(tableData, this.nextHandle(), "0");
+    const ownerHandle = this.blockRecordHandle(spaceFlag, layoutName);
+    const acadTable = formatAcadTableDxf(tableData, this.nextHandle(), ownerHandle);
     lines.push(acadTable);
 
-    const fallback = formatTableLinesFallbackDxf(tableData, this.handleCounter, "0");
+    const fallback = formatTableLinesFallbackDxf(tableData, this.handleCounter, ownerHandle);
     this.handleCounter = fallback.nextHandle;
     lines.push(fallback.dxf);
   }
@@ -1318,17 +1350,16 @@ export class DxfGenerator {
       "1",
     );
 
-    const layoutHandles: string[] = [];
-    for (const layout of LAYOUT_DEFS) {
-      const lh = this.nextHandle();
-      layoutHandles.push(lh);
+    for (let i = 0; i < this.layouts.length; i++) {
+      const layout = this.layouts[i];
+      const lh = this.layoutObjectHandles[i];
       lines.push("  3", layout.name, "350", lh);
     }
 
     // Individual Layout Objects (A-01 to E-02)
-    for (let i = 0; i < LAYOUT_DEFS.length; i++) {
-      const layout = LAYOUT_DEFS[i];
-      const lh = layoutHandles[i];
+    for (let i = 0; i < this.layouts.length; i++) {
+      const layout = this.layouts[i];
+      const lh = this.layoutObjectHandles[i];
       lines.push(
         "  0",
         "LAYOUT",
@@ -1339,9 +1370,11 @@ export class DxfGenerator {
         "100",
         "AcDbPlotSettings",
         "  1",
-        "DWG To PDF.pc3", // Plotter
+        `${layout.id}_A3`, // Page setup name
         "  2",
-        "ISO_full_bleed_A3_(420.00_x_297.00_MM)", // Media name
+        "DWG To PDF.pc3", // Plotter configuration
+        "  4",
+        "ISO_full_bleed_A3_(420.00_x_297.00_MM)", // Canonical media name
         " 40",
         "0.0", // Margins
         " 41",
@@ -1354,8 +1387,30 @@ export class DxfGenerator {
         "420.0", // Paper width mm
         " 45",
         "297.0", // Paper height mm
+        " 46",
+        "0.0", // Plot origin X
+        " 47",
+        "0.0", // Plot origin Y
         " 70",
-        "688", // Plot layout flags
+        "756", // Centered, standard scale, plot styles, lineweights and viewports first
+        " 72",
+        "1", // Millimeters
+        " 73",
+        "0", // Landscape A3, no rotation
+        " 74",
+        "5", // Plot layout information
+        " 75",
+        "16", // 1:1, sheet geometry is already in paper-space millimeters
+        "142",
+        "1.0", // Paper units per drawing unit
+        "143",
+        "1.0",
+        "147",
+        "1.0", // Unit conversion factor
+        "148",
+        "0.0", // Paper image origin X
+        "149",
+        "0.0", // Paper image origin Y
         "100",
         "AcDbLayout",
         "  1",
@@ -1372,6 +1427,8 @@ export class DxfGenerator {
         "420.0", // Max limits
         " 21",
         "297.0",
+        "330",
+        this.paperSpaceBlockRecordHandles[i],
       );
     }
 
@@ -1393,6 +1450,8 @@ export class DxfGenerator {
       "LINE",
       "  5",
       this.nextHandle(),
+      "330",
+      this.blockRecordHandle(space),
       "100",
       "AcDbEntity",
       "  8",
@@ -1428,6 +1487,8 @@ export class DxfGenerator {
       "CIRCLE",
       "  5",
       this.nextHandle(),
+      "330",
+      this.blockRecordHandle(space),
       "100",
       "AcDbEntity",
       "  8",
@@ -1454,10 +1515,12 @@ export class DxfGenerator {
     points: [[number, number], [number, number], [number, number], [number, number]],
     colorNumber?: number,
     layoutName?: string,
+    trueColor?: number,
   ): void {
-    lines.push("  0", "SOLID", "  5", this.nextHandle(), "100", "AcDbEntity", "  8", layer, " 67", space.toString());
+    lines.push("  0", "SOLID", "  5", this.nextHandle(), "330", this.blockRecordHandle(space, layoutName), "100", "AcDbEntity", "  8", layer, " 67", space.toString());
     if (layoutName) lines.push("410", layoutName);
-    if (colorNumber !== undefined) lines.push(" 62", String(colorNumber));
+    if (trueColor !== undefined) lines.push("420", String(trueColor));
+    else if (colorNumber !== undefined) lines.push(" 62", String(colorNumber));
     lines.push("100", "AcDbTrace");
     points.forEach((point, index) => lines.push(` ${10 + index}`, point[0].toFixed(3), ` ${20 + index}`, point[1].toFixed(3), ` ${30 + index}`, "0.000"));
   }
@@ -1478,6 +1541,8 @@ export class DxfGenerator {
       "LWPOLYLINE",
       "  5",
       this.nextHandle(),
+      "330",
+      this.blockRecordHandle(space, layoutName),
       "100",
       "AcDbEntity",
       "  8",
@@ -1511,12 +1576,17 @@ export class DxfGenerator {
     height: number,
     layoutName?: string,
     colorNumber?: number,
+    maxWidth?: number,
   ): void {
+    const naturalWidth = [...text].length * height * 0.52;
+    const widthFactor = maxWidth && naturalWidth > maxWidth ? maxWidth / naturalWidth : 1;
     lines.push(
       "  0",
       "TEXT",
       "  5",
       this.nextHandle(),
+      "330",
+      this.blockRecordHandle(space, layoutName),
       "100",
       "AcDbEntity",
       "  8",
@@ -1535,8 +1605,9 @@ export class DxfGenerator {
       "0.000",
       " 40",
       height.toFixed(3),
+      ...(widthFactor < 1 ? [" 41", widthFactor.toFixed(6)] : []),
       "  1",
-      text,
+      this.encodeDxfText(text),
       "  7",
       "STANDARD",
     );

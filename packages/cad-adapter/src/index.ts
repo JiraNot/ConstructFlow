@@ -23,7 +23,7 @@ export function exportProjectToDxf(
   return {
     dxfContent,
     publishScriptContent,
-    layoutsCount: LAYOUT_DEFS.length,
+    layoutsCount: generator.layoutsCount,
     layersCount: Object.keys(CAD_STANDARD_LAYERS).length,
   };
 }

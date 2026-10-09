@@ -6,6 +6,21 @@ import { calculateTakeoff } from '../dist/index.js'
 
 const fixture = deserializeProject(await readFile(new URL('../../../examples/kitchen-extension-proof.cfproj', import.meta.url), 'utf8'))
 
+test('renovation BOQ reports exactly three work cost centers and omits untouched existing objects', () => {
+  const report = calculateTakeoff(fixture)
+  assert.deepEqual(Object.keys(report.totals_by_cost_center).sort(), [
+    'demolition_site_prep', 'new_construction', 'remodeling_joint_treatment',
+  ])
+  assert.ok(report.lines.some(line => line.cost_center === 'new_construction'))
+  assert.ok(report.lines.some(line => line.cost_center === 'remodeling_joint_treatment'))
+  const untouchedExistingIds = Object.values(fixture.objects).filter(object => object.created_phase === 'existing' && object.removed_phase === null).map(object => object.id)
+  assert.ok(untouchedExistingIds.length > 0)
+  assert.ok(report.lines.every(line => line.object_type !== 'architecture.wall' || !line.source_object_ids.some(id => untouchedExistingIds.includes(id))), 'existing-to-remain wall quantities are not priced as work; references may still support joint treatment')
+  const demolished = structuredClone(fixture)
+  demolished.objects[untouchedExistingIds[0]].removed_phase = 'demolition'
+  assert.ok(calculateTakeoff(demolished).lines.some(line => line.cost_center === 'demolition_site_prep'), 'marking an existing object for removal transfers its quantities into demolition work')
+})
+
 test('wall takeoff separates masonry volume from inside and outside plaster areas', () => {
   const project = structuredClone(fixture)
   const wall = Object.values(project.objects).find(object => object.object_type === 'architecture.wall')

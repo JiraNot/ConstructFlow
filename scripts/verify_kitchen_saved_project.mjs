@@ -35,7 +35,7 @@ assert.deepEqual(counts, {
 assert.equal(new Set(objects.map(object => object.id)).size, objects.length, 'object UUIDs must be unique')
 
 const takeoff = calculateTakeoff(opened.project)
-assert.ok(takeoff.lines.some(line => line.cost_center === 'existing_to_remain' && line.quantity === 7 && line.unit === 'm2'))
+assert.ok(!takeoff.lines.some(line => line.cost_center === 'existing_to_remain'), 'existing-to-remain model context is not a BOQ cost center')
 assert.ok(takeoff.lines.some(line => line.cost_center === 'new_construction' && Math.abs(line.quantity - 19.16) < 1e-9 && line.unit === 'm2'))
 assert.ok(takeoff.lines.some(line => line.quantity === 16 && line.unit === 'item' && line.formula.includes('micro_pile_i18')))
 const jointLine = takeoff.lines.find(line => line.object_type === 'architecture.joint_treatment')

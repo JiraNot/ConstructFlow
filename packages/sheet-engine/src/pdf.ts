@@ -29,7 +29,7 @@ export async function compilePermitPdf(
   const font = await pdf.embedFont(fontBytes, { subset: false }),
     face = fontkit.create(fontBytes);
   if ("fonts" in face) throw new Error("A standalone TTF font is required");
-  pdf.setTitle(`ConstructFlow | ${set.project_id} | 20-sheet draft`);
+  pdf.setTitle(`ConstructFlow | ${set.project_id} | ${set.sheets.length}-sheet draft`);
   pdf.setLanguage("th-TH");
   pdf.setCreator("ConstructFlow native sheet compiler");
   for (const sheet of set.sheets) {
@@ -39,17 +39,34 @@ export async function compilePermitPdf(
       if (p.kind === "path") {
         const pts = p.closed ? [...p.points, p.points[0]] : p.points;
         if (p.fill && p.fill !== "none" && p.closed && p.points.length >= 3) {
-          const d =
-            p.points
-              .map(
-                (pt, i) =>
-                  `${i === 0 ? "M" : "L"} ${(pt[0] * PT).toFixed(2)} ${(
-                    (297 - pt[1]) *
-                    PT
-                  ).toFixed(2)}`,
-              )
-              .join(" ") + " Z";
-          page.drawSvgPath(d, { color: color(p.fill) });
+          const xs = [...new Set(p.points.map(point => point[0]))],
+            ys = [...new Set(p.points.map(point => point[1]))],
+            isWhiteKnockout = p.fill.toLowerCase() === "#ffffff" && p.width === 0 && xs.length === 2 && ys.length === 2;
+          if (isWhiteKnockout) {
+            // Use a native rectangle for label/void knockouts. pdf-lib's SVG
+            // path fill can leave thin grid strokes visible at small print
+            // sizes; direct page rectangles reliably mask the earlier vectors.
+            const left = Math.min(...xs), right = Math.max(...xs), top = Math.min(...ys), bottom = Math.max(...ys);
+            page.drawRectangle({
+              x: left * PT,
+              y: (297 - bottom) * PT,
+              width: (right - left) * PT,
+              height: (bottom - top) * PT,
+              color: color(p.fill),
+            });
+          } else {
+            const d =
+              p.points
+                .map(
+                  (pt, i) =>
+                    `${i === 0 ? "M" : "L"} ${(pt[0] * PT).toFixed(2)} ${(
+                      (297 - pt[1]) *
+                      PT
+                    ).toFixed(2)}`,
+                )
+                .join(" ") + " Z";
+            page.drawSvgPath(d, { color: color(p.fill) });
+          }
         }
         if (p.width > 0 && p.color !== "none") {
           for (let i = 1; i < pts.length; i++)

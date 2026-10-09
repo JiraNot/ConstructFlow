@@ -4,10 +4,22 @@ import { CreateWallInput, MoveWallInput, UpdateWallEndpointsInput, MoveOpeningIn
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
 import type { ProjectDocument } from '@constructflow/project-model'
 export { measureOpeningRegions, type OpeningDimensions } from './openingDimensions.js'
-import { preserveSegmentPlacementReference } from '@constructflow/geometry-kernel'
+import { preserveSegmentPlacementReference, validatePolygonWithVoids } from '@constructflow/geometry-kernel'
 import { validateStairThaiBuildingCode } from './stairs.js'
 
 const polygonAreaMm2 = (ring: number[][]) => Math.abs(ring.reduce((sum, p, i) => { const q = ring[(i + 1) % ring.length]; return sum + p[0] * q[1] - q[0] * p[1] }, 0) / 2)
+
+export type ArchitecturalFloorPatternKind = 'tile_grid' | 'staggered_plank'
+
+/** Resolve plan hatch from the floor finish assembly's exposed finish material. */
+export function resolveArchitecturalFloorPatternKind(
+  finishLayers: readonly { material?: unknown }[],
+): ArchitecturalFloorPatternKind | undefined {
+  const materials = finishLayers.map(layer => String(layer.material ?? ''))
+  if (materials.some(material => /tile|porcelain|ceramic|กระเบื้อง/i.test(material))) return 'tile_grid'
+  if (materials.some(material => /wood|timber|laminate|vinyl[_ -]?plank|ไม้|ลามิเนต/i.test(material))) return 'staggered_plank'
+  return undefined
+}
 
 function roomRingKey(ring: number[][], toleranceMm = 10): string {
   const points = ring.map(([x, y]) => [Math.round(x / toleranceMm), Math.round(y / toleranceMm)])
@@ -250,7 +262,7 @@ export function detectClosedWallRooms(project: ProjectDocument, levelId: string,
         const next = interiorBoundary[(index + 1) % interiorBoundary.length]
         return sum + point[0] * next[1] - next[0] * point[1]
       }, 0) / 2)
-      if (interiorBoundary.every(point => point.every(Number.isFinite)) && interiorArea > 100_000) rings.push(interiorBoundary)
+      if (interiorArea > 100_000 && validatePolygonWithVoids(interiorBoundary).valid) rings.push(interiorBoundary)
     }
   }
   return rings.sort((a, b) => {
@@ -266,6 +278,10 @@ function createArchitectureObject(context: CommandHandlerContext, family: string
   if (update && (!existing || existing.object_type !== family)) throw new Error(`${family} object ${id} was not found`)
   const levelId = String(moduleData.level_id ?? project.project.active_level_id)
   const data = { ...moduleData }
+  if (update && (family === 'architecture.floor' || family === 'architecture.ceiling')) {
+    const type = resolveCatalogType(updated, family, typeof data.type_id === 'string' ? data.type_id : undefined)
+    if (type) data.instance_overrides = catalogInstanceOverrides(family, data, type)
+  }
   if (update && (family === 'architecture.floor' || family === 'architecture.ceiling') && Array.isArray(input.boundary_mm)) {
     const previousBoundary = (existing!.module_data as Record<string, unknown>).boundary_mm
     const boundaryChanged = JSON.stringify(input.boundary_mm) !== JSON.stringify(previousBoundary)
@@ -429,9 +445,13 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const family=familyByCommand[commandName]
       const update=commandName.startsWith('Update')
       const payload={...input}
-      if((family==='architecture.floor'||family==='architecture.ceiling')&&typeof payload.room_id==='string'&&payload.boundary_mm===undefined){
+      if(!update&&(family==='architecture.floor'||family==='architecture.ceiling')&&typeof payload.room_id==='string'){
         const room=updated.objects[payload.room_id]
         if(room?.object_type!=='architecture.room')throw new Error('A valid room is required to create a room-based floor or ceiling')
+        if((room.module_data as Record<string,unknown>).boundary_status==='unclosed')throw new Error('Cannot create a room-based floor or ceiling while the room wall loop is open; close the wall loop and verify its boundary first')
+      }
+      if((family==='architecture.floor'||family==='architecture.ceiling')&&typeof payload.room_id==='string'&&payload.boundary_mm===undefined){
+        const room=updated.objects[payload.room_id]
         payload.boundary_mm=structuredClone((room.module_data as Record<string,unknown>).boundary_mm)
         payload.level_id=(room.module_data as Record<string,unknown>).level_id
         payload.follows_room_boundary=true
@@ -458,11 +478,12 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       }else{
         const boundary=payload.boundary_mm
         if(!Array.isArray(boundary)||boundary.length<3||boundary.some(p=>!Array.isArray(p)||p.length!==2||!p.every(Number.isFinite)))throw new Error(`${family} requires a closed boundary with at least three finite points`)
-        if(polygonAreaMm2(boundary as number[][])<=0)throw new Error(`${family} boundary has zero area`)
+        const polygonValidation=validatePolygonWithVoids(boundary as number[][], family==='architecture.floor'||family==='architecture.ceiling'?(Array.isArray(payload.voids_mm)?payload.voids_mm as number[][][]:[]):[])
+        if(!polygonValidation.valid)throw new Error(`${family} ${polygonValidation.reason}`)
         if(family==='architecture.room')payload.area_mm2=polygonAreaMm2(boundary as number[][])
         if(family==='architecture.floor'||family==='architecture.ceiling'){
           if(!Number.isFinite(Number(payload.thickness_mm))||Number(payload.thickness_mm)<=0)throw new Error(`${family} thickness must be positive`)
-          if(payload.voids_mm!==undefined&&(!Array.isArray(payload.voids_mm)||payload.voids_mm.some(r=>!Array.isArray(r)||r.length<3)))throw new Error(`${family} voids must be polygon rings`)
+          if(payload.voids_mm!==undefined&&!Array.isArray(payload.voids_mm))throw new Error(`${family} voids must be polygon rings`)
           if(family==='architecture.floor'&&payload.finish_layers!==undefined){
             if(!Array.isArray(payload.finish_layers))throw new Error('architecture.floor finish layers must be a list')
             for(const [index,rawLayer] of payload.finish_layers.entries()){
@@ -543,13 +564,17 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const old = target.module_data
       const start: [number, number, number] = [sx, sy, old.start_point_mm[2] ?? 0]
       const end: [number, number, number] = [ex, ey, old.end_point_mm[2] ?? 0]
-      const length_mm = Math.round(Math.hypot(ex - sx, ey - sy))
+      const exactLengthMm = Math.hypot(ex - sx, ey - sy)
+      const length_mm = Math.round(exactLengthMm)
       updated.objects[target.id] = { ...target, module_data: { ...old, start_point_mm: start, end_point_mm: end, length_mm }, updated_at: now }
       const affected = [target.id]
       for (const opening of Object.values(updated.objects)) {
         if ((!isDoorObject(opening) && !isWindowObject(opening)) || opening.module_data.wall_id !== target.id) continue
         const offset = opening.module_data.offset_along_wall_mm
-        const ratio = offset / length_mm
+        // The offset is a physical distance from the wall start, not a normalized
+        // fraction of its rounded catalog length. Use the exact endpoint span so
+        // diagonal walls and fractional-millimeter endpoints do not drift.
+        const ratio = offset / exactLengthMm
         const location: [number, number, number] = [sx + (ex - sx) * ratio, sy + (ey - sy) * ratio, opening.module_data.location_mm[2] ?? 0]
         updated.objects[opening.id] = { ...opening, module_data: { ...opening.module_data, location_mm: location }, updated_at: now }
         affected.push(opening.id)

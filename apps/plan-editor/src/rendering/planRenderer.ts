@@ -13,11 +13,15 @@ import {
   WindowModuleData,
   DoorHanding,
   isMasonryWallPlanHatch,
+  getDisplayPhase,
 } from '@constructflow/project-model'
 import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
+import { resolveArchitecturalFloorPatternKind } from '@constructflow/architecture-engine'
 import { SnapResult } from '@constructflow/snapping-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
-import { clippedGridSegments, polygonInteriorPoint, wallMasonryHatchSegments } from '@constructflow/geometry-kernel'
+import { clippedGridSegments, clippedStaggeredPlankSegments, polygonDiagonalHatchSegments, polygonInteriorPoint, wallMasonryHatchSegments } from '@constructflow/geometry-kernel'
+import { formatRoomAreaM2 } from '../roomLabel.mjs'
+import { resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '@constructflow/representation-engine'
 import { beginPlanLabels, queuePlanLabel, flushPlanLabels, planLabelScale } from './planLabels.js'
 
 function openingValue(project: ProjectDocument, object: SmartObject, field: string, fallback: unknown) {
@@ -103,29 +107,38 @@ export function renderPlanView(
       ring.forEach((point,index)=>{const [x,y]=worldToScreen(point,viewport);if(index===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)})
       ctx.closePath()
       if(obj.object_type==='architecture.floor'){
-        const boundaryOpen=data.room_boundary_status==='unclosed'
-        ctx.fillStyle=boundaryOpen?'rgba(239,68,68,.12)':isSelected(obj.id)?'rgba(5,150,105,.22)':'rgba(16,185,129,.10)';ctx.strokeStyle=boundaryOpen?'#dc2626':isSelected(obj.id)?'#059669':'rgba(5,150,105,.55)';ctx.lineWidth=1
-        if(boundaryOpen)ctx.setLineDash([5,3])
-        for(const raw of (Array.isArray(data.voids_mm)?data.voids_mm:[]) as [number,number][][]){ctx.moveTo(...worldToScreen(raw[0],viewport));raw.slice(1).forEach(p=>ctx.lineTo(...worldToScreen(p,viewport)));ctx.closePath()}
+        const boundaryOpen=data.room_boundary_status==='unclosed',phase=getDisplayPhase(obj),phaseStyle=resolvePlanPhaseStyle(phase),voids=(Array.isArray(data.voids_mm)?data.voids_mm:[]) as [number,number][][]
+        ctx.fillStyle=boundaryOpen?'rgba(239,68,68,.12)':isSelected(obj.id)?'rgba(5,150,105,.22)':phase==='existing'?'rgba(148,163,184,.4)':phaseStyle.fill;ctx.strokeStyle=boundaryOpen?'#dc2626':isSelected(obj.id)?'#059669':phaseStyle.stroke;ctx.lineWidth=phase==='demolition'?1.5:phase==='existing'?1:2
+        ctx.setLineDash(boundaryOpen?[5,3]:phaseStyle.dash)
+        for(const raw of voids){ctx.moveTo(...worldToScreen(raw[0],viewport));raw.slice(1).forEach(p=>ctx.lineTo(...worldToScreen(p,viewport)));ctx.closePath()}
         ctx.fill('evenodd');ctx.stroke();ctx.setLineDash([])
+        if(phase==='demolition'){
+          ctx.beginPath();ctx.strokeStyle='#ef4444';ctx.lineWidth=.75
+          for(const [a,b] of polygonDiagonalHatchSegments(ring,250,voids)){const [ax,ay]=worldToScreen(a,viewport),[bx,by]=worldToScreen(b,viewport);ctx.moveTo(ax,ay);ctx.lineTo(bx,by)}
+          ctx.stroke()
+        }
         const layers = Array.isArray(data.finish_layers) ? data.finish_layers as Array<{ material?: string }> : []
-        const tileFinish = layers.some(layer => /tile|porcelain|ceramic|กระเบื้อง/i.test(String(layer.material ?? '')))
-        if (tileFinish) {
+        const patternKind = resolveArchitecturalFloorPatternKind(layers)
+        if (patternKind) {
           const spacing: [number, number] = Array.isArray(data.finish_pattern_mm) ? data.finish_pattern_mm as [number, number] : [600, 600]
           const origin: [number, number] = Array.isArray(data.finish_pattern_origin_mm) ? data.finish_pattern_origin_mm as [number, number] : [0, 0]
           const rotation = Number(data.finish_pattern_rotation_deg ?? 0)
-          ctx.beginPath(); ctx.strokeStyle = isSelected(obj.id) ? 'rgba(5,150,105,.72)' : 'rgba(71,85,105,.45)'; ctx.lineWidth = .7
-          for (const [a, b] of clippedGridSegments(ring, spacing[0], spacing[1], (Array.isArray(data.voids_mm) ? data.voids_mm : []) as [number,number][][], origin, rotation)) {
+          ctx.beginPath(); ctx.strokeStyle = isSelected(obj.id) ? 'rgba(5,150,105,.72)' : phase==='demolition'?'#ef4444':'#cbd5e1'; ctx.lineWidth = .7;ctx.setLineDash(phaseStyle.dash)
+          const pattern = patternKind === 'staggered_plank'
+            ? clippedStaggeredPlankSegments(ring, spacing[0], spacing[1], voids, origin, rotation)
+            : clippedGridSegments(ring, spacing[0], spacing[1], voids, origin, rotation)
+          for (const [a, b] of pattern) {
             const [ax, ay] = worldToScreen(a, viewport), [bx, by] = worldToScreen(b, viewport)
             ctx.moveTo(ax, ay); ctx.lineTo(bx, by)
           }
-          ctx.stroke()
+          ctx.stroke();ctx.setLineDash([])
         }
       }else{
         const boundaryOpen=data.boundary_status==='unclosed'
         ctx.fillStyle=boundaryOpen?'rgba(239,68,68,.08)':'rgba(148,163,184,.04)';ctx.fill();ctx.strokeStyle=boundaryOpen?'#dc2626':'#94a3b8';ctx.lineWidth=.8;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([])
         const center=polygonInteriorPoint(ring) ?? [ring.reduce((s,p)=>s+p[0],0)/ring.length,ring.reduce((s,p)=>s+p[1],0)/ring.length]
-        const [x,y]=worldToScreen(center,viewport);ctx.font='11px sans-serif';ctx.textAlign='center';ctx.fillStyle=boundaryOpen?'#b91c1c':'#334155';ctx.fillText(`${String(data.number??'')} ${String(data.name??'Room')} · ${(Number(data.area_mm2??0)/1e6).toFixed(2)} m²${boundaryOpen?' · วงผนังเปิด':''}`,x,y)
+        const areaLabel=formatRoomAreaM2(data.area_mm2,data.boundary_status)
+        const [x,y]=worldToScreen(center,viewport);ctx.font='11px sans-serif';ctx.textAlign='center';ctx.fillStyle=boundaryOpen?'#b91c1c':'#334155';ctx.fillText(`${String(data.number??'')} ${String(data.name??'Room')}${areaLabel?` · ${areaLabel} m²`:''}${boundaryOpen?' · วงผนังเปิด':''}`,x,y)
       }
       ctx.restore()
     }
@@ -447,19 +460,15 @@ function drawColumn(
 
   ctx.save()
 
-  // Phase color scheme
-  let fillColor = '#b9dcf7' // Blue primary (new construction)
-  if (obj.created_phase === 'existing') fillColor = '#d5dde6'
-  if (obj.created_phase === 'demolition' || obj.removed_phase === 'demolition') {
-    fillColor = '#ef4444'
-  }
+  const displayPhase = getDisplayPhase(obj)
+  const phaseStyle = resolvePlanPhaseStyle(displayPhase)
 
   // Column solid fill
-  ctx.fillStyle = fillColor
+  ctx.fillStyle = displayPhase === 'existing' ? 'rgba(148, 163, 184, 0.4)' : phaseStyle.fill
   ctx.fillRect(minX, minY, screenW, screenH)
 
   // Architectural cross hatch inside column
-  ctx.strokeStyle = '#eaf4ff'
+  ctx.strokeStyle = displayPhase === 'demolition' ? '#ef4444' : displayPhase === 'existing' ? '#94a3b8' : '#9aa6b4'
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(minX, minY)
@@ -469,9 +478,11 @@ function drawColumn(
   ctx.stroke()
 
   // Outline
-  ctx.strokeStyle = isSelected ? '#1682e8' : isHovered ? '#60a5fa' : '#49627a'
-  ctx.lineWidth = isSelected ? 2.5 : 1.5
+  ctx.strokeStyle = isSelected ? '#1682e8' : isHovered ? '#60a5fa' : phaseStyle.stroke
+  ctx.lineWidth = isSelected ? 2.5 : isHovered ? 2 : displayPhase === 'demolition' ? 1.5 : displayPhase === 'existing' ? 1 : 2
+  ctx.setLineDash(phaseStyle.dash)
   ctx.strokeRect(minX, minY, screenW, screenH)
+  ctx.setLineDash([])
 
   // Human-readable Mark tag (e.g. "C01") rendered above column
   ctx.fillStyle = isSelected ? '#0876d1' : '#33465b'
@@ -511,8 +522,8 @@ function drawBeam(
 
   ctx.save()
 
-  const isDemolition = obj.created_phase === 'demolition' || obj.removed_phase === 'demolition'
-  const isExisting = obj.created_phase === 'existing'
+  const displayPhase = getDisplayPhase(obj)
+  const phaseStyle = resolvePlanPhaseStyle(displayPhase)
 
   // 1. Fill beam body
   ctx.beginPath()
@@ -526,11 +537,9 @@ function drawBeam(
     ? 'rgba(14, 165, 233, 0.35)'
     : isHovered
     ? 'rgba(56, 189, 248, 0.25)'
-    : isDemolition
-    ? 'rgba(239, 68, 68, 0.2)'
-    : isExisting
-    ? 'rgba(71, 85, 105, 0.5)'
-    : 'rgba(205, 218, 231, 0.82)'
+    : displayPhase === 'existing'
+    ? 'rgba(148, 163, 184, 0.4)'
+    : phaseStyle.fill
   ctx.fill()
 
   // 2. Stroke beam boundary
@@ -538,13 +547,9 @@ function drawBeam(
     ? '#38bdf8'
     : isHovered
     ? '#7dd3fc'
-    : isDemolition
-    ? '#ef4444'
-    : isExisting
-    ? '#64748b'
-    : '#0284c7'
-  ctx.lineWidth = isSelected ? 2.5 : isHovered ? 2 : 1.5
-  if (isDemolition) ctx.setLineDash([6, 4])
+    : phaseStyle.stroke
+  ctx.lineWidth = isSelected ? 2.5 : isHovered ? 2 : displayPhase === 'demolition' ? 1.5 : displayPhase === 'existing' ? 1 : 2
+  ctx.setLineDash(phaseStyle.dash)
   ctx.stroke()
   ctx.setLineDash([])
 
@@ -706,6 +711,7 @@ function drawWall(
   const hasFinishLayers = plasterInside + plasterOutside > 0
   const isDemolition = wall.created_phase === 'demolition' || wall.removed_phase === 'demolition'
   const isExisting = wall.created_phase === 'existing'
+  const phaseStyle = resolvePlanWallPhaseStyle(getDisplayPhase(wall))
 
   // Render solid segments
   for (const seg of subSegments) {
@@ -734,24 +740,16 @@ function drawWall(
       ? 'rgba(56, 189, 248, 0.4)'
       : isHovered
       ? 'rgba(71, 85, 105, 0.85)'
-      : isDemolition
-      ? 'rgba(239, 68, 68, 0.25)'
-      : isExisting
-      ? '#ffffff'
-      : 'rgba(226, 232, 240, 0.92)'
+      : phaseStyle.fill
     ctx.fill()
 
     ctx.strokeStyle = isSelected
       ? '#38bdf8'
       : isHovered
       ? '#94a3b8'
-      : isDemolition
-      ? '#ef4444'
-      : isExisting
-      ? '#64748b'
-      : '#64748b'
-    ctx.lineWidth = isSelected ? 2.5 : isHovered ? 2 : 1.5
-    if (isDemolition) ctx.setLineDash([6, 4])
+      : phaseStyle.stroke
+    ctx.lineWidth = isSelected ? 2.5 : isHovered ? 2 : isDemolition ? 1.5 : isExisting ? 1 : 2
+    ctx.setLineDash(phaseStyle.dash)
     ctx.stroke()
     ctx.setLineDash([])
     if (hasFinishLayers) {
@@ -774,17 +772,18 @@ function drawWall(
 
   // Draw hatch over the solid fills so it remains visible. Generate once from
   // the full host wall to keep its pitch aligned through opening gaps.
-  if (!isDemolition && !isExisting && isMasonryWallPlanHatch(wall, project.types)) {
+  if (isDemolition || (!isExisting && isMasonryWallPlanHatch(wall, project.types))) {
     const hatchSegments = wallMasonryHatchSegments(
       [x1, y1], [x2, y2], thickness_mm,
       mergedOpenings.map(opening => [opening.start_dist, opening.end_dist]),
+      isDemolition ? 250 : 140,
     )
     ctx.beginPath()
     for (const [start, end] of hatchSegments) {
       const [startX, startY] = worldToScreen(start, viewport), [endX, endY] = worldToScreen(end, viewport)
       ctx.moveTo(startX, startY); ctx.lineTo(endX, endY)
     }
-    ctx.strokeStyle = isSelected ? 'rgba(3, 105, 161, 0.62)' : '#9aa6b4'
+    ctx.strokeStyle = isSelected ? 'rgba(3, 105, 161, 0.62)' : isDemolition ? '#ef4444' : '#9aa6b4'
     ctx.lineWidth = 0.75
     ctx.stroke()
   }
@@ -878,13 +877,17 @@ function drawDoor(
   const [scx, scy] = worldToScreen([cx, cy], viewport)
 
   ctx.save()
+  const displayPhase = getDisplayPhase(door)
+  const phaseStyle = resolvePlanPhaseStyle(displayPhase)
+  const isDemolition = displayPhase === 'demolition'
+  ctx.setLineDash(phaseStyle.dash)
 
   // 1. Jamb end lines
   const thick_px = hostWall.module_data.thickness_mm * viewport.zoom
   const snx = nx
   const sny = ny
 
-  ctx.strokeStyle = isSelected ? '#1682e8' : isHovered ? '#0284c7' : '#334155'
+  ctx.strokeStyle = isSelected ? '#1682e8' : isHovered ? '#0284c7' : phaseStyle.stroke
   ctx.lineWidth = 1.5
   ctx.beginPath()
   ctx.moveTo(sj1x + snx * (thick_px / 2), sj1y + sny * (thick_px / 2))
@@ -899,7 +902,7 @@ function drawDoor(
   const frameFaceWidthMm = Math.max(1, Number(openingValue(project, door, 'frame_face_width_mm', 50)) || 50)
   const leafThicknessMm = Math.max(1, Number(openingValue(project, door, 'door_leaf_thickness_mm', 50)) || 50)
   const jambFaceWidthPx = Math.max(1, Math.min(frameFaceWidthMm * viewport.zoom, openingPx * 0.25))
-  ctx.strokeStyle = isSelected ? '#1682e8' : isHovered ? '#0284c7' : '#475569'
+  ctx.strokeStyle = isSelected ? '#1682e8' : isHovered ? '#0284c7' : phaseStyle.stroke
   ctx.lineWidth = 1
   for (const [jx, jy, direction] of [[sj1x, sj1y, 1], [sj2x, sj2y, -1]] as const) {
     const halfWall = thick_px / 2
@@ -915,7 +918,7 @@ function drawDoor(
   // Double frame profiles along both wall faces.
   const framePx = Math.max(1.5, Math.min(5, 6 * viewport.zoom))
   const frameInset = Math.max(0, thick_px / 2 - framePx)
-  ctx.strokeStyle = isSelected ? '#1682e8' : '#475569'
+  ctx.strokeStyle = isSelected ? '#1682e8' : phaseStyle.stroke
   ctx.lineWidth = framePx
   ctx.beginPath()
   for (const side of [-1, 1]) {
@@ -926,9 +929,6 @@ function drawDoor(
   ctx.stroke()
 
   // 2. Door leaf and swing arc
-  const isDemolition = door.created_phase === 'demolition' || door.removed_phase === 'demolition'
-  const isExisting = door.created_phase === 'existing'
-
   const operation = String(openingValue(project, door, 'opening_operation', 'hinged'))
   const panelCount = Math.max(1, Math.min(8, Number(openingValue(project, door, 'panel_count', 1)) || 1))
   const panelLayout = openingValue(project, door, 'panel_layout', Array.from({ length: panelCount }, () => operation)) as string[]
@@ -938,7 +938,7 @@ function drawDoor(
   const normalizedRatios = ratios.map(value => value / ratioTotal)
   const panelAt = (index: number) => normalizedRatios.slice(0, index).reduce((sum, value) => sum + value, 0)
   const scale = Math.max(0.85, Math.min(1.65, viewport.zoom / 0.065))
-  const leafColor = isSelected ? '#1682e8' : isHovered ? '#0284c7' : isDemolition ? '#ef4444' : isExisting ? '#64748b' : '#0f172a'
+  const leafColor = isSelected ? '#1682e8' : isHovered ? '#0284c7' : phaseStyle.stroke
   const drawArrow = (x: number, y: number, dir: number, color: string) => {
     const size = 7 * scale
     ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.1
@@ -975,7 +975,7 @@ function drawDoor(
   } else if (panelLayout.some(value => ['sliding', 'pocket', 'surface_sliding'].includes(value))) {
     const slidingMode = panelLayout.find(value => ['pocket', 'surface_sliding'].includes(value))
     const trackOffset = Math.max(2, Math.min(thick_px * 0.22, 8))
-    ctx.strokeStyle = isSelected ? '#38bdf8' : '#475569'
+    ctx.strokeStyle = isSelected ? '#38bdf8' : phaseStyle.stroke
     ctx.lineWidth = 1.35
     if (slidingMode === 'surface_sliding') {
       const surfaceOffset = thick_px / 2 + 4
@@ -1133,13 +1133,13 @@ function drawDoor(
       // Draw the leaf's inner edge as a distinct pair of plan lines so the
       // open sash reads as a door panel rather than a single swing ray.
       ctx.beginPath()
-      ctx.strokeStyle = isSelected ? '#1682e8' : '#64748b'
+      ctx.strokeStyle = isSelected ? '#1682e8' : phaseStyle.stroke
       ctx.lineWidth = 0.8
       ctx.moveTo(hx + leafNx * leafHalf * 0.35, hy + leafNy * leafHalf * 0.35)
       ctx.lineTo(leafEndX + leafNx * leafHalf * 0.35, leafEndY + leafNy * leafHalf * 0.35)
       ctx.stroke()
       ctx.beginPath()
-      ctx.strokeStyle = isSelected ? '#1682e8' : isDemolition ? '#ef4444' : isExisting ? '#94a3b8' : '#334155'
+      ctx.strokeStyle = isSelected ? '#1682e8' : phaseStyle.stroke
       ctx.lineWidth = 1.15; ctx.setLineDash([])
       const counterClockwise = (openAngle - closedAngle + 2 * Math.PI) % (2 * Math.PI) > Math.PI
       ctx.arc(hx, hy, swingRadius, closedAngle, openAngle, counterClockwise)
@@ -1149,7 +1149,7 @@ function drawDoor(
       if (panelOperation === 'louver' || String(openingValue(project, door, 'door_leaf_style', '')) === 'louvered') {
         // A louver leaf uses the same jamb, open leaf and quarter swing as an
         // ordinary door. Only the face receives thin, evenly spaced slats.
-        ctx.strokeStyle = isSelected ? '#0369a1' : '#475569'
+        ctx.strokeStyle = isSelected ? '#0369a1' : phaseStyle.stroke
         ctx.lineWidth = 0.85
         ctx.beginPath()
         const slatCount = Math.max(3, Math.min(5, Math.round(leafLength / 34)))
@@ -1222,6 +1222,10 @@ function drawWindow(
   const thickPx = hostWall.module_data.thickness_mm * viewport.zoom
 
   ctx.save()
+  const displayPhase = getDisplayPhase(win)
+  const phaseStyle = resolvePlanPhaseStyle(displayPhase)
+  const isDemolition = displayPhase === 'demolition'
+  ctx.setLineDash(phaseStyle.dash)
 
   // Opening cutout background
   ctx.beginPath()
@@ -1236,7 +1240,7 @@ function drawWindow(
   // Perimeter frame profile: two nested rectangles around the glazed opening
   // represent the outer frame and the inner glazing stop in plan.
   const frameCorners: [number, number][] = [[sc1x, sc1y], [sc2x, sc2y], [sc3x, sc3y], [sc4x, sc4y]]
-  ctx.strokeStyle = isSelected ? '#1682e8' : '#334155'
+  ctx.strokeStyle = isSelected ? '#1682e8' : phaseStyle.stroke
   ctx.lineWidth = 1.8
   ctx.beginPath()
   frameCorners.forEach(([x, y], index) => {
@@ -1246,7 +1250,7 @@ function drawWindow(
   })
   ctx.stroke()
   const profileInset = Math.max(1.5, Math.min(3, thickPx * 0.08))
-  ctx.strokeStyle = '#64748b'
+  ctx.strokeStyle = phaseStyle.stroke
   ctx.lineWidth = 0.85
   ctx.beginPath()
   frameCorners.forEach(([x, y], index) => {
@@ -1261,7 +1265,7 @@ function drawWindow(
   ctx.stroke()
 
   // Jambs
-  ctx.strokeStyle = isSelected ? '#1682e8' : isHovered ? '#0284c7' : '#475569'
+  ctx.strokeStyle = isSelected ? '#1682e8' : isHovered ? '#0284c7' : phaseStyle.stroke
   ctx.lineWidth = 2.25
   ctx.beginPath()
   ctx.moveTo(sc1x, sc1y)
@@ -1273,7 +1277,7 @@ function drawWindow(
   // Sill lines
   // A layered surround and sill make the frame profile read separately from
   // the glazing instead of appearing as a simple hole cut in the wall.
-  ctx.strokeStyle = isSelected ? '#1682e8' : '#334155'
+  ctx.strokeStyle = isSelected ? '#1682e8' : phaseStyle.stroke
   ctx.lineWidth = Math.max(2.5, Math.min(4, thickPx * 0.12))
   ctx.beginPath()
   ctx.moveTo(sc1x, sc1y)
@@ -1291,9 +1295,6 @@ function drawWindow(
   ctx.stroke()
 
   // Double Glass Lines
-  const isDemolition = win.created_phase === 'demolition' || win.removed_phase === 'demolition'
-  const isExisting = win.created_phase === 'existing'
-
   // 5 mm double-glazing linework remains thin while scaling with the drawing.
   const glassOffsetPx = Math.max(0.8, 2.5 * viewport.zoom)
   const frameFaceWidthMm = Math.max(1, Number(openingValue(project, win, 'frame_face_width_mm', 50)) || 50)
@@ -1306,7 +1307,7 @@ function drawWindow(
   // Double frame profiles along both wall faces.
   const framePx = 1.25
   const frameInset = Math.max(0, thickPx / 2 - framePx)
-  ctx.strokeStyle = isSelected ? '#1682e8' : '#475569'
+  ctx.strokeStyle = isSelected ? '#1682e8' : phaseStyle.stroke
   ctx.lineWidth = framePx
   ctx.beginPath()
   for (const side of [-1, 1]) {
@@ -1321,7 +1322,7 @@ function drawWindow(
   // wall thickness, so the detail remains clean at both horizontal and
   // vertical orientations.
   const trackGap = Math.max(2, Math.min((sashFaceWidthMm / 2) * viewport.zoom, thickPx * 0.45))
-  ctx.strokeStyle = isSelected ? '#075985' : '#475569'
+  ctx.strokeStyle = isSelected ? '#075985' : phaseStyle.stroke
   ctx.lineWidth = 1
   ctx.beginPath()
   for (const side of [-1, 1]) {
@@ -1349,7 +1350,7 @@ function drawWindow(
   const ratioTotal = ratios.reduce((sum, value) => sum + value, 0)
   const normalizedRatios = ratios.map(value => value / ratioTotal)
   const panelAt = (index: number) => normalizedRatios.slice(0, index).reduce((sum, value) => sum + value, 0)
-  const frameStroke = isSelected ? '#0369a1' : '#334155'
+  const frameStroke = isSelected ? '#0369a1' : phaseStyle.stroke
   const openingLengthPx = Math.hypot(sp2x - sp1x, sp2y - sp1y)
   // A sliding sash has a shallow 40 mm frame on one of two tracks. It must
   // not fill the entire wall depth; adjacent panels overlap at their meeting
@@ -1434,7 +1435,7 @@ function drawWindow(
     const sx = sp1x + (sp2x - sp1x) * startT, sy = sp1y + (sp2y - sp1y) * startT
     const ex = sp1x + (sp2x - sp1x) * endT, ey = sp1y + (sp2y - sp1y) * endT
     const mx = (sx + ex) / 2, my = (sy + ey) / 2
-    const panelColor = isDemolition ? '#ef4444' : isExisting ? '#94a3b8' : '#1682a8'
+    const panelColor = phaseStyle.stroke
     if (panelOperation === 'sliding') {
       // The plan symbol is the pair of offset tracks and overlapping sash
       // stiles above; directional arrows belong in elevation, not in plan.
@@ -1478,7 +1479,7 @@ function drawWindow(
     // symbol is drawn, including when the opening is selected.
     ctx.fillStyle = isSelected ? '#dff3ff' : '#fbfdff'
     ctx.fill()
-    ctx.strokeStyle = isSelected ? '#1682e8' : '#334155'
+    ctx.strokeStyle = isSelected ? '#1682e8' : phaseStyle.stroke
     ctx.lineWidth = 1.35
     ctx.stroke()
 

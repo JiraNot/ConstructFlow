@@ -59,7 +59,6 @@ const headerActionStyle: React.CSSProperties = {
 const takeoffCostCenterLabels: Record<string, string> = {
   demolition_site_prep: 'รื้อถอน/เตรียมพื้นที่',
   new_construction: 'งานสร้างใหม่',
-  existing_to_remain: 'ของเดิมคงอยู่',
   remodeling_joint_treatment: 'รอยต่อเดิม–ใหม่',
 }
 
@@ -631,15 +630,16 @@ export const App: React.FC = () => {
   const handleDetectRooms = () => runArchitectureCommand('DetectRooms',{level_id:project.project.active_level_id,default_name:'Room'})
   const handleCreateRoomFinish = (kind: 'floor'|'ceiling', roomId: string) => {
     const room=project.objects[roomId];if(!room||room.object_type!=='architecture.room')return
-    const data=room.module_data as Record<string,unknown>,level=project.levels.find(item=>item.id===data.level_id);if(!level)return
+    const data=room.module_data as Record<string,unknown>;if(data.boundary_status==='unclosed'){setFileFeedback('วงผนังห้องยังเปิดอยู่ · ปิดวงและตรวจพื้นที่ก่อนสร้างพื้นหรือฝ้าตามห้อง');return}
+    const level=project.levels.find(item=>item.id===data.level_id);if(!level)return
     if(kind==='floor')runArchitectureCommand('CreateArchitecturalFloor',{id:crypto.randomUUID(),mark:'AF1',level_id:level.id,room_id:roomId,elevation_mm:level.elevation_mm,elevation_reference:'level',elevation_offset_mm:0,thickness_mm:50,finish_layers:[{material:'tile',thickness_mm:10,mark:'Tile'}],voids_mm:[],follows_room_boundary:true})
     else runArchitectureCommand('CreateCeiling',{id:crypto.randomUUID(),mark:'CL1',level_id:level.id,room_id:roomId,elevation_mm:level.elevation_mm+Number(level.height_mm??2800),elevation_reference:'level',elevation_offset_mm:Number(level.height_mm??2800),thickness_mm:12,voids_mm:[],grid_mm:[600,600],follows_room_boundary:true})
   }
 
-  const handleCommitSlabVoid = (hostId: string, boundary_mm: [number, number][]) => {
-    const slab = project.objects[hostId]
-    if (!slab || slab.object_type !== 'structure.slab' || boundary_mm.length < 3) return
-    const data = slab.module_data as Record<string, unknown>
+  const handleCommitSurfaceVoid = (hostId: string, boundary_mm: [number, number][]) => {
+    const host = project.objects[hostId]
+    if (!host || !['structure.slab', 'architecture.floor', 'architecture.ceiling'].includes(host.object_type) || boundary_mm.length < 3) return
+    const data = host.module_data as Record<string, unknown>
     const inside = (point: [number, number], ring: [number, number][]) => {
       let result = false
       for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -649,14 +649,21 @@ export const App: React.FC = () => {
       return result
     }
     const boundary = data.boundary_mm as [number, number][]
-    if (!boundary || !boundary_mm.every(point => inside(point, boundary))) return
+    if (!boundary || !boundary_mm.every(point => inside(point, boundary))) {
+      setFileFeedback('ช่องเจาะต้องอยู่ภายในขอบเขตของพื้นหรือฝ้าทั้งหมด')
+      return
+    }
     const voids = Array.isArray(data.voids_mm) ? data.voids_mm as [number, number][][] : []
-    const result = CommandBus.execute(project, 'UpdateSlab', { ...data, id: hostId, voids_mm: [...voids, boundary_mm] })
+    const command = host.object_type === 'structure.slab'
+      ? 'UpdateSlab'
+      : host.object_type === 'architecture.floor' ? 'UpdateArchitecturalFloor' : 'UpdateCeiling'
+    const result = CommandBus.execute(project, command, { ...data, id: hostId, voids_mm: [...voids, boundary_mm] })
     if (result.result.status === 'success') {
       setProject(result.updatedProject)
       setSelectedId(hostId)
+      setFileFeedback('')
       if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
-    }
+    } else if (result.result.errors?.length) setFileFeedback(result.result.errors.join(' · '))
   }
 
   // Commit Door creation hosted on wall
@@ -1686,7 +1693,7 @@ export const App: React.FC = () => {
               onCommitArchitecturalFloor={handleCommitArchitecturalFloor}
               onCommitCeiling={handleCommitCeiling}
               onCommitRoomSeparator={handleCommitRoomSeparator}
-              onCommitSlabVoid={handleCommitSlabVoid}
+              onCommitSurfaceVoid={handleCommitSurfaceVoid}
               onCommitGrid={handleCommitGrid}
               onCommitGridSystem={handleCommitGridSystem}
               onModifyGrid={handleModifyGrid}
@@ -1786,7 +1793,7 @@ export const App: React.FC = () => {
             onOpenTypeManager={() => openCatalog(true,true)}
             onAddFoundation={(colId) => handleCommitFoundation({ columnId: colId })}
             onDeleteObject={handleDeleteObject}
-            onDrawSlabVoid={(slabId) => { setSelectedId(slabId); setActiveTool('slabVoid') }}
+            onDrawSurfaceVoid={(surfaceId) => { setSelectedId(surfaceId); setViewMode('plan'); setActiveTool('slabVoid') }}
             onCreateRoomFinish={handleCreateRoomFinish}
           /></div>}
 

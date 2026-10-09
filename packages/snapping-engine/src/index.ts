@@ -153,6 +153,7 @@ export function snapPoint(
   viewport: SnapViewport,
   snapDistanceScreenPx = 16,
   enabledModes: ReadonlySet<SnapMode> = new Set(DEFAULT_SNAP_MODES),
+  excludedObjectId?: string,
 ): SnapResult {
   const toleranceMm = snapDistanceScreenPx / Math.max(viewport.zoom, 0.0001)
   const toleranceSq = toleranceMm * toleranceMm
@@ -163,6 +164,7 @@ export function snapPoint(
   const segments: Segment[] = []
 
   const offer = (point: Point, kind: SnapKind, targetId: string | undefined, description: string, priority: number) => {
+    if (excludedObjectId && targetId === excludedObjectId) return
     const distance_sq = distSq(rawWorldPoint_mm, point)
     const mode = snapModeFor(kind)
     if (distance_sq > toleranceSq || (mode && !enabledModes.has(mode))) return
@@ -250,7 +252,10 @@ export function snapPoint(
     for (let j = i + 1; j < segments.length; j++) {
       if (segments[i].object_id === segments[j].object_id) continue
       const point = closestSegmentIntersection(segments[i], segments[j])
-      if (point) offer(point, 'intersection', `${segments[i].object_id}:${segments[j].object_id}`, 'จุดตัดแนวคาน/ผนัง', 0)
+      if (point) {
+        const [firstId, secondId] = [segments[i].object_id, segments[j].object_id].sort((a, b) => a.localeCompare(b))
+        offer(point, 'intersection', `${firstId}:${secondId}`, 'จุดตัดแนวคาน/ผนัง', 0)
+      }
     }
   }
 
@@ -290,6 +295,7 @@ export function snapToWallHost(
   openingWidth_mm = 800,
   snapDistanceScreenPx = 36,
 ): WallHostSnapResult | null {
+  if (!Number.isFinite(openingWidth_mm) || openingWidth_mm <= 0) return null
   const tolerance_mm = snapDistanceScreenPx / Math.max(viewport.zoom, 0.0001)
   let closest: WallHostSnapResult | null = null
   let minPerpDist = Infinity
@@ -299,7 +305,7 @@ export function snapToWallHost(
     const [sx, sy] = obj.module_data.start_point_mm
     const [ex, ey] = obj.module_data.end_point_mm
     const dx = ex - sx, dy = ey - sy, length = Math.hypot(dx, dy)
-    if (length < 10) continue
+    if (length < 10 || length < openingWidth_mm) continue
     const ux = dx / length, uy = dy / length
     const px = rawWorldPoint_mm[0] - sx, py = rawWorldPoint_mm[1] - sy
     const t = px * ux + py * uy
@@ -310,7 +316,10 @@ export function snapToWallHost(
     const clampedT = Math.max(minT, Math.min(maxT, t))
     const projX = sx + clampedT * ux, projY = sy + clampedT * uy
     const perpDist = Math.hypot(rawWorldPoint_mm[0] - projX, rawWorldPoint_mm[1] - projY)
-    if (perpDist <= tolerance_mm + obj.module_data.thickness_mm / 2 && perpDist < minPerpDist) {
+    const isCloser = perpDist < minPerpDist - 1e-9
+    const isStableTie = Math.abs(perpDist - minPerpDist) <= 1e-9
+      && obj.id.localeCompare(closest?.wall_id ?? '') < 0
+    if (perpDist <= tolerance_mm + obj.module_data.thickness_mm / 2 && (isCloser || isStableTie)) {
       minPerpDist = perpDist
       closest = {
         snapped: true,

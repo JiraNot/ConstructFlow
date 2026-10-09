@@ -4,12 +4,192 @@ import { createEmptyProjectDocument, deserializeProject, serializeProject } from
 import { CommandBus, ProjectCommandSession } from '../dist/index.js'
 import { detectClosedWallRooms } from '../../architecture-engine/dist/index.js'
 import { resolveArchitectureSurfaceElevation } from '@constructflow/project-model'
+import { calculateTakeoff } from '../../takeoff-engine/dist/index.js'
 
 const run = (project, name, input) => {
   const result = CommandBus.execute(project, name, input)
   assert.equal(result.result.status, 'success', JSON.stringify(result.result))
   return result.updatedProject
 }
+
+test('floor and ceiling commands reject invalid boundaries and void geometry before it enters the model', () => {
+  const project = createEmptyProjectDocument(crypto.randomUUID())
+  project.levels = [{ id: 'L1', name: 'Ground', elevation_mm: 0, storey_index: 0, height_mm: 2800 }]
+  const boundary_mm = [[0, 0], [4000, 0], [4000, 3000], [0, 3000]]
+  const base = { level_id: 'L1', boundary_mm, thickness_mm: 50, elevation_mm: 0 }
+  const cases = [
+    ['CreateArchitecturalFloor', { ...base, voids_mm: [[[3500, 1000], [4500, 1000], [4500, 2000], [3500, 2000]]] }, /strictly inside/],
+    ['CreateCeiling', { ...base, voids_mm: [[[500, 500], [2000, 500], [2000, 2000], [500, 2000]], [[1500, 1000], [3000, 1000], [3000, 2500], [1500, 2500]]] }, /overlaps/],
+    ['CreateArchitecturalFloor', { ...base, boundary_mm: [[0, 0], [4000, 3000], [4000, 0], [0, 3000]], voids_mm: [] }, /simple/],
+    ['CreateCeiling', { ...base, voids_mm: [[[500, 500], [1500, 500], [Number.NaN, 1200]]] }, /finite/],
+  ]
+  for (const [command, payload, reason] of cases) {
+    const result = CommandBus.execute(project, command, { id: crypto.randomUUID(), ...payload })
+    assert.notEqual(result.result.status, 'success', `${command} should reject invalid polygon data`)
+    assert.match(JSON.stringify(result.result), reason)
+    assert.deepEqual(result.updatedProject, project, 'rejected geometry must not mutate the source project')
+  }
+})
+
+test('architectural floor and ceiling void edits remain valid and reduce net finish quantities', () => {
+  let project = createEmptyProjectDocument(crypto.randomUUID())
+  project.levels = [{ id: 'L1', name: 'Ground', elevation_mm: 0, storey_index: 0, height_mm: 2800 }]
+  const boundary_mm = [[0, 0], [4000, 0], [4000, 3000], [0, 3000]]
+  const void_mm = [[1000, 1000], [1500, 1000], [1500, 1500], [1000, 1500]]
+  project = run(project, 'CreateArchitecturalFloor', {
+    id: crypto.randomUUID(), mark: 'AF1', level_id: 'L1', boundary_mm, thickness_mm: 50,
+    elevation_mm: 0, voids_mm: [], finish_layers: [{ mark: 'Tile', material: 'porcelain_tile', thickness_mm: 10, quantity_unit: 'm2' }],
+  })
+  project = run(project, 'CreateCeiling', {
+    id: crypto.randomUUID(), mark: 'CL1', level_id: 'L1', boundary_mm, thickness_mm: 12,
+    elevation_mm: 2800, voids_mm: [], grid_mm: [600, 600],
+  })
+  const floor = Object.values(project.objects).find(object => object.object_type === 'architecture.floor')
+  const ceiling = Object.values(project.objects).find(object => object.object_type === 'architecture.ceiling')
+  assert.ok(floor && ceiling)
+  project = run(project, 'UpdateArchitecturalFloor', { ...floor.module_data, id: floor.id, voids_mm: [void_mm] })
+  project = run(project, 'UpdateCeiling', { ...ceiling.module_data, id: ceiling.id, voids_mm: [void_mm] })
+  assert.deepEqual(project.objects[floor.id].module_data.voids_mm, [void_mm])
+  assert.deepEqual(project.objects[ceiling.id].module_data.voids_mm, [void_mm])
+  const report = calculateTakeoff(project)
+  const finish = report.lines.find(line => line.source_object_ids.includes(floor.id) && line.object_type === 'architecture.floor.finish')
+  const ceilingArea = report.lines.find(line => line.source_object_ids.includes(ceiling.id) && line.object_type === 'architecture.ceiling')
+  assert.equal(finish?.quantity, 11.75)
+  assert.equal(ceilingArea?.quantity, 11.75)
+  assert.deepEqual(report.warnings, [])
+})
+
+test('floor and ceiling catalog types cascade finish and grid data while preserving instance overrides and takeoff', () => {
+  let project = createEmptyProjectDocument(crypto.randomUUID())
+  project.levels = [{ id: 'L1', name: 'Ground', elevation_mm: 0, storey_index: 0, height_mm: 2800 }]
+  const boundary_mm = [[0, 0], [4000, 0], [4000, 3000], [0, 3000]]
+  const floorIds = [crypto.randomUUID(), crypto.randomUUID()]
+  const ceilingIds = [crypto.randomUUID(), crypto.randomUUID()]
+  for (const id of floorIds) project = run(project, 'CreateArchitecturalFloor', {
+    id, mark: 'AF', level_id: 'L1', boundary_mm, thickness_mm: 50, elevation_mm: 0, voids_mm: [],
+    finish_layers: [{ mark: 'Original Tile', material: 'ceramic_tile', thickness_mm: 10, quantity_unit: 'm3' }],
+  })
+  for (const id of ceilingIds) project = run(project, 'CreateCeiling', {
+    id, mark: 'CL', level_id: 'L1', boundary_mm, thickness_mm: 12, elevation_mm: 2800, voids_mm: [], grid_mm: [600, 600],
+  })
+
+  const floorTypeId = crypto.randomUUID(), ceilingTypeId = crypto.randomUUID()
+  project = run(project, 'DefineStructuralType', { id: floorTypeId, object_type: 'architecture.floor', name: 'AF-TILE', parameters: {
+    thickness_mm: 50, finish_layers: [{ mark: 'Catalog Tile', material: 'porcelain_tile', thickness_mm: 10, quantity_unit: 'm3' }],
+    finish_pattern_mm: [600, 600], finish_pattern_origin_mm: [0, 0], finish_pattern_rotation_deg: 0,
+  } })
+  project = run(project, 'DefineStructuralType', { id: ceilingTypeId, object_type: 'architecture.ceiling', name: 'CL-GRID', parameters: {
+    thickness_mm: 12, material: 'gypsum_board', grid_mm: [600, 600],
+  } })
+  for (const id of floorIds) project = run(project, 'AssignInstanceType', { object_id: id, type_id: floorTypeId })
+  for (const id of ceilingIds) project = run(project, 'AssignInstanceType', { object_id: id, type_id: ceilingTypeId })
+
+  const floorOverride = project.objects[floorIds[0]]
+  project = run(project, 'UpdateArchitecturalFloor', { ...floorOverride.module_data, id: floorOverride.id,
+    finish_layers: [{ mark: 'Custom Stone', material: 'stone', thickness_mm: 30, quantity_unit: 'm3' }],
+  })
+  const ceilingOverride = project.objects[ceilingIds[0]]
+  project = run(project, 'UpdateCeiling', { ...ceilingOverride.module_data, id: ceilingOverride.id, grid_mm: [300, 300] })
+
+  project = run(project, 'UpdateStructuralTypeDimensions', { type_id_or_name: floorTypeId, object_type: 'architecture.floor', parameters: {
+    finish_layers: [{ mark: 'Updated Catalog Tile', material: 'porcelain_tile', thickness_mm: 15, quantity_unit: 'm3' }],
+    finish_pattern_mm: [300, 450],
+  } })
+  project = run(project, 'UpdateStructuralTypeDimensions', { type_id_or_name: ceilingTypeId, object_type: 'architecture.ceiling', parameters: {
+    thickness_mm: 15, grid_mm: [600, 1200],
+  } })
+
+  const overriddenFloor = project.objects[floorIds[0]].module_data
+  const catalogFloor = project.objects[floorIds[1]].module_data
+  assert.equal(overriddenFloor.finish_layers[0].mark, 'Custom Stone')
+  assert.deepEqual(overriddenFloor.finish_pattern_mm, [300, 450])
+  assert.equal(catalogFloor.finish_layers[0].mark, 'Updated Catalog Tile')
+  assert.equal(catalogFloor.finish_layers[0].thickness_mm, 15)
+  assert.deepEqual(catalogFloor.finish_pattern_mm, [300, 450])
+  assert.deepEqual(project.objects[ceilingIds[0]].module_data.grid_mm, [300, 300])
+  assert.deepEqual(project.objects[ceilingIds[1]].module_data.grid_mm, [600, 1200])
+  assert.equal(project.objects[ceilingIds[1]].module_data.thickness_mm, 15)
+
+  const report = calculateTakeoff(project)
+  const updatedFinish = report.lines.find(line => line.source_object_ids.includes(floorIds[1]) && line.mark === 'Updated Catalog Tile')
+  const overrideFinish = report.lines.find(line => line.source_object_ids.includes(floorIds[0]) && line.mark === 'Custom Stone')
+  assert.equal(updatedFinish?.quantity, 0.18)
+  assert.equal(updatedFinish?.material, 'porcelain_tile')
+  assert.equal(overrideFinish?.quantity, 0.36)
+  assert.deepEqual(project.objects[floorIds[0]].module_data.instance_overrides.finish_layers, [{ mark: 'Custom Stone', material: 'stone', thickness_mm: 30, quantity_unit: 'm3' }])
+  assert.deepEqual(project.objects[ceilingIds[0]].module_data.instance_overrides.grid_mm, [300, 300])
+  const reopened = deserializeProject(serializeProject(project))
+  assert.deepEqual(reopened.objects[floorIds[1]].module_data.finish_layers, catalogFloor.finish_layers)
+  assert.deepEqual(reopened.objects[floorIds[0]].module_data.instance_overrides.finish_layers, project.objects[floorIds[0]].module_data.instance_overrides.finish_layers)
+  assert.equal(calculateTakeoff(reopened).lines.find(line => line.source_object_ids.includes(floorIds[1]) && line.mark === 'Updated Catalog Tile')?.quantity, 0.18)
+})
+
+test('deleting an enclosure wall marks linked room surfaces stale and excludes them from takeoff', () => {
+  let project = createEmptyProjectDocument(crypto.randomUUID())
+  project.levels = [{ id: 'L1', name: 'Ground', elevation_mm: 0, storey_index: 0, height_mm: 2800 }]
+  const edges = [
+    [[0, 0, 0], [4000, 0, 0]], [[4000, 0, 0], [4000, 3000, 0]],
+    [[4000, 3000, 0], [0, 3000, 0]], [[0, 3000, 0], [0, 0, 0]],
+  ]
+  const wallIds = []
+  for (const [start_point_mm, end_point_mm] of edges) {
+    const id = crypto.randomUUID()
+    wallIds.push(id)
+    project = run(project, 'CreateWall', {
+      id, mark: 'W1', start_point_mm, end_point_mm, thickness_mm: 100, height_mm: 2800, level_id: 'L1',
+    })
+  }
+  project = run(project, 'DetectRooms', { level_id: 'L1' })
+  const room = Object.values(project.objects).find(object => object.object_type === 'architecture.room')
+  assert.ok(room)
+  project = run(project, 'CreateArchitecturalFloor', {
+    id: crypto.randomUUID(), mark: 'AF1', room_id: room.id, level_id: 'L1', elevation_mm: 0,
+    thickness_mm: 50, voids_mm: [], finish_layers: [{ mark: 'Tile', material: 'porcelain_tile', thickness_mm: 10 }],
+  })
+  project = run(project, 'CreateCeiling', {
+    id: crypto.randomUUID(), mark: 'CL1', room_id: room.id, level_id: 'L1', elevation_mm: 2600,
+    thickness_mm: 20, voids_mm: [], grid_mm: [600, 600],
+  })
+  const floor = Object.values(project.objects).find(object => object.object_type === 'architecture.floor')
+  const ceiling = Object.values(project.objects).find(object => object.object_type === 'architecture.ceiling')
+  assert.ok(floor && ceiling)
+  const deletedWallId = wallIds[1]
+  const deletion = CommandBus.execute(project, 'DeleteObject', { object_id: deletedWallId })
+  assert.equal(deletion.result.status, 'success', JSON.stringify(deletion.result))
+  project = deletion.updatedProject
+
+  assert.equal(project.objects[deletedWallId], undefined)
+  assert.equal(project.objects[room.id].module_data.boundary_status, 'unclosed')
+  assert.equal(project.objects[floor.id].module_data.room_boundary_status, 'unclosed')
+  assert.equal(project.objects[ceiling.id].module_data.room_boundary_status, 'unclosed')
+  assert.ok(deletion.result.updated_object_ids.includes(room.id))
+  assert.ok(deletion.result.updated_object_ids.includes(floor.id))
+  assert.ok(deletion.result.updated_object_ids.includes(ceiling.id))
+
+  for (const [command, id] of [['CreateArchitecturalFloor', crypto.randomUUID()], ['CreateCeiling', crypto.randomUUID()]]) {
+    const result = CommandBus.execute(project, command, { id, mark: 'STALE', room_id: room.id, thickness_mm: 20, voids_mm: [] })
+    assert.notEqual(result.result.status, 'success', `${command} must not clone a stale room boundary`)
+    assert.match(JSON.stringify(result.result), /room wall loop is open/)
+    assert.equal(result.updatedProject, project, 'rejected room-based surface creation must leave the project unchanged')
+  }
+
+  const report = calculateTakeoff(project)
+  assert.ok(!report.lines.some(line => line.source_object_ids.includes(floor.id) || line.source_object_ids.includes(ceiling.id)))
+  assert.ok(report.warnings.some(warning => warning.startsWith(`${floor.id}: room boundary is unclosed`)))
+  assert.ok(report.warnings.some(warning => warning.startsWith(`${ceiling.id}: room boundary is unclosed`)))
+
+  project = run(project, 'CreateWall', {
+    id: deletedWallId, mark: 'W1', start_point_mm: [4000, 0, 0], end_point_mm: [4000, 3000, 0],
+    thickness_mm: 100, height_mm: 2800, level_id: 'L1',
+  })
+  assert.equal(project.objects[room.id].module_data.boundary_status, 'closed')
+  assert.equal(project.objects[floor.id].module_data.room_boundary_status, 'closed')
+  assert.equal(project.objects[ceiling.id].module_data.room_boundary_status, 'closed')
+  const restoredReport = calculateTakeoff(project)
+  assert.ok(restoredReport.lines.some(line => line.source_object_ids.includes(floor.id)))
+  assert.ok(restoredReport.lines.some(line => line.source_object_ids.includes(ceiling.id)))
+  assert.ok(!restoredReport.warnings.some(warning => warning.includes('room boundary is unclosed')))
+})
 
 test('room refresh after wall edits preserves room identity and updates associative floor/ceiling boundaries', () => {
   let project = createEmptyProjectDocument(crypto.randomUUID())
@@ -235,6 +415,31 @@ test('acute wall corners keep a finite inward finished-face room boundary', () =
   assert.ok(boundary.flat().every(Number.isFinite), 'acute corner offset intersections must remain finite')
   assert.ok(room.module_data.area_mm2 > 100_000 && room.module_data.area_mm2 < 5_000_000, 'finished-face area must remain positive and smaller than the centerline enclosure')
   assert.ok(boundary.every(([x, y]) => x > 0 && x < 10000 && y > 0 && y < 1000), 'finished faces must remain inside the wall centerline triangle')
+})
+
+test('concave wall enclosures create a simple interior room boundary with matching floor and ceiling areas', () => {
+  let project = createEmptyProjectDocument(crypto.randomUUID())
+  project.levels = [{ id: 'L1', name: 'Ground', elevation_mm: 0, storey_index: 0, height_mm: 2800 }]
+  const vertices = [[0, 0], [4000, 0], [4000, 1000], [1000, 1000], [1000, 4000], [0, 4000]]
+  for (let index = 0; index < vertices.length; index++) {
+    const start = vertices[index], end = vertices[(index + 1) % vertices.length]
+    project = run(project, 'CreateWall', {
+      id: crypto.randomUUID(), mark: 'W1', start_point_mm: [...start, 0], end_point_mm: [...end, 0],
+      thickness_mm: 100, height_mm: 2800, level_id: 'L1',
+    })
+  }
+  project = run(project, 'DetectRooms', { level_id: 'L1' })
+  const room = Object.values(project.objects).find(object => object.object_type === 'architecture.room')
+  assert.ok(room, 'the concave enclosure should produce one room')
+  assert.deepEqual(room.module_data.boundary_mm, [[50, 50], [3950, 50], [3950, 950], [950, 950], [950, 3950], [50, 3950]])
+  assert.equal(room.module_data.area_mm2, 6_210_000)
+  const floorId = crypto.randomUUID(), ceilingId = crypto.randomUUID()
+  project = run(project, 'CreateArchitecturalFloor', { id: floorId, room_id: room.id, level_id: 'L1', thickness_mm: 50, voids_mm: [], finish_layers: [] })
+  project = run(project, 'CreateCeiling', { id: ceilingId, room_id: room.id, level_id: 'L1', elevation_mm: 2600, thickness_mm: 12, voids_mm: [], grid_mm: [600, 600] })
+  assert.deepEqual(project.objects[floorId].module_data.boundary_mm, room.module_data.boundary_mm)
+  assert.deepEqual(project.objects[ceilingId].module_data.boundary_mm, room.module_data.boundary_mm)
+  assert.equal(project.objects[floorId].module_data.follows_room_boundary, true)
+  assert.equal(project.objects[ceilingId].module_data.follows_room_boundary, true)
 })
 
 test('room boundaries retain a step where collinear wall segments change thickness', () => {

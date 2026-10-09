@@ -132,6 +132,79 @@ test("A-02 and A-03 can each select any story without showing a wall on its top-
   assert.ok(architecturalPlan.sheets.find(s => s.id === "S-01").source_object_ids.includes("foundation-gf"), "structural footing geometry remains on its structural sheet");
 });
 
+test("A-02/A-03 isolate architectural floor patterns and surface sources by selected storey", () => {
+  const p = createEmptyProjectDocument("LEVEL-SURFACE-PLAN-PROOF");
+  p.levels = [
+    { id: "GF", name: "Ground", elevation_mm: 0, storey_index: 0, height_mm: 3000 },
+    { id: "L2", name: "Level 2", elevation_mm: 3000, storey_index: 1, height_mm: 3000 },
+  ];
+  p.project.active_level_id = "GF";
+  const addSurface = (id, object_type, level_id, elevation_mm, module_data) => {
+    p.objects[id] = {
+      id, object_type, owner_module: "constructflow.architecture", schema_version: 1,
+      created_phase: "new_construction", removed_phase: null, status: "active",
+      level_refs: [{ role: "base_level", level_id }], host_refs: [], connector_refs: [], relationships: [],
+      module_data: { mark: id, level_id, elevation_reference: "level", elevation_mm, elevation_offset_mm: 0,
+        boundary_mm: [[0, 0], [4000, 0], [4000, 3000], [0, 3000]], thickness_mm: object_type === "architecture.floor" ? 50 : 12,
+        voids_mm: [], ...module_data },
+      created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+    };
+  };
+  addSurface("floor-gf", "architecture.floor", "GF", 0, {
+    finish_layers: [{ mark: "Ground Tile", material: "porcelain_tile", thickness_mm: 10, quantity_unit: "m2" }], finish_pattern_mm: [1000, 1000],
+  });
+  addSurface("floor-l2", "architecture.floor", "L2", 3000, {
+    finish_layers: [{ mark: "Upper Tile", material: "ceramic_tile", thickness_mm: 8, quantity_unit: "m2" }], finish_pattern_mm: [500, 600],
+  });
+  addSurface("ceiling-gf", "architecture.ceiling", "GF", 2600, { material: "gypsum_board", grid_mm: [600, 600] });
+  addSurface("ceiling-l2", "architecture.ceiling", "L2", 5600, { material: "fiber_cement_board", grid_mm: [300, 600] });
+
+  const set = compilePermitDrawingSet(p, { viewports: {
+    "A-02": { scale_denominator: 100, level_id: "GF" },
+    "A-03": { scale_denominator: 100, level_id: "L2" },
+  } });
+  const ground = set.sheets.find(sheet => sheet.id === "A-02");
+  const upper = set.sheets.find(sheet => sheet.id === "A-03");
+  assert.deepEqual(ground.source_object_ids, ["floor-gf", "ceiling-gf"]);
+  assert.deepEqual(upper.source_object_ids, ["floor-l2", "ceiling-l2"]);
+  const floorGridCount = sheet => sheet.primitives.filter(item => item.kind === "path" && item.width === 0.1 && item.color === "#cbd5e1").length;
+  for (const sheet of [ground, upper]) {
+    assert.ok(floorGridCount(sheet) > 0, `${sheet.id} contains the selected floor's tile grid`);
+  }
+  assert.ok(floorGridCount(upper) > floorGridCount(ground), "the tighter upper-floor tile spacing produces more compiled tile lines");
+});
+
+test("A-05/A-06 keep higher elevations toward the top in top-down sheet coordinates", () => {
+  const p = createEmptyProjectDocument("ELEVATION-PAPER-AXIS-PROOF");
+  p.levels = [
+    { id: "GF", name: "Ground Floor", elevation_mm: 0, storey_index: 0, height_mm: 3000 },
+    { id: "L1", name: "First Floor", elevation_mm: 3000, storey_index: 1, height_mm: 3000 },
+    { id: "RF", name: "Roof Level", elevation_mm: 6000, storey_index: 2, height_mm: 500 },
+  ];
+  p.objects.wall = {
+    id: "wall", object_type: "architecture.wall", owner_module: "constructflow.architecture",
+    schema_version: 1, created_phase: "new_construction", removed_phase: null, status: "active",
+    level_refs: [{ role: "base_level", level_id: "GF" }, { role: "top_level", level_id: "L1" }],
+    host_refs: [], connector_refs: [], relationships: [],
+    module_data: { start_point_mm: [0, 0, 0], end_point_mm: [4000, 0, 0], thickness_mm: 100, height_mm: 3000, base_level_id: "GF", top_level_id: "L1" },
+    created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+  };
+
+  const viewports = {
+    "A-05": { scale_denominator: 100, center_mm: [2000, 3000] },
+    "A-06": { scale_denominator: 100, center_mm: [2000, 3000] },
+  };
+  const sheets = compilePermitDrawingSet(p, { viewports }).sheets.filter(sheet => sheet.id === "A-05" || sheet.id === "A-06");
+  for (const sheet of sheets) {
+    const getDatumY = (name) => sheet.primitives.find(primitive => primitive.kind === "text" && primitive.text.includes(name))?.at[1];
+    const groundY = getDatumY("Ground Floor");
+    const firstY = getDatumY("First Floor");
+    const roofY = getDatumY("Roof Level");
+    assert.ok(Number.isFinite(groundY) && Number.isFinite(firstY) && Number.isFinite(roofY), `${sheet.id} includes all three level labels`);
+    assert.ok(groundY > firstY && firstY > roofY, `${sheet.id} maps increasing model elevation toward the top edge of the sheet`);
+  }
+});
+
 test("new masonry plan hatch matches sheet output, stops at hosted openings, and is absent from existing walls", () => {
   const makeProject = (withOpening, newWallPhase = "new_construction", wallAssembly = {}) => {
     const p = createEmptyProjectDocument("PLAN-WALL-HATCH-PROOF");
@@ -162,17 +235,19 @@ test("new masonry plan hatch matches sheet output, stops at hosted openings, and
   const compiled = (project, viewport) => compilePermitDrawingSet(project, {
     viewports: viewport ? { "A-02": viewport } : undefined,
   }).sheets.find((sheet) => sheet.id === "A-02");
-  const hatchPaths = (project, viewport) => compiled(project, viewport).primitives
-    .filter((primitive) => primitive.kind === "path" && primitive.color === "#9aa6b4" && primitive.width === 0.15);
+  const hatchPaths = (project, viewport, color = "#9aa6b4") => compiled(project, viewport).primitives
+    .filter((primitive) => primitive.kind === "path" && primitive.color === color && primitive.width === 0.15);
 
   const withoutOpening = hatchPaths(makeProject(false), { scale_denominator: 100 });
   const withOpening = hatchPaths(makeProject(true));
   const existingOnly = hatchPaths(makeProject(false, "existing"));
+  const demolition = hatchPaths(makeProject(true, "demolition"), undefined, "#ef4444");
   const boardWall = hatchPaths(makeProject(false, "new_construction", { material: "steel_stud", wall_system: "steel_frame_board" }));
   assert.ok(withoutOpening.length > 20, "new masonry exports vector hatch strokes on the plan sheet");
   assert.ok(withOpening.length > 0 && withOpening.length < withoutOpening.length, "a hosted opening removes hatch lines from its wall span");
   assert.ok(withOpening.every((primitive) => primitive.points.length === 2), "hatch is emitted as editable clipped vector segments");
   assert.equal(existingOnly.length, 0, "existing walls do not receive new-construction masonry hatch");
+  assert.ok(demolition.length > 0 && demolition.length < withoutOpening.length, "demolition walls receive red strike-through hatch, clipped at hosted openings");
   assert.equal(boardWall.length, 0, "new steel-frame board walls do not receive masonry hatch");
   assert.equal(compiled(makeProject(false)).scale, "1:25", "a compact plan enlarges to the largest standard scale that retains a small view margin");
   assert.equal(compiled(makeProject(false), { scale_denominator: 100 }).scale, "1:100", "an explicit viewport scale remains authoritative");
@@ -208,13 +283,24 @@ test("A-10 compiles modeled ceiling boundaries, openings, labels and grids for t
   const viewport = { scale_denominator: 50, level_id: "GF", center_mm: [1800, 1500] };
   const sheet = compilePermitDrawingSet(p, { viewports: { "A-10": viewport } }).sheets.find(item => item.id === "A-10");
   assert.ok(sheet);
+  assert.ok(sheet.title.includes("Ground"), "the printed A-10 title identifies its selected level");
   assert.ok(sheet.source_object_ids.includes("ceiling-gf"));
-  assert.ok(sheet.primitives.some(item => item.kind === "text" && item.text.includes("CL1")));
+  const ceilingLabelIndex = sheet.primitives.findIndex(item => item.kind === "text" && item.text.includes("CL1"));
+  assert.ok(ceilingLabelIndex >= 0);
   assert.ok(sheet.primitives.some(item => item.kind === "text" && item.text.includes("RCP · ขอบเขตฝ้า")));
-  assert.ok(sheet.primitives.some(item => item.kind === "path" && item.color === "#7c3aed" && item.closed));
-  assert.ok(sheet.primitives.some(item => item.kind === "path" && item.color === "#7c3aed" && item.closed && item.fill === "#ffffff" && item.dash?.join(",") === "2,1"), "ceiling voids must be knocked out of the RCP fill while retaining a dashed opening outline");
+  assert.ok(sheet.primitives.some(item => item.kind === "path" && item.color === "#0f172a" && item.closed && item.fill === "#e3e8ed"));
+  assert.ok(sheet.primitives.some(item => item.kind === "path" && item.color === "#0f172a" && item.closed && item.fill === "#ffffff" && item.dash?.join(",") === "2,1"), "ceiling voids must be knocked out of the RCP fill while retaining a dashed opening outline");
+  const ceilingLabel = sheet.primitives[ceilingLabelIndex];
+  const ceilingLabelMask = sheet.primitives.slice(0, ceilingLabelIndex).reverse().find(item => item.kind === "path" && item.closed && item.fill === "#ffffff" && !item.dash);
+  assert.ok(ceilingLabelMask, "RCP ceiling labels receive a white knockout behind the grid");
+  const maskBounds = [Math.min(...ceilingLabelMask.points.map(point => point[0])), Math.min(...ceilingLabelMask.points.map(point => point[1])), Math.max(...ceilingLabelMask.points.map(point => point[0])), Math.max(...ceilingLabelMask.points.map(point => point[1]))];
+  assert.ok(ceilingLabel.at[0] >= maskBounds[0] && ceilingLabel.at[0] <= maskBounds[2] && ceilingLabel.at[1] >= maskBounds[1] && ceilingLabel.at[1] <= maskBounds[3], "the label text stays inside its knockout");
+  const ceilingVoid = sheet.primitives.find(item => item.kind === "path" && item.closed && item.fill === "#ffffff" && item.dash?.join(",") === "2,1");
+  const voidBounds = [Math.min(...ceilingVoid.points.map(point => point[0])), Math.min(...ceilingVoid.points.map(point => point[1])), Math.max(...ceilingVoid.points.map(point => point[0])), Math.max(...ceilingVoid.points.map(point => point[1]))];
+  assert.ok(maskBounds[2] <= voidBounds[0] || maskBounds[0] >= voidBounds[2] || maskBounds[3] <= voidBounds[1] || maskBounds[1] >= voidBounds[3], "the ceiling label knockout must not cover an opening");
+  assert.ok(!sheet.warnings.some(warning => warning.includes("no clear RCP label area")));
   const paperGrid = sheet.primitives
-    .filter(item => item.kind === "path" && item.color === "#a78bfa" && item.width === 0.12 && item.dash?.join(",") === "1.5,1.5")
+    .filter(item => item.kind === "path" && item.color === "#94a3b8" && item.width === 0.12 && !item.dash?.length)
     .map(item => item.points);
   const expectedGrid = clippedGridSegments(
     p.objects["ceiling-gf"].module_data.boundary_mm,
@@ -226,16 +312,31 @@ test("A-10 compiles modeled ceiling boundaries, openings, labels and grids for t
     [303 + (b[0] - 1800) / 50, 109 - (b[1] - 1500) / 50],
   ]);
   assert.deepEqual(paperGrid, expectedGrid, "A-10 RCP grid vectors must match the shared Canvas geometry, including stops around voids");
-  assert.ok(!sheet.primitives.some(item => item.kind === "text" && (item.text.includes("Ground") || item.text.includes("Level 2"))), "RCP plan must not show vertical floor datums");
+  assert.ok(!sheet.primitives.some(item => item.kind === "text" && item.text.includes("+0.000 m")), "RCP plan must not add vertical floor datums over the ceiling grid");
   assert.ok(!sheet.warnings.some(warning => warning.includes("no modeled ceiling objects")));
   assert.ok(sheet.warnings.some(warning => warning.includes("source room boundary is open")));
   assert.deepEqual(sheet.source_object_ids, ["ceiling-gf"]);
 
   const upperSheet = compilePermitDrawingSet(p, { viewports: { "A-10": { scale_denominator: 50, level_id: "L2" } } }).sheets.find(item => item.id === "A-10");
+  assert.ok(upperSheet.title.includes("Level 2"), "the upper-storey RCP title identifies its selected level");
   assert.deepEqual(upperSheet.source_object_ids, ["ceiling-l2"]);
   assert.ok(upperSheet.primitives.some(item => item.kind === "text" && item.text.includes("CL2")));
   assert.ok(upperSheet.primitives.some(item => item.kind === "text" && item.text.includes("+5.700 m")));
   assert.ok(!upperSheet.primitives.some(item => item.kind === "text" && item.text.includes("CL1")));
+
+  const demolitionProject = structuredClone(p);
+  demolitionProject.objects["ceiling-gf"].removed_phase = "demolition";
+  const demolitionSheet = compilePermitDrawingSet(demolitionProject, { viewports: { "A-10": viewport } }).sheets.find(item => item.id === "A-10");
+  assert.ok(demolitionSheet.source_object_ids.includes("ceiling-gf"), "demolition ceilings remain visible in the RCP");
+  assert.ok(demolitionSheet.primitives.some(item => item.kind === "path" && item.closed && item.color === "#ef4444" && item.fill === "#fee2e2" && item.dash?.join(",") === "2,1"));
+  assert.ok(demolitionSheet.primitives.some(item => item.kind === "path" && item.color === "#ef4444" && item.width === 0.12 && item.dash?.join(",") === "6,3"), "demolition RCP grids use the shared red dashed phase style");
+  assert.ok(demolitionSheet.primitives.some(item => item.kind === "path" && item.color === "#ef4444" && item.width === 0.15), "demolition ceiling hatch exports as editable PDF/DXF vector strokes");
+
+  const existingProject = structuredClone(p);
+  existingProject.objects["ceiling-gf"].created_phase = "existing";
+  const existingSheet = compilePermitDrawingSet(existingProject, { viewports: { "A-10": viewport } }).sheets.find(item => item.id === "A-10");
+  assert.ok(existingSheet.primitives.some(item => item.kind === "path" && item.closed && item.color === "#94a3b8" && item.fill === "#ffffff"), "existing ceilings use the muted existing phase palette");
+  assert.ok(existingSheet.primitives.some(item => item.kind === "path" && item.color === "#cbd5e1" && item.width === 0.12 && !item.dash?.length), "existing RCP grids use the lighter shared existing phase style");
   p.levels.find(level => level.id === "L2").elevation_mm = 3200;
   const raisedUpper = compilePermitDrawingSet(p, { viewports: { "A-10": { scale_denominator: 50, level_id: "L2" } } }).sheets.find(item => item.id === "A-10");
   assert.ok(raisedUpper.primitives.some(item => item.kind === "text" && item.text.includes("+5.900 m")), "RCP label follows the revised datum while retaining its 2700 mm offset");

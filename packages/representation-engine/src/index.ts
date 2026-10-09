@@ -30,6 +30,24 @@ export function resolveElevationWallPhaseStyle(phase: Phase): ElevationWallPhase
   return { fill: '#e3e8ed', stroke: '#334155', dash: [] }
 }
 
+/** Shared plan phase palette for Canvas, permit vectors and CAD layers. */
+export function resolvePlanPhaseStyle(phase: Phase): ElevationWallPhaseStyle {
+  if (phase === 'existing') return { fill: '#ffffff', stroke: '#94a3b8', dash: [] }
+  if (phase === 'demolition') return { fill: '#fee2e2', stroke: '#ef4444', dash: [6, 3] }
+  return { fill: '#e3e8ed', stroke: '#0f172a', dash: [] }
+}
+
+/** Shared reflected-ceiling grid styling for Canvas, permit vectors and DXF. */
+export function resolveCeilingGridStyle(phase: Phase): Pick<ElevationWallPhaseStyle, 'stroke' | 'dash'> {
+  if (phase === 'existing') return { stroke: '#cbd5e1', dash: [] }
+  if (phase === 'demolition') return { stroke: '#ef4444', dash: [6, 3] }
+  return { stroke: '#94a3b8', dash: [] }
+}
+
+export function resolvePlanWallPhaseStyle(phase: Phase): ElevationWallPhaseStyle {
+  return resolvePlanPhaseStyle(phase)
+}
+
 export interface OpeningCutout {
   object_id: string
   min_x_mm: number
@@ -218,6 +236,89 @@ export function isWallFacadeForElevation(
 }
 
 /**
+ * Project a triangulated surface into an orthographic elevation and omit or
+ * split edges covered by a nearer triangle of the same surface. This is used
+ * by the live elevation canvas and the permit-sheet compiler so hip/gable roof
+ * back edges do not show through the near roof plane in either output.
+ */
+export function getVisibleElevationMeshEdges(
+  triangles: Triangle[],
+  direction: 'north' | 'south' | 'east' | 'west',
+  paperUnitsPerMm = 0.1,
+): Array<[Vec3, Vec3]> {
+  const edgeMap = new Map<string, { a: Vec3; b: Vec3; normals: Vec3[] }>()
+  const pointKey = (point: Vec3) => point.map(value => Math.round(value * 10) / 10).join(',')
+  for (const triangle of triangles) {
+    if (triangle.length !== 3 || triangle.some(point => !point.every(Number.isFinite))) continue
+    const a = triangle[1].map((value, index) => value - triangle[0][index]) as Vec3
+    const b = triangle[2].map((value, index) => value - triangle[0][index]) as Vec3
+    const normal = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]] as Vec3
+    const magnitude = Math.hypot(...normal)
+    if (magnitude < 1e-8) continue
+    const unitNormal = normal.map(value => value / magnitude) as Vec3
+    for (let index = 0; index < 3; index++) {
+      const start = triangle[index], end = triangle[(index + 1) % 3]
+      const keys = [pointKey(start), pointKey(end)].sort()
+      const key = keys.join('|')
+      const edge = edgeMap.get(key) ?? { a: keys[0] === pointKey(start) ? start : end, b: keys[0] === pointKey(start) ? end : start, normals: [] }
+      edge.normals.push(unitNormal)
+      edgeMap.set(key, edge)
+    }
+  }
+  const edges = [...edgeMap.values()]
+    .filter(edge => edge.normals.length === 1 || edge.normals.slice(1).some(normal =>
+      Math.abs(normal.reduce((sum, value, index) => sum + value * edge.normals[0][index], 0)) < 0.9999,
+    ))
+  const eastWest = direction === 'east' || direction === 'west'
+  const depthAxis = eastWest ? 0 : 1
+  const horizontalAxis = eastWest ? 1 : 0
+  const cameraSign = direction === 'north' || direction === 'east' ? 1 : -1
+  const projected = (point: Vec3): [number, number] => [point[horizontalAxis], point[2]]
+  const signedDepth = (point: Vec3) => cameraSign * point[depthAxis]
+  const depthAt = (point: Vec3, triangle: Triangle): number | undefined => {
+    const [p0, p1, p2] = triangle.map(projected)
+    const [x, y] = projected(point)
+    const denominator = (p1[1] - p2[1]) * (p0[0] - p2[0]) + (p2[0] - p1[0]) * (p0[1] - p2[1])
+    if (Math.abs(denominator) < 1e-8) return undefined
+    const u = ((p1[1] - p2[1]) * (x - p2[0]) + (p2[0] - p1[0]) * (y - p2[1])) / denominator
+    const v = ((p2[1] - p0[1]) * (x - p2[0]) + (p0[0] - p2[0]) * (y - p2[1])) / denominator
+    const w = 1 - u - v
+    if (u < -1e-7 || v < -1e-7 || w < -1e-7) return undefined
+    return u * signedDepth(triangle[0]) + v * signedDepth(triangle[1]) + w * signedDepth(triangle[2])
+  }
+  const isVisible = (point: Vec3) => !triangles.some(triangle => {
+    if (triangle.length !== 3 || triangle.some(vertex => !vertex.every(Number.isFinite))) return false
+    const surfaceDepth = depthAt(point, triangle)
+    return surfaceDepth !== undefined && surfaceDepth > signedDepth(point) + 15
+  })
+  const stepMm = Math.max(0.25, Math.min(100, 1.5 / Math.max(0.001, paperUnitsPerMm)))
+  const result: Array<[Vec3, Vec3]> = []
+  for (const { a, b } of edges) {
+    const length = Math.hypot(...a.map((value, axis) => b[axis] - value))
+    const steps = Math.max(1, Math.min(1024, Math.ceil(length / stepMm)))
+    let runStart: number | undefined
+    for (let index = 0; index < steps; index++) {
+      const t0 = index / steps, t1 = (index + 1) / steps, mid = (t0 + t1) / 2
+      const sample = a.map((value, axis) => value + (b[axis] - value) * mid) as Vec3
+      const visible = isVisible(sample)
+      if (visible && runStart === undefined) runStart = t0
+      const currentRunStart = runStart
+      if (currentRunStart !== undefined && (!visible || index === steps - 1)) {
+        const runEnd = visible ? t1 : t0
+        if (runEnd - currentRunStart > 1e-6) {
+          result.push([
+            a.map((value, axis) => value + (b[axis] - value) * currentRunStart) as Vec3,
+            a.map((value, axis) => value + (b[axis] - value) * runEnd) as Vec3,
+          ])
+        }
+        runStart = undefined
+      }
+    }
+  }
+  return result
+}
+
+/**
  * Return facade walls whose projected face is not completely covered by a
  * nearer facade wall. Partial visibility is retained so stepped elevations
  * still show their exposed portions; fully hidden rear walls add no duplicate
@@ -235,7 +336,7 @@ export function getElevationVisibleWallIds(
     Array.isArray(point) && isFiniteNumber(point[axis]) ? point[axis] as number : undefined
   const bounds = new Map<string, { depth: number; minX: number; maxX: number; base: number; top: number }>()
   for (const wall of Object.values(project.objects)) {
-    if (wall.status === 'archived' || wall.removed_phase != null || !isWallFacadeForElevation(wall, direction)) continue
+    if (wall.status === 'archived' || !isWallFacadeForElevation(wall, direction)) continue
     const data = moduleData(wall)
     const start = data?.start_point_mm, end = data?.end_point_mm
     const x1 = coordinate(start, horizontalAxis), x2 = coordinate(end, horizontalAxis)
@@ -288,11 +389,11 @@ export function getElevationVisibleOpeningIds(
   const coordinate = (point: unknown, axis: number): number | undefined =>
     Array.isArray(point) && isFiniteNumber(point[axis]) ? point[axis] : undefined
   const walls = Object.values(project.objects).filter(object =>
-    object.status !== 'archived' && object.removed_phase == null && isWallFacadeForElevation(object, direction),
+    object.status !== 'archived' && isWallFacadeForElevation(object, direction),
   )
   const openings = Object.values(project.objects).filter(object =>
     object.object_type.startsWith('door_window.') &&
-    object.status !== 'archived' && object.removed_phase == null,
+    object.status !== 'archived',
   )
   const wallBounds = new Map<string, { depth: number; minX: number; maxX: number; base: number; top: number }>()
   for (const wall of walls) {

@@ -4,6 +4,78 @@ export type Triangle = [Vec3, Vec3, Vec3];
 export type SegmentPlacementReference = 'centerline' | 'left_face' | 'right_face';
 const EPS = 1e-8;
 
+export type PolygonValidationResult = { valid: true } | { valid: false; reason: string };
+
+/** Validate a simple outer polygon and strictly contained, non-overlapping voids. */
+export function validatePolygonWithVoids(
+  boundary: readonly (readonly number[])[],
+  voids: readonly (readonly (readonly number[])[])[] = [],
+): PolygonValidationResult {
+  type Point = [number, number]
+  const normalizeRing = (source: readonly (readonly number[])[]): Point[] | undefined => {
+    if (source.length < 3 || source.some(point => point.length !== 2 || !point.every(Number.isFinite))) return undefined
+    const points = source.map(point => [point[0], point[1]] as Point)
+    if (points.length > 3 && Math.hypot(points[0][0] - points.at(-1)![0], points[0][1] - points.at(-1)![1]) <= EPS) points.pop()
+    if (points.length < 3 || points.some((point, index) => {
+      const next = points[(index + 1) % points.length]
+      return Math.hypot(point[0] - next[0], point[1] - next[1]) <= EPS
+    })) return undefined
+    return points
+  }
+  const cross = (a: Point, b: Point, c: Point) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+  const onSegment = (p: Point, a: Point, b: Point) => Math.abs(cross(a, b, p)) <= EPS
+    && p[0] >= Math.min(a[0], b[0]) - EPS && p[0] <= Math.max(a[0], b[0]) + EPS
+    && p[1] >= Math.min(a[1], b[1]) - EPS && p[1] <= Math.max(a[1], b[1]) + EPS
+  const intersects = (a: Point, b: Point, c: Point, d: Point) => {
+    const abC = cross(a, b, c), abD = cross(a, b, d), cdA = cross(c, d, a), cdB = cross(c, d, b)
+    if (((abC > EPS && abD < -EPS) || (abC < -EPS && abD > EPS))
+      && ((cdA > EPS && cdB < -EPS) || (cdA < -EPS && cdB > EPS))) return true
+    return (Math.abs(abC) <= EPS && onSegment(c, a, b)) || (Math.abs(abD) <= EPS && onSegment(d, a, b))
+      || (Math.abs(cdA) <= EPS && onSegment(a, c, d)) || (Math.abs(cdB) <= EPS && onSegment(b, c, d))
+  }
+  const area = (ring: Point[]) => ring.reduce((sum, point, index) => {
+    const next = ring[(index + 1) % ring.length]
+    return sum + point[0] * next[1] - next[0] * point[1]
+  }, 0) / 2
+  const simple = (ring: Point[]) => {
+    if (Math.abs(area(ring)) <= EPS) return false
+    for (let i = 0; i < ring.length; i++) for (let j = i + 1; j < ring.length; j++) {
+      if (j === i + 1 || (i === 0 && j === ring.length - 1)) continue
+      if (intersects(ring[i], ring[(i + 1) % ring.length], ring[j], ring[(j + 1) % ring.length])) return false
+    }
+    return true
+  }
+  const containsStrictly = (point: Point, ring: Point[]) => {
+    let inside = false
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[j], b = ring[i]
+      if (onSegment(point, a, b)) return false
+      if ((a[1] > point[1]) !== (b[1] > point[1]) && point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside
+    }
+    return inside
+  }
+  const ringsIntersect = (a: Point[], b: Point[]) => a.some((point, index) => b.some((other, otherIndex) =>
+    intersects(point, a[(index + 1) % a.length], other, b[(otherIndex + 1) % b.length])))
+
+  const outer = normalizeRing(boundary)
+  if (!outer) return { valid: false, reason: 'boundary must contain at least three distinct finite 2D points' }
+  if (!simple(outer)) return { valid: false, reason: 'boundary must be a simple non-zero-area polygon' }
+  const holes: Point[][] = []
+  for (let index = 0; index < voids.length; index++) {
+    const hole = normalizeRing(voids[index])
+    if (!hole) return { valid: false, reason: `void ${index + 1} must contain at least three distinct finite 2D points` }
+    if (!simple(hole)) return { valid: false, reason: `void ${index + 1} must be a simple non-zero-area polygon` }
+    if (ringsIntersect(outer, hole) || !hole.every(point => containsStrictly(point, outer)))
+      return { valid: false, reason: `void ${index + 1} must be strictly inside the boundary` }
+    for (let other = 0; other < holes.length; other++) {
+      if (ringsIntersect(holes[other], hole) || containsStrictly(hole[0], holes[other]) || containsStrictly(holes[other][0], hole))
+        return { valid: false, reason: `void ${index + 1} overlaps void ${other + 1}` }
+    }
+    holes.push(hole)
+  }
+  return { valid: true }
+}
+
 /**
  * Build 45-degree masonry hatch in wall-local model coordinates, clipped to
  * solid wall runs around hosted openings. The pattern is anchored at the wall
@@ -64,6 +136,66 @@ export function wallMasonryHatchSegments(
       offer(c - half, -half)
       offer(c + half, half)
       if (hits.length >= 2) segments.push([toWorld(hits[0][0], hits[0][1]), toWorld(hits[1][0], hits[1][1])])
+    }
+  }
+  return segments
+}
+
+/** Clip parallel 45-degree hatch strokes to a polygon and its void rings. */
+export function polygonDiagonalHatchSegments(
+  boundary: readonly Vec2[],
+  spacingMm = 250,
+  voids: readonly (readonly Vec2[])[] = [],
+  angleDeg = 45,
+  origin: Vec2 = [0, 0],
+): Array<[Vec2, Vec2]> {
+  if (boundary.length < 3 || !(spacingMm > 0) || !Number.isFinite(angleDeg)
+    || [...boundary, ...voids.flat(), origin].some(point => !Number.isFinite(point[0]) || !Number.isFinite(point[1]))) return []
+  const radians = angleDeg * Math.PI / 180, cos = Math.cos(radians), sin = Math.sin(radians)
+  const toLocal = ([x, y]: Vec2): Vec2 => {
+    const dx = x - origin[0], dy = y - origin[1]
+    return [dx * cos + dy * sin, -dx * sin + dy * cos]
+  }
+  const toWorld = ([along, across]: Vec2): Vec2 => [
+    origin[0] + along * cos - across * sin,
+    origin[1] + along * sin + across * cos,
+  ]
+  const outer = boundary.map(toLocal), holes = voids.filter(ring => ring.length >= 3).map(ring => ring.map(toLocal))
+  const minAcross = Math.min(...outer.map(point => point[1])), maxAcross = Math.max(...outer.map(point => point[1]))
+  const first = Math.ceil((minAcross - 1e-8) / spacingMm), last = Math.floor((maxAcross + 1e-8) / spacingMm)
+  if (last - first > 10000) return []
+  const intersections = (ring: readonly Vec2[], across: number): number[] => {
+    const values: number[] = []
+    for (let index = 0; index < ring.length; index++) {
+      const a = ring[index], b = ring[(index + 1) % ring.length]
+      if ((a[1] <= across && b[1] > across) || (b[1] <= across && a[1] > across)) {
+        const t = (across - a[1]) / (b[1] - a[1])
+        values.push(a[0] + t * (b[0] - a[0]))
+      }
+    }
+    return values.sort((a, b) => a - b)
+  }
+  const intervals = (ring: readonly Vec2[], across: number): Array<[number, number]> => {
+    const hits = intersections(ring, across), result: Array<[number, number]> = []
+    for (let index = 1; index < hits.length; index += 2) {
+      if (hits[index] - hits[index - 1] > 1e-8) result.push([hits[index - 1], hits[index]])
+    }
+    return result
+  }
+  const segments: Array<[Vec2, Vec2]> = []
+  for (let index = first; index <= last; index++) {
+    const across = index * spacingMm
+    for (const [outerStart, outerEnd] of intervals(outer, across)) {
+      const cuts = holes.flatMap(hole => intervals(hole, across))
+        .filter(([start, end]) => end > outerStart && start < outerEnd)
+        .map(([start, end]) => [Math.max(start, outerStart), Math.min(end, outerEnd)] as [number, number])
+        .sort((a, b) => a[0] - b[0])
+      let cursor = outerStart
+      for (const [start, end] of cuts) {
+        if (start > cursor + 1e-8) segments.push([toWorld([cursor, across]), toWorld([start, across])])
+        cursor = Math.max(cursor, end)
+      }
+      if (cursor < outerEnd - 1e-8) segments.push([toWorld([cursor, across]), toWorld([outerEnd, across])])
     }
   }
   return segments
@@ -136,6 +268,107 @@ export function clippedGridSegments(
   for (let ix = firstX; ix <= lastX; ix++) drawAxis(true, ix * stepX, minY, maxY)
   for (let iy = firstY; iy <= lastY; iy++) drawAxis(false, iy * stepY, minX, maxX)
   return segments
+}
+
+/** Return horizontal intervals where a constant-X or constant-Y cut crosses a polygon, minus its voids. */
+export function polygonSectionIntervals(
+  boundary: readonly (readonly number[])[],
+  voids: readonly (readonly (readonly number[])[])[],
+  axis: 0 | 1,
+  coordinate: number,
+): Array<[number, number]> {
+  if (boundary.length < 3 || (axis !== 0 && axis !== 1) || !Number.isFinite(coordinate)) return []
+  const otherAxis = axis === 0 ? 1 : 0
+  const ringIntervals = (ring: readonly (readonly number[])[]): Array<[number, number]> => {
+    if (ring.length < 3 || ring.some(point => point.length !== 2 || !point.every(Number.isFinite))) return []
+    const intersections: number[] = []
+    for (let index = 0; index < ring.length; index++) {
+      const a = ring[index], b = ring[(index + 1) % ring.length]
+      const av = a[axis], bv = b[axis]
+      // Half-open edge inclusion avoids counting a shared polygon vertex twice.
+      if ((av <= coordinate && bv > coordinate) || (bv <= coordinate && av > coordinate)) {
+        const t = (coordinate - av) / (bv - av)
+        intersections.push(a[otherAxis] + (b[otherAxis] - a[otherAxis]) * t)
+      }
+    }
+    intersections.sort((a, b) => a - b)
+    const intervals: Array<[number, number]> = []
+    for (let index = 1; index < intersections.length; index += 2) {
+      const start = intersections[index - 1], end = intersections[index]
+      if (end - start > EPS) intervals.push([start, end])
+    }
+    return intervals
+  }
+  let intervals = ringIntervals(boundary)
+  for (const hole of voids) {
+    for (const [holeStart, holeEnd] of ringIntervals(hole)) {
+      intervals = intervals.flatMap(([start, end]) => {
+        if (holeEnd <= start + EPS || holeStart >= end - EPS) return [[start, end]]
+        const remaining: Array<[number, number]> = []
+        if (holeStart > start + EPS) remaining.push([start, Math.min(holeStart, end)])
+        if (holeEnd < end - EPS) remaining.push([Math.max(holeEnd, start), end])
+        return remaining
+      })
+    }
+  }
+  return intervals
+}
+
+/**
+ * Build a staggered plank layout clipped to a floor boundary and its voids.
+ * `plankLengthMm` and `plankWidthMm` are anchored to the rotated model-space
+ * origin, so Canvas and permit sheets can render the same editable pattern.
+ */
+export function clippedStaggeredPlankSegments(
+  boundary: readonly Vec2[],
+  plankLengthMm: number,
+  plankWidthMm: number,
+  voids: readonly (readonly Vec2[])[] = [],
+  origin: Vec2 = [0, 0],
+  rotationDeg = 0,
+): Array<[Vec2, Vec2]> {
+  if (boundary.length < 3 || ![plankLengthMm, plankWidthMm, rotationDeg, ...origin].every(Number.isFinite)
+    || !(plankLengthMm > 0) || !(plankWidthMm > 0)
+    || [...boundary, ...voids.flat()].some(point => !Number.isFinite(point[0]) || !Number.isFinite(point[1]))) return []
+  const radians = rotationDeg * Math.PI / 180, cos = Math.cos(radians), sin = Math.sin(radians)
+  const toLocal = ([x, y]: Vec2): Vec2 => {
+    const dx = x - origin[0], dy = y - origin[1]
+    return [dx * cos + dy * sin, -dx * sin + dy * cos]
+  }
+  const toWorld = ([x, y]: Vec2): Vec2 => [origin[0] + x * cos - y * sin, origin[1] + x * sin + y * cos]
+  const outer = boundary.map(toLocal), holes = voids.filter(ring => ring.length >= 3).map(ring => ring.map(toLocal))
+  if ([...outer, ...holes.flat()].some(point => !Number.isFinite(point[0]) || !Number.isFinite(point[1]))) return []
+  const minX = Math.min(...outer.map(point => point[0])), maxX = Math.max(...outer.map(point => point[0]))
+  const minY = Math.min(...outer.map(point => point[1])), maxY = Math.max(...outer.map(point => point[1]))
+  const firstRow = Math.floor(minY / plankWidthMm), lastRow = Math.ceil(maxY / plankWidthMm) - 1
+  const firstSeam = Math.ceil((minX - plankLengthMm) / plankLengthMm), lastSeam = Math.ceil((maxX + plankLengthMm) / plankLengthMm)
+  if (lastRow - firstRow > 10000 || lastSeam - firstSeam > 10000) return []
+  const result: Array<[Vec2, Vec2]> = []
+  // Longitudinal board seams run along the entire floor; the section resolver
+  // splits them at concave edges and subtracts every opening.
+  const firstCourse = Math.ceil((minY + EPS) / plankWidthMm), lastCourse = Math.floor((maxY - EPS) / plankWidthMm)
+  for (let course = firstCourse; course <= lastCourse; course++) {
+    const y = course * plankWidthMm
+    for (const [x0, x1] of polygonSectionIntervals(outer, holes, 1, y))
+      result.push([toWorld([x0, y]), toWorld([x1, y])])
+  }
+  // Butt joints stop at each plank row and alternate by half a plank to avoid
+  // continuous cross-floor seams.
+  for (let row = firstRow; row <= lastRow; row++) {
+    const y0 = Math.max(minY, row * plankWidthMm), y1 = Math.min(maxY, (row + 1) * plankWidthMm)
+    if (y1 - y0 <= EPS) continue
+    const phase = Math.abs(row % 2) === 1 ? plankLengthMm / 2 : 0
+    const firstJoint = Math.ceil((minX - phase - EPS) / plankLengthMm)
+    const lastJoint = Math.floor((maxX - phase + EPS) / plankLengthMm)
+    for (let joint = firstJoint; joint <= lastJoint; joint++) {
+      const x = phase + joint * plankLengthMm
+      for (const [spanStart, spanEnd] of polygonSectionIntervals(outer, holes, 0, x)) {
+        const from = Math.max(y0, spanStart), to = Math.min(y1, spanEnd)
+        if (to - from > EPS) result.push([toWorld([x, from]), toWorld([x, to])])
+      }
+    }
+  }
+  return result
 }
 
 /** Return a stable point strictly inside a simple polygon, including concave rings. */

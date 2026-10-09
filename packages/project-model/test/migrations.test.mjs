@@ -1,13 +1,20 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { DEFAULT_TYPES, deserializeProject, serializeProject } from '../dist/index.js'
+import { DEFAULT_TYPES, deserializeProject, serializeProject, validateDrawingSettings } from '../dist/index.js'
 
 const fixtureUrl = new URL('../../../examples/kitchen-extension-proof-v1.cfproj', import.meta.url)
 const fixtureText = await readFile(fixtureUrl, 'utf8')
 const currentFixtureText = await readFile(new URL('../../../examples/kitchen-extension-proof.cfproj', import.meta.url), 'utf8')
 const fixture = JSON.parse(fixtureText)
 const typeUuidV5 = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+test('drawing settings accept locked associative dimension placements and reject malformed offsets', () => {
+  validateDrawingSettings({ viewports: { 'A-02': { scale_denominator: 100, dimension_overrides: { 'opening:uuid:width': { offset_mm: [12.5, -4], locked: true } } } } })
+  validateDrawingSettings({ viewports: { 'A-02': { scale_denominator: 100 } } })
+  assert.throws(() => validateDrawingSettings({ viewports: { 'A-02': { scale_denominator: 100, dimension_overrides: { x: { offset_mm: [Infinity, 0], locked: true } } } } }), /Invalid locked dimension placement/)
+  assert.throws(() => validateDrawingSettings({ viewports: { 'A-02': { scale_denominator: 100, dimension_overrides: { x: { offset_mm: [0, 0], locked: false } } } } }), /Invalid locked dimension placement/)
+})
 
 test('door and window defaults include distinct opening styles for the 3D model', () => {
   const doors = DEFAULT_TYPES.filter(type => type.object_type === 'door_window.door')
