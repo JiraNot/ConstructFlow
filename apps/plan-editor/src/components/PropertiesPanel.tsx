@@ -20,6 +20,7 @@ import {
   resolveOpeningVerticalExtent,
   resolveColumnVerticalExtent,
   resolveBeamBaseElevation,
+  resolveArchitectureSurfaceElevation,
   formatLengthMm,
   parseLengthMm,
   type DisplayLengthUnit,
@@ -29,14 +30,30 @@ import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
 
 const LengthInput: React.FC<{ value: number; unit: DisplayLengthUnit; onChange: (value: number) => void; style?: React.CSSProperties; disabled?: boolean; 'aria-label'?: string }> = ({ value, unit, onChange, style, disabled, 'aria-label': ariaLabel }) => <WorkbenchNumberInput value={value} unit={unit} onChange={onChange} style={style} disabled={disabled} ariaLabel={ariaLabel} />
 
+const wallFaceMaterialOptions: Array<[string, string]> = [
+  ['cement_plaster', 'ฉาบปูน'], ['wall_paint', 'สีทาผนัง'],
+  // Keep old project values selectable while presenting them as neutral face finishes.
+  ['interior_paint', 'สีทาผนัง (ข้อมูลเดิม)'], ['exterior_paint', 'สีทาผนัง (ข้อมูลเดิม)'],
+  ['ceramic_tile', 'กระเบื้อง'], ['stone_cladding', 'กรุหิน'], ['timber_cladding', 'กรุไม้'],
+  ['wallpaper', 'วอลล์เปเปอร์'], ['exposed_masonry', 'โชว์ผิวก่อ'], ['smartboard', 'สมาร์ทบอร์ด'],
+  ['fiber_cement_board', 'ไฟเบอร์ซีเมนต์บอร์ด'], ['gypsum_board', 'ยิปซัมบอร์ด'],
+  ['composite_panel', 'แผ่นคอมโพซิต'], ['faux_wood_panel', 'แผ่นลายไม้เทียม'], ['none', 'ไม่ตกแต่ง'],
+]
+
+const neutralWallFaceMaterial = (material: string) => material === 'interior_paint' || material === 'exterior_paint' ? 'wall_paint' : material
+
 interface PropertiesPanelProps {
   project: ProjectDocument
   displayUnit: DisplayLengthUnit
   selectedId: string | null
+  selectedIds?: string[]
   onAssignType: (objectId: string, typeName: string) => void
+  onAssignTypeMany?: (objectIds: string[], typeId: string) => void
+  onDeleteObjects?: (objectIds: string[]) => void
   onUpdateColumnMark: (objectId: string, newMark: string) => void
   onUpdateColumnVerticalReference: (objectId: string, changes: { base_level_id?: string; top_level_id?: string | null; base_offset_mm?: number; top_offset_mm?: number }) => void
   onUpdateBeamVerticalReference: (objectId: string, changes: { level_id?: string; base_offset_mm?: number }) => void
+  onUpdateArchitectureSurface?: (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; material?: string; finish_layers?: Array<{ material: string; thickness_mm: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number; grid_mm?: [number, number] }) => void
   onUpdateFoundationMark: (objectId: string, newMark: string) => void
   onUpdateGridTag: (objectId: string, newTag: string) => void
   onModifyGrid: (objectId: string, changes: { start_point_mm?: [number, number]; end_point_mm?: [number, number]; bubble_visible?: boolean; auto_tag?: boolean; sequence_style?: 'auto' | 'alpha' | 'numeric' }) => void
@@ -57,10 +74,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   project,
   displayUnit,
   selectedId,
+  selectedIds = selectedId ? [selectedId] : [],
   onAssignType,
+  onAssignTypeMany,
+  onDeleteObjects,
   onUpdateColumnMark,
   onUpdateColumnVerticalReference,
   onUpdateBeamVerticalReference,
+  onUpdateArchitectureSurface,
   onUpdateFoundationMark,
   onUpdateGridTag,
   onModifyGrid,
@@ -77,6 +98,20 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onCreateRoomFinish,
 }) => {
   const selectedObj = selectedId ? project.objects[selectedId] : null
+  const selectedObjects = [...new Set(selectedIds)].map(id => project.objects[id]).filter((object): object is SmartObject => Boolean(object))
+  const selectedObjectFamily = selectedObjects.length > 1 && selectedObjects.every(object => object.object_type === selectedObjects[0].object_type)
+    ? selectedObjects[0].object_type
+    : null
+  const selectedFamilyTypes = selectedObjectFamily
+    ? project.types.filter(type => type.object_type === selectedObjectFamily)
+    : []
+  const selectedResolvedTypeIds = selectedObjects.map(object => {
+    const data = object.module_data as Record<string, unknown>
+    return project.types.find(type => type.object_type === object.object_type && (type.id === data.type_id || type.name === data.mark))?.id ?? ''
+  })
+  const selectedCommonTypeId = selectedObjects.length > 1 && selectedResolvedTypeIds[0] && selectedResolvedTypeIds.every(id => id === selectedResolvedTypeIds[0])
+    ? selectedResolvedTypeIds[0]
+    : ''
   const [editingMark, setEditingMark] = useState('')
 
   const colObj = selectedObj && isColumnObject(selectedObj) ? selectedObj : null
@@ -88,6 +123,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const doorObj = selectedObj && isDoorObject(selectedObj) ? selectedObj : null
   const winObj = selectedObj && isWindowObject(selectedObj) ? selectedObj : null
   const slabObj = selectedObj?.object_type === 'structure.slab' ? selectedObj : null
+  const architectureSurfaceObj = selectedObj && (selectedObj.object_type === 'architecture.floor' || selectedObj.object_type === 'architecture.ceiling') ? selectedObj : null
   const roomObj = selectedObj?.object_type === 'architecture.room' ? selectedObj : null
   const grdObj = selectedObj && isGridObject(selectedObj) ? selectedObj : null
 
@@ -190,6 +226,35 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const doorVertical = doorObj ? resolveOpeningVerticalExtent(project, doorObj) : undefined
   const windowVertical = winObj ? resolveOpeningVerticalExtent(project, winObj) : undefined
   const verticalSelectStyle: React.CSSProperties = { width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }
+
+  if (selectedObjects.length > 1) {
+    const familyLabels: Record<string, string> = {
+      'structure.beam': 'คาน', 'structure.column': 'เสา', 'structure.foundation': 'ฐานราก',
+      'architecture.wall': 'ผนัง', 'door_window.door': 'ประตู', 'door_window.window': 'หน้าต่าง',
+    }
+    const typeLabel = selectedObjectFamily ? familyLabels[selectedObjectFamily] ?? selectedObjectFamily : ''
+    return <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ borderBottom: '1px solid #dce4ed', paddingBottom: 10 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#24364b' }}>เลือก {selectedObjects.length} ชิ้น</div>
+        <div style={{ fontSize: 11, color: '#53657b', marginTop: 4 }}>
+          {selectedObjectFamily ? `ชนิดวัตถุเดียวกัน · ${typeLabel}` : 'มีวัตถุต่างชนิดกัน · เลือกลบพร้อมกันได้ แต่เปลี่ยน Type พร้อมกันไม่ได้'}
+        </div>
+        {selectedObjectFamily && <div style={{ fontSize: 11, color: '#53657b', marginTop: 3 }}>กด Shift ค้างแล้วคลิกเพิ่ม หรือลากกรอบครอบวัตถุที่ต้องการ</div>}
+      </div>
+      {selectedObjectFamily && selectedFamilyTypes.length > 0 && <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#52677d', fontWeight: 600 }}>
+        เปลี่ยน Type/Mark ให้ทั้ง {selectedObjects.length} ชิ้น
+        <select aria-label="เปลี่ยน Type ให้หลายวัตถุ" value={selectedCommonTypeId} onChange={event => {
+          if (event.target.value) onAssignTypeMany?.(selectedObjects.map(object => object.id), event.target.value)
+        }} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 8, color: '#24364b' }}>
+          <option value="">เลือก Type{selectedCommonTypeId ? '' : ' (หลายค่า)'}</option>
+          {selectedFamilyTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+        </select>
+      </label>}
+      <button type="button" className="cf-button" onClick={() => onDeleteObjects?.(selectedObjects.map(object => object.id))} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, color: '#dc2626', borderColor: '#fecaca', background: '#fff7f7' }}>
+        <Trash2 size={14} /> ลบที่เลือก {selectedObjects.length} ชิ้น
+      </button>
+    </div>
+  }
 
   return (
     <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -505,29 +570,30 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             {!wallObj.module_data.top_level_id && <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ความสูงผนัง ({displayUnit})<LengthInput aria-label="ความสูงผนัง" value={wallObj.module_data.height_mm} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { vertical_constraint: 'fixed_height', height_mm: value })} style={verticalSelectStyle} /></label>}
           </section>
 
+          <div style={{ fontSize: 10, color: '#667b91' }}>กำหนดรหัสและวัสดุผิวแยกสองฝั่งของผนัง เช่น W1/W2 ทั้งสองฝั่งอาจเป็นผิวภายในอาคารได้</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: '#52677d', fontWeight: 600 }}>
-              ผิวด้านใน
+              ผิวด้าน A
               <span style={{ fontWeight: 500 }}><input type="checkbox" checked={wallInsidePlaster > 0} onChange={e => onUpdateWallFace(wallObj.id, { plaster_inside_thickness_mm: e.target.checked ? 15 : 0 })} /> เปิดชั้นผิว</span>
-              <input aria-label="รหัสป้ายผิวด้านใน" list="cf-wall-marks" value={wallFaceField('inside_finish_mark', wallObj.module_data.mark)} onChange={e => onUpdateWallFace(wallObj.id, { inside_finish_mark: e.target.value })} placeholder="เช่น W1" style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
-              <select aria-label="ผิวผนังด้านใน" value={wallFaceField('plaster_inside_material', 'cement_plaster')} onChange={e => onUpdateWallFace(wallObj.id, { plaster_inside_material: e.target.value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }}>
-                <option value="cement_plaster">ฉาบปูน</option><option value="interior_paint">สีภายใน</option><option value="ceramic_tile">กระเบื้อง</option><option value="stone_cladding">กรุหิน</option><option value="timber_cladding">กรุไม้</option><option value="wallpaper">วอลล์เปเปอร์</option><option value="exposed_masonry">โชว์ผิวก่อ</option><option value="smartboard">สมาร์ทบอร์ด</option><option value="fiber_cement_board">ไฟเบอร์ซีเมนต์บอร์ด</option><option value="gypsum_board">ยิปซัมบอร์ด</option><option value="composite_panel">แผ่นคอมโพซิต</option><option value="faux_wood_panel">แผ่นลายไม้เทียม</option><option value="none">ไม่ตกแต่ง</option>
+              <input aria-label="รหัสผิวด้าน A" list="cf-wall-marks" value={wallFaceField('inside_finish_mark', wallObj.module_data.mark)} onChange={e => onUpdateWallFace(wallObj.id, { inside_finish_mark: e.target.value })} placeholder="เช่น W1" style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
+              <select aria-label="วัสดุผิวด้าน A" value={neutralWallFaceMaterial(wallFaceField('plaster_inside_material', 'cement_plaster'))} onChange={e => onUpdateWallFace(wallObj.id, { plaster_inside_material: e.target.value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }}>
+                {wallFaceMaterialOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
-              <LengthInput aria-label={`ความหนาผิวด้านใน (${displayUnit})`} disabled={wallInsidePlaster <= 0} value={wallInsidePlaster} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { plaster_inside_thickness_mm: value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
+              <LengthInput aria-label={`ความหนาผิวด้าน A (${displayUnit})`} disabled={wallInsidePlaster <= 0} value={wallInsidePlaster} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { plaster_inside_thickness_mm: value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: '#52677d', fontWeight: 600 }}>
-              ผิวด้านนอก
+              ผิวด้าน B
               <span style={{ fontWeight: 500 }}><input type="checkbox" checked={wallOutsidePlaster > 0} onChange={e => onUpdateWallFace(wallObj.id, { plaster_outside_thickness_mm: e.target.checked ? 15 : 0 })} /> เปิดชั้นผิว</span>
-              <input aria-label="รหัสป้ายผิวด้านนอก" list="cf-wall-marks" value={wallFaceField('outside_finish_mark', wallObj.module_data.mark)} onChange={e => onUpdateWallFace(wallObj.id, { outside_finish_mark: e.target.value })} placeholder="เช่น W2" style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
-              <select aria-label="ผิวผนังด้านนอก" value={wallFaceField('plaster_outside_material', 'cement_plaster')} onChange={e => onUpdateWallFace(wallObj.id, { plaster_outside_material: e.target.value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }}>
-                <option value="cement_plaster">ฉาบปูน</option><option value="exterior_paint">สีภายนอก</option><option value="ceramic_tile">กระเบื้อง</option><option value="stone_cladding">กรุหิน</option><option value="timber_cladding">กรุไม้</option><option value="exposed_masonry">โชว์ผิวก่อ</option><option value="smartboard">สมาร์ทบอร์ด</option><option value="fiber_cement_board">ไฟเบอร์ซีเมนต์บอร์ด</option><option value="gypsum_board">ยิปซัมบอร์ด</option><option value="composite_panel">แผ่นคอมโพซิต</option><option value="faux_wood_panel">แผ่นลายไม้เทียม</option><option value="none">ไม่ตกแต่ง</option>
+              <input aria-label="รหัสผิวด้าน B" list="cf-wall-marks" value={wallFaceField('outside_finish_mark', wallObj.module_data.mark)} onChange={e => onUpdateWallFace(wallObj.id, { outside_finish_mark: e.target.value })} placeholder="เช่น W2" style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
+              <select aria-label="วัสดุผิวด้าน B" value={neutralWallFaceMaterial(wallFaceField('plaster_outside_material', 'cement_plaster'))} onChange={e => onUpdateWallFace(wallObj.id, { plaster_outside_material: e.target.value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }}>
+                {wallFaceMaterialOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
-              <LengthInput aria-label={`ความหนาผิวด้านนอก (${displayUnit})`} disabled={wallOutsidePlaster <= 0} value={wallOutsidePlaster} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { plaster_outside_thickness_mm: value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
+              <LengthInput aria-label={`ความหนาผิวด้าน B (${displayUnit})`} disabled={wallOutsidePlaster <= 0} value={wallOutsidePlaster} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { plaster_outside_thickness_mm: value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
             </label>
           </div>
           <datalist id="cf-wall-marks">{wallPresets.map(mark => <option key={mark} value={mark} />)}</datalist>
           <button type="button" className="cf-button cf-button-quiet" onClick={() => onUpdateWallFace(wallObj.id, { interior_side: wallObj.module_data.interior_side === 'right' ? 'left' : 'right' })}>
-            สลับด้านใน/นอก · ด้านในอยู่ฝั่ง {(wallObj.module_data.interior_side ?? 'left') === 'left' ? 'ซ้าย' : 'ขวา'} ของแนวเริ่ม→จบ
+            สลับด้าน A/B · ด้าน A อยู่ฝั่ง{(wallObj.module_data.interior_side ?? 'left') === 'left' ? 'ซ้าย' : 'ขวา'} ของแนวเริ่ม→จบ
           </button>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -789,18 +855,22 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             const data = grdObj.module_data
             const start: [number, number] = data.start_point_mm ?? (data.orientation === 'vertical' ? [data.position_mm, data.extent_mm[0]] : [data.extent_mm[0], data.position_mm])
             const end: [number, number] = data.end_point_mm ?? (data.orientation === 'vertical' ? [data.position_mm, data.extent_mm[1]] : [data.extent_mm[1], data.position_mm])
-            const angle = Math.atan2(end[1] - start[1], end[0] - start[0]) * 180 / Math.PI
+            const angle = Math.atan2(start[1] - end[1], end[0] - start[0]) * 180 / Math.PI
             const rotateTo = (degrees: number) => {
               if (!Number.isFinite(degrees)) return
               const midpoint: [number, number] = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2]
               const length = Math.hypot(end[0] - start[0], end[1] - start[1])
               const radians = degrees * Math.PI / 180, dx = Math.cos(radians) * length / 2, dy = Math.sin(radians) * length / 2
-              onModifyGrid(grdObj.id, { start_point_mm: [midpoint[0] - dx, midpoint[1] - dy], end_point_mm: [midpoint[0] + dx, midpoint[1] + dy] })
+              onModifyGrid(grdObj.id, { start_point_mm: [midpoint[0] - dx, midpoint[1] + dy], end_point_mm: [midpoint[0] + dx, midpoint[1] - dy] })
             }
             return <section style={{ display: 'grid', gap: 8, marginTop: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
               <strong style={{ fontSize: 12 }}>เส้นกริดอ้างอิง</strong>
               <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>มุมเอียง (องศา)
-                <input aria-label="มุมเอียงเส้นกริดองศา" type="number" step="0.1" defaultValue={Number(angle.toFixed(1))} key={`${grdObj.id}:${Math.round(angle * 10) / 10}`} onBlur={event => rotateTo(Number(event.target.value))} style={verticalSelectStyle} />
+                <input aria-label="มุมเอียงเส้นกริดองศา" aria-describedby="grid-angle-key-help" type="number" step="0.1" defaultValue={Number(angle.toFixed(1))} key={`${grdObj.id}:${Math.round(angle * 10) / 10}`} onFocus={event => event.currentTarget.select()} onKeyDown={event => {
+                  if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() }
+                  if (event.key === 'Escape') { event.preventDefault(); event.currentTarget.value = angle.toFixed(1); event.currentTarget.blur() }
+                }} onBlur={event => rotateTo(Number(event.target.value))} style={verticalSelectStyle} />
+                <small id="grid-angle-key-help" style={{ fontSize: 10, color: '#64748b' }}>0° ไปทางขวา · 90° ขึ้น · Enter บันทึก · Esc คืนค่าเดิม</small>
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: '#52677d' }}><input type="checkbox" checked={data.bubble_visible !== false} onChange={event => onModifyGrid(grdObj.id, { bubble_visible: event.target.checked })} />แสดง Bubble</label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: '#52677d' }}><input type="checkbox" checked={data.auto_tag !== false} onChange={event => onModifyGrid(grdObj.id, { auto_tag: event.target.checked })} />รันป้ายอัตโนมัติ</label>
@@ -830,6 +900,82 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </section>
         })()
       )}
+      {architectureSurfaceObj && (() => {
+        const isFloor = architectureSurfaceObj.object_type === 'architecture.floor'
+        const data = architectureSurfaceObj.module_data as Record<string, unknown>
+        const levelId = typeof data.level_id === 'string' ? data.level_id : project.project.active_level_id
+        const level = project.levels.find(item => item.id === levelId)
+        const resolvedElevation = resolveArchitectureSurfaceElevation(project, architectureSurfaceObj)
+        const offset = resolvedElevation !== undefined && level ? resolvedElevation - level.elevation_mm : Number(data.elevation_offset_mm ?? 0)
+        const layers = Array.isArray(data.finish_layers) ? data.finish_layers as Array<{ material?: string; thickness_mm?: number; mark?: string; quantity_unit?: 'm2' | 'm3' }> : []
+        const update = (changes: Parameters<NonNullable<typeof onUpdateArchitectureSurface>>[1]) => onUpdateArchitectureSurface?.(architectureSurfaceObj.id, changes)
+        return <section style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid #dbe3ed', borderRadius: 8 }}>
+          <strong style={{ fontSize: 12 }}>{isFloor ? 'พื้นสถาปัตย์' : 'ฝ้าเพดาน'} {String(data.mark ?? '')}</strong>
+          <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>อ้างอิงระดับชั้น
+            <select aria-label="ระดับอ้างอิงพื้นหรือฝ้า" value={levelId} disabled={!onUpdateArchitectureSurface || (data.follows_room_boundary === true && typeof data.room_id === 'string')} onChange={event => update({ level_id: event.target.value })} style={verticalSelectStyle}>
+              {project.levels.map(item => <option key={item.id} value={item.id}>{item.name} · {(item.elevation_mm / 1000).toFixed(3)} m</option>)}
+            </select>
+            {data.follows_room_boundary === true && typeof data.room_id === 'string' && <small>ระดับตามห้องที่ผูกอยู่</small>}
+          </label>
+          <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>เยื้องจากระดับชั้น ({displayUnit})
+            <LengthInput aria-label={`ระยะเยื้องพื้นหรือฝ้า (${displayUnit})`} value={offset} unit={displayUnit} onChange={value => update({ elevation_offset_mm: value })} style={verticalSelectStyle} />
+          </label>
+          <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ความหนา ({displayUnit})
+            <LengthInput aria-label={`ความหนาพื้นหรือฝ้า (${displayUnit})`} value={Number(data.thickness_mm ?? 0)} unit={displayUnit} onChange={value => update({ thickness_mm: value })} style={verticalSelectStyle} />
+          </label>
+          {!isFloor && <>
+            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>วัสดุฝ้า
+              <input aria-label="วัสดุฝ้า" defaultValue={String(data.material ?? '')} key={`${architectureSurfaceObj.id}:${String(data.material ?? '')}`} onBlur={event => { const value = event.currentTarget.value.trim(); if (value) update({ material: value }) }} style={verticalSelectStyle} />
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>กริด X ({displayUnit})
+                <LengthInput aria-label={`ระยะกริดฝ้า X (${displayUnit})`} value={Number((data.grid_mm as number[] | undefined)?.[0] ?? 600)} unit={displayUnit} onChange={value => update({ grid_mm: [value, Number((data.grid_mm as number[] | undefined)?.[1] ?? 600)] })} style={verticalSelectStyle} />
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>กริด Y ({displayUnit})
+                <LengthInput aria-label={`ระยะกริดฝ้า Y (${displayUnit})`} value={Number((data.grid_mm as number[] | undefined)?.[1] ?? 600)} unit={displayUnit} onChange={value => update({ grid_mm: [Number((data.grid_mm as number[] | undefined)?.[0] ?? 600), value] })} style={verticalSelectStyle} />
+              </label>
+            </div>
+          </>}
+          {isFloor && <>
+            <strong style={{ fontSize: 11, marginTop: 3 }}>ชั้นวัสดุปูพื้น</strong>
+            {layers.map((layer, index) => <div key={`${architectureSurfaceObj.id}:layer:${index}`} style={{ display: 'grid', gridTemplateColumns: '1fr 0.65fr 0.55fr auto', gap: 5, alignItems: 'center' }}>
+              <input aria-label={`วัสดุชั้นพื้น ${index + 1}`} defaultValue={String(layer.material ?? '')} key={`${architectureSurfaceObj.id}:layer-material:${index}:${String(layer.material ?? '')}`} onBlur={event => {
+                const finish_layers = layers.map((current, i) => i === index ? { ...current, material: event.currentTarget.value.trim() || 'unspecified' } : current)
+                update({ finish_layers: finish_layers.map(current => ({ material: String(current.material ?? 'unspecified'), thickness_mm: Number(current.thickness_mm ?? 0), ...(current.mark ? { mark: current.mark } : {}), ...(current.quantity_unit ? { quantity_unit: current.quantity_unit } : {}) })) })
+              }} style={verticalSelectStyle} />
+              <LengthInput aria-label={`ความหนาชั้นพื้น ${index + 1} (${displayUnit})`} value={Number(layer.thickness_mm ?? 0)} unit={displayUnit} onChange={value => {
+                const finish_layers = layers.map((current, i) => i === index ? { ...current, thickness_mm: value } : current)
+                update({ finish_layers: finish_layers.map(current => ({ material: String(current.material ?? 'unspecified'), thickness_mm: Number(current.thickness_mm ?? 0), ...(current.mark ? { mark: current.mark } : {}), ...(current.quantity_unit ? { quantity_unit: current.quantity_unit } : {}) })) })
+              }} style={verticalSelectStyle} />
+              <select aria-label={`หน่วยถอดปริมาณชั้นพื้น ${index + 1}`} value={layer.quantity_unit ?? 'm2'} onChange={event => {
+                const finish_layers = layers.map((current, i) => i === index ? { ...current, quantity_unit: event.target.value as 'm2' | 'm3' } : current)
+                update({ finish_layers: finish_layers.map(current => ({ material: String(current.material ?? 'unspecified'), thickness_mm: Number(current.thickness_mm ?? 0), ...(current.mark ? { mark: current.mark } : {}), ...(current.quantity_unit ? { quantity_unit: current.quantity_unit } : {}) })) })
+              }} style={verticalSelectStyle}><option value="m2">ตร.ม.</option><option value="m3">ลบ.ม.</option></select>
+              <button type="button" aria-label={`ลบชั้นพื้น ${index + 1}`} onClick={() => update({ finish_layers: layers.filter((_, i) => i !== index).map(current => ({ material: String(current.material ?? 'unspecified'), thickness_mm: Number(current.thickness_mm ?? 0), ...(current.mark ? { mark: current.mark } : {}), ...(current.quantity_unit ? { quantity_unit: current.quantity_unit } : {}) })) })} style={{ ...verticalSelectStyle, color: '#b91c1c', padding: 6 }}>×</button>
+            </div>)}
+            <button type="button" onClick={() => update({ finish_layers: [...layers, { material: 'tile', thickness_mm: 10, mark: `ชั้น ${layers.length + 1}`, quantity_unit: 'm2' as const }].map(layer => ({ material: String(layer.material ?? 'unspecified'), thickness_mm: Number(layer.thickness_mm ?? 0), ...(layer.mark ? { mark: layer.mark } : {}), ...(layer.quantity_unit === 'm2' || layer.quantity_unit === 'm3' ? { quantity_unit: layer.quantity_unit } : {}) })) })} style={verticalSelectStyle}>+ เพิ่มชั้นวัสดุ</button>
+            <strong style={{ fontSize: 11, marginTop: 3 }}>แนวลายปูวัสดุ</strong>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ขนาด X ({displayUnit})
+                <LengthInput aria-label={`ขนาดลายพื้น X (${displayUnit})`} value={Number((data.finish_pattern_mm as number[] | undefined)?.[0] ?? 600)} unit={displayUnit} onChange={value => update({ finish_pattern_mm: [value, Number((data.finish_pattern_mm as number[] | undefined)?.[1] ?? 600)] })} style={verticalSelectStyle} />
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ขนาด Y ({displayUnit})
+                <LengthInput aria-label={`ขนาดลายพื้น Y (${displayUnit})`} value={Number((data.finish_pattern_mm as number[] | undefined)?.[1] ?? 600)} unit={displayUnit} onChange={value => update({ finish_pattern_mm: [Number((data.finish_pattern_mm as number[] | undefined)?.[0] ?? 600), value] })} style={verticalSelectStyle} />
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>จุดเริ่ม X ({displayUnit})
+                <LengthInput aria-label={`จุดเริ่มลายพื้น X (${displayUnit})`} value={Number((data.finish_pattern_origin_mm as number[] | undefined)?.[0] ?? 0)} unit={displayUnit} onChange={value => update({ finish_pattern_origin_mm: [value, Number((data.finish_pattern_origin_mm as number[] | undefined)?.[1] ?? 0)] })} style={verticalSelectStyle} />
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>จุดเริ่ม Y ({displayUnit})
+                <LengthInput aria-label={`จุดเริ่มลายพื้น Y (${displayUnit})`} value={Number((data.finish_pattern_origin_mm as number[] | undefined)?.[1] ?? 0)} unit={displayUnit} onChange={value => update({ finish_pattern_origin_mm: [Number((data.finish_pattern_origin_mm as number[] | undefined)?.[0] ?? 0), value] })} style={verticalSelectStyle} />
+              </label>
+            </div>
+            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>หมุนแนวลาย (องศา)
+              <input aria-label="หมุนแนวลายพื้น องศา" type="number" step="1" value={Number(data.finish_pattern_rotation_deg ?? 0)} onChange={event => update({ finish_pattern_rotation_deg: Number(event.target.value) })} style={verticalSelectStyle} />
+            </label>
+          </>}
+          <small style={{ fontSize: 10, color: '#64748b' }}>ระดับจริง {resolvedElevation === undefined ? 'ไม่ถูกต้อง' : `${formatLengthMm(resolvedElevation, displayUnit)} ${displayUnit}`} · ช่องเจาะ {Array.isArray(data.voids_mm) ? data.voids_mm.length : 0}</small>
+        </section>
+      })()}
       {roomObj && <section style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid #dbe3ed', borderRadius: 8 }}>
         <strong style={{ fontSize: 12 }}>ห้อง {String((roomObj.module_data as Record<string,unknown>).number ?? '')} · {String((roomObj.module_data as Record<string,unknown>).name ?? '')}</strong>
         <span style={{ fontSize: 11, color: '#52677d' }}>พื้นที่ {(Number((roomObj.module_data as Record<string,unknown>).area_mm2 ?? 0)/1e6).toFixed(2)} ตร.ม. · ขอบเขตตามผนัง/เส้นแบ่งห้อง</span>

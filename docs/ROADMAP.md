@@ -52,11 +52,11 @@ SketchUp/LayOut integration has separate adapter acceptance gates. Those gates d
 - **Optional SketchUp Sync Bridge:** `.cfproj` import and Ruby sync are adapter capabilities, separate from standalone 3D and R1 completion.
 
 ### Upcoming R1 Feature Tracks:
-- **Phasing Awareness for Renovation:** Continue domain-wide lifecycle coverage for Existing (บ้านเดิม), Demolition (ส่วนรื้อถอน), and New Construction (ส่วนสร้างใหม่); existing standalone evidence is tracked in `STATUS.md`.
-- [ ] **AI Vision & Underlay Calibration:**
-  - Import floor plan image (PNG/JPG) or 2D DWG as underlay.
-  - Point-to-Point Scale Calibration tool (click two points, specify distance e.g. 4.00m to scale the plan accurately).
-  - Floor-to-floor elevation setup (e.g. GF to L2 height prompt).
+- **Phasing Awareness for Renovation:** Continue domain-wide lifecycle coverage for Existing (บ้านเดิม), Demolition (ส่วนรื้อถอน), and New Construction (ส่วนสร้างใหม่); existing standalone evidence is tracked in `STATUS.md`. New masonry hatch now uses shared model-space vectors in Canvas, A-02/A-03 compilers, and DXF ModelSpace, while existing walls stay white poche; native CAD plot and print-scale acceptance remain open.
+- [x] **Image Underlay & Point-to-Point Calibration:** PNG/JPG/WebP import, project-embedded transforms by view/level, and real-distance calibration are implemented in the Plan Editor.
+- [x] **Wall junction level inheritance:** app-created walls touching an existing wall inherit its base/top level constraint and offsets; unconnected walls default to the next storey datum. Browser interaction and complex junction acceptance remain tracked in `STATUS.md`.
+- [ ] **DWG Underlay & AI Vision:** direct 2D DWG underlay and AI recognition of plan content remain open; these are separate from image calibration.
+- [x] **Floor-to-floor elevation setup:** configurable level datums and storey intervals are implemented; production workflow acceptance remains tracked with R0/R1.
 - [ ] **Auto-Dimensioning Engine:** Associative exterior grid-to-grid, column-to-column and opening dimension strings for standalone vector sheets, with optional adapter export.
 
 ---
@@ -78,6 +78,8 @@ Deliverables:
 - [ ] host stretch reconciliation
 
 ### Floors & Ceilings
+
+Core boundary commands, level-relative elevations/offsets, room-linked boundaries, void data and an RCP representation exist. New/updated architectural floors and ceilings resolve from their selected level plus a signed offset; legacy objects without an explicit reference retain their stored absolute elevation. The Inspector edits level/offset, thickness, ceiling material/grid, and floor finish layers with area/volume takeoff units; property edits preserve room association, while a changed boundary detaches it. Architectural floor takeoff subtracts polygon voids and reports each finish layer by area or, when explicitly requested, volume; ceiling takeoff subtracts voids from ceiling area. A-10 knocks ceiling voids out of its fill as well as clipping the ceiling grid. Tile/ceramic floor finishes now have an editable model-space grid (spacing, origin and rotation) shared by Plan Canvas and A-02/A-03; grid segments stop at floor edges and voids, and DXF receives the compiled sheet vectors. Catalog-driven finish assemblies, broader material-specific pattern families, level-constraint parity with structural slabs, and multi-storey drawing acceptance remain open; see R5 production acceptance below.
 - boundary + holes
 - level / offset
 - thickness / layered build-up
@@ -86,6 +88,8 @@ Deliverables:
 - quantity representation
 
 ### Rooms
+
+Closed-wall detection, separators, room identity/area, and room-derived floor/ceiling boundaries exist. Wall-loop faces now resolve to interior finished faces by offsetting each bounding wall by half its total thickness; room separators remain zero-thickness. Wall create/move/resize/delete commands reconcile wall-derived Room identity/area and propagate boundaries to associated floors/ceilings in the same transaction; adding a partition that splits an enclosed face now also creates the additional Room while preserving the original Room UUID. Automatically generated room marks/numbers avoid collisions with edited values. Manually edited Room boundaries become independent. When a loop opens, Room and dependent floor/ceiling data are flagged for review; acute/concave enclosure coverage, schedule/tag behavior, broader surface-association acceptance and end-to-end drawing acceptance remain open.
 
 - enclosure detection
 - room separation boundaries
@@ -202,6 +206,10 @@ Exit criteria:
 
 **Goal:** move documentation from late-stage output to an associative view of the same Smart Object model.
 
+**Production acceptance is still open even where a view generator exists.** Elevation and RCP navigation, level/tag placement, opening visibility, hidden-line behavior, and agreement between Canvas, PDF and DXF must be checked against representative multi-storey projects and print scales before these deliverables are treated as production-complete.
+
+Hosted door/window elevation linework now comes from the same catalog-resolved representation in Canvas and the sheet compiler; DXF consumes the compiled sheet vectors. Multi-scale visual comparison and native CAD plotting acceptance remain open.
+
 Deliverables:
 
 ### Views
@@ -221,7 +229,8 @@ Deliverables:
 - [x] ground baseline & 45° earth hatching
 - [x] stair walklines & diagonal break lines
 - object tags
-- room tags
+- [x] room tags (Plan Canvas and A-02/A-03, including room number, name and area)
+- Room-label anchors use a shared interior-point resolver for concave room polygons; verify placements at project print scales as part of R5 acceptance.
 - level tags
 - door/window tags
 - section markers

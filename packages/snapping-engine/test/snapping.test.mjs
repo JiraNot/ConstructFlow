@@ -48,6 +48,15 @@ test('projects onto a column face and onto beam edges and axes', () => {
   assert.deepEqual(beamAxis.point_mm, [500, 0])
 })
 
+test('keeps the column center snap stronger than its faces at normal plan zoom', () => {
+  const target = column('lower-storey-column', [4000, 3000], [200, 200])
+  const result = snapPoint([4000, 3000], project(target), view(0.08), 16)
+
+  assert.equal(result.kind, 'column_center')
+  assert.equal(result.target_id, 'lower-storey-column')
+  assert.deepEqual(result.point_mm, [4000, 3000])
+})
+
 test('classifies deterministic midpoint, endpoint, and duplicate-target ties', () => {
   const beamDoc = project(beam('beam-a', [0, 0], [1000, 0]))
   assert.equal(snapPoint([500, 0], beamDoc, view(), 8, new Set(['midpoint'])).kind, 'beam_midpoint')

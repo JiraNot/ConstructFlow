@@ -396,7 +396,7 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
         const layerGeometry = new THREE.ExtrudeGeometry(shape, { depth: layerThickness, bevelEnabled: false, steps: 1, curveSegments: 1 })
         layerGeometry.translate(0, 0, mmToM(layer.offset_mm) - layerThickness / 2)
         const finishColor: Record<string, string> = {
-          cement_plaster: '#d4d0c8', interior_paint: '#f1eee6', exterior_paint: '#e7e3da',
+          cement_plaster: '#d4d0c8', wall_paint: '#f1eee6', interior_paint: '#f1eee6', exterior_paint: '#f1eee6',
           ceramic_tile: '#a8d4dc', stone_cladding: '#a99f91', timber_cladding: '#a8754b',
           smartboard: '#c7d1d4', fiber_cement_board: '#b9c4c8', gypsum_board: '#ece9df',
           composite_panel: '#b7c5ce', faux_wood_panel: '#a8754b',

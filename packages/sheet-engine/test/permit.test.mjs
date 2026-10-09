@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createEmptyProjectDocument, deserializeProject } from "@constructflow/project-model";
+import { clippedGridSegments } from "@constructflow/geometry-kernel";
 import {
   compilePermitDrawingSet,
   compilePermitPdf,
@@ -106,17 +107,86 @@ test("A-02 and A-03 can each select any story without showing a wall on its top-
       created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
     };
   }
+  const auxiliary = (id, object_type, module_data, levelId = "GF") => ({
+    id, object_type, owner_module: object_type.startsWith("structure.") ? "constructflow.structure" : "constructflow.architecture",
+    schema_version: 1, created_phase: "new_construction", removed_phase: null, status: "active",
+    level_refs: [{ role: "base_level", level_id: levelId }], host_refs: [], connector_refs: [], relationships: [],
+    module_data, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+  });
+  p.objects["foundation-gf"] = auxiliary("foundation-gf", "structure.foundation", {
+    center_mm: [0, 0, 0], size_mm: [800, 800, 300], level_id: "GF",
+  });
+  p.objects["bathroom-gf"] = auxiliary("bathroom-gf", "architecture.bathroom", {
+    level_id: "GF", boundary_mm: [[0, 0], [1000, 0], [1000, 1000], [0, 1000]], drain_mm: [500, 500],
+    elevation_mm: 0, drop_mm: 0, slope_ratio: 0.02, waterproof_upstand_mm: 300,
+    wet_wall_height_mm: 1800, wet_wall_length_mm: 1000, tile_mm: [300, 300], toilet_rough_in_mm: 305,
+  });
   const set = compilePermitDrawingSet(p, { viewports: {
     "A-02": { scale_denominator: 100, level_id: "L3" },
     "A-03": { scale_denominator: 100, level_id: "L2" },
   } });
   assert.deepEqual(set.sheets.find(s => s.id === "A-02").source_object_ids, ["wall-l3"]);
   assert.deepEqual(set.sheets.find(s => s.id === "A-03").source_object_ids, ["wall-l2"]);
+  const architecturalPlan = compilePermitDrawingSet(p, { viewports: { "A-02": { scale_denominator: 100, level_id: "GF" } } });
+  assert.ok(!architecturalPlan.sheets.find(s => s.id === "A-02").source_object_ids.some(id => ["foundation-gf", "bathroom-gf"].includes(id)), "the architectural plan leaves footing and bathroom-detail geometry to their dedicated views");
+  assert.ok(architecturalPlan.sheets.find(s => s.id === "S-01").source_object_ids.includes("foundation-gf"), "structural footing geometry remains on its structural sheet");
+});
+
+test("new masonry plan hatch matches sheet output, stops at hosted openings, and is absent from existing walls", () => {
+  const makeProject = (withOpening, newWallPhase = "new_construction", wallAssembly = {}) => {
+    const p = createEmptyProjectDocument("PLAN-WALL-HATCH-PROOF");
+    const levelId = p.levels[0]?.id ?? "GF";
+    p.levels = [{ id: levelId, name: "Ground", elevation_mm: 0, storey_index: 0, height_mm: 3000 }];
+    p.project.active_level_id = levelId;
+    const object = (id, object_type, module_data, phase = "new_construction") => ({
+      id, object_type, owner_module: "constructflow.architecture", schema_version: 1,
+      created_phase: phase, removed_phase: null, status: "active",
+      level_refs: [{ role: "base_level", level_id: levelId }], host_refs: [], connector_refs: [], relationships: [],
+      module_data, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+    });
+    p.objects.wall = object("wall", "architecture.wall", {
+      start_point_mm: [0, 0, 0], end_point_mm: [4000, 0, 0], thickness_mm: 100,
+      height_mm: 3000, level_id: levelId, mark: "AAC 100 mm", inside_finish_mark: "W2", outside_finish_mark: "W1",
+      ...wallAssembly,
+    }, newWallPhase);
+    p.objects.oldWall = object("oldWall", "architecture.wall", {
+      start_point_mm: [0, 3000, 0], end_point_mm: [4000, 3000, 0], thickness_mm: 100,
+      height_mm: 3000, level_id: levelId, mark: "W0",
+    }, "existing");
+    if (withOpening) p.objects.window = object("window", "door_window.window", {
+      wall_id: "wall", offset_along_wall_mm: 2000, width_mm: 1000, height_mm: 1200,
+      sill_height_mm: 900, level_id: levelId, mark: "W1",
+    });
+    return p;
+  };
+  const compiled = (project, viewport) => compilePermitDrawingSet(project, {
+    viewports: viewport ? { "A-02": viewport } : undefined,
+  }).sheets.find((sheet) => sheet.id === "A-02");
+  const hatchPaths = (project, viewport) => compiled(project, viewport).primitives
+    .filter((primitive) => primitive.kind === "path" && primitive.color === "#9aa6b4" && primitive.width === 0.15);
+
+  const withoutOpening = hatchPaths(makeProject(false), { scale_denominator: 100 });
+  const withOpening = hatchPaths(makeProject(true));
+  const existingOnly = hatchPaths(makeProject(false, "existing"));
+  const boardWall = hatchPaths(makeProject(false, "new_construction", { material: "steel_stud", wall_system: "steel_frame_board" }));
+  assert.ok(withoutOpening.length > 20, "new masonry exports vector hatch strokes on the plan sheet");
+  assert.ok(withOpening.length > 0 && withOpening.length < withoutOpening.length, "a hosted opening removes hatch lines from its wall span");
+  assert.ok(withOpening.every((primitive) => primitive.points.length === 2), "hatch is emitted as editable clipped vector segments");
+  assert.equal(existingOnly.length, 0, "existing walls do not receive new-construction masonry hatch");
+  assert.equal(boardWall.length, 0, "new steel-frame board walls do not receive masonry hatch");
+  assert.equal(compiled(makeProject(false)).scale, "1:25", "a compact plan enlarges to the largest standard scale that retains a small view margin");
+  assert.equal(compiled(makeProject(false), { scale_denominator: 100 }).scale, "1:100", "an explicit viewport scale remains authoritative");
+  const planTexts = compiled(makeProject(false)).primitives.filter((primitive) => primitive.kind === "text").map((primitive) => primitive.text);
+  assert.ok(planTexts.includes("W1") && planTexts.includes("W2"), "plan labels each physical wall face with its own finish mark");
+  assert.ok(!planTexts.includes("AAC 100 mm"), "the assembly preset name is not mistaken for a face finish mark");
 });
 
 test("A-10 compiles modeled ceiling boundaries, openings, labels and grids for the selected level", () => {
   const p = createEmptyProjectDocument("RCP-PROOF");
-  p.levels = [{ id: "GF", name: "Ground", elevation_mm: 0, storey_index: 0, height_mm: 3000 }];
+  p.levels = [
+    { id: "GF", name: "Ground", elevation_mm: 0, storey_index: 0, height_mm: 3000 },
+    { id: "L2", name: "Level 2", elevation_mm: 3000, storey_index: 1, height_mm: 3000 },
+  ];
   p.project.active_level_id = "GF";
   p.objects["ceiling-gf"] = {
     id: "ceiling-gf", object_type: "architecture.ceiling", owner_module: "constructflow.architecture",
@@ -125,17 +195,50 @@ test("A-10 compiles modeled ceiling boundaries, openings, labels and grids for t
     module_data: {
       mark: "CL1", level_id: "GF", boundary_mm: [[0, 0], [3600, 0], [3600, 3000], [0, 3000]],
       voids_mm: [[[1500, 1200], [2100, 1200], [2100, 1800], [1500, 1800]]],
-      elevation_mm: 2700, elevation_offset_mm: 0, thickness_mm: 9, grid_mm: [600, 600], follows_room_boundary: true,
+      elevation_mm: 2700, elevation_reference: "level", elevation_offset_mm: 2700, thickness_mm: 9, grid_mm: [600, 600], follows_room_boundary: true, room_boundary_status: "unclosed",
     },
     created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
   };
-  const sheet = compilePermitDrawingSet(p).sheets.find(item => item.id === "A-10");
+  p.objects["ceiling-l2"] = {
+    ...structuredClone(p.objects["ceiling-gf"]),
+    id: "ceiling-l2",
+    level_refs: [{ role: "base_level", level_id: "L2" }],
+    module_data: { ...structuredClone(p.objects["ceiling-gf"].module_data), level_id: "L2", mark: "CL2" },
+  };
+  const viewport = { scale_denominator: 50, level_id: "GF", center_mm: [1800, 1500] };
+  const sheet = compilePermitDrawingSet(p, { viewports: { "A-10": viewport } }).sheets.find(item => item.id === "A-10");
   assert.ok(sheet);
   assert.ok(sheet.source_object_ids.includes("ceiling-gf"));
   assert.ok(sheet.primitives.some(item => item.kind === "text" && item.text.includes("CL1")));
   assert.ok(sheet.primitives.some(item => item.kind === "text" && item.text.includes("RCP · ขอบเขตฝ้า")));
   assert.ok(sheet.primitives.some(item => item.kind === "path" && item.color === "#7c3aed" && item.closed));
+  assert.ok(sheet.primitives.some(item => item.kind === "path" && item.color === "#7c3aed" && item.closed && item.fill === "#ffffff" && item.dash?.join(",") === "2,1"), "ceiling voids must be knocked out of the RCP fill while retaining a dashed opening outline");
+  const paperGrid = sheet.primitives
+    .filter(item => item.kind === "path" && item.color === "#a78bfa" && item.width === 0.12 && item.dash?.join(",") === "1.5,1.5")
+    .map(item => item.points);
+  const expectedGrid = clippedGridSegments(
+    p.objects["ceiling-gf"].module_data.boundary_mm,
+    600,
+    600,
+    p.objects["ceiling-gf"].module_data.voids_mm,
+  ).map(([a, b]) => [
+    [303 + (a[0] - 1800) / 50, 109 - (a[1] - 1500) / 50],
+    [303 + (b[0] - 1800) / 50, 109 - (b[1] - 1500) / 50],
+  ]);
+  assert.deepEqual(paperGrid, expectedGrid, "A-10 RCP grid vectors must match the shared Canvas geometry, including stops around voids");
+  assert.ok(!sheet.primitives.some(item => item.kind === "text" && (item.text.includes("Ground") || item.text.includes("Level 2"))), "RCP plan must not show vertical floor datums");
   assert.ok(!sheet.warnings.some(warning => warning.includes("no modeled ceiling objects")));
+  assert.ok(sheet.warnings.some(warning => warning.includes("source room boundary is open")));
+  assert.deepEqual(sheet.source_object_ids, ["ceiling-gf"]);
+
+  const upperSheet = compilePermitDrawingSet(p, { viewports: { "A-10": { scale_denominator: 50, level_id: "L2" } } }).sheets.find(item => item.id === "A-10");
+  assert.deepEqual(upperSheet.source_object_ids, ["ceiling-l2"]);
+  assert.ok(upperSheet.primitives.some(item => item.kind === "text" && item.text.includes("CL2")));
+  assert.ok(upperSheet.primitives.some(item => item.kind === "text" && item.text.includes("+5.700 m")));
+  assert.ok(!upperSheet.primitives.some(item => item.kind === "text" && item.text.includes("CL1")));
+  p.levels.find(level => level.id === "L2").elevation_mm = 3200;
+  const raisedUpper = compilePermitDrawingSet(p, { viewports: { "A-10": { scale_denominator: 50, level_id: "L2" } } }).sheets.find(item => item.id === "A-10");
+  assert.ok(raisedUpper.primitives.some(item => item.kind === "text" && item.text.includes("+5.900 m")), "RCP label follows the revised datum while retaining its 2700 mm offset");
 });
 
 test("drawing set generates independent architectural and framing sheets for every unrepresented level", () => {

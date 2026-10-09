@@ -25,6 +25,7 @@ test('AC-STAND-006: kitchen contains its requested hosted doors/windows and colu
   const window = objects.find(o => o.object_type === 'door_window.window')
   assert.deepEqual(door.module_data.location_mm, [3250, 4000, 0])
   assert.deepEqual(window.module_data.location_mm, [3250, 6500, 0])
+  assert.equal(window.module_data.mark, 'W1', 'the elevation tag must use the window mark, not the host wall assembly name')
   assert.equal(door.module_data.width_mm, 900)
   assert.equal(window.module_data.width_mm, 1200)
   assert.ok(objects.filter(o => o.object_type === 'architecture.wall').every(o => o.module_data.material === 'lightweight_block'))
@@ -35,8 +36,10 @@ test('AC-STAND-006: kitchen contains its requested hosted doors/windows and colu
 test('AC-STAND-006: four-sided kitchen can exclude both openings', () => {
   const result = applyExtensionPreset(document(), { ...options, kitchenWallSides: 4, kitchenIncludeDoor: false, kitchenIncludeWindow: false })
   assert.equal(result.status, 'success')
-  assert.equal(Object.values(result.updatedProject.objects).filter(o => o.object_type === 'architecture.wall').length, 4)
-  assert.equal(Object.keys(result.updatedProject.objects).length, 16)
+  const objects = Object.values(result.updatedProject.objects)
+  assert.equal(objects.filter(o => o.object_type === 'architecture.wall').length, 4)
+  assert.equal(objects.filter(o => o.object_type === 'architecture.room').length, 1, 'a fully enclosed four-sided kitchen should create its room automatically')
+  assert.equal(objects.length, 17)
 })
 
 test('AC-STAND-006: carport assigns steel and generates 13 individually editable objects', () => {

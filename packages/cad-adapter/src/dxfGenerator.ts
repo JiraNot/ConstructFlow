@@ -1,8 +1,10 @@
 // ConstructFlow Native DXF Engine (AutoCAD R2018 / AC1032)
-// Standalone pure TypeScript implementation supporting ModelSpace (1:1 mm)
-// and 20 PaperSpace Layouts (A-01 to E-02) with Viewports and ACAD_TABLEs.
+// Smart Object geometry stays in real-world ModelSpace coordinates (mm);
+// the 20 PaperSpace layouts mirror PermitDrawingSet vectors at page scale.
 
-import type { ProjectDocument, SmartObject } from "@constructflow/project-model";
+import { isMasonryWallPlanHatch, type ProjectDocument, type SmartObject } from "@constructflow/project-model";
+import { compilePermitDrawingSet, type PermitSheet, type VectorPrimitive } from "@constructflow/sheet-engine";
+import { wallMasonryHatchSegments } from "@constructflow/geometry-kernel";
 import { CAD_STANDARD_LAYERS, resolveCadLayer } from "./layerStandards.js";
 import {
   formatAcadTableDxf,
@@ -46,10 +48,15 @@ export class DxfGenerator {
   private handleCounter: number = 0x100;
   private project: ProjectDocument;
   private options: DxfGeneratorOptions;
+  private compiledSheets: Map<string, PermitSheet>;
 
   constructor(project: ProjectDocument, options: DxfGeneratorOptions = {}) {
     this.project = project;
     this.options = options;
+    this.compiledSheets = new Map(compilePermitDrawingSet(project, {
+      revision: options.revision,
+      author: options.architectName,
+    }).sheets.map(sheet => [sheet.id, sheet]));
   }
 
   private nextHandle(): string {
@@ -806,6 +813,19 @@ export class DxfGenerator {
       if (last && opening.from <= last[1]) last[1] = Math.max(last[1], opening.to);
       else merged.push([opening.from, opening.to]);
     }
+    const intervals: Array<[number, number]> = [];
+    let solidCursor = 0;
+    for (const [from, to] of merged) { if (from > solidCursor) intervals.push([solidCursor, from]); solidCursor = Math.max(solidCursor, to); }
+    if (solidCursor < length) intervals.push([solidCursor, length]);
+    if (wall.created_phase === "existing") {
+      for (const [from, to] of intervals) this.writeSolid(lines, layer, 0, [point(from, -half), point(to, -half), point(to, half), point(from, half)], 7);
+    } else if (wall.created_phase === "new_construction" && isMasonryWallPlanHatch(wall, this.project.types)) {
+      // Keep phase hatch editable and identical to Canvas/PDF model-space lines.
+      for (const [from, to] of wallMasonryHatchSegments(
+        [start[0], start[1]], [end[0], end[1]], Number(d.thickness_mm ?? 100),
+        openings.map(opening => [opening.from, opening.to]),
+      )) this.writeLine(lines, layer, 0, from, to);
+    }
     for (const side of [-1, 1]) {
       let cursor = 0;
       for (const [from, to] of merged) {
@@ -825,12 +845,23 @@ export class DxfGenerator {
     }
     if (length - 700 > labelCursor) labelIntervals.push([labelCursor, length - 700]);
     const middle = labelIntervals.sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0];
-    const insideMark = String(d.inside_finish_mark ?? d.mark ?? "W1");
-    const outsideMark = String(d.outside_finish_mark ?? d.mark ?? "W1");
+    const wallType = this.project.types.find(type => type.id === d.type_id)
+      ?? this.project.types.find(type => type.object_type === wall.object_type && type.name.toLowerCase() === String(d.mark ?? "").toLowerCase());
+    const overrides = d.instance_overrides ?? {};
+    const insideMark = String(overrides.inside_finish_mark ?? d.inside_finish_mark ?? wallType?.parameters.inside_finish_mark ?? d.mark ?? "W1");
+    const outsideMark = String(overrides.outside_finish_mark ?? d.outside_finish_mark ?? wallType?.parameters.outside_finish_mark ?? d.mark ?? "W1");
     if (middle) {
       const labelAt = (middle[0] + middle[1]) / 2;
-      this.writeText(lines, layer, 0, point(labelAt, insideSign * (half + 320)), insideMark, 250);
-      this.writeText(lines, layer, 0, point(labelAt, -insideSign * (half + 320)), outsideMark, 250);
+      const finishTag = (side: number, mark: string) => {
+        this.writeLwPolyline(lines, layer, 0, [
+          point(labelAt, side * half),
+          point(labelAt + 250, side * (half + 300)),
+          point(labelAt - 250, side * (half + 300)),
+        ], true);
+        this.writeText(lines, layer, 0, point(labelAt, side * (half + 190)), mark, 200);
+      };
+      finishTag(insideSign, insideMark);
+      finishTag(-insideSign, outsideMark);
     }
     for (const opening of openings) {
       const { object, data: openingData } = opening;
@@ -878,6 +909,11 @@ export class DxfGenerator {
     layout: (typeof LAYOUT_DEFS)[number],
     _layoutIndex: number,
   ): void {
+    const compiledSheet = this.compiledSheets.get(layout.id);
+    if (compiledSheet) {
+      this.writeCompiledSheetEntities(lines, layout, compiledSheet);
+      return;
+    }
     const ownerHandle = "0"; // Will be linked in layout context
     const spaceFlag = 1; // PaperSpace
 
@@ -990,6 +1026,55 @@ export class DxfGenerator {
     } else if (layout.id === "E-02") {
       this.writeElectricalPanelSchedule(lines, spaceFlag);
     }
+  }
+
+  /** Emit the same page-space vector primitives used by SVG/PDF into the matching DXF layout. */
+  private writeCompiledSheetEntities(
+    lines: string[],
+    layout: (typeof LAYOUT_DEFS)[number],
+    sheet: PermitSheet,
+  ): void {
+    const layer = `${layout.discipline}-VIEW`;
+    for (const primitive of sheet.primitives) {
+      if (primitive.kind === "text") {
+        this.writeText(lines, "ANNO-TEXT", 1, primitive.at, primitive.text, primitive.size, layout.name, this.toAciColor(primitive.color));
+        continue;
+      }
+      this.writeSheetPath(lines, layer, layout.name, primitive);
+    }
+  }
+
+  private writeSheetPath(
+    lines: string[],
+    layer: string,
+    layoutName: string,
+    primitive: Extract<VectorPrimitive, { kind: "path" }>,
+  ): void {
+    const points = primitive.points.map(point => [point[0], point[1]] as [number, number]);
+    if (points.length < 2) return;
+    const color = this.toAciColor(primitive.color);
+    const lineweight = Math.max(0, Math.min(211, Math.round(primitive.width * 100)));
+    if (primitive.fill && primitive.fill !== "none" && primitive.closed && points.length >= 3) {
+      const fillColor = this.toAciColor(primitive.fill);
+      // Sheet fills are emitted in source order, so opaque facade masks cover
+      // rear geometry exactly as they do in the PDF compiler.
+      for (let index = 1; index < points.length - 1; index++) {
+        this.writeSolid(lines, layer, 1, [points[0], points[index], points[index + 1], points[index + 1]], fillColor, layoutName);
+      }
+    }
+    if (primitive.width > 0 && !(primitive.color.toLowerCase() === "#ffffff" && primitive.fill === "#ffffff")) {
+      this.writeLwPolyline(lines, layer, 1, points, primitive.closed ?? false, layoutName, color, lineweight, primitive.dash?.length ? "DASHED2" : undefined);
+    }
+  }
+
+  private toAciColor(color: string): number {
+    const normalized = color.toLowerCase();
+    if (normalized === "#ef4444" || normalized === "#ff0000" || normalized === "red") return 1;
+    if (normalized === "#94a3b8" || normalized === "#64748b" || normalized === "#808080") return 8;
+    if (normalized === "#0f172a" || normalized === "#000000" || normalized === "#ffffff" || normalized === "white") return 7;
+    if (normalized === "#087cf0" || normalized === "#0284c7" || normalized === "#0000ff") return 5;
+    if (normalized === "#22c55e" || normalized === "#008000") return 3;
+    return 7;
   }
 
   private writeDoorWindowSchedule(lines: string[], spaceFlag: number): void {
@@ -1362,12 +1447,31 @@ export class DxfGenerator {
     );
   }
 
+  private writeSolid(
+    lines: string[],
+    layer: string,
+    space: number,
+    points: [[number, number], [number, number], [number, number], [number, number]],
+    colorNumber?: number,
+    layoutName?: string,
+  ): void {
+    lines.push("  0", "SOLID", "  5", this.nextHandle(), "100", "AcDbEntity", "  8", layer, " 67", space.toString());
+    if (layoutName) lines.push("410", layoutName);
+    if (colorNumber !== undefined) lines.push(" 62", String(colorNumber));
+    lines.push("100", "AcDbTrace");
+    points.forEach((point, index) => lines.push(` ${10 + index}`, point[0].toFixed(3), ` ${20 + index}`, point[1].toFixed(3), ` ${30 + index}`, "0.000"));
+  }
+
   private writeLwPolyline(
     lines: string[],
     layer: string,
     space: number,
     points: [number, number][],
     closed: boolean = false,
+    layoutName?: string,
+    colorNumber?: number,
+    lineweight?: number,
+    lineType?: string,
   ): void {
     lines.push(
       "  0",
@@ -1378,8 +1482,12 @@ export class DxfGenerator {
       "AcDbEntity",
       "  8",
       layer,
+      ...(lineType ? ["  6", lineType] : []),
       " 67",
       space.toString(),
+      ...(layoutName ? ["410", layoutName] : []),
+      ...(colorNumber === undefined ? [] : [" 62", String(colorNumber)]),
+      ...(lineweight === undefined ? [] : ["370", String(lineweight)]),
       "100",
       "AcDbPolyline",
       " 90",
@@ -1401,6 +1509,8 @@ export class DxfGenerator {
     at: [number, number],
     text: string,
     height: number,
+    layoutName?: string,
+    colorNumber?: number,
   ): void {
     lines.push(
       "  0",
@@ -1413,6 +1523,8 @@ export class DxfGenerator {
       layer,
       " 67",
       space.toString(),
+      ...(layoutName ? ["410", layoutName] : []),
+      ...(colorNumber === undefined ? [] : [" 62", String(colorNumber)]),
       "100",
       "AcDbText",
       " 10",

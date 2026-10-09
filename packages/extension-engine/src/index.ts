@@ -189,7 +189,7 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
       queueCreate('CreateWindow', {
         wall_id: w3Id,
         location_mm: [X_mm + Math.round(W_mm / 2), Y_mm + L_mm, baseElevation_mm],
-        mark: 'AAC 100 mm',
+        mark: 'W1',
         width_mm: 1200,
         height_mm: 1200,
         sill_height_mm: 900,

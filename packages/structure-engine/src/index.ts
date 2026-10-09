@@ -1,5 +1,5 @@
 import { SmartObject, ColumnModuleData, FoundationModuleData, GridModuleData, BeamModuleData, resolveCatalogType, catalogInstanceOverrides, isColumnObject, isFoundationObject, isGridObject, isBeamObject, resolveColumnVerticalExtent, resolveBeamBaseElevation, type ProjectDocument } from '@constructflow/project-model'
-import { CreateColumnInput, MoveColumnInput, UpdateColumnMarkInput, UpdateColumnVerticalReferenceInput, CreateFoundationInput, CreateGridInput, CreateGridSystemInput, UpdateGridSystemInput, ModifyGridInput, CreateBeamInput, UpdateBeamMarkInput, UpdateBeamDimensionsInput, UpdateBeamVerticalReferenceInput, UpdateColumnDimensionsInput, UpdateFoundationDimensionsInput } from '@constructflow/command-schema'
+import { CreateColumnInput, MoveColumnInput, UpdateColumnMarkInput, UpdateColumnVerticalReferenceInput, CreateFoundationInput, CreateGridInput, CreateGridSystemInput, UpdateGridSystemInput, ModifyGridInput, CreateBeamInput, UpdateBeamMarkInput, UpdateBeamDimensionsInput, UpdateBeamEndpointsInput, UpdateBeamVerticalReferenceInput, UpdateColumnDimensionsInput, UpdateFoundationDimensionsInput } from '@constructflow/command-schema'
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
 export * from './construction.js'
@@ -840,6 +840,28 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
         updatedProject: updated,
         emittedEnvelope: envelope,
       }
+    }
+
+    case 'UpdateBeamEndpoints': {
+      const update = input as unknown as UpdateBeamEndpointsInput
+      const target = updated.objects[update.object_id]
+      if (!target || !isBeamObject(target)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Beam UUID ${update.object_id} not found`] }, updatedProject: project }
+      const [sx, sy] = update.start_point_mm, [ex, ey] = update.end_point_mm
+      const span_mm = Math.round(Math.hypot(ex - sx, ey - sy))
+      if (![sx, sy, ex, ey].every(Number.isFinite) || span_mm < 1) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Beam endpoints must define a finite span of at least 1 mm'] }, updatedProject: project }
+      const startColumnId = update.start_column_id === undefined ? target.module_data.start_column_id : update.start_column_id ?? undefined
+      const endColumnId = update.end_column_id === undefined ? target.module_data.end_column_id : update.end_column_id ?? undefined
+      for (const id of [startColumnId, endColumnId]) if (id && !isColumnObject(updated.objects[id])) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Beam endpoint column ${id} not found`] }, updatedProject: project }
+      const start: [number, number, number] = [sx, sy, target.module_data.start_point_mm[2] ?? 0]
+      const end: [number, number, number] = [ex, ey, target.module_data.end_point_mm[2] ?? 0]
+      const hostRefs = [...new Set([startColumnId, endColumnId].filter((id): id is string => Boolean(id)))]
+      updated.objects[target.id] = { ...target, host_refs: hostRefs, module_data: { ...target.module_data, start_point_mm: start, end_point_mm: end, path_mm: [start, end], span_mm,
+        ...(startColumnId ? { start_column_id: startColumnId } : { start_column_id: undefined }),
+        ...(endColumnId ? { end_column_id: endColumnId } : { end_column_id: undefined }),
+      }, updated_at: now }
+      updated.relationships = updated.relationships.filter(relationship => !(relationship.kind === 'connects_to' && relationship.source_id === target.id && relationship.role === 'beam_column_connection'))
+      for (const columnId of hostRefs) updated.relationships.push({ kind: 'connects_to', source_id: target.id, target_id: columnId, role: 'beam_column_connection' })
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] }, updatedProject: updated, emittedEnvelope: { ...envelope, input: { ...update, start_point_mm: [sx, sy], end_point_mm: [ex, ey], start_column_id: startColumnId ?? null, end_column_id: endColumnId ?? null } } }
     }
 
     case 'UpdateColumnDimensions': {

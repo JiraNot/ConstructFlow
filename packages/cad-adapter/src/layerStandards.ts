@@ -195,6 +195,34 @@ export const CAD_STANDARD_LAYERS: Record<string, CadLayerDefinition> = {
     lineWeightHundredthsMm: 50,
     description: "Title Block & Borders",
   },
+  "A-VIEW": {
+    name: "A-VIEW",
+    colorNumber: 7,
+    lineType: "CONTINUOUS",
+    lineWeightHundredthsMm: 25,
+    description: "Compiled architectural sheet vectors",
+  },
+  "S-VIEW": {
+    name: "S-VIEW",
+    colorNumber: 7,
+    lineType: "CONTINUOUS",
+    lineWeightHundredthsMm: 25,
+    description: "Compiled structural sheet vectors",
+  },
+  "M-VIEW": {
+    name: "M-VIEW",
+    colorNumber: 7,
+    lineType: "CONTINUOUS",
+    lineWeightHundredthsMm: 25,
+    description: "Compiled mechanical and plumbing sheet vectors",
+  },
+  "E-VIEW": {
+    name: "E-VIEW",
+    colorNumber: 7,
+    lineType: "CONTINUOUS",
+    lineWeightHundredthsMm: 25,
+    description: "Compiled electrical sheet vectors",
+  },
   "SITE-BNDY": {
     name: "SITE-BNDY",
     colorNumber: 1, // Red

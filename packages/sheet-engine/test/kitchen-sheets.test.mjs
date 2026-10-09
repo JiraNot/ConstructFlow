@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { deserializeProject } from '../../project-model/dist/index.js'
-import { compileInitialDrawingSet } from '../dist/index.js'
+import { compileInitialDrawingSet, compilePermitDrawingSet } from '../dist/index.js'
 
 const fixtureUrl = new URL('../../../examples/kitchen-extension-proof.cfproj', import.meta.url)
 const project = deserializeProject(await readFile(fixtureUrl, 'utf8'))
@@ -35,6 +35,40 @@ test('S4: A-02 and S-01 show the same kitchen envelope, hosted openings and foun
   assert.equal((s01.svg.match(/LENGTH TBD/g) ?? []).length, 4)
   assert.equal(warnings.length, 1)
   assert.ok(warnings[0].includes('pile length is not assigned'))
+})
+
+test('A-02 distinguishes new masonry hatch from existing white wall poche', () => {
+  const phased = structuredClone(project)
+  const walls = Object.values(phased.objects).filter(object => object.object_type === 'architecture.wall')
+  walls[0].created_phase = 'existing'
+  walls[1].created_phase = 'new_construction'
+  const a02 = compileInitialDrawingSet(phased).sheets.find(sheet => sheet.id === 'A-02')
+  assert.match(a02.svg, /fill="none" stroke="#9aa6b4" stroke-width="0\.18"/,
+    'new masonry hatch should compile as editable model-space line segments')
+  assert.ok(!a02.svg.includes('url(#masonry-hatch)'), 'legacy A-02 should not use a separate SVG pattern hatch')
+  assert.ok(a02.svg.includes('fill="#ffffff"'))
+})
+
+test('A-02 draws adjustable tile finish lines clipped around architectural floor voids', () => {
+  const withFloor = structuredClone(project)
+  const levelId = withFloor.levels[0].id
+  withFloor.objects['floor-tile-proof'] = {
+    id: 'floor-tile-proof',
+    object_type: 'architecture.floor',
+    created_phase: 'new_construction',
+    level_refs: [{ level_id: levelId, role: 'base' }],
+    module_data: {
+      mark: 'AF1', level_id: levelId,
+      boundary_mm: [[0, 0], [2400, 0], [2400, 2400], [0, 2400]],
+      voids_mm: [[[600, 600], [1800, 600], [1800, 1800], [600, 1800]]],
+      elevation_mm: 0, elevation_offset_mm: 0, thickness_mm: 100,
+      finish_layers: [{ material: 'porcelain_tile', thickness_mm: 10 }],
+      finish_pattern_mm: [400, 600], finish_pattern_origin_mm: [100, 0],
+      finish_pattern_rotation_deg: 15, follows_room_boundary: false,
+    },
+  }
+  const a02 = compilePermitDrawingSet(withFloor).sheets.find(sheet => sheet.id === 'A-02')
+  assert.ok(a02.svg.includes('#9aa6b4'), 'tile finish grid should compile to editable vector linework')
 })
 
 test('S4: A-08 covers all levels and schedules catalog dimensions in meters', () => {

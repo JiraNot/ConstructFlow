@@ -1,4 +1,5 @@
-import { getDisplayPhase, resolveCatalogType, type ProjectDocument } from '@constructflow/project-model'
+import { getDisplayPhase, isMasonryWallPlanHatch, resolveCatalogType, type ProjectDocument } from '@constructflow/project-model'
+import { wallMasonryHatchSegments } from '@constructflow/geometry-kernel'
 export * from './permit.js'
 /** Load font shaping and PDF libraries only when PDF export is requested. */
 export async function compilePermitPdf(...args: Parameters<typeof import('./pdf.js').compilePermitPdf>) {
@@ -127,7 +128,8 @@ function compileArchitecturePlan(project: ProjectDocument, warnings: string[]): 
     const [x2, y2] = transform.map(data.end_point_mm[0], data.end_point_mm[1])
     const length = Math.hypot(x2 - x1, y2 - y1)
     const ux = (x2 - x1) / Math.max(length, 0.001), uy = (y2 - y1) / Math.max(length, 0.001)
-    const style = phaseStyle(getDisplayPhase(wall))
+    const displayPhase = getDisplayPhase(wall)
+    const style = phaseStyle(displayPhase)
     const hosted = openings.filter(opening => (opening.module_data as Data).wall_id === wall.id)
       .map(opening => {
         const openingData = opening.module_data as Data
@@ -136,14 +138,32 @@ function compileArchitecturePlan(project: ProjectDocument, warnings: string[]): 
       }).filter(opening => opening.width > 0)
     const intervals: [number, number][] = hosted.map(opening => [Math.max(0, opening.offset - opening.width / 2), Math.min(length, opening.offset + opening.width / 2)] as [number, number])
       .filter(interval => interval[1] > interval[0]).sort((a, b) => a[0] - b[0])
+    const hasMasonryHatch = displayPhase === 'new_construction' && isMasonryWallPlanHatch(wall, project.types)
     let cursor = 0
     const drawSegment = (from: number, to: number) => {
       if (to <= from) return
       const wallWidth = Math.max(Number(data.thickness_mm ?? 100) * transform.scale, 0.65)
-      elements.push(`<path d="M${x1 + ux * from},${y1 + uy * from} L${x1 + ux * to},${y1 + uy * to}" fill="none" stroke="${style.color}" stroke-opacity="${style.opacity}" stroke-width="${Math.max(style.width * 0.35, wallWidth)}"${style.dash}/>`)
+      const nx = -uy, ny = ux, half = wallWidth / 2
+      const ax = x1 + ux * from, ay = y1 + uy * from, bx = x1 + ux * to, by = y1 + uy * to
+      const path = `M${ax + nx * half},${ay + ny * half} L${bx + nx * half},${by + ny * half} L${bx - nx * half},${by - ny * half} L${ax - nx * half},${ay - ny * half} Z`
+      const fill = displayPhase === 'demolition' ? 'url(#demo-hatch)' : displayPhase === 'existing' ? '#ffffff' : '#e2e8f0'
+      elements.push(`<path d="${path}" fill="${fill}" stroke="${style.color}" stroke-opacity="${style.opacity}" stroke-width="${Math.max(style.width * 0.2, 0.18)}"${style.dash}/>`)
     }
     for (const [start, end] of intervals) { drawSegment(cursor, start); cursor = Math.max(cursor, end) }
     drawSegment(cursor, length)
+    if (hasMasonryHatch) {
+      const worldStart = data.start_point_mm as [number, number, number]
+      const worldEnd = data.end_point_mm as [number, number, number]
+      const hatch = wallMasonryHatchSegments(
+        [worldStart[0], worldStart[1]], [worldEnd[0], worldEnd[1]], Number(data.thickness_mm ?? 100),
+        hosted.map(opening => [opening.offset / transform.scale - opening.width / transform.scale / 2,
+          opening.offset / transform.scale + opening.width / transform.scale / 2]),
+      )
+      for (const [a, b] of hatch) {
+        const [hx1, hy1] = transform.map(a[0], a[1]), [hx2, hy2] = transform.map(b[0], b[1])
+        elements.push(`<path d="M${hx1},${hy1} L${hx2},${hy2}" fill="none" stroke="#9aa6b4" stroke-width="0.18"/>`)
+      }
+    }
     elements.push(`<text x="${(x1 + x2) / 2 + 1.2}" y="${(y1 + y2) / 2 - 1.2}" font-size="2.3" fill="${style.color}" font-family="Arial,sans-serif">${escapeXml(data.mark)}</text>`)
   }
   for (const object of levelObjects) {

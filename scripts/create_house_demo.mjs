@@ -51,7 +51,7 @@ for (const [level, offset, mark] of [['GF', 2600, 'B1'], ['L1', 2600, 'B1']]) {
 }
 
 // Structural floor plates with a stairwell opening.
-const stairVoid = [[4500, 4300], [7500, 4300], [7500, 8800], [4500, 8800]]
+const stairVoid = [[4500, 3000], [7500, 3000], [7500, 5000], [4500, 5000]]
 for (const level of ['GF', 'L1']) {
   run('CreateSlab', {
     mark: 'S1', level_id: level,
@@ -100,9 +100,9 @@ for (const level of ['GF', 'L1']) {
 
 // Main stair and stairwell are included as editable objects, not drawing-only linework.
 run('CreateStair', {
-  mark: 'ST1', level_id: 'GF', stair_type: 'straight', structure_type: 'rc_monolithic',
-  start_point_mm: [4700, 4500, 0], total_rise_mm: 3000, width_mm: 1000, num_risers: 17,
-  riser_height_mm: 176.47, tread_depth_mm: 270, landing_depth_mm: 1000, turn_direction: 'right',
+  mark: 'ST1', level_id: 'GF', stair_type: 'u_shape', structure_type: 'rc_monolithic',
+  start_point_mm: [4500, 3000, 0], total_rise_mm: 3000, width_mm: 900, num_risers: 17,
+  riser_height_mm: 176.47, tread_depth_mm: 220, landing_depth_mm: 1000, turn_direction: 'right',
   has_handrail: true, handrail_height_mm: 900,
 })
 

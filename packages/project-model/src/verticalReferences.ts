@@ -25,12 +25,17 @@ export function getLevelElevation(project: ProjectDocument, levelId: unknown): n
 export function resolveWallVerticalExtent(project: ProjectDocument, object: SmartObject | Data): VerticalExtent | undefined {
   const data = dataOf(object)
   const baseLevelId = typeof data.level_id === 'string' ? data.level_id : undefined
+  const referencedBaseLevel = baseLevelId ? project.levels.find(level => level.id === baseLevelId) : undefined
+  if (baseLevelId && !referencedBaseLevel) return undefined
+  const topLevelId = typeof data.top_level_id === 'string' ? data.top_level_id : undefined
+  const referencedTopLevel = topLevelId ? project.levels.find(level => level.id === topLevelId) : undefined
+  if (topLevelId && !referencedTopLevel) return undefined
   const baseLevel = getLevelElevation(project, baseLevelId) ?? (typeof data.start_point_mm === 'object' && Array.isArray(data.start_point_mm) ? Number(data.start_point_mm[2] ?? 0) : 0)
   const baseOffset = Number(data.base_offset_mm ?? 0)
   const topOffset = Number(data.top_offset_mm ?? 0)
   if (!Number.isFinite(baseOffset) || !Number.isFinite(topOffset)) return undefined
   const base = baseLevel + baseOffset
-  const topLevel = getLevelElevation(project, data.top_level_id)
+  const topLevel = referencedTopLevel?.elevation_mm
   const height = topLevel !== undefined
     ? topLevel + topOffset - base
     : Number(data.height_mm)
@@ -82,9 +87,14 @@ export function resolveBeamBaseElevation(project: ProjectDocument, object: Smart
 export function resolveOpeningVerticalExtent(project: ProjectDocument, object: SmartObject | Data): VerticalExtent | undefined {
   const data = dataOf(object)
   const levelId = typeof data.level_id === 'string' ? data.level_id : undefined
+  const baseLevel = levelId ? project.levels.find(level => level.id === levelId) : undefined
+  if (levelId && !baseLevel) return undefined
   const levelElevation = getLevelElevation(project, levelId) ?? 0
   const bottomOffset = Number(data.base_offset_mm ?? data.sill_height_mm ?? 0)
-  const headLevel = getLevelElevation(project, data.head_level_id)
+  const headLevelId = typeof data.head_level_id === 'string' ? data.head_level_id : undefined
+  const referencedHeadLevel = headLevelId ? project.levels.find(level => level.id === headLevelId) : undefined
+  if (headLevelId && !referencedHeadLevel) return undefined
+  const headLevel = referencedHeadLevel?.elevation_mm
   const headOffset = Number(data.head_offset_mm ?? 0)
   const fixedHeight = Number(data.height_mm)
   if (![bottomOffset, headOffset].every(Number.isFinite)) return undefined
@@ -99,10 +109,34 @@ export function resolveOpeningVerticalExtent(project: ProjectDocument, object: S
 
 export function resolveSlabElevation(project: ProjectDocument, object: SmartObject | Data): number | undefined {
   const data = dataOf(object)
+  const levelId = typeof data.level_id === 'string' ? data.level_id : undefined
+  const level = levelId ? project.levels.find(item => item.id === levelId) : undefined
+  if (levelId && !level) return undefined
   const levelElevation = getLevelElevation(project, data.level_id) ?? 0
   const offset = Number(data.elevation_offset_mm ?? 0)
   const legacyElevation = Number(data.elevation_mm ?? 0)
   if (!Number.isFinite(offset) || !Number.isFinite(legacyElevation)) return undefined
   // elevation_offset_mm is additive to the selected level; legacy slabs remain absolute.
   return data.elevation_offset_mm !== undefined ? levelElevation + offset : legacyElevation
+}
+
+/** Resolve an architectural floor/ceiling elevation from its level datum and offset.
+ * Objects without the discriminator keep the historical absolute-elevation behavior.
+ */
+export function resolveArchitectureSurfaceElevation(project: ProjectDocument, object: SmartObject | Data): number | undefined {
+  const data = dataOf(object)
+  const offset = Number(data.elevation_offset_mm ?? 0)
+  const storedElevation = Number(data.elevation_mm ?? 0)
+  if (!Number.isFinite(offset) || !Number.isFinite(storedElevation)) return undefined
+  if (data.elevation_reference !== 'level' && data.elevation_reference !== 'absolute') {
+    // Before the explicit reference mode existed, architectural surfaces stored a
+    // world elevation in elevation_mm and then added elevation_offset_mm.
+    return storedElevation + offset
+  }
+  if (data.elevation_reference === 'absolute') return storedElevation + offset
+  const levelId = typeof data.level_id === 'string' ? data.level_id : undefined
+  const level = levelId ? project.levels.find(item => item.id === levelId) : undefined
+  if (levelId && !level) return undefined
+  if (!level) return undefined
+  return level.elevation_mm + offset
 }

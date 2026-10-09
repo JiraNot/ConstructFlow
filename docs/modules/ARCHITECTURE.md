@@ -38,6 +38,10 @@ Provides capabilities:
 - `ceiling.host_surface`
 - room boundary/program lookup.
 
+### Room boundary and area semantics
+
+Wall-loop detection uses wall axes and room-separator lines to discover bounded faces, then offsets each detected face inward by half the resolved total thickness of its bounding walls. A room derived from wall loops therefore reports its usable interior-face area and perimeter; zero-thickness room separators do not reduce the area. Room-linked architectural floors and ceilings inherit this resolved boundary. Manually drawn Room boundaries remain user-authored and are not offset.
+
 ## Wall semantics
 
 Wall parameters can include:
@@ -231,6 +235,7 @@ Extension-generated walls use the same Architecture plan representation as manua
 - AC-ARCH-005: hosted opening remains semantically attached during supported wall length/height edits.
 - AC-ARCH-006: Undo/Redo restores wall geometry and metadata together.
 - AC-ARCH-007: room area recalculates after supported boundary change.
+- AC-ARCH-012: wall-derived room boundaries and areas resolve to the interior finished wall faces, including mixed room-separator edges, and dependent room-linked floors/ceilings follow the same boundary.
 - AC-ARCH-008: Extension generation produces one Architecture-owned wall per normalized boundary edge with stable `wall_edge_N` provenance.
 - AC-ARCH-009: Extension wall regeneration updates matching wall identities and removes stale generated slots after topology shrink.
 - AC-ARCH-010: supported hosted openings remain present during generated-wall rebuild.

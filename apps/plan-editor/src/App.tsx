@@ -17,6 +17,7 @@ import {
   DoorHanding,
   PlacementReference,
   formatLengthMm,
+  resolveArchitectureSurfaceElevation,
   type DisplayLengthUnit,
 } from '@constructflow/project-model'
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
@@ -237,6 +238,8 @@ export const App: React.FC = () => {
   const [isConstructionOpen,setIsConstructionOpen]=useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const copiedObjectIdsRef = useRef<string[]>([])
+  const pasteCountRef = useRef(0)
   useEffect(() => {
     if (selectedId && !selectedIds.includes(selectedId)) setSelectedIds([selectedId])
     else if (!selectedId && selectedIds.length) setSelectedIds([])
@@ -518,6 +521,15 @@ export const App: React.FC = () => {
   }
 
   // Commit Beam creation with active type
+  const snapEndpointToColumnCenter = (point: [number, number]): [number, number] => {
+    const column = Object.values(project.objects).find(object => {
+      if (!isColumnObject(object)) return false
+      const [cx, cy] = object.module_data.location_mm, [width, depth] = object.module_data.section_mm
+      return Math.abs(point[0] - cx) <= width / 2 + 120 && Math.abs(point[1] - cy) <= depth / 2 + 120
+    })
+    return column && isColumnObject(column) ? [column.module_data.location_mm[0], column.module_data.location_mm[1]] : point
+  }
+
   const handleCommitBeam = (
     start_point_mm: [number, number],
     end_point_mm: [number, number],
@@ -526,6 +538,10 @@ export const App: React.FC = () => {
     placementReference: PlacementReference = 'centerline'
   ) => {
     const beamId = crypto.randomUUID()
+    const startColumn = startColId ? project.objects[startColId] : undefined
+    const endColumn = endColId ? project.objects[endColId] : undefined
+    if (startColumn && isColumnObject(startColumn)) start_point_mm = [startColumn.module_data.location_mm[0], startColumn.module_data.location_mm[1]]
+    if (endColumn && isColumnObject(endColumn)) end_point_mm = [endColumn.module_data.location_mm[0], endColumn.module_data.location_mm[1]]
     const res = CommandBus.execute(project, 'CreateBeam', {
       id: beamId,
       mark: activeBeamType,
@@ -544,18 +560,23 @@ export const App: React.FC = () => {
   }
 
   // Commit Wall creation with active type
-  const handleCommitWall = (start_point_mm: [number, number], end_point_mm: [number, number], placementReference: PlacementReference = 'centerline') => {
+  const handleCommitWall = (start_point_mm: [number, number], end_point_mm: [number, number], placementReference: PlacementReference = 'centerline', verticalReference?: { level_id: string; top_level_id?: string; height_mm?: number; base_offset_mm?: number; top_offset_mm?: number }) => {
+    start_point_mm = snapEndpointToColumnCenter(start_point_mm)
+    end_point_mm = snapEndpointToColumnCenter(end_point_mm)
     const wallId = crypto.randomUUID()
-    const baseLevel = project.levels.find(level => level.id === project.project.active_level_id)
-    const topLevel = baseLevel ? project.levels.filter(level => level.elevation_mm > baseLevel.elevation_mm).sort((a, b) => a.elevation_mm - b.elevation_mm)[0] : undefined
+    const levelId = verticalReference?.level_id ?? project.project.active_level_id
     const res = CommandBus.execute(project, 'CreateWall', {
       id: wallId,
       mark: activeWallType,
       placement_reference: placementReference,
       start_point_mm: [start_point_mm[0], start_point_mm[1], 0],
       end_point_mm: [end_point_mm[0], end_point_mm[1], 0],
-      level_id: project.project.active_level_id,
-      ...(topLevel ? { top_level_id: topLevel.id } : {}),
+      level_id: levelId,
+      ...(verticalReference?.top_level_id ? { top_level_id: verticalReference.top_level_id } : {}),
+      ...(verticalReference?.height_mm !== undefined ? { height_mm: verticalReference.height_mm } : {}),
+      ...(verticalReference?.base_offset_mm !== undefined ? { base_offset_mm: verticalReference.base_offset_mm } : {}),
+      ...(verticalReference?.top_offset_mm !== undefined ? { top_offset_mm: verticalReference.top_offset_mm } : {}),
+      ...(!verticalReference ? { inherit_joined_wall_constraint: true } : {}),
     })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
@@ -600,19 +621,19 @@ export const App: React.FC = () => {
   }
   const handleCommitArchitecturalFloor = (boundary_mm: [number, number][]) => {
     const level=project.levels.find(item=>item.id===project.project.active_level_id);if(!level)return
-    runArchitectureCommand('CreateArchitecturalFloor',{id:crypto.randomUUID(),mark:'AF1',level_id:level.id,boundary_mm,elevation_mm:level.elevation_mm,elevation_offset_mm:0,thickness_mm:50,finish_layers:[{material:'tile',thickness_mm:10,mark:'Tile'}],voids_mm:[],follows_room_boundary:false})
+    runArchitectureCommand('CreateArchitecturalFloor',{id:crypto.randomUUID(),mark:'AF1',level_id:level.id,boundary_mm,elevation_mm:level.elevation_mm,elevation_reference:'level',elevation_offset_mm:0,thickness_mm:50,finish_layers:[{material:'tile',thickness_mm:10,mark:'Tile'}],voids_mm:[],follows_room_boundary:false})
   }
   const handleCommitCeiling = (boundary_mm: [number, number][]) => {
     const level=project.levels.find(item=>item.id===project.project.active_level_id);if(!level)return
-    runArchitectureCommand('CreateCeiling',{id:crypto.randomUUID(),mark:'CL1',level_id:level.id,boundary_mm,elevation_mm:level.elevation_mm+Number(level.height_mm??2800),elevation_offset_mm:0,thickness_mm:12,voids_mm:[],grid_mm:[600,600],follows_room_boundary:false})
+    runArchitectureCommand('CreateCeiling',{id:crypto.randomUUID(),mark:'CL1',level_id:level.id,boundary_mm,elevation_mm:level.elevation_mm+Number(level.height_mm??2800),elevation_reference:'level',elevation_offset_mm:Number(level.height_mm??2800),thickness_mm:12,voids_mm:[],grid_mm:[600,600],follows_room_boundary:false})
   }
   const handleCommitRoomSeparator = (start_point_mm: [number,number],end_point_mm: [number,number]) => runArchitectureCommand('CreateRoomSeparator',{id:crypto.randomUUID(),mark:'RS',level_id:project.project.active_level_id,start_point_mm,end_point_mm})
   const handleDetectRooms = () => runArchitectureCommand('DetectRooms',{level_id:project.project.active_level_id,default_name:'Room'})
   const handleCreateRoomFinish = (kind: 'floor'|'ceiling', roomId: string) => {
     const room=project.objects[roomId];if(!room||room.object_type!=='architecture.room')return
     const data=room.module_data as Record<string,unknown>,level=project.levels.find(item=>item.id===data.level_id);if(!level)return
-    if(kind==='floor')runArchitectureCommand('CreateArchitecturalFloor',{id:crypto.randomUUID(),mark:'AF1',level_id:level.id,room_id:roomId,elevation_mm:level.elevation_mm,elevation_offset_mm:0,thickness_mm:50,finish_layers:[{material:'tile',thickness_mm:10,mark:'Tile'}],voids_mm:[],follows_room_boundary:true})
-    else runArchitectureCommand('CreateCeiling',{id:crypto.randomUUID(),mark:'CL1',level_id:level.id,room_id:roomId,elevation_mm:level.elevation_mm+Number(level.height_mm??2800),elevation_offset_mm:0,thickness_mm:12,voids_mm:[],grid_mm:[600,600],follows_room_boundary:true})
+    if(kind==='floor')runArchitectureCommand('CreateArchitecturalFloor',{id:crypto.randomUUID(),mark:'AF1',level_id:level.id,room_id:roomId,elevation_mm:level.elevation_mm,elevation_reference:'level',elevation_offset_mm:0,thickness_mm:50,finish_layers:[{material:'tile',thickness_mm:10,mark:'Tile'}],voids_mm:[],follows_room_boundary:true})
+    else runArchitectureCommand('CreateCeiling',{id:crypto.randomUUID(),mark:'CL1',level_id:level.id,room_id:roomId,elevation_mm:level.elevation_mm+Number(level.height_mm??2800),elevation_reference:'level',elevation_offset_mm:Number(level.height_mm??2800),thickness_mm:12,voids_mm:[],grid_mm:[600,600],follows_room_boundary:true})
   }
 
   const handleCommitSlabVoid = (hostId: string, boundary_mm: [number, number][]) => {
@@ -752,6 +773,24 @@ export const App: React.FC = () => {
     }
   }
 
+  const handleAssignTypeMany = (objectIds: string[], typeId: string) => {
+    const objects = [...new Set(objectIds)].map(id => project.objects[id]).filter(Boolean)
+    if (objects.length < 2 || objects.some(object => object.object_type !== objects[0].object_type)) return
+    const type = project.types.find(candidate => candidate.id === typeId && candidate.object_type === objects[0].object_type)
+    if (!type) return
+    const result = dispatchCommandBatch(objects.map(object => ({
+      name: 'AssignInstanceType',
+      input: { object_id: object.id, type_id: type.id, type_name: type.name },
+    })))
+    if (result.status !== 'success') {
+      setFileFeedback(result.errors?.[0] ?? 'เปลี่ยน Type ให้หลายวัตถุไม่สำเร็จ')
+      return
+    }
+    setSelectedIds(objects.map(object => object.id))
+    setSelectedId(objects.at(-1)!.id)
+    setFileFeedback(`เปลี่ยน ${objects.length} ชิ้นเป็น ${type.name} แล้ว`)
+  }
+
   const syncRenamedActiveType = (type: TypeDefinition, name: string) => {
     const entries: Array<[string,string,(value:string)=>void]> = [
       ['structure.column',activeColumnType,setActiveColumnType], ['structure.foundation',activeFoundationType,setActiveFoundationType],
@@ -870,6 +909,78 @@ export const App: React.FC = () => {
     return false
   }
 
+  const handleUpdateWallEndpoints = (objectId: string, start_point_mm: [number, number], end_point_mm: [number, number]) => {
+    start_point_mm = snapEndpointToColumnCenter(start_point_mm)
+    end_point_mm = snapEndpointToColumnCenter(end_point_mm)
+    const res = CommandBus.execute(project, 'UpdateWallEndpoints', { object_id: objectId, start_point_mm, end_point_mm })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
+    } else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
+  }
+
+  const handleUpdateBeamEndpoints = (objectId: string, start_point_mm: [number, number], end_point_mm: [number, number], start_column_id?: string | null, end_column_id?: string | null) => {
+    if (start_column_id && isColumnObject(project.objects[start_column_id])) start_point_mm = [project.objects[start_column_id].module_data.location_mm[0], project.objects[start_column_id].module_data.location_mm[1]]
+    if (end_column_id && isColumnObject(project.objects[end_column_id])) end_point_mm = [project.objects[end_column_id].module_data.location_mm[0], project.objects[end_column_id].module_data.location_mm[1]]
+    const res = CommandBus.execute(project, 'UpdateBeamEndpoints', { object_id: objectId, start_point_mm, end_point_mm, start_column_id, end_column_id })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
+    } else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
+  }
+
+  const handleResizeOpening = (objectId: string, width_mm: number) => {
+    const opening = project.objects[objectId]
+    if (!opening || (!isDoorObject(opening) && !isWindowObject(opening))) return
+    const data = opening.module_data
+    const name = isDoorObject(opening) ? 'UpdateDoorDimensions' : 'UpdateWindowDimensions'
+    const input = { object_id: objectId, width_mm, height_mm: data.height_mm,
+      ...(isDoorObject(opening) ? { sill_height_mm: Number(data.sill_height_mm ?? 0) } : { sill_height_mm: Number(data.sill_height_mm ?? 900) }),
+      ...(data.vertical_constraint === 'head_level' ? { head_level_id: data.head_level_id, head_offset_mm: data.head_offset_mm, vertical_constraint: 'head_level' } : { vertical_constraint: 'fixed_height' }),
+    }
+    const res = CommandBus.execute(project, name, input)
+    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
+    else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
+  }
+
+  const handleUpdateBoundaryVertex = (objectId: string, boundary_mm: [number, number][]) => {
+    const object = project.objects[objectId]
+    if (!object) return
+    const data = object.module_data as Record<string, unknown>
+    const command = object.object_type === 'structure.slab' ? 'UpdateSlab'
+      : object.object_type === 'architecture.floor' ? 'UpdateArchitecturalFloor'
+        : object.object_type === 'architecture.ceiling' ? 'UpdateCeiling' : null
+    if (!command) return
+    const input = object.object_type === 'structure.slab'
+      ? { ...data, id: objectId, boundary_mm }
+      : { ...data, id: objectId, boundary_mm, follows_room_boundary: false }
+    const res = CommandBus.execute(project, command, input)
+    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
+    else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
+  }
+
+  const handleUpdateRoomSeparator = (objectId: string, start_point_mm: [number, number], end_point_mm: [number, number]) => {
+    const object = project.objects[objectId]
+    if (!object || object.object_type !== 'architecture.room_separator') return
+    const res = CommandBus.execute(project, 'UpdateRoomSeparator', { ...object.module_data, id: objectId, start_point_mm, end_point_mm })
+    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
+    else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
+  }
+
+  const handleResizeColumn = (objectId: string, section_mm: [number, number]) => {
+    const res = CommandBus.execute(project, 'UpdateColumnDimensions', { object_id: objectId, section_mm })
+    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
+    else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
+  }
+
+  const handleResizeFoundation = (objectId: string, size_mm: [number, number]) => {
+    const foundation = project.objects[objectId]
+    if (!foundation || !isFoundationObject(foundation)) return
+    const res = CommandBus.execute(project, 'UpdateFoundationDimensions', { object_id: objectId, size_mm: [size_mm[0], size_mm[1], foundation.module_data.size_mm[2]] })
+    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
+    else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
+  }
+
   const handleMoveFoundation = (objectId: string, center_mm: [number, number]): boolean => {
     const foundation = project.objects[objectId]
     if (!foundation || foundation.object_type !== 'structure.foundation') return false
@@ -923,6 +1034,34 @@ export const App: React.FC = () => {
       setProject(res.updatedProject)
       if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
     } else if (res.result.errors?.length) window.alert(res.result.errors.join('\n'))
+  }
+
+  const handleUpdateArchitectureSurface = (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; material?: string; finish_layers?: Array<{ material: string; thickness_mm: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number; grid_mm?: [number, number] }) => {
+    const object = project.objects[objectId]
+    if (!object || (object.object_type !== 'architecture.floor' && object.object_type !== 'architecture.ceiling')) return
+    const data = object.module_data as Record<string, unknown>
+    const oldLevelId = typeof data.level_id === 'string' ? data.level_id : project.project.active_level_id
+    const levelId = changes.level_id ?? oldLevelId
+    const level = project.levels.find(item => item.id === levelId)
+    if (!level) { setFileFeedback(`ไม่พบระดับชั้น ${levelId}`); return }
+    const oldLevel = project.levels.find(item => item.id === oldLevelId)
+    const worldElevation = resolveArchitectureSurfaceElevation(project, object) ?? Number(data.elevation_mm ?? 0)
+    const currentOffset = worldElevation - Number(oldLevel?.elevation_mm ?? 0)
+    const offset = changes.elevation_offset_mm ?? currentOffset
+    const command = object.object_type === 'architecture.floor' ? 'UpdateArchitecturalFloor' : 'UpdateCeiling'
+    const res = CommandBus.execute(project, command, {
+      ...data,
+      ...changes,
+      id: objectId,
+      level_id: levelId,
+      elevation_reference: 'level',
+      elevation_offset_mm: offset,
+      elevation_mm: level.elevation_mm + offset,
+    })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
+    } else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
   }
 
   // Rename Foundation Mark handler
@@ -1052,6 +1191,49 @@ export const App: React.FC = () => {
     }
   }
   const handleDeleteObject = (objectId: string) => handleDeleteObjects([objectId])
+
+  const handleCopyObjects = (objectIds: string[]) => {
+    const ids = [...new Set(objectIds)].filter(id => Boolean(project.objects[id]))
+    if (!ids.length) return
+    copiedObjectIdsRef.current = ids
+    pasteCountRef.current = 0
+    setFileFeedback(`คัดลอก ${ids.length} ชิ้นแล้ว · Ctrl+V เพื่อวาง`)
+  }
+
+  const handlePasteObjects = () => {
+    const objectIds = copiedObjectIdsRef.current.filter(id => Boolean(project.objects[id]))
+    if (!objectIds.length) return
+    const id_map = Object.fromEntries(objectIds.map(id => [id, crypto.randomUUID()]))
+    const distance = 500 * (pasteCountRef.current + 1)
+    const result = dispatchCommandBatch([{ name: 'DuplicateObjects', input: { object_ids: objectIds, delta_x_mm: distance, delta_y_mm: 0, id_map } }])
+    if (result.status !== 'success') {
+      setFileFeedback(result.errors?.[0] ?? 'คัดลอกวัตถุไม่สำเร็จ')
+      return
+    }
+    pasteCountRef.current += 1
+    const ids = result.results[0]?.affected_object_ids ?? []
+    if (ids.length) { setSelectedIds(ids); setSelectedId(ids[0]) }
+    setFileFeedback(`วางสำเนา ${ids.length} ชิ้นแล้ว · เยื้องจากชุดต้นฉบับ ${distance} มม.`)
+  }
+
+  useEffect(() => {
+    const isEditingText = (target: EventTarget | null) => target instanceof HTMLElement
+      && (target.isContentEditable || Boolean(target.closest('input, textarea, select, [contenteditable="true"]')))
+    const handleClipboardShortcuts = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || isEditingText(event.target) || document.querySelector('[role="dialog"]')) return
+      if (event.key.toLowerCase() === 'c') {
+        const ids = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
+        if (!ids.length) return
+        event.preventDefault()
+        handleCopyObjects(ids)
+      } else if (event.key.toLowerCase() === 'v' && copiedObjectIdsRef.current.length) {
+        event.preventDefault()
+        handlePasteObjects()
+      }
+    }
+    window.addEventListener('keydown', handleClipboardShortcuts)
+    return () => window.removeEventListener('keydown', handleClipboardShortcuts)
+  }, [selectedId, selectedIds, project])
 
   // Delete the selected object from the plan without intercepting text editing.
   useEffect(() => {
@@ -1493,6 +1675,7 @@ export const App: React.FC = () => {
               onRequestEditProperties={() => { setRightPanelTab('properties'); setInspectorOpen(true) }}
               onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }}
               onDeleteObjects={handleDeleteObjects}
+              onCopyObjects={handleCopyObjects}
               onCommitColumn={handleCommitColumn}
               onCommitFoundation={handleCommitFoundation}
               onCommitBeam={handleCommitBeam}
@@ -1513,6 +1696,13 @@ export const App: React.FC = () => {
               onMoveColumn={handleMoveColumn}
               onMoveWall={handleMoveWall}
               onMoveOpening={handleMoveOpening}
+              onUpdateWallEndpoints={handleUpdateWallEndpoints}
+              onUpdateBeamEndpoints={handleUpdateBeamEndpoints}
+              onResizeOpening={handleResizeOpening}
+              onUpdateBoundaryVertex={handleUpdateBoundaryVertex}
+              onUpdateRoomSeparator={handleUpdateRoomSeparator}
+              onResizeColumn={handleResizeColumn}
+              onResizeFoundation={handleResizeFoundation}
               onFlipDoorHanding={handleFlipDoorHanding}
               onStartCalibrationModal={(dist, first, second) => {
                 setMeasuredCalibrationDist_mm(dist)
@@ -1565,7 +1755,7 @@ export const App: React.FC = () => {
         {/* Right Inspector & Sync Sidebar */}
         {inspectorOpen && <aside className="cf-inspector">
           <div className="cf-inspector-heading">
-            <div><strong>แผงข้อมูล</strong><span>{selectedIds.length > 1 ? `เลือกอยู่ ${selectedIds.length} ชิ้น · Delete เพื่อลบพร้อมกัน` : selectedId ? 'คุณสมบัติวัตถุและปริมาณ' : 'เลือกวัตถุบนแปลนเพื่อแก้ไข'}</span></div>
+            <div><strong>แผงข้อมูล</strong><span>{selectedIds.length > 1 ? `เลือกอยู่ ${selectedIds.length} ชิ้น · เปลี่ยน Type หรือ Delete พร้อมกันได้` : selectedId ? 'คุณสมบัติวัตถุและปริมาณ' : 'เลือกวัตถุบนแปลนเพื่อแก้ไข'}</span></div>
           </div>
           <div className="cf-inspector-tabs" role="tablist" aria-label="แผงข้อมูล">
             <button type="button" role="tab" aria-selected={rightPanelTab === 'properties'} className={rightPanelTab === 'properties' ? 'is-active' : ''} onClick={() => setRightPanelTab('properties')}>คุณสมบัติ</button>
@@ -1576,10 +1766,14 @@ export const App: React.FC = () => {
             project={project}
             displayUnit={displayUnit}
             selectedId={selectedId}
+            selectedIds={selectedIds}
             onAssignType={handleAssignType}
+            onAssignTypeMany={handleAssignTypeMany}
+            onDeleteObjects={handleDeleteObjects}
             onUpdateColumnMark={handleUpdateColumnMark}
             onUpdateColumnVerticalReference={handleUpdateColumnVerticalReference}
             onUpdateBeamVerticalReference={handleUpdateBeamVerticalReference}
+            onUpdateArchitectureSurface={handleUpdateArchitectureSurface}
             onUpdateFoundationMark={handleUpdateFoundationMark}
             onUpdateGridTag={handleUpdateGridTag}
             onModifyGrid={handleModifyGrid}

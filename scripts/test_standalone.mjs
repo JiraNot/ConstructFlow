@@ -27,6 +27,7 @@ for (const directory of packages) {
   run(directory, ["run", "build"]);
 }
 for (const directory of [
+  "packages/geometry-kernel",
   "packages/project-model",
   "packages/snapping-engine",
   "packages/representation-engine",

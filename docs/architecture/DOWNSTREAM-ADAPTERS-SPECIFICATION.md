@@ -132,27 +132,10 @@ All entities are drawn at real-world coordinates in millimeters:
   * **Hatch Patterns:** Color 8 (Light Gray), Lineweight 0.13mm
 
 ### 3.2 20 PaperSpace Layout Tabs (`A-01` to `E-02`)
-The exporter writes 20 individual PaperSpace layout dictionaries into a single DXF file:
-* **A3 Title Block Definition:** Inserts an A3 block reference (`INSERT`) with parameterized block attributes:
-  * `PROJECT_NAME`, `DRAWING_TITLE`, `SHEET_NO`, `SCALE`, `DATE`, `ARCHITECT_NAME`, `ENGINEER_LICENSE_NO`
-* **Floating `VIEWPORT` Entities:**
-  * Viewport centers and bounds computed to fit the A3 printable frame ($400\times 277$ mm within $420\times 297$ mm).
-  * `CustomScale` set deterministically (`0.01` for 1:100, `0.02` for 1:50, `0.04` for 1:25).
-* **Viewport Layer Freeze Table (`VPLAYER`):**
-  Each layout tab selectively freezes layers belonging to other disciplines:
-  ```text
-  Layout S-01 (Foundation):  VPLAYER FREEZE -> A-*, M-*, E-*, ID-*
-  Layout M-02 (Drainage):    VPLAYER FREEZE -> S-REBAR, E-*, ID-*
-  Layout E-01 (Lighting):    VPLAYER FREEZE -> S-REBAR, M-*, S-FND
-  ```
+The exporter writes the 20 standard PaperSpace layouts from the `PermitDrawingSet` page-space vector primitives, the same compiled source used by PDF. Every entity carries its layout name so A-05/A-06 receive their elevation vectors rather than a repeated top-plan viewport. Text, fills, phase color, lineweight, and demolition dash style are translated into editable DXF entities in discipline view layers. Original Smart Object geometry remains in ModelSpace on semantic object layers. Page vectors use millimeters in PaperSpace; their compiled positions already include sheet scale and printable-frame placement.
 
-### 3.3 Genuine `ACAD_TABLE` Generation
-The adapter writes true AutoCAD table objects (`ACAD_TABLE`) instead of exploded dumb lines and text:
-* **Door & Window Schedules:** Table with Type, Mark, Width, Height, Material, Hardware, and Count.
-* **Structural BBS Schedules:** Table with Bar Mark, Diameter (DB12/16/20), Shape Code, Cut Length, Hook Bend, Quantity, and Total Weight (kg/Ton).
-* **Electrical Load Schedule:** Table with Circuit No, Description, Connected Watts, Breaker Rating (AT/AF), Wire Size ($mm^2$).
-* Tables remain fully editable spreadsheets within AutoCAD.
-
+### 3.3 Schedule and Native CAD Acceptance
+Schedule sheets currently export as editable page-space vectors from the same compiler as PDF. Native `ACAD_TABLE` generation is not connected to project-derived schedule data yet; the legacy formatting helper alone is not evidence of a live table workflow. Opening and plotting the 20 layouts in AutoCAD/LibreCAD, including font/background behavior, remains a required native-app acceptance step.
 ### 3.4 AutoLISP & Script Automation
 * Generates a batch plot script (`batch_publish.scr`) that automatically plots all 20 PaperSpace layouts to A3 PDF in a single command.
 

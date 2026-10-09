@@ -8,8 +8,8 @@ const labels: Record<string, string> = {
   thickness_mm: "ความหนารวม",
   plaster_thickness_mm: "ความหนาฉาบเสา",
   masonry_thickness_mm: "ความหนาแกน / โครง",
-  plaster_inside_thickness_mm: "ชั้นผิวด้านใน",
-  plaster_outside_thickness_mm: "ชั้นผิวด้านนอก",
+  plaster_inside_thickness_mm: "ความหนาผิวด้าน A",
+  plaster_outside_thickness_mm: "ความหนาผิวด้าน B",
   wall_system: "ระบบผนัง",
   sill_height_mm: "ระดับธรณี",
   transom_height_mm: "ช่องแสงบน",
@@ -53,8 +53,8 @@ const labels: Record<string, string> = {
   start_ratio: "เริ่มช่วง (0–1)",
   end_ratio: "จบช่วง (0–1)",
   spacing_mm: "ระยะเรียง",
-  plaster_inside_material: "ผิวสำเร็จด้านใน",
-  plaster_outside_material: "ผิวสำเร็จด้านนอก",
+  plaster_inside_material: "วัสดุผิวด้าน A",
+  plaster_outside_material: "วัสดุผิวด้าน B",
 };
 const options: Record<string, [string, string][]> = {
   door_leaf_style: [
@@ -109,13 +109,13 @@ const options: Record<string, [string, string][]> = {
     ["hollow_core", "พื้น Hollow Core"],
   ],
   plaster_inside_material: [
-    ["cement_plaster", "ฉาบปูน"], ["interior_paint", "สีภายใน"], ["ceramic_tile", "กระเบื้อง"],
+    ["cement_plaster", "ฉาบปูน"], ["wall_paint", "สีทาผนัง"], ["interior_paint", "สีทาผนัง (ข้อมูลเดิม)"], ["exterior_paint", "สีทาผนัง (ข้อมูลเดิม)"], ["ceramic_tile", "กระเบื้อง"],
     ["stone_cladding", "กรุหิน"], ["timber_cladding", "กรุไม้"], ["wallpaper", "วอลล์เปเปอร์"],
     ["exposed_masonry", "โชว์ผิวก่อ"], ["smartboard", "สมาร์ทบอร์ด"], ["fiber_cement_board", "ไฟเบอร์ซีเมนต์บอร์ด"], ["gypsum_board", "ยิปซัมบอร์ด"], ["composite_panel", "แผ่นคอมโพซิต"], ["faux_wood_panel", "แผ่นลายไม้เทียม"], ["none", "ไม่ตกแต่ง"],
   ],
   plaster_outside_material: [
-    ["cement_plaster", "ฉาบปูน"], ["exterior_paint", "สีภายนอก"], ["ceramic_tile", "กระเบื้อง"],
-    ["stone_cladding", "กรุหิน"], ["timber_cladding", "กรุไม้"], ["exposed_masonry", "โชว์ผิวก่อ"], ["smartboard", "สมาร์ทบอร์ด"], ["fiber_cement_board", "ไฟเบอร์ซีเมนต์บอร์ด"], ["gypsum_board", "ยิปซัมบอร์ด"], ["composite_panel", "แผ่นคอมโพซิต"], ["faux_wood_panel", "แผ่นลายไม้เทียม"], ["none", "ไม่ตกแต่ง"],
+    ["cement_plaster", "ฉาบปูน"], ["wall_paint", "สีทาผนัง"], ["interior_paint", "สีทาผนัง (ข้อมูลเดิม)"], ["exterior_paint", "สีทาผนัง (ข้อมูลเดิม)"], ["ceramic_tile", "กระเบื้อง"],
+    ["stone_cladding", "กรุหิน"], ["timber_cladding", "กรุไม้"], ["wallpaper", "วอลล์เปเปอร์"], ["exposed_masonry", "โชว์ผิวก่อ"], ["smartboard", "สมาร์ทบอร์ด"], ["fiber_cement_board", "ไฟเบอร์ซีเมนต์บอร์ด"], ["gypsum_board", "ยิปซัมบอร์ด"], ["composite_panel", "แผ่นคอมโพซิต"], ["faux_wood_panel", "แผ่นลายไม้เทียม"], ["none", "ไม่ตกแต่ง"],
   ],
   wall_system: [["masonry", "ผนังก่ออิฐ / อิฐมวลเบา"], ["c_stud_smartboard", "โครงซีไลน์ + สมาร์ทบอร์ด"], ["steel_frame_board", "โครงเหล็ก + แผ่นบอร์ด"], ["composite_panel", "ผนังแผ่นคอมโพซิต"], ["faux_wood_cladding", "ผนังลายไม้เทียม"], ["custom", "ระบบผนังอื่น · กำหนดเอง"]],
   material: [

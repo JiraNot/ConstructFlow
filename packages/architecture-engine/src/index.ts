@@ -1,5 +1,5 @@
 import { SmartObject, WallModuleData, DoorModuleData, WindowModuleData, DoorHanding, resolveCatalogType, catalogInstanceOverrides, isWallObject, isDoorObject, isWindowObject, getLevelElevation, resolveOpeningVerticalExtent } from '@constructflow/project-model'
-import { CreateWallInput, MoveWallInput, MoveOpeningInput, UpdateWallMarkInput, UpdateWallDimensionsInput, CreateDoorInput, UpdateDoorMarkInput, UpdateDoorDimensionsInput, FlipDoorHandingInput, CreateWindowInput, UpdateWindowMarkInput, UpdateWindowDimensionsInput } from '@constructflow/command-schema'
+import { CreateWallInput, MoveWallInput, UpdateWallEndpointsInput, MoveOpeningInput, UpdateWallMarkInput, UpdateWallDimensionsInput, CreateDoorInput, UpdateDoorMarkInput, UpdateDoorDimensionsInput, FlipDoorHandingInput, CreateWindowInput, UpdateWindowMarkInput, UpdateWindowDimensionsInput } from '@constructflow/command-schema'
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
 import type { ProjectDocument } from '@constructflow/project-model'
@@ -9,31 +9,254 @@ import { validateStairThaiBuildingCode } from './stairs.js'
 
 const polygonAreaMm2 = (ring: number[][]) => Math.abs(ring.reduce((sum, p, i) => { const q = ring[(i + 1) % ring.length]; return sum + p[0] * q[1] - q[0] * p[1] }, 0) / 2)
 
+function roomRingKey(ring: number[][], toleranceMm = 10): string {
+  const points = ring.map(([x, y]) => [Math.round(x / toleranceMm), Math.round(y / toleranceMm)])
+  const variants: string[] = []
+  for (const ordered of [points, [...points].reverse()]) {
+    for (let start = 0; start < ordered.length; start++) {
+      variants.push([...ordered.slice(start), ...ordered.slice(0, start)].map(point => point.join(',')).join(';'))
+    }
+  }
+  return variants.sort()[0] ?? ''
+}
+
+function roomRingMetrics(ring: number[][]) {
+  const xs = ring.map(point => point[0]), ys = ring.map(point => point[1])
+  let crossSum = 0, centerX = 0, centerY = 0
+  for (let i = 0; i < ring.length; i++) {
+    const current = ring[i], next = ring[(i + 1) % ring.length]
+    const cross = current[0] * next[1] - next[0] * current[1]
+    crossSum += cross
+    centerX += (current[0] + next[0]) * cross
+    centerY += (current[1] + next[1]) * cross
+  }
+  const center: [number, number] = Math.abs(crossSum) > 1e-8
+    ? [centerX / (3 * crossSum), centerY / (3 * crossSum)]
+    : [xs.reduce((sum, x) => sum + x, 0) / xs.length, ys.reduce((sum, y) => sum + y, 0) / ys.length]
+  return {
+    area: polygonAreaMm2(ring),
+    center,
+    span: Math.max(100, Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys))),
+  }
+}
+
+function roomEdgeWallThickness(project: ProjectDocument, levelId: string, start: [number, number], end: [number, number], toleranceMm: number): number {
+  const dx = end[0] - start[0], dy = end[1] - start[1]
+  const length = Math.hypot(dx, dy)
+  if (length <= 1e-8) return 0
+  const midpoint: [number, number] = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2]
+  let thickness = 0
+  for (const wall of Object.values(project.objects)) {
+    if (wall.object_type !== 'architecture.wall' || wall.status === 'archived' || wall.removed_phase) continue
+    const data = wall.module_data as Record<string, unknown>
+    if (data.level_id !== levelId) continue
+    const a = data.start_point_mm as number[] | undefined, b = data.end_point_mm as number[] | undefined
+    if (!a || !b) continue
+    const wx = b[0] - a[0], wy = b[1] - a[1], wallLength = Math.hypot(wx, wy)
+    if (wallLength <= 1e-8 || Math.abs(wx * dy - wy * dx) / (wallLength * length) > 1e-4) continue
+    const t = ((midpoint[0] - a[0]) * wx + (midpoint[1] - a[1]) * wy) / (wallLength * wallLength)
+    const nearest: [number, number] = [a[0] + Math.max(0, Math.min(1, t)) * wx, a[1] + Math.max(0, Math.min(1, t)) * wy]
+    if (t < -toleranceMm / wallLength || t > 1 + toleranceMm / wallLength || Math.hypot(nearest[0] - midpoint[0], nearest[1] - midpoint[1]) > toleranceMm) continue
+    const overrides = data.instance_overrides as Record<string, unknown> | undefined
+    const typeReference = typeof data.type_id === 'string' ? data.type_id : typeof data.mark === 'string' ? data.mark : undefined
+    const type = resolveCatalogType(project, 'architecture.wall', typeReference)
+    const masonry = Number(data.masonry_thickness_mm ?? overrides?.masonry_thickness_mm ?? type?.parameters.masonry_thickness_mm)
+    const inside = Number(data.plaster_inside_thickness_mm ?? overrides?.plaster_inside_thickness_mm ?? type?.parameters.plaster_inside_thickness_mm ?? 0)
+    const outside = Number(data.plaster_outside_thickness_mm ?? overrides?.plaster_outside_thickness_mm ?? type?.parameters.plaster_outside_thickness_mm ?? 0)
+    const resolvedThickness = Number(data.thickness_mm ?? overrides?.thickness_mm ?? type?.parameters.thickness_mm ?? (Number.isFinite(masonry) ? masonry + inside + outside : 0))
+    if (Number.isFinite(resolvedThickness) && resolvedThickness > thickness) thickness = resolvedThickness
+  }
+  return thickness
+}
+
+/** Move a centerline-detected room ring to the finished interior wall faces. */
+function roomInteriorFinishBoundary(project: ProjectDocument, levelId: string, ring: number[][], toleranceMm: number): number[][] {
+  const count = ring.length
+  if (count < 3) return ring
+  const offsets = ring.map((point, index) => {
+    const next = ring[(index + 1) % count]
+    const dx = next[0] - point[0], dy = next[1] - point[1], length = Math.hypot(dx, dy)
+    const halfThickness = roomEdgeWallThickness(project, levelId, point as [number, number], next as [number, number], toleranceMm) / 2
+    return length > 1e-8 ? [-dy / length * halfThickness, dx / length * halfThickness] as [number, number] : [0, 0] as [number, number]
+  })
+  const boundary: number[][] = []
+  for (let index = 0; index < count; index++) {
+    const point = ring[index]
+    const previous = ring[(index - 1 + count) % count], next = ring[(index + 1) % count]
+    const firstDirection: [number, number] = [point[0] - previous[0], point[1] - previous[1]]
+    const secondDirection: [number, number] = [next[0] - point[0], next[1] - point[1]]
+    const firstPoint: [number, number] = [previous[0] + offsets[(index - 1 + count) % count][0], previous[1] + offsets[(index - 1 + count) % count][1]]
+    const secondPoint: [number, number] = [point[0] + offsets[index][0], point[1] + offsets[index][1]]
+    const denominator = firstDirection[0] * secondDirection[1] - firstDirection[1] * secondDirection[0]
+    if (Math.abs(denominator) <= 1e-8) {
+      const sameDirection = firstDirection[0] * secondDirection[0] + firstDirection[1] * secondDirection[1] > 0
+      const incomingPoint: [number, number] = [point[0] + offsets[(index - 1 + count) % count][0], point[1] + offsets[(index - 1 + count) % count][1]]
+      if (sameDirection && Math.hypot(incomingPoint[0] - secondPoint[0], incomingPoint[1] - secondPoint[1]) > 1e-6) boundary.push(incomingPoint)
+      boundary.push(secondPoint)
+      continue
+    }
+    const delta: [number, number] = [secondPoint[0] - firstPoint[0], secondPoint[1] - firstPoint[1]]
+    const t = (delta[0] * secondDirection[1] - delta[1] * secondDirection[0]) / denominator
+    boundary.push([firstPoint[0] + firstDirection[0] * t, firstPoint[1] + firstDirection[1] * t])
+  }
+  return boundary
+}
+
 /** Finds closed loops in the level's wall/separation-line graph. Endpoints within tolerance share a node. */
 export function detectClosedWallRooms(project: ProjectDocument, levelId: string, toleranceMm = 10): number[][][] {
-  const segments: Array<{ a: number[]; b: number[] }> = []
+  const segments: Array<{ a: [number, number]; b: [number, number]; splits: number[] }> = []
   for (const object of Object.values(project.objects)) {
     if (object.status === 'archived' || object.removed_phase) continue
     const data = object.module_data as Record<string, unknown>
-    if (object.object_type === 'architecture.wall' && data.level_id === levelId) segments.push({ a: data.start_point_mm as number[], b: data.end_point_mm as number[] })
-    if (object.object_type === 'architecture.room_separator' && data.level_id === levelId) segments.push({ a: data.start_point_mm as number[], b: data.end_point_mm as number[] })
+    if (object.object_type !== 'architecture.wall' && object.object_type !== 'architecture.room_separator') continue
+    if (data.level_id !== levelId) continue
+    const start = data.start_point_mm as number[] | undefined
+    const end = data.end_point_mm as number[] | undefined
+    if (!start || !end || ![start[0], start[1], end[0], end[1]].every(Number.isFinite)) continue
+    const a: [number, number] = [start[0], start[1]], b: [number, number] = [end[0], end[1]]
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) <= toleranceMm) continue
+    segments.push({ a, b, splits: [0, 1] })
   }
-  const nodes: number[][] = [], edges: Array<[number, number]> = []
-  const nodeId = (p: number[]) => { let index = nodes.findIndex(q => Math.hypot(q[0]-p[0],q[1]-p[1]) <= toleranceMm); if(index<0){index=nodes.length;nodes.push([p[0],p[1]])} return index }
-  for(const segment of segments){const a=nodeId(segment.a),b=nodeId(segment.b);if(a!==b)edges.push([a,b])}
-  const adjacent=nodes.map(()=>[] as number[])
-  edges.forEach(([a,b])=>{adjacent[a].push(b);adjacent[b].push(a)})
-  const rings=new Map<string,number[][]>()
-  for(let start=0;start<nodes.length;start++){
-    const visit=(current:number,path:number[])=>{
-      if(path.length>nodes.length)return
-      for(const next of adjacent[current]){
-        if(next===start&&path.length>=3){const ids=[...path];const smallest=Math.min(...ids);const idx=ids.indexOf(smallest);const forward=[...ids.slice(idx),...ids.slice(0,idx)];const reversed=[forward[0],...forward.slice(1).reverse()];const key=forward.join(',')<reversed.join(',')?forward.join(','):reversed.join(',');rings.set(key,forward.map(id=>nodes[id]));continue}
-        if(next>start&&!path.includes(next))visit(next,[...path,next])
+  const cross = (a: [number, number], b: [number, number]) => a[0] * b[1] - a[1] * b[0]
+  const clamp01 = (value: number) => Math.max(0, Math.min(1, value))
+  const offerPoint = (segment: typeof segments[number], point: [number, number]) => {
+    const dx = segment.b[0] - segment.a[0], dy = segment.b[1] - segment.a[1]
+    const lengthSquared = dx * dx + dy * dy, length = Math.sqrt(lengthSquared)
+    const t = ((point[0] - segment.a[0]) * dx + (point[1] - segment.a[1]) * dy) / lengthSquared
+    const clamped = clamp01(t)
+    const nearest: [number, number] = [segment.a[0] + clamped * dx, segment.a[1] + clamped * dy]
+    if (t >= -toleranceMm / length && t <= 1 + toleranceMm / length && Math.hypot(point[0] - nearest[0], point[1] - nearest[1]) <= toleranceMm) segment.splits.push(clamped)
+  }
+  // Split walls where another wall/partition ends or crosses them. Without this,
+  // a T-junction in the middle of an unsplit wall cannot close a room boundary.
+  for (let i = 0; i < segments.length; i++) for (let j = i + 1; j < segments.length; j++) {
+    const first = segments[i], second = segments[j]
+    const r: [number, number] = [first.b[0] - first.a[0], first.b[1] - first.a[1]]
+    const s: [number, number] = [second.b[0] - second.a[0], second.b[1] - second.a[1]]
+    const qmp: [number, number] = [second.a[0] - first.a[0], second.a[1] - first.a[1]]
+    const denominator = cross(r, s)
+    if (Math.abs(denominator) > 1e-8) {
+      const t = cross(qmp, s) / denominator, u = cross(qmp, r) / denominator
+      const firstEpsilon = toleranceMm / Math.hypot(...r), secondEpsilon = toleranceMm / Math.hypot(...s)
+      if (t < -firstEpsilon || t > 1 + firstEpsilon || u < -secondEpsilon || u > 1 + secondEpsilon) continue
+      first.splits.push(clamp01(t)); second.splits.push(clamp01(u))
+    } else if (Math.abs(cross(qmp, r)) <= toleranceMm * Math.hypot(...r)) {
+      offerPoint(first, second.a); offerPoint(first, second.b)
+      offerPoint(second, first.a); offerPoint(second, first.b)
+    }
+  }
+  const nodes: [number, number][] = []
+  const nodeId = (point: [number, number]) => {
+    let index = nodes.findIndex(node => Math.hypot(node[0] - point[0], node[1] - point[1]) <= toleranceMm)
+    if (index < 0) { index = nodes.length; nodes.push(point) }
+    return index
+  }
+  const edgeKeys = new Set<string>()
+  const edges: Array<[number, number]> = []
+  for (const segment of segments) {
+    const dx = segment.b[0] - segment.a[0], dy = segment.b[1] - segment.a[1]
+    const length = Math.hypot(dx, dy)
+    const cuts = [...new Set(segment.splits.map(value => Math.round(clamp01(value) * length * 1e6) / (length * 1e6)))].sort((a, b) => a - b)
+    for (let i = 1; i < cuts.length; i++) {
+      const t0 = cuts[i - 1], t1 = cuts[i]
+      if ((t1 - t0) * length <= toleranceMm * 0.25) continue
+      const a = nodeId([segment.a[0] + t0 * dx, segment.a[1] + t0 * dy])
+      const b = nodeId([segment.a[0] + t1 * dx, segment.a[1] + t1 * dy])
+      if (a === b) continue
+      const key = a < b ? `${a},${b}` : `${b},${a}`
+      if (!edgeKeys.has(key)) { edgeKeys.add(key); edges.push([a, b]) }
+    }
+  }
+  const graph = nodes.map(() => [] as number[])
+  for (const [a, b] of edges) { graph[a].push(b); graph[b].push(a) }
+  const discovery = nodes.map(() => -1), low = nodes.map(() => -1), bridges = new Set<string>()
+  let clock = 0
+  const edgeKey = (a: number, b: number) => a < b ? `${a},${b}` : `${b},${a}`
+  const findBridges = (node: number, parent: number) => {
+    discovery[node] = low[node] = clock++
+    for (const neighbor of graph[node]) {
+      if (neighbor === parent) continue
+      if (discovery[neighbor] < 0) {
+        findBridges(neighbor, node)
+        low[node] = Math.min(low[node], low[neighbor])
+        if (low[neighbor] > discovery[node]) bridges.add(edgeKey(node, neighbor))
+      } else low[node] = Math.min(low[node], discovery[neighbor])
+    }
+  }
+  for (let node = 0; node < nodes.length; node++) if (discovery[node] < 0) findBridges(node, -1)
+  const faceEdges = edges.filter(([a, b]) => !bridges.has(edgeKey(a, b)))
+  const adjacent = nodes.map(() => [] as number[])
+  for (const [a, b] of faceEdges) { adjacent[a].push(b); adjacent[b].push(a) }
+  for (let node = 0; node < adjacent.length; node++) adjacent[node].sort((a, b) =>
+    Math.atan2(nodes[a][1] - nodes[node][1], nodes[a][0] - nodes[node][0]) - Math.atan2(nodes[b][1] - nodes[node][1], nodes[b][0] - nodes[node][0]))
+
+  // Walk directed half-edges and keep only counter-clockwise bounded faces.
+  // Enumerating arbitrary graph cycles also returns the outer perimeter and
+  // unions of adjacent rooms, which incorrectly inflates room counts/areas.
+  const visited = new Set<string>(), rings: number[][][] = []
+  for (const [a, b] of faceEdges) for (const [from, to] of [[a, b], [b, a]] as const) {
+    const startKey = `${from},${to}`
+    if (visited.has(startKey)) continue
+    const ringIds: number[] = []
+    let currentFrom = from, currentTo = to, closed = false
+    for (let step = 0; step <= faceEdges.length * 2; step++) {
+      const key = `${currentFrom},${currentTo}`
+      if (visited.has(key)) { closed = key === startKey; break }
+      visited.add(key)
+      ringIds.push(currentFrom)
+      const around = adjacent[currentTo], reverseIndex = around.indexOf(currentFrom)
+      if (reverseIndex < 0 || around.length < 2) break
+      const next = around[(reverseIndex - 1 + around.length) % around.length]
+      currentFrom = currentTo; currentTo = next
+      if (currentFrom === from && currentTo === to) { closed = true; break }
+    }
+    if (!closed || ringIds.length < 3) continue
+    const simpleIds: number[] = []
+    for (const nodeId of ringIds) {
+      if (simpleIds.length >= 2 && simpleIds[simpleIds.length - 2] === nodeId) simpleIds.pop()
+      else simpleIds.push(nodeId)
+    }
+    const ring = simpleIds.map(nodeId => nodes[nodeId])
+    let simplified = true
+    while (simplified && ring.length > 3) {
+      simplified = false
+      for (let index = 0; index < ring.length; index++) {
+        const previous = ring[(index - 1 + ring.length) % ring.length]
+        const current = ring[index]
+        const next = ring[(index + 1) % ring.length]
+        const first: [number, number] = [current[0] - previous[0], current[1] - previous[1]]
+        const second: [number, number] = [next[0] - current[0], next[1] - current[1]]
+        const span = Math.hypot(next[0] - previous[0], next[1] - previous[1])
+        const collinearDistance = span > 0 ? Math.abs(cross(first, second)) / span : Number.POSITIVE_INFINITY
+        const between = first[0] * (current[0] - next[0]) + first[1] * (current[1] - next[1]) <= toleranceMm * toleranceMm
+        if (collinearDistance <= toleranceMm && between) {
+          const incomingThickness = roomEdgeWallThickness(project, levelId, previous as [number, number], current as [number, number], toleranceMm)
+          const outgoingThickness = roomEdgeWallThickness(project, levelId, current as [number, number], next as [number, number], toleranceMm)
+          if (Math.abs(incomingThickness - outgoingThickness) > 1e-6) continue
+          ring.splice(index, 1)
+          simplified = true
+          break
+        }
       }
-    };visit(start,[start])
+    }
+    if (ring.length < 3) continue
+    const signedArea = ring.reduce((sum, point, index) => {
+      const next = ring[(index + 1) % ring.length]
+      return sum + point[0] * next[1] - next[0] * point[1]
+    }, 0) / 2
+    if (signedArea > 100_000) {
+      const interiorBoundary = roomInteriorFinishBoundary(project, levelId, ring, toleranceMm)
+      const interiorArea = Math.abs(interiorBoundary.reduce((sum, point, index) => {
+        const next = interiorBoundary[(index + 1) % interiorBoundary.length]
+        return sum + point[0] * next[1] - next[0] * point[1]
+      }, 0) / 2)
+      if (interiorBoundary.every(point => point.every(Number.isFinite)) && interiorArea > 100_000) rings.push(interiorBoundary)
+    }
   }
-  return [...rings.values()].filter(ring=>polygonAreaMm2(ring)>100_000)
+  return rings.sort((a, b) => {
+    const ma = roomRingMetrics(a), mb = roomRingMetrics(b)
+    return ma.center[0] - mb.center[0] || ma.center[1] - mb.center[1]
+  })
 }
 
 function createArchitectureObject(context: CommandHandlerContext, family: string, owner: string, moduleData: Record<string, unknown>, update: boolean) {
@@ -43,8 +266,15 @@ function createArchitectureObject(context: CommandHandlerContext, family: string
   if (update && (!existing || existing.object_type !== family)) throw new Error(`${family} object ${id} was not found`)
   const levelId = String(moduleData.level_id ?? project.project.active_level_id)
   const data = { ...moduleData }
-  if (update && (family === 'architecture.floor' || family === 'architecture.ceiling') && Array.isArray(input.boundary_mm)) data.follows_room_boundary = false
-  if (update && family === 'architecture.room') data.area_mm2 = polygonAreaMm2(data.boundary_mm as number[][])
+  if (update && (family === 'architecture.floor' || family === 'architecture.ceiling') && Array.isArray(input.boundary_mm)) {
+    const previousBoundary = (existing!.module_data as Record<string, unknown>).boundary_mm
+    const boundaryChanged = JSON.stringify(input.boundary_mm) !== JSON.stringify(previousBoundary)
+    if (boundaryChanged) data.follows_room_boundary = false
+  }
+  if (update && family === 'architecture.room' && Array.isArray(input.boundary_mm)) {
+    data.area_mm2 = polygonAreaMm2(data.boundary_mm as number[][])
+    data.boundary_source = commandName === 'RefreshWallDerivedRooms' ? 'walls' : 'manual'
+  }
   const object: SmartObject = {
     id, object_type: family, owner_module: owner, schema_version: 1,
     created_phase: String(input.created_phase ?? input.phase ?? existing?.created_phase ?? project.project.active_phase) as SmartObject['created_phase'],
@@ -58,11 +288,79 @@ function createArchitectureObject(context: CommandHandlerContext, family: string
     for(const child of Object.values(updated.objects)){
       const childData=child.module_data as Record<string,unknown>
       if(childData.room_id!==id||childData.follows_room_boundary!==true)continue
-      updated.objects[child.id]={...child,module_data:{...childData,boundary_mm:structuredClone(data.boundary_mm)},updated_at:now}
+      updated.objects[child.id]={...child,module_data:{...childData,boundary_mm:structuredClone(data.boundary_mm),room_boundary_status:'closed'},updated_at:now}
       affected.push(child.id)
     }
   }
   return {result:{status:'success' as const,command_id,command_name:commandName,affected_object_ids:affected,updated_object_ids:affected,created_object_ids:existing?undefined:[id]},updatedProject:updated,emittedEnvelope:{...envelope,input:{...input,id}}}
+}
+
+export function refreshWallDerivedRooms(context: CommandHandlerContext, levelIds: string[], createMissing = false) {
+  const { updated, now } = context
+  const result = { created: [] as string[], updated: [] as string[], updatedObjects: [] as string[], affected: [] as string[] }
+  for (const levelId of new Set(levelIds)) {
+    if (!updated.levels.some(level => level.id === levelId)) continue
+    const rings = detectClosedWallRooms(updated, levelId)
+    const levelRooms = Object.values(updated.objects).filter(object => object.object_type === 'architecture.room' && (object.module_data as Record<string, unknown>).level_id === levelId)
+    const existing = new Set(levelRooms.map(object => roomRingKey((object.module_data as Record<string, unknown>).boundary_mm as number[][])))
+    const usedRoomMarks = new Set(levelRooms.map(object => String((object.module_data as Record<string, unknown>).mark ?? '')))
+    const usedRoomNumbers = new Set(levelRooms.map(object => String((object.module_data as Record<string, unknown>).number ?? '')))
+    const wallRooms = levelRooms.filter(object => (object.module_data as Record<string, unknown>).boundary_source === 'walls')
+    const matched = new Set<string>()
+    for (const boundary of rings) {
+      const key = roomRingKey(boundary)
+      const nextMetrics = roomRingMetrics(boundary)
+      const match = wallRooms.filter(room => !matched.has(room.id)).map(room => {
+        const oldData = room.module_data as Record<string, unknown>
+        const oldMetrics = roomRingMetrics(oldData.boundary_mm as number[][])
+        const ratio = Math.min(nextMetrics.area, oldMetrics.area) / Math.max(nextMetrics.area, oldMetrics.area)
+        const distance = Math.hypot(nextMetrics.center[0] - oldMetrics.center[0], nextMetrics.center[1] - oldMetrics.center[1]) / Math.max(nextMetrics.span, oldMetrics.span)
+        return { room, score: Math.abs(Math.log(Math.max(ratio, 1e-9))) + distance }
+      }).sort((a, b) => a.score - b.score)[0]
+      if (match && match.score <= 2) {
+        const oldData = match.room.module_data as Record<string, unknown>
+        const internalContext = { ...context, commandName: 'RefreshWallDerivedRooms', input: { ...oldData, id: match.room.id, level_id: levelId, boundary_mm: boundary, area_mm2: nextMetrics.area, boundary_source: 'walls' } }
+        const objectResult = createArchitectureObject(internalContext, 'architecture.room', 'constructflow.architecture', { ...oldData, level_id: levelId, boundary_mm: boundary, area_mm2: nextMetrics.area, boundary_source: 'walls', boundary_status: 'closed' }, true)
+        matched.add(match.room.id)
+        result.updated.push(match.room.id)
+        result.updatedObjects.push(...(objectResult.result.updated_object_ids ?? []))
+        result.affected.push(...objectResult.result.affected_object_ids)
+        existing.add(key)
+        continue
+      }
+      if (!createMissing || existing.has(key)) continue
+      let roomNumber = 1
+      while (usedRoomNumbers.has(String(roomNumber)) || usedRoomMarks.has(`R${roomNumber}`)) roomNumber++
+      const id = crypto.randomUUID(), name = String(context.input.default_name ?? 'Room')
+      const input = { id, level_id: levelId, mark: `R${roomNumber}`, name: `${name} ${roomNumber}`, number: String(roomNumber), boundary_mm: boundary, area_mm2: nextMetrics.area, boundary_source: 'walls', boundary_status: 'closed' }
+      const objectResult = createArchitectureObject({ ...context, commandName: 'RefreshWallDerivedRooms', input }, 'architecture.room', 'constructflow.architecture', input, false)
+      result.created.push(id)
+      result.affected.push(...objectResult.result.affected_object_ids)
+      usedRoomMarks.add(input.mark)
+      usedRoomNumbers.add(input.number)
+      existing.add(key)
+    }
+    for (const room of wallRooms) {
+      if (matched.has(room.id) || (room.module_data as Record<string, unknown>).boundary_status === 'unclosed') continue
+      const data = room.module_data as Record<string, unknown>
+      updated.objects[room.id] = { ...room, module_data: { ...data, boundary_status: 'unclosed' }, updated_at: now }
+      result.updated.push(room.id)
+      result.updatedObjects.push(room.id)
+      result.affected.push(room.id)
+      for (const child of Object.values(updated.objects)) {
+        const childData = child.module_data as Record<string, unknown>
+        if (childData.room_id !== room.id || childData.follows_room_boundary !== true) continue
+        updated.objects[child.id] = { ...child, module_data: { ...childData, room_boundary_status: 'unclosed' }, updated_at: now }
+        result.updatedObjects.push(child.id)
+        result.affected.push(child.id)
+      }
+    }
+  }
+  result.created = [...new Set(result.created)]
+  result.updated = [...new Set(result.updated)]
+  result.updatedObjects = [...new Set(result.updatedObjects)]
+  result.affected = [...new Set(result.affected)]
+  return result
 }
 
 function shiftHostedOpenings(project: ProjectDocument, wallId: string, shiftMm: [number, number], now: string): string[] {
@@ -139,6 +437,22 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         payload.follows_room_boundary=true
         if(payload.elevation_mm===undefined)payload.elevation_mm=project.levels.find(level=>level.id===payload.level_id)?.elevation_mm??0
       }
+      if(family==='architecture.floor'||family==='architecture.ceiling'){
+        const levelId=String(payload.level_id??project.project.active_level_id)
+        const level=project.levels.find(item=>item.id===levelId)
+        if(!level)throw new Error(`${family} references unknown level ${levelId}`)
+        payload.level_id=levelId
+        if(payload.elevation_reference===undefined){
+          // Older callers supply an absolute elevation plus an additive offset.
+          // Convert that world elevation once into the new level-relative form.
+          const absoluteElevation=Number(payload.elevation_mm??level.elevation_mm)+Number(payload.elevation_offset_mm??0)
+          payload.elevation_reference='level'
+          payload.elevation_offset_mm=absoluteElevation-level.elevation_mm
+        }
+        payload.elevation_offset_mm ??=0
+        if(!Number.isFinite(Number(payload.elevation_offset_mm)))throw new Error(`${family} elevation offset must be finite`)
+        if(payload.elevation_mm===undefined)payload.elevation_mm=level.elevation_mm+Number(payload.elevation_offset_mm)
+      }
       if(family==='architecture.room_separator'){
         for(const field of ['start_point_mm','end_point_mm']){const p=payload[field];if(!Array.isArray(p)||p.length!==2||!p.every(Number.isFinite))throw new Error(`Room separator ${field} must be a finite 2D point`)}
       }else{
@@ -149,11 +463,24 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         if(family==='architecture.floor'||family==='architecture.ceiling'){
           if(!Number.isFinite(Number(payload.thickness_mm))||Number(payload.thickness_mm)<=0)throw new Error(`${family} thickness must be positive`)
           if(payload.voids_mm!==undefined&&(!Array.isArray(payload.voids_mm)||payload.voids_mm.some(r=>!Array.isArray(r)||r.length<3)))throw new Error(`${family} voids must be polygon rings`)
+          if(family==='architecture.floor'&&payload.finish_layers!==undefined){
+            if(!Array.isArray(payload.finish_layers))throw new Error('architecture.floor finish layers must be a list')
+            for(const [index,rawLayer] of payload.finish_layers.entries()){
+              if(!rawLayer||typeof rawLayer!=='object'||Array.isArray(rawLayer))throw new Error(`Floor finish layer ${index+1} is invalid`)
+              const layer=rawLayer as Record<string,unknown>
+              if(typeof layer.material!=='string'||!layer.material.trim())throw new Error(`Floor finish layer ${index+1} requires a material`)
+              if(!Number.isFinite(Number(layer.thickness_mm))||Number(layer.thickness_mm)<=0)throw new Error(`Floor finish layer ${index+1} thickness must be positive`)
+              if(layer.quantity_unit!==undefined&&layer.quantity_unit!=='m2'&&layer.quantity_unit!=='m3')throw new Error(`Floor finish layer ${index+1} quantity unit must be m2 or m3`)
+            }
+          }
+          if(family==='architecture.floor'&&payload.finish_pattern_mm!==undefined&&(!Array.isArray(payload.finish_pattern_mm)||payload.finish_pattern_mm.length!==2||!payload.finish_pattern_mm.every(value=>Number.isFinite(Number(value))&&Number(value)>0)))throw new Error('Floor finish pattern spacing must contain two positive values')
+          if(family==='architecture.floor'&&payload.finish_pattern_origin_mm!==undefined&&(!Array.isArray(payload.finish_pattern_origin_mm)||payload.finish_pattern_origin_mm.length!==2||!payload.finish_pattern_origin_mm.every(value=>Number.isFinite(Number(value)))))throw new Error('Floor finish pattern origin must contain two finite values')
+          if(family==='architecture.floor'&&payload.finish_pattern_rotation_deg!==undefined&&!Number.isFinite(Number(payload.finish_pattern_rotation_deg)))throw new Error('Floor finish pattern rotation must be finite')
+          if(family==='architecture.ceiling'&&payload.grid_mm!==undefined&&(!Array.isArray(payload.grid_mm)||payload.grid_mm.length!==2||!payload.grid_mm.every(value=>Number.isFinite(Number(value))&&Number(value)>0)))throw new Error('Ceiling grid spacing must contain two positive values')
         }
       }
       if(family==='architecture.floor'||family==='architecture.ceiling'){
         payload.voids_mm ??=[]
-        payload.elevation_offset_mm ??=0
         payload.follows_room_boundary ??=typeof payload.room_id==='string'
         if(family==='architecture.floor')payload.finish_layers ??=[]
       }
@@ -162,16 +489,8 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
     case 'DetectRooms': {
       const levelId=String(input.level_id??project.project.active_level_id)
       if(!project.levels.some(level=>level.id===levelId))throw new Error(`Unknown room detection level ${levelId}`)
-      const rings=detectClosedWallRooms(updated,levelId)
-      const existing=new Set(Object.values(updated.objects).filter(o=>o.object_type==='architecture.room'&&(o.module_data as Record<string,unknown>).level_id===levelId).map(o=>JSON.stringify((o.module_data as Record<string,unknown>).boundary_mm)))
-      const created:string[]=[]
-      for(const [index,boundary] of rings.entries()){
-        if(existing.has(JSON.stringify(boundary)))continue
-        const id=crypto.randomUUID(),name=String(input.default_name??'Room')
-        createArchitectureObject({...context,input:{id,level_id:levelId,mark:`R${index+1}`,name:`${name} ${index+1}`,number:String(index+1),boundary_mm:boundary,area_mm2:polygonAreaMm2(boundary),boundary_source:'walls'}},'architecture.room','constructflow.architecture',{level_id:levelId,mark:`R${index+1}`,name:`${name} ${index+1}`,number:String(index+1),boundary_mm:boundary,area_mm2:polygonAreaMm2(boundary),boundary_source:'walls'},false)
-        created.push(id)
-      }
-      return {result:{status:'success',command_id,command_name:commandName,affected_object_ids:created,created_object_ids:created},updatedProject:updated,emittedEnvelope:{...envelope,input:{level_id:levelId,room_ids:created}}}
+      const rooms=refreshWallDerivedRooms(context,[levelId],true)
+      return {result:{status:'success',command_id,command_name:commandName,affected_object_ids:rooms.affected,updated_object_ids:rooms.updatedObjects,created_object_ids:rooms.created},updatedProject:updated,emittedEnvelope:{...envelope,input:{level_id:levelId,room_ids:rooms.created,updated_room_ids:rooms.updated}}}
     }
     case 'MoveWall': {
       const move = input as unknown as MoveWallInput
@@ -213,6 +532,29 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         updatedProject: updated,
         emittedEnvelope: { ...envelope, input: { ...move, delta_mm: [dx, dy] } },
       }
+    }
+
+    case 'UpdateWallEndpoints': {
+      const update = input as unknown as UpdateWallEndpointsInput
+      const target = updated.objects[update.object_id]
+      if (!target || !isWallObject(target)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Wall UUID ${update.object_id} not found`] }, updatedProject: project }
+      const [sx, sy] = update.start_point_mm, [ex, ey] = update.end_point_mm
+      if (![sx, sy, ex, ey].every(Number.isFinite) || Math.hypot(ex - sx, ey - sy) < 1) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Wall endpoints must define a finite span of at least 1 mm'] }, updatedProject: project }
+      const old = target.module_data
+      const start: [number, number, number] = [sx, sy, old.start_point_mm[2] ?? 0]
+      const end: [number, number, number] = [ex, ey, old.end_point_mm[2] ?? 0]
+      const length_mm = Math.round(Math.hypot(ex - sx, ey - sy))
+      updated.objects[target.id] = { ...target, module_data: { ...old, start_point_mm: start, end_point_mm: end, length_mm }, updated_at: now }
+      const affected = [target.id]
+      for (const opening of Object.values(updated.objects)) {
+        if ((!isDoorObject(opening) && !isWindowObject(opening)) || opening.module_data.wall_id !== target.id) continue
+        const offset = opening.module_data.offset_along_wall_mm
+        const ratio = offset / length_mm
+        const location: [number, number, number] = [sx + (ex - sx) * ratio, sy + (ey - sy) * ratio, opening.module_data.location_mm[2] ?? 0]
+        updated.objects[opening.id] = { ...opening, module_data: { ...opening.module_data, location_mm: location }, updated_at: now }
+        affected.push(opening.id)
+      }
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: affected, updated_object_ids: affected }, updatedProject: updated, emittedEnvelope: { ...envelope, input: { ...update, start_point_mm: [sx, sy], end_point_mm: [ex, ey] } } }
     }
 
     case 'MoveOpening': {
@@ -278,6 +620,47 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const id = wallInput.id || crypto.randomUUID()
       const mark = wallInput.mark || 'W1'
       const level_id = wallInput.level_id || project.project.active_level_id
+      const legacyInput = wallInput as CreateWallInput & { start_node_mm?: [number, number, number]; end_node_mm?: [number, number, number] }
+      const rawStart = wallInput.start_point_mm || legacyInput.start_node_mm || [0, 0, 0]
+      const rawEnd = wallInput.end_point_mm || legacyInput.end_node_mm || [0, 0, 0]
+      const start_point_mm: [number, number, number] = [rawStart[0], rawStart[1], rawStart[2] ?? 0]
+      const end_point_mm: [number, number, number] = [rawEnd[0], rawEnd[1], rawEnd[2] ?? 0]
+      const inheritedWall = wallInput.inherit_joined_wall_constraint && wallInput.top_level_id === undefined && wallInput.height_mm === undefined
+        ? Object.values(project.objects)
+          .filter(object => object.object_type === 'architecture.wall' && object.status !== 'archived' && !object.removed_phase)
+          .map(object => {
+            const data = object.module_data as Record<string, unknown>
+            if (data.level_id !== level_id) return null
+            const a = data.start_point_mm as number[] | undefined, b = data.end_point_mm as number[] | undefined
+            if (!a || !b || ![a[0], a[1], b[0], b[1]].every(Number.isFinite)) return null
+            const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy)
+            if (length <= 1e-8) return null
+            const tolerance = Math.max(25, Number(data.thickness_mm ?? 100) / 2 + 15)
+            const distanceToSegment = (point: [number, number, number]) => {
+              const t = Math.max(0, Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / (length * length)))
+              return Math.hypot(point[0] - (a[0] + t * dx), point[1] - (a[1] + t * dy))
+            }
+            const connectionDistance = Math.min(distanceToSegment(start_point_mm), distanceToSegment(end_point_mm))
+            if (connectionDistance > tolerance) return null
+            return {
+              id: object.id,
+              distance: connectionDistance,
+              top_level_id: typeof data.top_level_id === 'string' ? data.top_level_id : undefined,
+              base_offset_mm: Number(data.base_offset_mm ?? 0),
+              top_offset_mm: Number(data.top_offset_mm ?? 0),
+              height_mm: Number(data.height_mm),
+            }
+          })
+          .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
+          .sort((a, b) => a.distance - b.distance || a.id.localeCompare(b.id))[0]
+        : undefined
+      const inferredTopLevel = inheritedWall?.top_level_id
+        ? updated.levels.find(level => level.id === inheritedWall.top_level_id && level.elevation_mm > (getLevelElevation(updated, level_id) ?? 0))
+        : undefined
+      const nextStoryLevel = wallInput.inherit_joined_wall_constraint && !inheritedWall
+        ? updated.levels.filter(level => level.elevation_mm > (getLevelElevation(updated, level_id) ?? 0)).sort((a, b) => a.elevation_mm - b.elevation_mm)[0]
+        : undefined
+      const top_level_id = wallInput.top_level_id ?? inferredTopLevel?.id ?? nextStoryLevel?.id
       const typeDef = resolveCatalogType(updated, 'architecture.wall', wallInput.type_id || mark)
       const hasLayerAssembly = typeDef?.parameters.masonry_thickness_mm !== undefined
         || typeDef?.parameters.plaster_inside_thickness_mm !== undefined
@@ -288,28 +671,15 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const thickness_mm = hasLayerAssembly
         ? masonry_thickness_mm + plaster_inside_thickness_mm + plaster_outside_thickness_mm
         : wallInput.thickness_mm || positiveCatalogNumber(typeDef?.parameters.thickness_mm, 100)
-      const base_offset_mm = Number(wallInput.base_offset_mm ?? 0)
-      const top_offset_mm = Number(wallInput.top_offset_mm ?? 0)
-      const topLevelElevation = getLevelElevation(updated, wallInput.top_level_id)
+      const base_offset_mm = Number(wallInput.base_offset_mm ?? inheritedWall?.base_offset_mm ?? 0)
+      const top_offset_mm = Number(wallInput.top_offset_mm ?? inheritedWall?.top_offset_mm ?? 0)
+      const topLevelElevation = getLevelElevation(updated, top_level_id)
       const baseLevelElevation = getLevelElevation(updated, level_id) ?? 0
       const height_mm = topLevelElevation !== undefined
         ? topLevelElevation + top_offset_mm - baseLevelElevation - base_offset_mm
-        : wallInput.height_mm || positiveCatalogNumber(typeDef?.parameters.height_mm, 2800)
+        : wallInput.height_mm ?? inheritedWall?.height_mm ?? positiveCatalogNumber(typeDef?.parameters.height_mm, 2800)
       if (!Number.isFinite(height_mm) || height_mm <= 0) throw new Error('Wall top level must be above its base level')
       const material = wallInput.material || catalogString(typeDef?.parameters.material, 'brick_masonry')
-      const legacyInput = wallInput as CreateWallInput & { start_node_mm?: [number, number, number]; end_node_mm?: [number, number, number] }
-      const rawStart = wallInput.start_point_mm || legacyInput.start_node_mm || [0, 0, 0]
-      const rawEnd = wallInput.end_point_mm || legacyInput.end_node_mm || [0, 0, 0]
-      const start_point_mm: [number, number, number] = [
-        rawStart[0],
-        rawStart[1],
-        rawStart[2] ?? 0,
-      ]
-      const end_point_mm: [number, number, number] = [
-        rawEnd[0],
-        rawEnd[1],
-        rawEnd[2] ?? 0,
-      ]
       const dx = end_point_mm[0] - start_point_mm[0]
       const dy = end_point_mm[1] - start_point_mm[1]
       const length_mm = Math.round(Math.sqrt(dx * dx + dy * dy))
@@ -342,6 +712,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
             role: 'base_level',
             level_id,
           },
+          ...(top_level_id ? [{ role: 'top_level' as const, level_id: top_level_id }] : []),
         ],
         host_refs: [],
         connector_refs: [],
@@ -363,7 +734,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           } : {}),
           interior_side: 'left',
           height_mm,
-          ...(wallInput.top_level_id ? { top_level_id: wallInput.top_level_id, vertical_constraint: 'top_level' as const } : {}),
+          ...(top_level_id ? { top_level_id, vertical_constraint: 'top_level' as const } : {}),
           base_offset_mm,
           top_offset_mm,
           length_mm,

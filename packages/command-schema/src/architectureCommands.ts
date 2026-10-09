@@ -38,6 +38,8 @@ export interface CreateWallInput {
   top_level_id?: string
   base_offset_mm?: number
   top_offset_mm?: number
+  /** Infer the connected wall's vertical constraint, or the next level when unattached. */
+  inherit_joined_wall_constraint?: boolean
 
   /** Associated building level ID */
   level_id: string
@@ -73,6 +75,12 @@ export interface UpdateWallDimensionsInput {
 export interface MoveWallInput {
   object_id: string
   delta_mm: [number, number]
+}
+
+export interface UpdateWallEndpointsInput {
+  object_id: string
+  start_point_mm: [number, number]
+  end_point_mm: [number, number]
 }
 
 /** Move a hosted door/window along its host wall centerline, preserving the relationship. */

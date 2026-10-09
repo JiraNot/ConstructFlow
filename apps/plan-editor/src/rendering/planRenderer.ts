@@ -12,10 +12,12 @@ import {
   DoorModuleData,
   WindowModuleData,
   DoorHanding,
+  isMasonryWallPlanHatch,
 } from '@constructflow/project-model'
 import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
 import { SnapResult } from '@constructflow/snapping-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
+import { clippedGridSegments, polygonInteriorPoint, wallMasonryHatchSegments } from '@constructflow/geometry-kernel'
 import { beginPlanLabels, queuePlanLabel, flushPlanLabels, planLabelScale } from './planLabels.js'
 
 function openingValue(project: ProjectDocument, object: SmartObject, field: string, fallback: unknown) {
@@ -101,13 +103,29 @@ export function renderPlanView(
       ring.forEach((point,index)=>{const [x,y]=worldToScreen(point,viewport);if(index===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)})
       ctx.closePath()
       if(obj.object_type==='architecture.floor'){
-        ctx.fillStyle=isSelected(obj.id)?'rgba(5,150,105,.22)':'rgba(16,185,129,.10)';ctx.strokeStyle=isSelected(obj.id)?'#059669':'rgba(5,150,105,.55)';ctx.lineWidth=1
+        const boundaryOpen=data.room_boundary_status==='unclosed'
+        ctx.fillStyle=boundaryOpen?'rgba(239,68,68,.12)':isSelected(obj.id)?'rgba(5,150,105,.22)':'rgba(16,185,129,.10)';ctx.strokeStyle=boundaryOpen?'#dc2626':isSelected(obj.id)?'#059669':'rgba(5,150,105,.55)';ctx.lineWidth=1
+        if(boundaryOpen)ctx.setLineDash([5,3])
         for(const raw of (Array.isArray(data.voids_mm)?data.voids_mm:[]) as [number,number][][]){ctx.moveTo(...worldToScreen(raw[0],viewport));raw.slice(1).forEach(p=>ctx.lineTo(...worldToScreen(p,viewport)));ctx.closePath()}
-        ctx.fill('evenodd');ctx.stroke()
+        ctx.fill('evenodd');ctx.stroke();ctx.setLineDash([])
+        const layers = Array.isArray(data.finish_layers) ? data.finish_layers as Array<{ material?: string }> : []
+        const tileFinish = layers.some(layer => /tile|porcelain|ceramic|กระเบื้อง/i.test(String(layer.material ?? '')))
+        if (tileFinish) {
+          const spacing: [number, number] = Array.isArray(data.finish_pattern_mm) ? data.finish_pattern_mm as [number, number] : [600, 600]
+          const origin: [number, number] = Array.isArray(data.finish_pattern_origin_mm) ? data.finish_pattern_origin_mm as [number, number] : [0, 0]
+          const rotation = Number(data.finish_pattern_rotation_deg ?? 0)
+          ctx.beginPath(); ctx.strokeStyle = isSelected(obj.id) ? 'rgba(5,150,105,.72)' : 'rgba(71,85,105,.45)'; ctx.lineWidth = .7
+          for (const [a, b] of clippedGridSegments(ring, spacing[0], spacing[1], (Array.isArray(data.voids_mm) ? data.voids_mm : []) as [number,number][][], origin, rotation)) {
+            const [ax, ay] = worldToScreen(a, viewport), [bx, by] = worldToScreen(b, viewport)
+            ctx.moveTo(ax, ay); ctx.lineTo(bx, by)
+          }
+          ctx.stroke()
+        }
       }else{
-        ctx.fillStyle='rgba(148,163,184,.04)';ctx.fill();ctx.strokeStyle='#94a3b8';ctx.lineWidth=.8;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([])
-        const center:[number,number]=[ring.reduce((s,p)=>s+p[0],0)/ring.length,ring.reduce((s,p)=>s+p[1],0)/ring.length]
-        const [x,y]=worldToScreen(center,viewport);ctx.font='11px sans-serif';ctx.textAlign='center';ctx.fillStyle='#334155';ctx.fillText(`${String(data.number??'')} ${String(data.name??'Room')} · ${(Number(data.area_mm2??0)/1e6).toFixed(2)} m²`,x,y)
+        const boundaryOpen=data.boundary_status==='unclosed'
+        ctx.fillStyle=boundaryOpen?'rgba(239,68,68,.08)':'rgba(148,163,184,.04)';ctx.fill();ctx.strokeStyle=boundaryOpen?'#dc2626':'#94a3b8';ctx.lineWidth=.8;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([])
+        const center=polygonInteriorPoint(ring) ?? [ring.reduce((s,p)=>s+p[0],0)/ring.length,ring.reduce((s,p)=>s+p[1],0)/ring.length]
+        const [x,y]=worldToScreen(center,viewport);ctx.font='11px sans-serif';ctx.textAlign='center';ctx.fillStyle=boundaryOpen?'#b91c1c':'#334155';ctx.fillText(`${String(data.number??'')} ${String(data.name??'Room')} · ${(Number(data.area_mm2??0)/1e6).toFixed(2)} m²${boundaryOpen?' · วงผนังเปิด':''}`,x,y)
       }
       ctx.restore()
     }
@@ -686,6 +704,8 @@ function drawWall(
   const plasterInside = wall.module_data.plaster_inside_thickness_mm ?? 0
   const plasterOutside = wall.module_data.plaster_outside_thickness_mm ?? 0
   const hasFinishLayers = plasterInside + plasterOutside > 0
+  const isDemolition = wall.created_phase === 'demolition' || wall.removed_phase === 'demolition'
+  const isExisting = wall.created_phase === 'existing'
 
   // Render solid segments
   for (const seg of subSegments) {
@@ -702,9 +722,6 @@ function drawWall(
     const [sc3x, sc3y] = worldToScreen(c3_mm, viewport)
     const [sc4x, sc4y] = worldToScreen(c4_mm, viewport)
 
-    const isDemolition = wall.created_phase === 'demolition' || wall.removed_phase === 'demolition'
-    const isExisting = wall.created_phase === 'existing'
-
     ctx.save()
     ctx.beginPath()
     ctx.moveTo(sc1x, sc1y)
@@ -720,7 +737,7 @@ function drawWall(
       : isDemolition
       ? 'rgba(239, 68, 68, 0.25)'
       : isExisting
-      ? 'rgba(71, 85, 105, 0.65)'
+      ? '#ffffff'
       : 'rgba(226, 232, 240, 0.92)'
     ctx.fill()
 
@@ -753,6 +770,23 @@ function drawWall(
       ctx.stroke()
     }
     ctx.restore()
+  }
+
+  // Draw hatch over the solid fills so it remains visible. Generate once from
+  // the full host wall to keep its pitch aligned through opening gaps.
+  if (!isDemolition && !isExisting && isMasonryWallPlanHatch(wall, project.types)) {
+    const hatchSegments = wallMasonryHatchSegments(
+      [x1, y1], [x2, y2], thickness_mm,
+      mergedOpenings.map(opening => [opening.start_dist, opening.end_dist]),
+    )
+    ctx.beginPath()
+    for (const [start, end] of hatchSegments) {
+      const [startX, startY] = worldToScreen(start, viewport), [endX, endY] = worldToScreen(end, viewport)
+      ctx.moveTo(startX, startY); ctx.lineTo(endX, endY)
+    }
+    ctx.strokeStyle = isSelected ? 'rgba(3, 105, 161, 0.62)' : '#9aa6b4'
+    ctx.lineWidth = 0.75
+    ctx.stroke()
   }
 
   // Draw centerline dashes along entire wall

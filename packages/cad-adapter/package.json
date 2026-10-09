@@ -14,6 +14,7 @@
     "@constructflow/geometry-kernel": "file:../geometry-kernel",
     "@constructflow/project-model": "file:../project-model",
     "@constructflow/representation-engine": "file:../representation-engine",
+    "@constructflow/sheet-engine": "file:../sheet-engine",
     "@constructflow/structure-engine": "file:../structure-engine",
     "@constructflow/takeoff-engine": "file:../takeoff-engine",
     "constructflow-standalone": "file:../.."

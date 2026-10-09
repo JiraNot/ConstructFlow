@@ -17,6 +17,19 @@ export { doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHan
 
 export type Vec3Mm = [number, number, number]
 
+/** Shared elevation palette for wall faces in Canvas, permit sheets and DXF. */
+export interface ElevationWallPhaseStyle {
+  fill: string
+  stroke: string
+  dash: number[]
+}
+
+export function resolveElevationWallPhaseStyle(phase: Phase): ElevationWallPhaseStyle {
+  if (phase === 'existing') return { fill: '#ffffff', stroke: '#64748b', dash: [] }
+  if (phase === 'demolition') return { fill: '#fee2e2', stroke: '#ef4444', dash: [6, 3] }
+  return { fill: '#e3e8ed', stroke: '#334155', dash: [] }
+}
+
 export interface OpeningCutout {
   object_id: string
   min_x_mm: number
@@ -102,6 +115,66 @@ export interface RepresentationResult {
   warnings: string[]
 }
 
+export interface OpeningElevationPath {
+  points_mm: Array<[number, number]>
+  closed: boolean
+  line_width_mm: number
+  fill?: string
+}
+
+/**
+ * Build front-elevation linework in opening-local coordinates (origin at its
+ * lower-left corner). Canvas, PDF and DXF use this same catalog-resolved shape
+ * so their frame, sash and glazing divisions cannot drift independently.
+ */
+export function getOpeningElevationLinework(shape: Extract<RepresentationShape, { kind: 'opening' }>): OpeningElevationPath[] {
+  const width = shape.width_mm, height = shape.height_mm
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return []
+  const frame = Math.min(width / 5, Math.max(25, shape.frame_face_width_mm || 50))
+  const paths: OpeningElevationPath[] = []
+  const rect = (left: number, bottom: number, right: number, top: number, line_width_mm: number, fill?: string) => {
+    if (right <= left || top <= bottom) return
+    paths.push({ points_mm: [[left, bottom], [right, bottom], [right, top], [left, top]], closed: true, line_width_mm, fill })
+  }
+  const line = (x1: number, z1: number, x2: number, z2: number, line_width_mm: number) => {
+    paths.push({ points_mm: [[x1, z1], [x2, z2]], closed: false, line_width_mm })
+  }
+
+  rect(0, 0, width, height, 0.35, '#ffffff')
+  rect(frame, frame, width - frame, height - frame, 0.25)
+  if (shape.opening_type === 'window') {
+    const panels = Math.max(1, Math.min(8, Math.floor(shape.panel_count || 2)))
+    const ratios = shape.panel_width_ratios.length === panels && shape.panel_width_ratios.every(value => Number.isFinite(value) && value > 0)
+      ? shape.panel_width_ratios
+      : Array.from({ length: panels }, () => 1 / panels)
+    let accumulated = 0
+    for (let index = 0; index < panels - 1; index++) {
+      accumulated += ratios[index]
+      const x = width * accumulated
+      line(x, frame, x, height - frame, 0.3)
+    }
+    const rows = Math.max(1, Math.min(8, Math.floor(shape.muntin_rows || 1)))
+    const columns = Math.max(1, Math.min(8, Math.floor(shape.muntin_columns || 1)))
+    for (let index = 1; index <= rows; index++) {
+      const z = frame + (height - frame * 2) * index / (rows + 1)
+      line(frame, z, width - frame, z, 0.2)
+    }
+    for (let index = 1; index <= columns; index++) {
+      const x = frame + (width - frame * 2) * index / (columns + 1)
+      line(x, frame, x, height - frame, 0.2)
+    }
+  } else {
+    const inset = frame * 1.7
+    rect(inset, inset, width - inset, height - inset, 0.2)
+    const panels = Math.max(1, Math.min(4, Math.floor(shape.panel_count || 1)))
+    for (let index = 1; index <= panels; index++) {
+      const z = inset + (height - inset * 2) * index / (panels + 1)
+      line(inset, z, width - inset, z, 0.2)
+    }
+  }
+  return paths
+}
+
 /**
  * Expand a renderer-neutral representation into world-space triangles.
  * Elevation sheets and interactive elevation canvases use this same geometry
@@ -130,6 +203,66 @@ export function getRepresentationTriangles(representation: ObjectRepresentation3
     .map(triangle => triangle.map(vertex => transformRepresentationPoint(representation, vertex)) as Triangle)
 }
 
+/** Return whether a wall's long axis forms a facade in the requested orthographic elevation. */
+export function isWallFacadeForElevation(
+  wall: SmartObject,
+  direction: 'north' | 'south' | 'east' | 'west',
+): boolean {
+  if (wall.object_type !== 'architecture.wall') return false
+  const data = moduleData(wall)
+  const start = data?.start_point_mm, end = data?.end_point_mm
+  if (!Array.isArray(start) || !Array.isArray(end) || !isFiniteNumber(start[0]) || !isFiniteNumber(start[1]) || !isFiniteNumber(end[0]) || !isFiniteNumber(end[1])) return false
+  const dx = Math.abs(end[0] - start[0]), dy = Math.abs(end[1] - start[1])
+  if (dx + dy <= 1e-8) return false
+  return direction === 'east' || direction === 'west' ? dy > dx : dx >= dy
+}
+
+/**
+ * Return facade walls whose projected face is not completely covered by a
+ * nearer facade wall. Partial visibility is retained so stepped elevations
+ * still show their exposed portions; fully hidden rear walls add no duplicate
+ * elevation face or finish annotation.
+ */
+export function getElevationVisibleWallIds(
+  project: ProjectDocument,
+  direction: 'north' | 'south' | 'east' | 'west',
+): ReadonlySet<string> {
+  const eastWest = direction === 'east' || direction === 'west'
+  const depthAxis = eastWest ? 0 : 1
+  const horizontalAxis = eastWest ? 1 : 0
+  const cameraSign = direction === 'north' || direction === 'east' ? 1 : -1
+  const coordinate = (point: unknown, axis: number): number | undefined =>
+    Array.isArray(point) && isFiniteNumber(point[axis]) ? point[axis] as number : undefined
+  const bounds = new Map<string, { depth: number; minX: number; maxX: number; base: number; top: number }>()
+  for (const wall of Object.values(project.objects)) {
+    if (wall.status === 'archived' || wall.removed_phase != null || !isWallFacadeForElevation(wall, direction)) continue
+    const data = moduleData(wall)
+    const start = data?.start_point_mm, end = data?.end_point_mm
+    const x1 = coordinate(start, horizontalAxis), x2 = coordinate(end, horizontalAxis)
+    const d1 = coordinate(start, depthAxis), d2 = coordinate(end, depthAxis)
+    const extent = resolveWallVerticalExtent(project, wall)
+    if (x1 === undefined || x2 === undefined || d1 === undefined || d2 === undefined || !extent) continue
+    const halfThickness = Math.max(0, Number(data?.thickness_mm ?? 0)) / 2
+    bounds.set(wall.id, {
+      depth: (d1 + d2) / 2 + cameraSign * halfThickness,
+      minX: Math.min(x1, x2) - halfThickness,
+      maxX: Math.max(x1, x2) + halfThickness,
+      base: extent.base_elevation_mm,
+      top: extent.top_elevation_mm,
+    })
+  }
+  const visible = new Set<string>()
+  for (const [id, candidate] of bounds) {
+    const fullyMasked = [...bounds].some(([otherId, other]) => {
+      if (otherId === id || cameraSign * other.depth <= cameraSign * candidate.depth + 1) return false
+      if (other.minX > candidate.minX || other.maxX < candidate.maxX || other.base > candidate.base || other.top < candidate.top) return false
+      return true
+    })
+    if (!fullyMasked) visible.add(id)
+  }
+  return visible
+}
+
 function transformRepresentationPoint(representation: ObjectRepresentation3D, point: Vec3): Vec3 {
   const c = Math.cos(representation.rotation_rad), s = Math.sin(representation.rotation_rad)
   return [
@@ -137,6 +270,73 @@ function transformRepresentationPoint(representation: ObjectRepresentation3D, po
     representation.position_mm[1] + point[0] * s + point[1] * c,
     representation.position_mm[2] + point[2],
   ]
+}
+
+/**
+ * Return the hosted door/window objects visible from one orthographic facade.
+ * Openings on a rear wall are omitted when a nearer finished wall masks them,
+ * unless an opening on that nearer wall fully clears their projected bounds.
+ */
+export function getElevationVisibleOpeningIds(
+  project: ProjectDocument,
+  direction: 'north' | 'south' | 'east' | 'west',
+): ReadonlySet<string> {
+  const eastWest = direction === 'east' || direction === 'west'
+  const depthAxis = eastWest ? 0 : 1
+  const horizontalAxis = eastWest ? 1 : 0
+  const cameraSign = direction === 'north' || direction === 'east' ? 1 : -1
+  const coordinate = (point: unknown, axis: number): number | undefined =>
+    Array.isArray(point) && isFiniteNumber(point[axis]) ? point[axis] : undefined
+  const walls = Object.values(project.objects).filter(object =>
+    object.status !== 'archived' && object.removed_phase == null && isWallFacadeForElevation(object, direction),
+  )
+  const openings = Object.values(project.objects).filter(object =>
+    object.object_type.startsWith('door_window.') &&
+    object.status !== 'archived' && object.removed_phase == null,
+  )
+  const wallBounds = new Map<string, { depth: number; minX: number; maxX: number; base: number; top: number }>()
+  for (const wall of walls) {
+    const data = moduleData(wall)
+    if (!data) continue
+    const start = data.start_point_mm, end = data.end_point_mm
+    const x1 = coordinate(start, horizontalAxis), x2 = coordinate(end, horizontalAxis)
+    const d1 = coordinate(start, depthAxis), d2 = coordinate(end, depthAxis)
+    const extent = resolveWallVerticalExtent(project, wall)
+    if (x1 === undefined || x2 === undefined || d1 === undefined || d2 === undefined || !extent) continue
+    const halfThickness = Math.max(0, Number(data.thickness_mm ?? 0)) / 2
+    wallBounds.set(wall.id, {
+      depth: (d1 + d2) / 2 + cameraSign * halfThickness,
+      minX: Math.min(x1, x2) - halfThickness,
+      maxX: Math.max(x1, x2) + halfThickness,
+      base: extent.base_elevation_mm,
+      top: extent.top_elevation_mm,
+    })
+  }
+  const openingBounds = new Map<string, { hostId: string; minX: number; maxX: number; base: number; top: number; depth: number }>()
+  for (const opening of openings) {
+    const data = moduleData(opening)
+    const hostId = typeof data?.wall_id === 'string' ? data.wall_id : ''
+    const host = wallBounds.get(hostId)
+    const center = coordinate(data?.location_mm, horizontalAxis)
+    const extent = resolveOpeningVerticalExtent(project, opening)
+    if (!host || center === undefined || !extent) continue
+    const halfWidth = Math.max(0, Number(data?.width_mm ?? 0)) / 2
+    openingBounds.set(opening.id, { hostId, minX: center - halfWidth, maxX: center + halfWidth, base: extent.base_elevation_mm, top: extent.top_elevation_mm, depth: host.depth })
+  }
+  const visible = new Set<string>()
+  for (const [id, opening] of openingBounds) {
+    const masked = [...wallBounds].some(([wallId, wall]) => {
+      if (wallId === opening.hostId || cameraSign * wall.depth <= cameraSign * opening.depth + 1) return false
+      if (wall.maxX <= opening.minX || wall.minX >= opening.maxX || wall.top <= opening.base || wall.base >= opening.top) return false
+      const hasClearOpening = openings.some(candidate => {
+        const aperture = openingBounds.get(candidate.id)
+        return aperture?.hostId === wallId && aperture.minX <= opening.minX && aperture.maxX >= opening.maxX && aperture.base <= opening.base && aperture.top >= opening.top
+      })
+      return !hasClearOpening
+    })
+    if (!masked) visible.add(id)
+  }
+  return visible
 }
 
 /** Return the Smart Objects that belong on the project's active plan level. */
@@ -179,6 +379,14 @@ export function getPlanVisibleObjects(project: ProjectDocument): SmartObject[] {
       : levelRef(object, 'base_level') ?? levelRef(object, 'host_level')
     return directLevelId ? directLevelId === activeLevel.id : true
   })
+}
+
+/** Return a project snapshot containing only objects that belong in the active 2D plan. */
+export function getPlanViewProject(project: ProjectDocument, visibleObjects = getPlanVisibleObjects(project)): ProjectDocument {
+  return {
+    ...project,
+    objects: Object.fromEntries(visibleObjects.map(object => [object.id, object])) as ProjectDocument['objects'],
+  }
 }
 
 type Data = Record<string, unknown>

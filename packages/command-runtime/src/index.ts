@@ -4,7 +4,7 @@ import type {
   CommandBatchResult, CommandHandlerContext,
 } from '@constructflow/command-schema'
 import { executeStructureCommand, reconcileStructuralLevelElevation } from '@constructflow/structure-engine'
-import { executeArchitectureCommand } from '@constructflow/architecture-engine'
+import { executeArchitectureCommand, refreshWallDerivedRooms } from '@constructflow/architecture-engine'
 import { executeCatalogCommand } from '@constructflow/catalog-engine'
 import { executeProjectCommand } from './projectCommands.js'
 import { executeStructureConstructionCommand, reconcileTypeReinforcement } from '@constructflow/structure-engine'
@@ -16,8 +16,10 @@ import { executePlumbingCommand } from '@constructflow/plumbing-engine'
 import { executeElectricalCommand } from '@constructflow/electrical-engine'
 import { executeInteriorCommand } from '@constructflow/interior-engine'
 import { validateConstructionProject } from '@constructflow/domain-providers'
+import { executeDuplicateObjects } from './clipboardCommands.js'
 
-const handlers = [executeProjectCommand, executeStructureCommand, executeArchitectureCommand, executeCatalogCommand,
+const handlers = [(context: CommandHandlerContext) => context.commandName === 'DuplicateObjects' ? executeDuplicateObjects(context) : null,
+  executeProjectCommand, executeStructureCommand, executeArchitectureCommand, executeCatalogCommand,
   executeStructureConstructionCommand, executeBathroomCommand, executeRoofCommand, executeDecorativeCommand,
   executePlumbingCommand, executeDrainageCommand, executeElectricalCommand, executeInteriorCommand]
 const phases = new Set(['existing', 'demolition', 'new_construction'])
@@ -73,6 +75,33 @@ export class CommandBus {
         const response = handle(context)
         if (!response) continue
         if (response.result.status !== 'success') return { ...response, updatedProject: project }
+        const wallGeometryCommands = new Set(['CreateWall', 'MoveWall', 'UpdateWallEndpoints', 'UpdateWallDimensions', 'DeleteObject'])
+        if (wallGeometryCommands.has(commandName)) {
+          const candidateIds: string[] = commandName === 'CreateWall'
+            ? response.result.affected_object_ids
+            : typeof input.object_id === 'string' ? [input.object_id] : []
+          const changedWalls = candidateIds.map(id => ({ before: project.objects[id], after: response.updatedProject.objects[id] }))
+            .filter(pair => pair.before?.object_type === 'architecture.wall' || pair.after?.object_type === 'architecture.wall')
+          const levels = new Set<string>()
+          for (const { before, after } of changedWalls) for (const object of [before, after]) {
+            const data = object?.module_data as Record<string, unknown> | undefined
+            const levelId = typeof data?.level_id === 'string' ? data.level_id : object?.level_refs.find(reference => reference.role === 'base_level')?.level_id
+            if (levelId) levels.add(levelId)
+          }
+          if (levels.size) {
+            const roomRefresh = refreshWallDerivedRooms({ ...context, updated: response.updatedProject }, [...levels], true)
+            response.result.affected_object_ids = [...new Set([...response.result.affected_object_ids, ...roomRefresh.affected])]
+            response.result.updated_object_ids = [...new Set([...(response.result.updated_object_ids ?? []), ...roomRefresh.updatedObjects])]
+            const resultWithCreated = response.result as typeof response.result & { created_object_ids?: string[] }
+            resultWithCreated.created_object_ids = [...new Set([...(resultWithCreated.created_object_ids ?? []), ...roomRefresh.created])]
+            if (response.emittedEnvelope) response.emittedEnvelope.input = {
+              ...response.emittedEnvelope.input,
+              created_room_ids: roomRefresh.created,
+              refreshed_room_ids: roomRefresh.updated,
+              rooms_requiring_review: roomRefresh.updated.filter(id => (response.updatedProject.objects[id].module_data as Record<string, unknown>).boundary_status === 'unclosed'),
+            }
+          }
+        }
         if (commandName === 'UpdateLevel' && typeof input.id === 'string') {
           const reconciledIds = reconcileStructuralLevelElevation(project, response.updatedProject, input.id, now)
           response.result.affected_object_ids = [...new Set([...response.result.affected_object_ids, ...reconciledIds])]

@@ -219,6 +219,14 @@ export interface UpdateBeamDimensionsInput {
   section_mm: [number, number]
 }
 
+export interface UpdateBeamEndpointsInput {
+  object_id: string
+  start_point_mm: [number, number]
+  end_point_mm: [number, number]
+  start_column_id?: string | null
+  end_column_id?: string | null
+}
+
 export interface UpdateBeamVerticalReferenceInput {
   object_id: string
   level_id?: string

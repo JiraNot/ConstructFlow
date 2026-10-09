@@ -86,3 +86,39 @@ test('direct wall dimension edits keep the selected placement face fixed', () =>
   assert.equal(adjustedWall.module_data.start_point_mm[1] - adjustedWall.module_data.thickness_mm / 2, 0)
   assert.equal(updated.objects[door.id].module_data.location_mm[1], 50)
 })
+
+test('a wall joined to an existing wall can inherit its complete storey constraint', () => {
+  const project = createEmptyProjectDocument(crypto.randomUUID())
+  project.levels = [
+    { id: 'GF', name: 'Ground Floor', elevation_mm: 0, storey_index: 0, height_mm: 400 },
+    { id: 'FF', name: 'First Floor', elevation_mm: 400, storey_index: 1, height_mm: 3000 },
+    { id: 'EAVE', name: 'Eave', elevation_mm: 3400, storey_index: 2, height_mm: 2000 },
+  ]
+  project.project.active_level_id = 'GF'
+  const hostId = crypto.randomUUID()
+  const hostProject = execute(project, 'CreateWall', {
+    id: hostId, mark: 'W1', level_id: 'GF', top_level_id: 'EAVE',
+    base_offset_mm: -150, top_offset_mm: -100,
+    start_point_mm: [0, 0, 0], end_point_mm: [4000, 0, 0], thickness_mm: 100,
+  })
+  const joinedId = crypto.randomUUID()
+  const joinedProject = execute(hostProject, 'CreateWall', {
+    id: joinedId, mark: 'W1', level_id: 'GF', inherit_joined_wall_constraint: true,
+    start_point_mm: [2000, 0, 0], end_point_mm: [2000, 3000, 0], thickness_mm: 100,
+  })
+  const host = joinedProject.objects[hostId].module_data
+  const joined = joinedProject.objects[joinedId].module_data
+  assert.deepEqual(
+    { level_id: joined.level_id, top_level_id: joined.top_level_id, base_offset_mm: joined.base_offset_mm, top_offset_mm: joined.top_offset_mm, height_mm: joined.height_mm },
+    { level_id: host.level_id, top_level_id: host.top_level_id, base_offset_mm: host.base_offset_mm, top_offset_mm: host.top_offset_mm, height_mm: host.height_mm },
+  )
+  assert.ok(joinedProject.objects[joinedId].level_refs.some(reference => reference.role === 'top_level' && reference.level_id === 'EAVE'))
+
+  const unattachedId = crypto.randomUUID()
+  const unattachedProject = execute(joinedProject, 'CreateWall', {
+    id: unattachedId, mark: 'W1', level_id: 'GF', inherit_joined_wall_constraint: true,
+    start_point_mm: [10000, 0, 0], end_point_mm: [12000, 0, 0], thickness_mm: 100,
+  })
+  assert.equal(unattachedProject.objects[unattachedId].module_data.top_level_id, 'FF', 'unattached walls default to the next storey datum')
+  assert.equal(unattachedProject.objects[unattachedId].module_data.height_mm, 400)
+})

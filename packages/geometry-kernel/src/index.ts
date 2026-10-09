@@ -4,6 +4,185 @@ export type Triangle = [Vec3, Vec3, Vec3];
 export type SegmentPlacementReference = 'centerline' | 'left_face' | 'right_face';
 const EPS = 1e-8;
 
+/**
+ * Build 45-degree masonry hatch in wall-local model coordinates, clipped to
+ * solid wall runs around hosted openings. The pattern is anchored at the wall
+ * start and expressed in millimetres so Canvas, sheets and CAD share the same
+ * linework regardless of viewport scale.
+ */
+export function wallMasonryHatchSegments(
+  start: Vec2,
+  end: Vec2,
+  thicknessMm: number,
+  openingSpans: readonly (readonly [number, number])[] = [],
+  pitchMm = 140,
+): Array<[Vec2, Vec2]> {
+  if (![...start, ...end, thicknessMm, pitchMm].every(Number.isFinite) || !(thicknessMm > 0) || !(pitchMm > 0)) return []
+  const dx = end[0] - start[0], dy = end[1] - start[1], length = Math.hypot(dx, dy)
+  if (!(length > EPS)) return []
+  const tangent: Vec2 = [dx / length, dy / length], normal: Vec2 = [-tangent[1], tangent[0]]
+  const half = thicknessMm / 2
+  const openings = openingSpans
+    .filter(([from, to]) => Number.isFinite(from) && Number.isFinite(to))
+    .map(([from, to]) => [Math.max(0, Math.min(length, Math.min(from, to))), Math.max(0, Math.min(length, Math.max(from, to)))] as [number, number])
+    .filter(([from, to]) => to - from > EPS)
+    .sort((a, b) => a[0] - b[0])
+  const merged: Array<[number, number]> = []
+  for (const span of openings) {
+    const previous = merged.at(-1)
+    if (previous && span[0] <= previous[1] + EPS) previous[1] = Math.max(previous[1], span[1])
+    else merged.push([...span])
+  }
+  const solidRuns: Array<[number, number]> = []
+  let cursor = 0
+  for (const [from, to] of merged) {
+    if (from > cursor + EPS) solidRuns.push([cursor, from])
+    cursor = Math.max(cursor, to)
+  }
+  if (cursor < length - EPS) solidRuns.push([cursor, length])
+
+  const toWorld = (along: number, across: number): Vec2 => [
+    start[0] + tangent[0] * along + normal[0] * across,
+    start[1] + tangent[1] * along + normal[1] * across,
+  ]
+  const firstIndex = Math.ceil((-half - EPS) / pitchMm)
+  const lastIndex = Math.floor((length + half + EPS) / pitchMm)
+  if (lastIndex - firstIndex > 10000) return []
+  const segments: Array<[Vec2, Vec2]> = []
+  for (const [from, to] of solidRuns) {
+    for (let index = firstIndex; index <= lastIndex; index++) {
+      // Local equation along - across = index * pitch. For an east-going wall
+      // this slopes up to the right on plan, matching the Canvas convention.
+      const c = index * pitchMm
+      const hits: Vec2[] = []
+      const offer = (along: number, across: number) => {
+        if (along < from - EPS || along > to + EPS || across < -half - EPS || across > half + EPS) return
+        if (!hits.some(([a, b]) => Math.hypot(a - along, b - across) <= 1e-6)) hits.push([along, across])
+      }
+      offer(from, from - c)
+      offer(to, to - c)
+      offer(c - half, -half)
+      offer(c + half, half)
+      if (hits.length >= 2) segments.push([toWorld(hits[0][0], hits[0][1]), toWorld(hits[1][0], hits[1][1])])
+    }
+  }
+  return segments
+}
+
+/**
+ * Create a rotated orthogonal grid clipped to a polygon and its void rings.
+ * The origin and spacing are in model millimetres, so the result is stable
+ * across Canvas zoom levels and sheet scales.
+ */
+export function clippedGridSegments(
+  boundary: readonly Vec2[],
+  stepX: number,
+  stepY: number,
+  voids: readonly (readonly Vec2[])[] = [],
+  origin: Vec2 = [0, 0],
+  rotationDeg = 0,
+): Array<[Vec2, Vec2]> {
+  if (boundary.length < 3 || !(stepX > 0) || !(stepY > 0) || !Number.isFinite(rotationDeg)) return []
+  const radians = rotationDeg * Math.PI / 180, cos = Math.cos(radians), sin = Math.sin(radians)
+  const toLocal = ([x, y]: Vec2): Vec2 => {
+    const dx = x - origin[0], dy = y - origin[1]
+    return [dx * cos + dy * sin, -dx * sin + dy * cos]
+  }
+  const toWorld = ([x, y]: Vec2): Vec2 => [origin[0] + x * cos - y * sin, origin[1] + x * sin + y * cos]
+  const outer = boundary.map(toLocal), holes = voids.filter(ring => ring.length >= 3).map(ring => ring.map(toLocal))
+  if ([...outer, ...holes.flat()].some(point => !Number.isFinite(point[0]) || !Number.isFinite(point[1]))) return []
+  const inside = (point: Vec2, ring: readonly Vec2[]) => {
+    let result = false
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i], b = ring[j]
+      if ((a[1] > point[1]) !== (b[1] > point[1]) && point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]) result = !result
+    }
+    return result
+  }
+  const minX = Math.min(...outer.map(point => point[0])), maxX = Math.max(...outer.map(point => point[0]))
+  const minY = Math.min(...outer.map(point => point[1])), maxY = Math.max(...outer.map(point => point[1]))
+  const segments: Array<[Vec2, Vec2]> = []
+  const drawAxis = (vertical: boolean, fixed: number, lo: number, hi: number) => {
+    const intersections = (ring: readonly Vec2[]) => {
+      const values: number[] = []
+      for (let i = 0; i < ring.length; i++) {
+        const a = ring[i], b = ring[(i + 1) % ring.length]
+        const av = vertical ? a[0] : a[1], bv = vertical ? b[0] : b[1]
+        if ((av <= fixed && bv > fixed) || (bv <= fixed && av > fixed)) {
+          const t = (fixed - av) / (bv - av)
+          values.push((vertical ? a[1] : a[0]) + t * ((vertical ? b[1] : b[0]) - (vertical ? a[1] : a[0])))
+        }
+      }
+      return values.sort((a, b) => a - b)
+    }
+    const spans = intersections(outer)
+    for (let i = 1; i < spans.length; i++) {
+      const start = spans[i - 1], end = spans[i]
+      if (end <= start) continue
+      const cuts = [start, ...holes.flatMap(intersections).filter(value => value > start + EPS && value < end - EPS), end].sort((a, b) => a - b)
+      for (let j = 1; j < cuts.length; j++) {
+        const aCoord = Math.max(cuts[j - 1], lo), bCoord = Math.min(cuts[j], hi), mid = (aCoord + bCoord) / 2
+        const sample: Vec2 = vertical ? [fixed, mid] : [mid, fixed]
+        if (bCoord - aCoord <= EPS || !inside(sample, outer) || holes.some(hole => inside(sample, hole))) continue
+        const a: Vec2 = vertical ? [fixed, aCoord] : [aCoord, fixed]
+        const b: Vec2 = vertical ? [fixed, bCoord] : [bCoord, fixed]
+        segments.push([toWorld(a), toWorld(b)])
+      }
+    }
+  }
+  const firstX = Math.ceil((minX - EPS) / stepX), lastX = Math.floor((maxX + EPS) / stepX)
+  const firstY = Math.ceil((minY - EPS) / stepY), lastY = Math.floor((maxY + EPS) / stepY)
+  if (lastX - firstX > 10000 || lastY - firstY > 10000) return []
+  for (let ix = firstX; ix <= lastX; ix++) drawAxis(true, ix * stepX, minY, maxY)
+  for (let iy = firstY; iy <= lastY; iy++) drawAxis(false, iy * stepY, minX, maxX)
+  return segments
+}
+
+/** Return a stable point strictly inside a simple polygon, including concave rings. */
+export function polygonInteriorPoint(ring: readonly Vec2[]): Vec2 | undefined {
+  if (ring.length < 3 || ring.some(point => !Number.isFinite(point[0]) || !Number.isFinite(point[1]))) return undefined
+  const onSegment = (point: Vec2, a: Vec2, b: Vec2) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1]
+    const cross = (point[0] - a[0]) * dy - (point[1] - a[1]) * dx
+    return Math.abs(cross) <= 1e-7 && (point[0] - a[0]) * (point[0] - b[0]) + (point[1] - a[1]) * (point[1] - b[1]) <= 1e-7
+  }
+  const isInside = (point: Vec2) => {
+    let inside = false
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i], b = ring[j]
+      if (onSegment(point, a, b)) return false
+      if ((a[1] > point[1]) !== (b[1] > point[1]) && point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside
+    }
+    return inside
+  }
+  const clearance = (point: Vec2) => Math.min(...ring.map((a, index) => {
+    const b = ring[(index + 1) % ring.length], dx = b[0] - a[0], dy = b[1] - a[1]
+    const lengthSquared = dx * dx + dy * dy
+    const t = lengthSquared > EPS ? Math.max(0, Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / lengthSquared)) : 0
+    return Math.hypot(point[0] - (a[0] + dx * t), point[1] - (a[1] + dy * t))
+  }))
+  const candidates: Vec2[] = []
+  let area2 = 0, centerX = 0, centerY = 0
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length], cross = a[0] * b[1] - b[0] * a[1]
+    area2 += cross; centerX += (a[0] + b[0]) * cross; centerY += (a[1] + b[1]) * cross
+  }
+  if (Math.abs(area2) > EPS) candidates.push([centerX / (3 * area2), centerY / (3 * area2)])
+  const levels = [...new Set(ring.map(point => point[1]))].sort((a, b) => a - b)
+  for (let i = 1; i < levels.length; i++) {
+    if (levels[i] - levels[i - 1] <= EPS) continue
+    const y = (levels[i] + levels[i - 1]) / 2
+    const intersections: number[] = []
+    for (let edge = 0; edge < ring.length; edge++) {
+      const a = ring[edge], b = ring[(edge + 1) % ring.length]
+      if ((a[1] <= y && b[1] > y) || (b[1] <= y && a[1] > y)) intersections.push(a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1]))
+    }
+    intersections.sort((a, b) => a - b)
+    for (let j = 1; j < intersections.length; j += 2) candidates.push([(intersections[j - 1] + intersections[j]) / 2, y])
+  }
+  return candidates.filter(isInside).sort((a, b) => clearance(b) - clearance(a))[0]
+}
+
 /** Adjust a segment centerline after a thickness change while keeping its referenced face fixed. */
 export function preserveSegmentPlacementReference(
   start: Vec3,

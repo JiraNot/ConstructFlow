@@ -4,10 +4,11 @@
     "id": "CF-HOUSE-DEMO",
     "name": "บ้านเดโมสองชั้น · ConstructFlow",
     "units": "mm",
+    "display_unit": "m",
     "active_level_id": "GF",
     "active_phase": "new_construction",
-    "created_at": "2026-10-08T18:37:35.145Z",
-    "updated_at": "2026-10-08T18:37:35.489Z"
+    "created_at": "2026-10-08T22:00:03.798Z",
+    "updated_at": "2026-10-08T22:00:04.047Z"
   },
   "levels": [
     {
@@ -605,8 +606,8 @@
     }
   ],
   "objects": {
-    "26efc518-18cb-4805-84f9-14acc5e5038a": {
-      "id": "26efc518-18cb-4805-84f9-14acc5e5038a",
+    "acd0b330-d8bd-417e-8efe-7209956df2f4": {
+      "id": "acd0b330-d8bd-417e-8efe-7209956df2f4",
       "object_type": "structure.grid",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -629,18 +630,23 @@
           -1000,
           11000
         ],
-        "system_id": "f9f1f2c8-1dbd-4df2-936e-d34ec364951d",
+        "system_id": "10c4ac5a-e99a-4d3c-a83e-e78ab1df7a3d",
         "system_index": 0,
         "system_origin_mm": 0,
         "system_spacing_mm": 4000,
         "system_count": 3,
-        "system_first_tag": "A"
+        "system_first_tag": "A",
+        "system_positions_mm": [
+          0,
+          4000,
+          8000
+        ]
       },
-      "created_at": "2026-10-08T18:37:35.150Z",
-      "updated_at": "2026-10-08T18:37:35.150Z"
+      "created_at": "2026-10-08T22:00:03.802Z",
+      "updated_at": "2026-10-08T22:00:03.802Z"
     },
-    "89c0ab0e-768d-4988-97fc-db4260d03f3f": {
-      "id": "89c0ab0e-768d-4988-97fc-db4260d03f3f",
+    "a8f3b1d1-049b-4951-b016-5170134060dd": {
+      "id": "a8f3b1d1-049b-4951-b016-5170134060dd",
       "object_type": "structure.grid",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -663,18 +669,23 @@
           -1000,
           11000
         ],
-        "system_id": "f9f1f2c8-1dbd-4df2-936e-d34ec364951d",
+        "system_id": "10c4ac5a-e99a-4d3c-a83e-e78ab1df7a3d",
         "system_index": 1,
         "system_origin_mm": 0,
         "system_spacing_mm": 4000,
         "system_count": 3,
-        "system_first_tag": "A"
+        "system_first_tag": "A",
+        "system_positions_mm": [
+          0,
+          4000,
+          8000
+        ]
       },
-      "created_at": "2026-10-08T18:37:35.150Z",
-      "updated_at": "2026-10-08T18:37:35.150Z"
+      "created_at": "2026-10-08T22:00:03.802Z",
+      "updated_at": "2026-10-08T22:00:03.802Z"
     },
-    "17804ab1-04d9-489b-87c2-703942726a22": {
-      "id": "17804ab1-04d9-489b-87c2-703942726a22",
+    "1d6d0952-426d-4bab-889d-3eadbfda3082": {
+      "id": "1d6d0952-426d-4bab-889d-3eadbfda3082",
       "object_type": "structure.grid",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -697,18 +708,23 @@
           -1000,
           11000
         ],
-        "system_id": "f9f1f2c8-1dbd-4df2-936e-d34ec364951d",
+        "system_id": "10c4ac5a-e99a-4d3c-a83e-e78ab1df7a3d",
         "system_index": 2,
         "system_origin_mm": 0,
         "system_spacing_mm": 4000,
         "system_count": 3,
-        "system_first_tag": "A"
+        "system_first_tag": "A",
+        "system_positions_mm": [
+          0,
+          4000,
+          8000
+        ]
       },
-      "created_at": "2026-10-08T18:37:35.150Z",
-      "updated_at": "2026-10-08T18:37:35.150Z"
+      "created_at": "2026-10-08T22:00:03.802Z",
+      "updated_at": "2026-10-08T22:00:03.802Z"
     },
-    "1bef91f0-5456-42ad-9d6f-ffc6073637f2": {
-      "id": "1bef91f0-5456-42ad-9d6f-ffc6073637f2",
+    "343fffdb-ec41-4b68-8f0e-629a04876de8": {
+      "id": "343fffdb-ec41-4b68-8f0e-629a04876de8",
       "object_type": "structure.grid",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -731,18 +747,23 @@
           -1000,
           9000
         ],
-        "system_id": "b7360a99-1330-47fe-9b75-ed90d57c8725",
+        "system_id": "6acb540d-dd04-423b-b9f1-7214b39f37a7",
         "system_index": 0,
         "system_origin_mm": 0,
         "system_spacing_mm": 5000,
         "system_count": 3,
-        "system_first_tag": "1"
+        "system_first_tag": "1",
+        "system_positions_mm": [
+          0,
+          5000,
+          10000
+        ]
       },
-      "created_at": "2026-10-08T18:37:35.156Z",
-      "updated_at": "2026-10-08T18:37:35.156Z"
+      "created_at": "2026-10-08T22:00:03.807Z",
+      "updated_at": "2026-10-08T22:00:03.807Z"
     },
-    "88147a94-66c0-47d1-9b09-f32bc42fdc72": {
-      "id": "88147a94-66c0-47d1-9b09-f32bc42fdc72",
+    "638dfaf3-67c2-47f3-b987-2ebc0401ba4f": {
+      "id": "638dfaf3-67c2-47f3-b987-2ebc0401ba4f",
       "object_type": "structure.grid",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -765,18 +786,23 @@
           -1000,
           9000
         ],
-        "system_id": "b7360a99-1330-47fe-9b75-ed90d57c8725",
+        "system_id": "6acb540d-dd04-423b-b9f1-7214b39f37a7",
         "system_index": 1,
         "system_origin_mm": 0,
         "system_spacing_mm": 5000,
         "system_count": 3,
-        "system_first_tag": "1"
+        "system_first_tag": "1",
+        "system_positions_mm": [
+          0,
+          5000,
+          10000
+        ]
       },
-      "created_at": "2026-10-08T18:37:35.156Z",
-      "updated_at": "2026-10-08T18:37:35.156Z"
+      "created_at": "2026-10-08T22:00:03.807Z",
+      "updated_at": "2026-10-08T22:00:03.807Z"
     },
-    "dc297c7d-8cc3-43e5-bee4-090cfac8db09": {
-      "id": "dc297c7d-8cc3-43e5-bee4-090cfac8db09",
+    "91b07b96-0103-4ea4-9aa5-1d71eda6173e": {
+      "id": "91b07b96-0103-4ea4-9aa5-1d71eda6173e",
       "object_type": "structure.grid",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -799,18 +825,23 @@
           -1000,
           9000
         ],
-        "system_id": "b7360a99-1330-47fe-9b75-ed90d57c8725",
+        "system_id": "6acb540d-dd04-423b-b9f1-7214b39f37a7",
         "system_index": 2,
         "system_origin_mm": 0,
         "system_spacing_mm": 5000,
         "system_count": 3,
-        "system_first_tag": "1"
+        "system_first_tag": "1",
+        "system_positions_mm": [
+          0,
+          5000,
+          10000
+        ]
       },
-      "created_at": "2026-10-08T18:37:35.156Z",
-      "updated_at": "2026-10-08T18:37:35.156Z"
+      "created_at": "2026-10-08T22:00:03.807Z",
+      "updated_at": "2026-10-08T22:00:03.807Z"
     },
-    "11fe2aae-bc67-4ddb-870a-5cd463af1408": {
-      "id": "11fe2aae-bc67-4ddb-870a-5cd463af1408",
+    "b2865b0d-163b-4f68-9a00-e4b5e8feec02": {
+      "id": "b2865b0d-163b-4f68-9a00-e4b5e8feec02",
       "object_type": "structure.column",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -851,11 +882,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.158Z",
-      "updated_at": "2026-10-08T18:37:35.158Z"
+      "created_at": "2026-10-08T22:00:03.808Z",
+      "updated_at": "2026-10-08T22:00:03.808Z"
     },
-    "51fa0c9b-20d6-48bb-8a72-a9e7018d806d": {
-      "id": "51fa0c9b-20d6-48bb-8a72-a9e7018d806d",
+    "53443e19-0385-4a01-92c5-7b1a8f4f9de1": {
+      "id": "53443e19-0385-4a01-92c5-7b1a8f4f9de1",
       "object_type": "structure.foundation",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -872,7 +903,7 @@
         }
       ],
       "host_refs": [
-        "11fe2aae-bc67-4ddb-870a-5cd463af1408"
+        "b2865b0d-163b-4f68-9a00-e4b5e8feec02"
       ],
       "connector_refs": [],
       "status": "active",
@@ -898,15 +929,15 @@
           350
         ],
         "top_elevation_mm": -350,
-        "supported_column_id": "11fe2aae-bc67-4ddb-870a-5cd463af1408",
+        "supported_column_id": "b2865b0d-163b-4f68-9a00-e4b5e8feec02",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.160Z",
-      "updated_at": "2026-10-08T18:37:35.160Z"
+      "created_at": "2026-10-08T22:00:03.810Z",
+      "updated_at": "2026-10-08T22:00:03.810Z"
     },
-    "5541a957-e402-443d-a8f3-6f79ff656832": {
-      "id": "5541a957-e402-443d-a8f3-6f79ff656832",
+    "7a3cdc2f-0c14-412f-a90d-129b8a5752b7": {
+      "id": "7a3cdc2f-0c14-412f-a90d-129b8a5752b7",
       "object_type": "structure.column",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -947,11 +978,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.161Z",
-      "updated_at": "2026-10-08T18:37:35.161Z"
+      "created_at": "2026-10-08T22:00:03.811Z",
+      "updated_at": "2026-10-08T22:00:03.811Z"
     },
-    "5ac991a6-c802-4614-a1b2-f72f00817da3": {
-      "id": "5ac991a6-c802-4614-a1b2-f72f00817da3",
+    "9bb0a5e5-6635-47b1-86e2-196ad80e6359": {
+      "id": "9bb0a5e5-6635-47b1-86e2-196ad80e6359",
       "object_type": "structure.foundation",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -968,7 +999,7 @@
         }
       ],
       "host_refs": [
-        "5541a957-e402-443d-a8f3-6f79ff656832"
+        "7a3cdc2f-0c14-412f-a90d-129b8a5752b7"
       ],
       "connector_refs": [],
       "status": "active",
@@ -994,15 +1025,15 @@
           350
         ],
         "top_elevation_mm": -350,
-        "supported_column_id": "5541a957-e402-443d-a8f3-6f79ff656832",
+        "supported_column_id": "7a3cdc2f-0c14-412f-a90d-129b8a5752b7",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.162Z",
-      "updated_at": "2026-10-08T18:37:35.162Z"
+      "created_at": "2026-10-08T22:00:03.812Z",
+      "updated_at": "2026-10-08T22:00:03.812Z"
     },
-    "927dccc1-a68d-4388-b006-49f5e827a0cf": {
-      "id": "927dccc1-a68d-4388-b006-49f5e827a0cf",
+    "ea5296c3-9906-4588-890c-780e2c6183f0": {
+      "id": "ea5296c3-9906-4588-890c-780e2c6183f0",
       "object_type": "structure.column",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1043,11 +1074,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.163Z",
-      "updated_at": "2026-10-08T18:37:35.163Z"
+      "created_at": "2026-10-08T22:00:03.813Z",
+      "updated_at": "2026-10-08T22:00:03.813Z"
     },
-    "8d88057f-a1fb-47b1-97e1-4a3c9cfe6c53": {
-      "id": "8d88057f-a1fb-47b1-97e1-4a3c9cfe6c53",
+    "aa982a05-c2fc-44fe-aef9-faf193fbc3a9": {
+      "id": "aa982a05-c2fc-44fe-aef9-faf193fbc3a9",
       "object_type": "structure.foundation",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1064,7 +1095,7 @@
         }
       ],
       "host_refs": [
-        "927dccc1-a68d-4388-b006-49f5e827a0cf"
+        "ea5296c3-9906-4588-890c-780e2c6183f0"
       ],
       "connector_refs": [],
       "status": "active",
@@ -1090,15 +1121,15 @@
           350
         ],
         "top_elevation_mm": -350,
-        "supported_column_id": "927dccc1-a68d-4388-b006-49f5e827a0cf",
+        "supported_column_id": "ea5296c3-9906-4588-890c-780e2c6183f0",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.164Z",
-      "updated_at": "2026-10-08T18:37:35.164Z"
+      "created_at": "2026-10-08T22:00:03.814Z",
+      "updated_at": "2026-10-08T22:00:03.814Z"
     },
-    "4b39c03f-96cc-4a7e-87ef-530c3b9b6afc": {
-      "id": "4b39c03f-96cc-4a7e-87ef-530c3b9b6afc",
+    "c2364422-f0dd-489c-863f-483b525e8db7": {
+      "id": "c2364422-f0dd-489c-863f-483b525e8db7",
       "object_type": "structure.column",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1139,11 +1170,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.166Z",
-      "updated_at": "2026-10-08T18:37:35.166Z"
+      "created_at": "2026-10-08T22:00:03.815Z",
+      "updated_at": "2026-10-08T22:00:03.815Z"
     },
-    "b07ec8b3-98c2-4781-91ec-467930211fbf": {
-      "id": "b07ec8b3-98c2-4781-91ec-467930211fbf",
+    "03f64007-30df-46a1-b89e-6a33eeb344fc": {
+      "id": "03f64007-30df-46a1-b89e-6a33eeb344fc",
       "object_type": "structure.foundation",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1160,7 +1191,7 @@
         }
       ],
       "host_refs": [
-        "4b39c03f-96cc-4a7e-87ef-530c3b9b6afc"
+        "c2364422-f0dd-489c-863f-483b525e8db7"
       ],
       "connector_refs": [],
       "status": "active",
@@ -1186,15 +1217,15 @@
           350
         ],
         "top_elevation_mm": -350,
-        "supported_column_id": "4b39c03f-96cc-4a7e-87ef-530c3b9b6afc",
+        "supported_column_id": "c2364422-f0dd-489c-863f-483b525e8db7",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.167Z",
-      "updated_at": "2026-10-08T18:37:35.167Z"
+      "created_at": "2026-10-08T22:00:03.816Z",
+      "updated_at": "2026-10-08T22:00:03.816Z"
     },
-    "f32d80c6-41c0-4be7-baf0-444962795602": {
-      "id": "f32d80c6-41c0-4be7-baf0-444962795602",
+    "1024ce09-5074-4a66-a22b-5cd87ff2a011": {
+      "id": "1024ce09-5074-4a66-a22b-5cd87ff2a011",
       "object_type": "structure.column",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1235,11 +1266,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.168Z",
-      "updated_at": "2026-10-08T18:37:35.168Z"
+      "created_at": "2026-10-08T22:00:03.817Z",
+      "updated_at": "2026-10-08T22:00:03.817Z"
     },
-    "a6ee4abe-330a-406c-9874-432b7e6a4ad1": {
-      "id": "a6ee4abe-330a-406c-9874-432b7e6a4ad1",
+    "752d109c-aa91-43df-97da-f16ca743126e": {
+      "id": "752d109c-aa91-43df-97da-f16ca743126e",
       "object_type": "structure.foundation",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1256,7 +1287,7 @@
         }
       ],
       "host_refs": [
-        "f32d80c6-41c0-4be7-baf0-444962795602"
+        "1024ce09-5074-4a66-a22b-5cd87ff2a011"
       ],
       "connector_refs": [],
       "status": "active",
@@ -1282,15 +1313,15 @@
           350
         ],
         "top_elevation_mm": -350,
-        "supported_column_id": "f32d80c6-41c0-4be7-baf0-444962795602",
+        "supported_column_id": "1024ce09-5074-4a66-a22b-5cd87ff2a011",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.169Z",
-      "updated_at": "2026-10-08T18:37:35.169Z"
+      "created_at": "2026-10-08T22:00:03.818Z",
+      "updated_at": "2026-10-08T22:00:03.818Z"
     },
-    "c849e4a9-9ea0-4245-ab69-b59c36b1f557": {
-      "id": "c849e4a9-9ea0-4245-ab69-b59c36b1f557",
+    "3d9fcd80-8ba8-4ec7-a9a5-abf884461572": {
+      "id": "3d9fcd80-8ba8-4ec7-a9a5-abf884461572",
       "object_type": "structure.column",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1331,11 +1362,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.170Z",
-      "updated_at": "2026-10-08T18:37:35.170Z"
+      "created_at": "2026-10-08T22:00:03.819Z",
+      "updated_at": "2026-10-08T22:00:03.819Z"
     },
-    "2b6f02e0-14b4-47ce-a979-935b06d72615": {
-      "id": "2b6f02e0-14b4-47ce-a979-935b06d72615",
+    "47d36337-85fb-48b2-b92c-722512399c31": {
+      "id": "47d36337-85fb-48b2-b92c-722512399c31",
       "object_type": "structure.foundation",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1352,7 +1383,7 @@
         }
       ],
       "host_refs": [
-        "c849e4a9-9ea0-4245-ab69-b59c36b1f557"
+        "3d9fcd80-8ba8-4ec7-a9a5-abf884461572"
       ],
       "connector_refs": [],
       "status": "active",
@@ -1378,15 +1409,15 @@
           350
         ],
         "top_elevation_mm": -350,
-        "supported_column_id": "c849e4a9-9ea0-4245-ab69-b59c36b1f557",
+        "supported_column_id": "3d9fcd80-8ba8-4ec7-a9a5-abf884461572",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.171Z",
-      "updated_at": "2026-10-08T18:37:35.171Z"
+      "created_at": "2026-10-08T22:00:03.819Z",
+      "updated_at": "2026-10-08T22:00:03.819Z"
     },
-    "5b90a2e4-10c8-4434-98fa-ecadd82b41c1": {
-      "id": "5b90a2e4-10c8-4434-98fa-ecadd82b41c1",
+    "fe274025-3925-4593-9b65-931aec1d036a": {
+      "id": "fe274025-3925-4593-9b65-931aec1d036a",
       "object_type": "structure.column",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1427,11 +1458,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.171Z",
-      "updated_at": "2026-10-08T18:37:35.171Z"
+      "created_at": "2026-10-08T22:00:03.820Z",
+      "updated_at": "2026-10-08T22:00:03.820Z"
     },
-    "82e7778a-4e26-44d3-bba3-961d1374c5d3": {
-      "id": "82e7778a-4e26-44d3-bba3-961d1374c5d3",
+    "c074c70a-c3c7-4b2d-b3f8-3ab1c9a4bb1d": {
+      "id": "c074c70a-c3c7-4b2d-b3f8-3ab1c9a4bb1d",
       "object_type": "structure.foundation",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1448,7 +1479,7 @@
         }
       ],
       "host_refs": [
-        "5b90a2e4-10c8-4434-98fa-ecadd82b41c1"
+        "fe274025-3925-4593-9b65-931aec1d036a"
       ],
       "connector_refs": [],
       "status": "active",
@@ -1474,15 +1505,15 @@
           350
         ],
         "top_elevation_mm": -350,
-        "supported_column_id": "5b90a2e4-10c8-4434-98fa-ecadd82b41c1",
+        "supported_column_id": "fe274025-3925-4593-9b65-931aec1d036a",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.172Z",
-      "updated_at": "2026-10-08T18:37:35.172Z"
+      "created_at": "2026-10-08T22:00:03.821Z",
+      "updated_at": "2026-10-08T22:00:03.821Z"
     },
-    "cbff70dc-c900-467e-a627-709098adc9ae": {
-      "id": "cbff70dc-c900-467e-a627-709098adc9ae",
+    "7b872f3c-1aa4-4ca2-a0aa-89f20a125ef0": {
+      "id": "7b872f3c-1aa4-4ca2-a0aa-89f20a125ef0",
       "object_type": "structure.column",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1523,11 +1554,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.174Z",
-      "updated_at": "2026-10-08T18:37:35.174Z"
+      "created_at": "2026-10-08T22:00:03.822Z",
+      "updated_at": "2026-10-08T22:00:03.822Z"
     },
-    "6d29ace8-8841-4f32-b11c-01530cceabe3": {
-      "id": "6d29ace8-8841-4f32-b11c-01530cceabe3",
+    "5d8c5d77-cf20-4fd1-a78a-d21e37bd0226": {
+      "id": "5d8c5d77-cf20-4fd1-a78a-d21e37bd0226",
       "object_type": "structure.foundation",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1544,7 +1575,7 @@
         }
       ],
       "host_refs": [
-        "cbff70dc-c900-467e-a627-709098adc9ae"
+        "7b872f3c-1aa4-4ca2-a0aa-89f20a125ef0"
       ],
       "connector_refs": [],
       "status": "active",
@@ -1570,15 +1601,15 @@
           350
         ],
         "top_elevation_mm": -350,
-        "supported_column_id": "cbff70dc-c900-467e-a627-709098adc9ae",
+        "supported_column_id": "7b872f3c-1aa4-4ca2-a0aa-89f20a125ef0",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.175Z",
-      "updated_at": "2026-10-08T18:37:35.175Z"
+      "created_at": "2026-10-08T22:00:03.823Z",
+      "updated_at": "2026-10-08T22:00:03.823Z"
     },
-    "a39c49f7-7e66-40dc-b1b0-cbef2e738e81": {
-      "id": "a39c49f7-7e66-40dc-b1b0-cbef2e738e81",
+    "2793223d-8e02-46af-8671-e33742a8992a": {
+      "id": "2793223d-8e02-46af-8671-e33742a8992a",
       "object_type": "structure.column",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1619,11 +1650,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.177Z",
-      "updated_at": "2026-10-08T18:37:35.177Z"
+      "created_at": "2026-10-08T22:00:03.824Z",
+      "updated_at": "2026-10-08T22:00:03.824Z"
     },
-    "97cbe329-bc82-4071-8a94-0e75c6a717ee": {
-      "id": "97cbe329-bc82-4071-8a94-0e75c6a717ee",
+    "0b0f0e93-eb44-45f2-9178-edfd0b7bbbbb": {
+      "id": "0b0f0e93-eb44-45f2-9178-edfd0b7bbbbb",
       "object_type": "structure.foundation",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1640,7 +1671,7 @@
         }
       ],
       "host_refs": [
-        "a39c49f7-7e66-40dc-b1b0-cbef2e738e81"
+        "2793223d-8e02-46af-8671-e33742a8992a"
       ],
       "connector_refs": [],
       "status": "active",
@@ -1666,15 +1697,15 @@
           350
         ],
         "top_elevation_mm": -350,
-        "supported_column_id": "a39c49f7-7e66-40dc-b1b0-cbef2e738e81",
+        "supported_column_id": "2793223d-8e02-46af-8671-e33742a8992a",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.179Z",
-      "updated_at": "2026-10-08T18:37:35.179Z"
+      "created_at": "2026-10-08T22:00:03.824Z",
+      "updated_at": "2026-10-08T22:00:03.824Z"
     },
-    "13ac262c-1c32-4991-b709-9dce4bde9bc6": {
-      "id": "13ac262c-1c32-4991-b709-9dce4bde9bc6",
+    "c93ec659-8456-481c-bcc0-aec739253582": {
+      "id": "c93ec659-8456-481c-bcc0-aec739253582",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1714,11 +1745,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.181Z",
-      "updated_at": "2026-10-08T18:37:35.181Z"
+      "created_at": "2026-10-08T22:00:03.826Z",
+      "updated_at": "2026-10-08T22:00:03.826Z"
     },
-    "3d3f9074-dcae-4990-b83b-88d20b816d77": {
-      "id": "3d3f9074-dcae-4990-b83b-88d20b816d77",
+    "d8651164-9835-4113-a3da-cfd63375e8a3": {
+      "id": "d8651164-9835-4113-a3da-cfd63375e8a3",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1741,98 +1772,54 @@
         "start_point_mm": [
           4000,
           0,
-          2600
-        ],
-        "end_point_mm": [
-          8000,
-          0,
-          2600
-        ],
-        "section_mm": [
-          200,
-          400
-        ],
-        "span_mm": 4000,
-        "level_id": "GF",
-        "base_offset_mm": 2600,
-        "material": "reinforced_concrete",
-        "engineering_status": "preliminary"
-      },
-      "created_at": "2026-10-08T18:37:35.183Z",
-      "updated_at": "2026-10-08T18:37:35.183Z"
-    },
-    "8554fbcd-e5f1-4463-af3f-973a3e1e3a8b": {
-      "id": "8554fbcd-e5f1-4463-af3f-973a3e1e3a8b",
-      "object_type": "structure.beam",
-      "owner_module": "constructflow.structure",
-      "schema_version": 1,
-      "created_phase": "new_construction",
-      "removed_phase": null,
-      "level_refs": [
-        {
-          "role": "base_level",
-          "level_id": "GF"
-        }
-      ],
-      "host_refs": [],
-      "connector_refs": [],
-      "status": "active",
-      "module_data": {
-        "mark": "B1",
-        "placement_reference": "centerline",
-        "type_id": "6b0b7721-1fa1-56bf-825b-a1cf26a10123",
-        "instance_overrides": {},
-        "start_point_mm": [
-          0,
-          5000,
-          2600
-        ],
-        "end_point_mm": [
-          4000,
-          5000,
-          2600
-        ],
-        "section_mm": [
-          200,
-          400
-        ],
-        "span_mm": 4000,
-        "level_id": "GF",
-        "base_offset_mm": 2600,
-        "material": "reinforced_concrete",
-        "engineering_status": "preliminary"
-      },
-      "created_at": "2026-10-08T18:37:35.185Z",
-      "updated_at": "2026-10-08T18:37:35.185Z"
-    },
-    "21ae17c7-c9cb-498c-bd00-a0449e27374b": {
-      "id": "21ae17c7-c9cb-498c-bd00-a0449e27374b",
-      "object_type": "structure.beam",
-      "owner_module": "constructflow.structure",
-      "schema_version": 1,
-      "created_phase": "new_construction",
-      "removed_phase": null,
-      "level_refs": [
-        {
-          "role": "base_level",
-          "level_id": "GF"
-        }
-      ],
-      "host_refs": [],
-      "connector_refs": [],
-      "status": "active",
-      "module_data": {
-        "mark": "B1",
-        "placement_reference": "centerline",
-        "type_id": "6b0b7721-1fa1-56bf-825b-a1cf26a10123",
-        "instance_overrides": {},
-        "start_point_mm": [
-          4000,
-          5000,
           2600
         ],
         "end_point_mm": [
           8000,
+          0,
+          2600
+        ],
+        "section_mm": [
+          200,
+          400
+        ],
+        "span_mm": 4000,
+        "level_id": "GF",
+        "base_offset_mm": 2600,
+        "material": "reinforced_concrete",
+        "engineering_status": "preliminary"
+      },
+      "created_at": "2026-10-08T22:00:03.827Z",
+      "updated_at": "2026-10-08T22:00:03.827Z"
+    },
+    "04770de1-31ff-4f48-bf12-a8536bf986e3": {
+      "id": "04770de1-31ff-4f48-bf12-a8536bf986e3",
+      "object_type": "structure.beam",
+      "owner_module": "constructflow.structure",
+      "schema_version": 1,
+      "created_phase": "new_construction",
+      "removed_phase": null,
+      "level_refs": [
+        {
+          "role": "base_level",
+          "level_id": "GF"
+        }
+      ],
+      "host_refs": [],
+      "connector_refs": [],
+      "status": "active",
+      "module_data": {
+        "mark": "B1",
+        "placement_reference": "centerline",
+        "type_id": "6b0b7721-1fa1-56bf-825b-a1cf26a10123",
+        "instance_overrides": {},
+        "start_point_mm": [
+          0,
+          5000,
+          2600
+        ],
+        "end_point_mm": [
+          4000,
           5000,
           2600
         ],
@@ -1846,11 +1833,55 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.188Z",
-      "updated_at": "2026-10-08T18:37:35.188Z"
+      "created_at": "2026-10-08T22:00:03.828Z",
+      "updated_at": "2026-10-08T22:00:03.828Z"
     },
-    "5fe145a4-e963-45ec-a354-37dbd0856cf0": {
-      "id": "5fe145a4-e963-45ec-a354-37dbd0856cf0",
+    "69443278-7f1b-406b-b82c-de37a018a3ea": {
+      "id": "69443278-7f1b-406b-b82c-de37a018a3ea",
+      "object_type": "structure.beam",
+      "owner_module": "constructflow.structure",
+      "schema_version": 1,
+      "created_phase": "new_construction",
+      "removed_phase": null,
+      "level_refs": [
+        {
+          "role": "base_level",
+          "level_id": "GF"
+        }
+      ],
+      "host_refs": [],
+      "connector_refs": [],
+      "status": "active",
+      "module_data": {
+        "mark": "B1",
+        "placement_reference": "centerline",
+        "type_id": "6b0b7721-1fa1-56bf-825b-a1cf26a10123",
+        "instance_overrides": {},
+        "start_point_mm": [
+          4000,
+          5000,
+          2600
+        ],
+        "end_point_mm": [
+          8000,
+          5000,
+          2600
+        ],
+        "section_mm": [
+          200,
+          400
+        ],
+        "span_mm": 4000,
+        "level_id": "GF",
+        "base_offset_mm": 2600,
+        "material": "reinforced_concrete",
+        "engineering_status": "preliminary"
+      },
+      "created_at": "2026-10-08T22:00:03.829Z",
+      "updated_at": "2026-10-08T22:00:03.829Z"
+    },
+    "0db96fe1-b641-4244-b302-5311db74ed72": {
+      "id": "0db96fe1-b641-4244-b302-5311db74ed72",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1890,11 +1921,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.190Z",
-      "updated_at": "2026-10-08T18:37:35.190Z"
+      "created_at": "2026-10-08T22:00:03.831Z",
+      "updated_at": "2026-10-08T22:00:03.831Z"
     },
-    "5762b27a-c1c2-460b-be03-f658ea08f85c": {
-      "id": "5762b27a-c1c2-460b-be03-f658ea08f85c",
+    "e7f26d3b-02d6-439f-b1fa-89c0387110db": {
+      "id": "e7f26d3b-02d6-439f-b1fa-89c0387110db",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1934,11 +1965,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.192Z",
-      "updated_at": "2026-10-08T18:37:35.192Z"
+      "created_at": "2026-10-08T22:00:03.832Z",
+      "updated_at": "2026-10-08T22:00:03.832Z"
     },
-    "b9fd3cb4-7d69-45a2-9eb0-ae1c34068c74": {
-      "id": "b9fd3cb4-7d69-45a2-9eb0-ae1c34068c74",
+    "8007f2e7-27e7-4883-9b34-03ff4463c528": {
+      "id": "8007f2e7-27e7-4883-9b34-03ff4463c528",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -1983,11 +2014,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.194Z",
-      "updated_at": "2026-10-08T18:37:35.194Z"
+      "created_at": "2026-10-08T22:00:03.833Z",
+      "updated_at": "2026-10-08T22:00:03.833Z"
     },
-    "15938f99-67b0-4334-b5d5-a68441f1d2a3": {
-      "id": "15938f99-67b0-4334-b5d5-a68441f1d2a3",
+    "1d9694f7-9abe-4934-b3fa-0628810dc729": {
+      "id": "1d9694f7-9abe-4934-b3fa-0628810dc729",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2032,11 +2063,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.195Z",
-      "updated_at": "2026-10-08T18:37:35.195Z"
+      "created_at": "2026-10-08T22:00:03.834Z",
+      "updated_at": "2026-10-08T22:00:03.834Z"
     },
-    "dc30e953-344f-4610-b415-89df7dee70a0": {
-      "id": "dc30e953-344f-4610-b415-89df7dee70a0",
+    "b68e6146-a248-4c68-9402-4b9ba138f9c5": {
+      "id": "b68e6146-a248-4c68-9402-4b9ba138f9c5",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2081,11 +2112,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.196Z",
-      "updated_at": "2026-10-08T18:37:35.196Z"
+      "created_at": "2026-10-08T22:00:03.835Z",
+      "updated_at": "2026-10-08T22:00:03.835Z"
     },
-    "a268a597-2189-49fc-85ff-80c25a817f06": {
-      "id": "a268a597-2189-49fc-85ff-80c25a817f06",
+    "12d77010-a669-4b2d-94e4-5176e966f36c": {
+      "id": "12d77010-a669-4b2d-94e4-5176e966f36c",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2130,11 +2161,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.197Z",
-      "updated_at": "2026-10-08T18:37:35.197Z"
+      "created_at": "2026-10-08T22:00:03.837Z",
+      "updated_at": "2026-10-08T22:00:03.837Z"
     },
-    "a449d27c-ed0f-4cc2-8358-08255ac231b8": {
-      "id": "a449d27c-ed0f-4cc2-8358-08255ac231b8",
+    "373bd1fa-0e4d-4413-8176-eaed31f7a14e": {
+      "id": "373bd1fa-0e4d-4413-8176-eaed31f7a14e",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2179,11 +2210,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.199Z",
-      "updated_at": "2026-10-08T18:37:35.199Z"
+      "created_at": "2026-10-08T22:00:03.838Z",
+      "updated_at": "2026-10-08T22:00:03.838Z"
     },
-    "5e61362c-aa23-458a-8140-d8ec122f207a": {
-      "id": "5e61362c-aa23-458a-8140-d8ec122f207a",
+    "d3b69569-3ec0-4ff4-b98a-0fb5373fb861": {
+      "id": "d3b69569-3ec0-4ff4-b98a-0fb5373fb861",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2228,11 +2259,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.201Z",
-      "updated_at": "2026-10-08T18:37:35.201Z"
+      "created_at": "2026-10-08T22:00:03.839Z",
+      "updated_at": "2026-10-08T22:00:03.839Z"
     },
-    "a264fe97-cda4-45d7-9eb5-8ed193f34317": {
-      "id": "a264fe97-cda4-45d7-9eb5-8ed193f34317",
+    "5df7d4d7-ee8a-499a-80db-3e1a0850d0d8": {
+      "id": "5df7d4d7-ee8a-499a-80db-3e1a0850d0d8",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2272,11 +2303,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.202Z",
-      "updated_at": "2026-10-08T18:37:35.202Z"
+      "created_at": "2026-10-08T22:00:03.840Z",
+      "updated_at": "2026-10-08T22:00:03.840Z"
     },
-    "a6c20841-9731-4939-abd3-5811c56520a1": {
-      "id": "a6c20841-9731-4939-abd3-5811c56520a1",
+    "ce84f5b3-0b18-4f74-ad77-5cc7728961c4": {
+      "id": "ce84f5b3-0b18-4f74-ad77-5cc7728961c4",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2299,98 +2330,54 @@
         "start_point_mm": [
           4000,
           0,
-          5600
-        ],
-        "end_point_mm": [
-          8000,
-          0,
-          5600
-        ],
-        "section_mm": [
-          200,
-          400
-        ],
-        "span_mm": 4000,
-        "level_id": "L1",
-        "base_offset_mm": 2600,
-        "material": "reinforced_concrete",
-        "engineering_status": "preliminary"
-      },
-      "created_at": "2026-10-08T18:37:35.204Z",
-      "updated_at": "2026-10-08T18:37:35.204Z"
-    },
-    "23cd1293-f207-40cf-9165-4ce6cec76df3": {
-      "id": "23cd1293-f207-40cf-9165-4ce6cec76df3",
-      "object_type": "structure.beam",
-      "owner_module": "constructflow.structure",
-      "schema_version": 1,
-      "created_phase": "new_construction",
-      "removed_phase": null,
-      "level_refs": [
-        {
-          "role": "base_level",
-          "level_id": "L1"
-        }
-      ],
-      "host_refs": [],
-      "connector_refs": [],
-      "status": "active",
-      "module_data": {
-        "mark": "B1",
-        "placement_reference": "centerline",
-        "type_id": "6b0b7721-1fa1-56bf-825b-a1cf26a10123",
-        "instance_overrides": {},
-        "start_point_mm": [
-          0,
-          5000,
-          5600
-        ],
-        "end_point_mm": [
-          4000,
-          5000,
-          5600
-        ],
-        "section_mm": [
-          200,
-          400
-        ],
-        "span_mm": 4000,
-        "level_id": "L1",
-        "base_offset_mm": 2600,
-        "material": "reinforced_concrete",
-        "engineering_status": "preliminary"
-      },
-      "created_at": "2026-10-08T18:37:35.206Z",
-      "updated_at": "2026-10-08T18:37:35.206Z"
-    },
-    "5e1717da-f5f3-42f8-8612-1e76f36d639e": {
-      "id": "5e1717da-f5f3-42f8-8612-1e76f36d639e",
-      "object_type": "structure.beam",
-      "owner_module": "constructflow.structure",
-      "schema_version": 1,
-      "created_phase": "new_construction",
-      "removed_phase": null,
-      "level_refs": [
-        {
-          "role": "base_level",
-          "level_id": "L1"
-        }
-      ],
-      "host_refs": [],
-      "connector_refs": [],
-      "status": "active",
-      "module_data": {
-        "mark": "B1",
-        "placement_reference": "centerline",
-        "type_id": "6b0b7721-1fa1-56bf-825b-a1cf26a10123",
-        "instance_overrides": {},
-        "start_point_mm": [
-          4000,
-          5000,
           5600
         ],
         "end_point_mm": [
           8000,
+          0,
+          5600
+        ],
+        "section_mm": [
+          200,
+          400
+        ],
+        "span_mm": 4000,
+        "level_id": "L1",
+        "base_offset_mm": 2600,
+        "material": "reinforced_concrete",
+        "engineering_status": "preliminary"
+      },
+      "created_at": "2026-10-08T22:00:03.841Z",
+      "updated_at": "2026-10-08T22:00:03.841Z"
+    },
+    "b09a8ee6-6e57-4c4c-84a6-d25f9a2e9bb6": {
+      "id": "b09a8ee6-6e57-4c4c-84a6-d25f9a2e9bb6",
+      "object_type": "structure.beam",
+      "owner_module": "constructflow.structure",
+      "schema_version": 1,
+      "created_phase": "new_construction",
+      "removed_phase": null,
+      "level_refs": [
+        {
+          "role": "base_level",
+          "level_id": "L1"
+        }
+      ],
+      "host_refs": [],
+      "connector_refs": [],
+      "status": "active",
+      "module_data": {
+        "mark": "B1",
+        "placement_reference": "centerline",
+        "type_id": "6b0b7721-1fa1-56bf-825b-a1cf26a10123",
+        "instance_overrides": {},
+        "start_point_mm": [
+          0,
+          5000,
+          5600
+        ],
+        "end_point_mm": [
+          4000,
           5000,
           5600
         ],
@@ -2404,11 +2391,55 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.209Z",
-      "updated_at": "2026-10-08T18:37:35.209Z"
+      "created_at": "2026-10-08T22:00:03.842Z",
+      "updated_at": "2026-10-08T22:00:03.842Z"
     },
-    "9946391c-7063-4a46-b275-8aabc6492c78": {
-      "id": "9946391c-7063-4a46-b275-8aabc6492c78",
+    "74659220-56c7-4379-9cab-99a4e1cb9788": {
+      "id": "74659220-56c7-4379-9cab-99a4e1cb9788",
+      "object_type": "structure.beam",
+      "owner_module": "constructflow.structure",
+      "schema_version": 1,
+      "created_phase": "new_construction",
+      "removed_phase": null,
+      "level_refs": [
+        {
+          "role": "base_level",
+          "level_id": "L1"
+        }
+      ],
+      "host_refs": [],
+      "connector_refs": [],
+      "status": "active",
+      "module_data": {
+        "mark": "B1",
+        "placement_reference": "centerline",
+        "type_id": "6b0b7721-1fa1-56bf-825b-a1cf26a10123",
+        "instance_overrides": {},
+        "start_point_mm": [
+          4000,
+          5000,
+          5600
+        ],
+        "end_point_mm": [
+          8000,
+          5000,
+          5600
+        ],
+        "section_mm": [
+          200,
+          400
+        ],
+        "span_mm": 4000,
+        "level_id": "L1",
+        "base_offset_mm": 2600,
+        "material": "reinforced_concrete",
+        "engineering_status": "preliminary"
+      },
+      "created_at": "2026-10-08T22:00:03.844Z",
+      "updated_at": "2026-10-08T22:00:03.844Z"
+    },
+    "b0f68345-9de5-46c5-adda-74b8d8aeaebd": {
+      "id": "b0f68345-9de5-46c5-adda-74b8d8aeaebd",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2448,11 +2479,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.211Z",
-      "updated_at": "2026-10-08T18:37:35.211Z"
+      "created_at": "2026-10-08T22:00:03.845Z",
+      "updated_at": "2026-10-08T22:00:03.845Z"
     },
-    "aa5d3494-5e13-4e19-8eb8-0b5dca5a8089": {
-      "id": "aa5d3494-5e13-4e19-8eb8-0b5dca5a8089",
+    "60de8363-b7ec-47c7-aa35-3066450b3814": {
+      "id": "60de8363-b7ec-47c7-aa35-3066450b3814",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2492,11 +2523,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.213Z",
-      "updated_at": "2026-10-08T18:37:35.213Z"
+      "created_at": "2026-10-08T22:00:03.846Z",
+      "updated_at": "2026-10-08T22:00:03.846Z"
     },
-    "c56a75eb-3fd9-43f9-a320-d81ab9e4f21d": {
-      "id": "c56a75eb-3fd9-43f9-a320-d81ab9e4f21d",
+    "a9af8105-ba3c-44c9-a3d2-9c7501d4ac2a": {
+      "id": "a9af8105-ba3c-44c9-a3d2-9c7501d4ac2a",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2541,11 +2572,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.215Z",
-      "updated_at": "2026-10-08T18:37:35.215Z"
+      "created_at": "2026-10-08T22:00:03.848Z",
+      "updated_at": "2026-10-08T22:00:03.848Z"
     },
-    "c4d60def-287c-4d71-a55d-94bcd5cf527f": {
-      "id": "c4d60def-287c-4d71-a55d-94bcd5cf527f",
+    "adaf0a2f-eeb8-40ec-b2d2-d27091b52a76": {
+      "id": "adaf0a2f-eeb8-40ec-b2d2-d27091b52a76",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2590,11 +2621,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.217Z",
-      "updated_at": "2026-10-08T18:37:35.217Z"
+      "created_at": "2026-10-08T22:00:03.849Z",
+      "updated_at": "2026-10-08T22:00:03.849Z"
     },
-    "ab9a94b6-9c00-4113-aae6-3232365ee4eb": {
-      "id": "ab9a94b6-9c00-4113-aae6-3232365ee4eb",
+    "b38db814-cb9c-41d8-b0a5-43e3d1b5462c": {
+      "id": "b38db814-cb9c-41d8-b0a5-43e3d1b5462c",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2639,11 +2670,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.218Z",
-      "updated_at": "2026-10-08T18:37:35.218Z"
+      "created_at": "2026-10-08T22:00:03.851Z",
+      "updated_at": "2026-10-08T22:00:03.851Z"
     },
-    "fc72b793-2685-4ad4-880b-ebb45688d93b": {
-      "id": "fc72b793-2685-4ad4-880b-ebb45688d93b",
+    "27b2433f-3fea-407d-a9fc-0a0378bb62dd": {
+      "id": "27b2433f-3fea-407d-a9fc-0a0378bb62dd",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2688,11 +2719,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.220Z",
-      "updated_at": "2026-10-08T18:37:35.220Z"
+      "created_at": "2026-10-08T22:00:03.852Z",
+      "updated_at": "2026-10-08T22:00:03.852Z"
     },
-    "089ea845-18e2-41f6-8540-6b1734e94827": {
-      "id": "089ea845-18e2-41f6-8540-6b1734e94827",
+    "3c2084c0-da8b-4d66-ab63-051694d84a91": {
+      "id": "3c2084c0-da8b-4d66-ab63-051694d84a91",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2737,11 +2768,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.223Z",
-      "updated_at": "2026-10-08T18:37:35.223Z"
+      "created_at": "2026-10-08T22:00:03.853Z",
+      "updated_at": "2026-10-08T22:00:03.853Z"
     },
-    "6e2ae629-6046-496d-b644-0682e1c13445": {
-      "id": "6e2ae629-6046-496d-b644-0682e1c13445",
+    "b53b6a33-a7b2-4c5a-a016-a2f0d4439cd0": {
+      "id": "b53b6a33-a7b2-4c5a-a016-a2f0d4439cd0",
       "object_type": "structure.beam",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2786,11 +2817,11 @@
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
-      "created_at": "2026-10-08T18:37:35.226Z",
-      "updated_at": "2026-10-08T18:37:35.226Z"
+      "created_at": "2026-10-08T22:00:03.855Z",
+      "updated_at": "2026-10-08T22:00:03.855Z"
     },
-    "b6e34157-9be7-4fdf-aafa-a0a80f37d6a4": {
-      "id": "b6e34157-9be7-4fdf-aafa-a0a80f37d6a4",
+    "0150dc1e-1855-4836-a434-69830532fe5e": {
+      "id": "0150dc1e-1855-4836-a434-69830532fe5e",
       "object_type": "structure.slab",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2831,19 +2862,19 @@
           [
             [
               4500,
-              4300
+              3000
             ],
             [
               7500,
-              4300
+              3000
             ],
             [
               7500,
-              8800
+              5000
             ],
             [
               4500,
-              8800
+              5000
             ]
           ]
         ],
@@ -2854,15 +2885,15 @@
         "slope_ratio": 0,
         "drain_direction_deg": 0
       },
-      "created_at": "2026-10-08T18:37:35.229Z",
-      "updated_at": "2026-10-08T18:37:35.229Z",
+      "created_at": "2026-10-08T22:00:03.856Z",
+      "updated_at": "2026-10-08T22:00:03.856Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "342d785f-d5b6-4652-8509-da0f45c5fa09": {
-      "id": "342d785f-d5b6-4652-8509-da0f45c5fa09",
+    "448bf2fa-3e8d-45ae-a9f2-4516e36e7872": {
+      "id": "448bf2fa-3e8d-45ae-a9f2-4516e36e7872",
       "object_type": "structure.slab",
       "owner_module": "constructflow.structure",
       "schema_version": 1,
@@ -2903,19 +2934,19 @@
           [
             [
               4500,
-              4300
+              3000
             ],
             [
               7500,
-              4300
+              3000
             ],
             [
               7500,
-              8800
+              5000
             ],
             [
               4500,
-              8800
+              5000
             ]
           ]
         ],
@@ -2926,15 +2957,15 @@
         "slope_ratio": 0,
         "drain_direction_deg": 0
       },
-      "created_at": "2026-10-08T18:37:35.235Z",
-      "updated_at": "2026-10-08T18:37:35.235Z",
+      "created_at": "2026-10-08T22:00:03.861Z",
+      "updated_at": "2026-10-08T22:00:03.861Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "df9b2662-0074-4d34-a52b-9456c1c7724c": {
-      "id": "df9b2662-0074-4d34-a52b-9456c1c7724c",
+    "61d8ceb5-27a0-44e4-a329-bfeacc0b160a": {
+      "id": "61d8ceb5-27a0-44e4-a329-bfeacc0b160a",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -2974,11 +3005,11 @@
         "level_id": "GF",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.238Z",
-      "updated_at": "2026-10-08T18:37:35.238Z"
+      "created_at": "2026-10-08T22:00:03.863Z",
+      "updated_at": "2026-10-08T22:00:03.863Z"
     },
-    "73da03b0-0a6f-494e-b982-5bd00dd942f7": {
-      "id": "73da03b0-0a6f-494e-b982-5bd00dd942f7",
+    "1156166c-bc3b-4fb4-be03-140aa540e878": {
+      "id": "1156166c-bc3b-4fb4-be03-140aa540e878",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3018,11 +3049,11 @@
         "level_id": "GF",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.241Z",
-      "updated_at": "2026-10-08T18:37:35.241Z"
+      "created_at": "2026-10-08T22:00:03.867Z",
+      "updated_at": "2026-10-08T22:00:03.867Z"
     },
-    "2bb1e968-4e0e-4eb7-9e75-83250c474d41": {
-      "id": "2bb1e968-4e0e-4eb7-9e75-83250c474d41",
+    "1acb3f17-c4d3-4975-b288-a466063a3ebf": {
+      "id": "1acb3f17-c4d3-4975-b288-a466063a3ebf",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3062,11 +3093,11 @@
         "level_id": "GF",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.244Z",
-      "updated_at": "2026-10-08T18:37:35.244Z"
+      "created_at": "2026-10-08T22:00:03.870Z",
+      "updated_at": "2026-10-08T22:00:03.870Z"
     },
-    "1125bfd0-566a-40fc-b07e-15d63d622178": {
-      "id": "1125bfd0-566a-40fc-b07e-15d63d622178",
+    "3211e458-e3e6-40d0-9a41-cd7036fced1b": {
+      "id": "3211e458-e3e6-40d0-9a41-cd7036fced1b",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3106,11 +3137,11 @@
         "level_id": "GF",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.250Z",
-      "updated_at": "2026-10-08T18:37:35.250Z"
+      "created_at": "2026-10-08T22:00:03.872Z",
+      "updated_at": "2026-10-08T22:00:03.872Z"
     },
-    "2f30a132-000b-407d-a82b-3b67da03d7f4": {
-      "id": "2f30a132-000b-407d-a82b-3b67da03d7f4",
+    "b211734c-fba8-4e16-8f0c-ddf9d46285f8": {
+      "id": "b211734c-fba8-4e16-8f0c-ddf9d46285f8",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3150,11 +3181,11 @@
         "level_id": "GF",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.253Z",
-      "updated_at": "2026-10-08T18:37:35.253Z"
+      "created_at": "2026-10-08T22:00:03.874Z",
+      "updated_at": "2026-10-08T22:00:03.874Z"
     },
-    "573ccda5-b5b5-4636-a29f-5faa2e418cad": {
-      "id": "573ccda5-b5b5-4636-a29f-5faa2e418cad",
+    "c1d3667a-3f1d-4175-b133-d0dde3471ea0": {
+      "id": "c1d3667a-3f1d-4175-b133-d0dde3471ea0",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3194,11 +3225,11 @@
         "level_id": "GF",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.256Z",
-      "updated_at": "2026-10-08T18:37:35.256Z"
+      "created_at": "2026-10-08T22:00:03.877Z",
+      "updated_at": "2026-10-08T22:00:03.877Z"
     },
-    "82510558-db07-458f-993a-454b23c715fb": {
-      "id": "82510558-db07-458f-993a-454b23c715fb",
+    "b35c719e-ea40-450f-afb3-540639c68adb": {
+      "id": "b35c719e-ea40-450f-afb3-540639c68adb",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3238,11 +3269,11 @@
         "level_id": "GF",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.259Z",
-      "updated_at": "2026-10-08T18:37:35.259Z"
+      "created_at": "2026-10-08T22:00:03.880Z",
+      "updated_at": "2026-10-08T22:00:03.880Z"
     },
-    "7a1359cd-cf20-4b26-8a57-acebe6da9bbc": {
-      "id": "7a1359cd-cf20-4b26-8a57-acebe6da9bbc",
+    "64c9ee78-d68a-4d3d-9643-589ae6759a88": {
+      "id": "64c9ee78-d68a-4d3d-9643-589ae6759a88",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3282,11 +3313,11 @@
         "level_id": "GF",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.262Z",
-      "updated_at": "2026-10-08T18:37:35.262Z"
+      "created_at": "2026-10-08T22:00:03.883Z",
+      "updated_at": "2026-10-08T22:00:03.883Z"
     },
-    "5acc68de-5bfb-476c-b644-e3eef4a4fd7e": {
-      "id": "5acc68de-5bfb-476c-b644-e3eef4a4fd7e",
+    "2c2dba43-0a5f-46cf-a456-80529bb535bd": {
+      "id": "2c2dba43-0a5f-46cf-a456-80529bb535bd",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3326,11 +3357,11 @@
         "level_id": "L1",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.264Z",
-      "updated_at": "2026-10-08T18:37:35.264Z"
+      "created_at": "2026-10-08T22:00:03.884Z",
+      "updated_at": "2026-10-08T22:00:03.884Z"
     },
-    "159fe811-a5cc-4a18-a5b0-61d2a9f08d0d": {
-      "id": "159fe811-a5cc-4a18-a5b0-61d2a9f08d0d",
+    "d44c54d6-e42a-462e-98ba-fe514ebd7b98": {
+      "id": "d44c54d6-e42a-462e-98ba-fe514ebd7b98",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3370,11 +3401,11 @@
         "level_id": "L1",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.267Z",
-      "updated_at": "2026-10-08T18:37:35.267Z"
+      "created_at": "2026-10-08T22:00:03.886Z",
+      "updated_at": "2026-10-08T22:00:03.886Z"
     },
-    "4c7aafb2-7ea1-4cc0-86e2-3ca89b75b618": {
-      "id": "4c7aafb2-7ea1-4cc0-86e2-3ca89b75b618",
+    "342ef79c-3880-499d-9812-3154edc38dd0": {
+      "id": "342ef79c-3880-499d-9812-3154edc38dd0",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3414,11 +3445,11 @@
         "level_id": "L1",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.270Z",
-      "updated_at": "2026-10-08T18:37:35.270Z"
+      "created_at": "2026-10-08T22:00:03.888Z",
+      "updated_at": "2026-10-08T22:00:03.888Z"
     },
-    "733ed2c7-9508-4339-910f-8ef83ac50bcf": {
-      "id": "733ed2c7-9508-4339-910f-8ef83ac50bcf",
+    "935861a7-e55b-4d45-a379-546a228c728d": {
+      "id": "935861a7-e55b-4d45-a379-546a228c728d",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3458,11 +3489,11 @@
         "level_id": "L1",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.273Z",
-      "updated_at": "2026-10-08T18:37:35.273Z"
+      "created_at": "2026-10-08T22:00:03.890Z",
+      "updated_at": "2026-10-08T22:00:03.890Z"
     },
-    "c55d0671-7bc4-4b5e-bafa-e973206065a7": {
-      "id": "c55d0671-7bc4-4b5e-bafa-e973206065a7",
+    "e3b6775e-fdc6-4070-b0fd-4f2d73b22514": {
+      "id": "e3b6775e-fdc6-4070-b0fd-4f2d73b22514",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3502,11 +3533,11 @@
         "level_id": "L1",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.275Z",
-      "updated_at": "2026-10-08T18:37:35.275Z"
+      "created_at": "2026-10-08T22:00:03.892Z",
+      "updated_at": "2026-10-08T22:00:03.892Z"
     },
-    "fb45ee75-4d30-4326-a039-948170ce0bc9": {
-      "id": "fb45ee75-4d30-4326-a039-948170ce0bc9",
+    "56b6679d-5d01-41c8-9b04-c681c822f63e": {
+      "id": "56b6679d-5d01-41c8-9b04-c681c822f63e",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3546,11 +3577,11 @@
         "level_id": "L1",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.277Z",
-      "updated_at": "2026-10-08T18:37:35.277Z"
+      "created_at": "2026-10-08T22:00:03.894Z",
+      "updated_at": "2026-10-08T22:00:03.894Z"
     },
-    "f9393124-19f2-4250-87d4-c5381a64a8e0": {
-      "id": "f9393124-19f2-4250-87d4-c5381a64a8e0",
+    "146c0c5f-28d2-41e0-90c1-51b69e75ec68": {
+      "id": "146c0c5f-28d2-41e0-90c1-51b69e75ec68",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3590,11 +3621,11 @@
         "level_id": "L1",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.279Z",
-      "updated_at": "2026-10-08T18:37:35.279Z"
+      "created_at": "2026-10-08T22:00:03.897Z",
+      "updated_at": "2026-10-08T22:00:03.897Z"
     },
-    "845abf0a-5e9f-4ea7-887a-0c290485d4a1": {
-      "id": "845abf0a-5e9f-4ea7-887a-0c290485d4a1",
+    "dfef34d6-f6b7-49a1-adfc-06142113f42a": {
+      "id": "dfef34d6-f6b7-49a1-adfc-06142113f42a",
       "object_type": "architecture.wall",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -3634,11 +3665,11 @@
         "level_id": "L1",
         "material": "brick_masonry"
       },
-      "created_at": "2026-10-08T18:37:35.282Z",
-      "updated_at": "2026-10-08T18:37:35.282Z"
+      "created_at": "2026-10-08T22:00:03.899Z",
+      "updated_at": "2026-10-08T22:00:03.899Z"
     },
-    "177eaae9-0868-4cbc-8b1f-4d8594938387": {
-      "id": "177eaae9-0868-4cbc-8b1f-4d8594938387",
+    "c54cc904-3d59-47e9-8f99-88f64e479785": {
+      "id": "c54cc904-3d59-47e9-8f99-88f64e479785",
       "object_type": "door_window.door",
       "owner_module": "constructflow.door_window",
       "schema_version": 1,
@@ -3651,7 +3682,7 @@
         }
       ],
       "host_refs": [
-        "df9b2662-0074-4d34-a52b-9456c1c7724c"
+        "61d8ceb5-27a0-44e4-a329-bfeacc0b160a"
       ],
       "connector_refs": [],
       "status": "active",
@@ -3662,7 +3693,7 @@
           "width_mm": 900,
           "height_mm": 2100
         },
-        "wall_id": "df9b2662-0074-4d34-a52b-9456c1c7724c",
+        "wall_id": "61d8ceb5-27a0-44e4-a329-bfeacc0b160a",
         "location_mm": [
           4000,
           0,
@@ -3675,11 +3706,11 @@
         "handing": "left_in",
         "level_id": "GF"
       },
-      "created_at": "2026-10-08T18:37:35.284Z",
-      "updated_at": "2026-10-08T18:37:35.284Z"
+      "created_at": "2026-10-08T22:00:03.902Z",
+      "updated_at": "2026-10-08T22:00:03.902Z"
     },
-    "317bcd76-78bc-4b9f-b98b-21961fcefea2": {
-      "id": "317bcd76-78bc-4b9f-b98b-21961fcefea2",
+    "c3d97f52-34b4-495e-8b17-b439c99d29f8": {
+      "id": "c3d97f52-34b4-495e-8b17-b439c99d29f8",
       "object_type": "door_window.door",
       "owner_module": "constructflow.door_window",
       "schema_version": 1,
@@ -3692,7 +3723,7 @@
         }
       ],
       "host_refs": [
-        "2f30a132-000b-407d-a82b-3b67da03d7f4"
+        "b211734c-fba8-4e16-8f0c-ddf9d46285f8"
       ],
       "connector_refs": [],
       "status": "active",
@@ -3702,7 +3733,7 @@
         "instance_overrides": {
           "width_mm": 800
         },
-        "wall_id": "2f30a132-000b-407d-a82b-3b67da03d7f4",
+        "wall_id": "b211734c-fba8-4e16-8f0c-ddf9d46285f8",
         "location_mm": [
           4000,
           2500,
@@ -3715,11 +3746,11 @@
         "handing": "right_in",
         "level_id": "GF"
       },
-      "created_at": "2026-10-08T18:37:35.287Z",
-      "updated_at": "2026-10-08T18:37:35.287Z"
+      "created_at": "2026-10-08T22:00:03.903Z",
+      "updated_at": "2026-10-08T22:00:03.903Z"
     },
-    "7533329a-fe1f-4c4c-ad25-72c8e806eb61": {
-      "id": "7533329a-fe1f-4c4c-ad25-72c8e806eb61",
+    "445ac6d4-57c4-420c-beef-29573a8e9cc1": {
+      "id": "445ac6d4-57c4-420c-beef-29573a8e9cc1",
       "object_type": "door_window.window",
       "owner_module": "constructflow.door_window",
       "schema_version": 1,
@@ -3732,7 +3763,7 @@
         }
       ],
       "host_refs": [
-        "df9b2662-0074-4d34-a52b-9456c1c7724c"
+        "61d8ceb5-27a0-44e4-a329-bfeacc0b160a"
       ],
       "connector_refs": [],
       "status": "active",
@@ -3742,7 +3773,7 @@
         "instance_overrides": {
           "width_mm": 1400
         },
-        "wall_id": "df9b2662-0074-4d34-a52b-9456c1c7724c",
+        "wall_id": "61d8ceb5-27a0-44e4-a329-bfeacc0b160a",
         "location_mm": [
           1800,
           0,
@@ -3754,11 +3785,11 @@
         "sill_height_mm": 900,
         "level_id": "GF"
       },
-      "created_at": "2026-10-08T18:37:35.290Z",
-      "updated_at": "2026-10-08T18:37:35.290Z"
+      "created_at": "2026-10-08T22:00:03.905Z",
+      "updated_at": "2026-10-08T22:00:03.905Z"
     },
-    "0ef6797f-3d91-4d58-af3c-a0113f636f2b": {
-      "id": "0ef6797f-3d91-4d58-af3c-a0113f636f2b",
+    "c67c210e-2db5-42de-87a4-d5236bf1de5b": {
+      "id": "c67c210e-2db5-42de-87a4-d5236bf1de5b",
       "object_type": "door_window.window",
       "owner_module": "constructflow.door_window",
       "schema_version": 1,
@@ -3771,7 +3802,7 @@
         }
       ],
       "host_refs": [
-        "df9b2662-0074-4d34-a52b-9456c1c7724c"
+        "61d8ceb5-27a0-44e4-a329-bfeacc0b160a"
       ],
       "connector_refs": [],
       "status": "active",
@@ -3781,7 +3812,7 @@
         "instance_overrides": {
           "width_mm": 1400
         },
-        "wall_id": "df9b2662-0074-4d34-a52b-9456c1c7724c",
+        "wall_id": "61d8ceb5-27a0-44e4-a329-bfeacc0b160a",
         "location_mm": [
           6200,
           0,
@@ -3793,11 +3824,11 @@
         "sill_height_mm": 900,
         "level_id": "GF"
       },
-      "created_at": "2026-10-08T18:37:35.293Z",
-      "updated_at": "2026-10-08T18:37:35.293Z"
+      "created_at": "2026-10-08T22:00:03.908Z",
+      "updated_at": "2026-10-08T22:00:03.908Z"
     },
-    "0f6ea0b0-bc4b-490a-920d-579f0cd01e6a": {
-      "id": "0f6ea0b0-bc4b-490a-920d-579f0cd01e6a",
+    "406ba283-8aec-4235-a11a-410ff70bbe5c": {
+      "id": "406ba283-8aec-4235-a11a-410ff70bbe5c",
       "object_type": "door_window.window",
       "owner_module": "constructflow.door_window",
       "schema_version": 1,
@@ -3810,7 +3841,7 @@
         }
       ],
       "host_refs": [
-        "2bb1e968-4e0e-4eb7-9e75-83250c474d41"
+        "1acb3f17-c4d3-4975-b288-a466063a3ebf"
       ],
       "connector_refs": [],
       "status": "active",
@@ -3820,7 +3851,7 @@
         "instance_overrides": {
           "width_mm": 1600
         },
-        "wall_id": "2bb1e968-4e0e-4eb7-9e75-83250c474d41",
+        "wall_id": "1acb3f17-c4d3-4975-b288-a466063a3ebf",
         "location_mm": [
           6000,
           10000,
@@ -3832,11 +3863,11 @@
         "sill_height_mm": 900,
         "level_id": "GF"
       },
-      "created_at": "2026-10-08T18:37:35.296Z",
-      "updated_at": "2026-10-08T18:37:35.296Z"
+      "created_at": "2026-10-08T22:00:03.910Z",
+      "updated_at": "2026-10-08T22:00:03.910Z"
     },
-    "a3162f5d-2444-4237-bc6c-2f86cb1d549d": {
-      "id": "a3162f5d-2444-4237-bc6c-2f86cb1d549d",
+    "903145fd-fec9-43c3-b606-d993951d6dbc": {
+      "id": "903145fd-fec9-43c3-b606-d993951d6dbc",
       "object_type": "door_window.window",
       "owner_module": "constructflow.door_window",
       "schema_version": 1,
@@ -3849,7 +3880,7 @@
         }
       ],
       "host_refs": [
-        "1125bfd0-566a-40fc-b07e-15d63d622178"
+        "3211e458-e3e6-40d0-9a41-cd7036fced1b"
       ],
       "connector_refs": [],
       "status": "active",
@@ -3859,7 +3890,7 @@
         "instance_overrides": {
           "width_mm": 1200
         },
-        "wall_id": "1125bfd0-566a-40fc-b07e-15d63d622178",
+        "wall_id": "3211e458-e3e6-40d0-9a41-cd7036fced1b",
         "location_mm": [
           0,
           7000,
@@ -3871,11 +3902,11 @@
         "sill_height_mm": 900,
         "level_id": "GF"
       },
-      "created_at": "2026-10-08T18:37:35.299Z",
-      "updated_at": "2026-10-08T18:37:35.299Z"
+      "created_at": "2026-10-08T22:00:03.912Z",
+      "updated_at": "2026-10-08T22:00:03.912Z"
     },
-    "25f016ac-4a5a-43c5-ae44-15bb1ca604e4": {
-      "id": "25f016ac-4a5a-43c5-ae44-15bb1ca604e4",
+    "7032181a-5429-4af0-9f95-9ac22f94e27c": {
+      "id": "7032181a-5429-4af0-9f95-9ac22f94e27c",
       "object_type": "door_window.door",
       "owner_module": "constructflow.door_window",
       "schema_version": 1,
@@ -3888,7 +3919,7 @@
         }
       ],
       "host_refs": [
-        "5acc68de-5bfb-476c-b644-e3eef4a4fd7e"
+        "2c2dba43-0a5f-46cf-a456-80529bb535bd"
       ],
       "connector_refs": [],
       "status": "active",
@@ -3899,7 +3930,7 @@
           "width_mm": 900,
           "height_mm": 2100
         },
-        "wall_id": "5acc68de-5bfb-476c-b644-e3eef4a4fd7e",
+        "wall_id": "2c2dba43-0a5f-46cf-a456-80529bb535bd",
         "location_mm": [
           4000,
           0,
@@ -3912,11 +3943,11 @@
         "handing": "left_in",
         "level_id": "L1"
       },
-      "created_at": "2026-10-08T18:37:35.301Z",
-      "updated_at": "2026-10-08T18:37:35.301Z"
+      "created_at": "2026-10-08T22:00:03.914Z",
+      "updated_at": "2026-10-08T22:00:03.914Z"
     },
-    "1cd0ed04-1bad-4522-84c2-be6cf9c95237": {
-      "id": "1cd0ed04-1bad-4522-84c2-be6cf9c95237",
+    "46b71a30-d9a9-4564-8c1e-cf1d1a3a75c3": {
+      "id": "46b71a30-d9a9-4564-8c1e-cf1d1a3a75c3",
       "object_type": "door_window.door",
       "owner_module": "constructflow.door_window",
       "schema_version": 1,
@@ -3929,7 +3960,7 @@
         }
       ],
       "host_refs": [
-        "fb45ee75-4d30-4326-a039-948170ce0bc9"
+        "56b6679d-5d01-41c8-9b04-c681c822f63e"
       ],
       "connector_refs": [],
       "status": "active",
@@ -3937,7 +3968,7 @@
         "mark": "D1",
         "type_id": "f549faa5-6144-558c-b8f0-53a7e111ed2d",
         "instance_overrides": {},
-        "wall_id": "fb45ee75-4d30-4326-a039-948170ce0bc9",
+        "wall_id": "56b6679d-5d01-41c8-9b04-c681c822f63e",
         "location_mm": [
           4000,
           7500,
@@ -3950,11 +3981,11 @@
         "handing": "left_in",
         "level_id": "L1"
       },
-      "created_at": "2026-10-08T18:37:35.303Z",
-      "updated_at": "2026-10-08T18:37:35.303Z"
+      "created_at": "2026-10-08T22:00:03.916Z",
+      "updated_at": "2026-10-08T22:00:03.916Z"
     },
-    "3aaed222-af2d-4d04-9a8b-f41e04e1e67e": {
-      "id": "3aaed222-af2d-4d04-9a8b-f41e04e1e67e",
+    "8bd27dc5-34db-4c03-b197-137e3c8c6f5b": {
+      "id": "8bd27dc5-34db-4c03-b197-137e3c8c6f5b",
       "object_type": "door_window.window",
       "owner_module": "constructflow.door_window",
       "schema_version": 1,
@@ -3967,7 +3998,7 @@
         }
       ],
       "host_refs": [
-        "5acc68de-5bfb-476c-b644-e3eef4a4fd7e"
+        "2c2dba43-0a5f-46cf-a456-80529bb535bd"
       ],
       "connector_refs": [],
       "status": "active",
@@ -3977,7 +4008,7 @@
         "instance_overrides": {
           "width_mm": 1400
         },
-        "wall_id": "5acc68de-5bfb-476c-b644-e3eef4a4fd7e",
+        "wall_id": "2c2dba43-0a5f-46cf-a456-80529bb535bd",
         "location_mm": [
           1800,
           0,
@@ -3989,11 +4020,11 @@
         "sill_height_mm": 900,
         "level_id": "L1"
       },
-      "created_at": "2026-10-08T18:37:35.306Z",
-      "updated_at": "2026-10-08T18:37:35.306Z"
+      "created_at": "2026-10-08T22:00:03.918Z",
+      "updated_at": "2026-10-08T22:00:03.918Z"
     },
-    "8921a811-21d3-4322-95e7-b2ac9d756c47": {
-      "id": "8921a811-21d3-4322-95e7-b2ac9d756c47",
+    "f12da748-a9f6-481a-baf8-c374384f969b": {
+      "id": "f12da748-a9f6-481a-baf8-c374384f969b",
       "object_type": "door_window.window",
       "owner_module": "constructflow.door_window",
       "schema_version": 1,
@@ -4006,7 +4037,7 @@
         }
       ],
       "host_refs": [
-        "5acc68de-5bfb-476c-b644-e3eef4a4fd7e"
+        "2c2dba43-0a5f-46cf-a456-80529bb535bd"
       ],
       "connector_refs": [],
       "status": "active",
@@ -4016,7 +4047,7 @@
         "instance_overrides": {
           "width_mm": 1400
         },
-        "wall_id": "5acc68de-5bfb-476c-b644-e3eef4a4fd7e",
+        "wall_id": "2c2dba43-0a5f-46cf-a456-80529bb535bd",
         "location_mm": [
           6200,
           0,
@@ -4028,11 +4059,11 @@
         "sill_height_mm": 900,
         "level_id": "L1"
       },
-      "created_at": "2026-10-08T18:37:35.309Z",
-      "updated_at": "2026-10-08T18:37:35.309Z"
+      "created_at": "2026-10-08T22:00:03.920Z",
+      "updated_at": "2026-10-08T22:00:03.920Z"
     },
-    "f07201a3-7ee9-495a-8aba-f690e6ce99a0": {
-      "id": "f07201a3-7ee9-495a-8aba-f690e6ce99a0",
+    "affb8506-4e53-4858-aae7-ed850cc3826f": {
+      "id": "affb8506-4e53-4858-aae7-ed850cc3826f",
       "object_type": "door_window.window",
       "owner_module": "constructflow.door_window",
       "schema_version": 1,
@@ -4045,7 +4076,7 @@
         }
       ],
       "host_refs": [
-        "4c7aafb2-7ea1-4cc0-86e2-3ca89b75b618"
+        "342ef79c-3880-499d-9812-3154edc38dd0"
       ],
       "connector_refs": [],
       "status": "active",
@@ -4055,7 +4086,7 @@
         "instance_overrides": {
           "width_mm": 1600
         },
-        "wall_id": "4c7aafb2-7ea1-4cc0-86e2-3ca89b75b618",
+        "wall_id": "342ef79c-3880-499d-9812-3154edc38dd0",
         "location_mm": [
           6000,
           10000,
@@ -4067,11 +4098,11 @@
         "sill_height_mm": 900,
         "level_id": "L1"
       },
-      "created_at": "2026-10-08T18:37:35.312Z",
-      "updated_at": "2026-10-08T18:37:35.312Z"
+      "created_at": "2026-10-08T22:00:03.922Z",
+      "updated_at": "2026-10-08T22:00:03.922Z"
     },
-    "f9ab13d0-59b6-43a6-a950-a13aec870c70": {
-      "id": "f9ab13d0-59b6-43a6-a950-a13aec870c70",
+    "8e5f3bc2-96a7-4256-9ad8-557c256dd321": {
+      "id": "8e5f3bc2-96a7-4256-9ad8-557c256dd321",
       "object_type": "door_window.window",
       "owner_module": "constructflow.door_window",
       "schema_version": 1,
@@ -4084,7 +4115,7 @@
         }
       ],
       "host_refs": [
-        "733ed2c7-9508-4339-910f-8ef83ac50bcf"
+        "935861a7-e55b-4d45-a379-546a228c728d"
       ],
       "connector_refs": [],
       "status": "active",
@@ -4094,7 +4125,7 @@
         "instance_overrides": {
           "width_mm": 1200
         },
-        "wall_id": "733ed2c7-9508-4339-910f-8ef83ac50bcf",
+        "wall_id": "935861a7-e55b-4d45-a379-546a228c728d",
         "location_mm": [
           0,
           7000,
@@ -4106,11 +4137,11 @@
         "sill_height_mm": 900,
         "level_id": "L1"
       },
-      "created_at": "2026-10-08T18:37:35.316Z",
-      "updated_at": "2026-10-08T18:37:35.316Z"
+      "created_at": "2026-10-08T22:00:03.925Z",
+      "updated_at": "2026-10-08T22:00:03.925Z"
     },
-    "f292aac6-670a-417b-98e2-79f9edd57cb5": {
-      "id": "f292aac6-670a-417b-98e2-79f9edd57cb5",
+    "10774ac3-e5f8-4255-8ef4-cc1e39febd87": {
+      "id": "10774ac3-e5f8-4255-8ef4-cc1e39febd87",
       "object_type": "architecture.stair",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4125,23 +4156,23 @@
       "host_refs": [],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.318Z",
-      "updated_at": "2026-10-08T18:37:35.318Z",
+      "created_at": "2026-10-08T22:00:03.927Z",
+      "updated_at": "2026-10-08T22:00:03.927Z",
       "module_data": {
         "mark": "ST1",
         "level_id": "GF",
-        "stair_type": "straight",
+        "stair_type": "u_shape",
         "structure_type": "rc_monolithic",
         "start_point_mm": [
-          4700,
           4500,
+          3000,
           0
         ],
         "total_rise_mm": 3000,
-        "width_mm": 1000,
+        "width_mm": 900,
         "num_risers": 17,
         "riser_height_mm": 176.47,
-        "tread_depth_mm": 270,
+        "tread_depth_mm": 220,
         "landing_depth_mm": 1000,
         "turn_direction": "right",
         "has_handrail": true,
@@ -4157,8 +4188,8 @@
         }
       }
     },
-    "a7003f99-7ef1-4757-8038-c28740d624ed": {
-      "id": "a7003f99-7ef1-4757-8038-c28740d624ed",
+    "05ec92ca-0cec-44dd-9483-c41d0067fcc5": {
+      "id": "05ec92ca-0cec-44dd-9483-c41d0067fcc5",
       "object_type": "architecture.room",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4173,8 +4204,8 @@
       "host_refs": [],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.323Z",
-      "updated_at": "2026-10-08T18:37:35.323Z",
+      "created_at": "2026-10-08T22:00:03.930Z",
+      "updated_at": "2026-10-08T22:00:03.930Z",
       "module_data": {
         "mark": "R01",
         "name": "Living / Dining",
@@ -4200,12 +4231,12 @@
         ],
         "boundary_source": "manual",
         "device_ids": [],
-        "id": "a7003f99-7ef1-4757-8038-c28740d624ed",
+        "id": "05ec92ca-0cec-44dd-9483-c41d0067fcc5",
         "area_mm2": 20000000
       }
     },
-    "302c45c9-77aa-47c3-b8de-87f77424aa3b": {
-      "id": "302c45c9-77aa-47c3-b8de-87f77424aa3b",
+    "150c5efc-4e59-4c97-8172-b1204032af42": {
+      "id": "150c5efc-4e59-4c97-8172-b1204032af42",
       "object_type": "architecture.floor",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4218,15 +4249,15 @@
         }
       ],
       "host_refs": [
-        "a7003f99-7ef1-4757-8038-c28740d624ed"
+        "05ec92ca-0cec-44dd-9483-c41d0067fcc5"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.328Z",
-      "updated_at": "2026-10-08T18:37:35.328Z",
+      "created_at": "2026-10-08T22:00:03.933Z",
+      "updated_at": "2026-10-08T22:00:03.933Z",
       "module_data": {
         "mark": "AF1",
-        "room_id": "a7003f99-7ef1-4757-8038-c28740d624ed",
+        "room_id": "05ec92ca-0cec-44dd-9483-c41d0067fcc5",
         "level_id": "GF",
         "elevation_mm": 0,
         "elevation_offset_mm": 0,
@@ -4238,7 +4269,7 @@
             "thickness_mm": 10
           }
         ],
-        "id": "302c45c9-77aa-47c3-b8de-87f77424aa3b",
+        "id": "150c5efc-4e59-4c97-8172-b1204032af42",
         "boundary_mm": [
           [
             0,
@@ -4260,8 +4291,8 @@
         "follows_room_boundary": true
       }
     },
-    "d20439e0-fce9-45ce-8982-16141756577f": {
-      "id": "d20439e0-fce9-45ce-8982-16141756577f",
+    "d0bc8284-cce6-437b-9c4b-3bc28544165b": {
+      "id": "d0bc8284-cce6-437b-9c4b-3bc28544165b",
       "object_type": "architecture.ceiling",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4274,15 +4305,15 @@
         }
       ],
       "host_refs": [
-        "a7003f99-7ef1-4757-8038-c28740d624ed"
+        "05ec92ca-0cec-44dd-9483-c41d0067fcc5"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.331Z",
-      "updated_at": "2026-10-08T18:37:35.331Z",
+      "created_at": "2026-10-08T22:00:03.936Z",
+      "updated_at": "2026-10-08T22:00:03.936Z",
       "module_data": {
         "mark": "CL1",
-        "room_id": "a7003f99-7ef1-4757-8038-c28740d624ed",
+        "room_id": "05ec92ca-0cec-44dd-9483-c41d0067fcc5",
         "level_id": "GF",
         "elevation_mm": 2800,
         "elevation_offset_mm": 0,
@@ -4292,7 +4323,7 @@
           600,
           600
         ],
-        "id": "d20439e0-fce9-45ce-8982-16141756577f",
+        "id": "d0bc8284-cce6-437b-9c4b-3bc28544165b",
         "boundary_mm": [
           [
             0,
@@ -4314,8 +4345,8 @@
         "follows_room_boundary": true
       }
     },
-    "38aa2ade-42d4-4f05-bea9-996cc682ec35": {
-      "id": "38aa2ade-42d4-4f05-bea9-996cc682ec35",
+    "fe42f66e-37b0-4791-bc2c-6cce0025e396": {
+      "id": "fe42f66e-37b0-4791-bc2c-6cce0025e396",
       "object_type": "architecture.room",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4330,8 +4361,8 @@
       "host_refs": [],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.335Z",
-      "updated_at": "2026-10-08T18:37:35.335Z",
+      "created_at": "2026-10-08T22:00:03.938Z",
+      "updated_at": "2026-10-08T22:00:03.938Z",
       "module_data": {
         "mark": "R02",
         "name": "Kitchen",
@@ -4357,12 +4388,12 @@
         ],
         "boundary_source": "manual",
         "device_ids": [],
-        "id": "38aa2ade-42d4-4f05-bea9-996cc682ec35",
+        "id": "fe42f66e-37b0-4791-bc2c-6cce0025e396",
         "area_mm2": 20000000
       }
     },
-    "9b796fc5-1d65-4e1a-bec3-40ef99634386": {
-      "id": "9b796fc5-1d65-4e1a-bec3-40ef99634386",
+    "295cbdbf-5bee-4351-a6ce-1844e2b09d01": {
+      "id": "295cbdbf-5bee-4351-a6ce-1844e2b09d01",
       "object_type": "architecture.floor",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4375,15 +4406,15 @@
         }
       ],
       "host_refs": [
-        "38aa2ade-42d4-4f05-bea9-996cc682ec35"
+        "fe42f66e-37b0-4791-bc2c-6cce0025e396"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.337Z",
-      "updated_at": "2026-10-08T18:37:35.337Z",
+      "created_at": "2026-10-08T22:00:03.940Z",
+      "updated_at": "2026-10-08T22:00:03.940Z",
       "module_data": {
         "mark": "AF1",
-        "room_id": "38aa2ade-42d4-4f05-bea9-996cc682ec35",
+        "room_id": "fe42f66e-37b0-4791-bc2c-6cce0025e396",
         "level_id": "GF",
         "elevation_mm": 0,
         "elevation_offset_mm": 0,
@@ -4395,7 +4426,7 @@
             "thickness_mm": 10
           }
         ],
-        "id": "9b796fc5-1d65-4e1a-bec3-40ef99634386",
+        "id": "295cbdbf-5bee-4351-a6ce-1844e2b09d01",
         "boundary_mm": [
           [
             4000,
@@ -4417,8 +4448,8 @@
         "follows_room_boundary": true
       }
     },
-    "5856a414-7a2e-45c7-90a9-126d76920a35": {
-      "id": "5856a414-7a2e-45c7-90a9-126d76920a35",
+    "6d389f94-224f-4e9a-82d6-c3231825f9c0": {
+      "id": "6d389f94-224f-4e9a-82d6-c3231825f9c0",
       "object_type": "architecture.ceiling",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4431,15 +4462,15 @@
         }
       ],
       "host_refs": [
-        "38aa2ade-42d4-4f05-bea9-996cc682ec35"
+        "fe42f66e-37b0-4791-bc2c-6cce0025e396"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.344Z",
-      "updated_at": "2026-10-08T18:37:35.344Z",
+      "created_at": "2026-10-08T22:00:03.943Z",
+      "updated_at": "2026-10-08T22:00:03.943Z",
       "module_data": {
         "mark": "CL1",
-        "room_id": "38aa2ade-42d4-4f05-bea9-996cc682ec35",
+        "room_id": "fe42f66e-37b0-4791-bc2c-6cce0025e396",
         "level_id": "GF",
         "elevation_mm": 2800,
         "elevation_offset_mm": 0,
@@ -4449,7 +4480,7 @@
           600,
           600
         ],
-        "id": "5856a414-7a2e-45c7-90a9-126d76920a35",
+        "id": "6d389f94-224f-4e9a-82d6-c3231825f9c0",
         "boundary_mm": [
           [
             4000,
@@ -4471,8 +4502,8 @@
         "follows_room_boundary": true
       }
     },
-    "b2bfc50c-e1c5-4b00-9f86-7d98dc0f6af4": {
-      "id": "b2bfc50c-e1c5-4b00-9f86-7d98dc0f6af4",
+    "75f2867f-da42-4b32-ab36-adef2edb7d81": {
+      "id": "75f2867f-da42-4b32-ab36-adef2edb7d81",
       "object_type": "architecture.room",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4487,8 +4518,8 @@
       "host_refs": [],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.350Z",
-      "updated_at": "2026-10-08T18:37:35.350Z",
+      "created_at": "2026-10-08T22:00:03.946Z",
+      "updated_at": "2026-10-08T22:00:03.946Z",
       "module_data": {
         "mark": "R03",
         "name": "Bath / Guest",
@@ -4514,12 +4545,12 @@
         ],
         "boundary_source": "manual",
         "device_ids": [],
-        "id": "b2bfc50c-e1c5-4b00-9f86-7d98dc0f6af4",
+        "id": "75f2867f-da42-4b32-ab36-adef2edb7d81",
         "area_mm2": 20000000
       }
     },
-    "3e64e773-abcb-4261-96de-9356d13a71b1": {
-      "id": "3e64e773-abcb-4261-96de-9356d13a71b1",
+    "62bc167a-bcc3-4b88-820d-da52a6ca3897": {
+      "id": "62bc167a-bcc3-4b88-820d-da52a6ca3897",
       "object_type": "architecture.floor",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4532,15 +4563,15 @@
         }
       ],
       "host_refs": [
-        "b2bfc50c-e1c5-4b00-9f86-7d98dc0f6af4"
+        "75f2867f-da42-4b32-ab36-adef2edb7d81"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.355Z",
-      "updated_at": "2026-10-08T18:37:35.355Z",
+      "created_at": "2026-10-08T22:00:03.949Z",
+      "updated_at": "2026-10-08T22:00:03.949Z",
       "module_data": {
         "mark": "AF1",
-        "room_id": "b2bfc50c-e1c5-4b00-9f86-7d98dc0f6af4",
+        "room_id": "75f2867f-da42-4b32-ab36-adef2edb7d81",
         "level_id": "GF",
         "elevation_mm": 0,
         "elevation_offset_mm": 0,
@@ -4552,7 +4583,7 @@
             "thickness_mm": 10
           }
         ],
-        "id": "3e64e773-abcb-4261-96de-9356d13a71b1",
+        "id": "62bc167a-bcc3-4b88-820d-da52a6ca3897",
         "boundary_mm": [
           [
             0,
@@ -4574,8 +4605,8 @@
         "follows_room_boundary": true
       }
     },
-    "51a66a77-662a-4f77-a8b7-41ffe414286f": {
-      "id": "51a66a77-662a-4f77-a8b7-41ffe414286f",
+    "d563f45e-dbec-4db6-8ce5-9481ba9c7919": {
+      "id": "d563f45e-dbec-4db6-8ce5-9481ba9c7919",
       "object_type": "architecture.ceiling",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4588,15 +4619,15 @@
         }
       ],
       "host_refs": [
-        "b2bfc50c-e1c5-4b00-9f86-7d98dc0f6af4"
+        "75f2867f-da42-4b32-ab36-adef2edb7d81"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.357Z",
-      "updated_at": "2026-10-08T18:37:35.357Z",
+      "created_at": "2026-10-08T22:00:03.951Z",
+      "updated_at": "2026-10-08T22:00:03.951Z",
       "module_data": {
         "mark": "CL1",
-        "room_id": "b2bfc50c-e1c5-4b00-9f86-7d98dc0f6af4",
+        "room_id": "75f2867f-da42-4b32-ab36-adef2edb7d81",
         "level_id": "GF",
         "elevation_mm": 2800,
         "elevation_offset_mm": 0,
@@ -4606,7 +4637,7 @@
           600,
           600
         ],
-        "id": "51a66a77-662a-4f77-a8b7-41ffe414286f",
+        "id": "d563f45e-dbec-4db6-8ce5-9481ba9c7919",
         "boundary_mm": [
           [
             0,
@@ -4628,8 +4659,8 @@
         "follows_room_boundary": true
       }
     },
-    "01c3bbf3-d49d-4d9e-bb6d-0ca1a10f6dfb": {
-      "id": "01c3bbf3-d49d-4d9e-bb6d-0ca1a10f6dfb",
+    "58f7bb07-de91-4fad-88ec-0a4c7124f776": {
+      "id": "58f7bb07-de91-4fad-88ec-0a4c7124f776",
       "object_type": "architecture.room",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4644,8 +4675,8 @@
       "host_refs": [],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.360Z",
-      "updated_at": "2026-10-08T18:37:35.360Z",
+      "created_at": "2026-10-08T22:00:03.954Z",
+      "updated_at": "2026-10-08T22:00:03.954Z",
       "module_data": {
         "mark": "R04",
         "name": "Bedroom 1",
@@ -4671,12 +4702,12 @@
         ],
         "boundary_source": "manual",
         "device_ids": [],
-        "id": "01c3bbf3-d49d-4d9e-bb6d-0ca1a10f6dfb",
+        "id": "58f7bb07-de91-4fad-88ec-0a4c7124f776",
         "area_mm2": 20000000
       }
     },
-    "b495e392-e8c2-4bce-b804-644ff88cc17e": {
-      "id": "b495e392-e8c2-4bce-b804-644ff88cc17e",
+    "f1ae4c11-102b-4fdf-9d40-4d2099423cc7": {
+      "id": "f1ae4c11-102b-4fdf-9d40-4d2099423cc7",
       "object_type": "architecture.floor",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4689,15 +4720,15 @@
         }
       ],
       "host_refs": [
-        "01c3bbf3-d49d-4d9e-bb6d-0ca1a10f6dfb"
+        "58f7bb07-de91-4fad-88ec-0a4c7124f776"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.363Z",
-      "updated_at": "2026-10-08T18:37:35.363Z",
+      "created_at": "2026-10-08T22:00:03.956Z",
+      "updated_at": "2026-10-08T22:00:03.956Z",
       "module_data": {
         "mark": "AF1",
-        "room_id": "01c3bbf3-d49d-4d9e-bb6d-0ca1a10f6dfb",
+        "room_id": "58f7bb07-de91-4fad-88ec-0a4c7124f776",
         "level_id": "GF",
         "elevation_mm": 0,
         "elevation_offset_mm": 0,
@@ -4709,7 +4740,7 @@
             "thickness_mm": 10
           }
         ],
-        "id": "b495e392-e8c2-4bce-b804-644ff88cc17e",
+        "id": "f1ae4c11-102b-4fdf-9d40-4d2099423cc7",
         "boundary_mm": [
           [
             4000,
@@ -4731,8 +4762,8 @@
         "follows_room_boundary": true
       }
     },
-    "cfe14606-0279-4690-b89d-0a440bd0d547": {
-      "id": "cfe14606-0279-4690-b89d-0a440bd0d547",
+    "a53f3792-7b1b-4292-bef3-19e0c1ddf7a8": {
+      "id": "a53f3792-7b1b-4292-bef3-19e0c1ddf7a8",
       "object_type": "architecture.ceiling",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4745,15 +4776,15 @@
         }
       ],
       "host_refs": [
-        "01c3bbf3-d49d-4d9e-bb6d-0ca1a10f6dfb"
+        "58f7bb07-de91-4fad-88ec-0a4c7124f776"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.367Z",
-      "updated_at": "2026-10-08T18:37:35.367Z",
+      "created_at": "2026-10-08T22:00:03.959Z",
+      "updated_at": "2026-10-08T22:00:03.959Z",
       "module_data": {
         "mark": "CL1",
-        "room_id": "01c3bbf3-d49d-4d9e-bb6d-0ca1a10f6dfb",
+        "room_id": "58f7bb07-de91-4fad-88ec-0a4c7124f776",
         "level_id": "GF",
         "elevation_mm": 2800,
         "elevation_offset_mm": 0,
@@ -4763,7 +4794,7 @@
           600,
           600
         ],
-        "id": "cfe14606-0279-4690-b89d-0a440bd0d547",
+        "id": "a53f3792-7b1b-4292-bef3-19e0c1ddf7a8",
         "boundary_mm": [
           [
             4000,
@@ -4785,8 +4816,8 @@
         "follows_room_boundary": true
       }
     },
-    "6846b210-d17e-4d55-8530-cfafafba6217": {
-      "id": "6846b210-d17e-4d55-8530-cfafafba6217",
+    "62ba6712-7ea3-494c-83ad-3bc29bc5053f": {
+      "id": "62ba6712-7ea3-494c-83ad-3bc29bc5053f",
       "object_type": "architecture.room",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4801,8 +4832,8 @@
       "host_refs": [],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.371Z",
-      "updated_at": "2026-10-08T18:37:35.371Z",
+      "created_at": "2026-10-08T22:00:03.961Z",
+      "updated_at": "2026-10-08T22:00:03.961Z",
       "module_data": {
         "mark": "R01",
         "name": "Living / Dining",
@@ -4828,12 +4859,12 @@
         ],
         "boundary_source": "manual",
         "device_ids": [],
-        "id": "6846b210-d17e-4d55-8530-cfafafba6217",
+        "id": "62ba6712-7ea3-494c-83ad-3bc29bc5053f",
         "area_mm2": 20000000
       }
     },
-    "94d44b1f-b354-499a-9c43-747a04cbda42": {
-      "id": "94d44b1f-b354-499a-9c43-747a04cbda42",
+    "cbc781c7-2417-43d6-b132-cdff14a327f7": {
+      "id": "cbc781c7-2417-43d6-b132-cdff14a327f7",
       "object_type": "architecture.floor",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4846,15 +4877,15 @@
         }
       ],
       "host_refs": [
-        "6846b210-d17e-4d55-8530-cfafafba6217"
+        "62ba6712-7ea3-494c-83ad-3bc29bc5053f"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.375Z",
-      "updated_at": "2026-10-08T18:37:35.375Z",
+      "created_at": "2026-10-08T22:00:03.963Z",
+      "updated_at": "2026-10-08T22:00:03.963Z",
       "module_data": {
         "mark": "AF1",
-        "room_id": "6846b210-d17e-4d55-8530-cfafafba6217",
+        "room_id": "62ba6712-7ea3-494c-83ad-3bc29bc5053f",
         "level_id": "L1",
         "elevation_mm": 3000,
         "elevation_offset_mm": 0,
@@ -4866,7 +4897,7 @@
             "thickness_mm": 10
           }
         ],
-        "id": "94d44b1f-b354-499a-9c43-747a04cbda42",
+        "id": "cbc781c7-2417-43d6-b132-cdff14a327f7",
         "boundary_mm": [
           [
             0,
@@ -4888,8 +4919,8 @@
         "follows_room_boundary": true
       }
     },
-    "4e91d26b-41a9-4cc3-a3c0-1abd9a8b6ef8": {
-      "id": "4e91d26b-41a9-4cc3-a3c0-1abd9a8b6ef8",
+    "769f9231-4111-4c64-943e-0c48248d6c0b": {
+      "id": "769f9231-4111-4c64-943e-0c48248d6c0b",
       "object_type": "architecture.ceiling",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4902,15 +4933,15 @@
         }
       ],
       "host_refs": [
-        "6846b210-d17e-4d55-8530-cfafafba6217"
+        "62ba6712-7ea3-494c-83ad-3bc29bc5053f"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.378Z",
-      "updated_at": "2026-10-08T18:37:35.378Z",
+      "created_at": "2026-10-08T22:00:03.966Z",
+      "updated_at": "2026-10-08T22:00:03.966Z",
       "module_data": {
         "mark": "CL1",
-        "room_id": "6846b210-d17e-4d55-8530-cfafafba6217",
+        "room_id": "62ba6712-7ea3-494c-83ad-3bc29bc5053f",
         "level_id": "L1",
         "elevation_mm": 5800,
         "elevation_offset_mm": 0,
@@ -4920,7 +4951,7 @@
           600,
           600
         ],
-        "id": "4e91d26b-41a9-4cc3-a3c0-1abd9a8b6ef8",
+        "id": "769f9231-4111-4c64-943e-0c48248d6c0b",
         "boundary_mm": [
           [
             0,
@@ -4942,8 +4973,8 @@
         "follows_room_boundary": true
       }
     },
-    "a9342cf0-5ab6-408b-b491-a8466c5248f4": {
-      "id": "a9342cf0-5ab6-408b-b491-a8466c5248f4",
+    "77a2817d-ab75-4e4d-856f-35e180c3ed91": {
+      "id": "77a2817d-ab75-4e4d-856f-35e180c3ed91",
       "object_type": "architecture.room",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -4958,8 +4989,8 @@
       "host_refs": [],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.383Z",
-      "updated_at": "2026-10-08T18:37:35.383Z",
+      "created_at": "2026-10-08T22:00:03.968Z",
+      "updated_at": "2026-10-08T22:00:03.968Z",
       "module_data": {
         "mark": "R02",
         "name": "Kitchen",
@@ -4985,12 +5016,12 @@
         ],
         "boundary_source": "manual",
         "device_ids": [],
-        "id": "a9342cf0-5ab6-408b-b491-a8466c5248f4",
+        "id": "77a2817d-ab75-4e4d-856f-35e180c3ed91",
         "area_mm2": 20000000
       }
     },
-    "3f68dbac-5efb-4bc8-aff7-3ef3aff09cdd": {
-      "id": "3f68dbac-5efb-4bc8-aff7-3ef3aff09cdd",
+    "881ab3c6-0c2a-4872-a3f3-a86eb3e3f2be": {
+      "id": "881ab3c6-0c2a-4872-a3f3-a86eb3e3f2be",
       "object_type": "architecture.floor",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -5003,15 +5034,15 @@
         }
       ],
       "host_refs": [
-        "a9342cf0-5ab6-408b-b491-a8466c5248f4"
+        "77a2817d-ab75-4e4d-856f-35e180c3ed91"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.387Z",
-      "updated_at": "2026-10-08T18:37:35.387Z",
+      "created_at": "2026-10-08T22:00:03.971Z",
+      "updated_at": "2026-10-08T22:00:03.971Z",
       "module_data": {
         "mark": "AF1",
-        "room_id": "a9342cf0-5ab6-408b-b491-a8466c5248f4",
+        "room_id": "77a2817d-ab75-4e4d-856f-35e180c3ed91",
         "level_id": "L1",
         "elevation_mm": 3000,
         "elevation_offset_mm": 0,
@@ -5023,7 +5054,7 @@
             "thickness_mm": 10
           }
         ],
-        "id": "3f68dbac-5efb-4bc8-aff7-3ef3aff09cdd",
+        "id": "881ab3c6-0c2a-4872-a3f3-a86eb3e3f2be",
         "boundary_mm": [
           [
             4000,
@@ -5045,8 +5076,8 @@
         "follows_room_boundary": true
       }
     },
-    "e0650e0c-881b-4edd-86a9-803682e2d60e": {
-      "id": "e0650e0c-881b-4edd-86a9-803682e2d60e",
+    "00148730-4fd7-483c-8e57-0a0d2b665cab": {
+      "id": "00148730-4fd7-483c-8e57-0a0d2b665cab",
       "object_type": "architecture.ceiling",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -5059,15 +5090,15 @@
         }
       ],
       "host_refs": [
-        "a9342cf0-5ab6-408b-b491-a8466c5248f4"
+        "77a2817d-ab75-4e4d-856f-35e180c3ed91"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.390Z",
-      "updated_at": "2026-10-08T18:37:35.390Z",
+      "created_at": "2026-10-08T22:00:03.974Z",
+      "updated_at": "2026-10-08T22:00:03.974Z",
       "module_data": {
         "mark": "CL1",
-        "room_id": "a9342cf0-5ab6-408b-b491-a8466c5248f4",
+        "room_id": "77a2817d-ab75-4e4d-856f-35e180c3ed91",
         "level_id": "L1",
         "elevation_mm": 5800,
         "elevation_offset_mm": 0,
@@ -5077,7 +5108,7 @@
           600,
           600
         ],
-        "id": "e0650e0c-881b-4edd-86a9-803682e2d60e",
+        "id": "00148730-4fd7-483c-8e57-0a0d2b665cab",
         "boundary_mm": [
           [
             4000,
@@ -5099,8 +5130,8 @@
         "follows_room_boundary": true
       }
     },
-    "f8afd73d-c294-4abc-b385-3c8115e4ad25": {
-      "id": "f8afd73d-c294-4abc-b385-3c8115e4ad25",
+    "b569e9e6-e24a-4e50-8efe-183e53a5ce3e": {
+      "id": "b569e9e6-e24a-4e50-8efe-183e53a5ce3e",
       "object_type": "architecture.room",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -5115,8 +5146,8 @@
       "host_refs": [],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.392Z",
-      "updated_at": "2026-10-08T18:37:35.392Z",
+      "created_at": "2026-10-08T22:00:03.976Z",
+      "updated_at": "2026-10-08T22:00:03.976Z",
       "module_data": {
         "mark": "R03",
         "name": "Bedroom 2",
@@ -5142,12 +5173,12 @@
         ],
         "boundary_source": "manual",
         "device_ids": [],
-        "id": "f8afd73d-c294-4abc-b385-3c8115e4ad25",
+        "id": "b569e9e6-e24a-4e50-8efe-183e53a5ce3e",
         "area_mm2": 20000000
       }
     },
-    "542fc740-df62-4b6c-bb90-8462a9d250d1": {
-      "id": "542fc740-df62-4b6c-bb90-8462a9d250d1",
+    "29d1b3e1-e978-4701-adc8-9f65841875d7": {
+      "id": "29d1b3e1-e978-4701-adc8-9f65841875d7",
       "object_type": "architecture.floor",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -5160,15 +5191,15 @@
         }
       ],
       "host_refs": [
-        "f8afd73d-c294-4abc-b385-3c8115e4ad25"
+        "b569e9e6-e24a-4e50-8efe-183e53a5ce3e"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.396Z",
-      "updated_at": "2026-10-08T18:37:35.396Z",
+      "created_at": "2026-10-08T22:00:03.978Z",
+      "updated_at": "2026-10-08T22:00:03.978Z",
       "module_data": {
         "mark": "AF1",
-        "room_id": "f8afd73d-c294-4abc-b385-3c8115e4ad25",
+        "room_id": "b569e9e6-e24a-4e50-8efe-183e53a5ce3e",
         "level_id": "L1",
         "elevation_mm": 3000,
         "elevation_offset_mm": 0,
@@ -5180,7 +5211,7 @@
             "thickness_mm": 10
           }
         ],
-        "id": "542fc740-df62-4b6c-bb90-8462a9d250d1",
+        "id": "29d1b3e1-e978-4701-adc8-9f65841875d7",
         "boundary_mm": [
           [
             0,
@@ -5202,8 +5233,8 @@
         "follows_room_boundary": true
       }
     },
-    "55c6c115-683d-4004-9663-6cd58216922c": {
-      "id": "55c6c115-683d-4004-9663-6cd58216922c",
+    "e2702fb9-61c6-42b3-a695-76f47db3710b": {
+      "id": "e2702fb9-61c6-42b3-a695-76f47db3710b",
       "object_type": "architecture.ceiling",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -5216,15 +5247,15 @@
         }
       ],
       "host_refs": [
-        "f8afd73d-c294-4abc-b385-3c8115e4ad25"
+        "b569e9e6-e24a-4e50-8efe-183e53a5ce3e"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.399Z",
-      "updated_at": "2026-10-08T18:37:35.399Z",
+      "created_at": "2026-10-08T22:00:03.980Z",
+      "updated_at": "2026-10-08T22:00:03.980Z",
       "module_data": {
         "mark": "CL1",
-        "room_id": "f8afd73d-c294-4abc-b385-3c8115e4ad25",
+        "room_id": "b569e9e6-e24a-4e50-8efe-183e53a5ce3e",
         "level_id": "L1",
         "elevation_mm": 5800,
         "elevation_offset_mm": 0,
@@ -5234,7 +5265,7 @@
           600,
           600
         ],
-        "id": "55c6c115-683d-4004-9663-6cd58216922c",
+        "id": "e2702fb9-61c6-42b3-a695-76f47db3710b",
         "boundary_mm": [
           [
             0,
@@ -5256,8 +5287,8 @@
         "follows_room_boundary": true
       }
     },
-    "5fafc0f5-1a0f-4fda-ade6-fc18da32cacb": {
-      "id": "5fafc0f5-1a0f-4fda-ade6-fc18da32cacb",
+    "c7b8f297-d901-4c26-9c30-d092438969f4": {
+      "id": "c7b8f297-d901-4c26-9c30-d092438969f4",
       "object_type": "architecture.room",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -5272,8 +5303,8 @@
       "host_refs": [],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.402Z",
-      "updated_at": "2026-10-08T18:37:35.402Z",
+      "created_at": "2026-10-08T22:00:03.983Z",
+      "updated_at": "2026-10-08T22:00:03.983Z",
       "module_data": {
         "mark": "R04",
         "name": "Primary Bedroom",
@@ -5299,12 +5330,12 @@
         ],
         "boundary_source": "manual",
         "device_ids": [],
-        "id": "5fafc0f5-1a0f-4fda-ade6-fc18da32cacb",
+        "id": "c7b8f297-d901-4c26-9c30-d092438969f4",
         "area_mm2": 20000000
       }
     },
-    "ac8cd1cc-db2f-4e13-bc86-b631ea6b4bfe": {
-      "id": "ac8cd1cc-db2f-4e13-bc86-b631ea6b4bfe",
+    "50eef662-ceee-47ea-a5e2-94a27dcf20db": {
+      "id": "50eef662-ceee-47ea-a5e2-94a27dcf20db",
       "object_type": "architecture.floor",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -5317,15 +5348,15 @@
         }
       ],
       "host_refs": [
-        "5fafc0f5-1a0f-4fda-ade6-fc18da32cacb"
+        "c7b8f297-d901-4c26-9c30-d092438969f4"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.405Z",
-      "updated_at": "2026-10-08T18:37:35.405Z",
+      "created_at": "2026-10-08T22:00:03.985Z",
+      "updated_at": "2026-10-08T22:00:03.985Z",
       "module_data": {
         "mark": "AF1",
-        "room_id": "5fafc0f5-1a0f-4fda-ade6-fc18da32cacb",
+        "room_id": "c7b8f297-d901-4c26-9c30-d092438969f4",
         "level_id": "L1",
         "elevation_mm": 3000,
         "elevation_offset_mm": 0,
@@ -5337,7 +5368,7 @@
             "thickness_mm": 10
           }
         ],
-        "id": "ac8cd1cc-db2f-4e13-bc86-b631ea6b4bfe",
+        "id": "50eef662-ceee-47ea-a5e2-94a27dcf20db",
         "boundary_mm": [
           [
             4000,
@@ -5359,8 +5390,8 @@
         "follows_room_boundary": true
       }
     },
-    "bb4b38f6-e6a1-4192-a9df-70b71b370d80": {
-      "id": "bb4b38f6-e6a1-4192-a9df-70b71b370d80",
+    "cba7038b-2ce4-4653-a3f0-fa3ef3bcd0e7": {
+      "id": "cba7038b-2ce4-4653-a3f0-fa3ef3bcd0e7",
       "object_type": "architecture.ceiling",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -5373,15 +5404,15 @@
         }
       ],
       "host_refs": [
-        "5fafc0f5-1a0f-4fda-ade6-fc18da32cacb"
+        "c7b8f297-d901-4c26-9c30-d092438969f4"
       ],
       "connector_refs": [],
       "status": "active",
-      "created_at": "2026-10-08T18:37:35.408Z",
-      "updated_at": "2026-10-08T18:37:35.408Z",
+      "created_at": "2026-10-08T22:00:03.987Z",
+      "updated_at": "2026-10-08T22:00:03.987Z",
       "module_data": {
         "mark": "CL1",
-        "room_id": "5fafc0f5-1a0f-4fda-ade6-fc18da32cacb",
+        "room_id": "c7b8f297-d901-4c26-9c30-d092438969f4",
         "level_id": "L1",
         "elevation_mm": 5800,
         "elevation_offset_mm": 0,
@@ -5391,7 +5422,7 @@
           600,
           600
         ],
-        "id": "bb4b38f6-e6a1-4192-a9df-70b71b370d80",
+        "id": "cba7038b-2ce4-4653-a3f0-fa3ef3bcd0e7",
         "boundary_mm": [
           [
             4000,
@@ -5413,8 +5444,8 @@
         "follows_room_boundary": true
       }
     },
-    "4e67e85f-059e-47de-b2cd-87b847c535f6": {
-      "id": "4e67e85f-059e-47de-b2cd-87b847c535f6",
+    "8d61ee2b-ba57-40b5-9dc2-9be96a3f040d": {
+      "id": "8d61ee2b-ba57-40b5-9dc2-9be96a3f040d",
       "object_type": "roof.system",
       "owner_module": "constructflow.roof",
       "schema_version": 1,
@@ -5472,15 +5503,15 @@
         "material": "pu_metal_sheet",
         "thickness_mm": 30
       },
-      "created_at": "2026-10-08T18:37:35.410Z",
-      "updated_at": "2026-10-08T18:37:35.410Z",
+      "created_at": "2026-10-08T22:00:03.989Z",
+      "updated_at": "2026-10-08T22:00:03.989Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "2bc92b2f-a682-43ec-a242-8c7e4aff6281": {
-      "id": "2bc92b2f-a682-43ec-a242-8c7e4aff6281",
+    "123b8bc1-f121-4cad-8648-233ec21a2d13": {
+      "id": "123b8bc1-f121-4cad-8648-233ec21a2d13",
       "object_type": "architecture.bathroom",
       "owner_module": "constructflow.architecture",
       "schema_version": 1,
@@ -5532,15 +5563,15 @@
         ],
         "toilet_rough_in_mm": 305
       },
-      "created_at": "2026-10-08T18:37:35.416Z",
-      "updated_at": "2026-10-08T18:37:35.416Z",
+      "created_at": "2026-10-08T22:00:03.993Z",
+      "updated_at": "2026-10-08T22:00:03.993Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "f2463b58-1424-4dde-867d-8c2e679b2280": {
-      "id": "f2463b58-1424-4dde-867d-8c2e679b2280",
+    "8875b5af-9756-4f39-997f-32cf895e4022": {
+      "id": "8875b5af-9756-4f39-997f-32cf895e4022",
       "object_type": "interior.cabinet_run",
       "owner_module": "constructflow.interior",
       "schema_version": 1,
@@ -5585,15 +5616,15 @@
         "countertop_material": "quartz",
         "countertop_mm": 20
       },
-      "created_at": "2026-10-08T18:37:35.420Z",
-      "updated_at": "2026-10-08T18:37:35.420Z",
+      "created_at": "2026-10-08T22:00:03.996Z",
+      "updated_at": "2026-10-08T22:00:03.996Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "88907c2b-1e36-43de-a385-09376d0913cd": {
-      "id": "88907c2b-1e36-43de-a385-09376d0913cd",
+    "bfd26e4f-216e-483c-b5cb-84cc21dc2802": {
+      "id": "bfd26e4f-216e-483c-b5cb-84cc21dc2802",
       "object_type": "electrical.led_run",
       "owner_module": "constructflow.electrical",
       "schema_version": 1,
@@ -5606,7 +5637,7 @@
         }
       ],
       "host_refs": [
-        "f2463b58-1424-4dde-867d-8c2e679b2280"
+        "8875b5af-9756-4f39-997f-32cf895e4022"
       ],
       "connector_refs": [],
       "status": "active",
@@ -5630,17 +5661,17 @@
         "driver_watts": 40,
         "derating_ratio": 0.8,
         "material": "aluminium_profile_diffuser",
-        "host_id": "f2463b58-1424-4dde-867d-8c2e679b2280"
+        "host_id": "8875b5af-9756-4f39-997f-32cf895e4022"
       },
-      "created_at": "2026-10-08T18:37:35.432Z",
-      "updated_at": "2026-10-08T18:37:35.432Z",
+      "created_at": "2026-10-08T22:00:04.005Z",
+      "updated_at": "2026-10-08T22:00:04.005Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "47e9765b-a882-4dd6-9dc0-8f3c21295fe2": {
-      "id": "47e9765b-a882-4dd6-9dc0-8f3c21295fe2",
+    "86850876-5257-4362-b50d-f901913b461a": {
+      "id": "86850876-5257-4362-b50d-f901913b461a",
       "object_type": "electrical.fixture",
       "owner_module": "constructflow.electrical",
       "schema_version": 1,
@@ -5669,15 +5700,15 @@
         "switch_ways": 1,
         "grounded": true
       },
-      "created_at": "2026-10-08T18:37:35.440Z",
-      "updated_at": "2026-10-08T18:37:35.440Z",
+      "created_at": "2026-10-08T22:00:04.011Z",
+      "updated_at": "2026-10-08T22:00:04.011Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "80f30ad5-e879-4080-8fa6-67706863d18a": {
-      "id": "80f30ad5-e879-4080-8fa6-67706863d18a",
+    "0eef562d-338a-48ac-a50b-add3489c45ca": {
+      "id": "0eef562d-338a-48ac-a50b-add3489c45ca",
       "object_type": "electrical.fixture",
       "owner_module": "constructflow.electrical",
       "schema_version": 1,
@@ -5706,15 +5737,15 @@
         "switch_ways": 1,
         "grounded": true
       },
-      "created_at": "2026-10-08T18:37:35.447Z",
-      "updated_at": "2026-10-08T18:37:35.447Z",
+      "created_at": "2026-10-08T22:00:04.016Z",
+      "updated_at": "2026-10-08T22:00:04.016Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "f74f0ca2-a1f1-47a3-baad-d306721ae9aa": {
-      "id": "f74f0ca2-a1f1-47a3-baad-d306721ae9aa",
+    "864880fd-3d29-455e-8e31-37dd875f15f2": {
+      "id": "864880fd-3d29-455e-8e31-37dd875f15f2",
       "object_type": "electrical.fixture",
       "owner_module": "constructflow.electrical",
       "schema_version": 1,
@@ -5743,15 +5774,15 @@
         "switch_ways": 1,
         "grounded": true
       },
-      "created_at": "2026-10-08T18:37:35.454Z",
-      "updated_at": "2026-10-08T18:37:35.454Z",
+      "created_at": "2026-10-08T22:00:04.021Z",
+      "updated_at": "2026-10-08T22:00:04.021Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "805d5e6a-6af4-43b3-94ab-c7fa1261ff29": {
-      "id": "805d5e6a-6af4-43b3-94ab-c7fa1261ff29",
+    "a484b857-0bb6-4576-8ca3-8837c82806c4": {
+      "id": "a484b857-0bb6-4576-8ca3-8837c82806c4",
       "object_type": "electrical.fixture",
       "owner_module": "constructflow.electrical",
       "schema_version": 1,
@@ -5780,15 +5811,15 @@
         "switch_ways": 1,
         "grounded": true
       },
-      "created_at": "2026-10-08T18:37:35.460Z",
-      "updated_at": "2026-10-08T18:37:35.460Z",
+      "created_at": "2026-10-08T22:00:04.025Z",
+      "updated_at": "2026-10-08T22:00:04.025Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "859d738b-c775-4ca2-90a3-78a56d51f6f0": {
-      "id": "859d738b-c775-4ca2-90a3-78a56d51f6f0",
+    "ea4f2ead-d3dd-4203-a55a-af7b2f23082b": {
+      "id": "ea4f2ead-d3dd-4203-a55a-af7b2f23082b",
       "object_type": "electrical.fixture",
       "owner_module": "constructflow.electrical",
       "schema_version": 1,
@@ -5817,15 +5848,15 @@
         "switch_ways": 1,
         "grounded": true
       },
-      "created_at": "2026-10-08T18:37:35.465Z",
-      "updated_at": "2026-10-08T18:37:35.465Z",
+      "created_at": "2026-10-08T22:00:04.030Z",
+      "updated_at": "2026-10-08T22:00:04.030Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "707f1fd9-d0d0-48e3-b3f2-b78e4433a9b7": {
-      "id": "707f1fd9-d0d0-48e3-b3f2-b78e4433a9b7",
+    "69cbd78d-0ccc-4722-a893-d23203b7dc34": {
+      "id": "69cbd78d-0ccc-4722-a893-d23203b7dc34",
       "object_type": "electrical.fixture",
       "owner_module": "constructflow.electrical",
       "schema_version": 1,
@@ -5854,15 +5885,15 @@
         "switch_ways": 1,
         "grounded": true
       },
-      "created_at": "2026-10-08T18:37:35.475Z",
-      "updated_at": "2026-10-08T18:37:35.475Z",
+      "created_at": "2026-10-08T22:00:04.036Z",
+      "updated_at": "2026-10-08T22:00:04.036Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "ecff5662-7919-490d-9e8f-29b38d0fb7be": {
-      "id": "ecff5662-7919-490d-9e8f-29b38d0fb7be",
+    "4e59eac2-d7d0-4316-aa24-47703c8d37bc": {
+      "id": "4e59eac2-d7d0-4316-aa24-47703c8d37bc",
       "object_type": "electrical.fixture",
       "owner_module": "constructflow.electrical",
       "schema_version": 1,
@@ -5888,21 +5919,21 @@
         "kind": "switch",
         "watts": 0,
         "controlled_ids": [
-          "80f30ad5-e879-4080-8fa6-67706863d18a",
-          "f74f0ca2-a1f1-47a3-baad-d306721ae9aa"
+          "0eef562d-338a-48ac-a50b-add3489c45ca",
+          "864880fd-3d29-455e-8e31-37dd875f15f2"
         ],
         "switch_ways": 2,
         "grounded": true
       },
-      "created_at": "2026-10-08T18:37:35.481Z",
-      "updated_at": "2026-10-08T18:37:35.481Z",
+      "created_at": "2026-10-08T22:00:04.042Z",
+      "updated_at": "2026-10-08T22:00:04.042Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
       }
     },
-    "10197ad4-372c-400d-afdd-7d66c3b96091": {
-      "id": "10197ad4-372c-400d-afdd-7d66c3b96091",
+    "7a22aade-377b-4ce0-905c-61817a0bec33": {
+      "id": "7a22aade-377b-4ce0-905c-61817a0bec33",
       "object_type": "electrical.circuit",
       "owner_module": "constructflow.electrical",
       "schema_version": 1,
@@ -5915,28 +5946,28 @@
         }
       ],
       "host_refs": [
-        "47e9765b-a882-4dd6-9dc0-8f3c21295fe2"
+        "86850876-5257-4362-b50d-f901913b461a"
       ],
       "connector_refs": [],
       "status": "active",
       "module_data": {
         "mark": "CKT1",
         "level_id": "GF",
-        "panel_id": "47e9765b-a882-4dd6-9dc0-8f3c21295fe2",
+        "panel_id": "86850876-5257-4362-b50d-f901913b461a",
         "device_ids": [
-          "80f30ad5-e879-4080-8fa6-67706863d18a",
-          "f74f0ca2-a1f1-47a3-baad-d306721ae9aa",
-          "805d5e6a-6af4-43b3-94ab-c7fa1261ff29",
-          "859d738b-c775-4ca2-90a3-78a56d51f6f0",
-          "707f1fd9-d0d0-48e3-b3f2-b78e4433a9b7"
+          "0eef562d-338a-48ac-a50b-add3489c45ca",
+          "864880fd-3d29-455e-8e31-37dd875f15f2",
+          "a484b857-0bb6-4576-8ca3-8837c82806c4",
+          "ea4f2ead-d3dd-4203-a55a-af7b2f23082b",
+          "69cbd78d-0ccc-4722-a893-d23203b7dc34"
         ],
         "voltage": 230,
         "breaker_a": 16,
         "allowable_current_a": 20,
         "cable_mm2": 2.5
       },
-      "created_at": "2026-10-08T18:37:35.489Z",
-      "updated_at": "2026-10-08T18:37:35.489Z",
+      "created_at": "2026-10-08T22:00:04.047Z",
+      "updated_at": "2026-10-08T22:00:04.047Z",
       "revision_meta": {
         "dirty_quantity": true,
         "dirty_drawing": true
@@ -5946,265 +5977,265 @@
   "relationships": [
     {
       "kind": "supports",
-      "source_id": "51fa0c9b-20d6-48bb-8a72-a9e7018d806d",
-      "target_id": "11fe2aae-bc67-4ddb-870a-5cd463af1408",
+      "source_id": "53443e19-0385-4a01-92c5-7b1a8f4f9de1",
+      "target_id": "b2865b0d-163b-4f68-9a00-e4b5e8feec02",
       "role": "foundation_support"
     },
     {
       "kind": "supported_by",
-      "source_id": "11fe2aae-bc67-4ddb-870a-5cd463af1408",
-      "target_id": "51fa0c9b-20d6-48bb-8a72-a9e7018d806d",
+      "source_id": "b2865b0d-163b-4f68-9a00-e4b5e8feec02",
+      "target_id": "53443e19-0385-4a01-92c5-7b1a8f4f9de1",
       "role": "foundation_support"
     },
     {
       "kind": "supports",
-      "source_id": "5ac991a6-c802-4614-a1b2-f72f00817da3",
-      "target_id": "5541a957-e402-443d-a8f3-6f79ff656832",
+      "source_id": "9bb0a5e5-6635-47b1-86e2-196ad80e6359",
+      "target_id": "7a3cdc2f-0c14-412f-a90d-129b8a5752b7",
       "role": "foundation_support"
     },
     {
       "kind": "supported_by",
-      "source_id": "5541a957-e402-443d-a8f3-6f79ff656832",
-      "target_id": "5ac991a6-c802-4614-a1b2-f72f00817da3",
+      "source_id": "7a3cdc2f-0c14-412f-a90d-129b8a5752b7",
+      "target_id": "9bb0a5e5-6635-47b1-86e2-196ad80e6359",
       "role": "foundation_support"
     },
     {
       "kind": "supports",
-      "source_id": "8d88057f-a1fb-47b1-97e1-4a3c9cfe6c53",
-      "target_id": "927dccc1-a68d-4388-b006-49f5e827a0cf",
+      "source_id": "aa982a05-c2fc-44fe-aef9-faf193fbc3a9",
+      "target_id": "ea5296c3-9906-4588-890c-780e2c6183f0",
       "role": "foundation_support"
     },
     {
       "kind": "supported_by",
-      "source_id": "927dccc1-a68d-4388-b006-49f5e827a0cf",
-      "target_id": "8d88057f-a1fb-47b1-97e1-4a3c9cfe6c53",
+      "source_id": "ea5296c3-9906-4588-890c-780e2c6183f0",
+      "target_id": "aa982a05-c2fc-44fe-aef9-faf193fbc3a9",
       "role": "foundation_support"
     },
     {
       "kind": "supports",
-      "source_id": "b07ec8b3-98c2-4781-91ec-467930211fbf",
-      "target_id": "4b39c03f-96cc-4a7e-87ef-530c3b9b6afc",
+      "source_id": "03f64007-30df-46a1-b89e-6a33eeb344fc",
+      "target_id": "c2364422-f0dd-489c-863f-483b525e8db7",
       "role": "foundation_support"
     },
     {
       "kind": "supported_by",
-      "source_id": "4b39c03f-96cc-4a7e-87ef-530c3b9b6afc",
-      "target_id": "b07ec8b3-98c2-4781-91ec-467930211fbf",
+      "source_id": "c2364422-f0dd-489c-863f-483b525e8db7",
+      "target_id": "03f64007-30df-46a1-b89e-6a33eeb344fc",
       "role": "foundation_support"
     },
     {
       "kind": "supports",
-      "source_id": "a6ee4abe-330a-406c-9874-432b7e6a4ad1",
-      "target_id": "f32d80c6-41c0-4be7-baf0-444962795602",
+      "source_id": "752d109c-aa91-43df-97da-f16ca743126e",
+      "target_id": "1024ce09-5074-4a66-a22b-5cd87ff2a011",
       "role": "foundation_support"
     },
     {
       "kind": "supported_by",
-      "source_id": "f32d80c6-41c0-4be7-baf0-444962795602",
-      "target_id": "a6ee4abe-330a-406c-9874-432b7e6a4ad1",
+      "source_id": "1024ce09-5074-4a66-a22b-5cd87ff2a011",
+      "target_id": "752d109c-aa91-43df-97da-f16ca743126e",
       "role": "foundation_support"
     },
     {
       "kind": "supports",
-      "source_id": "2b6f02e0-14b4-47ce-a979-935b06d72615",
-      "target_id": "c849e4a9-9ea0-4245-ab69-b59c36b1f557",
+      "source_id": "47d36337-85fb-48b2-b92c-722512399c31",
+      "target_id": "3d9fcd80-8ba8-4ec7-a9a5-abf884461572",
       "role": "foundation_support"
     },
     {
       "kind": "supported_by",
-      "source_id": "c849e4a9-9ea0-4245-ab69-b59c36b1f557",
-      "target_id": "2b6f02e0-14b4-47ce-a979-935b06d72615",
+      "source_id": "3d9fcd80-8ba8-4ec7-a9a5-abf884461572",
+      "target_id": "47d36337-85fb-48b2-b92c-722512399c31",
       "role": "foundation_support"
     },
     {
       "kind": "supports",
-      "source_id": "82e7778a-4e26-44d3-bba3-961d1374c5d3",
-      "target_id": "5b90a2e4-10c8-4434-98fa-ecadd82b41c1",
+      "source_id": "c074c70a-c3c7-4b2d-b3f8-3ab1c9a4bb1d",
+      "target_id": "fe274025-3925-4593-9b65-931aec1d036a",
       "role": "foundation_support"
     },
     {
       "kind": "supported_by",
-      "source_id": "5b90a2e4-10c8-4434-98fa-ecadd82b41c1",
-      "target_id": "82e7778a-4e26-44d3-bba3-961d1374c5d3",
+      "source_id": "fe274025-3925-4593-9b65-931aec1d036a",
+      "target_id": "c074c70a-c3c7-4b2d-b3f8-3ab1c9a4bb1d",
       "role": "foundation_support"
     },
     {
       "kind": "supports",
-      "source_id": "6d29ace8-8841-4f32-b11c-01530cceabe3",
-      "target_id": "cbff70dc-c900-467e-a627-709098adc9ae",
+      "source_id": "5d8c5d77-cf20-4fd1-a78a-d21e37bd0226",
+      "target_id": "7b872f3c-1aa4-4ca2-a0aa-89f20a125ef0",
       "role": "foundation_support"
     },
     {
       "kind": "supported_by",
-      "source_id": "cbff70dc-c900-467e-a627-709098adc9ae",
-      "target_id": "6d29ace8-8841-4f32-b11c-01530cceabe3",
+      "source_id": "7b872f3c-1aa4-4ca2-a0aa-89f20a125ef0",
+      "target_id": "5d8c5d77-cf20-4fd1-a78a-d21e37bd0226",
       "role": "foundation_support"
     },
     {
       "kind": "supports",
-      "source_id": "97cbe329-bc82-4071-8a94-0e75c6a717ee",
-      "target_id": "a39c49f7-7e66-40dc-b1b0-cbef2e738e81",
+      "source_id": "0b0f0e93-eb44-45f2-9178-edfd0b7bbbbb",
+      "target_id": "2793223d-8e02-46af-8671-e33742a8992a",
       "role": "foundation_support"
     },
     {
       "kind": "supported_by",
-      "source_id": "a39c49f7-7e66-40dc-b1b0-cbef2e738e81",
-      "target_id": "97cbe329-bc82-4071-8a94-0e75c6a717ee",
+      "source_id": "2793223d-8e02-46af-8671-e33742a8992a",
+      "target_id": "0b0f0e93-eb44-45f2-9178-edfd0b7bbbbb",
       "role": "foundation_support"
     },
     {
       "kind": "hosted_on",
-      "source_id": "177eaae9-0868-4cbc-8b1f-4d8594938387",
-      "target_id": "df9b2662-0074-4d34-a52b-9456c1c7724c",
+      "source_id": "c54cc904-3d59-47e9-8f99-88f64e479785",
+      "target_id": "61d8ceb5-27a0-44e4-a329-bfeacc0b160a",
       "role": "door_wall_host"
     },
     {
       "kind": "hosts",
-      "source_id": "df9b2662-0074-4d34-a52b-9456c1c7724c",
-      "target_id": "177eaae9-0868-4cbc-8b1f-4d8594938387",
+      "source_id": "61d8ceb5-27a0-44e4-a329-bfeacc0b160a",
+      "target_id": "c54cc904-3d59-47e9-8f99-88f64e479785",
       "role": "wall_door_opening"
     },
     {
       "kind": "hosted_on",
-      "source_id": "317bcd76-78bc-4b9f-b98b-21961fcefea2",
-      "target_id": "2f30a132-000b-407d-a82b-3b67da03d7f4",
+      "source_id": "c3d97f52-34b4-495e-8b17-b439c99d29f8",
+      "target_id": "b211734c-fba8-4e16-8f0c-ddf9d46285f8",
       "role": "door_wall_host"
     },
     {
       "kind": "hosts",
-      "source_id": "2f30a132-000b-407d-a82b-3b67da03d7f4",
-      "target_id": "317bcd76-78bc-4b9f-b98b-21961fcefea2",
+      "source_id": "b211734c-fba8-4e16-8f0c-ddf9d46285f8",
+      "target_id": "c3d97f52-34b4-495e-8b17-b439c99d29f8",
       "role": "wall_door_opening"
     },
     {
       "kind": "hosted_on",
-      "source_id": "7533329a-fe1f-4c4c-ad25-72c8e806eb61",
-      "target_id": "df9b2662-0074-4d34-a52b-9456c1c7724c",
+      "source_id": "445ac6d4-57c4-420c-beef-29573a8e9cc1",
+      "target_id": "61d8ceb5-27a0-44e4-a329-bfeacc0b160a",
       "role": "window_wall_host"
     },
     {
       "kind": "hosts",
-      "source_id": "df9b2662-0074-4d34-a52b-9456c1c7724c",
-      "target_id": "7533329a-fe1f-4c4c-ad25-72c8e806eb61",
+      "source_id": "61d8ceb5-27a0-44e4-a329-bfeacc0b160a",
+      "target_id": "445ac6d4-57c4-420c-beef-29573a8e9cc1",
       "role": "wall_window_opening"
     },
     {
       "kind": "hosted_on",
-      "source_id": "0ef6797f-3d91-4d58-af3c-a0113f636f2b",
-      "target_id": "df9b2662-0074-4d34-a52b-9456c1c7724c",
+      "source_id": "c67c210e-2db5-42de-87a4-d5236bf1de5b",
+      "target_id": "61d8ceb5-27a0-44e4-a329-bfeacc0b160a",
       "role": "window_wall_host"
     },
     {
       "kind": "hosts",
-      "source_id": "df9b2662-0074-4d34-a52b-9456c1c7724c",
-      "target_id": "0ef6797f-3d91-4d58-af3c-a0113f636f2b",
+      "source_id": "61d8ceb5-27a0-44e4-a329-bfeacc0b160a",
+      "target_id": "c67c210e-2db5-42de-87a4-d5236bf1de5b",
       "role": "wall_window_opening"
     },
     {
       "kind": "hosted_on",
-      "source_id": "0f6ea0b0-bc4b-490a-920d-579f0cd01e6a",
-      "target_id": "2bb1e968-4e0e-4eb7-9e75-83250c474d41",
+      "source_id": "406ba283-8aec-4235-a11a-410ff70bbe5c",
+      "target_id": "1acb3f17-c4d3-4975-b288-a466063a3ebf",
       "role": "window_wall_host"
     },
     {
       "kind": "hosts",
-      "source_id": "2bb1e968-4e0e-4eb7-9e75-83250c474d41",
-      "target_id": "0f6ea0b0-bc4b-490a-920d-579f0cd01e6a",
+      "source_id": "1acb3f17-c4d3-4975-b288-a466063a3ebf",
+      "target_id": "406ba283-8aec-4235-a11a-410ff70bbe5c",
       "role": "wall_window_opening"
     },
     {
       "kind": "hosted_on",
-      "source_id": "a3162f5d-2444-4237-bc6c-2f86cb1d549d",
-      "target_id": "1125bfd0-566a-40fc-b07e-15d63d622178",
+      "source_id": "903145fd-fec9-43c3-b606-d993951d6dbc",
+      "target_id": "3211e458-e3e6-40d0-9a41-cd7036fced1b",
       "role": "window_wall_host"
     },
     {
       "kind": "hosts",
-      "source_id": "1125bfd0-566a-40fc-b07e-15d63d622178",
-      "target_id": "a3162f5d-2444-4237-bc6c-2f86cb1d549d",
+      "source_id": "3211e458-e3e6-40d0-9a41-cd7036fced1b",
+      "target_id": "903145fd-fec9-43c3-b606-d993951d6dbc",
       "role": "wall_window_opening"
     },
     {
       "kind": "hosted_on",
-      "source_id": "25f016ac-4a5a-43c5-ae44-15bb1ca604e4",
-      "target_id": "5acc68de-5bfb-476c-b644-e3eef4a4fd7e",
+      "source_id": "7032181a-5429-4af0-9f95-9ac22f94e27c",
+      "target_id": "2c2dba43-0a5f-46cf-a456-80529bb535bd",
       "role": "door_wall_host"
     },
     {
       "kind": "hosts",
-      "source_id": "5acc68de-5bfb-476c-b644-e3eef4a4fd7e",
-      "target_id": "25f016ac-4a5a-43c5-ae44-15bb1ca604e4",
+      "source_id": "2c2dba43-0a5f-46cf-a456-80529bb535bd",
+      "target_id": "7032181a-5429-4af0-9f95-9ac22f94e27c",
       "role": "wall_door_opening"
     },
     {
       "kind": "hosted_on",
-      "source_id": "1cd0ed04-1bad-4522-84c2-be6cf9c95237",
-      "target_id": "fb45ee75-4d30-4326-a039-948170ce0bc9",
+      "source_id": "46b71a30-d9a9-4564-8c1e-cf1d1a3a75c3",
+      "target_id": "56b6679d-5d01-41c8-9b04-c681c822f63e",
       "role": "door_wall_host"
     },
     {
       "kind": "hosts",
-      "source_id": "fb45ee75-4d30-4326-a039-948170ce0bc9",
-      "target_id": "1cd0ed04-1bad-4522-84c2-be6cf9c95237",
+      "source_id": "56b6679d-5d01-41c8-9b04-c681c822f63e",
+      "target_id": "46b71a30-d9a9-4564-8c1e-cf1d1a3a75c3",
       "role": "wall_door_opening"
     },
     {
       "kind": "hosted_on",
-      "source_id": "3aaed222-af2d-4d04-9a8b-f41e04e1e67e",
-      "target_id": "5acc68de-5bfb-476c-b644-e3eef4a4fd7e",
+      "source_id": "8bd27dc5-34db-4c03-b197-137e3c8c6f5b",
+      "target_id": "2c2dba43-0a5f-46cf-a456-80529bb535bd",
       "role": "window_wall_host"
     },
     {
       "kind": "hosts",
-      "source_id": "5acc68de-5bfb-476c-b644-e3eef4a4fd7e",
-      "target_id": "3aaed222-af2d-4d04-9a8b-f41e04e1e67e",
+      "source_id": "2c2dba43-0a5f-46cf-a456-80529bb535bd",
+      "target_id": "8bd27dc5-34db-4c03-b197-137e3c8c6f5b",
       "role": "wall_window_opening"
     },
     {
       "kind": "hosted_on",
-      "source_id": "8921a811-21d3-4322-95e7-b2ac9d756c47",
-      "target_id": "5acc68de-5bfb-476c-b644-e3eef4a4fd7e",
+      "source_id": "f12da748-a9f6-481a-baf8-c374384f969b",
+      "target_id": "2c2dba43-0a5f-46cf-a456-80529bb535bd",
       "role": "window_wall_host"
     },
     {
       "kind": "hosts",
-      "source_id": "5acc68de-5bfb-476c-b644-e3eef4a4fd7e",
-      "target_id": "8921a811-21d3-4322-95e7-b2ac9d756c47",
+      "source_id": "2c2dba43-0a5f-46cf-a456-80529bb535bd",
+      "target_id": "f12da748-a9f6-481a-baf8-c374384f969b",
       "role": "wall_window_opening"
     },
     {
       "kind": "hosted_on",
-      "source_id": "f07201a3-7ee9-495a-8aba-f690e6ce99a0",
-      "target_id": "4c7aafb2-7ea1-4cc0-86e2-3ca89b75b618",
+      "source_id": "affb8506-4e53-4858-aae7-ed850cc3826f",
+      "target_id": "342ef79c-3880-499d-9812-3154edc38dd0",
       "role": "window_wall_host"
     },
     {
       "kind": "hosts",
-      "source_id": "4c7aafb2-7ea1-4cc0-86e2-3ca89b75b618",
-      "target_id": "f07201a3-7ee9-495a-8aba-f690e6ce99a0",
+      "source_id": "342ef79c-3880-499d-9812-3154edc38dd0",
+      "target_id": "affb8506-4e53-4858-aae7-ed850cc3826f",
       "role": "wall_window_opening"
     },
     {
       "kind": "hosted_on",
-      "source_id": "f9ab13d0-59b6-43a6-a950-a13aec870c70",
-      "target_id": "733ed2c7-9508-4339-910f-8ef83ac50bcf",
+      "source_id": "8e5f3bc2-96a7-4256-9ad8-557c256dd321",
+      "target_id": "935861a7-e55b-4d45-a379-546a228c728d",
       "role": "window_wall_host"
     },
     {
       "kind": "hosts",
-      "source_id": "733ed2c7-9508-4339-910f-8ef83ac50bcf",
-      "target_id": "f9ab13d0-59b6-43a6-a950-a13aec870c70",
+      "source_id": "935861a7-e55b-4d45-a379-546a228c728d",
+      "target_id": "8e5f3bc2-96a7-4256-9ad8-557c256dd321",
       "role": "wall_window_opening"
     },
     {
       "kind": "hosted_on",
-      "source_id": "88907c2b-1e36-43de-a385-09376d0913cd",
-      "target_id": "f2463b58-1424-4dde-867d-8c2e679b2280"
+      "source_id": "bfd26e4f-216e-483c-b5cb-84cc21dc2802",
+      "target_id": "8875b5af-9756-4f39-997f-32cf895e4022"
     },
     {
       "kind": "hosted_on",
-      "source_id": "10197ad4-372c-400d-afdd-7d66c3b96091",
-      "target_id": "47e9765b-a882-4dd6-9dc0-8f3c21295fe2"
+      "source_id": "7a22aade-377b-4ce0-905c-61817a0bec33",
+      "target_id": "86850876-5257-4362-b50d-f901913b461a"
     }
   ]
 }

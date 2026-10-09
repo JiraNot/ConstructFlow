@@ -14,6 +14,7 @@ const objectCounts = Object.values(project.objects).reduce((counts, object) => {
 }, {})
 assert.deepEqual(objectCounts, {
   'architecture.wall': 4,
+  'architecture.room': 1,
   'door_window.door': 1,
   'door_window.window': 1,
   'structure.beam': 4,

@@ -184,7 +184,9 @@ export function snapPoint(
       const [cx, cy] = object.module_data.location_mm
       const [width, depth] = object.module_data.section_mm
       const corners = rectangleCorners([cx, cy], width, depth, object.module_data.rotation_deg || 0)
-      offer([cx, cy], 'column_center', object.id, `เสากึ่งกลาง ${object.module_data.mark || ''}`.trim(), 2)
+      // A precise center point must win over the nearby projected faces, even
+      // at typical plan zoom where half a column is only a few screen pixels.
+      offer([cx, cy], 'column_center', object.id, `เสากึ่งกลาง ${object.module_data.mark || ''}`.trim(), 0)
       corners.forEach((corner, index) => offer(corner, 'column_corner', object.id, `มุมเสา ${object.module_data.mark || ''} ${index + 1}`.trim(), 0))
       for (let index = 0; index < 4; index++) {
         const start = corners[index], end = corners[(index + 1) % 4]

@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { deserializeProject } from '../../project-model/dist/index.js'
-import { buildProjectRepresentations3D, getPlanVisibleObjects, getRepresentationTriangles } from '../dist/index.js'
+import { createEmptyProjectDocument, deserializeProject } from '../../project-model/dist/index.js'
+import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getPlanViewProject, getPlanVisibleObjects, getRepresentationTriangles, isWallFacadeForElevation, resolveElevationWallPhaseStyle } from '../dist/index.js'
 
 const fixture = deserializeProject(await readFile(new URL('../../../examples/kitchen-extension-proof.cfproj', import.meta.url), 'utf8'))
+
+test('elevation wall phase palette is shared and distinguishes existing, new and demolition work', () => {
+  assert.deepEqual(resolveElevationWallPhaseStyle('existing'), { fill: '#ffffff', stroke: '#64748b', dash: [] })
+  assert.deepEqual(resolveElevationWallPhaseStyle('new_construction'), { fill: '#e3e8ed', stroke: '#334155', dash: [] })
+  assert.deepEqual(resolveElevationWallPhaseStyle('demolition'), { fill: '#fee2e2', stroke: '#ef4444', dash: [6, 3] })
+})
 
 test('3D representations are deterministic and keep phase and supported interactions', () => {
   const first = buildProjectRepresentations3D(fixture)
@@ -144,6 +150,26 @@ test('opening frame and sash face widths resolve from the same catalog parameter
   assert.equal(windowShape.sash_face_width_mm, 42)
 })
 
+test('front-elevation opening linework uses catalog frame widths and asymmetric panel ratios without plan-only diagonals', () => {
+  const project = JSON.parse(JSON.stringify(fixture))
+  const window = Object.values(project.objects).find(object => object.object_type === 'door_window.window')
+  assert.ok(window)
+  window.module_data.width_mm = 2100
+  window.module_data.height_mm = 1400
+  window.module_data.frame_face_width_mm = 50
+  window.module_data.panel_count = 2
+  window.module_data.panel_width_ratios = [0.35, 0.65]
+  window.module_data.muntin_rows = 2
+  window.module_data.muntin_columns = 2
+  const representation = buildProjectRepresentations3D(project).objects.find(object => object.object_id === window.id)
+  assert.equal(representation.shape.kind, 'opening')
+  const paths = getOpeningElevationLinework(representation.shape)
+  assert.ok(paths.some(path => path.closed && path.fill === '#ffffff' && path.points_mm[0][0] === 0 && path.points_mm[2][0] === 2100))
+  assert.ok(paths.some(path => !path.closed && path.points_mm[0][0] === 735 && path.points_mm[1][0] === 735), 'the meeting stile follows the 35/65 panel layout')
+  assert.ok(paths.every(path => path.points_mm.length !== 2 || path.points_mm[0][0] === path.points_mm[1][0] || path.points_mm[0][1] === path.points_mm[1][1]), 'front elevation contains no diagonal X symbol')
+  assert.ok(paths.some(path => path.closed && path.points_mm[0][0] === 50 && path.points_mm[0][1] === 50), 'the real 50 mm frame face sets the inner frame edge')
+})
+
 test('layered wall representations keep masonry core and both plaster faces distinct', () => {
   const project = structuredClone(fixture)
   const wall = Object.values(project.objects).find(object => object.object_type === 'architecture.wall')
@@ -219,4 +245,106 @@ test('plan visibility filters objects by active level while showing spanning col
   assert.equal(firstFloor.filter(object => object.object_type === 'structure.beam').length, 4)
   assert.equal(firstFloor.filter(object => object.object_type === 'architecture.wall').length, 0)
   assert.equal(firstFloor.filter(object => object.object_type.startsWith('door_window.')).length, 0)
+})
+
+test('plan visibility keeps room and ceiling representations on their own active storey', () => {
+  const project = structuredClone(fixture)
+  const template = Object.values(project.objects).find(object => object.object_type === 'architecture.wall')
+  for (const [id, object_type, level_id] of [
+    ['room-ground', 'architecture.room', project.levels[0].id],
+    ['room-upper', 'architecture.room', project.levels[1].id],
+    ['floor-ground', 'architecture.floor', project.levels[0].id],
+    ['floor-upper', 'architecture.floor', project.levels[1].id],
+    ['ceiling-ground', 'architecture.ceiling', project.levels[0].id],
+    ['ceiling-upper', 'architecture.ceiling', project.levels[1].id],
+  ]) {
+    project.objects[id] = { ...structuredClone(template), id, object_type, module_data: { level_id, boundary_mm: [[0, 0], [4000, 0], [4000, 3000], [0, 3000]] } }
+  }
+  const ground = new Set(getPlanVisibleObjects(project).map(object => object.id))
+  const groundPlan = new Set(Object.keys(getPlanViewProject(project).objects))
+  assert.ok(ground.has('room-ground'))
+  assert.ok(ground.has('floor-ground'))
+  assert.ok(ground.has('ceiling-ground'))
+  assert.equal(ground.has('room-upper'), false)
+  assert.equal(ground.has('floor-upper'), false)
+  assert.equal(ground.has('ceiling-upper'), false)
+  assert.ok(groundPlan.has('floor-ground'))
+  assert.equal(groundPlan.has('floor-upper'), false, 'the rendered plan project must not append semantic floors from another storey')
+
+  project.project.active_level_id = project.levels[1].id
+  const upper = new Set(getPlanVisibleObjects(project).map(object => object.id))
+  const upperPlan = new Set(Object.keys(getPlanViewProject(project).objects))
+  assert.ok(upper.has('room-upper'))
+  assert.ok(upper.has('floor-upper'))
+  assert.ok(upper.has('ceiling-upper'))
+  assert.equal(upper.has('room-ground'), false)
+  assert.equal(upper.has('floor-ground'), false)
+  assert.equal(upper.has('ceiling-ground'), false)
+  assert.ok(upperPlan.has('floor-upper'))
+  assert.equal(upperPlan.has('floor-ground'), false, 'switching storeys must remove semantic floors from the previous level')
+})
+
+test('elevation projection hides rear openings behind solid facades but passes aligned openings through', () => {
+  const project = createEmptyProjectDocument('ELEVATION-OPENINGS', 'Elevation openings')
+  const wall = (id, y) => ({
+    id, object_type: 'architecture.wall', created_phase: 'new_construction', level_refs: [], host_refs: [],
+    module_data: { mark: id, start_point_mm: [0, y, 0], end_point_mm: [4000, y, 0], thickness_mm: 150, height_mm: 3000 },
+  })
+  const opening = (id, wallId, y) => ({
+    id, object_type: 'door_window.window', created_phase: 'new_construction', level_refs: [], host_refs: [],
+    module_data: { mark: id, wall_id: wallId, location_mm: [2000, y, 0], width_mm: 1000, height_mm: 1200, sill_height_mm: 900 },
+  })
+  project.objects['north-facade'] = wall('north-facade', 5000)
+  project.objects['south-facade'] = wall('south-facade', 0)
+  project.objects['rear-window'] = opening('rear-window', 'south-facade', 0)
+
+  assert.equal(getElevationVisibleOpeningIds(project, 'north').has('rear-window'), false)
+  assert.equal(getElevationVisibleOpeningIds(project, 'south').has('rear-window'), true)
+
+  project.objects['front-window'] = opening('front-window', 'north-facade', 5000)
+  assert.equal(getElevationVisibleOpeningIds(project, 'north').has('rear-window'), true)
+  assert.equal(getElevationVisibleOpeningIds(project, 'north').has('front-window'), true)
+})
+
+test('elevation projection suppresses fully covered rear walls but retains stepped facade portions', () => {
+  const project = createEmptyProjectDocument('ELEVATION-WALL-OCCLUSION', 'Elevation wall occlusion')
+  const wall = (id, start, end) => ({
+    id, object_type: 'architecture.wall', created_phase: 'new_construction', level_refs: [], host_refs: [],
+    module_data: { mark: id, start_point_mm: start, end_point_mm: end, thickness_mm: 150, height_mm: 3000 },
+  })
+  project.objects['north-front'] = wall('north-front', [0, 5000, 0], [4000, 5000, 0])
+  project.objects['south-rear'] = wall('south-rear', [0, 0, 0], [4000, 0, 0])
+
+  assert.deepEqual([...getElevationVisibleWallIds(project, 'north')], ['north-front'])
+  assert.deepEqual([...getElevationVisibleWallIds(project, 'south')], ['south-rear'])
+
+  project.objects['north-front'] = wall('north-front', [0, 5000, 0], [2000, 5000, 0])
+  assert.deepEqual(new Set(getElevationVisibleWallIds(project, 'north')), new Set(['north-front', 'south-rear']),
+    'a farther wall must remain when part of its projected facade is exposed')
+})
+
+test('orthographic elevations include only walls whose long axis forms that facade', () => {
+  const project = createEmptyProjectDocument('ELEVATION-FACADES', 'Elevation facade directions')
+  const wall = (id, start, end) => ({
+    id, object_type: 'architecture.wall', created_phase: 'new_construction', level_refs: [], host_refs: [],
+    module_data: { mark: id, start_point_mm: start, end_point_mm: end, thickness_mm: 150, height_mm: 3000 },
+  })
+  const northWall = wall('north-wall', [0, 0, 0], [4000, 0, 0])
+  const eastWall = wall('east-wall', [4000, 0, 0], [4000, 3000, 0])
+  const diagonalWall = wall('diagonal-wall', [0, 0, 0], [4000, 4000, 0])
+
+  assert.equal(isWallFacadeForElevation(northWall, 'north'), true)
+  assert.equal(isWallFacadeForElevation(northWall, 'east'), false)
+  assert.equal(isWallFacadeForElevation(eastWall, 'east'), true)
+  assert.equal(isWallFacadeForElevation(eastWall, 'south'), false)
+  assert.equal(isWallFacadeForElevation(diagonalWall, 'north'), true, 'ties consistently resolve to the X-axis facade')
+
+  project.objects[northWall.id] = northWall
+  project.objects[eastWall.id] = eastWall
+  project.objects['side-window'] = {
+    id: 'side-window', object_type: 'door_window.window', created_phase: 'new_construction', level_refs: [], host_refs: [],
+    module_data: { mark: 'W-SIDE', wall_id: eastWall.id, location_mm: [4000, 1500, 0], width_mm: 1000, height_mm: 1200, sill_height_mm: 900 },
+  }
+  assert.equal(getElevationVisibleOpeningIds(project, 'north').has('side-window'), false)
+  assert.equal(getElevationVisibleOpeningIds(project, 'east').has('side-window'), true)
 })

@@ -232,9 +232,15 @@ export interface ArchitecturalFloorModuleData extends CatalogPlacement {
   boundary_mm: Point2Mm[]
   voids_mm: Point2Mm[][]
   elevation_mm: number
+  /** Vertical elevation is measured from the selected level unless explicitly absolute. */
+  elevation_reference?: 'level' | 'absolute'
   elevation_offset_mm: number
   thickness_mm: number
-  finish_layers: Array<{ material: string; thickness_mm: number; mark?: string }>
+  finish_layers: Array<{ material: string; thickness_mm: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>
+  /** Tile/finish layout grid in model millimetres; omitted values use 600 × 600 mm at 0°. */
+  finish_pattern_mm?: Point2Mm
+  finish_pattern_origin_mm?: Point2Mm
+  finish_pattern_rotation_deg?: number
   room_id?: string
   follows_room_boundary: boolean
 }
@@ -242,8 +248,11 @@ export interface CeilingModuleData extends CatalogPlacement {
   boundary_mm: Point2Mm[]
   voids_mm: Point2Mm[][]
   elevation_mm: number
+  /** Vertical elevation is measured from the selected level unless explicitly absolute. */
+  elevation_reference?: 'level' | 'absolute'
   elevation_offset_mm: number
   thickness_mm: number
+  material?: string
   grid_mm?: Point2Mm
   room_id?: string
   follows_room_boundary: boolean

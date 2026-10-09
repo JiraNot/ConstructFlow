@@ -51,6 +51,121 @@ function positiveTuple(value: unknown, length: number): number[] | undefined {
   return entries?.every(value => value > 0) ? entries : undefined
 }
 
+type Point2 = [number, number]
+
+function polygonRing(value: unknown): Point2[] | undefined {
+  if (!Array.isArray(value) || value.length < 3) return undefined
+  const points = value.map(point => finiteTuple(point, 2))
+  if (points.some(point => !point)) return undefined
+  const ring = points as Point2[]
+  if (ring.length > 3 && Math.hypot(ring[0][0] - ring.at(-1)![0], ring[0][1] - ring.at(-1)![1]) <= 1e-8) ring.pop()
+  if (ring.length < 3 || ring.some((point, index) => {
+    const next = ring[(index + 1) % ring.length]
+    return Math.hypot(point[0] - next[0], point[1] - next[1]) <= 1e-8
+  })) return undefined
+  return ring
+}
+
+function signedAreaMm2(ring: Point2[]): number {
+  return ring.reduce((sum, point, index) => {
+    const next = ring[(index + 1) % ring.length]
+    return sum + point[0] * next[1] - next[0] * point[1]
+  }, 0) / 2
+}
+
+function polygonAreaMm2(value: unknown): number | undefined {
+  const ring = polygonRing(value)
+  if (!ring || !isSimpleRing(ring)) return undefined
+  const area = Math.abs(signedAreaMm2(ring))
+  return Number.isFinite(area) ? area : undefined
+}
+
+function orient(a: Point2, b: Point2, c: Point2): number {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+}
+
+function pointOnSegment(point: Point2, a: Point2, b: Point2, epsilon = 1e-7): boolean {
+  if (Math.abs(orient(a, b, point)) > epsilon * Math.max(1, Math.hypot(b[0] - a[0], b[1] - a[1]))) return false
+  return point[0] >= Math.min(a[0], b[0]) - epsilon && point[0] <= Math.max(a[0], b[0]) + epsilon
+    && point[1] >= Math.min(a[1], b[1]) - epsilon && point[1] <= Math.max(a[1], b[1]) + epsilon
+}
+
+function segmentsIntersect(a: Point2, b: Point2, c: Point2, d: Point2): boolean {
+  const abC = orient(a, b, c), abD = orient(a, b, d), cdA = orient(c, d, a), cdB = orient(c, d, b)
+  const sign = (value: number) => Math.abs(value) <= 1e-7 ? 0 : Math.sign(value)
+  if (sign(abC) * sign(abD) < 0 && sign(cdA) * sign(cdB) < 0) return true
+  return (sign(abC) === 0 && pointOnSegment(c, a, b)) || (sign(abD) === 0 && pointOnSegment(d, a, b))
+    || (sign(cdA) === 0 && pointOnSegment(a, c, d)) || (sign(cdB) === 0 && pointOnSegment(b, c, d))
+}
+
+function isSimpleRing(ring: Point2[]): boolean {
+  if (ring.length < 3 || Math.abs(signedAreaMm2(ring)) <= 1e-8) return false
+  for (let i = 0; i < ring.length; i++) {
+    const iNext = (i + 1) % ring.length
+    for (let j = i + 1; j < ring.length; j++) {
+      const jNext = (j + 1) % ring.length
+      if (i === j || iNext === j || jNext === i) continue
+      if (segmentsIntersect(ring[i], ring[iNext], ring[j], ring[jNext])) return false
+    }
+  }
+  return true
+}
+
+function strictlyInsideRing(point: Point2, ring: Point2[]): boolean {
+  for (let i = 0; i < ring.length; i++) if (pointOnSegment(point, ring[i], ring[(i + 1) % ring.length])) return false
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i], b = ring[j]
+    if ((a[1] > point[1]) !== (b[1] > point[1]) && point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside
+  }
+  return inside
+}
+
+function ringsIntersect(a: Point2[], b: Point2[]): boolean {
+  for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++)
+    if (segmentsIntersect(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])) return true
+  return false
+}
+
+function netBoundaryAreaMm2(data: Data, objectId: string, warnings: string[]): number | undefined {
+  const boundary = polygonRing(data.boundary_mm)
+  const grossArea = boundary && isSimpleRing(boundary) ? Math.abs(signedAreaMm2(boundary)) : undefined
+  if (!boundary || !grossArea || grossArea <= 0) {
+    warnings.push(`${objectId}: architectural boundary is missing, self-intersecting, or invalid; quantity was omitted`)
+    return undefined
+  }
+  let voidArea = 0
+  const voids = data.voids_mm ?? []
+  if (!Array.isArray(voids)) {
+    warnings.push(`${objectId}: boundary voids are invalid; quantity was omitted`)
+    return undefined
+  }
+  const rings: Point2[][] = []
+  for (const rawVoid of voids) {
+    const ring = polygonRing(rawVoid)
+    const area = ring && isSimpleRing(ring) ? Math.abs(signedAreaMm2(ring)) : undefined
+    if (!ring || !area || area <= 0) {
+      warnings.push(`${objectId}: a boundary void is self-intersecting or invalid; quantity was omitted`)
+      return undefined
+    }
+    voidArea += area
+    if (voidArea > grossArea + 1e-6) {
+      warnings.push(`${objectId}: boundary void area exceeds the gross area; quantity was omitted`)
+      return undefined
+    }
+    if (ring.some(point => !strictlyInsideRing(point, boundary)) || ringsIntersect(ring, boundary)) {
+      warnings.push(`${objectId}: a boundary void is not fully contained within its boundary; quantity was omitted`)
+      return undefined
+    }
+    if (rings.some(existing => ringsIntersect(ring, existing) || strictlyInsideRing(ring[0], existing) || strictlyInsideRing(existing[0], ring))) {
+      warnings.push(`${objectId}: boundary voids overlap or contain one another; quantity was omitted`)
+      return undefined
+    }
+    rings.push(ring)
+  }
+  return grossArea - voidArea
+}
+
 function valueFor(project: ProjectDocument, objectType: string, data: Data, field: string): unknown {
   const rawOverrides = data.instance_overrides
   const overrides = rawOverrides && typeof rawOverrides === 'object' && !Array.isArray(rawOverrides)
@@ -229,6 +344,48 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
               typeof treatment.material === 'string' && treatment.material.trim() ? treatment.material : 'joint_sealant',
               { phase: 'new_construction', cost_center: 'remodeling_joint_treatment', object_type: 'architecture.joint_treatment', mark: String(kind) })
           }
+        }
+        break
+      }
+      case 'architecture.floor':
+      case 'architecture.ceiling': {
+        const netAreaMm2 = netBoundaryAreaMm2(data, object.id, warnings)
+        if (netAreaMm2 === undefined) break
+        const netArea = mm2ToM2(netAreaMm2)
+        const isFloor = object.object_type === 'architecture.floor'
+        if (isFloor && Array.isArray(data.finish_layers) && data.finish_layers.length) {
+          for (const [index, rawLayer] of data.finish_layers.entries()) {
+            if (!rawLayer || typeof rawLayer !== 'object' || Array.isArray(rawLayer)) {
+              warnings.push(`${object.id}: floor finish layer ${index + 1} is invalid and was omitted`)
+              continue
+            }
+            const layer = rawLayer as Data
+            const material = typeof layer.material === 'string' && layer.material.trim() ? layer.material : undefined
+            if (!material) {
+              warnings.push(`${object.id}: floor finish layer ${index + 1} has no material`)
+              continue
+            }
+            const mark = typeof layer.mark === 'string' && layer.mark.trim() ? layer.mark : `${String(data.mark ?? 'AF')} · ${material}`
+            const classification = { phase: phaseAndCostCenter(object.created_phase, object.removed_phase).phase, cost_center: phaseAndCostCenter(object.created_phase, object.removed_phase).cost_center, object_type: 'architecture.floor.finish', mark }
+            const thickness = layer.thickness_mm
+            if (layer.quantity_unit !== undefined && layer.quantity_unit !== 'm2' && layer.quantity_unit !== 'm3') {
+              warnings.push(`${object.id}: floor finish layer ${mark} quantity unit must be m2 or m3`)
+              continue
+            }
+            const unit = layer.quantity_unit === 'm3' ? 'm3' : 'm2'
+            if (unit === 'm3') {
+              if (!finitePositive(thickness)) {
+                warnings.push(`${object.id}: volumetric floor finish layer ${mark} thickness is missing/invalid`)
+                continue
+              }
+              add(object, 'm3', mm3ToM3(netAreaMm2 * thickness), `${netArea.toFixed(6)} m² × ${thickness} mm floor layer`, material, classification)
+            } else add(object, 'm2', netArea, `net architectural floor finish area: ${mm2ToM2(polygonAreaMm2(data.boundary_mm)!)} m² − ${Array.isArray(data.voids_mm) ? data.voids_mm.length : 0} void(s)`, material, classification)
+          }
+        } else {
+          const material = typeof data.material === 'string' ? data.material : undefined
+          const family = isFloor ? 'architectural floor' : 'ceiling'
+          const classification = { phase: phaseAndCostCenter(object.created_phase, object.removed_phase).phase, cost_center: phaseAndCostCenter(object.created_phase, object.removed_phase).cost_center, object_type: isFloor ? 'architecture.floor' : 'architecture.ceiling' }
+          add(object, 'm2', netArea, `net ${family} area: gross boundary − ${Array.isArray(data.voids_mm) ? data.voids_mm.length : 0} void(s)`, material, classification)
         }
         break
       }
