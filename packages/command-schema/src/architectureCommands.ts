@@ -192,3 +192,9 @@ export interface UpdateWindowDimensionsInput {
   head_offset_mm?: number
   vertical_constraint?: 'fixed_height' | 'head_level'
 }
+
+/** Update catalog-backed parameters on one hosted opening. A null value removes that instance override and restores the type value. */
+export interface UpdateOpeningInstanceParametersInput {
+  object_id: string
+  parameters: Record<string, unknown | null>
+}

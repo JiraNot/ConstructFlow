@@ -950,6 +950,12 @@ export const App: React.FC = () => {
     else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
   }
 
+  const handleUpdateOpeningInstanceParameters = (objectId: string, parameters: Record<string, unknown | null>) => {
+    const res = CommandBus.execute(project, 'UpdateOpeningInstanceParameters', { object_id: objectId, parameters })
+    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
+    else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
+  }
+
   const handleUpdateBoundaryVertex = (objectId: string, boundary_mm: [number, number][]) => {
     const object = project.objects[objectId]
     if (!object) return
@@ -1787,6 +1793,7 @@ export const App: React.FC = () => {
             onUpdateGridSystem={handleUpdateGridSystem}
             onUpdateWallFace={handleUpdateWallFace}
             onUpdateOpeningVertical={handleUpdateOpeningVertical}
+            onUpdateOpeningInstanceParameters={handleUpdateOpeningInstanceParameters}
             onUpdatePhase={handleUpdateObjectPhase}
             onUpdateRemovalPhase={handleUpdateObjectRemovalPhase}
             onFlipDoorHanding={handleFlipDoorHanding}

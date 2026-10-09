@@ -16,6 +16,8 @@ import {
   isWindowObject,
   Phase,
   RemovalPhase,
+  CATALOG_PARAMETER_FIELDS,
+  resolveCatalogType,
   resolveWallVerticalExtent,
   resolveOpeningVerticalExtent,
   resolveColumnVerticalExtent,
@@ -27,6 +29,7 @@ import {
 } from '@constructflow/project-model'
 import { Trash2, PlusCircle, RefreshCw, SlidersHorizontal, MousePointer2 } from 'lucide-react'
 import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
+import { CatalogField } from './CatalogField.js'
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
 
 const LengthInput: React.FC<{ value: number; unit: DisplayLengthUnit; onChange: (value: number) => void; style?: React.CSSProperties; disabled?: boolean; 'aria-label'?: string }> = ({ value, unit, onChange, style, disabled, 'aria-label': ariaLabel }) => <WorkbenchNumberInput value={value} unit={unit} onChange={onChange} style={style} disabled={disabled} ariaLabel={ariaLabel} />
@@ -61,6 +64,7 @@ interface PropertiesPanelProps {
   onUpdateGridSystem: (systemId: string, changes: { positions_mm?: number[]; first_tag?: string }) => void
   onUpdateWallFace: (objectId: string, changes: { plaster_inside_thickness_mm?: number; plaster_outside_thickness_mm?: number; plaster_inside_material?: string; plaster_outside_material?: string; inside_finish_mark?: string; outside_finish_mark?: string; interior_side?: 'left' | 'right'; top_level_id?: string; base_offset_mm?: number; top_offset_mm?: number; vertical_constraint?: 'fixed_height' | 'top_level'; height_mm?: number }) => void
   onUpdateOpeningVertical: (objectId: string, changes: { sill_height_mm?: number; height_mm?: number; head_level_id?: string; head_offset_mm?: number; vertical_constraint?: 'fixed_height' | 'head_level' }) => void
+  onUpdateOpeningInstanceParameters?: (objectId: string, parameters: Record<string, unknown | null>) => void
   onUpdatePhase?: (objectId: string, newPhase: Phase) => void
   onUpdateRemovalPhase?: (objectId: string, removedPhase: RemovalPhase | null) => void
   onFlipDoorHanding?: (doorId: string) => void
@@ -89,6 +93,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateGridSystem,
   onUpdateWallFace,
   onUpdateOpeningVertical,
+  onUpdateOpeningInstanceParameters,
   onUpdatePhase,
   onUpdateRemovalPhase,
   onFlipDoorHanding,
@@ -123,6 +128,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const wallObj = selectedObj && isWallObject(selectedObj) ? selectedObj : null
   const doorObj = selectedObj && isDoorObject(selectedObj) ? selectedObj : null
   const winObj = selectedObj && isWindowObject(selectedObj) ? selectedObj : null
+  const openingObj = doorObj ?? winObj
+  const openingType = openingObj ? resolveCatalogType(project, openingObj.object_type, openingObj.module_data.type_id ?? openingObj.module_data.mark) : undefined
+  const openingParameterFields = openingObj && openingType
+    ? (CATALOG_PARAMETER_FIELDS[openingObj.object_type] ?? []).filter(field => openingType.parameters[field] !== undefined)
+    : []
   const slabObj = selectedObj?.object_type === 'structure.slab' ? selectedObj : null
   const architectureSurfaceObj = selectedObj && (selectedObj.object_type === 'architecture.floor' || selectedObj.object_type === 'architecture.ceiling') ? selectedObj : null
   const roomObj = selectedObj?.object_type === 'architecture.room' ? selectedObj : null
@@ -151,6 +161,33 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   useEffect(() => {
     setEditingMark(currentMark)
   }, [selectedId, currentMark])
+
+  const openingInstanceEditor = openingObj && openingType ? (
+    <details style={{ border: '1px solid #e5edf5', borderRadius: 6, padding: '8px 9px', background: '#fbfdff' }}>
+      <summary style={{ cursor: 'pointer', color: '#40566e', fontSize: 11, fontWeight: 700 }}>
+        พารามิเตอร์รายชิ้น · {Object.keys(openingObj.module_data.instance_overrides ?? {}).length} ค่า override
+      </summary>
+      <div style={{ display: 'grid', gap: 8, marginTop: 9 }}>
+        {openingParameterFields.map(field => {
+          const overrides = openingObj.module_data.instance_overrides ?? {}
+          const isOverridden = Object.hasOwn(overrides, field)
+          const value = isOverridden ? overrides[field] : (openingObj.module_data as unknown as Record<string, unknown>)[field] ?? openingType.parameters[field]
+          return <div key={field} style={{ padding: 7, border: '1px solid #e8eef5', borderRadius: 5, background: '#fff' }}>
+            <CatalogField
+              name={field}
+              value={value}
+              displayUnit={displayUnit}
+              onChange={next => onUpdateOpeningInstanceParameters?.(openingObj.id, { [field]: next })}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
+              <span style={{ fontSize: 10, color: isOverridden ? '#a65b00' : '#64748b' }}>{isOverridden ? 'กำหนดเฉพาะชิ้นนี้' : `สืบทอดจาก ${openingType.name}`}</span>
+              {isOverridden && <button type="button" className="cf-button cf-button-quiet" onClick={() => onUpdateOpeningInstanceParameters?.(openingObj.id, { [field]: null })}>คืนค่าตามชนิด</button>}
+            </div>
+          </div>
+        })}
+      </div>
+    </details>
+  ) : null
 
   const handleSaveMark = (preset?: string) => {
     const val = (preset !== undefined ? preset : editingMark).trim()
@@ -702,6 +739,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </div>
           </div>
 
+          {openingInstanceEditor}
+
           <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับประตู</strong>
             <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ธรณี/ยกจากพื้น ({displayUnit})<LengthInput aria-label="ระดับธรณีประตู" value={doorObj.module_data.sill_height_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { sill_height_mm: value })} style={verticalSelectStyle} /></label>
@@ -798,6 +837,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <span style={{ fontSize: 10, color: '#53657b', fontWeight: 500 }}>Type {winObj.module_data.mark}</span>
             </div>
           </div>
+
+          {openingInstanceEditor}
 
           <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับหน้าต่าง</strong>

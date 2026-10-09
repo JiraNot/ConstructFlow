@@ -9,6 +9,9 @@
     "rootDir": "src",
     "skipLibCheck": true,
     "paths": {
+      "@constructflow/architecture-engine": [
+        "../architecture-engine/dist/index.d.ts"
+      ],
       "@constructflow/representation-engine": ["../representation-engine/dist/index.d.ts"],
       "@constructflow/domain-providers": [
         "../domain-providers/dist/index.d.ts"

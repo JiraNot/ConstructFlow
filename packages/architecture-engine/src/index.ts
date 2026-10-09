@@ -1,5 +1,5 @@
-import { SmartObject, WallModuleData, DoorModuleData, WindowModuleData, DoorHanding, resolveCatalogType, catalogInstanceOverrides, isWallObject, isDoorObject, isWindowObject, getLevelElevation, resolveOpeningVerticalExtent } from '@constructflow/project-model'
-import { CreateWallInput, MoveWallInput, UpdateWallEndpointsInput, MoveOpeningInput, UpdateWallMarkInput, UpdateWallDimensionsInput, CreateDoorInput, UpdateDoorMarkInput, UpdateDoorDimensionsInput, FlipDoorHandingInput, CreateWindowInput, UpdateWindowMarkInput, UpdateWindowDimensionsInput } from '@constructflow/command-schema'
+import { SmartObject, WallModuleData, DoorModuleData, WindowModuleData, DoorHanding, CATALOG_PARAMETER_FIELDS, resolveCatalogType, catalogInstanceOverrides, isWallObject, isDoorObject, isWindowObject, getLevelElevation, resolveOpeningVerticalExtent, resolveWallVerticalExtent, validateDoorFaceComponents, validateOpeningPlanSymbolLines } from '@constructflow/project-model'
+import { CreateWallInput, MoveWallInput, UpdateWallEndpointsInput, MoveOpeningInput, UpdateWallMarkInput, UpdateWallDimensionsInput, CreateDoorInput, UpdateDoorMarkInput, UpdateDoorDimensionsInput, FlipDoorHandingInput, CreateWindowInput, UpdateWindowMarkInput, UpdateWindowDimensionsInput, UpdateOpeningInstanceParametersInput } from '@constructflow/command-schema'
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
 import type { ProjectDocument } from '@constructflow/project-model'
@@ -1107,10 +1107,11 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         ...(dDimInput.vertical_constraint === 'fixed_height' ? { head_level_id: undefined, vertical_constraint: 'fixed_height' as const } : {}),
       }
       if (dDimInput.head_level_id !== undefined && !resolveOpeningVerticalExtent(updated, nextDoorData)) throw new Error('Door head level must be above its sill')
+      const doorType = resolveCatalogType(updated, target.object_type, typeof nextDoorData.type_id === 'string' ? nextDoorData.type_id : nextDoorData.mark)
       updated.objects[dDimInput.object_id] = {
         ...target,
         updated_at: now,
-        module_data: nextDoorData,
+        module_data: { ...nextDoorData, instance_overrides: catalogInstanceOverrides(target.object_type, nextDoorData, doorType) },
       }
 
       return {
@@ -1341,10 +1342,11 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         ...(wDimInput.vertical_constraint === 'fixed_height' ? { head_level_id: undefined, vertical_constraint: 'fixed_height' as const } : {}),
       }
       if (wDimInput.head_level_id !== undefined && !resolveOpeningVerticalExtent(updated, nextWindowData)) throw new Error('Window head level must be above its sill')
+      const windowType = resolveCatalogType(updated, target.object_type, typeof nextWindowData.type_id === 'string' ? nextWindowData.type_id : nextWindowData.mark)
       updated.objects[wDimInput.object_id] = {
         ...target,
         updated_at: now,
-        module_data: nextWindowData,
+        module_data: { ...nextWindowData, instance_overrides: catalogInstanceOverrides(target.object_type, nextWindowData, windowType) },
       }
 
       return {
@@ -1357,6 +1359,85 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         },
         updatedProject: updated,
         emittedEnvelope: envelope,
+      }
+    }
+
+    case 'UpdateOpeningInstanceParameters': {
+      const request = input as unknown as UpdateOpeningInstanceParametersInput
+      const target = updated.objects[request.object_id]
+      if (!target || (!isDoorObject(target) && !isWindowObject(target))) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Opening UUID ${request.object_id} not found`] }, updatedProject: project }
+      }
+      if (!request.parameters || typeof request.parameters !== 'object' || Array.isArray(request.parameters) || Object.keys(request.parameters).length === 0) {
+        throw new Error('At least one opening instance parameter is required')
+      }
+
+      const data = { ...target.module_data } as Record<string, unknown>
+      const family = target.object_type
+      const allowed = new Set(CATALOG_PARAMETER_FIELDS[family] ?? [])
+      const type = resolveCatalogType(updated, family, typeof data.type_id === 'string' ? data.type_id : typeof data.mark === 'string' ? data.mark : undefined)
+      const typeParameters = type?.parameters ?? {}
+      const overrides = { ...(data.instance_overrides && typeof data.instance_overrides === 'object' && !Array.isArray(data.instance_overrides) ? data.instance_overrides as Record<string, unknown> : {}) }
+      for (const [field, value] of Object.entries(request.parameters)) {
+        if (!allowed.has(field)) throw new Error(`Unsupported ${family} parameter ${field}`)
+        if (value === null) {
+          if (typeParameters[field] === undefined) delete data[field]
+          else data[field] = structuredClone(typeParameters[field])
+          delete overrides[field]
+        } else {
+          if (field.endsWith('_mm') && (typeof value !== 'number' || !Number.isFinite(value))) throw new Error(`${field} must be a finite millimeter value`)
+          if (field === 'width_mm' || field === 'height_mm' || field === 'frame_depth_mm' || field === 'frame_face_width_mm' || field === 'sash_face_width_mm' || field === 'door_leaf_thickness_mm' || field === 'plan_symbol_reference_depth_mm') {
+            if (typeof value !== 'number' || value <= 0) throw new Error(`${field} must be positive`)
+          } else if (field.endsWith('_mm') && typeof value === 'number' && value < 0) throw new Error(`${field} cannot be negative`)
+          if (field === 'panel_count' && (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 8)) throw new Error('panel_count must be an integer from 1 to 8')
+          if (/(^|_)(rows|columns)$/.test(field) && (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 24)) throw new Error(`${field} must be an integer from 0 to 24`)
+          if (field === 'glazing_transmission' && (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1)) throw new Error('glazing_transmission must be from 0 to 1')
+          data[field] = structuredClone(value)
+          if (typeParameters[field] !== undefined && JSON.stringify(value) === JSON.stringify(typeParameters[field])) delete overrides[field]
+          else overrides[field] = structuredClone(value)
+        }
+      }
+      const panelCount = Number(data.panel_count ?? typeParameters.panel_count ?? 1)
+      if (Array.isArray(data.panel_layout) && data.panel_layout.length !== panelCount) throw new Error('panel_layout must match panel_count')
+      if (Array.isArray(data.panel_width_ratios)) {
+        if (data.panel_width_ratios.length !== panelCount || !data.panel_width_ratios.every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)) throw new Error('panel_width_ratios must contain one positive ratio per panel')
+        const ratioTotal = (data.panel_width_ratios as number[]).reduce((sum, value) => sum + value, 0)
+        if (Math.abs(ratioTotal - 1) > 0.001) throw new Error('panel_width_ratios must add up to 1')
+      }
+      // A manually entered height takes control from a level-constrained head.
+      if (Object.hasOwn(request.parameters, 'height_mm') && request.parameters.height_mm !== null) {
+        data.head_level_id = undefined
+        data.head_offset_mm = undefined
+        data.vertical_constraint = 'fixed_height'
+      }
+      data.instance_overrides = overrides
+
+      const width = Number(data.width_mm)
+      const wall = updated.objects[String(data.wall_id)]
+      if (!wall || !isWallObject(wall)) throw new Error(`Host wall for opening ${target.id} not found`)
+      const wallData = wall.module_data
+      const wallLength = Math.hypot(wallData.end_point_mm[0] - wallData.start_point_mm[0], wallData.end_point_mm[1] - wallData.start_point_mm[1])
+      const offset = Number(data.offset_along_wall_mm)
+      if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(offset) || offset - width / 2 < -1 || offset + width / 2 > wallLength + 1) {
+        throw new Error(`Opening ${target.id} does not fit within host wall ${wall.id}`)
+      }
+      if (data.door_face_components !== undefined) validateDoorFaceComponents(data.door_face_components)
+      if (data.plan_symbol_lines !== undefined) validateOpeningPlanSymbolLines(data.plan_symbol_lines)
+      const openingExtent = resolveOpeningVerticalExtent(updated, data)
+      const wallExtent = resolveWallVerticalExtent(updated, wall)
+      if (!openingExtent || !wallExtent || openingExtent.base_elevation_mm < wallExtent.base_elevation_mm - 1 || openingExtent.top_elevation_mm > wallExtent.top_elevation_mm + 1) {
+        throw new Error(`Opening ${target.id} vertical bounds exceed host wall ${wall.id}`)
+      }
+      updated.objects[target.id] = {
+        ...target,
+        module_data: data as unknown as DoorModuleData | WindowModuleData,
+        updated_at: now,
+        revision_meta: { ...target.revision_meta, dirty_quantity: true, dirty_drawing: true },
+      }
+      return {
+        result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] },
+        updatedProject: updated,
+        emittedEnvelope: { ...envelope, input: { object_id: target.id, parameters: structuredClone(request.parameters) } },
       }
     }
 

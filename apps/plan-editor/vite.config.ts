@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 function fileAcceptanceDiskPlugin() {
   return {
@@ -65,6 +66,11 @@ function fileAcceptanceDiskPlugin() {
 
 export default defineConfig({
   plugins: [react(), fileAcceptanceDiskPlugin()],
+  resolve: {
+    alias: {
+      '@constructflow/architecture-engine': fileURLToPath(new URL('../../packages/architecture-engine/dist/index.js', import.meta.url)),
+    },
+  },
   server: {
     // Expose Vite to other devices on the user's private LAN, not just loopback.
     host: '0.0.0.0',

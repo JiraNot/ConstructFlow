@@ -74,7 +74,7 @@ Deliverables:
 - [x] hand/facing/flip state (4 quadrants)
 - [x] dynamic 2D wall cutouts without breaking topology
 - [x] 3D hole punching and infill creation via SketchUp CommandBus
-- [ ] type vs instance parameters flex in UI
+- [x] type vs instance parameters flex in UI: the Inspector exposes catalog-backed opening parameters, labels inherited values and per-instance overrides, and can reset an override to the catalog value. The `UpdateOpeningInstanceParameters` command validates family-supported values and host/level constraints; type cascade, override/reset, save/reopen, undo/redo and rejection cases have command-runtime coverage. This closes the current basic type/instance editing track; formulas, richer constraints and production family flex remain under R3.
 - [x] host stretch reconciliation (endpoint edits preserve opening offsets from the edited wall start, refresh opening coordinates from the exact unrounded span, and reject stretches that clip a hosted opening atomically)
 
 ### Floors & Ceilings
