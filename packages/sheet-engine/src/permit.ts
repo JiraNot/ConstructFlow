@@ -34,6 +34,7 @@ import {
   recommendEITBreakerAndWire,
   balanceCircuitsPhase,
 } from "@constructflow/electrical-engine";
+import { evaluateRoomVentilationCompliance } from "@constructflow/clash-engine";
 
 export const PERMIT_INDEX = [
   ["A-01", "ผังบริเวณ / Site & project information", 200],
@@ -1089,6 +1090,34 @@ function compilePermitDrawingSetBase(
             5.5,
           );
 
+          // 5. Natural Lighting & Ventilation Schedule (MR55 Rule 40 & 41)
+          const ventSummary = evaluateRoomVentilationCompliance(project);
+          if (ventSummary.rooms.length > 0) {
+            text(
+              [220, 192],
+              "ตารางตรวจสอบแสงสว่างและการระบายอากาศธรรมชาติ (MR55 ข้อ 40-41)",
+              2.6,
+              "#0f172a",
+            );
+            const ventRows = [
+              ["ห้อง / Room", "พื้นที่", "แสงสว่าง (>=10%)", "ระบายอากาศ", "ผลตรวจ"],
+              ...ventSummary.rooms.slice(0, 10).map((r) => [
+                `${r.room_number ? r.room_number + " " : ""}${r.room_name}`,
+                `${r.floor_area_sq_m.toFixed(1)} ม²`,
+                `${r.total_daylight_area_sq_m.toFixed(2)} (${r.daylight_ratio_percent.toFixed(0)}%)`,
+                `${r.total_ventilation_area_sq_m.toFixed(2)} (${r.ventilation_ratio_percent.toFixed(0)}%)`,
+                r.overall_status === "pass" ? "ผ่าน ✅" : "ไม่ผ่าน ⚠️",
+              ]),
+            ];
+            drawTable(
+              ventRows,
+              [220, 196],
+              [48, 24, 40, 43, 30],
+              11,
+              5.2,
+            );
+          }
+
           // 20-Sheet Master Index
           text([18, 162], "20-SHEET MASTER DRAWING INDEX", 3.0, "#0f172a");
           PERMIT_INDEX.forEach((entry, i) =>
@@ -1127,6 +1156,33 @@ function compilePermitDrawingSetBase(
               185,
             ),
           );
+
+          const ventSummary = evaluateRoomVentilationCompliance(project);
+          if (ventSummary.rooms.length > 0) {
+            text(
+              [220, 34],
+              "ตารางตรวจสอบแสงสว่างและการระบายอากาศธรรมชาติ (MR55 ข้อ 40-41)",
+              2.6,
+              "#0f172a",
+            );
+            const ventRows = [
+              ["ห้อง / Room", "พื้นที่", "แสงสว่าง (>=10%)", "ระบายอากาศ", "ผลตรวจ"],
+              ...ventSummary.rooms.slice(0, 15).map((r) => [
+                `${r.room_number ? r.room_number + " " : ""}${r.room_name}`,
+                `${r.floor_area_sq_m.toFixed(1)} ม²`,
+                `${r.total_daylight_area_sq_m.toFixed(2)} (${r.daylight_ratio_percent.toFixed(0)}%)`,
+                `${r.total_ventilation_area_sq_m.toFixed(2)} (${r.ventilation_ratio_percent.toFixed(0)}%)`,
+                r.overall_status === "pass" ? "ผ่าน ✅" : "ไม่ผ่าน ⚠️",
+              ]),
+            ];
+            drawTable(
+              ventRows,
+              [220, 38],
+              [48, 24, 40, 43, 30],
+              16,
+              5.5,
+            );
+          }
         }
       } else {
         const objectsWithMesh = selected.map((o) => ({

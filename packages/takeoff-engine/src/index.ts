@@ -399,9 +399,69 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
         break
       }
       case 'door_window.door':
-      case 'door_window.window':
+      case 'door_window.window': {
         add(object, 'item', 1, 'one scheduled hosted opening')
+
+        const costInfo = phaseAndCostCenter(object.created_phase, object.removed_phase)
+        if (costInfo.cost_center === 'new_construction') {
+          const widthMm = Number(valueFor(project, object.object_type, data, 'width_mm') ?? data.width_mm)
+          const heightMm = Number(valueFor(project, object.object_type, data, 'height_mm') ?? data.height_mm)
+          const isWindow = object.object_type === 'door_window.window'
+          const sillHeightMm = isWindow ? Number(valueFor(project, object.object_type, data, 'sill_height_mm') ?? data.sill_height_mm ?? 0) : 0
+          const hostId = typeof data.wall_id === 'string' ? data.wall_id : undefined
+          const hostWall = hostId ? project.objects[hostId] : undefined
+          const hostData = hostWall ? (hostWall.module_data as Data) : undefined
+          const wallThicknessMm = Number((hostData ? valueFor(project, 'architecture.wall', hostData, 'thickness_mm') : undefined) ?? hostData?.thickness_mm) || 100
+
+          if (finitePositive(widthMm) && finitePositive(heightMm)) {
+            const W = mmToM(widthMm)
+            const H = mmToM(heightMm)
+            const Tw = mmToM(wallThicknessMm)
+            const stiffenerLengthM = 2 * H
+            const lintelLengthM = W + 0.40 // 0.20m bearing each side
+            const sillLengthM = (isWindow && sillHeightMm > 0) ? (W + 0.40) : 0
+            const totalLengthM = Number((stiffenerLengthM + lintelLengthM + sillLengthM).toFixed(4))
+
+            if (totalLengthM > 0) {
+              const depthM = 0.10 // standard 100mm depth
+              const concreteVolM3 = Number((totalLengthM * Tw * depthM).toFixed(4))
+              const formworkAreaM2 = Number((totalLengthM * 2 * depthM).toFixed(4))
+              const mainRebarKg = Number((totalLengthM * 2 * 0.499).toFixed(4)) // 2-RB9 @ 0.499 kg/m
+              const stirrupTies = Math.ceil(totalLengthM / 0.20) // RB6 @ 0.20m
+              const tieLengthM = 2 * (Tw + depthM)
+              const stirrupKg = Number((stirrupTies * tieLengthM * 0.222).toFixed(4)) // RB6 @ 0.222 kg/m
+
+              const stiffenerClass: TakeoffClassification = {
+                phase: costInfo.phase,
+                cost_center: costInfo.cost_center,
+                object_type: 'architecture.masonry_stiffener',
+                mark: 'เสาเอ็น-ทับหลัง คสล.',
+              }
+
+              // 1) คอนกรีต คสล. เสาเอ็น-ทับหลัง
+              add(object, 'm3', concreteVolM3,
+                'คอนกรีต คสล. เสาเอ็น-ทับหลัง (240 ksc)',
+                'concrete_240_ksc', stiffenerClass)
+
+              // 2) ไม้แบบหล่อเสาเอ็น-ทับหลัง
+              add(object, 'm2', formworkAreaM2,
+                'ไม้แบบหล่อเสาเอ็น-ทับหลัง (2 ด้าน)',
+                'plywood_formwork', stiffenerClass)
+
+              // 3) เหล็กเสริมแกน 2-RB9
+              add(object, 'kg', mainRebarKg,
+                'เหล็กเสริมแกน 2-RB9 เสาเอ็น-ทับหลัง',
+                'rebar_rb9', stiffenerClass)
+
+              // 4) เหล็กปลอก RB6 @ 0.20 ม.
+              add(object, 'kg', stirrupKg,
+                'เหล็กปลอก RB6 @ 0.20 ม. เสาเอ็น-ทับหลัง',
+                'rebar_rb6', stiffenerClass)
+            }
+          }
+        }
         break
+      }
       default:
         break
     }

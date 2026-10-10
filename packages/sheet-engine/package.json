@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@constructflow/architecture-engine": "file:../architecture-engine",
+    "@constructflow/clash-engine": "file:../clash-engine",
     "@constructflow/domain-providers": "file:../domain-providers",
     "@constructflow/electrical-engine": "file:../electrical-engine",
     "@constructflow/geometry-kernel": "file:../geometry-kernel",

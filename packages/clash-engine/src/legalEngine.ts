@@ -2,6 +2,12 @@
 // Implements Title Deed parcel processing, Thai Land measurement units,
 // Thai Building Code (กฎกระทรวงฉบับที่ 55 พ.ศ. 2543), and BMA Municipal Regulations (ข้อบัญญัติ กทม.).
 
+import {
+  type ProjectDocument,
+  type SmartObject,
+  resolveCatalogType,
+} from '@constructflow/project-model'
+
 export interface SurveyPeg {
   name: string // e.g. "1ก 1234"
   x_m?: number
@@ -425,5 +431,480 @@ export function evaluateBmaZoning(inputs: BmaZoningEvaluationInputs): BmaZoningE
     permeable_status: permeablePass ? 'pass' : 'fail',
     overall_status: overallPass ? 'pass' : 'fail',
     findings,
+  }
+}
+
+// -------------------------------------------------------------
+// Natural Lighting & Ventilation Compliance (กฎกระทรวง ฉบับที่ 55 ข้อ 40, 41)
+// -------------------------------------------------------------
+
+export interface RoomVentilationOpeningItem {
+  opening_id: string
+  mark: string
+  object_type: 'door_window.door' | 'door_window.window'
+  width_m: number
+  height_m: number
+  gross_area_sq_m: number
+  operation: string // e.g. 'sliding', 'hinged', 'awning', 'fixed'
+  daylight_ratio: number
+  ventilation_ratio: number
+  effective_daylight_area_sq_m: number
+  effective_ventilation_area_sq_m: number
+  wall_id: string
+  is_exterior: boolean
+}
+
+export interface RoomVentilationResult {
+  room_id: string
+  room_number: string
+  room_name: string
+  level_id: string
+  room_type: 'habitable' | 'bathroom'
+  floor_area_sq_m: number
+  exterior_openings: RoomVentilationOpeningItem[]
+  total_daylight_area_sq_m: number
+  daylight_ratio_percent: number
+  required_daylight_percent: number
+  daylight_status: ComplianceStatus
+  total_ventilation_area_sq_m: number
+  ventilation_ratio_percent: number
+  required_ventilation_percent: number
+  min_ventilation_area_sq_m: number
+  ventilation_status: ComplianceStatus
+  overall_status: ComplianceStatus
+  findings: ComplianceFinding[]
+}
+
+export interface ProjectVentilationComplianceSummary {
+  overall_status: ComplianceStatus
+  rooms: RoomVentilationResult[]
+  total_rooms: number
+  passed_rooms: number
+  failed_rooms: number
+  findings: ComplianceFinding[]
+}
+
+function pointInPolygon2D(p: [number, number], polygon: [number, number][]): boolean {
+  if (!polygon || polygon.length < 3) return false
+  let inside = false
+  const [x, y] = p
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0]
+    const yi = polygon[i][1]
+    const xj = polygon[j][0]
+    const yj = polygon[j][1]
+    const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+
+function pointToSegmentDist2D(p: [number, number], a: [number, number], b: [number, number]): number {
+  const dx = b[0] - a[0]
+  const dy = b[1] - a[1]
+  const l2 = dx * dx + dy * dy
+  if (l2 === 0) return Math.hypot(p[0] - a[0], p[1] - a[1])
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2))
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
+}
+
+function minDistanceToPolygon2D(p: [number, number], polygon: [number, number][]): number {
+  if (!polygon || polygon.length < 2) return Infinity
+  let minD = Infinity
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i]
+    const b = polygon[(i + 1) % polygon.length]
+    const d = pointToSegmentDist2D(p, a, b)
+    if (d < minD) minD = d
+  }
+  return minD
+}
+
+function polygonAreaSqM2D(polygon: [number, number][]): number {
+  if (!polygon || polygon.length < 3) return 0
+  let areaSum = 0
+  for (let i = 0; i < polygon.length; i++) {
+    const j = (i + 1) % polygon.length
+    areaSum += polygon[i][0] * polygon[j][1] - polygon[j][0] * polygon[i][1]
+  }
+  return Math.abs(areaSum) / 2.0 / 1_000_000
+}
+
+/**
+ * Evaluates Natural Daylighting and Natural Ventilation compliance under
+ * Thai Building Code (กฎกระทรวงฉบับที่ 55 พ.ศ. 2543 ข้อ 40 และข้อ 41).
+ */
+export function evaluateRoomVentilationCompliance(
+  project: ProjectDocument,
+  targetRoomId?: string,
+): ProjectVentilationComplianceSummary {
+  const allRooms = Object.values(project.objects).filter((obj): obj is SmartObject => {
+    if (obj.status === 'archived' || obj.removed_phase) return false
+    return obj.object_type === 'architecture.room'
+  })
+
+  const allWalls = Object.values(project.objects).filter((obj): obj is SmartObject => {
+    if (obj.status === 'archived' || obj.removed_phase) return false
+    return obj.object_type === 'architecture.wall'
+  })
+
+  const allOpenings = Object.values(project.objects).filter((obj): obj is SmartObject => {
+    if (obj.status === 'archived' || obj.removed_phase) return false
+    return obj.object_type === 'door_window.door' || obj.object_type === 'door_window.window'
+  })
+
+  const roomsToEvaluate = targetRoomId ? allRooms.filter((r) => r.id === targetRoomId) : allRooms
+  const roomResults: RoomVentilationResult[] = []
+  const allFindings: ComplianceFinding[] = []
+
+  for (const room of roomsToEvaluate) {
+    const roomData = (room.module_data ?? {}) as Record<string, unknown>
+    const levelId = String(roomData.level_id ?? (room.level_refs?.[0]?.level_id ?? ''))
+    const roomNumber = String(roomData.number ?? '')
+    const roomName = String(roomData.name ?? 'Room')
+    const boundary = (roomData.boundary_mm as [number, number][]) ?? []
+
+    const floorAreaSqM =
+      typeof roomData.area_mm2 === 'number' && roomData.area_mm2 > 0
+        ? Math.round((roomData.area_mm2 / 1_000_000) * 100) / 100
+        : Math.round(polygonAreaSqM2D(boundary) * 100) / 100
+
+    const isBathroom = /bath|toilet|wc|w\.c\.|powder|restroom|ห้องน้ำ|สุขา|ส้วม/i.test(
+      `${roomName} ${roomNumber}`,
+    )
+    const roomType: 'habitable' | 'bathroom' = isBathroom ? 'bathroom' : 'habitable'
+
+    const requiredDaylightPercent = isBathroom ? 0 : 10.0
+    const requiredVentilationPercent = 10.0
+    const minVentilationAreaSqM = isBathroom ? 0.2 : 0
+
+    // Find openings on this level that border this room and face the exterior
+    const levelRooms = allRooms.filter((r) => {
+      const rd = (r.module_data ?? {}) as Record<string, unknown>
+      return (rd.level_id ?? r.level_refs?.[0]?.level_id) === levelId
+    })
+
+    const levelOpenings = allOpenings.filter((o) => {
+      const od = (o.module_data ?? {}) as Record<string, unknown>
+      const oLevel = od.level_id ?? o.level_refs?.[0]?.level_id
+      return oLevel === levelId || !oLevel
+    })
+
+    const exteriorOpenings: RoomVentilationOpeningItem[] = []
+
+    for (const op of levelOpenings) {
+      const opData = (op.module_data ?? {}) as Record<string, unknown>
+      const wallId = String(opData.wall_id ?? '')
+      const hostWall = allWalls.find((w) => w.id === wallId)
+
+      let loc: [number, number] | undefined = Array.isArray(opData.location_mm)
+        ? [Number(opData.location_mm[0]), Number(opData.location_mm[1])]
+        : undefined
+
+      if (!loc && hostWall) {
+        const hwData = (hostWall.module_data ?? {}) as Record<string, unknown>
+        const start = hwData.start_point_mm as number[] | undefined
+        const end = hwData.end_point_mm as number[] | undefined
+        if (start && end) {
+          const dx = end[0] - start[0]
+          const dy = end[1] - start[1]
+          const len = Math.hypot(dx, dy)
+          const offset =
+            typeof opData.offset_along_wall_mm === 'number'
+              ? opData.offset_along_wall_mm
+              : len / 2
+          if (len > 0) loc = [start[0] + (dx / len) * offset, start[1] + (dy / len) * offset]
+        }
+      }
+
+      if (!loc) continue
+
+      // Test adjacency to this room's boundary
+      let adjacentToThisRoom = false
+      if (boundary.length >= 3) {
+        const dist = minDistanceToPolygon2D(loc, boundary)
+        adjacentToThisRoom = dist <= 450 // mm tolerance for wall offset + thickness
+      } else if (opData.room_id === room.id) {
+        adjacentToThisRoom = true
+      }
+
+      if (!adjacentToThisRoom) continue
+
+      // Determine if opening faces the outdoor exterior
+      let isExterior = false
+      if (hostWall) {
+        const hwData = (hostWall.module_data ?? {}) as Record<string, unknown>
+        if (
+          hwData.plaster_outside_material === 'exterior_paint' ||
+          Boolean(hwData.outside_finish_mark)
+        ) {
+          isExterior = true
+        }
+
+        const start = hwData.start_point_mm as number[] | undefined
+        const end = hwData.end_point_mm as number[] | undefined
+        if (start && end) {
+          const dx = end[0] - start[0]
+          const dy = end[1] - start[1]
+          const len = Math.hypot(dx, dy)
+          if (len > 0) {
+            const nx = -dy / len
+            const ny = dx / len
+            const p1: [number, number] = [loc[0] + 350 * nx, loc[1] + 350 * ny]
+            const p2: [number, number] = [loc[0] - 350 * nx, loc[1] - 350 * ny]
+            const r1 = levelRooms.filter((r) =>
+              pointInPolygon2D(
+                p1,
+                ((r.module_data ?? {}) as Record<string, unknown>).boundary_mm as [number, number][],
+              ),
+            )
+            const r2 = levelRooms.filter((r) =>
+              pointInPolygon2D(
+                p2,
+                ((r.module_data ?? {}) as Record<string, unknown>).boundary_mm as [number, number][],
+              ),
+            )
+
+            if ((r1.length > 0 && r2.length === 0) || (r2.length > 0 && r1.length === 0)) {
+              isExterior = true
+            } else if (r1.length > 0 && r2.length > 0) {
+              isExterior = false // Partition between indoor rooms
+            }
+          }
+        }
+      } else if (op.object_type === 'door_window.window') {
+        isExterior = true
+      }
+
+      if (!isExterior) continue
+
+      // Calculate gross and effective areas
+      const widthMm = Number(opData.width_mm ?? 1000)
+      const heightMm = Number(opData.height_mm ?? 1200)
+      const widthM = widthMm / 1000
+      const heightM = heightMm / 1000
+      const grossAreaSqM = Math.round(widthM * heightM * 1000) / 1000
+
+      const typeId = String(
+        opData.type_id ?? opData.door_type_id ?? opData.window_type_id ?? '',
+      )
+      const typeDef =
+        Array.isArray(project.types) && typeId
+          ? resolveCatalogType(project, op.object_type, typeId)
+          : undefined
+      const params = {
+        ...(typeDef?.parameters ?? {}),
+        ...((opData.instance_overrides as Record<string, unknown>) ?? {}),
+      }
+
+      const operation = String(
+        params.opening_operation ?? (op.object_type === 'door_window.window' ? 'sliding' : 'hinged'),
+      )
+      const glazing = String(
+        params.glazing_material ?? (op.object_type === 'door_window.window' ? 'clear_glass' : 'none'),
+      )
+      const leafStyle = String(params.door_leaf_style ?? '')
+
+      // Daylight ratio
+      let daylightRatio = 0
+      if (op.object_type === 'door_window.window') {
+        daylightRatio = glazing === 'none' || leafStyle === 'louvered' ? 0 : 1.0
+      } else {
+        if (
+          glazing !== 'none' ||
+          leafStyle.includes('french') ||
+          leafStyle.includes('glass') ||
+          operation === 'sliding'
+        ) {
+          daylightRatio = 0.8
+        } else {
+          daylightRatio = 0
+        }
+      }
+
+      // Ventilation ratio
+      let ventilationRatio = 0.5
+      switch (operation) {
+        case 'fixed':
+          ventilationRatio = 0.0
+          break
+        case 'sliding':
+          ventilationRatio = 0.5
+          break
+        case 'louvered':
+        case 'jalousie':
+          ventilationRatio = 0.7
+          break
+        case 'bifold':
+          ventilationRatio = 0.9
+          break
+        case 'hinged':
+        case 'casement':
+        case 'awning':
+        case 'pivoted':
+          ventilationRatio = 1.0
+          break
+        default:
+          ventilationRatio = op.object_type === 'door_window.window' ? 0.5 : 1.0
+      }
+
+      const effectiveDaylight = Math.round(grossAreaSqM * daylightRatio * 1000) / 1000
+      const effectiveVentilation = Math.round(grossAreaSqM * ventilationRatio * 1000) / 1000
+
+      exteriorOpenings.push({
+        opening_id: op.id,
+        mark: String(opData.mark ?? (op.object_type === 'door_window.window' ? 'W' : 'D')),
+        object_type: op.object_type as 'door_window.door' | 'door_window.window',
+        width_m: widthM,
+        height_m: heightM,
+        gross_area_sq_m: grossAreaSqM,
+        operation,
+        daylight_ratio: daylightRatio,
+        ventilation_ratio: ventilationRatio,
+        effective_daylight_area_sq_m: effectiveDaylight,
+        effective_ventilation_area_sq_m: effectiveVentilation,
+        wall_id: wallId,
+        is_exterior: true,
+      })
+    }
+
+    // Totals for room
+    const totalDaylightAreaSqM =
+      Math.round(
+        exteriorOpenings.reduce((sum, o) => sum + o.effective_daylight_area_sq_m, 0) * 1000,
+      ) / 1000
+    const totalVentilationAreaSqM =
+      Math.round(
+        exteriorOpenings.reduce((sum, o) => sum + o.effective_ventilation_area_sq_m, 0) * 1000,
+      ) / 1000
+
+    const daylightRatioPercent =
+      floorAreaSqM > 0
+        ? Math.round((totalDaylightAreaSqM / floorAreaSqM) * 1000) / 10
+        : 0
+    const ventilationRatioPercent =
+      floorAreaSqM > 0
+        ? Math.round((totalVentilationAreaSqM / floorAreaSqM) * 1000) / 10
+        : 0
+
+    // Evaluation
+    let daylightStatus: ComplianceStatus = 'pass'
+    if (roomType === 'habitable') {
+      daylightStatus = daylightRatioPercent >= requiredDaylightPercent ? 'pass' : 'fail'
+    } else {
+      daylightStatus = 'pass' // bathrooms use mechanical or artificial illumination
+    }
+
+    let ventilationStatus: ComplianceStatus = 'pass'
+    if (roomType === 'bathroom') {
+      ventilationStatus =
+        totalVentilationAreaSqM >= minVentilationAreaSqM ||
+        ventilationRatioPercent >= requiredVentilationPercent
+          ? 'pass'
+          : 'fail'
+    } else {
+      ventilationStatus =
+        ventilationRatioPercent >= requiredVentilationPercent ? 'pass' : 'fail'
+    }
+
+    const roomOverall: ComplianceStatus =
+      daylightStatus === 'pass' && ventilationStatus === 'pass' ? 'pass' : 'fail'
+
+    // Formulate Thai findings
+    const roomFindings: ComplianceFinding[] = []
+
+    // Rule 41 Daylighting
+    const daylightTitle = `Natural Daylighting (${roomName} ${roomNumber})`
+    const daylightTitleTh = `ระบบแสงสว่างธรรมชาติ (${roomName} ${roomNumber})`
+    const requiredDaylightSqM = (floorAreaSqM * (requiredDaylightPercent / 100)).toFixed(2)
+    roomFindings.push({
+      rule_id: 'TH-MR55-RULE-41-DAYLIGHT',
+      title: daylightTitle,
+      title_th: daylightTitleTh,
+      status: daylightStatus,
+      actual: `${totalDaylightAreaSqM.toFixed(2)} ตร.ม. (${daylightRatioPercent.toFixed(1)}%)`,
+      required:
+        requiredDaylightPercent > 0
+          ? `>= ${requiredDaylightSqM} ตร.ม. (>= ${requiredDaylightPercent.toFixed(0)}%)`
+          : 'ตามความเหมาะสม (ไฟส่องสว่าง)',
+      citation: 'กฎกระทรวง ฉบับที่ 55 (พ.ศ. 2543) ข้อ 41',
+      description_th:
+        roomType === 'bathroom'
+          ? `ห้องน้ำ/ส้วม อนุโลมให้ใช้ระบบไฟฟ้าแสงสว่างได้ตามมาตรฐานความปลอดภัย`
+          : `ห้อง ${roomName} พื้นที่ ${floorAreaSqM.toFixed(2)} ตร.ม. มีช่องรับแสงธรรมชาติรวม ${totalDaylightAreaSqM.toFixed(2)} ตร.ม. (${daylightRatioPercent.toFixed(1)}%) ${
+              daylightStatus === 'pass'
+                ? `ถูกต้องตามเกณฑ์กฎกระทรวง (>= 10%)`
+                : `ต่ำกว่าเกณฑ์กฎกระทรวง (ต้องมีช่องรับแสงไม่น้อยกว่า 10% หรือ >= ${requiredDaylightSqM} ตร.ม.)`
+            }`,
+    })
+
+    // Rule 40 Ventilation
+    const ventTitle = `Natural Ventilation (${roomName} ${roomNumber})`
+    const ventTitleTh = `ระบบระบายอากาศธรรมชาติ (${roomName} ${roomNumber})`
+    const requiredVentSqM =
+      roomType === 'bathroom'
+        ? `${minVentilationAreaSqM.toFixed(2)} ตร.ม. หรือ >= 10%`
+        : `>= ${(floorAreaSqM * 0.1).toFixed(2)} ตร.ม. (>= 10%)`
+    roomFindings.push({
+      rule_id: 'TH-MR55-RULE-40-VENTILATION',
+      title: ventTitle,
+      title_th: ventTitleTh,
+      status: ventilationStatus,
+      actual: `${totalVentilationAreaSqM.toFixed(2)} ตร.ม. (${ventilationRatioPercent.toFixed(1)}%)`,
+      required: requiredVentSqM,
+      citation:
+        roomType === 'bathroom'
+          ? 'กฎกระทรวง ฉบับที่ 55 (พ.ศ. 2543) ข้อ 40 วรรคสอง'
+          : 'กฎกระทรวง ฉบับที่ 55 (พ.ศ. 2543) ข้อ 40 วรรคหนึ่ง',
+      description_th:
+        roomType === 'bathroom'
+          ? `ห้องน้ำ/ส้วม ${roomName} พื้นที่ ${floorAreaSqM.toFixed(2)} ตร.ม. มีช่องเปิดระบายอากาศสู่ภายนอก ${totalVentilationAreaSqM.toFixed(2)} ตร.ม. (${ventilationRatioPercent.toFixed(1)}%) ${
+              ventilationStatus === 'pass'
+                ? `ถูกต้องตามเกณฑ์กฎกระทรวง (>= 0.20 ตร.ม. หรือ >= 10%)`
+                : `ต่ำกว่าเกณฑ์กฎกระทรวง (ต้องมีช่องระบายอากาศไม่น้อยกว่า 0.20 ตร.ม. หรือ 10% ของพื้นที่ห้อง)`
+            }`
+          : `ห้อง ${roomName} พื้นที่ ${floorAreaSqM.toFixed(2)} ตร.ม. มีช่องระบายอากาศธรรมชาติรวม ${totalVentilationAreaSqM.toFixed(2)} ตร.ม. (${ventilationRatioPercent.toFixed(1)}%) ${
+              ventilationStatus === 'pass'
+                ? `ถูกต้องตามเกณฑ์กฎกระทรวง (>= 10%)`
+                : `ต่ำกว่าเกณฑ์กฎกระทรวง (ต้องมีช่องระบายอากาศไม่น้อยกว่า 10% หรือ >= ${(floorAreaSqM * 0.1).toFixed(2)} ตร.ม.)`
+            }`,
+    })
+
+    roomResults.push({
+      room_id: room.id,
+      room_number: roomNumber,
+      room_name: roomName,
+      level_id: levelId,
+      room_type: roomType,
+      floor_area_sq_m: floorAreaSqM,
+      exterior_openings: exteriorOpenings,
+      total_daylight_area_sq_m: totalDaylightAreaSqM,
+      daylight_ratio_percent: daylightRatioPercent,
+      required_daylight_percent: requiredDaylightPercent,
+      daylight_status: daylightStatus,
+      total_ventilation_area_sq_m: totalVentilationAreaSqM,
+      ventilation_ratio_percent: ventilationRatioPercent,
+      required_ventilation_percent: requiredVentilationPercent,
+      min_ventilation_area_sq_m: minVentilationAreaSqM,
+      ventilation_status: ventilationStatus,
+      overall_status: roomOverall,
+      findings: roomFindings,
+    })
+
+    allFindings.push(...roomFindings)
+  }
+
+  const passedCount = roomResults.filter((r) => r.overall_status === 'pass').length
+  const failedCount = roomResults.filter((r) => r.overall_status === 'fail').length
+  const overallStatus: ComplianceStatus =
+    failedCount > 0 ? 'fail' : roomResults.length > 0 ? 'pass' : 'insufficient_data'
+
+  return {
+    overall_status: overallStatus,
+    rooms: roomResults,
+    total_rooms: roomResults.length,
+    passed_rooms: passedCount,
+    failed_rooms: failedCount,
+    findings: allFindings,
   }
 }

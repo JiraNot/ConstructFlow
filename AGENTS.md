@@ -175,6 +175,11 @@ When a user or agent modifies a Type Catalog entry (e.g. changing beam `B1` dept
     * ผนังทึบ ร่นห่างแนวเขตที่ดิน $\ge 0.50$ ม.
     * ผนังทึบสร้างชิดแนวเขตที่ดิน ($0.00$ ม.) ได้เฉพาะเมื่อมีหนังสือยินยอมเป็นลายลักษณ์อักษรจากเจ้าของที่ดินข้างเคียง.
   * **Town Planning Zoning (ผังเมืองรวม กทม. ย.1 - ย.10):** FAR (Floor Area Ratio) และ OSR (Open Space Ratio) validation พร้อมตรวจสัดส่วนพื้นที่ว่างน้ำซึมผ่านได้ $\ge 50$% ของพื้นที่ว่างเปิดโล่ง.
+  * **Natural Daylighting & Ventilation Compliance (การระบายอากาศและแสงสว่างธรรมชาติ กฎกระทรวง 55 ข้อ 40, 41):**
+    * **Natural Ventilation (ข้อ 40):** ห้องในอาคารที่อยู่อาศัย (ห้องนอน ห้องนั่งเล่น ห้องครัว) ต้องมีช่องระบายอากาศสู่ภายนอก $\ge 10\%$ ของพื้นที่ห้อง (บานเปิด/กระทุ้ง 100%, บานเลื่อน 50%, บานเกล็ด 70%), ห้องน้ำ/ส้วม ต้องมีช่องระบายอากาศ $\ge 10\%$ หรือ $\ge 0.20\text{ m}^2$.
+    * **Natural Daylighting (ข้อ 41):** ห้องในอาคารที่อยู่อาศัยต้องมีช่องรับแสงสว่างธรรมชาติ $\ge 10\%$ ของพื้นที่ห้อง.
+    * **Two-Sided Probe Test:** แยกช่องเปิดภายนอก (Exterior) ออกจากช่องเปิดผนังภายใน (Interior Partition) ด้วย Normal Probe Testing ตรวจสอบ Point-in-Polygon กับแนววงห้องทุกห้องในชั้นนั้น.
+    * **Interactive Real-Time Gauges & Permit Schedule:** แสดงเกจวัด % พร้อมสถานะ ผ่าน ✅ / ไม่ผ่าน ⚠️ แบบ Real-time บน PropertiesPanel เมื่อคลิกเลือกห้อง และสรุปตารางแสดงผลบนแบบแผ่น A-01.
 
 ### Domain 2: Structural Engineering & Detail Schedules
 * **Substructure & Foundation:**
@@ -200,6 +205,7 @@ When a user or agent modifies a Type Catalog entry (e.g. changing beam `B1` dept
 * **Parametric Portals & Decorative Openings:**
   * บานประตูซุ้มโค้ง (Roman Arch, Segmental Arch, Fillet Corners), ช่องแสงกระจกทึบ/โปร่ง (Transoms & Sidelights), หน้าต่างบานเล่อน, บานเปิด, บานกระทุ้ง, บานเกล็ด.
   * ควบคุม 4-Quadrant Swing Handing (`left_in`, `left_out`, `right_in`, `right_out`) พร้อมหักช่องเปิดบนผนังแบบ Dynamic Cutout.
+  * **Opening RC Stiffener & Lintel Takeoff (เสาเอ็น-ทับหลัง-เอ็นธรณี คสล.):** คำนวณปริมาณงาน คสล. อัตโนมัติจากขนาดช่องเปิดและผนังโฮสต์: เสาเอ็น 2 ข้าง + ทับหลังบน (ระยะฝากข้างละ 20 ซม.) + เอ็นธรณีใต้หน้าต่าง ($L_{\text{total}} = 2H + (W + 0.40) + (\text{isWindow} ? W + 0.40 : 0)$) บันทึก 4 รายการมาตรฐานลง BOQ หมวดสถาปัตย์ (คอนกรีต 240 ksc, ไม้แบบหล่อ 2 ด้าน, เหล็กเสริมแกน 2-RB9, เหล็กปลอก RB6 @ 0.20 ม.).
 * **Decorative Wall Cladding & Wainscoting:**
   * คิ้วผนังลูกฟักสไตล์คลาสสิก (Wainscoting Panels), ไม้ระแนง (Flute Slats), ผนังกรุกระเบื้อง/หินอ่อนซ่อนไฟ (Stone Cladding).
 * **Surface Tiling & Borderlines (งานปูกระเบื้องและแนวขอบ):**
@@ -257,7 +263,7 @@ ConstructFlow compiles vector drawings directly into a standardized 20-Sheet A3 
 +--------+-------------------------------------------------------------+------------+
 | Sheet  | Sheet Name & Contents                                       | Scale      |
 +--------+-------------------------------------------------------------+------------+
-| A-01   | Cover Sheet, Title Deed, Site Plan, Legal Setbacks & OSR/FAR| 1:200/1:500|
+| A-01   | Title Deed, Setbacks, OSR/FAR & Ventilation Schedule        | 1:200/1:500|
 | A-02   | Phased Floor Plan - Ground Level (Existing/Demo/New Overlay)| 1:100      |
 | A-03   | Phased Floor Plan - Upper Levels & Mezzanine                | 1:100      |
 | A-04   | Roof Plan, Pitch Slopes, Drainage & Gutters                 | 1:100      |

@@ -145,3 +145,199 @@ test('F03: evaluateBmaZoning evaluates FAR, OSR and permeable green area for BMA
   assert.equal(result.osr_status, 'pass')
   assert.equal(result.permeable_status, 'pass')
 })
+
+test('F03: evaluateRoomVentilationCompliance checks MR55 Rules 40 & 41 for rooms and openings', async () => {
+  const { evaluateRoomVentilationCompliance } = await import('../dist/index.js')
+
+  const dummyProject = {
+    schema_version: 1,
+    id: 'proj-1',
+    name: 'Ventilation Test Project',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    levels: [{ id: 'GF', name: 'Ground Floor', elevation_mm: 0 }],
+    types: [
+      {
+        id: 'win-sliding',
+        name: 'Sliding Window',
+        object_type: 'door_window.window',
+        parameters: { opening_operation: 'sliding', glazing_material: 'clear_glass' },
+      },
+      {
+        id: 'win-casement',
+        name: 'Casement Window',
+        object_type: 'door_window.window',
+        parameters: { opening_operation: 'hinged', glazing_material: 'clear_glass' },
+      },
+      {
+        id: 'door-solid',
+        name: 'Solid Door',
+        object_type: 'door_window.door',
+        parameters: { opening_operation: 'hinged', glazing_material: 'none' },
+      },
+    ],
+    objects: {
+      // Room 1: Bedroom 1 (Habitable, 4m x 4m = 16 sqm)
+      'room-1': {
+        id: 'room-1',
+        object_type: 'architecture.room',
+        owner_module: 'constructflow.architecture',
+        schema_version: 1,
+        created_phase: 'new_construction',
+        removed_phase: null,
+        level_refs: [{ level_id: 'GF' }],
+        host_refs: [],
+        connector_refs: [],
+        status: 'active',
+        module_data: {
+          number: '101',
+          name: 'Bedroom 1',
+          level_id: 'GF',
+          area_mm2: 16_000_000,
+          boundary_mm: [[0, 0], [4000, 0], [4000, 4000], [0, 4000]],
+        },
+        created_at: '',
+        updated_at: '',
+      },
+      // Wall 1: Exterior south wall at Y = -50
+      'wall-1': {
+        id: 'wall-1',
+        object_type: 'architecture.wall',
+        owner_module: 'constructflow.architecture',
+        schema_version: 1,
+        created_phase: 'new_construction',
+        removed_phase: null,
+        level_refs: [{ level_id: 'GF' }],
+        host_refs: [],
+        connector_refs: [],
+        status: 'active',
+        module_data: {
+          start_point_mm: [-100, -50, 0],
+          end_point_mm: [4100, -50, 0],
+          thickness_mm: 100,
+          level_id: 'GF',
+          plaster_outside_material: 'exterior_paint',
+        },
+        created_at: '',
+        updated_at: '',
+      },
+      // Window 1 on Wall 1: Casement window 1.6m x 1.2m = 1.92 sqm
+      // Daylight = 1.92 sqm (12.0% of 16 sqm -> >= 10% PASS)
+      // Vent (hinged 100%) = 1.92 sqm (12.0% -> >= 10% PASS)
+      'win-1': {
+        id: 'win-1',
+        object_type: 'door_window.window',
+        owner_module: 'constructflow.architecture',
+        schema_version: 1,
+        created_phase: 'new_construction',
+        removed_phase: null,
+        level_refs: [{ level_id: 'GF' }],
+        host_refs: ['wall-1'],
+        connector_refs: [],
+        status: 'active',
+        module_data: {
+          mark: 'W1',
+          wall_id: 'wall-1',
+          type_id: 'win-casement',
+          location_mm: [2000, -50, 0],
+          width_mm: 1600,
+          height_mm: 1200,
+          level_id: 'GF',
+        },
+        created_at: '',
+        updated_at: '',
+      },
+      // Room 2: Bath (Bathroom, 2m x 2m = 4 sqm)
+      'room-2': {
+        id: 'room-2',
+        object_type: 'architecture.room',
+        owner_module: 'constructflow.architecture',
+        schema_version: 1,
+        created_phase: 'new_construction',
+        removed_phase: null,
+        level_refs: [{ level_id: 'GF' }],
+        host_refs: [],
+        connector_refs: [],
+        status: 'active',
+        module_data: {
+          number: '102',
+          name: 'Guest Bath',
+          level_id: 'GF',
+          area_mm2: 4_000_000,
+          boundary_mm: [[4000, 0], [6000, 0], [6000, 2000], [4000, 2000]],
+        },
+        created_at: '',
+        updated_at: '',
+      },
+      // Wall 2: Exterior south wall for bath
+      'wall-2': {
+        id: 'wall-2',
+        object_type: 'architecture.wall',
+        owner_module: 'constructflow.architecture',
+        schema_version: 1,
+        created_phase: 'new_construction',
+        removed_phase: null,
+        level_refs: [{ level_id: 'GF' }],
+        host_refs: [],
+        connector_refs: [],
+        status: 'active',
+        module_data: {
+          start_point_mm: [3900, -50, 0],
+          end_point_mm: [6100, -50, 0],
+          thickness_mm: 100,
+          level_id: 'GF',
+          plaster_outside_material: 'exterior_paint',
+        },
+        created_at: '',
+        updated_at: '',
+      },
+      // Window 2 for Bath: Awning window 0.8m x 0.6m = 0.48 sqm
+      // Awning (100% vent) = 0.48 sqm >= 0.20 sqm min -> PASS
+      'win-2': {
+        id: 'win-2',
+        object_type: 'door_window.window',
+        owner_module: 'constructflow.architecture',
+        schema_version: 1,
+        created_phase: 'new_construction',
+        removed_phase: null,
+        level_refs: [{ level_id: 'GF' }],
+        host_refs: ['wall-2'],
+        connector_refs: [],
+        status: 'active',
+        module_data: {
+          mark: 'W2',
+          wall_id: 'wall-2',
+          location_mm: [5000, -50, 0],
+          width_mm: 800,
+          height_mm: 600,
+          level_id: 'GF',
+        },
+        created_at: '',
+        updated_at: '',
+      },
+    },
+  }
+
+  const result = evaluateRoomVentilationCompliance(dummyProject)
+  assert.equal(result.total_rooms, 2)
+  assert.equal(result.passed_rooms, 2)
+  assert.equal(result.failed_rooms, 0)
+  assert.equal(result.overall_status, 'pass')
+
+  const r1 = result.rooms.find((r) => r.room_id === 'room-1')
+  assert.ok(r1)
+  assert.equal(r1.room_type, 'habitable')
+  assert.equal(r1.floor_area_sq_m, 16)
+  assert.equal(r1.exterior_openings.length, 1)
+  assert.equal(r1.daylight_status, 'pass')
+  assert.equal(r1.ventilation_status, 'pass')
+  assert.equal(r1.overall_status, 'pass')
+
+  const r2 = result.rooms.find((r) => r.room_id === 'room-2')
+  assert.ok(r2)
+  assert.equal(r2.room_type, 'bathroom')
+  assert.equal(r2.floor_area_sq_m, 4)
+  assert.equal(r2.exterior_openings.length, 1)
+  assert.equal(r2.ventilation_status, 'pass')
+  assert.ok(r2.total_ventilation_area_sq_m >= 0.2)
+})

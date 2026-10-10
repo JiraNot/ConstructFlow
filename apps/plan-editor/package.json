@@ -12,6 +12,7 @@
     "@constructflow/architecture-engine": "file:../../packages/architecture-engine",
     "@constructflow/bim-adapter": "file:../../packages/bim-adapter",
     "@constructflow/cad-adapter": "file:../../packages/cad-adapter",
+    "@constructflow/clash-engine": "file:../../packages/clash-engine",
     "@constructflow/command-runtime": "file:../../packages/command-runtime",
     "@constructflow/command-schema": "file:../../packages/command-schema",
     "@constructflow/domain-providers": "file:../../packages/domain-providers",
