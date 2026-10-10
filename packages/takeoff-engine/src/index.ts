@@ -17,6 +17,8 @@ export interface TakeoffLine {
   quantity: number
   source_object_ids: string[]
   formula: string
+  waste_percent?: number
+  gross_quantity?: number
 }
 
 export interface TakeoffReport {
@@ -478,6 +480,687 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
     remodeling_joint_treatment: { item: 0, m: 0, m2: 0, m3: 0, kg:0 },
   }
   const sorted = [...lines.values()].sort((a, b) => a.phase.localeCompare(b.phase) || a.object_type.localeCompare(b.object_type) || a.mark.localeCompare(b.mark))
-  for (const line of sorted) totals[line.cost_center][line.unit] += line.quantity
+  for (const line of sorted) {
+    totals[line.cost_center][line.unit] += line.quantity
+    if (line.unit !== 'item') {
+      const waste = getStandardWasteFactor(line.material || line.mark || line.object_type)
+      if (waste > 0) {
+        line.waste_percent = waste
+        line.gross_quantity = Number((line.quantity * (1 + waste / 100)).toFixed(4))
+      }
+    }
+  }
   return { project_id: project.project.id, schema_version: 1, lines: sorted, totals_by_cost_center: totals, warnings }
 }
+
+/**
+ * Thai Standard Material Waste Factors (ตัวคูณเผื่อเศษวัสดุตามเกณฑ์กรมบัญชีกลางและ วสท.)
+ */
+export const THAI_STANDARD_WASTE_FACTORS: Record<string, number> = {
+  tile_ceramic: 7,
+  tile_porcelain: 7,
+  tile_granite: 5,
+  tile: 7,
+  concrete_240_ksc: 5,
+  concrete_lean: 5,
+  concrete: 5,
+  mortar: 5,
+  cement_plaster: 5,
+  plaster: 5,
+  rebar_rb6: 5,
+  rebar_rb9: 5,
+  rebar_db12: 7,
+  rebar_db16: 9,
+  rebar_db20: 11,
+  rebar_db25: 11,
+  rebar: 7,
+  wire_mesh: 5,
+  brick: 5,
+  aac_block: 5,
+  paint: 10,
+  primer: 10,
+  gypsum: 5,
+  gypsum_board: 5,
+  roof_tile: 5,
+  metal_sheet: 5,
+  formwork: 15,
+  plywood_formwork: 15,
+}
+
+export function getStandardWasteFactor(identifier: string): number {
+  if (!identifier) return 0
+  const key = identifier.toLowerCase().trim()
+  if (key.includes('db20') || key.includes('db25')) return 11
+  if (key.includes('db16')) return 9
+  if (key.includes('db12')) return 7
+  if (key.includes('rb6') || key.includes('rb9')) return 5
+  if (key.includes('rebar') || key.includes('เหล็กเสริม') || key.includes('เหล็กปลอก')) return 7
+  if (key.includes('wire_mesh') || key.includes('ไวร์เมช')) return 5
+  if (key.includes('granite') || key.includes('แกรนิต') || key.includes('marble') || key.includes('หินอ่อน')) return 5
+  if (key.includes('tile') || key.includes('กระเบื้อง')) return 7
+  if (key.includes('paint') || key.includes('สีทา') || key.includes('สีรองพื้น')) return 10
+  if (key.includes('mortar') || key.includes('plaster') || key.includes('ปูน')) return 5
+  if (key.includes('concrete') || key.includes('คอนกรีต')) return 5
+  if (key.includes('brick') || key.includes('aac') || key.includes('อิฐ')) return 5
+  if (key.includes('gypsum') || key.includes('ฝ้า')) return 5
+  if (key.includes('roof') || key.includes('metal_sheet') || key.includes('หลังคา')) return 5
+  if (key.includes('formwork') || key.includes('ไม้แบบ')) return 15
+  return 0
+}
+
+// =============================================================================
+// Formwork Reuse Engine (การคิดลดค่าวัสดุไม้แบบตามจำนวนชั้นและการนำกลับมาใช้ซ้ำ กรมบัญชีกลาง)
+// =============================================================================
+
+export interface FormworkElement {
+  object_id: string
+  object_type: string
+  mark: string
+  category: 'foundation' | 'column' | 'beam' | 'slab' | 'lintel_stiffener'
+  storey: number
+  contact_area_m2: number
+  material_factor: number
+  formwork_material_area_m2: number
+  formwork_labor_area_m2: number
+}
+
+export interface FormworkCategorySummary {
+  contact_area_m2: number
+  material_area_m2: number
+  labor_area_m2: number
+}
+
+export interface FormworkReport {
+  elements: FormworkElement[]
+  total_contact_area_m2: number
+  total_material_area_m2: number
+  total_labor_area_m2: number
+  by_category: {
+    foundation: FormworkCategorySummary
+    column: FormworkCategorySummary
+    beam: FormworkCategorySummary
+    slab: FormworkCategorySummary
+    lintel_stiffener: FormworkCategorySummary
+  }
+}
+
+export function calculateFormwork(project: ProjectDocument): FormworkReport {
+  const elements: FormworkElement[] = []
+  const summaryByCategory: FormworkReport['by_category'] = {
+    foundation: { contact_area_m2: 0, material_area_m2: 0, labor_area_m2: 0 },
+    column: { contact_area_m2: 0, material_area_m2: 0, labor_area_m2: 0 },
+    beam: { contact_area_m2: 0, material_area_m2: 0, labor_area_m2: 0 },
+    slab: { contact_area_m2: 0, material_area_m2: 0, labor_area_m2: 0 },
+    lintel_stiffener: { contact_area_m2: 0, material_area_m2: 0, labor_area_m2: 0 },
+  }
+
+  const addElement = (
+    object: ProjectDocument['objects'][string],
+    category: FormworkElement['category'],
+    mark: string,
+    contactAreaM2: number,
+    storey = 1,
+  ) => {
+    if (!Number.isFinite(contactAreaM2) || contactAreaM2 <= 0) return
+    // Comptroller General's Dept reuse factors:
+    // Storey 1 (Ground / Substructure): 0.80 material factor (20% loss/depreciation)
+    // Storey 2: 0.70 material factor (30% loss/depreciation)
+    // Storey 3+: 0.60 material factor
+    // Labor factor is always 1.00 (100% full labor each time)
+    const materialFactor = storey >= 3 ? 0.60 : storey === 2 ? 0.70 : 0.80
+    const matArea = Number((contactAreaM2 * materialFactor).toFixed(4))
+    const labArea = Number((contactAreaM2 * 1.0).toFixed(4))
+
+    const el: FormworkElement = {
+      object_id: object.id,
+      object_type: object.object_type,
+      mark,
+      category,
+      storey,
+      contact_area_m2: Number(contactAreaM2.toFixed(4)),
+      material_factor: materialFactor,
+      formwork_material_area_m2: matArea,
+      formwork_labor_area_m2: labArea,
+    }
+    elements.push(el)
+
+    summaryByCategory[category].contact_area_m2 += el.contact_area_m2
+    summaryByCategory[category].material_area_m2 += el.formwork_material_area_m2
+    summaryByCategory[category].labor_area_m2 += el.formwork_labor_area_m2
+  }
+
+  for (const object of Object.values(project.objects)) {
+    if (object.created_phase === 'existing' || object.removed_phase === 'demolition') continue
+    const data = object.module_data as Data
+
+    if (object.object_type === 'structure.foundation') {
+      const size = positiveTuple(valueFor(project, object.object_type, data, 'size_mm'), 3)
+      if (size) {
+        const [w, l, t] = size
+        // 4 vertical sides = 2 * (w + l) * t
+        const area = (2 * (w + l) * t) / 1_000_000
+        const mark = String(data.mark ?? 'F1')
+        addElement(object, 'foundation', mark, area, 1)
+      }
+    } else if (object.object_type === 'structure.column') {
+      const section = positiveTuple(valueFor(project, object.object_type, data, 'section_mm'), 2)
+      if (section) {
+        const [w, d] = section
+        const baseLevelId = typeof data.base_level_id === 'string' ? data.base_level_id : undefined
+        const topLevelId = typeof data.top_level_id === 'string' ? data.top_level_id : undefined
+        const base = finiteNumber(data.base_elevation_mm) ? data.base_elevation_mm : project.levels.find(level => level.id === baseLevelId)?.elevation_mm ?? 0
+        const top = finiteNumber(data.top_elevation_mm) ? data.top_elevation_mm : project.levels.find(level => level.id === topLevelId)?.elevation_mm ?? base + 3000
+        const height = top - base
+        if (height > 0) {
+          // 4 vertical sides = 2 * (w + d) * height
+          const area = (2 * (w + d) * height) / 1_000_000
+          const storey = base >= 2500 || top > 4000 ? 2 : 1
+          const mark = String(data.mark ?? 'C1')
+          addElement(object, 'column', mark, area, storey)
+        }
+      }
+    } else if (object.object_type === 'structure.beam') {
+      const section = positiveTuple(valueFor(project, object.object_type, data, 'section_mm'), 2)
+      const length = finitePositive(data.span_mm) ? data.span_mm : finitePositive(data.length_mm) ? data.length_mm : 0
+      if (section && length > 0) {
+        const [w, d] = section
+        // 2 sides + bottom soffit = (2 * d + w) * length
+        const area = ((2 * d + w) * length) / 1_000_000
+        const mark = String(data.mark ?? 'B1')
+        const levelId = typeof data.level_id === 'string' ? data.level_id : undefined
+        const levelElev = project.levels.find(lvl => lvl.id === levelId)?.elevation_mm ?? 0
+        const startZ = finiteTuple(data.start_point_mm, 3)?.[2] ?? levelElev
+        const storey = startZ >= 2500 || mark.toUpperCase().startsWith('RB') ? 2 : 1
+        addElement(object, 'beam', mark, area, storey)
+      }
+    } else if (object.object_type === 'structure.slab') {
+      const slabType = String(data.slab_type ?? 'sog').toLowerCase()
+      const thickness = finitePositive(data.thickness_mm) ? Number(data.thickness_mm) : 120
+      const boundary = polygonRing(data.boundary_mm)
+      const netAreaMm2 = boundary && isSimpleRing(boundary) ? Math.abs(signedAreaMm2(boundary)) : 0
+      if (netAreaMm2 > 0) {
+        let perimeterMm = 0
+        if (boundary) {
+          for (let i = 0; i < boundary.length; i++) {
+            const next = boundary[(i + 1) % boundary.length]
+            perimeterMm += Math.hypot(boundary[i][0] - next[0], boundary[i][1] - next[1])
+          }
+        }
+        const edgeAreaM2 = (perimeterMm * thickness) / 1_000_000
+        const bottomAreaM2 = slabType === 'sog' ? 0 : netAreaMm2 / 1_000_000
+        const totalAreaM2 = bottomAreaM2 + edgeAreaM2
+        const mark = String(data.mark ?? 'S1')
+        const storey = finiteNumber(data.elevation_offset_mm) && Number(data.elevation_offset_mm) >= 2500 ? 2 : 1
+        addElement(object, 'slab', mark, totalAreaM2, storey)
+      }
+    } else if (object.object_type === 'door_window.door' || object.object_type === 'door_window.window') {
+      const widthMm = Number(valueFor(project, object.object_type, data, 'width_mm') ?? data.width_mm)
+      const heightMm = Number(valueFor(project, object.object_type, data, 'height_mm') ?? data.height_mm)
+      if (finitePositive(widthMm) && finitePositive(heightMm)) {
+        const isWindow = object.object_type === 'door_window.window'
+        const sillHeightMm = isWindow ? Number(valueFor(project, object.object_type, data, 'sill_height_mm') ?? data.sill_height_mm ?? 0) : 0
+        const stiffenerLengthM = 2 * mmToM(heightMm)
+        const lintelLengthM = mmToM(widthMm) + 0.40
+        const sillLengthM = (isWindow && sillHeightMm > 0) ? (mmToM(widthMm) + 0.40) : 0
+        const totalLengthM = stiffenerLengthM + lintelLengthM + sillLengthM
+        const depthM = 0.10
+        const formworkAreaM2 = totalLengthM * 2 * depthM
+        addElement(object, 'lintel_stiffener', 'เสาเอ็น-ทับหลัง', formworkAreaM2, 1)
+      }
+    }
+  }
+
+  for (const key of Object.keys(summaryByCategory) as (keyof FormworkReport['by_category'])[]) {
+    summaryByCategory[key].contact_area_m2 = Number(summaryByCategory[key].contact_area_m2.toFixed(4))
+    summaryByCategory[key].material_area_m2 = Number(summaryByCategory[key].material_area_m2.toFixed(4))
+    summaryByCategory[key].labor_area_m2 = Number(summaryByCategory[key].labor_area_m2.toFixed(4))
+  }
+
+  const totalContact = elements.reduce((sum, el) => sum + el.contact_area_m2, 0)
+  const totalMat = elements.reduce((sum, el) => sum + el.formwork_material_area_m2, 0)
+  const totalLab = elements.reduce((sum, el) => sum + el.formwork_labor_area_m2, 0)
+
+  return {
+    elements,
+    total_contact_area_m2: Number(totalContact.toFixed(4)),
+    total_material_area_m2: Number(totalMat.toFixed(4)),
+    total_labor_area_m2: Number(totalLab.toFixed(4)),
+    by_category: summaryByCategory,
+  }
+}
+
+// =============================================================================
+// Preliminaries & Temporary Works Engine (หมวดงานเตรียมการและงานชั่วคราว)
+// =============================================================================
+
+export interface PreliminaryItem {
+  id: string
+  code: string
+  description: string
+  category: 'demolition_handling' | 'shoring' | 'scaffolding' | 'site_protection' | 'utilities'
+  unit: 'item' | 'm' | 'm2' | 'm3' | 'job'
+  quantity: number
+  rate_thb: number
+  amount_thb: number
+  notes: string
+}
+
+export interface PreliminariesReport {
+  items: PreliminaryItem[]
+  total_amount_thb: number
+  total_debris_volume_m3: number
+  bulked_debris_volume_m3: number
+  truckloads_count: number
+  scaffolding_area_m2: number
+  dust_canvas_area_m2: number
+  shoring_props_count: number
+}
+
+export function calculatePreliminaries(project: ProjectDocument): PreliminariesReport {
+  const items: PreliminaryItem[] = []
+  let totalDebrisM3 = 0
+  let scaffoldingAreaM2 = 0
+  let dustCanvasAreaM2 = 0
+  let shoringPropsCount = 0
+
+  // 1. Demolition handling
+  for (const object of Object.values(project.objects)) {
+    const isDemolished = object.created_phase === 'demolition' || object.removed_phase === 'demolition'
+    if (!isDemolished) continue
+    const data = object.module_data as Data
+
+    if (object.object_type === 'architecture.wall') {
+      const thickness = Number(valueFor(project, object.object_type, data, 'thickness_mm') ?? 100)
+      const height = Number(valueFor(project, object.object_type, data, 'height_mm') ?? 2800)
+      const length = Number(data.length_mm ?? 3000)
+      const vol = (length * height * thickness) / 1_000_000_000
+      totalDebrisM3 += vol
+      shoringPropsCount += 2
+    } else if (object.object_type === 'structure.column' || object.object_type === 'structure.beam' || object.object_type === 'structure.slab') {
+      totalDebrisM3 += 0.5
+      shoringPropsCount += 2
+    }
+  }
+
+  // 2. New construction scaffolding & shoring
+  for (const object of Object.values(project.objects)) {
+    if (object.created_phase !== 'new_construction' || object.removed_phase === 'demolition') continue
+    const data = object.module_data as Data
+
+    if (object.object_type === 'architecture.wall') {
+      const height = Number(valueFor(project, object.object_type, data, 'height_mm') ?? 2800)
+      const length = Number(data.length_mm ?? 3000)
+      if (height >= 2500) {
+        const wallScaffArea = (length / 1000) * ((height / 1000) + 1.0)
+        scaffoldingAreaM2 += wallScaffArea
+      }
+      dustCanvasAreaM2 += (length / 1000) * 3.0
+    } else if (object.object_type === 'structure.beam') {
+      const span = Number(data.span_mm ?? data.length_mm ?? 3000)
+      shoringPropsCount += Math.max(1, Math.ceil(span / 1200))
+    }
+  }
+
+  const bulkedDebrisM3 = Number((totalDebrisM3 * 1.4).toFixed(3))
+  const truckloads = Math.ceil(bulkedDebrisM3 / 5.0)
+
+  if (totalDebrisM3 > 0) {
+    items.push({
+      id: 'pre-debris-removal',
+      code: 'PRE-01',
+      description: 'งานขนย้ายเศษซากและขยะรื้อถอนไปทิ้งภายนอกโครงการ (รถบรรทุก 6 ล้อ)',
+      category: 'demolition_handling',
+      unit: 'm3',
+      quantity: bulkedDebrisM3,
+      rate_thb: 450,
+      amount_thb: Math.round(bulkedDebrisM3 * 450),
+      notes: `คิดจากปริมาตรเศษวัสดุรื้อถอน ${totalDebrisM3.toFixed(3)} m³ × ตัวคูณขยายตัว 1.4 = ${bulkedDebrisM3} m³ (ประมาณ ${truckloads} เที่ยว)`,
+    })
+  }
+
+  if (shoringPropsCount > 0) {
+    items.push({
+      id: 'pre-shoring-props',
+      code: 'PRE-02',
+      description: 'งานเสาค้ำยันเหล็กปรับระดับชั่วคราว (Adjustable Steel Props)',
+      category: 'shoring',
+      unit: 'item',
+      quantity: shoringPropsCount,
+      rate_thb: 150,
+      amount_thb: shoringPropsCount * 150,
+      notes: `ค้ำยันท้องคาน/พื้นหล่อในที่ และค้ำยันโครงสร้างเดิมระหว่างทำงาน (${shoringPropsCount} จุด)`,
+    })
+  }
+
+  if (scaffoldingAreaM2 > 0) {
+    const area = Number(scaffoldingAreaM2.toFixed(2))
+    items.push({
+      id: 'pre-scaffolding',
+      code: 'PRE-03',
+      description: 'งานติดตั้งนั่งร้านเหล็กและอุปกรณ์ความปลอดภัยสำหรับงานที่สูง',
+      category: 'scaffolding',
+      unit: 'm2',
+      quantity: area,
+      rate_thb: 80,
+      amount_thb: Math.round(area * 80),
+      notes: `นั่งร้านสำหรับผนังสูงเกิน 2.50 ม. พร้อมราวกั้นตก (${area} m²)`,
+    })
+  }
+
+  if (dustCanvasAreaM2 > 0) {
+    const area = Number(dustCanvasAreaM2.toFixed(2))
+    items.push({
+      id: 'pre-dust-canvas',
+      code: 'PRE-04',
+      description: 'งานติดตั้งผ้าใบกันฝุ่นและตาข่ายป้องกันเศษวัสดุรอบพื้นที่ก่อสร้าง',
+      category: 'site_protection',
+      unit: 'm2',
+      quantity: area,
+      rate_thb: 45,
+      amount_thb: Math.round(area * 45),
+      notes: `ผ้าใบ PE กันฝุ่นสูง 3.00 ม. ป้องกันผลกระทบต่ออาคารข้างเคียง (${area} m²)`,
+    })
+  }
+
+  items.push({
+    id: 'pre-site-utilities',
+    code: 'PRE-05',
+    description: 'งานระบบน้ำ-ไฟฟ้าชั่วคราวและการอำนวยความสะดวกหน้างาน',
+    category: 'utilities',
+    unit: 'job',
+    quantity: 1,
+    rate_thb: 5000,
+    amount_thb: 5000,
+    notes: 'ค่าน้ำประปา ไฟฟ้าชั่วคราว ตู้เมนเบรกเกอร์ และการจัดการความปลอดภัยไซต์ก่อสร้าง',
+  })
+
+  const totalAmount = items.reduce((sum, item) => sum + item.amount_thb, 0)
+
+  return {
+    items,
+    total_amount_thb: totalAmount,
+    total_debris_volume_m3: Number(totalDebrisM3.toFixed(3)),
+    bulked_debris_volume_m3: bulkedDebrisM3,
+    truckloads_count: truckloads,
+    scaffolding_area_m2: Number(scaffoldingAreaM2.toFixed(2)),
+    dust_canvas_area_m2: Number(dustCanvasAreaM2.toFixed(2)),
+    shoring_props_count: shoringPropsCount,
+  }
+}
+
+// =============================================================================
+// Factor F Engine (ตาราง Factor F งานอาคาร กรมบัญชีกลาง & VAT 7%)
+// =============================================================================
+
+export interface FactorFResult {
+  direct_cost_thb: number
+  factor_f: number
+  overhead_profit_interest_rate: number
+  vat_rate: number
+  total_with_factor_f_thb: number
+}
+
+export function calculateFactorF(directCostThb: number): FactorFResult {
+  const dc = Math.max(0, directCostThb)
+  let factorF = 1.3056
+  if (dc > 10_000_000) factorF = 1.2750
+  else if (dc > 5_000_000) factorF = 1.2801
+  else if (dc > 2_000_000) factorF = 1.2854
+  else if (dc > 1_000_000) factorF = 1.2982
+  else if (dc > 500_000) factorF = 1.3015
+
+  const vatRate = 0.07
+  const overheadProfitInterestRate = Number(((factorF / (1 + vatRate)) - 1).toFixed(4))
+  const total = Number((dc * factorF).toFixed(2))
+
+  return {
+    direct_cost_thb: dc,
+    factor_f: factorF,
+    overhead_profit_interest_rate: overheadProfitInterestRate,
+    vat_rate: vatRate,
+    total_with_factor_f_thb: total,
+  }
+}
+
+// =============================================================================
+// Phased BOQ Calculator (การคำนวณและสรุปตาราง BOQ แยก 3 Discrete Cost Centers)
+// =============================================================================
+
+export interface UnitRate {
+  material_rate: number
+  labor_rate: number
+  unit: QuantityUnit
+}
+
+export const DEFAULT_THAI_UNIT_RATES: Record<string, UnitRate> = {
+  concrete_240_ksc: { material_rate: 2350, labor_rate: 450, unit: 'm3' },
+  concrete_lean: { material_rate: 1950, labor_rate: 350, unit: 'm3' },
+  concrete: { material_rate: 2350, labor_rate: 450, unit: 'm3' },
+  plywood_formwork: { material_rate: 280, labor_rate: 150, unit: 'm2' },
+  formwork: { material_rate: 280, labor_rate: 150, unit: 'm2' },
+  rebar_rb6: { material_rate: 28, labor_rate: 4.5, unit: 'kg' },
+  rebar_rb9: { material_rate: 28, labor_rate: 4.5, unit: 'kg' },
+  rebar_db12: { material_rate: 29, labor_rate: 4.5, unit: 'kg' },
+  rebar_db16: { material_rate: 29.5, labor_rate: 4.5, unit: 'kg' },
+  rebar_db20: { material_rate: 30, labor_rate: 4.5, unit: 'kg' },
+  rebar: { material_rate: 29, labor_rate: 4.5, unit: 'kg' },
+  wire_mesh: { material_rate: 45, labor_rate: 15, unit: 'm2' },
+  micro_pile_i18: { material_rate: 950, labor_rate: 350, unit: 'item' },
+  pile: { material_rate: 950, labor_rate: 350, unit: 'item' },
+  aac_block: { material_rate: 260, labor_rate: 120, unit: 'm2' },
+  brick: { material_rate: 240, labor_rate: 130, unit: 'm2' },
+  cement_plaster: { material_rate: 85, labor_rate: 110, unit: 'm2' },
+  tile_ceramic: { material_rate: 380, labor_rate: 200, unit: 'm2' },
+  tile_granite: { material_rate: 650, labor_rate: 250, unit: 'm2' },
+  tile: { material_rate: 420, labor_rate: 220, unit: 'm2' },
+  paint: { material_rate: 55, labor_rate: 45, unit: 'm2' },
+  door: { material_rate: 3500, labor_rate: 600, unit: 'item' },
+  window: { material_rate: 2800, labor_rate: 400, unit: 'item' },
+  chemical_dowel_epoxy: { material_rate: 120, labor_rate: 80, unit: 'm' },
+  expansion_joint_sealant: { material_rate: 90, labor_rate: 60, unit: 'm' },
+  roof_flashing: { material_rate: 250, labor_rate: 100, unit: 'm' },
+  joint_sealant: { material_rate: 90, labor_rate: 60, unit: 'm' },
+}
+
+export interface BOQLineItem {
+  id: string
+  phase: Phase
+  cost_center: TakeoffCostCenter
+  object_type: string
+  mark: string
+  material?: string
+  unit: QuantityUnit
+  net_quantity: number
+  waste_percent: number
+  gross_quantity: number
+  unit_material_cost_thb: number
+  unit_labor_cost_thb: number
+  total_material_cost_thb: number
+  total_labor_cost_thb: number
+  total_direct_cost_thb: number
+  formula: string
+}
+
+export interface PhasedCostCenterSummary {
+  cost_center: TakeoffCostCenter
+  cost_center_label_th: string
+  items: BOQLineItem[]
+  total_material_thb: number
+  total_labor_thb: number
+  total_direct_cost_thb: number
+}
+
+export interface PhasedBOQReport {
+  project_id: string
+  schema_version: 1
+  cost_centers: Record<TakeoffCostCenter, PhasedCostCenterSummary>
+  formwork: FormworkReport
+  preliminaries: PreliminariesReport
+  total_direct_material_thb: number
+  total_direct_labor_thb: number
+  total_direct_cost_thb: number
+  preliminaries_cost_thb: number
+  total_direct_with_preliminaries_thb: number
+  factor_f: FactorFResult
+  grand_total_thb: number
+  warnings: string[]
+}
+
+export function calculatePhasedBOQ(
+  project: ProjectDocument,
+  customRates?: Partial<Record<string, UnitRate>>,
+): PhasedBOQReport {
+  const takeoff = calculateTakeoff(project)
+  const formwork = calculateFormwork(project)
+  const preliminaries = calculatePreliminaries(project)
+
+  const rates: Record<string, UnitRate> = {
+    ...DEFAULT_THAI_UNIT_RATES,
+    ...(customRates as Record<string, UnitRate> | undefined),
+  }
+
+  const resolveRate = (line: TakeoffLine): { material: number; labor: number } => {
+    // 1. Demolition cost center is pure labor (no new material purchase)
+    if (line.cost_center === 'demolition_site_prep') {
+      if (line.unit === 'm3') return { material: 0, labor: 650 }
+      if (line.unit === 'm2') return { material: 0, labor: 120 }
+      if (line.unit === 'm') return { material: 0, labor: 50 }
+      return { material: 0, labor: 300 }
+    }
+
+    // 2. Check exact material rate
+    const matKey = line.material?.toLowerCase()
+    if (matKey && rates[matKey]) return { material: rates[matKey].material_rate, labor: rates[matKey].labor_rate }
+
+    // 3. Remodeling joint treatment cost center
+    if (line.cost_center === 'remodeling_joint_treatment') {
+      const markKey = line.mark.toLowerCase()
+      if (markKey.includes('chemical_dowel') || markKey.includes('dowel')) return { material: 120, labor: 80 }
+      if (markKey.includes('flashing')) return { material: 250, labor: 100 }
+      if (markKey.includes('expansion') || markKey.includes('sealant')) return { material: 90, labor: 60 }
+      return { material: 90, labor: 60 }
+    }
+
+    const idKey = (line.material || line.mark || line.object_type).toLowerCase()
+    if (idKey.includes('db20') || idKey.includes('db25')) return { material: 30, labor: 4.5 }
+    if (idKey.includes('db16')) return { material: 29.5, labor: 4.5 }
+    if (idKey.includes('db12')) return { material: 29, labor: 4.5 }
+    if (idKey.includes('rb6') || idKey.includes('rb9')) return { material: 28, labor: 4.5 }
+    if (idKey.includes('rebar') || idKey.includes('เหล็ก')) return { material: 29, labor: 4.5 }
+    if (idKey.includes('wire_mesh') || idKey.includes('ไวร์เมช')) return { material: 45, labor: 15 }
+    if (idKey.includes('formwork') || idKey.includes('ไม้แบบ')) return { material: 280, labor: 150 }
+    if (idKey.includes('granite') || idKey.includes('แกรนิต')) return { material: 650, labor: 250 }
+    if (idKey.includes('tile') || idKey.includes('กระเบื้อง')) return { material: 420, labor: 220 }
+    if (idKey.includes('plaster') || idKey.includes('ปูนฉาบ')) return { material: 85, labor: 110 }
+    if (idKey.includes('concrete') || idKey.includes('คอนกรีต')) return { material: 2350, labor: 450 }
+    if (idKey.includes('pile') || idKey.includes('เสาเข็ม')) return { material: 950, labor: 350 }
+    if (idKey.includes('door') || idKey.includes('ประตู')) return { material: 3500, labor: 600 }
+    if (idKey.includes('window') || idKey.includes('หน้าต่าง')) return { material: 2800, labor: 400 }
+    if (idKey.includes('paint') || idKey.includes('สี')) return { material: 55, labor: 45 }
+    if (idKey.includes('brick') || idKey.includes('อิฐมอญ')) return { material: 240, labor: 130 }
+    if (idKey.includes('aac') || idKey.includes('มวลเบา')) return { material: 260, labor: 120 }
+    if (idKey.includes('gypsum') || idKey.includes('ฝ้า')) return { material: 220, labor: 110 }
+    if (idKey.includes('roof') || idKey.includes('หลังคา')) return { material: 350, labor: 150 }
+
+    if (line.unit === 'm3') return { material: 2000, labor: 400 }
+    if (line.unit === 'm2') return { material: 200, labor: 100 }
+    if (line.unit === 'm') return { material: 100, labor: 50 }
+    if (line.unit === 'kg') return { material: 28, labor: 4.5 }
+    return { material: 500, labor: 150 }
+  }
+
+  const costCenterLabels: Record<TakeoffCostCenter, string> = {
+    demolition_site_prep: 'งานรื้อถอนและเตรียมพื้นที่ (Demolition & Site Prep)',
+    new_construction: 'งานโครงสร้าง สถาปัตย์ และระบบสร้างใหม่ (New Construction)',
+    remodeling_joint_treatment: 'งานเชื่อมต่อรอยต่อเดิม-ใหม่ (Remodeling & Joint Treatment)',
+  }
+
+  const costCenters: Record<TakeoffCostCenter, PhasedCostCenterSummary> = {
+    demolition_site_prep: {
+      cost_center: 'demolition_site_prep',
+      cost_center_label_th: costCenterLabels.demolition_site_prep,
+      items: [],
+      total_material_thb: 0,
+      total_labor_thb: 0,
+      total_direct_cost_thb: 0,
+    },
+    new_construction: {
+      cost_center: 'new_construction',
+      cost_center_label_th: costCenterLabels.new_construction,
+      items: [],
+      total_material_thb: 0,
+      total_labor_thb: 0,
+      total_direct_cost_thb: 0,
+    },
+    remodeling_joint_treatment: {
+      cost_center: 'remodeling_joint_treatment',
+      cost_center_label_th: costCenterLabels.remodeling_joint_treatment,
+      items: [],
+      total_material_thb: 0,
+      total_labor_thb: 0,
+      total_direct_cost_thb: 0,
+    },
+  }
+
+  for (const line of takeoff.lines) {
+    const rate = resolveRate(line)
+    const wastePercent = line.waste_percent ?? (line.unit === 'item' ? 0 : getStandardWasteFactor(line.material || line.mark || line.object_type))
+    const grossQty = line.gross_quantity ?? Number((line.quantity * (1 + wastePercent / 100)).toFixed(4))
+    const totalMat = Number((grossQty * rate.material).toFixed(2))
+    const totalLab = Number((line.quantity * rate.labor).toFixed(2))
+    const totalDirect = Number((totalMat + totalLab).toFixed(2))
+
+    const boqItem: BOQLineItem = {
+      id: line.id,
+      phase: line.phase,
+      cost_center: line.cost_center,
+      object_type: line.object_type,
+      mark: line.mark,
+      material: line.material,
+      unit: line.unit,
+      net_quantity: line.quantity,
+      waste_percent: wastePercent,
+      gross_quantity: grossQty,
+      unit_material_cost_thb: rate.material,
+      unit_labor_cost_thb: rate.labor,
+      total_material_cost_thb: totalMat,
+      total_labor_cost_thb: totalLab,
+      total_direct_cost_thb: totalDirect,
+      formula: line.formula,
+    }
+
+    const cc = costCenters[line.cost_center]
+    if (cc) {
+      cc.items.push(boqItem)
+      cc.total_material_thb = Number((cc.total_material_thb + totalMat).toFixed(2))
+      cc.total_labor_thb = Number((cc.total_labor_thb + totalLab).toFixed(2))
+      cc.total_direct_cost_thb = Number((cc.total_direct_cost_thb + totalDirect).toFixed(2))
+    }
+  }
+
+  const directMaterial = Object.values(costCenters).reduce((sum, cc) => sum + cc.total_material_thb, 0)
+  const directLabor = Object.values(costCenters).reduce((sum, cc) => sum + cc.total_labor_thb, 0)
+  const directCost = Number((directMaterial + directLabor).toFixed(2))
+  const prelimCost = preliminaries.total_amount_thb
+  const totalDirectWithPrelim = Number((directCost + prelimCost).toFixed(2))
+
+  const factorFResult = calculateFactorF(totalDirectWithPrelim)
+  const grandTotal = factorFResult.total_with_factor_f_thb
+
+  return {
+    project_id: project.project.id,
+    schema_version: 1,
+    cost_centers: costCenters,
+    formwork,
+    preliminaries,
+    total_direct_material_thb: Number(directMaterial.toFixed(2)),
+    total_direct_labor_thb: Number(directLabor.toFixed(2)),
+    total_direct_cost_thb: directCost,
+    preliminaries_cost_thb: prelimCost,
+    total_direct_with_preliminaries_thb: totalDirectWithPrelim,
+    factor_f: factorFResult,
+    grand_total_thb: grandTotal,
+    warnings: takeoff.warnings,
+  }
+}
+

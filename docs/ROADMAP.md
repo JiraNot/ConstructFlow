@@ -481,15 +481,14 @@ Exit criteria:
 **Goal:** make the coordinated model commercially and document-production complete.
 
 ### Quantity / BOQ / Cost
-
-- normalized quantity pipeline
-- Smart Object traceability for every reported quantity
-- demolition vs new-work grouping
-- material/labor/waste/rate layers
-- company/project rate libraries
-- BOQ views
-- CSV/XLSX export contract
-- stale/current state
+- [x] normalized quantity pipeline (`calculateTakeoff` & `calculatePhasedBOQ` in `packages/takeoff-engine`)
+- [x] Smart Object traceability for every reported quantity (`source_object_ids` per `TakeoffLine`)
+- [x] demolition vs new-work vs joint-treatment grouping (3 discrete cost centers)
+- [x] material/labor/waste/rate layers (`THAI_STANDARD_WASTE_FACTORS`, `calculateFormwork` depreciation, and unit rates)
+- [x] company/project rate libraries (`DEFAULT_THAI_UNIT_RATES` and custom rate overrides)
+- [x] BOQ views (Plan Editor Quantities panel with live summary card, Factor F, and cost centers)
+- [x] CSV/XLSX export contract (1-click Net/Gross Takeoff CSV & Thai Gov 15-column BOQ CSV export)
+- [x] stale/current state (automatic real-time recalculation upon model updates)
 
 ### QA / Coordination
 
