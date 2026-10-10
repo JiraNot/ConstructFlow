@@ -5,7 +5,9 @@ import { clippedGridSegments, polygonDiagonalHatchSegments, polygonInteriorPoint
 import { getElevationWallStyle, getVisibleElevationLevelRows, layoutElevationTags, packElevationLevelLabelCenters, panElevationView, resolveElevationWallFaceMark, sortElevationObjectsForDrawing, zoomElevationViewAtPoint, zoomElevationViewFromCenter } from '../elevationLabelLayout.mjs'
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
 
+import type { CoordinationFinding } from '@constructflow/clash-engine'
 import type { UnderlayConfig } from '../rendering/planRenderer.js'
+import { drawCoordinationPrimitives, planCoordinationOverlay } from '../rendering/coordinationOverlay.js'
 
 export type ElevationDirection = 'north' | 'south' | 'east' | 'west' | 'rcp'
 type ElevationViewState = { zoom: number; panX: number; panY: number }
@@ -22,6 +24,8 @@ interface Props {
   onSelectObject: (id: string | null) => void
   underlay?: UnderlayConfig | null
   onMoveObject?: (id: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move' | 'top') => void
+  /** Same coordination report the plan canvas draws, projected onto this elevation. */
+  coordination?: readonly CoordinationFinding[]
 }
 
 function drawTag(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, text: string, shape: 'hexagon' | 'circle' | 'triangle', selected: boolean) {
@@ -52,7 +56,7 @@ function drawTag(ctx: CanvasRenderingContext2D, centerX: number, centerY: number
 }
 
 /** Orthographic, semantic projection of the project model. The canvas never becomes an editable copy of model edges. */
-export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedId, onSelectObject, underlay, onMoveObject }) => {
+export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedId, onSelectObject, underlay, onMoveObject, coordination = [] }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hitRegions = useRef<Array<{ id: string; x: number; y: number; w: number; h: number }>>([])
   const viewTransform = useRef({ scale: 0.1, reversed: false, isEastWest: false, panX: 0, panY: 0 })
@@ -354,6 +358,14 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
       // and the earth hatch. Datum lines remain behind the model geometry.
       drawLevelLabels()
 
+      // Coordination findings (exact penetration / clearance shortfall) projected onto this
+      // elevation with the same severity tinting used by the plan canvas.
+      if(coordination.length){
+        drawCoordinationPrimitives(ctx,planCoordinationOverlay(coordination,{
+          project:p=>[sx(horizontalCoordinate(p as unknown as number[])),sy(Number(p[2]??0))],
+        }))
+      }
+
       // Revit-style selection outline, grip handles, and temporary elevation badges
       if(selectedVisual){
         ctx.save()
@@ -425,7 +437,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     draw()
     const observer=new ResizeObserver(draw);observer.observe(canvas)
     return ()=>observer.disconnect()
-  },[project,direction,selectedId,underlay,viewRevision])
+  },[project,direction,selectedId,underlay,viewRevision,coordination])
 
   const zoomBy = (factor: number) => {
     const currentView = viewState.current[direction]
@@ -437,7 +449,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     setViewRevision(value => value + 1)
   }
   const controlStyle: React.CSSProperties = {
-    width: 30, height: 30, border: '1px solid #cbd5e1', borderRadius: 6,
+    width: 30, height: 30, border: '1px solid #cbd5e1', borderRadius: 3,
     background: 'rgba(255,255,255,.96)', color: '#334155', fontSize: 17,
     lineHeight: '26px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(15,23,42,.12)',
   }
@@ -475,7 +487,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     if(start.id&&project.objects[start.id]?.object_type!=='roof.system'&&Math.hypot(dx,dy)>3&&onMoveObject){const view=viewTransform.current,horizontal=(dx/view.scale)*(view.reversed?-1:1);onMoveObject(start.id,view.isEastWest?[0,horizontal]:[horizontal,0],-dy/view.scale,start.verticalIntent);onSelectObject(start.id)}
     else onSelectObject(start.id)
   }}/>
-    <div role="group" aria-label="ควบคุมสเกลรูปด้าน" style={{position:'absolute',bottom:10,right:10,display:'flex',alignItems:'center',gap:5,padding:4,border:'1px solid #dbe3ec',borderRadius:8,background:'rgba(248,250,252,.94)',boxShadow:'0 2px 8px rgba(15,23,42,.08)'}}>
+    <div role="group" aria-label="ควบคุมสเกลรูปด้าน" style={{position:'absolute',bottom:10,right:10,display:'flex',alignItems:'center',gap: 4,padding: 3,border:'1px solid #dbe3ec',borderRadius: 4,background:'rgba(248,250,252,.94)',boxShadow:'0 2px 8px rgba(15,23,42,.08)'}}>
       <button type="button" aria-label="ย่อรูปด้าน" title="ย่อ" style={controlStyle} onClick={()=>zoomBy(1/1.25)}>−</button>
       <input type="range" min={20} max={800} step={5} value={Math.round(viewState.current[direction].zoom*100)} aria-label="เปอร์เซ็นต์ซูมรูปด้าน" aria-valuetext={`${Math.round(viewState.current[direction].zoom*100)}% จากภาพพอดี`} title="ปรับซูมจากภาพพอดี · 20–800%" style={{width:84,accentColor:'#2563eb',cursor:'ew-resize'}} onChange={event=>{
         const currentView=viewState.current[direction]

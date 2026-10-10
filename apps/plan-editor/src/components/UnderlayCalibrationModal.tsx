@@ -71,7 +71,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
         style={{
           width: 480,
           background: '#ffffff',
-          borderRadius: 12,
+          borderRadius: 6,
           border: '1px solid #dce4ed',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
           overflow: 'hidden',
@@ -82,7 +82,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
         {/* Header */}
         <div
           style={{
-            padding: '16px 20px',
+            padding: '11px 14px',
             borderBottom: '1px solid #f2f6fa',
             display: 'flex',
             alignItems: 'center',
@@ -90,12 +90,12 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
             background: 'linear-gradient(90deg, #ffffff 0%, #f2f6fa 100%)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <div
               style={{
                 width: 32,
                 height: 32,
-                borderRadius: 8,
+                borderRadius: 4,
                 background: 'rgba(56, 189, 248, 0.15)',
                 display: 'flex',
                 alignItems: 'center',
@@ -121,8 +121,8 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
               border: 'none',
               color: '#64748b',
               cursor: 'pointer',
-              padding: 4,
-              borderRadius: 4,
+              padding: 3,
+              borderRadius: 2,
             }}
           >
             <X size={18} />
@@ -130,13 +130,13 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
         </div>
 
         {/* Body */}
-        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 11 }}>
           {/* Measured Info Card */}
           <div
             style={{
               background: '#f2f6fa',
-              borderRadius: 8,
-              padding: '12px 16px',
+              borderRadius: 4,
+              padding: '8px 11px',
               border: '1px solid #dce4ed',
               display: 'flex',
               justifyContent: 'space-between',
@@ -154,17 +154,17 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
           </div>
 
           {/* Real Distance Input */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#24364b' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#24364b' }}>
             จัดแนวเส้นที่วัดให้ขนานกับแกน
-            <select value={axis} onChange={event => setAxis(event.target.value as 'x' | 'y')} style={{ padding: 6, border: '1px solid #cbd5e1', borderRadius: 5 }}>
+            <select value={axis} onChange={event => setAxis(event.target.value as 'x' | 'y')} style={{ padding: 4, border: '1px solid #cbd5e1', borderRadius: 3 }}>
               <option value="x">X (แนวนอน)</option><option value="y">Y (แนวตั้ง)</option>
             </select>
           </label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: '#24364b' }}>
               ระยะจริงระหว่าง 2 จุดนี้ ({displayUnit}; ใส่ mm/cm/m ต่อท้ายได้):
             </label>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
               <input
                 type="text"
                 autoFocus
@@ -179,8 +179,8 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
                   flex: 1,
                   background: '#0b1329',
                   border: errorMsg ? '1px solid #ef4444' : '1px solid #0284c7',
-                  borderRadius: 6,
-                  padding: '9px 12px',
+                  borderRadius: 3,
+                  padding: '6px 8px',
                   color: '#ffffff',
                   fontSize: 14,
                   fontWeight: 700,
@@ -194,8 +194,8 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
                   color: '#0873c4',
                   fontWeight: 600,
                   background: 'rgba(56, 189, 248, 0.1)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
+                  padding: '6px 8px',
+                  borderRadius: 3,
                   border: '1px solid rgba(56, 189, 248, 0.2)',
                 }}
               >
@@ -206,9 +206,9 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
           </div>
 
           {/* Quick Presets */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={{ fontSize: 11, color: '#52677d' }}>ระยะยอดนิยม (Quick Presets):</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {[1000, 2000, 3000, 3500, 4000, 5000, 6000, 8000].map((presetMm) => {
                 const preset = formatLengthMm(presetMm, displayUnit)
                 return (
@@ -222,8 +222,8 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
                     background: inputValue === preset ? '#0284c7' : '#f2f6fa',
                     color: inputValue === preset ? '#ffffff' : '#40566e',
                     border: '1px solid #dce4ed',
-                    borderRadius: 4,
-                    padding: '3px 8px',
+                    borderRadius: 2,
+                    padding: '2px 6px',
                     fontSize: 11,
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -241,8 +241,8 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
             style={{
               background: 'rgba(56, 189, 248, 0.05)',
               border: '1px solid rgba(56, 189, 248, 0.2)',
-              borderRadius: 6,
-              padding: '10px 14px',
+              borderRadius: 3,
+              padding: '7px 10px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -252,7 +252,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
             <div style={{ color: '#52677d' }}>
               อัตราส่วนสเกลใหม่:
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#0873c4' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#0873c4' }}>
               <span>1 px = {formatLengthMm(computedScale, displayUnit)} {displayUnit}</span>
               <ArrowRight size={14} />
               <span style={{ color: '#22c55e' }}>1:1 Real Scale</span>
@@ -263,11 +263,11 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
         {/* Footer */}
         <div
           style={{
-            padding: '12px 20px',
+            padding: '8px 14px',
             borderTop: '1px solid #f2f6fa',
             display: 'flex',
             justifyContent: 'flex-end',
-            gap: 10,
+            gap: 7,
             background: '#0b1329',
           }}
         >
@@ -277,8 +277,8 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
               background: '#f2f6fa',
               border: '1px solid #dce4ed',
               color: '#40566e',
-              borderRadius: 6,
-              padding: '7px 14px',
+              borderRadius: 3,
+              padding: '5px 10px',
               fontSize: 12,
               fontWeight: 600,
               cursor: 'pointer',
@@ -292,14 +292,14 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
               background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
               border: '1px solid #0873c4',
               color: '#ffffff',
-              borderRadius: 6,
-              padding: '7px 18px',
+              borderRadius: 3,
+              padding: '5px 12px',
               fontSize: 12,
               fontWeight: 700,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
+              gap: 4,
               boxShadow: '0 4px 6px -1px rgba(2, 132, 199, 0.4)',
             }}
           >

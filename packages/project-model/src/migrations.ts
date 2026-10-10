@@ -4,6 +4,7 @@ import type { Phase } from './types.js'
 import type { ProjectDocument, TypeDefinition } from './project.js'
 import { validateConstructionPayloads } from './constructionValidation.js'
 import { validateDrawingSettings } from './sheetSettings.js'
+import { validateCoordinationSettings } from './coordinationSettings.js'
 
 export interface ProjectDocumentV1 {
   schema_version: 1
@@ -137,6 +138,7 @@ export function validateProjectV2(project: ProjectDocument): void {
   if (!project.objects || typeof project.objects !== 'object' || Array.isArray(project.objects)) throw new Error('Invalid project format: objects map required')
   validateConstructionPayloads(project)
   if(project.drawing_settings!==undefined)validateDrawingSettings(project.drawing_settings)
+  if(project.coordination_settings!==undefined)validateCoordinationSettings(project.coordination_settings)
   if (project.underlays !== undefined) {
     if (!project.underlays || typeof project.underlays !== 'object' || Array.isArray(project.underlays)) throw new Error('Invalid project format: underlays must be a keyed map')
     for (const [key, underlay] of Object.entries(project.underlays)) {

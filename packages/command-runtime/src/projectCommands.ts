@@ -1,8 +1,14 @@
 import { getArchitectureDeletionDependents } from '@constructflow/architecture-engine'
 import { getStructureDeletionDependents, reconcileStructureDeletion } from '@constructflow/structure-engine'
 import { DeleteObjectInput } from '@constructflow/command-schema'
-import { validateDrawingSettings } from '@constructflow/project-model'
-import type { UpdateSheetViewportInput } from '@constructflow/command-schema'
+import {
+  analyzeDependencyImpact,
+  buildDependencyGraph,
+  normalizeCoordinationSettings,
+  validateCoordinationSettings,
+  validateDrawingSettings,
+} from '@constructflow/project-model'
+import type { UpdateCoordinationSettingsInput, UpdateSheetViewportInput } from '@constructflow/command-schema'
 
 import {
   CommandHandlerContext,
@@ -26,6 +32,19 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       if (updated.levels.some(existing => Math.abs(existing.elevation_mm - level.elevation_mm) < 1)) throw new Error('Another level already uses this elevation')
       updated.levels.push({ ...level })
       updated.levels.sort((a, b) => a.elevation_mm - b.elevation_mm)
+      return {
+        result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] },
+        updatedProject: updated,
+        emittedEnvelope: envelope,
+      }
+    }
+    case 'UpdateCoordinationSettings': {
+      const { settings } = input as unknown as UpdateCoordinationSettingsInput
+      validateCoordinationSettings(settings)
+      const normalized = normalizeCoordinationSettings(settings)
+      updated.coordination_settings = normalized
+      // Re-running coordination after a settings change is the caller's decision; the command only
+      // owns the persisted deviation so undo/redo restores the previous rule set atomically.
       return {
         result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] },
         updatedProject: updated,
@@ -127,6 +146,13 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
         }
       }
 
+      // The dependency graph is the shared source of truth for "who depends on this object".
+      // Domain helpers still contribute their own derived geometry, and both sets are unioned so
+      // no dependent is silently orphaned.
+      const dependencyImpact = analyzeDependencyImpact(buildDependencyGraph(updated), [delInput.object_id], 'delete')
+      const graphCascade = dependencyImpact.entries
+        .filter(entry => entry.disposition === 'cascade_delete')
+        .map(entry => entry.object_id)
       const archDependents = getArchitectureDeletionDependents(updated, delInput.object_id)
       const structDependents = getStructureDeletionDependents(updated, delInput.object_id)
       const decorativeDependents = Object.values(updated.objects)
@@ -134,7 +160,7 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
           ((obj.module_data as Record<string, unknown>).host_id === delInput.object_id || obj.host_refs.includes(delInput.object_id)))
         .map(obj => obj.id)
 
-      const hostedIdsToDelete = [...new Set([...archDependents, ...structDependents, ...decorativeDependents])]
+      const hostedIdsToDelete = [...new Set([...archDependents, ...structDependents, ...decorativeDependents, ...graphCascade])]
 
       delete updated.objects[delInput.object_id]
       for (const hid of hostedIdsToDelete) {
@@ -166,8 +192,17 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       updated.relationships = updated.relationships.filter(
         (r) => !allDeletedIds.includes(r.source_id) && !allDeletedIds.includes(r.target_id)
       )
-      const updatedObjectIds = [...new Set([...treatmentHostsUpdated, ...structUpdated])]
+      // Objects that survive the deletion but lost a host/support must be reported as needing a
+      // new one; blocking dependents are surfaced so the caller can resolve them explicitly.
+      const needsRehost = dependencyImpact.entries
+        .filter(entry => entry.disposition === 'needs_rehost' && updated.objects[entry.object_id])
+        .map(entry => entry.object_id)
+      const updatedObjectIds = [...new Set([...treatmentHostsUpdated, ...structUpdated, ...needsRehost])]
       const affectedIds = [...allDeletedIds, ...updatedObjectIds]
+      const warnings = [
+        ...dependencyImpact.warnings,
+        ...(needsRehost.length ? [`ต้องกำหนด host/ที่ยึดใหม่ ${needsRehost.length} ชิ้น: ${needsRehost.join(', ')}`] : []),
+      ]
 
       return {
         result: {
@@ -177,6 +212,8 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
           affected_object_ids: affectedIds,
           deleted_object_ids: allDeletedIds,
           updated_object_ids: updatedObjectIds,
+          ...(warnings.length ? { warnings } : {}),
+          dependency_impact: dependencyImpact,
         },
         updatedProject: updated,
         emittedEnvelope: envelope,
@@ -206,13 +243,24 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
         updated_at: now,
       }
 
+      // Demolishing a host is not the same as deleting it: hosted objects survive but must be
+      // re-hosted or re-routed, so the impact report is attached to the committed command.
+      const nextRemovedPhase = updated.objects[object_id].removed_phase
+      const dependencyImpact = nextRemovedPhase === 'demolition' && target.removed_phase !== 'demolition'
+        ? analyzeDependencyImpact(buildDependencyGraph(updated), [object_id], 'demolish')
+        : undefined
+      const affectedDependents = dependencyImpact
+        ? dependencyImpact.entries.filter(entry => entry.disposition !== 'informational').map(entry => entry.object_id)
+        : []
+
       return {
         result: {
           status: 'success',
           command_id,
           command_name: commandName,
-          affected_object_ids: [object_id],
+          affected_object_ids: [object_id, ...affectedDependents],
           updated_object_ids: [object_id],
+          ...(dependencyImpact ? { dependency_impact: dependencyImpact } : {}),
         },
         updatedProject: updated,
         emittedEnvelope: { ...envelope, input: { ...input } },

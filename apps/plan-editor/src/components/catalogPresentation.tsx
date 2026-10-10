@@ -417,7 +417,7 @@ export const OpeningPreview: React.FC<
         height: showDimensions ? "auto" : "100%",
         maxHeight: showDimensions ? 320 : 260,
         background: "#f2f7fb",
-        borderRadius: 8,
+        borderRadius: 4,
       }}
     >
       <rect

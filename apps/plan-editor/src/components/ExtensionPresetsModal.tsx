@@ -108,7 +108,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 20,
+        padding: 14,
       }}
       onClick={onClose}
     >
@@ -118,7 +118,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
           maxHeight: '92vh',
           background: '#ffffff',
           border: '1px solid #dce4ed',
-          borderRadius: 12,
+          borderRadius: 6,
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
           display: 'flex',
           flexDirection: 'column',
@@ -129,7 +129,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
         {/* Header */}
         <div
           style={{
-            padding: '16px 20px',
+            padding: '11px 14px',
             background: 'linear-gradient(90deg, #f2f6fa 0%, #ffffff 100%)',
             borderBottom: '1px solid #dce4ed',
             display: 'flex',
@@ -137,12 +137,12 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             justifyContent: 'space-between',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <div
               style={{
                 width: 32,
                 height: 32,
-                borderRadius: 8,
+                borderRadius: 4,
                 background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 display: 'flex',
                 alignItems: 'center',
@@ -168,8 +168,8 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
               border: 'none',
               color: '#52677d',
               cursor: 'pointer',
-              padding: 4,
-              borderRadius: 4,
+              padding: 3,
+              borderRadius: 2,
             }}
           >
             <X size={20} />
@@ -177,24 +177,24 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
         </div>
 
         {/* Preset Selector Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, padding: '16px 20px 0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, padding: '16px 20px 0' }}>
           {/* Preset 1: Carport */}
           <div
             onClick={() => handleSelectPreset('carport')}
             style={{
-              padding: '12px 14px',
-              borderRadius: 8,
+              padding: '8px 10px',
+              borderRadius: 4,
               border: activePreset === 'carport' ? '2px solid #0873c4' : '1px solid #dce4ed',
               background: activePreset === 'carport' ? 'rgba(56, 189, 248, 0.1)' : '#f2f6fa',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
-              gap: 6,
+              gap: 4,
               transition: 'all 0.2s',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#24364b', fontSize: 13 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#24364b', fontSize: 13 }}>
                 <Car size={16} color="#0873c4" />
                 <span>โรงจอดรถหน้าบ้าน</span>
               </div>
@@ -212,19 +212,19 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
           <div
             onClick={() => handleSelectPreset('kitchen')}
             style={{
-              padding: '12px 14px',
-              borderRadius: 8,
+              padding: '8px 10px',
+              borderRadius: 4,
               border: activePreset === 'kitchen' ? '2px solid #f97316' : '1px solid #dce4ed',
               background: activePreset === 'kitchen' ? 'rgba(249, 115, 22, 0.1)' : '#f2f6fa',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
-              gap: 6,
+              gap: 4,
               transition: 'all 0.2s',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#24364b', fontSize: 13 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#24364b', fontSize: 13 }}>
                 <Utensils size={16} color="#f97316" />
                 <span>ครัวไทยหลังบ้าน</span>
               </div>
@@ -242,19 +242,19 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
           <div
             onClick={() => handleSelectPreset('terrace')}
             style={{
-              padding: '12px 14px',
-              borderRadius: 8,
+              padding: '8px 10px',
+              borderRadius: 4,
               border: activePreset === 'terrace' ? '2px solid #22c55e' : '1px solid #dce4ed',
               background: activePreset === 'terrace' ? 'rgba(34, 197, 94, 0.1)' : '#f2f6fa',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
-              gap: 6,
+              gap: 4,
               transition: 'all 0.2s',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#24364b', fontSize: 13 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#24364b', fontSize: 13 }}>
                 <TreePine size={16} color="#22c55e" />
                 <span>เทอเรสระเบียงไม้เทียม</span>
               </div>
@@ -270,16 +270,16 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
         </div>
 
         {/* Main Configuration & Blueprint Preview */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 16, padding: 20, overflowY: 'auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 11, padding: 14, overflowY: 'auto' }}>
           {/* Left Column: Form Controls */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ background: '#f2f6fa', padding: 14, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ background: '#f2f6fa', padding: 10, borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#40566e' }}>1. ขนาดและตำแหน่ง ({displayUnit})</span>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div>
                   <label style={{ fontSize: 11, color: '#52677d' }}>ความกว้าง (Width):</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                     <input
                       type="number"
                       step={0.1 * unitsPerMeter}
@@ -291,9 +291,9 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                         width: '100%',
                         background: '#ffffff',
                         border: '1px solid #dce4ed',
-                        borderRadius: 6,
+                        borderRadius: 3,
                         color: '#24364b',
-                        padding: '6px 10px',
+                        padding: '4px 7px',
                         fontSize: 13,
                         fontWeight: 600,
                       }}
@@ -304,7 +304,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
 
                 <div>
                   <label style={{ fontSize: 11, color: '#52677d' }}>ความยาว/ลึก (Length):</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                     <input
                       type="number"
                       step={0.1 * unitsPerMeter}
@@ -316,9 +316,9 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                         width: '100%',
                         background: '#ffffff',
                         border: '1px solid #dce4ed',
-                        borderRadius: 6,
+                        borderRadius: 3,
                         color: '#24364b',
-                        padding: '6px 10px',
+                        padding: '4px 7px',
                         fontSize: 13,
                         fontWeight: 600,
                       }}
@@ -328,10 +328,10 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div>
                   <label style={{ fontSize: 11, color: '#52677d' }}>พิกัดจุดเริ่มต้น X:</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                     <input
                       type="number"
                       step="0.50"
@@ -341,9 +341,9 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                         width: '100%',
                         background: '#ffffff',
                         border: '1px solid #dce4ed',
-                        borderRadius: 6,
+                        borderRadius: 3,
                         color: '#24364b',
-                        padding: '6px 10px',
+                        padding: '4px 7px',
                         fontSize: 13,
                         fontWeight: 600,
                       }}
@@ -354,7 +354,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
 
                 <div>
                   <label style={{ fontSize: 11, color: '#52677d' }}>พิกัดจุดเริ่มต้น Y:</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                     <input
                       type="number"
                       step="0.50"
@@ -364,9 +364,9 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                         width: '100%',
                         background: '#ffffff',
                         border: '1px solid #dce4ed',
-                        borderRadius: 6,
+                        borderRadius: 3,
                         color: '#24364b',
-                        padding: '6px 10px',
+                        padding: '4px 7px',
                         fontSize: 13,
                         fontWeight: 600,
                       }}
@@ -378,7 +378,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             </div>
 
             {/* 2. Specific Preset Options */}
-            <div style={{ background: '#f2f6fa', padding: 14, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: '#f2f6fa', padding: 10, borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#40566e' }}>
                 2. พารามิเตอร์เฉพาะส่วนต่อเติม (Specific Options)
               </span>
@@ -390,7 +390,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                     <select
                       value={carportColumnType}
                       onChange={(e) => setCarportColumnType(e.target.value)}
-                      style={{ background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 4, padding: '4px 8px', fontSize: 12 }}
+                      style={{ background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 2, padding: '3px 6px', fontSize: 12 }}
                     >
                       <option value="SC1">เสาเหล็ก SC1 (150×150 มม.)</option>
                       <option value="C1">คอนกรีต คสล. C1 (200×200 มม.)</option>
@@ -404,7 +404,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <label style={{ fontSize: 11, color: '#52677d' }}>ความสูงผนัง (Wall Height):</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <input
                         type="number"
                       step={0.1 * unitsPerMeter}
@@ -412,7 +412,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                         max={4 * unitsPerMeter}
                         value={fromMeters(kitchenWallHeight_m)}
                         onChange={(e) => setKitchenWallHeight_m(toMeters(parseFloat(e.target.value) || fromMeters(2.8)))}
-                        style={{ width: 60, background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 4, padding: '4px 6px', fontSize: 12, textAlign: 'center' }}
+                        style={{ width: 60, background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 2, padding: '3px 4px', fontSize: 12, textAlign: 'center' }}
                       />
                       <span style={{ fontSize: 11, color: '#52677d' }}>{displayUnit}</span>
                     </div>
@@ -422,14 +422,14 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                     <select
                       value={kitchenWallSides}
                       onChange={(e) => setKitchenWallSides(parseInt(e.target.value) as 3 | 4)}
-                      style={{ background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 4, padding: '4px 8px', fontSize: 12 }}
+                      style={{ background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 2, padding: '3px 6px', fontSize: 12 }}
                     >
                       <option value="3">3 ด้าน (แนวชนบ้านเดิมแยกขาด Expansion Joint)</option>
                       <option value="4">4 ด้านอิสระ (Fully Enclosed)</option>
                     </select>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#40566e', cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#40566e', cursor: 'pointer' }}>
                       <input
                         type="checkbox"
                         checked={kitchenIncludeDoor}
@@ -437,7 +437,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                       />
                       รวมประตู D1 (0.90 ม.)
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#40566e', cursor: 'pointer' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#40566e', cursor: 'pointer' }}>
                       <input
                         type="checkbox"
                         checked={kitchenIncludeWindow}
@@ -453,7 +453,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <label style={{ fontSize: 11, color: '#52677d' }}>ระดับความสูงพื้น (Elevation):</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <input
                         type="number"
                         step={0.05 * unitsPerMeter}
@@ -461,7 +461,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                         max={1.5 * unitsPerMeter}
                         value={fromMeters(terraceElevation_m)}
                         onChange={(e) => setTerraceElevation_m(toMeters(parseFloat(e.target.value) || fromMeters(0.45)))}
-                        style={{ width: 60, background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 4, padding: '4px 6px', fontSize: 12, textAlign: 'center' }}
+                        style={{ width: 60, background: '#ffffff', color: '#24364b', border: '1px solid #dce4ed', borderRadius: 2, padding: '3px 4px', fontSize: 12, textAlign: 'center' }}
                       />
                       <span style={{ fontSize: 11, color: '#52677d' }}>{displayUnit}</span>
                     </div>
@@ -473,7 +473,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
           </div>
 
           {/* Right Column: Live SVG Blueprint Preview */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#40566e' }}>
               แผนผังจำลอง (Live Schematic Preview)
             </span>
@@ -482,7 +482,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
               style={{
                 height: 240,
                 background: '#070d1e',
-                borderRadius: 8,
+                borderRadius: 4,
                 border: '1px solid #f2f6fa',
                 display: 'flex',
                 alignItems: 'center',
@@ -570,16 +570,16 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             {/* Bill of Elements Generated */}
             <div
               style={{
-                padding: '10px 12px',
+                padding: '7px 8px',
                 background: '#f2f6fa',
-                borderRadius: 6,
+                borderRadius: 3,
                 fontSize: 11,
                 color: '#52677d',
                 lineHeight: 1.5,
                 border: '1px solid #dce4ed',
               }}
             >
-              <div style={{ color: '#40566e', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ color: '#40566e', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
                 <Layers size={13} color="#0873c4" />
                 <span>รายการชิ้นส่วนที่จะถูกสร้างอัตโนมัติ:</span>
               </div>
@@ -596,12 +596,12 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
           </div>
         </div>
 
-        {generationError && <div role="alert" style={{ padding: '10px 20px', color: '#fca5a5' }}>{generationError}</div>}
+        {generationError && <div role="alert" style={{ padding: '7px 14px', color: '#fca5a5' }}>{generationError}</div>}
 
         {/* Footer Actions */}
         <div
           style={{
-            padding: '14px 20px',
+            padding: '10px 14px',
             background: '#0b1329',
             borderTop: '1px solid #f2f6fa',
             display: 'flex',
@@ -613,15 +613,15 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             * ทุกชิ้นงานแก้ไขหรือลบต่อได้ทันที และการเชื่อมโยงข้อมูลจะคงอยู่
           </div>
 
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 7 }}>
             <button
               onClick={onClose}
               style={{
                 background: '#f2f6fa',
                 border: '1px solid #dce4ed',
                 color: '#40566e',
-                padding: '7px 14px',
-                borderRadius: 6,
+                padding: '5px 10px',
+                borderRadius: 3,
                 fontSize: 12,
                 cursor: 'pointer',
               }}
@@ -635,14 +635,14 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                 background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 border: 'none',
                 color: '#ffffff',
-                padding: '7px 18px',
-                borderRadius: 6,
+                padding: '5px 12px',
+                borderRadius: 3,
                 fontSize: 12,
                 fontWeight: 700,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
+                gap: 4,
                 boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
               }}
             >

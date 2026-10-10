@@ -32,6 +32,8 @@ import { TypeManagerModal } from './components/TypeManagerModal.js'
 import { UnderlayCalibrationModal } from './components/UnderlayCalibrationModal.js'
 import { ExtensionPresetsModal } from './components/ExtensionPresetsModal.js'
 import { ProjectLegalModal } from './components/ProjectLegalModal.js'
+import { CoordinationPanel } from './components/CoordinationPanel.js'
+import { useCoordinationReport } from './features/coordination/useCoordinationReport.js'
 import { exportProjectToDxf } from '@constructflow/cad-adapter'
 import { exportProjectToIfc } from '@constructflow/bim-adapter'
 import type { ProjectLegalMetadata } from '@constructflow/project-model'
@@ -200,7 +202,9 @@ export const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<'plan' | ElevationDirection | 'model3d'>('plan')
   const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
   const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
-  const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects'>('properties')
+  const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination'>('properties')
+  const coordination = useCoordinationReport(project, true)
+  const coordinationFindings = coordination.report?.findings ?? []
   const [activeColumnType, setActiveColumnType] = useState<string>('C1')
   const [activeColumnTopLevelId, setActiveColumnTopLevelId] = useState<string>(() => nextHigherLevelId(project, project.project.active_level_id))
   const [activeFoundationType, setActiveFoundationType] = useState<string>('F1')
@@ -1777,6 +1781,8 @@ export const App: React.FC = () => {
               activeSlabTypeMark={activeSlabType}
               labelMode={labelMode}
               labelVisibility={labelVisibility}
+              coordination={coordinationFindings}
+              coordinationFocusSelection={false}
               onOpenTypeManager={() => openCatalog()}
               onChangeActiveTypeMark={(mark) => {
                 if (activeTool === 'column') setActiveColumnType(mark)
@@ -1832,7 +1838,7 @@ export const App: React.FC = () => {
                 setCursorCoords_mm(coords)
                 setSnapKind(kind)
               }}
-            /> : viewMode !== 'model3d' ? <ElevationCanvas project={project} direction={viewMode} selectedId={selectedId} onSelectObject={setSelectedId} underlay={underlay} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
+            /> : viewMode !== 'model3d' ? <ElevationCanvas project={project} direction={viewMode} selectedId={selectedId} onSelectObject={setSelectedId} underlay={underlay} coordination={coordinationFindings} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
               <Model3DViewport project={project} onSelectObject={setSelectedId} />
             </Suspense>}
           </div>
@@ -1880,6 +1886,20 @@ export const App: React.FC = () => {
             <button type="button" role="tab" aria-selected={rightPanelTab === 'properties'} className={rightPanelTab === 'properties' ? 'is-active' : ''} onClick={() => setRightPanelTab('properties')}>คุณสมบัติ</button>
             <button type="button" role="tab" aria-selected={rightPanelTab === 'quantities'} className={rightPanelTab === 'quantities' ? 'is-active' : ''} onClick={() => setRightPanelTab('quantities')}>ปริมาณ</button>
             <button type="button" role="tab" aria-selected={rightPanelTab === 'objects'} className={rightPanelTab === 'objects' ? 'is-active' : ''} onClick={() => setRightPanelTab('objects')}>รายการ</button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={rightPanelTab === 'coordination'}
+              className={rightPanelTab === 'coordination' ? 'is-active' : ''}
+              onClick={() => setRightPanelTab('coordination')}
+              title="ตรวจสอบระยะชนและความสัมพันธ์ระหว่างระบบ"
+              style={{ position: 'relative' }}
+            >
+              ตรวจระยะ
+              {coordination.report && coordination.report.summary.by_severity.hard > 0
+                ? <span style={{ marginLeft: 4, color: '#ef4444', fontWeight: 700 }}>{coordination.report.summary.by_severity.hard}</span>
+                : null}
+            </button>
           </div>
           {rightPanelTab === 'properties' && <div className="cf-inspector-content"><PropertiesPanel
             project={project}
@@ -1970,6 +1990,15 @@ export const App: React.FC = () => {
               </div>
             )}
           </section>}
+
+          {rightPanelTab === 'coordination' && <CoordinationPanel
+            project={project}
+            report={coordination.report}
+            error={coordination.error}
+            selectedIds={selectedIds}
+            onSelectObjects={(ids) => { setSelectedIds(ids); setSelectedId(ids[0] ?? null) }}
+            onSubmitSettings={(settings) => dispatchCommandBatch([{ name: 'UpdateCoordinationSettings', input: { settings } }])}
+          />}
 
           {rightPanelTab === 'objects' && <div className="cf-object-summary">
             {[['แกนเสา', gridCount, 'เส้น'], ['เสา', columnCount, 'ต้น'], ['ฐานราก', foundationCount, 'ฐาน'], ['คาน', beamCount, 'ช่วง'], ['ผนัง', wallCount, 'แผง'], ['ประตู', doorCount, 'บาน'], ['หน้าต่าง', windowCount, 'บาน']].map(([label, count, unit]) => <div className="cf-object-row" key={String(label)}><span>{label}</span><strong>{count} {unit}</strong></div>)}

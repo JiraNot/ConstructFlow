@@ -31,8 +31,8 @@ export const OpeningElevationThumbnail: React.FC<Props> = ({
         alignItems: 'center',
         background: '#f8fafc',
         border: '1px solid #e2e8f0',
-        borderRadius: 6,
-        padding: '8px 12px',
+        borderRadius: 3,
+        padding: '6px 8px',
         margin: '4px 0',
       }}
     >

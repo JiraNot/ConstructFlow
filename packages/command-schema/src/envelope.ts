@@ -1,5 +1,7 @@
 // ConstructFlow Command Envelope & Execution Result Contracts
 
+import type { DependencyImpactReport } from '@constructflow/project-model'
+
 export interface CommandActor {
   kind: 'human' | 'ai' | 'sync' | 'system'
   id?: string
@@ -42,4 +44,9 @@ export interface CommandExecutionResult {
   deleted_object_ids?: string[]
   errors?: string[]
   warnings?: string[]
+  /**
+   * Populated for lifecycle-sensitive mutations (delete/demolish/move) so hosts, panels and
+   * agents can see which dependents cascade, which need re-hosting and which block the command.
+   */
+  dependency_impact?: DependencyImpactReport
 }

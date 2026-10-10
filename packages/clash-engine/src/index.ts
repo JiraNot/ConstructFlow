@@ -1,13 +1,8 @@
 import { resolveBeamBaseElevation, resolveCatalogType, resolveColumnVerticalExtent, type ProjectDocument, type SmartObject } from '@constructflow/project-model'
 import { constructionOutputs } from '@constructflow/domain-providers'
+import type { SpatialBounds, Vec3 } from './spatial.js'
 
-export type Vec3 = [number, number, number]
-
-/** Axis-aligned bounds; project analysis uses the model's canonical millimeter units. */
-export interface SpatialBounds {
-  min: Vec3
-  max: Vec3
-}
+export * from './spatial.js'
 
 export interface SpatialObjectBounds {
   object_id: string
@@ -320,3 +315,7 @@ export function classifySpatialInteractions(
 export * from './legalEngine.js'
 
 export * from './clashRules.js';
+export * from './exactContact.js';
+export * from './coordinationModel.js';
+export * from './coordinationRules.js';
+export * from './coordination.js';

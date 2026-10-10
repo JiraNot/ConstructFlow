@@ -1,7 +1,7 @@
 import type { ProjectDocument, SmartObject } from '@constructflow/project-model'
-import type { SpatialInteraction, SpatialObjectBounds, Vec3 } from './index.js'
-
-export type ClashSeverity = 'hard' | 'clearance' | 'soft'
+import type { SpatialInteraction, SpatialObjectBounds } from './index.js'
+import type { Vec3 } from './spatial.js'
+import type { ClashSeverity } from './coordinationRules.js'
 
 export interface ClashVerdict {
   interaction: SpatialInteraction

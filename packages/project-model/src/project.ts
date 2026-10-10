@@ -3,6 +3,7 @@
 import { Phase, Level, PileSystem, Relationship, ProjectLegalMetadata } from './types.js'
 import { SmartObject } from './smartObject.js'
 import type { DrawingSettings } from './sheetSettings.js'
+import type { CoordinationSettings } from './coordinationSettings.js'
 import type { DoorFaceComponent } from './doorFace.js'
 import type { OpeningPlanSymbolLine } from './openingPlanSymbol.js'
 
@@ -106,6 +107,8 @@ export interface ProjectDocument {
   relationships: Relationship[]
   constraints?: import('./types.js').ConstraintData[]
   drawing_settings?: DrawingSettings
+  /** Project deviations from the versioned clash/coordination rule dataset. */
+  coordination_settings?: CoordinationSettings
   legal_metadata?: ProjectLegalMetadata
   /** Embedded reference drawings, keyed by view and level so they travel with .cfproj. */
   underlays?: Record<string, ProjectUnderlay>

@@ -20,7 +20,8 @@ import {
 } from '@constructflow/project-model'
 import { projectPointToWallOffsetMm } from '@constructflow/architecture-engine'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
-import { analyzeProjectSpatialBounds, classifySpatialInteractions, detectHardClashes } from '@constructflow/clash-engine'
+import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
+import { drawCoordinationPrimitives, planCoordinationOverlay } from '../rendering/coordinationOverlay.js'
 import { constructionOutputs } from '@constructflow/domain-providers'
 import { TypePicker } from './TypePicker.js'
 import { TOOL_FAMILIES } from './catalogPresentation.js'
@@ -90,6 +91,12 @@ interface PlanCanvasProps {
   onFlipDoorHanding?: (doorId: string) => void
   onStartCalibrationModal?: (measuredDist_mm: number, point1_mm: [number, number], point2_mm: [number, number]) => void
   onCursorChange: (coords_mm: [number, number], snapKind: string) => void
+  /** Coordination findings from the clash engine (exact narrow phase + Thai rule set). */
+  coordination?: readonly CoordinationFinding[]
+  /** Severities to draw on the canvas; omitted = every severity. */
+  coordinationSeverities?: readonly ClashSeverity[]
+  /** Highlight coordinate findings that involve the current selection. */
+  coordinationFocusSelection?: boolean
 }
 
 interface WallVerticalReference {
@@ -559,6 +566,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onFlipDoorHanding,
   onStartCalibrationModal,
   onCursorChange,
+  coordination = [],
+  coordinationSeverities,
+  coordinationFocusSelection = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -566,16 +576,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const planVisibleObjects = useMemo(() => getPlanVisibleObjects(project), [project])
   const planProject = useMemo(() => getPlanViewProject(project, planVisibleObjects), [project, planVisibleObjects])
 
-  const clashes = useMemo(() => {
-    try {
-      const analysis = analyzeProjectSpatialBounds(planProject)
-      const interactions = classifySpatialInteractions(analysis)
-      return detectHardClashes(planProject, interactions)
-    } catch (err) {
-      console.warn('Clash detection error:', err)
-      return []
-    }
-  }, [planProject])
+
 
   // Viewport state: 0.08 zoom = 1000mm -> 80px on screen.
   const [viewport, setViewport] = useState<ViewportState>({
@@ -1200,8 +1201,18 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       project,
       labelMode,
       labelVisibility,
-      clashes
+      []
     )
+    // 10.6 Coordination overlay — the shared report is drawn here in plan space so the canvas,
+    // the inspector panel and the permit sheets quote identical millimetres.
+    if (coordination.length) {
+      const focusIds = coordinationFocusSelection && editableSelectionIds.length ? editableSelectionIds : undefined
+      drawCoordinationPrimitives(ctx, planCoordinationOverlay(coordination, {
+        project: point => worldToScreen([point[0], point[1]], viewport),
+        ...(coordinationSeverities ? { severities: coordinationSeverities } : {}),
+        ...(focusIds ? { objectIds: focusIds } : {}),
+      }), 0.55 + 0.45 * Math.abs(Math.sin(Date.now() / 320)))
+    }
     if (activeTool === 'select') {
       ctx.save()
       for (const id of editableSelectionIds) {
@@ -1385,6 +1396,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     selectionBox,
     dimensionReferenceMode,
     tapeMeasure,
+    coordination,
+    coordinationSeverities,
+    coordinationFocusSelection,
   ])
 
   useEffect(() => {

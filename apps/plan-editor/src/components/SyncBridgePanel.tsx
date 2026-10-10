@@ -245,10 +245,10 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
   const totalElements = Object.keys(project.objects || {}).length
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #334155', paddingBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#38bdf8', fontWeight: 600, fontSize: 13 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#38bdf8', fontWeight: 600, fontSize: 13 }}>
           <ArrowRightLeft size={16} />
           SKETCHUP 3D SYNC BRIDGE
         </div>
@@ -278,8 +278,8 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
         <div style={{
           background: '#090d16',
           border: '1px solid #1e293b',
-          borderRadius: 6,
-          padding: 10,
+          borderRadius: 3,
+          padding: 7,
           fontSize: 11,
           color: '#cbd5e1',
           lineHeight: 1.5,
@@ -297,19 +297,19 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
       )}
 
       {/* Primary Action: Full Plan 3D Generation */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <button
           onClick={handleCopyFullScript}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 7,
+            gap: 5,
             background: copiedFullScript ? '#16a34a' : '#0284c7',
             color: '#ffffff',
             border: 'none',
-            padding: '9px 12px',
-            borderRadius: 6,
+            padding: '6px 8px',
+            borderRadius: 3,
             cursor: 'pointer',
             fontWeight: 700,
             fontSize: 12,
@@ -327,12 +327,12 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 6,
+            gap: 4,
             background: '#1e293b',
             color: '#f1f5f9',
             border: '1px solid #3b82f6',
-            padding: '7px 12px',
-            borderRadius: 6,
+            padding: '5px 8px',
+            borderRadius: 3,
             cursor: 'pointer',
             fontSize: 11,
             fontWeight: 600,
@@ -350,14 +350,14 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
         borderTop: '1px dashed #334155',
         display: 'flex',
         flexDirection: 'column',
-        gap: 6
+        gap: 4
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>MUTATION STREAM</span>
           <span style={{
             fontSize: 10,
-            padding: '1px 5px',
-            borderRadius: 4,
+            padding: '1px 4px',
+            borderRadius: 2,
             background: commandQueue.length > 0 ? '#38bdf8' : '#334155',
             color: commandQueue.length > 0 ? '#0f172a' : '#ffffff',
             fontWeight: 700,
@@ -366,7 +366,7 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 4 }}>
           <button
             onClick={handleCopyIncrementalScript}
             disabled={commandQueue.length === 0}
@@ -375,12 +375,12 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 4,
+              gap: 3,
               background: '#0f172a',
               color: commandQueue.length > 0 ? (copiedIncrementalScript ? '#22c55e' : '#cbd5e1') : '#475569',
               border: '1px solid #334155',
-              padding: '5px 8px',
-              borderRadius: 5,
+              padding: '4px 6px',
+              borderRadius: 3,
               cursor: commandQueue.length > 0 ? 'pointer' : 'default',
               fontSize: 10,
               fontWeight: 500,
@@ -398,12 +398,12 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 4,
+              gap: 3,
               background: '#0f172a',
               color: commandQueue.length > 0 ? '#38bdf8' : '#475569',
               border: '1px solid #334155',
-              padding: '5px 8px',
-              borderRadius: 5,
+              padding: '4px 6px',
+              borderRadius: 3,
               cursor: commandQueue.length > 0 ? 'pointer' : 'default',
               fontSize: 10,
               fontWeight: 500,
@@ -420,8 +420,8 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
           fontSize: 10,
           fontFamily: 'monospace',
           background: '#020617',
-          padding: '6px 8px',
-          borderRadius: 4,
+          padding: '4px 6px',
+          borderRadius: 2,
           color: syncStatus === 'synced' ? '#4ade80' : '#94a3b8',
           border: '1px solid #1e293b',
           maxHeight: 60,
@@ -432,17 +432,17 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
       )}
 
       {/* Recent Sync Events Log */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <div style={{
           maxHeight: 120,
           overflowY: 'auto',
           background: '#0a0f1d',
-          borderRadius: 6,
+          borderRadius: 3,
           border: '1px solid #1e293b',
-          padding: 6,
+          padding: 4,
           display: 'flex',
           flexDirection: 'column',
-          gap: 3,
+          gap: 2,
         }}>
           {commandQueue.length === 0 ? (
             <div style={{ fontSize: 10, color: '#475569', textAlign: 'center', padding: '8px 0' }}>
@@ -455,8 +455,8 @@ export const SyncBridgePanel: React.FC<SyncBridgePanelProps> = ({
                 style={{
                   fontSize: 10,
                   fontFamily: 'monospace',
-                  padding: '3px 6px',
-                  borderRadius: 4,
+                  padding: '2px 4px',
+                  borderRadius: 2,
                   background: '#131d31',
                   borderLeft: '2px solid #38bdf8',
                   display: 'flex',

@@ -487,7 +487,7 @@ const enumLabels: Record<string,string> = {reinforced_concrete:'คอนกร�
 const fieldStyle: React.CSSProperties = {
   display: "grid",
   alignContent: "start",
-  gap: 4,
+  gap: 3,
   padding: "5px 0",
   fontSize: 12,
 };
@@ -495,8 +495,8 @@ const inputStyle: React.CSSProperties = {
   background: "#ffffff",
   color: "#33465b",
   border: "1px solid #dce4ed",
-  borderRadius: 4,
-  padding: 7,
+  borderRadius: 2,
+  padding: 5,
   width: "100%",
 };
 
@@ -559,13 +559,13 @@ function Field({
   if (Array.isArray(value) && tupleLabels[name])
     return (
       <fieldset
-        style={{ border: "1px solid #dce4ed", margin: "6px 0", padding: 8 }}
+        style={{ border: "1px solid #dce4ed", margin: "6px 0", padding: 6 }}
       >
         <legend>
           {label}
           {unit}
         </legend>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 6 }}>
           {tupleLabels[name].map((axis, i) => (
             <label key={axis} style={{ flex: 1, fontSize: 11 }}>
               {axis}
@@ -584,7 +584,7 @@ function Field({
     return (
       <fieldset
         className={value.every(v=>Array.isArray(v)) ? "cf-coordinate-list" : undefined}
-        style={{ border: "1px solid #dce4ed", margin: "6px 0", padding: 8, gridColumn: "1 / -1" }}
+        style={{ border: "1px solid #dce4ed", margin: "6px 0", padding: 6, gridColumn: "1 / -1" }}
       >
         <legend>
           {label}
@@ -593,12 +593,12 @@ function Field({
         {value.map((v, i) => (
           <div
             key={i}
-            style={{ display: "flex", gap: 8, alignItems: "center" }}
+            style={{ display: "flex", gap: 6, alignItems: "center" }}
           >
             <span>{i + 1}</span>
             <div style={{ flex: 1 }}>
               {Array.isArray(v) ? (
-                <div style={{ display: "flex", gap: 4 }}>
+                <div style={{ display: "flex", gap: 3 }}>
                   {v.map((n, j) => (
                     <label key={j} style={{ flex: 1, fontSize: 11 }}>
                       {["X", "Y", "Z"][j] ?? j + 1}
@@ -625,7 +625,7 @@ function Field({
                   ))}
                 </div>
               ) : typeof v === "object" && v !== null ? (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {Object.entries(v).map(([k, x]) => (
                     <div key={k} style={{ flex: "1 1 160px" }}>
                       <Field
@@ -925,13 +925,13 @@ export function ConstructionWorkbench({
           minHeight: 0,
           background: "#ffffff",
           color: "#33465b",
-          borderRadius: 8,
+          borderRadius: 4,
           display: "flex",
           flexDirection: "column",
-          padding: 18,
+          padding: 12,
         }}
       >
-        <nav style={{ display: "flex", gap: 8, margin: "12px 0" }}>
+        <nav style={{ display: "flex", gap: 6, margin: "12px 0" }}>
           <button onClick={onOpenCatalog}>
             คลังชนิด
           </button>
@@ -1070,7 +1070,7 @@ export function ConstructionWorkbench({
                 style={{
                   display: "grid",
                   gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))",
-                  gap: 12,
+                  gap: 8,
                 }}
               >
                 {Object.entries(payload)
@@ -1112,11 +1112,11 @@ export function ConstructionWorkbench({
                     />
                   ))}
               </div>
-              <button onClick={create} style={{ padding: 10, marginTop: 12 }}>
+              <button onClick={create} style={{ padding: 7, marginTop: 12 }}>
                 บันทึกชิ้นงาน / จัดเหล็กทั้งชุด
               </button>
               <button
-                style={{ padding: 10, marginLeft: 8 }}
+                style={{ padding: 7, marginLeft: 8 }}
                 onClick={() => execute(planPhaseProof(project))}
               >
                 เพิ่มโครงการตัวอย่างทุกหมวด

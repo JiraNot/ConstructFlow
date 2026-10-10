@@ -144,16 +144,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     <div className={`cf-toolbar cf-toolbar-${orientation}`} style={{
       display: 'flex',
       alignItems: 'center',
-      gap: 8,
+      gap: 6,
       background: '#1e293b',
-      padding: '6px 12px',
-      borderRadius: 8,
+      padding: '4px 8px',
+      borderRadius: 4,
       border: '1px solid #334155',
       boxShadow: '0 4px 6px -1px rgba(0,0,0,0.3)',
       flexWrap: 'wrap',
     }}>
       {/* Tool Buttons */}
-      <div className="cf-tool-list" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div className="cf-tool-list" style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
         {tools.filter(tool => tool.id !== 'calibrate' || (underlayHasImage && underlayVisible)).map((t) => {
           const isActive = activeTool === t.id
           return (
@@ -165,9 +165,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 5,
-                padding: '5px 10px',
-                borderRadius: 6,
+                gap: 4,
+                padding: '4px 7px',
+                borderRadius: 3,
                 border: isActive ? '1px solid #38bdf8' : '1px solid transparent',
                 background: isActive ? '#0369a1' : 'transparent',
                 color: isActive ? '#ffffff' : '#94a3b8',
@@ -193,12 +193,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 5,
+            gap: 4,
             background: 'transparent',
             border: '1px solid #475569',
             color: '#cbd5e1',
-            borderRadius: 6,
-            padding: '4px 8px',
+            borderRadius: 3,
+            padding: '3px 6px',
             fontSize: 11,
             fontWeight: 600,
             cursor: 'pointer',
@@ -210,7 +210,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </div>
 
       {/* Underlay Controls */}
-      <div className="cf-toolbar-utility cf-underlay-tools" style={{ borderLeft: '1px solid #334155', paddingLeft: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div className="cf-toolbar-utility cf-underlay-tools" style={{ borderLeft: '1px solid #334155', paddingLeft: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
         <input
           ref={fileInputRef}
           type="file"
@@ -232,12 +232,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 5,
+              gap: 4,
               background: 'rgba(56, 189, 248, 0.1)',
               border: '1px solid #0284c7',
               color: '#38bdf8',
-              borderRadius: 6,
-              padding: '4px 8px',
+              borderRadius: 3,
+              padding: '3px 6px',
               fontSize: 11,
               fontWeight: 600,
               cursor: 'pointer',
@@ -247,7 +247,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <span>Import Plan Image</span>
           </button>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
             {/* Toggle Visibility */}
             <button
               className="cf-underlay-button"
@@ -256,12 +256,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 4,
+                gap: 3,
                 background: underlayVisible ? '#0369a1' : '#1e293b',
                 border: '1px solid #334155',
                 color: '#ffffff',
-                borderRadius: 4,
-                padding: '4px 6px',
+                borderRadius: 2,
+                padding: '3px 4px',
                 fontSize: 11,
                 cursor: 'pointer',
               }}
@@ -271,7 +271,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             </button>
 
             {/* Opacity slider */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#94a3b8' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: '#94a3b8' }}>
               <span>{Math.round((underlayOpacity ?? 0.6) * 100)}%</span>
               <input
                 type="range"
@@ -295,7 +295,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                 color: '#ef4444',
                 padding: '4px',
                 cursor: 'pointer',
-                borderRadius: 4,
+                borderRadius: 2,
                 display: 'flex',
                 alignItems: 'center',
               }}

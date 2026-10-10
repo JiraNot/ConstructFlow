@@ -170,23 +170,23 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   }, [selectedId, currentMark])
 
   const openingInstanceEditor = openingObj && openingType ? (
-    <details style={{ border: '1px solid #e5edf5', borderRadius: 6, padding: '8px 9px', background: '#fbfdff' }}>
+    <details style={{ border: '1px solid #e5edf5', borderRadius: 3, padding: '6px 6px', background: '#fbfdff' }}>
       <summary style={{ cursor: 'pointer', color: '#40566e', fontSize: 11, fontWeight: 700 }}>
         พารามิเตอร์รายชิ้น · {Object.keys(openingObj.module_data.instance_overrides ?? {}).length} ค่า override
       </summary>
-      <div style={{ display: 'grid', gap: 8, marginTop: 9 }}>
+      <div style={{ display: 'grid', gap: 6, marginTop: 9 }}>
         {openingParameterFields.map(field => {
           const overrides = openingObj.module_data.instance_overrides ?? {}
           const isOverridden = Object.hasOwn(overrides, field)
           const value = isOverridden ? overrides[field] : (openingObj.module_data as unknown as Record<string, unknown>)[field] ?? openingType.parameters[field]
-          return <div key={field} style={{ padding: 7, border: '1px solid #e8eef5', borderRadius: 5, background: '#fff' }}>
+          return <div key={field} style={{ padding: 5, border: '1px solid #e8eef5', borderRadius: 3, background: '#fff' }}>
             <CatalogField
               name={field}
               value={value}
               displayUnit={displayUnit}
               onChange={next => onUpdateOpeningInstanceParameters?.(openingObj.id, { [field]: next })}
             />
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginTop: 4 }}>
               <span style={{ fontSize: 10, color: isOverridden ? '#a65b00' : '#64748b' }}>{isOverridden ? 'กำหนดเฉพาะชิ้นนี้' : `สืบทอดจาก ${openingType.name}`}</span>
               {isOverridden && <button type="button" className="cf-button cf-button-quiet" onClick={() => onUpdateOpeningInstanceParameters?.(openingObj.id, { [field]: null })}>คืนค่าตามชนิด</button>}
             </div>
@@ -212,7 +212,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   if (!selectedObj) {
     return (
       <div style={{
-        padding: 16,
+        padding: 11,
         color: '#53657b',
         fontSize: 13,
         textAlign: 'center',
@@ -276,7 +276,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const windowVertical = winObj ? resolveOpeningVerticalExtent(project, winObj) : undefined
   const doorShape = doorObj ? buildOpeningRepresentationShapeFromObject(project, doorObj) : undefined
   const winShape = winObj ? buildOpeningRepresentationShapeFromObject(project, winObj) : undefined
-  const verticalSelectStyle: React.CSSProperties = { width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }
+  const verticalSelectStyle: React.CSSProperties = { width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 5, color: '#24364b' }
 
   if (selectedObjects.length > 1) {
     const familyLabels: Record<string, string> = {
@@ -284,7 +284,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       'architecture.wall': 'ผนัง', 'door_window.door': 'ประตู', 'door_window.window': 'หน้าต่าง',
     }
     const typeLabel = selectedObjectFamily ? familyLabels[selectedObjectFamily] ?? selectedObjectFamily : ''
-    return <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+    return <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ borderBottom: '1px solid #dce4ed', paddingBottom: 10 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: '#24364b' }}>เลือก {selectedObjects.length} ชิ้น</div>
         <div style={{ fontSize: 11, color: '#53657b', marginTop: 4 }}>
@@ -292,23 +292,23 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         </div>
         {selectedObjectFamily && <div style={{ fontSize: 11, color: '#53657b', marginTop: 3 }}>กด Shift ค้างแล้วคลิกเพิ่ม หรือลากกรอบครอบวัตถุที่ต้องการ</div>}
       </div>
-      {selectedObjectFamily && selectedFamilyTypes.length > 0 && <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#52677d', fontWeight: 600 }}>
+      {selectedObjectFamily && selectedFamilyTypes.length > 0 && <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#52677d', fontWeight: 600 }}>
         เปลี่ยน Type/Mark ให้ทั้ง {selectedObjects.length} ชิ้น
         <select aria-label="เปลี่ยน Type ให้หลายวัตถุ" value={selectedCommonTypeId} onChange={event => {
           if (event.target.value) onAssignTypeMany?.(selectedObjects.map(object => object.id), event.target.value)
-        }} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 8, color: '#24364b' }}>
+        }} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 6, color: '#24364b' }}>
           <option value="">เลือก Type{selectedCommonTypeId ? '' : ' (หลายค่า)'}</option>
           {selectedFamilyTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
         </select>
       </label>}
-      <button type="button" className="cf-button" onClick={() => onDeleteObjects?.(selectedObjects.map(object => object.id))} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, color: '#dc2626', borderColor: '#fecaca', background: '#fff7f7' }}>
+      <button type="button" className="cf-button" onClick={() => onDeleteObjects?.(selectedObjects.map(object => object.id))} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, color: '#dc2626', borderColor: '#fecaca', background: '#fff7f7' }}>
         <Trash2 size={14} /> ลบที่เลือก {selectedObjects.length} ชิ้น
       </button>
     </div>
   }
 
   return (
-    <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Header with Type Badge */}
       <div style={{ borderBottom: '1px solid #dce4ed', paddingBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -330,8 +330,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               ? '#0873c4'
               : '#52677d',
             background: '#f5f8fc',
-            padding: '2px 6px',
-            borderRadius: 4,
+            padding: '2px 4px',
+            borderRadius: 2,
             border: '1px solid #dce4ed',
           }}>
             {selectedObj.object_type}
@@ -361,12 +361,12 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       {/* Human-Readable Mark & Type Presets */}
       {(colObj || fndObj || beamObj || wallObj || doorObj || winObj) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>
             ชนิดของชิ้นนี้
           </label>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <select aria-label="ชนิดของชิ้นที่เลือก" value={currentMark} onChange={e=>handleSaveMark(e.target.value)} style={{width:'100%',background:'#fff',border:'1px solid #dce4ed',padding:8,color:'#24364b'}}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <select aria-label="ชนิดของชิ้นที่เลือก" value={currentMark} onChange={e=>handleSaveMark(e.target.value)} style={{width:'100%',background:'#fff',border:'1px solid #dce4ed',padding: 6,color:'#24364b'}}>
               {project.types.filter(type=>type.object_type===selectedObj.object_type).map(type=><option key={type.id} value={type.name}>{type.name}</option>)}
             </select>
           </div>
@@ -377,7 +377,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       {/* Column Dimensions */}
       {colObj && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>หน้าตัด ({displayUnit})</label>
             <button
@@ -397,8 +397,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
           <div style={{
             background: '#f5f8fc',
-            padding: '7px 10px',
-            borderRadius: 6,
+            padding: '5px 7px',
+            borderRadius: 3,
             fontSize: 13,
             fontWeight: 700,
             color: '#0873c4',
@@ -416,10 +416,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               ({formatLengthMm(colObj.module_data.location_mm[0], displayUnit)} {displayUnit}, {formatLengthMm(colObj.module_data.location_mm[1], displayUnit)} {displayUnit})
             </span>
           </div>
-          <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
+          <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับและความสูงเสา</strong>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระดับฐาน
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ระดับฐาน
                 <select aria-label="ระดับฐานเสา" value={colObj.module_data.base_level_id} onChange={event => {
                   const baseLevelId = event.target.value
                   const base = project.levels.find(level => level.id === baseLevelId)
@@ -429,7 +429,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   {project.levels.map(level => <option key={level.id} value={level.id}>{level.name} · +{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit}</option>)}
                 </select>
               </label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระดับยอด
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ระดับยอด
                 <select aria-label="ระดับยอดเสา" value={colObj.module_data.top_level_id ?? (() => {
                   const base = project.levels.find(level => level.id === colObj.module_data.base_level_id)
                   return base ? [...project.levels].filter(level => level.elevation_mm > base.elevation_mm).sort((a, b) => a.elevation_mm - b.elevation_mm)[0]?.id ?? '' : ''
@@ -439,9 +439,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 </select>
               </label>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>เยื้องฐาน ({displayUnit})<LengthInput aria-label="ระยะเยื้องฐานเสา" value={colObj.module_data.base_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateColumnVerticalReference(colObj.id, { base_offset_mm: value })} style={verticalSelectStyle} /></label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>เยื้องยอด ({displayUnit})<LengthInput aria-label="ระยะเยื้องยอดเสา" value={colObj.module_data.top_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateColumnVerticalReference(colObj.id, { top_offset_mm: value })} style={verticalSelectStyle} /></label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>เยื้องฐาน ({displayUnit})<LengthInput aria-label="ระยะเยื้องฐานเสา" value={colObj.module_data.base_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateColumnVerticalReference(colObj.id, { base_offset_mm: value })} style={verticalSelectStyle} /></label>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>เยื้องยอด ({displayUnit})<LengthInput aria-label="ระยะเยื้องยอดเสา" value={colObj.module_data.top_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateColumnVerticalReference(colObj.id, { top_offset_mm: value })} style={verticalSelectStyle} /></label>
             </div>
             <span style={{ fontSize: 10, color: '#52677d' }}>สูง {formatLengthMm(columnVertical?.height_mm ?? 0, displayUnit)} {displayUnit} · +{formatLengthMm(columnVertical?.base_elevation_mm ?? 0, displayUnit)} ถึง +{formatLengthMm(columnVertical?.top_elevation_mm ?? 0, displayUnit)} {displayUnit}</span>
           </section>
@@ -450,7 +450,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       {/* Footing Dimensions */}
       {fndObj && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ขนาด ({displayUnit})</label>
             <button
@@ -470,8 +470,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
           <div style={{
             background: '#f5f8fc',
-            padding: '7px 10px',
-            borderRadius: 6,
+            padding: '5px 7px',
+            borderRadius: 3,
             fontSize: 13,
             fontWeight: 700,
             color: '#996000',
@@ -494,8 +494,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       {/* Beam Dimensions & Span */}
       {beamObj && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>หน้าตัด ({displayUnit})</label>
               <button
@@ -515,8 +515,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </div>
             <div style={{
               background: '#f5f8fc',
-              padding: '7px 10px',
-              borderRadius: 6,
+              padding: '5px 7px',
+              borderRadius: 3,
               fontSize: 13,
               fontWeight: 700,
               color: '#0873c4',
@@ -530,27 +530,27 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </div>
           </div>
 
-          <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
+          <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับวางคาน</strong>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>อ้างอิงระดับ
+            <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>อ้างอิงระดับ
               <select aria-label="ระดับอ้างอิงคาน" value={beamObj.module_data.level_id} onChange={event => onUpdateBeamVerticalReference(beamObj.id, { level_id: event.target.value })} style={verticalSelectStyle}>
                 {project.levels.map(level => <option key={level.id} value={level.id}>{level.name} · {level.elevation_mm === 0 ? '±0' : `${level.elevation_mm > 0 ? '+' : ''}${formatLengthMm(level.elevation_mm, displayUnit)}`} {displayUnit}</option>)}
               </select>
             </label>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระยะวางคานจากระดับ ({displayUnit})
+            <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ระยะวางคานจากระดับ ({displayUnit})
               <LengthInput aria-label="ระยะเยื้องคานจากระดับ" value={beamObj.module_data.base_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateBeamVerticalReference(beamObj.id, { base_offset_mm: value })} style={verticalSelectStyle} />
             </label>
             <span style={{ fontSize: 10, color: '#52677d' }}>ท้องคาน +{formatLengthMm((beamBaseElevation ?? 0) - Number(beamObj.module_data.drop_mm ?? 0), displayUnit)} {displayUnit} · หลังคาน +{formatLengthMm((beamBaseElevation ?? 0) + beamObj.module_data.section_mm[1] - Number(beamObj.module_data.drop_mm ?? 0), displayUnit)} {displayUnit}</span>
           </section>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>
               SPAN LENGTH (ความยาวช่วงคาน)
             </label>
             <div style={{
               background: '#f5f8fc',
-              padding: '7px 10px',
-              borderRadius: 6,
+              padding: '5px 7px',
+              borderRadius: 3,
               fontSize: 13,
               fontWeight: 700,
               color: '#34d399',
@@ -570,8 +570,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       {/* Wall Properties */}
       {wallObj && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ความหนาและความสูง ({displayUnit})</label>
               <button
@@ -591,8 +591,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </div>
             <div style={{
               background: '#f5f8fc',
-              padding: '7px 10px',
-              borderRadius: 6,
+              padding: '5px 7px',
+              borderRadius: 3,
               fontSize: 13,
               fontWeight: 700,
               color: '#40566e',
@@ -606,9 +606,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </div>
           </div>
 
-          <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
+          <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับและความสูงผนัง</strong>
-            <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#52677d' }}>ขอบบนผนัง
+            <label style={{ display: 'grid', gap: 3, fontSize: 11, color: '#52677d' }}>ขอบบนผนัง
               <select aria-label="ระดับขอบบนผนัง" style={verticalSelectStyle} value={wallObj.module_data.top_level_id ?? ''} onChange={e => e.target.value
                 ? onUpdateWallFace(wallObj.id, { top_level_id: e.target.value, vertical_constraint: 'top_level' })
                 : onUpdateWallFace(wallObj.id, { top_level_id: undefined, vertical_constraint: 'fixed_height', height_mm: wallVertical?.height_mm ?? wallObj.module_data.height_mm })}>
@@ -616,32 +616,32 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === wallObj.module_data.level_id)?.elevation_mm ?? 0)).map(level => <option key={level.id} value={level.id}>{level.name} · +{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit}</option>)}
               </select>
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ยกจากพื้น ({displayUnit})<LengthInput aria-label="ระยะยกฐานผนัง" value={wallObj.module_data.base_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { base_offset_mm: value })} style={verticalSelectStyle} /></label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ลดจากระดับบน ({displayUnit})<LengthInput aria-label="ระยะลดขอบบนผนัง" value={wallObj.module_data.top_offset_mm ?? 0} unit={displayUnit} disabled={!wallObj.module_data.top_level_id} onChange={value => onUpdateWallFace(wallObj.id, { top_offset_mm: value })} style={verticalSelectStyle} /></label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ยกจากพื้น ({displayUnit})<LengthInput aria-label="ระยะยกฐานผนัง" value={wallObj.module_data.base_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { base_offset_mm: value })} style={verticalSelectStyle} /></label>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ลดจากระดับบน ({displayUnit})<LengthInput aria-label="ระยะลดขอบบนผนัง" value={wallObj.module_data.top_offset_mm ?? 0} unit={displayUnit} disabled={!wallObj.module_data.top_level_id} onChange={value => onUpdateWallFace(wallObj.id, { top_offset_mm: value })} style={verticalSelectStyle} /></label>
             </div>
-            {!wallObj.module_data.top_level_id && <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ความสูงผนัง ({displayUnit})<LengthInput aria-label="ความสูงผนัง" value={wallObj.module_data.height_mm} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { vertical_constraint: 'fixed_height', height_mm: value })} style={verticalSelectStyle} /></label>}
+            {!wallObj.module_data.top_level_id && <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ความสูงผนัง ({displayUnit})<LengthInput aria-label="ความสูงผนัง" value={wallObj.module_data.height_mm} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { vertical_constraint: 'fixed_height', height_mm: value })} style={verticalSelectStyle} /></label>}
           </section>
 
           <div style={{ fontSize: 10, color: '#667b91' }}>กำหนดรหัสและวัสดุผิวแยกสองฝั่งของผนัง เช่น W1/W2 ทั้งสองฝั่งอาจเป็นผิวภายในอาคารได้</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: '#52677d', fontWeight: 600 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: '#52677d', fontWeight: 600 }}>
               ผิวด้าน A
               <span style={{ fontWeight: 500 }}><input type="checkbox" checked={wallInsidePlaster > 0} onChange={e => onUpdateWallFace(wallObj.id, { plaster_inside_thickness_mm: e.target.checked ? 15 : 0 })} /> เปิดชั้นผิว</span>
-              <input aria-label="รหัสผิวด้าน A" list="cf-wall-marks" value={wallFaceField('inside_finish_mark', wallObj.module_data.mark)} onChange={e => onUpdateWallFace(wallObj.id, { inside_finish_mark: e.target.value })} placeholder="เช่น W1" style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
-              <select aria-label="วัสดุผิวด้าน A" value={neutralWallFaceMaterial(wallFaceField('plaster_inside_material', 'cement_plaster'))} onChange={e => onUpdateWallFace(wallObj.id, { plaster_inside_material: e.target.value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }}>
+              <input aria-label="รหัสผิวด้าน A" list="cf-wall-marks" value={wallFaceField('inside_finish_mark', wallObj.module_data.mark)} onChange={e => onUpdateWallFace(wallObj.id, { inside_finish_mark: e.target.value })} placeholder="เช่น W1" style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 5, color: '#24364b' }} />
+              <select aria-label="วัสดุผิวด้าน A" value={neutralWallFaceMaterial(wallFaceField('plaster_inside_material', 'cement_plaster'))} onChange={e => onUpdateWallFace(wallObj.id, { plaster_inside_material: e.target.value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 5, color: '#24364b' }}>
                 {wallFaceMaterialOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
-              <LengthInput aria-label={`ความหนาผิวด้าน A (${displayUnit})`} disabled={wallInsidePlaster <= 0} value={wallInsidePlaster} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { plaster_inside_thickness_mm: value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
+              <LengthInput aria-label={`ความหนาผิวด้าน A (${displayUnit})`} disabled={wallInsidePlaster <= 0} value={wallInsidePlaster} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { plaster_inside_thickness_mm: value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 5, color: '#24364b' }} />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: '#52677d', fontWeight: 600 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: '#52677d', fontWeight: 600 }}>
               ผิวด้าน B
               <span style={{ fontWeight: 500 }}><input type="checkbox" checked={wallOutsidePlaster > 0} onChange={e => onUpdateWallFace(wallObj.id, { plaster_outside_thickness_mm: e.target.checked ? 15 : 0 })} /> เปิดชั้นผิว</span>
-              <input aria-label="รหัสผิวด้าน B" list="cf-wall-marks" value={wallFaceField('outside_finish_mark', wallObj.module_data.mark)} onChange={e => onUpdateWallFace(wallObj.id, { outside_finish_mark: e.target.value })} placeholder="เช่น W2" style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
-              <select aria-label="วัสดุผิวด้าน B" value={neutralWallFaceMaterial(wallFaceField('plaster_outside_material', 'cement_plaster'))} onChange={e => onUpdateWallFace(wallObj.id, { plaster_outside_material: e.target.value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }}>
+              <input aria-label="รหัสผิวด้าน B" list="cf-wall-marks" value={wallFaceField('outside_finish_mark', wallObj.module_data.mark)} onChange={e => onUpdateWallFace(wallObj.id, { outside_finish_mark: e.target.value })} placeholder="เช่น W2" style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 5, color: '#24364b' }} />
+              <select aria-label="วัสดุผิวด้าน B" value={neutralWallFaceMaterial(wallFaceField('plaster_outside_material', 'cement_plaster'))} onChange={e => onUpdateWallFace(wallObj.id, { plaster_outside_material: e.target.value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 5, color: '#24364b' }}>
                 {wallFaceMaterialOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
-              <LengthInput aria-label={`ความหนาผิวด้าน B (${displayUnit})`} disabled={wallOutsidePlaster <= 0} value={wallOutsidePlaster} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { plaster_outside_thickness_mm: value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }} />
+              <LengthInput aria-label={`ความหนาผิวด้าน B (${displayUnit})`} disabled={wallOutsidePlaster <= 0} value={wallOutsidePlaster} unit={displayUnit} onChange={value => onUpdateWallFace(wallObj.id, { plaster_outside_thickness_mm: value })} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 5, color: '#24364b' }} />
             </label>
           </div>
           <datalist id="cf-wall-marks">{wallPresets.map(mark => <option key={mark} value={mark} />)}</datalist>
@@ -649,14 +649,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             สลับด้าน A/B · ด้าน A อยู่ฝั่ง{(wallObj.module_data.interior_side ?? 'left') === 'left' ? 'ซ้าย' : 'ขวา'} ของแนวเริ่ม→จบ
           </button>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>
               WALL LENGTH (ความยาวผนัง)
             </label>
             <div style={{
               background: '#f5f8fc',
-              padding: '7px 10px',
-              borderRadius: 6,
+              padding: '5px 7px',
+              borderRadius: 3,
               fontSize: 13,
               fontWeight: 700,
               color: '#0873c4',
@@ -673,19 +673,19 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
 
           {/* Hosted Openings Status */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>
               HOSTED OPENINGS ({hostedOpenings.length})
             </label>
             {hostedOpenings.length > 0 ? (
               <div style={{
                 background: '#f5f8fc',
-                padding: '6px 8px',
-                borderRadius: 6,
+                padding: '4px 6px',
+                borderRadius: 3,
                 border: '1px solid #eef3f8',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 4,
+                gap: 3,
               }}>
                 {hostedOpenings.map((op) => {
                   const isDoor = isDoorObject(op)
@@ -713,11 +713,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           {/* Thai Building Code Rule 50 Setback Info */}
           <div style={{
             background: '#ffffff',
-            padding: 8,
-            borderRadius: 6,
+            padding: 6,
+            borderRadius: 3,
             border: '1px solid #e2e8f0',
             display: 'grid',
-            gap: 4,
+            gap: 3,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>
@@ -725,8 +725,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </span>
               <span style={{
                 fontSize: 10,
-                padding: '1px 5px',
-                borderRadius: 4,
+                padding: '1px 4px',
+                borderRadius: 2,
                 fontWeight: 600,
                 background: hostedOpenings.length > 0 ? '#e0f2fe' : '#f1f5f9',
                 color: hostedOpenings.length > 0 ? '#0284c7' : '#475569',
@@ -751,14 +751,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const slopeDeg = Number(rData.slope_deg ?? 25)
 
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             <div style={{
               background: '#f8fafc',
-              padding: '8px 10px',
-              borderRadius: 6,
+              padding: '6px 7px',
+              borderRadius: 3,
               border: '1px solid #e2e8f0',
               display: 'grid',
-              gap: 6,
+              gap: 4,
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                 <span style={{ color: '#475569' }}>ความลาดชัน (Slope):</span>
@@ -773,11 +773,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             {/* Thai Building Code Rule 50 Eaves Setback Card */}
             <div style={{
               background: '#ffffff',
-              padding: 8,
-              borderRadius: 6,
+              padding: 6,
+              borderRadius: 3,
               border: '1px solid #e2e8f0',
               display: 'grid',
-              gap: 4,
+              gap: 3,
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>
@@ -785,8 +785,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 </span>
                 <span style={{
                   fontSize: 10,
-                  padding: '1px 5px',
-                  borderRadius: 4,
+                  padding: '1px 4px',
+                  borderRadius: 2,
                   fontWeight: 600,
                   background: '#dcfce7',
                   color: '#15803d',
@@ -805,8 +805,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       {/* Door Properties */}
       {doorObj && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ขนาด ({displayUnit})</label>
               <button
@@ -826,8 +826,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </div>
             <div style={{
               background: '#f5f8fc',
-              padding: '7px 10px',
-              borderRadius: 6,
+              padding: '5px 7px',
+              borderRadius: 3,
               fontSize: 13,
               fontWeight: 700,
               color: '#18764b',
@@ -844,10 +844,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           {openingInstanceEditor}
           {doorShape && <OpeningElevationThumbnail shape={doorShape} />}
 
-          <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
+          <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับประตู</strong>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ธรณี/ยกจากพื้น ({displayUnit})<LengthInput aria-label="ระดับธรณีประตู" value={doorObj.module_data.sill_height_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { sill_height_mm: value })} style={verticalSelectStyle} /></label>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>หัวประตูจบที่ระดับ
+            <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ธรณี/ยกจากพื้น ({displayUnit})<LengthInput aria-label="ระดับธรณีประตู" value={doorObj.module_data.sill_height_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { sill_height_mm: value })} style={verticalSelectStyle} /></label>
+            <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>หัวประตูจบที่ระดับ
               <select aria-label="ระดับหัวประตู" value={doorObj.module_data.head_level_id || ''} onChange={e => e.target.value
                 ? onUpdateOpeningVertical(doorObj.id, { head_level_id: e.target.value, head_offset_mm: 0, vertical_constraint: 'head_level' })
                 : onUpdateOpeningVertical(doorObj.id, { head_level_id: '', vertical_constraint: 'fixed_height', height_mm: doorVertical?.height_mm ?? doorObj.module_data.height_mm })} style={verticalSelectStyle}>
@@ -856,12 +856,12 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </select>
             </label>
             {doorObj.module_data.head_level_id ? (
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>
                 ระยะหัวประตูจากระดับ ({displayUnit})
                 <LengthInput aria-label="ระยะหัวประตูจากระดับ" value={doorObj.module_data.head_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { head_offset_mm: value })} style={verticalSelectStyle} />
               </label>
             ) : (
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>
                 ความสูงประตู ({displayUnit})
                 <LengthInput aria-label="ความสูงประตู" value={doorObj.module_data.height_mm} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { vertical_constraint: 'fixed_height', height_mm: value })} style={verticalSelectStyle} />
               </label>
@@ -869,13 +869,13 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </section>
 
           {/* Door Handing with Flip button */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>HANDING & SWING</label>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <div style={{
                 background: '#f5f8fc',
-                padding: '6px 10px',
-                borderRadius: 6,
+                padding: '4px 7px',
+                borderRadius: 3,
                 fontSize: 12,
                 fontWeight: 600,
                 color: '#24364b',
@@ -890,12 +890,12 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 4,
+                  gap: 3,
                   background: '#eef3f8',
                   color: '#18764b',
                   border: '1px solid #16a34a',
-                  padding: '6px 10px',
-                  borderRadius: 6,
+                  padding: '4px 7px',
+                  borderRadius: 3,
                   cursor: 'pointer',
                   fontSize: 11,
                   fontWeight: 600,
@@ -915,8 +915,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       {/* Window Properties */}
       {winObj && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ขนาด ({displayUnit})</label>
               <button
@@ -936,8 +936,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </div>
             <div style={{
               background: '#f5f8fc',
-              padding: '7px 10px',
-              borderRadius: 6,
+              padding: '5px 7px',
+              borderRadius: 3,
               fontSize: 13,
               fontWeight: 700,
               color: '#0873c4',
@@ -954,10 +954,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           {openingInstanceEditor}
           {winShape && <OpeningElevationThumbnail shape={winShape} />}
 
-          <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
+          <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับหน้าต่าง</strong>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ธรณีหน้าต่างจากพื้น ({displayUnit})<LengthInput aria-label="ระดับธรณีหน้าต่าง" value={winObj.module_data.sill_height_mm} unit={displayUnit} onChange={value => onUpdateOpeningVertical(winObj.id, { sill_height_mm: value })} style={verticalSelectStyle} /></label>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>หัวหน้าต่างจบที่ระดับ
+            <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ธรณีหน้าต่างจากพื้น ({displayUnit})<LengthInput aria-label="ระดับธรณีหน้าต่าง" value={winObj.module_data.sill_height_mm} unit={displayUnit} onChange={value => onUpdateOpeningVertical(winObj.id, { sill_height_mm: value })} style={verticalSelectStyle} /></label>
+            <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>หัวหน้าต่างจบที่ระดับ
               <select aria-label="ระดับหัวหน้าต่าง" value={winObj.module_data.head_level_id || ''} onChange={e => e.target.value
                 ? onUpdateOpeningVertical(winObj.id, { head_level_id: e.target.value, head_offset_mm: 0, vertical_constraint: 'head_level' })
                 : onUpdateOpeningVertical(winObj.id, { head_level_id: '', vertical_constraint: 'fixed_height', height_mm: windowVertical?.height_mm ?? winObj.module_data.height_mm })} style={verticalSelectStyle}>
@@ -966,12 +966,12 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </select>
             </label>
             {winObj.module_data.head_level_id ? (
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>
                 ระยะหัวหน้าต่างจากระดับ ({displayUnit})
                 <LengthInput aria-label="ระยะหัวหน้าต่างจากระดับ" value={winObj.module_data.head_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(winObj.id, { head_offset_mm: value })} style={verticalSelectStyle} />
               </label>
             ) : (
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>
                 ความสูงหน้าต่าง ({displayUnit})
                 <LengthInput aria-label="ความสูงหน้าต่าง" value={winObj.module_data.height_mm} unit={displayUnit} onChange={value => onUpdateOpeningVertical(winObj.id, { vertical_constraint: 'fixed_height', height_mm: value })} style={verticalSelectStyle} />
               </label>
@@ -992,11 +992,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       {/* Grid Coordinates */}
       {grdObj && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>
             GRID LINE POSITION
           </label>
-          <div style={{ background: '#f5f8fc', padding: '6px 8px', borderRadius: 6, fontSize: 12 }}>
+          <div style={{ background: '#f5f8fc', padding: '4px 6px', borderRadius: 3, fontSize: 12 }}>
             {grdObj.module_data.start_point_mm && grdObj.module_data.end_point_mm
               ? <>แนวอ้างอิงจาก {grdObj.module_data.start_point_mm.map(value => formatLengthMm(value, displayUnit)).join(', ')} ถึง {grdObj.module_data.end_point_mm.map(value => formatLengthMm(value, displayUnit)).join(', ')} {displayUnit}</>
               : <>{grdObj.module_data.orientation === 'vertical' ? 'X = ' : 'Y = '}<b>{formatLengthMm(grdObj.module_data.position_mm, displayUnit)} {displayUnit}</b></>}
@@ -1004,16 +1004,16 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           {grdObj.module_data.system_id && (() => {
             const members = Object.values(project.objects).filter(isGridObject).filter(object => object.module_data.system_id === grdObj.module_data.system_id).sort((a, b) => (a.module_data.system_index ?? 0) - (b.module_data.system_index ?? 0))
             const positions = members.map(member => member.module_data.position_mm)
-            return <section key={`${grdObj.module_data.system_id}:${selectedId}`} style={{ display: 'grid', gap: 7, marginTop: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
+            return <section key={`${grdObj.module_data.system_id}:${selectedId}`} style={{ display: 'grid', gap: 5, marginTop: 7, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
             <strong style={{ fontSize: 12 }}>ระบบ Grid Line · {members.length} เส้น</strong>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ตำแหน่งทุกเส้น ({displayUnit} คั่นด้วยจุลภาค)
+            <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ตำแหน่งทุกเส้น ({displayUnit} คั่นด้วยจุลภาค)
               <input aria-label={`ตำแหน่งทุกเส้นในระบบกริด (${displayUnit})`} defaultValue={positions.map(value => formatLengthMm(value, displayUnit)).join(', ')} onBlur={event => {
                 const tokens = event.target.value.split(/[\s,;]+/).filter(value => value.trim() !== '')
                 const values = tokens.map(value => parseLengthMm(value.trim(), displayUnit))
                 if (values.length && values.length <= 100 && values.every(value => value !== null && Number.isFinite(value)) && values.every((value, index) => index === 0 || value! > values[index - 1]!)) onUpdateGridSystem(grdObj.module_data.system_id!, { positions_mm: values as number[] })
               }} style={verticalSelectStyle} />
             </label>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ป้ายเส้นแรก
+            <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ป้ายเส้นแรก
               <input aria-label="ป้ายกริดเส้นแรกในชุด" defaultValue={grdObj.module_data.system_first_tag ?? grdObj.module_data.tag} onBlur={event => {
                 const value = event.target.value.trim(); if (value) onUpdateGridSystem(grdObj.module_data.system_id!, { first_tag: value })
               }} style={verticalSelectStyle} />
@@ -1033,21 +1033,21 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               const radians = degrees * Math.PI / 180, dx = Math.cos(radians) * length / 2, dy = Math.sin(radians) * length / 2
               onModifyGrid(grdObj.id, { start_point_mm: [midpoint[0] - dx, midpoint[1] + dy], end_point_mm: [midpoint[0] + dx, midpoint[1] - dy] })
             }
-            return <section style={{ display: 'grid', gap: 8, marginTop: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
+            return <section style={{ display: 'grid', gap: 6, marginTop: 7, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
               <strong style={{ fontSize: 12 }}>เส้นกริดอ้างอิง</strong>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>มุมเอียง (องศา)
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>มุมเอียง (องศา)
                 <input aria-label="มุมเอียงเส้นกริดองศา" aria-describedby="grid-angle-key-help" type="number" step="0.1" defaultValue={Number(angle.toFixed(1))} key={`${grdObj.id}:${Math.round(angle * 10) / 10}`} onFocus={event => event.currentTarget.select()} onKeyDown={event => {
                   if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() }
                   if (event.key === 'Escape') { event.preventDefault(); event.currentTarget.value = angle.toFixed(1); event.currentTarget.blur() }
                 }} onBlur={event => rotateTo(Number(event.target.value))} style={verticalSelectStyle} />
                 <small id="grid-angle-key-help" style={{ fontSize: 10, color: '#64748b' }}>0° ไปทางขวา · 90° ขึ้น · Enter บันทึก · Esc คืนค่าเดิม</small>
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: '#52677d' }}><input type="checkbox" checked={data.bubble_visible !== false} onChange={event => onModifyGrid(grdObj.id, { bubble_visible: event.target.checked })} />แสดง Bubble</label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: '#52677d' }}><input type="checkbox" checked={data.auto_tag !== false} onChange={event => onModifyGrid(grdObj.id, { auto_tag: event.target.checked })} />รันป้ายอัตโนมัติ</label>
-              {data.auto_tag === false && <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ป้ายกำกับ
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#52677d' }}><input type="checkbox" checked={data.bubble_visible !== false} onChange={event => onModifyGrid(grdObj.id, { bubble_visible: event.target.checked })} />แสดง Bubble</label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#52677d' }}><input type="checkbox" checked={data.auto_tag !== false} onChange={event => onModifyGrid(grdObj.id, { auto_tag: event.target.checked })} />รันป้ายอัตโนมัติ</label>
+              {data.auto_tag === false && <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ป้ายกำกับ
                 <input aria-label="ป้ายกำกับกริด" defaultValue={data.tag} onBlur={event => { if (event.target.value.trim()) onUpdateGridTag(grdObj.id, event.target.value) }} style={verticalSelectStyle} />
               </label>}
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>รูปแบบเลข/ตัวอักษร
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>รูปแบบเลข/ตัวอักษร
                 <select aria-label="รูปแบบลำดับป้ายกริด" value={data.sequence_style ?? 'auto'} onChange={event => onModifyGrid(grdObj.id, { sequence_style: event.target.value as 'auto' | 'alpha' | 'numeric' })} style={verticalSelectStyle}>
                   <option value="auto">อัตโนมัติ (ตั้ง A / นอน 1)</option><option value="alpha">ตัวอักษร A, B, C</option><option value="numeric">ตัวเลข 1, 2, 3</option>
                 </select>
@@ -1067,9 +1067,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           const currentOffset = resolvedElevation !== undefined && level ? resolvedElevation - level.elevation_mm : Number(slabData.elevation_offset_mm ?? 0)
           const thickness = Number(slabData.thickness_mm ?? 120)
           return (
-            <section style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid #dbe3ed', borderRadius: 8, background: '#f8fafc' }}>
+            <section style={{ display: 'grid', gap: 6, padding: 7, border: '1px solid #dbe3ed', borderRadius: 4, background: '#f8fafc' }}>
               <strong style={{ fontSize: 12 }}>แผ่นพื้นโครงสร้าง {String(slabData.mark ?? '')}</strong>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>
                 อ้างอิงระดับชั้น
                 <select
                   aria-label="ระดับอ้างอิงพื้นโครงสร้าง"
@@ -1084,7 +1084,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   ))}
                 </select>
               </label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>
                 เยื้องจากระดับชั้น (Offset) ({displayUnit})
                 <LengthInput
                   aria-label={`ระยะเยื้องพื้นโครงสร้าง (${displayUnit})`}
@@ -1094,7 +1094,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   style={verticalSelectStyle}
                 />
               </label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>
                 ความหนาพื้น ({displayUnit})
                 <LengthInput
                   aria-label={`ความหนาพื้นโครงสร้าง (${displayUnit})`}
@@ -1122,38 +1122,38 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const offset = resolvedElevation !== undefined && level ? resolvedElevation - level.elevation_mm : Number(data.elevation_offset_mm ?? 0)
         const layers = Array.isArray(data.finish_layers) ? data.finish_layers as Array<{ material?: string; thickness_mm?: number; mark?: string; quantity_unit?: 'm2' | 'm3' }> : []
         const update = (changes: Parameters<NonNullable<typeof onUpdateArchitectureSurface>>[1]) => onUpdateArchitectureSurface?.(architectureSurfaceObj.id, changes)
-        return <section style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid #dbe3ed', borderRadius: 8 }}>
+        return <section style={{ display: 'grid', gap: 6, padding: 7, border: '1px solid #dbe3ed', borderRadius: 4 }}>
           <strong style={{ fontSize: 12 }}>{isFloor ? 'พื้นสถาปัตย์' : 'ฝ้าเพดาน'} {String(data.mark ?? '')}</strong>
           <button type="button" onClick={onOpenTypeManager} style={verticalSelectStyle}>{data.type_id ? 'เลือก / แก้ไขชนิดในคลัง' : 'เลือกชนิดจากคลัง'}</button>
           <button type="button" onClick={() => onDrawSurfaceVoid(architectureSurfaceObj.id)} style={verticalSelectStyle}>{isFloor ? 'วาดช่องเจาะพื้นสถาปัตย์' : 'วาดช่องเจาะฝ้า'}</button>
-          <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>อ้างอิงระดับชั้น
+          <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>อ้างอิงระดับชั้น
             <select aria-label="ระดับอ้างอิงพื้นหรือฝ้า" value={levelId} disabled={!onUpdateArchitectureSurface || (data.follows_room_boundary === true && typeof data.room_id === 'string')} onChange={event => update({ level_id: event.target.value })} style={verticalSelectStyle}>
               {project.levels.map(item => <option key={item.id} value={item.id}>{item.name} · {(item.elevation_mm / 1000).toFixed(3)} m</option>)}
             </select>
             {data.follows_room_boundary === true && typeof data.room_id === 'string' && <small>ระดับตามห้องที่ผูกอยู่</small>}
           </label>
-          <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>เยื้องจากระดับชั้น ({displayUnit})
+          <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>เยื้องจากระดับชั้น ({displayUnit})
             <LengthInput aria-label={`ระยะเยื้องพื้นหรือฝ้า (${displayUnit})`} value={offset} unit={displayUnit} onChange={value => update({ elevation_offset_mm: value })} style={verticalSelectStyle} />
           </label>
-          <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ความหนา ({displayUnit})
+          <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ความหนา ({displayUnit})
             <LengthInput aria-label={`ความหนาพื้นหรือฝ้า (${displayUnit})`} value={Number(data.thickness_mm ?? 0)} unit={displayUnit} onChange={value => update({ thickness_mm: value })} style={verticalSelectStyle} />
           </label>
           {!isFloor && <>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>วัสดุฝ้า
+            <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>วัสดุฝ้า
               <input aria-label="วัสดุฝ้า" defaultValue={String(data.material ?? '')} key={`${architectureSurfaceObj.id}:${String(data.material ?? '')}`} onBlur={event => { const value = event.currentTarget.value.trim(); if (value) update({ material: value }) }} style={verticalSelectStyle} />
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>กริด X ({displayUnit})
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>กริด X ({displayUnit})
                 <LengthInput aria-label={`ระยะกริดฝ้า X (${displayUnit})`} value={Number((data.grid_mm as number[] | undefined)?.[0] ?? 600)} unit={displayUnit} onChange={value => update({ grid_mm: [value, Number((data.grid_mm as number[] | undefined)?.[1] ?? 600)] })} style={verticalSelectStyle} />
               </label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>กริด Y ({displayUnit})
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>กริด Y ({displayUnit})
                 <LengthInput aria-label={`ระยะกริดฝ้า Y (${displayUnit})`} value={Number((data.grid_mm as number[] | undefined)?.[1] ?? 600)} unit={displayUnit} onChange={value => update({ grid_mm: [Number((data.grid_mm as number[] | undefined)?.[0] ?? 600), value] })} style={verticalSelectStyle} />
               </label>
             </div>
           </>}
           {isFloor && <>
             <strong style={{ fontSize: 11, marginTop: 3 }}>ชั้นวัสดุปูพื้น</strong>
-            {layers.map((layer, index) => <div key={`${architectureSurfaceObj.id}:layer:${index}`} style={{ display: 'grid', gridTemplateColumns: '1fr 0.65fr 0.55fr auto', gap: 5, alignItems: 'center' }}>
+            {layers.map((layer, index) => <div key={`${architectureSurfaceObj.id}:layer:${index}`} style={{ display: 'grid', gridTemplateColumns: '1fr 0.65fr 0.55fr auto', gap: 4, alignItems: 'center' }}>
               <input aria-label={`วัสดุชั้นพื้น ${index + 1}`} defaultValue={String(layer.material ?? '')} key={`${architectureSurfaceObj.id}:layer-material:${index}:${String(layer.material ?? '')}`} onBlur={event => {
                 const finish_layers = layers.map((current, i) => i === index ? { ...current, material: event.currentTarget.value.trim() || 'unspecified' } : current)
                 update({ finish_layers: finish_layers.map(current => ({ material: String(current.material ?? 'unspecified'), thickness_mm: Number(current.thickness_mm ?? 0), ...(current.mark ? { mark: current.mark } : {}), ...(current.quantity_unit ? { quantity_unit: current.quantity_unit } : {}) })) })
@@ -1166,25 +1166,25 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 const finish_layers = layers.map((current, i) => i === index ? { ...current, quantity_unit: event.target.value as 'm2' | 'm3' } : current)
                 update({ finish_layers: finish_layers.map(current => ({ material: String(current.material ?? 'unspecified'), thickness_mm: Number(current.thickness_mm ?? 0), ...(current.mark ? { mark: current.mark } : {}), ...(current.quantity_unit ? { quantity_unit: current.quantity_unit } : {}) })) })
               }} style={verticalSelectStyle}><option value="m2">ตร.ม.</option><option value="m3">ลบ.ม.</option></select>
-              <button type="button" aria-label={`ลบชั้นพื้น ${index + 1}`} onClick={() => update({ finish_layers: layers.filter((_, i) => i !== index).map(current => ({ material: String(current.material ?? 'unspecified'), thickness_mm: Number(current.thickness_mm ?? 0), ...(current.mark ? { mark: current.mark } : {}), ...(current.quantity_unit ? { quantity_unit: current.quantity_unit } : {}) })) })} style={{ ...verticalSelectStyle, color: '#b91c1c', padding: 6 }}>×</button>
+              <button type="button" aria-label={`ลบชั้นพื้น ${index + 1}`} onClick={() => update({ finish_layers: layers.filter((_, i) => i !== index).map(current => ({ material: String(current.material ?? 'unspecified'), thickness_mm: Number(current.thickness_mm ?? 0), ...(current.mark ? { mark: current.mark } : {}), ...(current.quantity_unit ? { quantity_unit: current.quantity_unit } : {}) })) })} style={{ ...verticalSelectStyle, color: '#b91c1c', padding: 4 }}>×</button>
             </div>)}
             <button type="button" onClick={() => update({ finish_layers: [...layers, { material: 'tile', thickness_mm: 10, mark: `ชั้น ${layers.length + 1}`, quantity_unit: 'm2' as const }].map(layer => ({ material: String(layer.material ?? 'unspecified'), thickness_mm: Number(layer.thickness_mm ?? 0), ...(layer.mark ? { mark: layer.mark } : {}), ...(layer.quantity_unit === 'm2' || layer.quantity_unit === 'm3' ? { quantity_unit: layer.quantity_unit } : {}) })) })} style={verticalSelectStyle}>+ เพิ่มชั้นวัสดุ</button>
             <strong style={{ fontSize: 11, marginTop: 3 }}>แนวลายปูวัสดุ</strong>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ขนาด X ({displayUnit})
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ขนาด X ({displayUnit})
                 <LengthInput aria-label={`ขนาดลายพื้น X (${displayUnit})`} value={Number((data.finish_pattern_mm as number[] | undefined)?.[0] ?? 600)} unit={displayUnit} onChange={value => update({ finish_pattern_mm: [value, Number((data.finish_pattern_mm as number[] | undefined)?.[1] ?? 600)] })} style={verticalSelectStyle} />
               </label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ขนาด Y ({displayUnit})
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ขนาด Y ({displayUnit})
                 <LengthInput aria-label={`ขนาดลายพื้น Y (${displayUnit})`} value={Number((data.finish_pattern_mm as number[] | undefined)?.[1] ?? 600)} unit={displayUnit} onChange={value => update({ finish_pattern_mm: [Number((data.finish_pattern_mm as number[] | undefined)?.[0] ?? 600), value] })} style={verticalSelectStyle} />
               </label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>จุดเริ่ม X ({displayUnit})
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>จุดเริ่ม X ({displayUnit})
                 <LengthInput aria-label={`จุดเริ่มลายพื้น X (${displayUnit})`} value={Number((data.finish_pattern_origin_mm as number[] | undefined)?.[0] ?? 0)} unit={displayUnit} onChange={value => update({ finish_pattern_origin_mm: [value, Number((data.finish_pattern_origin_mm as number[] | undefined)?.[1] ?? 0)] })} style={verticalSelectStyle} />
               </label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>จุดเริ่ม Y ({displayUnit})
+              <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>จุดเริ่ม Y ({displayUnit})
                 <LengthInput aria-label={`จุดเริ่มลายพื้น Y (${displayUnit})`} value={Number((data.finish_pattern_origin_mm as number[] | undefined)?.[1] ?? 0)} unit={displayUnit} onChange={value => update({ finish_pattern_origin_mm: [Number((data.finish_pattern_origin_mm as number[] | undefined)?.[0] ?? 0), value] })} style={verticalSelectStyle} />
               </label>
             </div>
-            <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>หมุนแนวลาย (องศา)
+            <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>หมุนแนวลาย (องศา)
               <input aria-label="หมุนแนวลายพื้น องศา" type="number" step="1" value={Number(data.finish_pattern_rotation_deg ?? 0)} onChange={event => update({ finish_pattern_rotation_deg: Number(event.target.value) })} style={verticalSelectStyle} />
             </label>
           </>}
@@ -1196,10 +1196,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const roomVent = ventSummary.rooms[0]
 
         return (
-          <section style={{ display: 'grid', gap: 10, padding: 10, border: '1px solid #dbe3ed', borderRadius: 8, background: '#fafcff' }}>
+          <section style={{ display: 'grid', gap: 7, padding: 7, border: '1px solid #dbe3ed', borderRadius: 4, background: '#fafcff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <strong style={{ fontSize: 13, color: '#0f172a' }}>ห้อง {String((roomObj.module_data as Record<string,unknown>).number ?? '')} · {String((roomObj.module_data as Record<string,unknown>).name ?? '')}</strong>
-              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: roomVent?.overall_status === 'pass' ? '#dcfce7' : '#fee2e2', color: roomVent?.overall_status === 'pass' ? '#15803d' : '#b91c1c', fontWeight: 600 }}>
+              <span style={{ fontSize: 10, padding: '2px 4px', borderRadius: 2, background: roomVent?.overall_status === 'pass' ? '#dcfce7' : '#fee2e2', color: roomVent?.overall_status === 'pass' ? '#15803d' : '#b91c1c', fontWeight: 600 }}>
                 {roomVent?.overall_status === 'pass' ? 'ผ่านเกณฑ์ ✅' : 'ไม่ผ่านเกณฑ์ ⚠️'}
               </span>
             </div>
@@ -1210,25 +1210,25 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
             {/* Thai Building Code MR55 Natural Light & Ventilation Gauge */}
             {roomVent && (
-              <div style={{ display: 'grid', gap: 8, background: '#ffffff', padding: 8, borderRadius: 6, border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'grid', gap: 6, background: '#ffffff', padding: 6, borderRadius: 3, border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>
                   การระบายอากาศและแสงสว่าง (กฎกระทรวง ฉบับที่ 55)
                 </div>
 
                 {/* Daylighting */}
-                <div style={{ display: 'grid', gap: 3 }}>
+                <div style={{ display: 'grid', gap: 2 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
                     <span style={{ color: '#475569' }}>☀️ แสงสว่างธรรมชาติ:</span>
                     <strong style={{ color: roomVent.daylight_status === 'pass' ? '#15803d' : '#b91c1c' }}>
                       {roomVent.total_daylight_area_sq_m.toFixed(2)} ตร.ม. ({roomVent.daylight_ratio_percent.toFixed(1)}%)
                     </strong>
                   </div>
-                  <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: 6, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
                     <div style={{
                       width: `${Math.min(100, (roomVent.daylight_ratio_percent / 10) * 100)}%`,
                       height: '100%',
                       background: roomVent.daylight_status === 'pass' ? '#22c55e' : '#f59e0b',
-                      borderRadius: 3,
+                      borderRadius: 2,
                     }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b' }}>
@@ -1238,19 +1238,19 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 </div>
 
                 {/* Ventilation */}
-                <div style={{ display: 'grid', gap: 3 }}>
+                <div style={{ display: 'grid', gap: 2 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
                     <span style={{ color: '#475569' }}>💨 ระบายอากาศธรรมชาติ:</span>
                     <strong style={{ color: roomVent.ventilation_status === 'pass' ? '#15803d' : '#b91c1c' }}>
                       {roomVent.total_ventilation_area_sq_m.toFixed(2)} ตร.ม. ({roomVent.ventilation_ratio_percent.toFixed(1)}%)
                     </strong>
                   </div>
-                  <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: 6, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
                     <div style={{
                       width: `${Math.min(100, roomVent.room_type === 'bathroom' ? (roomVent.total_ventilation_area_sq_m / 0.2) * 100 : (roomVent.ventilation_ratio_percent / 10) * 100)}%`,
                       height: '100%',
                       background: roomVent.ventilation_status === 'pass' ? '#22c55e' : '#f59e0b',
-                      borderRadius: 3,
+                      borderRadius: 2,
                     }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b' }}>
@@ -1289,10 +1289,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       })()}
 
       {/* Level and Phase */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
         <div>
           <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ระดับฐาน</label>
-          <div style={{ background: '#f5f8fc', padding: '5px 8px', borderRadius: 4, fontSize: 12, marginTop: 4 }}>
+          <div style={{ background: '#f5f8fc', padding: '4px 6px', borderRadius: 2, fontSize: 12, marginTop: 4 }}>
             {selectedObj.level_refs?.[0]?.level_id || 'Ground Floor'}
           </div>
         </div>
@@ -1311,8 +1311,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   : '#0369a1',
               color: selectedObj.created_phase === 'existing' ? '#24394d' : '#ffffff',
               border: '1px solid #53657b',
-              borderRadius: 4,
-              padding: '5px 8px',
+              borderRadius: 2,
+              padding: '4px 6px',
               fontSize: 11,
               fontWeight: 600,
               marginTop: 4,
@@ -1336,8 +1336,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             background: selectedObj.removed_phase === 'demolition' ? '#991b1b' : '#f5f8fc',
             color: selectedObj.removed_phase === 'demolition' ? '#ffffff' : '#24394d',
             border: '1px solid #53657b',
-            borderRadius: 4,
-            padding: '5px 8px',
+            borderRadius: 2,
+            padding: '4px 6px',
             fontSize: 11,
             marginTop: 4,
             cursor: 'pointer',
@@ -1355,8 +1355,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           {hostedFoundation ? (
             <div style={{
               background: '#f5f8fc',
-              padding: '8px 10px',
-              borderRadius: 6,
+              padding: '6px 7px',
+              borderRadius: 3,
               border: '1px solid #dce4ed',
               marginTop: 6,
               fontSize: 12,
@@ -1374,12 +1374,12 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
+                gap: 4,
                 background: '#eef3f8',
                 color: '#0873c4',
                 border: '1px solid #0284c7',
-                padding: '6px 12px',
-                borderRadius: 6,
+                padding: '4px 8px',
+                borderRadius: 3,
                 cursor: 'pointer',
                 fontSize: 12,
                 fontWeight: 600,
@@ -1404,12 +1404,12 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 4,
             background: 'rgba(239, 68, 68, 0.1)',
             color: '#ef4444',
             border: '1px solid rgba(239, 68, 68, 0.3)',
-            padding: '6px 12px',
-            borderRadius: 6,
+            padding: '4px 8px',
+            borderRadius: 3,
             cursor: 'pointer',
             fontSize: 12,
             fontWeight: 600,

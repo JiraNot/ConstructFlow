@@ -44,5 +44,5 @@ for (const directory of [
   "packages/bim-adapter",
 ])
   run(directory, ["test"]);
-for (const verifier of ["verify:kitchen", "verify:file-io", "verify:phases"])
+for (const verifier of ["verify:kitchen", "verify:file-io", "verify:phases", "verify:coordination"])
   run(".", ["run", verifier]);
