@@ -163,6 +163,27 @@ When a user or agent modifies a Type Catalog entry (e.g. changing beam `B1` dept
 
 ---
 
+### 4.2 Revit-Style BIM Elevation Selection Feedback & Vertical Datums (ระบบฟีดแบ็กรูปด้านและระดับอ้างอิง)
+
+ในมุมมองรูปด้าน (North, South, East, West Elevations) และการจัดการระดับของโมเดล ConstructFlow อิงมาตรฐานการจัดระดับและการแสดงผลสไตล์ Autodesk Revit และ AutoCAD:
+
+1. **Revit-Style Elevation Selection Bounding Box & Wash:**
+   * เมื่อคลิกเลือกวัตถุในรูปด้าน ระบบจะวาดเส้นขอบไฮไลต์สีฟ้า Revit (`#0284c7`, เส้นหนา 2px) พร้อมเงาสีฟ้าโปร่งแสง (`rgba(2, 132, 199, 0.09)`) ครอบคลุมรอบขอบเขตของวัตถุที่กำลังเลือก
+2. **8 CAD / Revit Grip Handles:**
+   * แสดงจุด Grip Handle สี่เหลี่ยม 8 จุดรอบวัตถุ (4 มุมขอบ + 4 กึ่งกลางขอบ) สีขาวตัดขอบสีฟ้า (`#0284c7`) ขนาด $7\times 7$ px อำนวยความสะดวกในการตรวจสอบตำแหน่งและรูปทรง
+3. **Temporary Elevation & Height Badges (ป้ายบอกระดับและความสูงชั่วคราว):**
+   * แสดงป้ายพื้นหลังสีดำทึบโปร่งแสง (`rgba(15, 23, 42, 0.88)`) ขอบสีฟ้า พร้อมข้อความตัวเลขอัตโนมัติ:
+     * **ระดับหลังวัตถุ (Top):** `▲ +X.XXX m` (เช่น `▲ +3.300 m`)
+     * **ระดับท้องวัตถุ (Base):** `▼ +Y.YYY m` (เช่น `▼ +0.400 m`)
+     * **ความสูงมิติวัตถุ (Height):** `H Z.ZZZ m` (เช่น `H 2.900 m`)
+   * รองรับทุกหมวดวัตถุ: ผนัง (Wall), เสา (Column), คาน (Beam), พื้นโครงสร้าง (Slab), ประตู (Door), หน้าต่าง (Window) และหลังคา (Roof)
+4. **Revit-Style Vertical Offset & Justification Standard:**
+   * **คาน (Beams):** ยึดระดับอ้างอิงจากด้านบน (Top Justification): $\text{Top} = \text{Level} + \text{Offset}$, $\text{Bottom} = \text{Top} - \text{Depth}$ เพื่อให้ท้องคานห้อยลงใต้ระดับพื้นชั้นนั้นอย่างถูกต้อง
+   * **พื้นโครงสร้าง (Slabs):** กำหนดระดับอ้างอิง `level_id`, ระยะเยื้อง `elevation_offset_mm` (รองรับค่าลบ เช่น `-0.120 m` สำหรับพื้นลดระดับห้องน้ำ/ระเบียง หรือลดระดับรองรับคอนกรีตทับหน้า Topping บนแผ่นพื้นสำเร็จรูป), ความหนา `thickness_mm`, พร้อมป้ายแสดงระดับหลังพื้นและท้องพื้น Real-time
+   * **ช่องเปิด (Doors & Windows):** รองรับทั้ง `fixed_height` (กำหนดความสูงเอง) และ `head_level` (ระดับหัวบานจบที่ระดับชั้นที่เลือก + Head Offset) โดยสามารถสลับกลับมาเป็น Fixed Height เพื่อแก้ความสูงเองได้อย่างสมบูรณ์
+
+---
+
 ## 5. Scope of Work across the 6 Engineering Domains
 
 ### Domain 1: Land Deed, Site Survey & Thai Legal Compliance
@@ -186,9 +207,9 @@ When a user or agent modifies a Type Catalog entry (e.g. changing beam `B1` dept
   * ฐานรากแผ่ (Isolated Spread Footing), ฐานรากเสาเข็มไมโครไพล์เจาะกด (Micro-pile $I-18, I-22$, Spun Micro-pile $\varnothing 20, \varnothing 25$), ฐานรากเสาเข็มเจาะ (Bored Pile).
   * Footing Reinforcement Detailing Template (`ConfigureFoundationReinforcement`): ตะแกรงเหล็กเสริมฐานราก 2 ทิศทาง (Bottom Mat X/Y เช่น DB12@0.15m, DB16@0.15m), เหล็กหนวดกุ้งเดือยเสา (Starter Dowels).
 * **Superstructure (Reinforced Concrete & Steel):**
-  * เสา (RC Columns), คาน (RC Beams), คานลดระดับ (Drop Beams) สำหรับห้องน้ำและระเบียงซักล้าง (Drop 50–100 mm).
+  * เสา (RC Columns), คาน (RC Beams), คานลดระดับ (Drop Beams) สำหรับห้องน้ำและระเบียงซักล้าง (Drop 50–100 mm). การจัดระดับคานใช้ Top Level Datum (`top = level + offset`, `bottom = top - depth`) สไตล์ Revit เพื่อให้ท้องคานห้อยลงใต้ระดับพื้นชั้นนั้นอย่างถูกต้อง.
   * Column Reinforcement Detailing Template (`ConfigureColumnReinforcement`): เหล็กยืนแกนหลัก (Main Bars เช่น 4-DB16, 6-DB20), เหล็กปลอกรัด (Ties / Stirrups RB6, RB9) พร้อมการแบ่งโซนระยะเรียงช่วงปลายหนาแน่น @0.10 ม. และช่วงกลาง @0.15–@0.20 ม.
-  * พื้นโครงสร้าง: พื้นหล่อในที่ (Slab on Beam), พื้นคอนกรีตสำเร็จรูปท้องเรียบ (Precast Solid Plank / Hollow Core) พร้อมคอนกรีตทับหน้า (Topping 50 mm + Wire Mesh $\varnothing 4$ @0.20 ม.), พื้นวางบนดิน (Slab on Ground พร้อมแผ่นพลาสติกกันชื้น PE sheet).
+  * พื้นโครงสร้าง (Structural Slabs): พื้นหล่อในที่ (Slab on Beam), พื้นคอนกรีตสำเร็จรูปท้องเรียบ (Precast Solid Plank / Hollow Core) พร้อมคอนกรีตทับหน้า (Topping 50 mm + Wire Mesh $\varnothing 4$ @0.20 ม.), พื้นวางบนดิน (Slab on Ground พร้อมแผ่นพลาสติกกันชื้น PE sheet). รองรับการจัดระดับสไตล์ Revit: กำหนดระดับอ้างอิง `level_id`, ระยะเยื้อง `elevation_offset_mm` (รองรับค่าบวก/ลบ เช่น -0.120 ม. สำหรับพื้นลดระดับห้องน้ำ/ระเบียง หรือลดระดับสำหรับปูแผ่นพื้นสำเร็จรูป), ความหนา `thickness_mm`, พร้อมป้ายแสดงระดับหลังพื้นและท้องพื้น Real-time บน PropertiesPanel.
   * โครงสร้างเหล็กรูปพรรณ (Structural Steel): Thai TIS standard H-Beam, I-Beam, C-Channel (แปเหล็ก), แผ่นเหล็ก Base plate ยึด Chemical Anchor เข้ากับเสา/คานเดิม.
 * **Rebar Detailing & Bar Bending Schedules (BBS):**
   * เหล็กยืน (Main Longitudinal Bars): DB12, DB16, DB20, DB25 (SD40 / SD50).
@@ -204,6 +225,8 @@ When a user or agent modifies a Type Catalog entry (e.g. changing beam `B1` dept
   * ระบบตัดมุมเฉียงเข้ามุมอัตโนมัติ (Automated $45^\circ$ Compound Mitering) วิ่งต่อเนื่องรอบห้องและรอบขอบเสา.
 * **Parametric Portals & Decorative Openings:**
   * บานประตูซุ้มโค้ง (Roman Arch, Segmental Arch, Fillet Corners), ช่องแสงกระจกทึบ/โปร่ง (Transoms & Sidelights), หน้าต่างบานเล่อน, บานเปิด, บานกระทุ้ง, บานเกล็ด.
+  * **สัญลักษณ์แปลน 2D สไตล์ AutoCAD/Revit คลีนเวกเตอร์:** เส้นกรอบวงกบอะลูมิเนียมแสดงรูปตัดขอบบาน (Jamb Profiles), เส้นระนาบกระจกกลางบาน (Centerline Glazing), เส้นลูกศรทิศทางเลื่อน (Slide Direction Arrows) อยู่นอกกรอบบานอย่างถูกต้อง, วงกบประตูไม่อยู่สลับด้านกับบานเปิด, และสัญลักษณ์บานกระทุ้งถูกต้องตามมาตรฐานสากล.
+  * **ระบบจำกัดความสูงหัวบาน (Vertical Head Level Constraint & Fixed Height Revert):** เลือกระดับหัวบานให้อ้างอิงตามระดับชั้นอาคาร (เช่น `Roof Level` + offset) หรือสลับกลับมาเป็น `กำหนดความสูงเอง (Fixed Height)` ได้อย่างอิสระโดยลบ `head_level_id` ออกอย่างสมบูรณ์ และเปิดช่องความสูง `<LengthInput>` ให้แก้ไขขนาดได้ทันที.
   * ควบคุม 4-Quadrant Swing Handing (`left_in`, `left_out`, `right_in`, `right_out`) พร้อมหักช่องเปิดบนผนังแบบ Dynamic Cutout.
   * **Opening RC Stiffener & Lintel Takeoff (เสาเอ็น-ทับหลัง-เอ็นธรณี คสล.):** คำนวณปริมาณงาน คสล. อัตโนมัติจากขนาดช่องเปิดและผนังโฮสต์: เสาเอ็น 2 ข้าง + ทับหลังบน (ระยะฝากข้างละ 20 ซม.) + เอ็นธรณีใต้หน้าต่าง ($L_{\text{total}} = 2H + (W + 0.40) + (\text{isWindow} ? W + 0.40 : 0)$) บันทึก 4 รายการมาตรฐานลง BOQ หมวดสถาปัตย์ (คอนกรีต 240 ksc, ไม้แบบหล่อ 2 ด้าน, เหล็กเสริมแกน 2-RB9, เหล็กปลอก RB6 @ 0.20 ม.).
 * **Decorative Wall Cladding & Wainscoting:**

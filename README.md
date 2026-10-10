@@ -91,7 +91,7 @@ temporary disk file and checks UUID preservation, as well as write/close orderin
 abort behavior. `verify:kitchen-file` validates an actual saved Kitchen Proof file through the
 same takeoff and drawing engines. Browser-native picker reopen still needs browser-level acceptance.
 
-Run the standalone regression suite (76 unit tests across 11 packages + 3 end-to-end verifiers) and Plan Editor production build:
+Run the standalone regression suite (80 unit tests across monorepo packages + 3 end-to-end verifiers) and Plan Editor production build:
 
 ```bash
 node scripts/test_standalone.mjs --install
@@ -100,8 +100,9 @@ node scripts/test_standalone.mjs --install
 The implementation has achieved major milestones across the **Plan-Driven Modeling Engine**, **Permit Sheet Engine**, and **Downstream Adapters**:
 
 1. **2D Plan Editor & Parametric Modeling:**
-   * **Structure & Detailing:** Grids, Columns (C1/C2) with intersection snapping, hosted Footings/Piles (F1/F2), Beams (B1/B2/RB1) with live span calculation, Footing & Column rebar detailing templates (`ConfigureColumnReinforcement`, `ConfigureFoundationReinforcement`), and Beam Bending Schedules (BBS).
-   * **Architecture & Openings:** Smart Walls with thickness/material options, hosted Doors (D1-D3) with 4-quadrant swing flipping, Windows (W1-W3) with dynamic real-time 2D wall cutouts, and interactive Stair Tool (`T` shortcut) with live walkline arrows and diagonal cut lines.
+   * **Structure & Detailing:** Grids, Columns (C1/C2) with intersection snapping, hosted Footings/Piles (F1/F2), Beams (B1/B2/RB1) with live span calculation, Footing & Column rebar detailing templates (`ConfigureColumnReinforcement`, `ConfigureFoundationReinforcement`), Beam Bending Schedules (BBS), and Structural Slabs with Revit-style Level references and signed vertical offset controls (`elevation_offset_mm`).
+   * **Architecture & Openings:** Smart Walls with thickness/material options, hosted Doors (D1-D3) with 4-quadrant swing flipping, Windows (W1-W3) with clean AutoCAD/Revit vector symbols and exterior slide indicators, flexible vertical head constraints (`head_level` vs `fixed_height`), and interactive Stair Tool (`T` shortcut) with live walkline arrows and diagonal cut lines.
+   * **Revit-Style BIM Elevation Views:** 4-direction orthographic facades with selection bounding box, 8 CAD/Revit grip handles, and temporary elevation & height badges (`▲ Top`, `▼ Base`, `H Height`).
    * **Roofs & Ceilings:** Convex footprint roofs with slope definitions and void editing, plus Reflected Ceiling Plan (RCP 600×600) grid styling.
 2. **MEP Engineering & Design Calculations:**
    * **Sanitary & Drainage:** Gravity auto-slope solver (`solveGravityInverts`) with 1:100 cascading Invert Levels (IL) to manholes, and septic tank PE capacity verification.
