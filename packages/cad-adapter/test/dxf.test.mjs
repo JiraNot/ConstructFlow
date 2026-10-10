@@ -617,4 +617,11 @@ test("DXF exports hosted openings, both wall finish marks, and floor cutout ring
   const a02ViewLines = records.filter(record => record.type === "LWPOLYLINE" && record.fields.get("410")?.includes("A-02_Ground_Plan") && record.fields.get("8")?.includes("A-VIEW"));
   assert.ok(a02ViewLines.length >= tileLineCount, `DXF A-02 PaperSpace should contain the ${tileLineCount} compiled tile paths (found ${a02ViewLines.length} view lines)`);
   assert.ok(dxf.includes("\\U+0E2B") && dxf.includes("12.00 m2"), "Thai room annotation uses DXF Unicode escapes and keeps its area");
+
+  const insertRecords = records.filter(record => record.type === "INSERT");
+  assert.ok(insertRecords.some(record => record.fields.get("2")?.some(name => name.startsWith("CF_DOOR_D1"))), "DXF exports door as genuine AutoCAD Block Reference (INSERT)");
+  assert.ok(insertRecords.some(record => record.fields.get("2")?.some(name => name.startsWith("CF_WIN_W1"))), "DXF exports window as genuine AutoCAD Block Reference (INSERT)");
+  const blockDefs = records.filter(record => record.type === "BLOCK");
+  assert.ok(blockDefs.some(record => record.fields.get("2")?.some(name => name.startsWith("CF_DOOR_D1"))), "DXF defines reusable CAD Block for door D1");
+  assert.ok(blockDefs.some(record => record.fields.get("2")?.some(name => name.startsWith("CF_WIN_W1"))), "DXF defines reusable CAD Block for window W1");
 });

@@ -12,9 +12,11 @@
   "dependencies": {
     "@constructflow/project-model": "file:../project-model",
     "@constructflow/geometry-kernel": "file:../geometry-kernel",
-    "@constructflow/domain-providers": "file:../domain-providers"
+    "@constructflow/domain-providers": "file:../domain-providers",
+    "@constructflow/constraint-engine": "file:../constraint-engine"
   },
   "devDependencies": {
     "typescript": "^5.7.3"
   }
 }
+

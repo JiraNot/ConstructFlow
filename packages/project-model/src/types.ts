@@ -487,3 +487,13 @@ export interface RailingModuleData extends CatalogPlacement {
   baluster_spacing_mm: number
   material: string
 }
+
+export interface ConstraintData {
+  id: string;
+  kind: 'lock' | 'parallel' | 'perpendicular' | 'equal_distance' | 'offset' | 'coincident';
+  entities: Array<{
+    id: string;
+    property: string;
+  }>;
+  value?: number;
+}

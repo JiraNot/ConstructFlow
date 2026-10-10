@@ -19,7 +19,7 @@ import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
 import { resolveArchitecturalFloorPatternKind } from '@constructflow/architecture-engine'
 import { SnapResult } from '@constructflow/snapping-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
-import { clippedGridSegments, clippedStaggeredPlankSegments, polygonDiagonalHatchSegments, polygonInteriorPoint, wallMasonryHatchSegments } from '@constructflow/geometry-kernel'
+import { clippedGridSegments, clippedStaggeredPlankSegments, polygonDiagonalHatchSegments, polygonInteriorPoint, wallMasonryHatchSegments , clippedCarpetSegments, clippedTerrazzoSegments} from "@constructflow/geometry-kernel"
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
 import { resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '@constructflow/representation-engine'
 import { beginPlanLabels, queuePlanLabel, flushPlanLabels, planLabelScale } from './planLabels.js'
@@ -124,9 +124,11 @@ export function renderPlanView(
           const origin: [number, number] = Array.isArray(data.finish_pattern_origin_mm) ? data.finish_pattern_origin_mm as [number, number] : [0, 0]
           const rotation = Number(data.finish_pattern_rotation_deg ?? 0)
           ctx.beginPath(); ctx.strokeStyle = isSelected(obj.id) ? 'rgba(5,150,105,.72)' : phase==='demolition'?'#ef4444':'#cbd5e1'; ctx.lineWidth = .7;ctx.setLineDash(phaseStyle.dash)
-          const pattern = patternKind === 'staggered_plank'
-            ? clippedStaggeredPlankSegments(ring, spacing[0], spacing[1], voids, origin, rotation)
-            : clippedGridSegments(ring, spacing[0], spacing[1], voids, origin, rotation)
+          const pattern = patternKind === 'staggered_plank' || patternKind === 'concrete_block'
+              ? clippedStaggeredPlankSegments(ring, spacing[0], spacing[1], voids, origin, rotation)
+              : patternKind === 'carpet' ? clippedCarpetSegments(ring, spacing[0], voids)
+              : patternKind === 'terrazzo' ? clippedTerrazzoSegments(ring, spacing[0], voids)
+              : clippedGridSegments(ring, spacing[0], spacing[1], voids, origin, rotation)
           for (const [a, b] of pattern) {
             const [ax, ay] = worldToScreen(a, viewport), [bx, by] = worldToScreen(b, viewport)
             ctx.moveTo(ax, ay); ctx.lineTo(bx, by)

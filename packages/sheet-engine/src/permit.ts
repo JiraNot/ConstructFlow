@@ -24,6 +24,8 @@ import {
   polygonDiagonalHatchSegments,
   polygonSectionIntervals,
   wallMasonryHatchSegments,
+  clippedCarpetSegments,
+  clippedTerrazzoSegments
 } from "@constructflow/geometry-kernel";
 import { polygonInteriorPoint } from "@constructflow/geometry-kernel";
 import { calculateBBS } from "@constructflow/structure-engine";

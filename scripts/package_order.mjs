@@ -11,6 +11,7 @@ export const packageDirectories = [
   "geometry-kernel",
   "snapping-engine",
   "command-schema",
+  "constraint-engine",
   "module-sdk",
   "structure-engine",
   "architecture-engine",

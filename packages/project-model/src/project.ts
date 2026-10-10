@@ -104,6 +104,7 @@ export interface ProjectDocument {
   types: TypeDefinition[]
   objects: Record<string, SmartObject> // Keyed by immutable UUID
   relationships: Relationship[]
+  constraints?: import('./types.js').ConstraintData[]
   drawing_settings?: DrawingSettings
   legal_metadata?: ProjectLegalMetadata
   /** Embedded reference drawings, keyed by view and level so they travel with .cfproj. */

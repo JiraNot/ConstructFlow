@@ -81,7 +81,7 @@ Deliverables:
 
 A-02/A-03 regressions now cover ground and upper-storey architectural floor patterns. Saved upper-level A-10 output identifies the selected level, and DXF vectors are regression-compared against the same void-clipped RCP geometry. An A3 raster of the upper-level RCP confirms the level title and ceiling opening/grid appearance; native multi-storey CAD plotting and level-constraint parity with structural slabs remain open.
 
-Core boundary commands, level-relative elevations, room-linked boundaries, void data and an RCP representation exist. New/updated architectural floors and ceilings resolve from their selected level plus a signed offset; legacy objects without an explicit reference retain their stored absolute elevation. The Inspector edits level/offset, thickness, ceiling material/grid, and floor finish layers with area/volume takeoff units; property edits preserve room association, while a changed boundary detaches it. The Inspector now starts plan-based void drawing for structural slabs, architectural floors and ceilings, and each surface family receives its matching update command. Architectural floor takeoff subtracts polygon voids and reports each finish layer by area or, when explicitly requested, volume; ceiling takeoff subtracts voids from ceiling area. Canvas RCP paints ceiling openings white with dashed edges and clips the ceiling grid; A-10 knocks ceiling voids out of its fill as well. Floor and ceiling commands reject self-intersecting boundaries, malformed/non-finite voids, voids outside or touching the boundary, and overlapping/nested voids before invalid geometry enters the project. Tile/ceramic finishes use an editable grid; timber/wood/laminate/vinyl-plank finishes now use editable staggered plank courses. Both patterns share geometry between Plan Canvas and A-02/A-03, clip to concave floor boundaries and voids, and export the compiled vectors to DXF; geometry, sheet and CAD regressions verify the wood pattern and PaperSpace parity. A-07 sections cut architectural floor/ceiling boundaries into phase-styled bands and subtract surface voids. Architectural floor and ceiling types are editable in the catalog; finish layers/patterns and ceiling grids cascade to assigned instances, explicit instance edits survive later type changes, and floor takeoff reads the cascaded layer values. Other material-specific pattern families, level-constraint parity with structural slabs, multi-storey drawing acceptance, and representative PDF/native CAD review remain open; see R5 production acceptance below.
+Core boundary commands, level-relative elevations, room-linked boundaries, void data and an RCP representation exist. New/updated architectural floors and ceilings resolve from their selected level plus a signed offset; legacy objects without an explicit reference retain their stored absolute elevation. The Inspector edits level/offset, thickness, ceiling material/grid, and floor finish layers with area/volume takeoff units; property edits preserve room association, while a changed boundary detaches it. The Inspector now starts plan-based void drawing for structural slabs, architectural floors and ceilings, and each surface family receives its matching update command. Architectural floor takeoff subtracts polygon voids and reports each finish layer by area or, when explicitly requested, volume; ceiling takeoff subtracts voids from ceiling area. Canvas RCP paints ceiling openings white with dashed edges and clips the ceiling grid; A-10 knocks ceiling voids out of its fill as well. Floor and ceiling commands reject self-intersecting boundaries, malformed/non-finite voids, voids outside or touching the boundary, and overlapping/nested voids before invalid geometry enters the project. Tile/ceramic finishes use an editable grid; timber/wood/laminate/vinyl-plank finishes use editable staggered plank courses; carpet (cross-hatch), terrazzo (scattered chips), concrete block, and glass block now generate shared clipped vectors in Plan Canvas and A-02/A-03/A-10 permit sheets. The complex topology stress-test fixture (`examples/complex-topology-stress-test.cfproj`) exercises acute and concave room geometries for native drawing acceptance. Both patterns share geometry between Plan Canvas and A-02/A-03, clip to concave floor boundaries and voids, and export the compiled vectors to DXF; geometry, sheet and CAD regressions verify the wood pattern and PaperSpace parity. A-07 sections cut architectural floor/ceiling boundaries into phase-styled bands and subtract surface voids. Architectural floor and ceiling types are editable in the catalog; finish layers/patterns and ceiling grids cascade to assigned instances, explicit instance edits survive later type changes, and floor takeoff reads the cascaded layer values. Other material-specific pattern families, level-constraint parity with structural slabs, multi-storey drawing acceptance, and representative PDF/native CAD review remain open; see R5 production acceptance below.
 - boundary + holes
 - level / offset
 - thickness / layered build-up
@@ -136,19 +136,21 @@ Initial consumers:
 
 ### Constraint / Dependency Engine
 
+The linear constraint solver foundation is integrated in `@constructflow/constraint-engine` powered by `kiwi.js` (Cassowary simplex algorithm) in `ConstructFlowSolver`, backed by `ConstraintData` in canonical `ProjectDocument` (`types.ts`, `project.ts`). The `CommandBus.execute` pipeline executes solver passes and commits delta updates atomically across constrained entities.
+
 Initial constraints:
 
-- Align
-- Lock
-- Offset
-- Equal
-- Fixed Distance
-- Parallel
-- Perpendicular
-- Centered
-- Host
-- Attach
-- Level Constraint
+- [ ] Align
+- [x] Lock (implemented in solver)
+- [x] Offset (implemented in solver)
+- [ ] Equal
+- [ ] Fixed Distance
+- [ ] Parallel
+- [ ] Perpendicular
+- [ ] Centered
+- [ ] Host
+- [ ] Attach
+- [ ] Level Constraint
 
 Use the existing command/event/dirty-state architecture for deterministic propagation.
 
@@ -173,7 +175,7 @@ Deliverables:
 - hip
 - multi-slope
 - custom footprint
-- ridge / hip / valley / eave / rake topology
+- [x] ridge / hip / valley / eave / rake topology (`computeRoofSkeleton` straight skeleton engine in `packages/roof-engine/src/topology/StraightSkeleton.ts`)
 - slope by footprint/edge intent
 - [x] roof openings & void polygon editing
 - wall attachment relationships

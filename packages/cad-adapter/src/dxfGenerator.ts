@@ -56,6 +56,11 @@ export class DxfGenerator {
   private modelSpaceBlockRecordHandle: string;
   private paperSpaceBlockRecordHandles: string[];
   private layoutObjectHandles: string[];
+  private customBlocks: Map<string, {
+    recordHandle: string;
+    layer: string;
+    entityLines: string[];
+  }> = new Map();
 
   constructor(project: ProjectDocument, options: DxfGeneratorOptions = {}) {
     this.project = project;
@@ -95,6 +100,7 @@ export class DxfGenerator {
    * Generates complete DXF document text.
    */
   public generate(): string {
+    this.registerCustomBlocks();
     const parts: string[] = [];
 
     // 1. HEADER SECTION
@@ -522,7 +528,7 @@ export class DxfGenerator {
       "100",
       "AcDbSymbolTable",
       " 70",
-      (1 + this.layouts.length).toString(),
+      (1 + this.layouts.length + this.customBlocks.size).toString(),
       "  0",
       "BLOCK_RECORD",
       "  5",
@@ -551,6 +557,21 @@ export class DxfGenerator {
         this.layoutObjectHandles[i],
       );
     }
+
+    for (const [blockName, blockDef] of this.customBlocks) {
+      lines.push(
+        "  0",
+        "BLOCK_RECORD",
+        "  5",
+        blockDef.recordHandle,
+        "100",
+        "AcDbSymbolTableRecord",
+        "100",
+        "AcDbBlockTableRecord",
+        "  2",
+        blockName,
+      );
+    }
     lines.push("  0", "ENDTAB");
 
     lines.push("  0", "ENDSEC\n");
@@ -561,7 +582,8 @@ export class DxfGenerator {
     return layoutIndex === 0 ? "*PAPER_SPACE" : `*PAPER_SPACE${layoutIndex - 1}`;
   }
 
-  private blockRecordHandle(space: number, layoutName?: string): string {
+  private blockRecordHandle(space: number, layoutName?: string, ownerHandle?: string): string {
+    if (ownerHandle) return ownerHandle;
     if (space !== 1) return this.modelSpaceBlockRecordHandle;
     const layoutIndex = layoutName ? this.layouts.findIndex(layout => layout.name === layoutName) : 0;
     return this.paperSpaceBlockRecordHandles[Math.max(0, layoutIndex)] ?? this.paperSpaceBlockRecordHandles[0];
@@ -662,6 +684,53 @@ export class DxfGenerator {
       );
     }
 
+    // Custom Blocks (Doors, Windows, etc.)
+    for (const [blockName, blockDef] of this.customBlocks) {
+      lines.push(
+        "  0",
+        "BLOCK",
+        "  5",
+        this.nextHandle(),
+        "330",
+        blockDef.recordHandle,
+        "100",
+        "AcDbEntity",
+        "  8",
+        blockDef.layer,
+        "100",
+        "AcDbBlockBegin",
+        "  2",
+        blockName,
+        " 70",
+        "0",
+        " 10",
+        "0.0",
+        " 20",
+        "0.0",
+        " 30",
+        "0.0",
+        "  3",
+        blockName,
+        "  1",
+        "",
+      );
+      lines.push(...blockDef.entityLines);
+      lines.push(
+        "  0",
+        "ENDBLK",
+        "  5",
+        this.nextHandle(),
+        "330",
+        blockDef.recordHandle,
+        "100",
+        "AcDbEntity",
+        "  8",
+        blockDef.layer,
+        "100",
+        "AcDbBlockEnd",
+      );
+    }
+
     lines.push("  0", "ENDSEC\n");
     return lines.join("\n");
   }
@@ -750,20 +819,28 @@ export class DxfGenerator {
       return;
     }
 
-    // Door / Window
+    // Door / Window (Unhosted CAD Block Insert)
     if (type === "door_window.door" || type.startsWith("arch.door") || type.startsWith("opening.door")) {
       if (typeof d.wall_id === "string" && this.project.objects[d.wall_id]) return;
       const loc = d.location_mm ?? [0, 0, 0];
-      const w = d.width_mm ?? 900;
-      this.writeLine(lines, layer.name, 0, [loc[0] - w / 2, loc[1]], [loc[0] + w / 2, loc[1]]);
+      const w = Math.round(d.width_mm ?? 900);
+      const mark = String(d.mark ?? "D").trim() || "D";
+      const handing = String(d.handing ?? "left_in").toLowerCase();
+      const safeMark = mark.replace(/[^A-Za-z0-9_]/g, "_");
+      const blockName = `CF_DOOR_${safeMark}_${w}_T100_${handing.toUpperCase()}`;
+      this.writeInsert(lines, blockName, layer.name, 0, [loc[0], loc[1]], 0);
       return;
     }
 
     if (type === "door_window.window" || type.startsWith("arch.window") || type.startsWith("opening.window")) {
       if (typeof d.wall_id === "string" && this.project.objects[d.wall_id]) return;
       const loc = d.location_mm ?? [0, 0, 0];
-      const w = d.width_mm ?? 1200;
-      this.writeLine(lines, layer.name, 0, [loc[0] - w / 2, loc[1]], [loc[0] + w / 2, loc[1]]);
+      const w = Math.round(d.width_mm ?? 1200);
+      const mark = String(d.mark ?? "W").trim() || "W";
+      const panelCount = Math.max(1, Math.floor(Number(d.panel_count ?? 2)));
+      const safeMark = mark.replace(/[^A-Za-z0-9_]/g, "_");
+      const blockName = `CF_WIN_${safeMark}_${w}_T100_${panelCount}P`;
+      this.writeInsert(lines, blockName, layer.name, 0, [loc[0], loc[1]], 0);
       return;
     }
 
@@ -874,41 +951,30 @@ export class DxfGenerator {
     for (const opening of openings) {
       const { object, data: openingData } = opening;
       const a = opening.from, b = opening.to, width = b - a;
-      this.writeLine(lines, layer, 0, point(a, -half), point(a, half));
-      this.writeLine(lines, layer, 0, point(b, -half), point(b, half));
       const isWindow = object.object_type === "door_window.window";
+      const openingPhase = getDisplayPhase(object);
+      const openingLayer = resolveCadLayer(object.object_type, openingPhase).name;
+      const center = point((a + b) / 2, 0);
+      const angleDeg = (Math.atan2(tangent[1], tangent[0]) * 180) / Math.PI;
+      const thickness = Math.round(half * 2);
+
       if (isWindow) {
-        const track = Math.min(22, half * 0.55);
-        this.writeLine(lines, layer, 0, point(a, -track), point(b, -track));
-        this.writeLine(lines, layer, 0, point(a, track), point(b, track));
+        const mark = String(openingData.mark ?? "W").trim() || "W";
         const panelCount = Math.max(1, Math.floor(Number(openingData.panel_count ?? 2)));
-        for (let i = 0; i <= panelCount; i++) this.writeLine(lines, layer, 0, point(a + width * i / panelCount, -track), point(a + width * i / panelCount, track));
-        this.writeText(lines, layer, 0, point((a + b) / 2, half + 120), String(openingData.mark ?? "W"), 250);
-        continue;
+        const safeMark = mark.replace(/[^A-Za-z0-9_]/g, "_");
+        const blockName = `CF_WIN_${safeMark}_${Math.round(width)}_T${thickness}_${panelCount}P`;
+        this.writeInsert(lines, blockName, openingLayer, 0, center, angleDeg);
+      } else {
+        const mark = String(openingData.mark ?? "D").trim() || "D";
+        const wallInteriorSide = d.interior_side === "right" ? -1 : 1;
+        const handing = String(openingData.handing ?? "left_in").toLowerCase();
+        const effectiveHanding = wallInteriorSide === -1
+          ? (handing.endsWith("in") ? handing.replace("in", "out") : handing.replace("out", "in"))
+          : handing;
+        const safeMark = mark.replace(/[^A-Za-z0-9_]/g, "_");
+        const blockName = `CF_DOOR_${safeMark}_${Math.round(width)}_T${thickness}_${effectiveHanding.toUpperCase()}`;
+        this.writeInsert(lines, blockName, openingLayer, 0, center, angleDeg);
       }
-      const mark = String(openingData.mark ?? "D");
-      const hingeAtStart = !String(openingData.handing ?? "left_in").startsWith("right");
-      const hingeAlong = hingeAtStart ? a : b;
-      const closedFree = point(hingeAtStart ? b : a, 0);
-      const hinge = point(hingeAlong, 0);
-      const wallInteriorSide = d.interior_side === "right" ? -1 : 1;
-      const opensInside = String(openingData.handing ?? "left_in").endsWith("in");
-      const swingSide = wallInteriorSide * (opensInside ? 1 : -1);
-      const openFree = point(hingeAlong, swingSide * width);
-      const openVector: [number, number] = [openFree[0] - hinge[0], openFree[1] - hinge[1]];
-      const closedVector: [number, number] = [closedFree[0] - hinge[0], closedFree[1] - hinge[1]];
-      let startAngle = Math.atan2(closedVector[1], closedVector[0]);
-      let endAngle = Math.atan2(openVector[1], openVector[0]);
-      while (endAngle - startAngle > Math.PI) endAngle -= Math.PI * 2;
-      while (endAngle - startAngle < -Math.PI) endAngle += Math.PI * 2;
-      const arc = Array.from({ length: 17 }, (_, i) => {
-        const angle = startAngle + (endAngle - startAngle) * i / 16;
-        return [hinge[0] + width * Math.cos(angle), hinge[1] + width * Math.sin(angle)] as [number, number];
-      });
-      this.writeLwPolyline(lines, layer, 0, arc);
-      const leafPerp: [number, number] = [-openVector[1] / width * 25, openVector[0] / width * 25];
-      this.writeLwPolyline(lines, layer, 0, [[hinge[0] + leafPerp[0], hinge[1] + leafPerp[1]], [openFree[0] + leafPerp[0], openFree[1] + leafPerp[1]], [openFree[0] - leafPerp[0], openFree[1] - leafPerp[1]], [hinge[0] - leafPerp[0], hinge[1] - leafPerp[1]]], true);
-      this.writeText(lines, layer, 0, point((a + b) / 2, swingSide * (width + 140)), mark, 250);
     }
   }
 
@@ -1444,6 +1510,8 @@ export class DxfGenerator {
     space: number,
     start: [number, number],
     end: [number, number],
+    layoutName?: string,
+    ownerHandle?: string,
   ): void {
     lines.push(
       "  0",
@@ -1451,7 +1519,7 @@ export class DxfGenerator {
       "  5",
       this.nextHandle(),
       "330",
-      this.blockRecordHandle(space),
+      this.blockRecordHandle(space, layoutName, ownerHandle),
       "100",
       "AcDbEntity",
       "  8",
@@ -1535,6 +1603,7 @@ export class DxfGenerator {
     colorNumber?: number,
     lineweight?: number,
     lineType?: string,
+    ownerHandle?: string,
   ): void {
     lines.push(
       "  0",
@@ -1542,7 +1611,7 @@ export class DxfGenerator {
       "  5",
       this.nextHandle(),
       "330",
-      this.blockRecordHandle(space, layoutName),
+      this.blockRecordHandle(space, layoutName, ownerHandle),
       "100",
       "AcDbEntity",
       "  8",
@@ -1567,6 +1636,217 @@ export class DxfGenerator {
     }
   }
 
+
+  private writeInsert(
+    lines: string[],
+    blockName: string,
+    layer: string,
+    space: number,
+    insertionPoint: [number, number],
+    rotationDeg: number = 0,
+    scaleX: number = 1,
+    scaleY: number = 1,
+    layoutName?: string,
+  ): void {
+    lines.push(
+      "  0",
+      "INSERT",
+      "  5",
+      this.nextHandle(),
+      "330",
+      this.blockRecordHandle(space, layoutName),
+      "100",
+      "AcDbEntity",
+      "  8",
+      layer,
+      " 67",
+      space.toString(),
+      ...(layoutName ? ["410", layoutName] : []),
+      "100",
+      "AcDbBlockReference",
+      "  2",
+      blockName,
+      " 10",
+      insertionPoint[0].toFixed(3),
+      " 20",
+      insertionPoint[1].toFixed(3),
+      " 30",
+      "0.000",
+      " 41",
+      scaleX.toFixed(4),
+      " 42",
+      scaleY.toFixed(4),
+      " 43",
+      "1.000",
+      " 50",
+      rotationDeg.toFixed(3),
+    );
+  }
+
+  private registerCustomBlocks(): void {
+    if (this.customBlocks.size > 0) return;
+
+    for (const obj of Object.values(this.project.objects)) {
+      const type = obj.object_type;
+      const d = obj.module_data as Record<string, any>;
+      const phase = getDisplayPhase(obj);
+
+      if (type === "door_window.door" || type.startsWith("arch.door") || type.startsWith("opening.door")) {
+        const mark = String(d.mark ?? "D").trim() || "D";
+        const width = Math.round(Number(d.width_mm ?? 900));
+        const wall = typeof d.wall_id === "string" ? this.project.objects[d.wall_id] : undefined;
+        const wallData = wall?.module_data as Record<string, any> | undefined;
+        const thickness = Math.round(Number(wallData?.thickness_mm ?? 100));
+        const wallInteriorSide = wallData?.interior_side === "right" ? -1 : 1;
+        const handing = String(d.handing ?? "left_in").toLowerCase();
+        const effectiveHanding = wallInteriorSide === -1
+          ? (handing.endsWith("in") ? handing.replace("in", "out") : handing.replace("out", "in"))
+          : handing;
+        const safeMark = mark.replace(/[^A-Za-z0-9_]/g, "_");
+        const blockName = `CF_DOOR_${safeMark}_${width}_T${thickness}_${effectiveHanding.toUpperCase()}`;
+
+        if (!this.customBlocks.has(blockName)) {
+          const recordHandle = this.nextHandle();
+          const layer = resolveCadLayer("door_window.door", phase).name;
+          const entityLines: string[] = [];
+          this.buildDoorBlockEntities(entityLines, recordHandle, layer, width, thickness, effectiveHanding, mark);
+          this.customBlocks.set(blockName, { recordHandle, layer, entityLines });
+        }
+      }
+
+      if (type === "door_window.window" || type.startsWith("arch.window") || type.startsWith("opening.window")) {
+        const mark = String(d.mark ?? "W").trim() || "W";
+        const width = Math.round(Number(d.width_mm ?? 1200));
+        const wall = typeof d.wall_id === "string" ? this.project.objects[d.wall_id] : undefined;
+        const wallData = wall?.module_data as Record<string, any> | undefined;
+        const thickness = Math.round(Number(wallData?.thickness_mm ?? 100));
+        const panelCount = Math.max(1, Math.floor(Number(d.panel_count ?? 2)));
+        const safeMark = mark.replace(/[^A-Za-z0-9_]/g, "_");
+        const blockName = `CF_WIN_${safeMark}_${width}_T${thickness}_${panelCount}P`;
+
+        if (!this.customBlocks.has(blockName)) {
+          const recordHandle = this.nextHandle();
+          const layer = resolveCadLayer("door_window.window", phase).name;
+          const entityLines: string[] = [];
+          this.buildWindowBlockEntities(entityLines, recordHandle, layer, width, thickness, panelCount, mark);
+          this.customBlocks.set(blockName, { recordHandle, layer, entityLines });
+        }
+      }
+    }
+  }
+
+  private buildDoorBlockEntities(
+    lines: string[],
+    ownerHandle: string,
+    layer: string,
+    width: number,
+    thickness: number,
+    handing: string,
+    mark: string,
+  ): void {
+    const half = thickness / 2;
+    const hw = width / 2;
+    const frameW = Math.max(25, Math.min(50, width * 0.1));
+
+    // Jamb boxes
+    this.writeLwPolyline(lines, layer, 0, [[-hw, -half], [-hw + frameW, -half], [-hw + frameW, half], [-hw, half]], true, undefined, undefined, undefined, undefined, ownerHandle);
+    this.writeLwPolyline(lines, layer, 0, [[hw - frameW, -half], [hw, -half], [hw, half], [hw - frameW, half]], true, undefined, undefined, undefined, undefined, ownerHandle);
+
+    const hingeAtStart = handing.startsWith("left");
+    const opensInside = handing.endsWith("in");
+    const hingeX = hingeAtStart ? (-hw + frameW) : (hw - frameW);
+    const hingeY = opensInside ? half : -half;
+    const closedFreeX = hingeAtStart ? (hw - frameW) : (-hw + frameW);
+    const leafLength = Math.abs(closedFreeX - hingeX);
+    const swingSide = opensInside ? 1 : -1;
+    const openFreeY = hingeY + swingSide * leafLength;
+
+    // Leaf polyline
+    const leafThickness = 35;
+    const leafDirX = hingeAtStart ? 1 : -1;
+    this.writeLwPolyline(
+      lines,
+      layer,
+      0,
+      [
+        [hingeX, hingeY],
+        [hingeX, openFreeY],
+        [hingeX + leafDirX * leafThickness, openFreeY],
+        [hingeX + leafDirX * leafThickness, hingeY],
+      ],
+      true,
+      undefined, undefined, undefined, undefined, ownerHandle,
+    );
+
+    // Swing arc
+    const startAngle = hingeAtStart ? 0 : Math.PI;
+    let endAngle: number;
+    if (hingeAtStart) {
+      endAngle = opensInside ? Math.PI / 2 : -Math.PI / 2;
+    } else {
+      endAngle = opensInside ? Math.PI / 2 : (3 * Math.PI / 2);
+    }
+    const arcPoints: [number, number][] = [];
+    const steps = 32;
+    for (let i = 0; i <= steps; i++) {
+      const angle = startAngle + (endAngle - startAngle) * (i / steps);
+      arcPoints.push([hingeX + leafLength * Math.cos(angle), hingeY + leafLength * Math.sin(angle)]);
+    }
+    this.writeLwPolyline(lines, layer, 0, arcPoints, false, undefined, undefined, undefined, undefined, ownerHandle);
+
+    // Text label
+    this.writeText(lines, layer, 0, [0, swingSide * (width / 2 + 100)], mark, 150, undefined, undefined, undefined, ownerHandle);
+  }
+
+  private buildWindowBlockEntities(
+    lines: string[],
+    ownerHandle: string,
+    layer: string,
+    width: number,
+    thickness: number,
+    panelCount: number,
+    mark: string,
+  ): void {
+    const half = thickness / 2;
+    const hw = width / 2;
+    const frameW = Math.max(25, Math.min(50, width * 0.1));
+
+    // Outer Frame Jambs
+    this.writeLwPolyline(lines, layer, 0, [[-hw, -half], [-hw + frameW, -half], [-hw + frameW, half], [-hw, half]], true, undefined, undefined, undefined, undefined, ownerHandle);
+    this.writeLwPolyline(lines, layer, 0, [[hw - frameW, -half], [hw, -half], [hw, half], [hw - frameW, half]], true, undefined, undefined, undefined, undefined, ownerHandle);
+    
+    // Sill/Outer frame bounds
+    this.writeLine(lines, layer, 0, [-hw + frameW, -half], [hw - frameW, -half], undefined, ownerHandle);
+    this.writeLine(lines, layer, 0, [-hw + frameW, half], [hw - frameW, half], undefined, ownerHandle);
+    
+    // Inner window tracks
+    const trackHalf = Math.min(22, half * 0.55);
+    this.writeLine(lines, layer, 0, [-hw + frameW, -trackHalf], [hw - frameW, -trackHalf], undefined, ownerHandle);
+    this.writeLine(lines, layer, 0, [-hw + frameW, trackHalf], [hw - frameW, trackHalf], undefined, ownerHandle);
+
+    // Sliding Panels (Sashes)
+    const clearW = width - 2 * frameW;
+    const overlap = 30; // 30mm overlap
+    const panelW = (clearW + (panelCount - 1) * overlap) / panelCount;
+    const sashThick = Math.min(35, trackHalf);
+
+    for (let i = 0; i < panelCount; i++) {
+      const isOuterTrack = i % 2 === 0;
+      const py = isOuterTrack ? -trackHalf : (trackHalf - sashThick);
+      const px1 = -hw + frameW + i * (panelW - overlap);
+      const px2 = px1 + panelW;
+      
+      this.writeLwPolyline(
+        lines, layer, 0,
+        [[px1, py], [px2, py], [px2, py + sashThick], [px1, py + sashThick]],
+        true, undefined, undefined, undefined, undefined, ownerHandle
+      );
+    }
+
+    // Text label
+    this.writeText(lines, layer, 0, [0, half + 150], mark, 150, undefined, undefined, undefined, ownerHandle);
+  }
+
   private writeText(
     lines: string[],
     layer: string,
@@ -1577,6 +1857,7 @@ export class DxfGenerator {
     layoutName?: string,
     colorNumber?: number,
     maxWidth?: number,
+    ownerHandle?: string,
   ): void {
     const naturalWidth = [...text].length * height * 0.52;
     const widthFactor = maxWidth && naturalWidth > maxWidth ? maxWidth / naturalWidth : 1;
@@ -1586,7 +1867,7 @@ export class DxfGenerator {
       "  5",
       this.nextHandle(),
       "330",
-      this.blockRecordHandle(space, layoutName),
+      this.blockRecordHandle(space, layoutName, ownerHandle),
       "100",
       "AcDbEntity",
       "  8",

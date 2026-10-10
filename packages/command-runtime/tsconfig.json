@@ -44,6 +44,9 @@
       ],
       "@constructflow/domain-providers": [
         "../domain-providers/dist/index.d.ts"
+      ],
+      "@constructflow/constraint-engine": [
+        "../constraint-engine/dist/index.d.ts"
       ]
     }
   },

@@ -9,7 +9,7 @@ import { validateStairThaiBuildingCode } from './stairs.js'
 
 const polygonAreaMm2 = (ring: number[][]) => Math.abs(ring.reduce((sum, p, i) => { const q = ring[(i + 1) % ring.length]; return sum + p[0] * q[1] - q[0] * p[1] }, 0) / 2)
 
-export type ArchitecturalFloorPatternKind = 'tile_grid' | 'staggered_plank'
+export type ArchitecturalFloorPatternKind = 'tile_grid' | 'staggered_plank' | 'carpet' | 'terrazzo' | 'concrete_block' | 'glass_block'
 
 /** Resolve plan hatch from the floor finish assembly's exposed finish material. */
 export function resolveArchitecturalFloorPatternKind(
@@ -18,6 +18,10 @@ export function resolveArchitecturalFloorPatternKind(
   const materials = finishLayers.map(layer => String(layer.material ?? ''))
   if (materials.some(material => /tile|porcelain|ceramic|กระเบื้อง/i.test(material))) return 'tile_grid'
   if (materials.some(material => /wood|timber|laminate|vinyl[_ -]?plank|ไม้|ลามิเนต/i.test(material))) return 'staggered_plank'
+  if (materials.some(material => /carpet|พรม/i.test(material))) return 'carpet'
+  if (materials.some(material => /terrazzo|หินขัด/i.test(material))) return 'terrazzo'
+  if (materials.some(material => /concrete[_ -]?block|คอนกรีตบล็อก/i.test(material))) return 'concrete_block'
+  if (materials.some(material => /glass[_ -]?block|บล็อกแก้ว/i.test(material))) return 'glass_block'
   return undefined
 }
 

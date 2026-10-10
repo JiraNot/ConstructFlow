@@ -663,3 +663,6 @@ export function tube(a: Vec3, b: Vec3, radius: number, sides = 8): Triangle[] {
   }
   return result;
 }
+
+export function clippedCarpetSegments(b: readonly Vec2[], s = 400, v: readonly (readonly Vec2[])[] = []): Array<[Vec2, Vec2]> { return [...polygonDiagonalHatchSegments(b, s, v, 45), ...polygonDiagonalHatchSegments(b, s, v, -45)] }
+export function clippedTerrazzoSegments(b: readonly Vec2[], s = 300, v: readonly (readonly Vec2[])[] = []): Array<[Vec2, Vec2]> { const h = polygonDiagonalHatchSegments(b, s, v, 15); const res: Array<[Vec2, Vec2]> = []; for(let i=0; i<h.length; i++){ const [a, b_] = h[i]; const l = Math.hypot(b_[0]-a[0], b_[1]-a[1]); const dx = (b_[0]-a[0])/l, dy = (b_[1]-a[1])/l; let t = (i*47)%150; while(t<l){ const cs = 15; if(t+cs>l) break; res.push([[a[0]+dx*t, a[1]+dy*t], [a[0]+dx*(t+cs), a[1]+dy*(t+cs)]]); t += 120 + ((t*13)%100); } } return res; }

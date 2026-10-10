@@ -17,6 +17,7 @@ import { executeElectricalCommand } from '@constructflow/electrical-engine'
 import { executeInteriorCommand } from '@constructflow/interior-engine'
 import { validateConstructionProject } from '@constructflow/domain-providers'
 import { executeDuplicateObjects } from './clipboardCommands.js'
+import { ConstructFlowSolver } from '@constructflow/constraint-engine'
 
 const handlers = [(context: CommandHandlerContext) => context.commandName === 'DuplicateObjects' ? executeDuplicateObjects(context) : null,
   executeProjectCommand, executeStructureCommand, executeArchitectureCommand, executeCatalogCommand,
@@ -102,6 +103,47 @@ export class CommandBus {
             }
           }
         }
+
+        // --- Constraint Engine Execution (R3) ---
+        if (response.updatedProject.constraints && response.updatedProject.constraints.length > 0) {
+            const solver = new ConstructFlowSolver();
+            solver.applyProjectConstraints(response.updatedProject.constraints);
+
+            // Suggest current properties as edit variables
+            for (const c of response.updatedProject.constraints) {
+                for (const entity of c.entities) {
+                    const obj = response.updatedProject.objects[entity.id];
+                    if (obj) {
+                        const data = obj.module_data as Record<string, any>;
+                        // Extremely simplified mapping for demonstration
+                        if (entity.property === 'start_x' && Array.isArray(data.start_mm)) {
+                            solver.addEditIntent(entity.id, entity.property, data.start_mm[0]);
+                        } else if (entity.property === 'start_y' && Array.isArray(data.start_mm)) {
+                            solver.addEditIntent(entity.id, entity.property, data.start_mm[1]);
+                        }
+                    }
+                }
+            }
+
+            const results = solver.solve();
+
+            // Apply solved variables back to the project state
+            for (const [key, value] of results.entries()) {
+                const [id, prop] = key.split('.');
+                const obj = response.updatedProject.objects[id];
+                if (obj && obj.module_data) {
+                    if (prop === 'start_x' && Array.isArray((obj.module_data as Record<string, any>).start_mm)) (obj.module_data as Record<string, any>).start_mm[0] = value;
+                    else if (prop === 'start_y' && Array.isArray((obj.module_data as Record<string, any>).start_mm)) (obj.module_data as Record<string, any>).start_mm[1] = value;
+                    // Additional property mapping would go here
+
+                    if (!response.result.affected_object_ids.includes(id)) {
+                        response.result.affected_object_ids.push(id);
+                    }
+                }
+            }
+        }
+        // ----------------------------------------
+
         if (commandName === 'UpdateLevel' && typeof input.id === 'string') {
           const reconciledIds = reconcileStructuralLevelElevation(project, response.updatedProject, input.id, now)
           response.result.affected_object_ids = [...new Set([...response.result.affected_object_ids, ...reconciledIds])]

@@ -68,6 +68,7 @@ export default defineConfig({
   plugins: [react(), fileAcceptanceDiskPlugin()],
   resolve: {
     alias: {
+      '@constructflow/constraint-engine': fileURLToPath(new URL('../../packages/constraint-engine/dist/index.js', import.meta.url)),
       '@constructflow/architecture-engine': fileURLToPath(new URL('../../packages/architecture-engine/dist/index.js', import.meta.url)),
     },
   },
