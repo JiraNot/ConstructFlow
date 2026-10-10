@@ -1,10 +1,16 @@
 import * as kiwi from 'kiwi.js';
-import type { ParametricSymbolDefinition, EvaluatedSymbolLine } from '@constructflow/project-model';
+import type {
+    ParametricSymbolDefinition,
+    EvaluatedSymbolLine,
+    EvaluatedSymbolPolygon,
+    EvaluatedSymbolArc,
+    EvaluatedParametricSymbol,
+} from '@constructflow/project-model';
 
 export function evaluateParametricSymbol(
     symbol: ParametricSymbolDefinition,
     inputParameters: Record<string, number>
-): EvaluatedSymbolLine[] {
+): EvaluatedParametricSymbol {
     const solver = new kiwi.Solver();
     const variables = new Map<string, kiwi.Variable>();
 
@@ -34,8 +40,6 @@ export function evaluateParametricSymbol(
     }
 
     // 3. Add weak stay constraints for points to their initial values
-    // This provides a fallback and prevents the solver from picking arbitrary coordinates 
-    // for unconstrained degrees of freedom.
     for (const pt of symbol.points) {
         const vx = getVar(`${pt.id}.x`);
         solver.addEditVariable(vx, kiwi.Strength.weak);
@@ -48,9 +52,10 @@ export function evaluateParametricSymbol(
 
     solver.updateVariables();
 
-    // 4. Extract evaluated lines
     const clean = (n: number) => (Math.abs(n) < 1e-9 ? 0 : n);
-    return symbol.lines.map(line => {
+
+    // 4. Extract evaluated lines
+    const lines: EvaluatedSymbolLine[] = (symbol.lines ?? []).map(line => {
         const sx = clean(getVar(`${line.start_point}.x`).value());
         const sy = clean(getVar(`${line.start_point}.y`).value());
         const ex = clean(getVar(`${line.end_point}.x`).value());
@@ -60,7 +65,46 @@ export function evaluateParametricSymbol(
             start: [sx, sy],
             end: [ex, ey],
             style: line.style,
-            thickness: line.thickness
+            thickness: line.thickness ?? 0.25,
         };
     });
+
+    // 5. Extract evaluated polygons
+    const polygons: EvaluatedSymbolPolygon[] = (symbol.polygons ?? []).map(poly => {
+        const points = poly.point_ids.map(pid => {
+            const px = clean(getVar(`${pid}.x`).value());
+            const py = clean(getVar(`${pid}.y`).value());
+            return [px, py] as [number, number];
+        });
+        return {
+            id: poly.id,
+            points,
+            style: poly.style ?? 'solid',
+            thickness: poly.thickness ?? 0.25,
+            fill: poly.fill,
+            closed: poly.closed !== false,
+        };
+    });
+
+    // 6. Extract evaluated arcs
+    const arcs: EvaluatedSymbolArc[] = (symbol.arcs ?? []).map(arc => {
+        const cx = clean(getVar(`${arc.center_point}.x`).value());
+        const cy = clean(getVar(`${arc.center_point}.y`).value());
+        let radius = arc.radius_mm ?? 0;
+        if (arc.radius_var) {
+            radius = clean(getVar(arc.radius_var).value());
+        }
+        return {
+            id: arc.id,
+            center: [cx, cy],
+            radius,
+            start_angle_deg: arc.start_angle_deg,
+            sweep_angle_deg: arc.sweep_angle_deg,
+            style: arc.style ?? 'solid',
+            thickness: arc.thickness ?? 0.25,
+        };
+    });
+
+    const result = Object.assign([...lines], { lines, polygons, arcs }) as EvaluatedParametricSymbol;
+    return result;
 }

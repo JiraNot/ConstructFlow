@@ -24,11 +24,33 @@ export interface ParametricLine {
   thickness?: number;
 }
 
+export interface ParametricPolygon {
+  id: string;
+  point_ids: string[];
+  style?: 'solid' | 'dashed';
+  thickness?: number;
+  fill?: string;
+  closed?: boolean;
+}
+
+export interface ParametricArc {
+  id: string;
+  center_point: string;
+  radius_var?: string;
+  radius_mm?: number;
+  start_angle_deg: number;
+  sweep_angle_deg: number;
+  style?: 'solid' | 'dashed';
+  thickness?: number;
+}
+
 export interface ParametricSymbolDefinition {
   parameters: string[];
   points: ParametricPoint[];
   equations: ParametricEquation[];
   lines: ParametricLine[];
+  polygons?: ParametricPolygon[];
+  arcs?: ParametricArc[];
 }
 
 export interface EvaluatedSymbolLine {
@@ -38,3 +60,28 @@ export interface EvaluatedSymbolLine {
   style?: 'solid' | 'dashed' | 'dashdot';
   thickness?: number;
 }
+
+export interface EvaluatedSymbolPolygon {
+  id: string;
+  points: Array<[number, number]>;
+  style?: 'solid' | 'dashed';
+  thickness: number;
+  fill?: string;
+  closed: boolean;
+}
+
+export interface EvaluatedSymbolArc {
+  id: string;
+  center: [number, number];
+  radius: number;
+  start_angle_deg: number;
+  sweep_angle_deg: number;
+  style?: 'solid' | 'dashed';
+  thickness: number;
+}
+
+export type EvaluatedParametricSymbol = EvaluatedSymbolLine[] & {
+  lines: EvaluatedSymbolLine[];
+  polygons: EvaluatedSymbolPolygon[];
+  arcs: EvaluatedSymbolArc[];
+};

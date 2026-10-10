@@ -76,6 +76,10 @@ Deliverables:
 - [x] 3D hole punching and infill creation via SketchUp CommandBus
 - [x] type vs instance parameters flex in UI: the Inspector exposes catalog-backed opening parameters, labels inherited values and per-instance overrides, and can reset an override to the catalog value. The `UpdateOpeningInstanceParameters` command validates family-supported values and host/level constraints; type cascade, override/reset, save/reopen, undo/redo and rejection cases have command-runtime coverage. This closes the current basic type/instance editing track; formulas, richer constraints and production family flex remain under R3.
 - [x] host stretch reconciliation (endpoint edits preserve opening offsets from the edited wall start, refresh opening coordinates from the exact unrounded span, and reject stretches that clip a hosted opening atomically)
+- [x] parametric elevation and plan symbol generators powered by `@constructflow/constraint-engine` (Kiwi.js linear simplex), supporting closed filled polygons (`#ffffff`), panel width ratios, muntin grids, dashed swing lines, and sliding direction arrows
+- [x] unified representation linework in `@constructflow/representation-engine` (`getOpeningElevationLinework` and `getOpeningPlanLinework`) serving 2D viewports, SVG thumbnails, and sheet compilers from a single source of truth
+- [x] Sheet A-08 Door & Window Schedule 1:50 Matrix Grid Cards compiler with elevation linework, overall $W \times H$ dimensions, sill $+Z$ datums, and 5-row Thai specification tables
+- [x] interactive PlanCanvas opening handles (center move handle, edge width resize handles with 100 mm BIM-aware clearance to columns and host ends, 50 mm step quantization, and 1-click flip handing badge icon `⇄`) plus live elevation thumbnails in Type Manager and Properties Inspector
 
 ### Floors & Ceilings
 

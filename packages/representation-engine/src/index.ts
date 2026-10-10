@@ -13,6 +13,13 @@ import {
 } from '@constructflow/project-model'
 import { constructionOutputs } from '@constructflow/domain-providers'
 import { box, tube, type Triangle, type Vec3 } from '@constructflow/geometry-kernel'
+import { evaluateParametricSymbol } from '@constructflow/constraint-engine'
+import {
+  createDoorElevationSymbol,
+  createWindowElevationSymbol,
+  createDoorPlanSymbol,
+  createWindowPlanSymbol,
+} from '@constructflow/project-model'
 export { doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement } from './openingDetails.js'
 
 export type Vec3Mm = [number, number, number]
@@ -140,54 +147,169 @@ export interface OpeningElevationPath {
   fill?: string
 }
 
+export interface OpeningElevationOptions {
+  show_operation_indicator?: boolean
+}
+
 /**
  * Build front-elevation linework in opening-local coordinates (origin at its
  * lower-left corner). Canvas, PDF and DXF use this same catalog-resolved shape
  * so their frame, sash and glazing divisions cannot drift independently.
+ *
+ * UNIFIED VIA CONSTRAINT ENGINE!
  */
-export function getOpeningElevationLinework(shape: Extract<RepresentationShape, { kind: 'opening' }>): OpeningElevationPath[] {
+export function getOpeningElevationLinework(
+  shape: Extract<RepresentationShape, { kind: 'opening' }>,
+  options?: OpeningElevationOptions
+): OpeningElevationPath[] {
   const width = shape.width_mm, height = shape.height_mm
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return []
   const frame = Math.min(width / 5, Math.max(25, shape.frame_face_width_mm || 50))
+  const sash = Math.min(width / 6, Math.max(25, shape.sash_face_width_mm || 50))
+  const showOperation = options?.show_operation_indicator ?? false
+
+  const parameters = { W: width, H: height, F: frame, S: sash }
+  const symbol = shape.opening_type === 'door'
+    ? createDoorElevationSymbol({
+        panelCount: Math.max(1, Math.min(4, Math.floor(shape.panel_count || 1))),
+        hingeAtStart: true,
+        showOperationIndicator: showOperation,
+      })
+    : createWindowElevationSymbol({
+        panelCount: Math.max(1, Math.min(8, Math.floor(shape.panel_count || 2))),
+        panelWidthRatios: shape.panel_width_ratios,
+        muntinRows: Math.max(0, Math.min(8, Math.floor(shape.muntin_rows || 0))),
+        muntinColumns: Math.max(0, Math.min(8, Math.floor(shape.muntin_columns || 0))),
+        showOperationIndicator: showOperation,
+      })
+
+  const evaluated = evaluateParametricSymbol(symbol, parameters)
   const paths: OpeningElevationPath[] = []
-  const rect = (left: number, bottom: number, right: number, top: number, line_width_mm: number, fill?: string) => {
-    if (right <= left || top <= bottom) return
-    paths.push({ points_mm: [[left, bottom], [right, bottom], [right, top], [left, top]], closed: true, line_width_mm, fill })
-  }
-  const line = (x1: number, z1: number, x2: number, z2: number, line_width_mm: number) => {
-    paths.push({ points_mm: [[x1, z1], [x2, z2]], closed: false, line_width_mm })
+
+  // Polygons (e.g. outer frame background with white fill, inner frame)
+  for (const poly of evaluated.polygons) {
+    paths.push({
+      points_mm: poly.points,
+      closed: poly.closed,
+      line_width_mm: poly.thickness,
+      fill: poly.fill,
+    })
   }
 
-  rect(0, 0, width, height, 0.35, '#ffffff')
-  rect(frame, frame, width - frame, height - frame, 0.25)
-  if (shape.opening_type === 'window') {
-    const panels = Math.max(1, Math.min(8, Math.floor(shape.panel_count || 2)))
-    const ratios = shape.panel_width_ratios && shape.panel_width_ratios.length === panels && shape.panel_width_ratios.every(value => Number.isFinite(value) && value > 0)
-      ? shape.panel_width_ratios
-      : Array.from({ length: panels }, () => 1 / panels)
-    let accumulated = 0
-    for (let index = 0; index < panels - 1; index++) {
-      accumulated += ratios[index]
-      const x = width * accumulated
-      line(x, frame, x, height - frame, 0.3)
+  // Lines (perimeter borders, meeting stiles, muntins, optional swing indicators)
+  for (const line of evaluated.lines) {
+    paths.push({
+      points_mm: [line.start, line.end],
+      closed: false,
+      line_width_mm: line.thickness ?? 0.25,
+    })
+  }
+
+  return paths
+}
+
+export interface OpeningPlanPath {
+  kind: 'line' | 'polygon' | 'arc'
+  points_mm: Array<[number, number]>
+  closed?: boolean
+  line_width_mm: number
+  fill?: string
+  arc?: {
+    center: [number, number]
+    radius: number
+    start_angle_deg: number
+    sweep_angle_deg: number
+  }
+}
+
+/**
+ * Build 2D plan linework in opening-local coordinates.
+ * Origin (0,0) is at the clear opening start, centered across the host wall thickness.
+ * Provides unified vectors for PlanCanvas, PDF A-02 floor plan, and AutoCAD DXF ModelSpace.
+ */
+export function getOpeningPlanLinework(
+  shape: Extract<RepresentationShape, { kind: 'opening' }>,
+  hostWallThicknessMm: number = 100
+): OpeningPlanPath[] {
+  const width = shape.width_mm
+  if (!Number.isFinite(width) || width <= 0) return []
+  const frame = Math.min(width / 5, Math.max(25, shape.frame_face_width_mm || 50))
+  const sash = Math.min(width / 6, Math.max(25, shape.sash_face_width_mm || 50))
+  const leaf = Math.min(width / 10, Math.max(30, shape.door_leaf_thickness_mm || 40))
+  const wallThick = Math.max(50, hostWallThicknessMm)
+
+  const paths: OpeningPlanPath[] = []
+
+  if (shape.opening_type === 'door') {
+    const symbol = createDoorPlanSymbol({
+      handing: (shape.handing as any) ?? 'left_in',
+      panelCount: Math.max(1, Math.min(4, Math.floor(shape.panel_count || 1))),
+    })
+    const evaluated = evaluateParametricSymbol(symbol, {
+      W: width,
+      T: wallThick,
+      F: frame,
+      D: leaf,
+    })
+
+    for (const poly of evaluated.polygons) {
+      paths.push({
+        kind: 'polygon',
+        points_mm: poly.points,
+        closed: poly.closed,
+        line_width_mm: poly.thickness,
+        fill: poly.fill,
+      })
     }
-    const rows = Math.max(1, Math.min(8, Math.floor(shape.muntin_rows || 1)))
-    const columns = Math.max(1, Math.min(8, Math.floor(shape.muntin_columns || 1)))
-    for (let index = 1; index <= rows; index++) {
-      const z = frame + (height - frame * 2) * index / (rows + 1)
-      line(frame, z, width - frame, z, 0.2)
+    for (const line of evaluated.lines) {
+      paths.push({
+        kind: 'line',
+        points_mm: [line.start, line.end],
+        closed: false,
+        line_width_mm: line.thickness ?? 0.25,
+      })
     }
-    for (let index = 1; index <= columns; index++) {
-      const x = frame + (width - frame * 2) * index / (columns + 1)
-      line(x, frame, x, height - frame, 0.2)
+    for (const arc of evaluated.arcs) {
+      paths.push({
+        kind: 'arc',
+        points_mm: [],
+        line_width_mm: arc.thickness ?? 0.25,
+        arc: {
+          center: arc.center,
+          radius: arc.radius,
+          start_angle_deg: arc.start_angle_deg,
+          sweep_angle_deg: arc.sweep_angle_deg,
+        },
+      })
     }
   } else {
-    const inset = frame * 1.7
-    rect(inset, inset, width - inset, height - inset, 0.2)
-    const panels = Math.max(1, Math.min(4, Math.floor(shape.panel_count || 1)))
-    for (let index = 1; index <= panels; index++) {
-      const z = inset + (height - inset * 2) * index / (panels + 1)
-      line(inset, z, width - inset, z, 0.2)
+    const symbol = createWindowPlanSymbol({
+      panelCount: Math.max(1, Math.min(8, Math.floor(shape.panel_count || 2))),
+      panelWidthRatios: shape.panel_width_ratios,
+    })
+    const evaluated = evaluateParametricSymbol(symbol, {
+      W: width,
+      T: wallThick,
+      F: frame,
+      S: sash,
+    })
+
+    for (const poly of evaluated.polygons) {
+      paths.push({
+        kind: 'polygon',
+        points_mm: poly.points,
+        closed: poly.closed,
+        line_width_mm: poly.thickness,
+        fill: poly.fill,
+      })
+    }
+    for (const line of evaluated.lines) {
+      paths.push({
+        kind: 'line',
+        points_mm: [line.start, line.end],
+        closed: false,
+        line_width_mm: line.thickness ?? 0.25,
+      })
     }
   }
 
@@ -531,6 +653,141 @@ function baseObject(object: SmartObject, data: Data, position_mm: Vec3Mm, rotati
   }
 }
 
+export function buildOpeningRepresentationShapeFromType(
+  objectType: string,
+  parameters: Record<string, any> = {},
+): Extract<RepresentationShape, { kind: 'opening' }> {
+  const isDoor = objectType.endsWith('.door')
+  const width = isPositive(parameters.width_mm) ? parameters.width_mm : (isDoor ? 900 : 1200)
+  const height = isPositive(parameters.height_mm) ? parameters.height_mm : (isDoor ? 2000 : 1100)
+  const operationValue = parameters.opening_operation
+  const operations = ['hinged', 'sliding', 'fixed', 'awning', 'louver'] as const
+  const operation = operations.includes(operationValue) ? operationValue : (isDoor ? 'hinged' : 'sliding')
+  const panelCount = isPositive(parameters.panel_count) ? Math.min(8, Math.floor(parameters.panel_count)) : (isDoor ? 1 : 2)
+  const panelLayoutValue = parameters.panel_layout
+  const panelOperations = ['hinged', 'sliding', 'fixed', 'awning', 'louver'] as const
+  const panelLayout = Array.isArray(panelLayoutValue) && panelLayoutValue.length === panelCount
+    && panelLayoutValue.every(value => panelOperations.includes(value))
+    ? panelLayoutValue
+    : Array.from({ length: panelCount }, () => operation)
+  const panelWidthRatiosValue = parameters.panel_width_ratios
+  const panelWidthRatios = Array.isArray(panelWidthRatiosValue) && panelWidthRatiosValue.length === panelCount
+    && panelWidthRatiosValue.every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
+    && Math.abs(panelWidthRatiosValue.reduce((sum, value) => sum + value, 0) - 1) < 0.001
+    ? panelWidthRatiosValue
+    : Array.from({ length: panelCount }, () => 1 / panelCount)
+  const transomHeight = isPositive(parameters.transom_height_mm) ? Math.min(parameters.transom_height_mm, height * 0.45) : 0
+  const bottomLightHeight = !isDoor && isPositive(parameters.bottom_light_height_mm) ? Math.min(parameters.bottom_light_height_mm, height * 0.45) : 0
+  const muntinRows = isPositive(parameters.muntin_rows) ? Math.min(8, Math.floor(parameters.muntin_rows)) : 1
+  const muntinColumns = isPositive(parameters.muntin_columns) ? Math.min(8, Math.floor(parameters.muntin_columns)) : 1
+  const transomMuntinRows = Math.max(1, Math.min(8, Math.floor(Number(parameters.transom_muntin_rows) || 1)))
+  const transomMuntinColumns = Math.max(1, Math.min(8, Math.floor(Number(parameters.transom_muntin_columns) || 1)))
+  const bottomLightMuntinRows = Math.max(1, Math.min(8, Math.floor(Number(parameters.bottom_light_muntin_rows) || 1)))
+  const bottomLightMuntinColumns = Math.max(1, Math.min(8, Math.floor(Number(parameters.bottom_light_muntin_columns) || 1)))
+  const frameDepth = isPositive(parameters.frame_depth_mm) ? parameters.frame_depth_mm : 65
+  const frameFaceWidth = isPositive(parameters.frame_face_width_mm) ? parameters.frame_face_width_mm : 50
+  const sashFaceWidth = isPositive(parameters.sash_face_width_mm) ? parameters.sash_face_width_mm : 50
+  const doorLeafThickness = isPositive(parameters.door_leaf_thickness_mm) ? parameters.door_leaf_thickness_mm : 50
+  const frameMaterial = typeof parameters.frame_material === 'string' ? parameters.frame_material : 'aluminium'
+  const panelMaterial = typeof parameters.panel_material === 'string' ? parameters.panel_material : undefined
+  const leafStyles = ['flush', 'raised_2_panel', 'raised_4_panel', 'raised_6_panel', 'horizontal_grooves_3', 'horizontal_grooves_5', 'vertical_grooves_3', 'louvered'] as const
+  const leafStyle = leafStyles.includes(parameters.door_leaf_style) ? parameters.door_leaf_style : (operation === 'louver' ? 'louvered' : 'raised_2_panel')
+  const handleStyles = ['lever', 'round_knob', 'pull_handle', 'recessed_pull', 'none'] as const
+  const handleStyle = handleStyles.includes(parameters.opening_handle_style) ? parameters.opening_handle_style : (operation === 'sliding' ? 'recessed_pull' : 'lever')
+  const finishStyles = ['stainless', 'matte_black', 'satin_brass', 'bronze'] as const
+  const hardwareFinish = finishStyles.includes(parameters.opening_hardware_finish) ? parameters.opening_hardware_finish : 'stainless'
+  const glazingMaterials = ['none', 'clear_glass', 'frosted_glass', 'tinted_glass'] as const
+  const glazingMaterial = glazingMaterials.includes(parameters.glazing_material) ? parameters.glazing_material : (isDoor ? 'none' : 'clear_glass')
+  const transmission = isFiniteNumber(parameters.glazing_transmission) ? Math.max(0, Math.min(1, parameters.glazing_transmission)) : (glazingMaterial === 'none' ? 0 : 0.72)
+
+  return {
+    kind: 'opening',
+    opening_type: isDoor ? 'door' : 'window',
+    width_mm: width,
+    height_mm: height,
+    wall_thickness_mm: isPositive(parameters.wall_thickness_mm) ? parameters.wall_thickness_mm : 100,
+    sill_height_mm: isPositive(parameters.sill_height_mm) ? parameters.sill_height_mm : 0,
+    operation,
+    panel_count: panelCount,
+    panel_layout: panelLayout,
+    panel_width_ratios: panelWidthRatios,
+    transom_height_mm: transomHeight,
+    bottom_light_height_mm: bottomLightHeight,
+    muntin_rows: muntinRows,
+    muntin_columns: muntinColumns,
+    transom_muntin_rows: transomMuntinRows,
+    transom_muntin_columns: transomMuntinColumns,
+    bottom_light_muntin_rows: bottomLightMuntinRows,
+    bottom_light_muntin_columns: bottomLightMuntinColumns,
+    frame_depth_mm: frameDepth,
+    frame_face_width_mm: frameFaceWidth,
+    sash_face_width_mm: sashFaceWidth,
+    door_leaf_thickness_mm: doorLeafThickness,
+    frame_material: frameMaterial,
+    panel_material: panelMaterial,
+    door_face_components: parameters.door_face_components,
+    door_leaf_style: leafStyle,
+    opening_handle_style: handleStyle,
+    opening_hardware_finish: hardwareFinish,
+    glazing_material: glazingMaterial,
+    glazing_transmission: transmission,
+    handing: typeof parameters.handing === 'string' ? parameters.handing : undefined,
+  }
+}
+
+export function buildOpeningRepresentationShapeFromObject(
+  project: ProjectDocument,
+  object: SmartObject,
+): Extract<RepresentationShape, { kind: 'opening' }> | undefined {
+  if (object.object_type !== 'door_window.door' && object.object_type !== 'door_window.window') return undefined
+  const data = moduleData(object)
+  if (!data) return undefined
+  const hostId = data.wall_id
+  const host = typeof hostId === 'string' ? project.objects[hostId] : undefined
+  const hostData = host ? moduleData(host) : undefined
+  const width = resolveValue(project, object, data, 'width_mm')
+  const vertical = resolveOpeningVerticalExtent(project, data)
+  const height = vertical?.height_mm ?? resolveValue(project, object, data, 'height_mm')
+  const hostVertical = hostData ? resolveWallVerticalExtent(project, hostData) : undefined
+  const sill = vertical ? vertical.base_elevation_mm - (hostVertical?.base_elevation_mm ?? 0) : (object.object_type === 'door_window.window' ? resolveValue(project, object, data, 'sill_height_mm') ?? 0 : 0)
+  if (!isPositive(width) || !isPositive(height) || !isFiniteNumber(sill) || sill < 0) return undefined
+  const wallThickness = host && hostData ? resolveValue(project, host, hostData, 'thickness_mm') : undefined
+
+  const params: Record<string, any> = {
+    width_mm: width,
+    height_mm: height,
+    sill_height_mm: sill,
+    wall_thickness_mm: wallThickness,
+    opening_operation: resolveValue(project, object, data, 'opening_operation'),
+    panel_count: resolveValue(project, object, data, 'panel_count'),
+    panel_layout: resolveValue(project, object, data, 'panel_layout'),
+    panel_width_ratios: resolveValue(project, object, data, 'panel_width_ratios'),
+    transom_height_mm: resolveValue(project, object, data, 'transom_height_mm'),
+    bottom_light_height_mm: object.object_type === 'door_window.window' ? resolveValue(project, object, data, 'bottom_light_height_mm') : 0,
+    muntin_rows: resolveValue(project, object, data, 'muntin_rows'),
+    muntin_columns: resolveValue(project, object, data, 'muntin_columns'),
+    transom_muntin_rows: resolveValue(project, object, data, 'transom_muntin_rows'),
+    transom_muntin_columns: resolveValue(project, object, data, 'transom_muntin_columns'),
+    bottom_light_muntin_rows: resolveValue(project, object, data, 'bottom_light_muntin_rows'),
+    bottom_light_muntin_columns: resolveValue(project, object, data, 'bottom_light_muntin_columns'),
+    frame_depth_mm: resolveValue(project, object, data, 'frame_depth_mm'),
+    frame_face_width_mm: resolveValue(project, object, data, 'frame_face_width_mm'),
+    sash_face_width_mm: resolveValue(project, object, data, 'sash_face_width_mm'),
+    door_leaf_thickness_mm: resolveValue(project, object, data, 'door_leaf_thickness_mm'),
+    frame_material: resolveValue(project, object, data, 'frame_material'),
+    panel_material: resolveValue(project, object, data, 'panel_material'),
+    door_face_components: resolveValue(project, object, data, 'door_face_components'),
+    door_leaf_style: resolveValue(project, object, data, 'door_leaf_style'),
+    opening_handle_style: resolveValue(project, object, data, 'opening_handle_style'),
+    opening_hardware_finish: resolveValue(project, object, data, 'opening_hardware_finish'),
+    glazing_material: resolveValue(project, object, data, 'glazing_material'),
+    glazing_transmission: resolveValue(project, object, data, 'glazing_transmission'),
+    handing: typeof data.handing === 'string' ? data.handing : undefined,
+  }
+
+  return buildOpeningRepresentationShapeFromType(object.object_type, params)
+}
+
 function representObject(project: ProjectDocument, object: SmartObject, warnings: string[], visibleObjectIds?: ReadonlySet<string>): ObjectRepresentation3D | undefined {
   const data = moduleData(object)
   if (!data) {
@@ -668,79 +925,12 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
         width_mm: width,
         offset_along_wall_mm: data.offset_along_wall_mm,
       }
-      const operationValue = resolveValue(project, object, data, 'opening_operation')
-      const operations = ['hinged', 'sliding', 'fixed', 'awning', 'louver'] as const
-      const operation = operations.includes(operationValue as typeof operations[number])
-        ? operationValue as typeof operations[number]
-        : object.object_type === 'door_window.door' ? 'hinged' : 'sliding'
-      const panelCountValue = resolveValue(project, object, data, 'panel_count')
-      const panelCount = isPositive(panelCountValue) ? Math.min(8, Math.floor(panelCountValue)) : object.object_type === 'door_window.window' ? 2 : 1
-      const panelLayoutValue = resolveValue(project, object, data, 'panel_layout')
-      const panelOperations = ['hinged', 'sliding', 'fixed', 'awning', 'louver'] as const
-      const panelLayout = Array.isArray(panelLayoutValue) && panelLayoutValue.length === panelCount
-        && panelLayoutValue.every(value => panelOperations.includes(value as typeof panelOperations[number]))
-        ? panelLayoutValue as Array<typeof panelOperations[number]>
-        : Array.from({ length: panelCount }, () => operation)
-      const panelWidthRatiosValue = resolveValue(project, object, data, 'panel_width_ratios')
-      const panelWidthRatios = Array.isArray(panelWidthRatiosValue) && panelWidthRatiosValue.length === panelCount
-        && panelWidthRatiosValue.every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
-        && Math.abs(panelWidthRatiosValue.reduce((sum, value) => sum + value, 0) - 1) < 0.001
-        ? panelWidthRatiosValue as number[]
-        : Array.from({ length: panelCount }, () => 1 / panelCount)
-      const transomHeight = resolveValue(project, object, data, 'transom_height_mm')
-      const bottomLightHeight = object.object_type === 'door_window.window' ? resolveValue(project, object, data, 'bottom_light_height_mm') : 0
-      const muntinRowsValue = resolveValue(project, object, data, 'muntin_rows')
-      const muntinColumnsValue = resolveValue(project, object, data, 'muntin_columns')
-      const frameDepthValue = resolveValue(project, object, data, 'frame_depth_mm')
-      const frameFaceWidthValue = resolveValue(project, object, data, 'frame_face_width_mm')
-      const sashFaceWidthValue = resolveValue(project, object, data, 'sash_face_width_mm')
-      const doorLeafThicknessValue = resolveValue(project, object, data, 'door_leaf_thickness_mm')
-      const frameMaterialValue = resolveValue(project, object, data, 'frame_material')
-      const panelMaterialValue = resolveValue(project, object, data, 'panel_material')
-      const leafStyleValue = resolveValue(project, object, data, 'door_leaf_style')
-      const handleStyleValue = resolveValue(project, object, data, 'opening_handle_style')
-      const hardwareFinishValue = resolveValue(project, object, data, 'opening_hardware_finish')
-      const glazingValue = resolveValue(project, object, data, 'glazing_material')
-      const transmissionValue = resolveValue(project, object, data, 'glazing_transmission')
-      const glazingMaterials = ['none', 'clear_glass', 'frosted_glass', 'tinted_glass'] as const
-      const glazingMaterial = glazingMaterials.includes(glazingValue as typeof glazingMaterials[number])
-        ? glazingValue as typeof glazingMaterials[number]
-        : object.object_type === 'door_window.window' ? 'clear_glass' : 'none'
-      const wall = project.objects[host.id]
-      const wallThickness = resolveValue(project, wall, moduleData(wall)!, 'thickness_mm')
-      return baseObject(object, data, [location[0], location[1], (vertical?.base_elevation_mm ?? location[2] + sill) + height / 2], Math.atan2(dy, dx), {
-        kind: 'opening',
-        opening_type: object.object_type === 'door_window.door' ? 'door' : 'window',
-        width_mm: width,
-        height_mm: height,
-        wall_thickness_mm: isPositive(wallThickness) ? wallThickness : 100,
-        sill_height_mm: sill,
-        operation,
-        panel_count: panelCount,
-        panel_layout: panelLayout,
-        panel_width_ratios: panelWidthRatios,
-        transom_height_mm: isPositive(transomHeight) ? Math.min(transomHeight, height * 0.45) : 0,
-        bottom_light_height_mm: isPositive(bottomLightHeight) ? Math.min(bottomLightHeight, height * 0.45) : 0,
-        muntin_rows: isPositive(muntinRowsValue) ? Math.min(8, Math.floor(muntinRowsValue)) : 1,
-        muntin_columns: isPositive(muntinColumnsValue) ? Math.min(8, Math.floor(muntinColumnsValue)) : 1,
-        transom_muntin_rows: Math.max(1, Math.min(8, Math.floor(Number(resolveValue(project, object, data, 'transom_muntin_rows')) || 1))),
-        transom_muntin_columns: Math.max(1, Math.min(8, Math.floor(Number(resolveValue(project, object, data, 'transom_muntin_columns')) || 1))),
-        bottom_light_muntin_rows: Math.max(1, Math.min(8, Math.floor(Number(resolveValue(project, object, data, 'bottom_light_muntin_rows')) || 1))),
-        bottom_light_muntin_columns: Math.max(1, Math.min(8, Math.floor(Number(resolveValue(project, object, data, 'bottom_light_muntin_columns')) || 1))),
-        frame_depth_mm: isPositive(frameDepthValue) ? frameDepthValue : 65,
-        frame_face_width_mm: isPositive(frameFaceWidthValue) ? frameFaceWidthValue : 50,
-        sash_face_width_mm: isPositive(sashFaceWidthValue) ? sashFaceWidthValue : 50,
-        door_leaf_thickness_mm: isPositive(doorLeafThicknessValue) ? doorLeafThicknessValue : 50,
-        frame_material: typeof frameMaterialValue === 'string' ? frameMaterialValue : 'aluminium',
-        panel_material: typeof panelMaterialValue === 'string' ? panelMaterialValue : undefined,
-        door_face_components: resolveValue(project, object, data, 'door_face_components') as DoorFaceComponent[] | undefined,
-        door_leaf_style: ['flush', 'raised_2_panel', 'raised_4_panel', 'raised_6_panel', 'horizontal_grooves_3', 'horizontal_grooves_5', 'vertical_grooves_3', 'louvered'].includes(String(leafStyleValue)) ? leafStyleValue as 'flush' | 'raised_2_panel' | 'raised_4_panel' | 'raised_6_panel' | 'horizontal_grooves_3' | 'horizontal_grooves_5' | 'vertical_grooves_3' | 'louvered' : operation === 'louver' ? 'louvered' : 'raised_2_panel',
-        opening_handle_style: ['lever', 'round_knob', 'pull_handle', 'recessed_pull', 'none'].includes(String(handleStyleValue)) ? handleStyleValue as 'lever' | 'round_knob' | 'pull_handle' | 'recessed_pull' | 'none' : operation === 'sliding' ? 'recessed_pull' : 'lever',
-        opening_hardware_finish: ['stainless', 'matte_black', 'satin_brass', 'bronze'].includes(String(hardwareFinishValue)) ? hardwareFinishValue as 'stainless' | 'matte_black' | 'satin_brass' | 'bronze' : 'stainless',
-        glazing_material: glazingMaterial,
-        glazing_transmission: isFiniteNumber(transmissionValue) ? Math.max(0, Math.min(1, transmissionValue)) : (glazingMaterial === 'none' ? 0 : 0.72),
-        handing: object.object_type === 'door_window.door' && typeof data.handing === 'string' ? data.handing : undefined,
-      }, interaction)
+      const shape = buildOpeningRepresentationShapeFromObject(project, object)
+      if (!shape) {
+        warnings.push(`${object.id}: host or opening dimensions are invalid; 3D representation omitted`)
+        return undefined
+      }
+      return baseObject(object, data, [location[0], location[1], (vertical?.base_elevation_mm ?? location[2] + sill) + height / 2], Math.atan2(dy, dx), shape, interaction)
     }
     default:
       return undefined

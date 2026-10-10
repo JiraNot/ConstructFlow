@@ -29,6 +29,8 @@ import {
   typeSizeLabel,
   type OpeningPreviewPart,
 } from "./catalogPresentation.js";
+import { OpeningElevationThumbnail } from "./OpeningElevationThumbnail.js";
+import { buildOpeningRepresentationShapeFromType } from "@constructflow/representation-engine";
 
 interface Props {
   isOpen: boolean;
@@ -904,6 +906,16 @@ function CatalogDialog({
                 selectedPart={selectedPart}
                 onSelectPart={opening ? selectPart : undefined}
               />
+              {opening && (
+                <div style={{ marginTop: 8 }}>
+                  <span className="cf-eyebrow" style={{ fontSize: 10, display: 'block', marginBottom: 4 }}>รูปด้านมาตรฐาน (Elevation Linework)</span>
+                  <OpeningElevationThumbnail
+                    shape={buildOpeningRepresentationShapeFromType(preview.object_type, preview.parameters)}
+                    widthPx={200}
+                    heightPx={130}
+                  />
+                </div>
+              )}
               <h3>{typeDescription(preview)}</h3>
               <p>{typeSizeLabel(preview, displayUnit)}</p>
               <p className="cf-help">

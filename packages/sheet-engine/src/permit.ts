@@ -786,44 +786,154 @@ function compilePermitDrawingSetBase(
           const unique = new Map<string, SmartObject>();
           for (const o of selected)
             unique.set(String(data(o).type_id ?? data(o).mark), o);
-          for (const [i, o] of [...unique.values()].slice(0, 6).entries()) {
-            const d = data(o),
-              t = resolveCatalogType(
-                project,
-                o.object_type,
-                String(d.type_id ?? d.mark),
-              ),
-              over = d.instance_overrides as
-                | Record<string, unknown>
-                | undefined,
-              w =
-                Number(over?.width_mm ?? d.width_mm ?? t?.parameters.width_mm) /
-                viewport.scale_denominator,
-              h =
-                Number(
-                  over?.height_mm ?? d.height_mm ?? t?.parameters.height_mm,
-                ) / viewport.scale_denominator,
-              x = 25 + i * 62,
-              y = 155;
-            if (!Number.isFinite(w + h)) continue;
+
+          const items = [...unique.values()].slice(0, 6);
+          const cardWidth = 59;
+          const cardHeight = 115;
+          const startX = 20;
+          const startY = 145;
+
+          text([startX, startY - 4], "แบบขยายประตูและหน้าต่าง (TYPE ELEVATIONS & SCHEDULE DETAILS) · มาตราส่วน 1:50", 2.8, "#0f172a");
+
+          for (const [i, o] of items.entries()) {
+            const d = data(o);
+            const mark = String(d.mark ?? "D1");
+            const isDoor = o.object_type === "door_window.door";
+            const count = selected.filter(item => String(data(item).type_id ?? data(item).mark) === String(d.type_id ?? d.mark)).length;
+            const t = resolveCatalogType(project, o.object_type, String(d.type_id ?? d.mark));
+            const over = d.instance_overrides as Record<string, unknown> | undefined;
+            const rawW = Number(over?.width_mm ?? d.width_mm ?? t?.parameters.width_mm ?? 900);
+            const rawH = Number(over?.height_mm ?? d.height_mm ?? t?.parameters.height_mm ?? 2000);
+            const sillMm = Number(over?.sill_height_mm ?? d.sill_height_mm ?? (isDoor ? 0 : 900));
+
+            const cardX = startX + i * (cardWidth + 4);
+            const cardY = startY;
+
+            // 1. Card container outline
             path(
               [
-                [x, y],
-                [x + w, y],
-                [x + w, y + h],
-                [x, y + h],
+                [cardX, cardY],
+                [cardX + cardWidth, cardY],
+                [cardX + cardWidth, cardY + cardHeight],
+                [cardX, cardY + cardHeight],
               ],
-              "#0f172a",
-              0.3,
+              "#cbd5e1",
+              0.25,
               undefined,
               true,
+              "#ffffff",
             );
-            text([x, y - 5], String(d.mark), 2.5);
-            text(
-              [x, y + h + 5],
-              `${((w * viewport.scale_denominator) / 1000).toFixed(2)} x ${((h * viewport.scale_denominator) / 1000).toFixed(2)} m`,
-              2.4,
+
+            // Card Header Banner
+            path(
+              [
+                [cardX, cardY],
+                [cardX + cardWidth, cardY],
+                [cardX + cardWidth, cardY + 9],
+                [cardX, cardY + 9],
+              ],
+              "#e2e8f0",
+              0.2,
+              undefined,
+              true,
+              "#f1f5f9",
             );
+            text([cardX + 2.5, cardY + 6.2], `[ ${mark} ]  ${isDoor ? "ประตู" : "หน้าต่าง"}`, 2.5, "#0f172a");
+            text([cardX + cardWidth - 16, cardY + 6.2], `จำนวน ${count} บาน`, 2.0, "#475569");
+
+            // 2. Elevation Drawing Sub-Box
+            const drawBoxX = cardX + 3.5;
+            const drawBoxY = cardY + 12;
+            const drawBoxW = cardWidth - 7;
+            const drawBoxH = 50;
+
+            path(
+              [
+                [drawBoxX, drawBoxY],
+                [drawBoxX + drawBoxW, drawBoxY],
+                [drawBoxX + drawBoxW, drawBoxY + drawBoxH],
+                [drawBoxX, drawBoxY + drawBoxH],
+              ],
+              "#e2e8f0",
+              0.15,
+              undefined,
+              true,
+              "#fafafa",
+            );
+
+            // Elevation Linework via Constraint Engine
+            const shape = representations.find(r => r.object_id === o.id)?.shape;
+            if (shape?.kind === "opening") {
+              const lineworks = getOpeningElevationLinework(shape, { show_operation_indicator: true });
+              const scale = Math.min((drawBoxW * 0.72) / rawW, (drawBoxH * 0.75) / rawH);
+              const dw = rawW * scale;
+              const dh = rawH * scale;
+              const originX = drawBoxX + (drawBoxW - dw) / 2;
+              const originY = drawBoxY + drawBoxH - 6;
+
+              // Ground / Sill reference line
+              path(
+                [
+                  [originX - 3, originY],
+                  [originX + dw + 3, originY],
+                ],
+                "#94a3b8",
+                0.3,
+                [2, 1],
+              );
+
+              for (const lw of lineworks) {
+                const pts: Vec2[] = lw.points_mm.map(([lx, lz]) => [
+                  originX + lx * scale,
+                  originY - lz * scale,
+                ]);
+                path(pts, "#0f172a", Math.max(0.15, lw.line_width_mm * 0.6), undefined, lw.closed, lw.fill);
+              }
+
+              // Dimension text
+              text(
+                [originX + dw / 2 - 5, originY + 4],
+                `${(rawW / 1000).toFixed(2)} ม.`,
+                1.9,
+                "#1e293b",
+              );
+              text(
+                [originX + dw + 1.5, originY - dh / 2],
+                `${(rawH / 1000).toFixed(2)} ม.`,
+                1.9,
+                "#1e293b",
+              );
+              text(
+                [drawBoxX + 1.5, originY - 1.5],
+                sillMm === 0 ? "±0.00" : `+${(sillMm / 1000).toFixed(2)}`,
+                1.7,
+                "#64748b",
+              );
+            }
+
+            // 3. Specification rows inside the card
+            const specY = cardY + 65;
+            const specRows = [
+              ["ขนาดช่องเปิด", `${(rawW / 1000).toFixed(2)} × ${(rawH / 1000).toFixed(2)} ม.`],
+              ["วงกบ (Frame)", isDoor ? (d.frame_material === "wood" ? "ไม้เนื้อแข็ง 2\"x4\"" : "อลูมิเนียม 1.5มม.") : "อลูมิเนียมอบขาว 1.5มม."],
+              ["บานกรอบ/ผิว", isDoor ? (d.door_leaf_style ? String(d.door_leaf_style).replace(/_/g, " ") : "บาน HDF ลายไม้") : "อลูมิเนียม + กระจก"],
+              ["กระจก (Glass)", isDoor ? "—" : "กระจกเขียวตัดแสง 6 มม."],
+              ["อุปกรณ์ล็อค", isDoor ? "ลูกบิด + บานพับ SS 4\"" : "ล็อคก้นหอย + ลูกปืน"],
+            ];
+
+            specRows.forEach(([label, val], sIdx) => {
+              const curY = specY + sIdx * 9.5;
+              path(
+                [
+                  [cardX + 2, curY - 2.5],
+                  [cardX + cardWidth - 2, curY - 2.5],
+                ],
+                "#e2e8f0",
+                0.15,
+              );
+              text([cardX + 2.5, curY], label, 1.8, "#64748b");
+              text([cardX + 2.5, curY + 4.2], val, 2.0, "#0f172a", cardWidth - 5);
+            });
           }
         }
       } else if (id === "A-01") {

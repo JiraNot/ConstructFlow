@@ -28,6 +28,8 @@ import {
   type DisplayLengthUnit,
 } from '@constructflow/project-model'
 import { Trash2, PlusCircle, RefreshCw, SlidersHorizontal, MousePointer2 } from 'lucide-react'
+import { OpeningElevationThumbnail } from './OpeningElevationThumbnail.js'
+import { buildOpeningRepresentationShapeFromObject } from '@constructflow/representation-engine'
 import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
 import { CatalogField } from './CatalogField.js'
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
@@ -267,6 +269,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const wallVertical = wallObj ? resolveWallVerticalExtent(project, wallObj) : undefined
   const doorVertical = doorObj ? resolveOpeningVerticalExtent(project, doorObj) : undefined
   const windowVertical = winObj ? resolveOpeningVerticalExtent(project, winObj) : undefined
+  const doorShape = doorObj ? buildOpeningRepresentationShapeFromObject(project, doorObj) : undefined
+  const winShape = winObj ? buildOpeningRepresentationShapeFromObject(project, winObj) : undefined
   const verticalSelectStyle: React.CSSProperties = { width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 5, padding: 7, color: '#24364b' }
 
   if (selectedObjects.length > 1) {
@@ -740,6 +744,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
 
           {openingInstanceEditor}
+          {doorShape && <OpeningElevationThumbnail shape={doorShape} />}
 
           <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับประตู</strong>
@@ -839,6 +844,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
 
           {openingInstanceEditor}
+          {winShape && <OpeningElevationThumbnail shape={winShape} />}
 
           <section style={{ display: 'grid', gap: 7, padding: 9, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 6 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับหน้าต่าง</strong>

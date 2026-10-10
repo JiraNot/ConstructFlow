@@ -134,11 +134,12 @@ Generated Extension infills use the same `DoorWindowQuantityProvider`; project-l
 
 ## Drawing
 
-- plan symbols/open direction;
-- elevation representation;
-- Door Schedule;
-- Window Schedule;
+- plan symbols/open direction via `@constructflow/representation-engine` (`getOpeningPlanLinework`): jambs, leaf, 90° swing arc, sliding arrows;
+- elevation representation via `@constructflow/representation-engine` (`getOpeningElevationLinework`) and `@constructflow/constraint-engine`: closed polygons with `#ffffff` fill, panel divisions, muntin grids, dashed swing lines, and sliding direction arrows;
+- Door Schedule & Window Schedule: compiled on sheet A-08 as 1:50 Matrix Grid Cards with dimensions ($W \times H$), sill ($+Z$), swing dashes, and 5-row specification table (Mark/Type, Dimensions, Frame, Glass/Panel, Count);
 - type ID (D01/W01);
+- interactive PlanCanvas editing: center move handle, width resize handles with 100 mm column/wall-end clearance snap, 50 mm step quantization, and 1-click flip handing badge icon (`⇄`);
+- visual SVG elevation thumbnails (`OpeningElevationThumbnail`) embedded in Type Manager and Properties Inspector;
 - head/jamb/sill detail anchors.
 
 Generated Extension infills use the same plan representation and appear in the selected Extension's Architecture drawing/currentness scope through Smart Object provenance.
@@ -167,3 +168,6 @@ Generated Extension infills use the same plan representation and appear in the s
 - AC-DW-009: Extension infill regeneration/type change preserves Smart Object identity while the Opening remains compatible and unchanged.
 - AC-DW-010: explicit Extension infill disable detaches and reconciles only generated new-work infill; omission is non-destructive.
 - AC-DW-011: generated Extension infill quantity/drawing output is produced by the normal Door/Window providers, not duplicated in Extension logic.
+- AC-DW-012: parametric elevation symbols solve closed polygons (`#ffffff` fill), panel width ratios, muntins, and swing/slide operation indicators using linear simplex constraints.
+- AC-DW-013: Sheet A-08 compiles 1:50 Matrix Grid Cards showing true elevation linework, $W \times H$ dimensions, sill $+Z$ datums, and 5-row Thai specification tables.
+- AC-DW-014: PlanCanvas provides interactive center move handle, width resize handles with 100 mm clearance snapping to columns/ends and 50 mm quantization, 1-click flip handing badge icon (`⇄`), and visual SVG thumbnails in UI panels.

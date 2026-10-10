@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { constrainPointToReference, findNearestLinearReference, inferLinearConstraint, snapPoint, snapToWallHost } from '../dist/index.js'
+import { constrainPointToReference, findNearestLinearReference, inferLinearConstraint, snapPoint, snapToWallHost, snapOpeningOffsetBimAware, snapOpeningWidthBimAware } from '../dist/index.js'
 
 const view = (zoom = 1) => ({ zoom })
 const project = (...objects) => ({ objects: Object.fromEntries(objects.map(object => [object.id, object])) })
@@ -183,4 +183,35 @@ test('automatically infers parallel and perpendicular intent within screen-space
   assert.equal(inferLinearConstraint([108, 500], [100, 20], reference, 10), 'perpendicular')
   assert.equal(inferLinearConstraint([600, 150], [100, 20], reference, 10), null)
   assert.equal(inferLinearConstraint([100, 20], [100, 20], reference, 10), null)
+})
+
+test('snapOpeningOffsetBimAware enforces 100mm clearance from column and wall ends', () => {
+  // Wall length 3000mm, opening width 800mm (half width = 400mm)
+  // minOffset without column: 100 + 400 = 500mm
+  const r1 = snapOpeningOffsetBimAware(520, 3000, 800)
+  assert.equal(r1.offset_along_wall_mm, 500)
+  assert.equal(r1.snap_type, 'wall_end_clearance')
+
+  // Wall start with 200mm column (half col = 100mm) -> minOffset = 100 + 100 + 400 = 600mm
+  const r2 = snapOpeningOffsetBimAware(615, 3000, 800, { startColumnWidth_mm: 200 })
+  assert.equal(r2.offset_along_wall_mm, 600)
+  assert.equal(r2.snap_type, 'column_clearance')
+
+  // Wall midpoint: 1500mm
+  const r3 = snapOpeningOffsetBimAware(1520, 3000, 800)
+  assert.equal(r3.offset_along_wall_mm, 1500)
+  assert.equal(r3.snap_type, 'midpoint')
+
+  // Step quantization: 1100 -> 1100, 1120 -> 1100, 1130 -> 1150
+  const r4 = snapOpeningOffsetBimAware(1130, 3000, 800)
+  assert.equal(r4.offset_along_wall_mm, 1150)
+  assert.equal(r4.snap_type, 'increment')
+})
+
+test('snapOpeningWidthBimAware snaps to standard catalog increments and clamps within max width', () => {
+  assert.equal(snapOpeningWidthBimAware(885, 2000), 900)
+  assert.equal(snapOpeningWidthBimAware(990, 2000), 1000)
+  assert.equal(snapOpeningWidthBimAware(1180, 2000), 1200)
+  // Max width clamping
+  assert.equal(snapOpeningWidthBimAware(1500, 1200), 1200)
 })

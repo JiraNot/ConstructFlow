@@ -336,3 +336,124 @@ export function snapToWallHost(
   }
   return closest
 }
+
+export interface OpeningBimSnapResult {
+  offset_along_wall_mm: number
+  description: string
+  snap_type: 'column_clearance' | 'wall_end_clearance' | 'midpoint' | 'increment' | 'free'
+}
+
+export interface OpeningBimSnapOptions {
+  startColumnWidth_mm?: number
+  endColumnWidth_mm?: number
+  minClearance_mm?: number
+  stepIncrement_mm?: number
+  snapTolerance_mm?: number
+}
+
+/**
+ * Snaps a proposed opening position along its host wall taking into account
+ * BIM architectural rules: minimum clearance to wall ends or columns (default 100mm),
+ * wall midpoint snapping, and standard 50mm increment quantization.
+ */
+export function snapOpeningOffsetBimAware(
+  rawOffset_mm: number,
+  wallLength_mm: number,
+  openingWidth_mm: number,
+  options: OpeningBimSnapOptions = {}
+): OpeningBimSnapResult {
+  const minClearance = options.minClearance_mm ?? 100
+  const step = options.stepIncrement_mm ?? 50
+  const tolerance = options.snapTolerance_mm ?? 50
+  const halfWidth = openingWidth_mm / 2
+
+  // Start obstacle: either column edge or wall start
+  const startObstacle = options.startColumnWidth_mm ? options.startColumnWidth_mm / 2 : 0
+  const minOffset = Math.round(startObstacle + minClearance + halfWidth)
+
+  // End obstacle: either column edge or wall end
+  const endObstacle = options.endColumnWidth_mm ? options.endColumnWidth_mm / 2 : 0
+  const maxOffset = Math.round(wallLength_mm - (endObstacle + minClearance + halfWidth))
+
+  // In case the wall is shorter than minOffset, clamp to available space or midpoint
+  if (minOffset > maxOffset) {
+    const center = Math.round(wallLength_mm / 2)
+    return {
+      offset_along_wall_mm: center,
+      description: `Midpoint / กึ่งกลาง (${(center / 1000).toFixed(2)}m)`,
+      snap_type: 'midpoint',
+    }
+  }
+
+  // 1. Check start clearance snap
+  if (Math.abs(rawOffset_mm - minOffset) <= tolerance) {
+    return {
+      offset_along_wall_mm: minOffset,
+      description: options.startColumnWidth_mm
+        ? `Column Clearance / ระยะขอบเสา ${minClearance} มม.`
+        : `Wall End Clearance / ระยะขอบผนัง ${minClearance} มม.`,
+      snap_type: options.startColumnWidth_mm ? 'column_clearance' : 'wall_end_clearance',
+    }
+  }
+
+  // 2. Check end clearance snap
+  if (Math.abs(rawOffset_mm - maxOffset) <= tolerance) {
+    return {
+      offset_along_wall_mm: maxOffset,
+      description: options.endColumnWidth_mm
+        ? `Column Clearance / ระยะขอบเสา ${minClearance} มม.`
+        : `Wall End Clearance / ระยะขอบผนัง ${minClearance} มม.`,
+      snap_type: options.endColumnWidth_mm ? 'column_clearance' : 'wall_end_clearance',
+    }
+  }
+
+  // 3. Check midpoint snap
+  const midpoint = Math.round(wallLength_mm / 2)
+  if (Math.abs(rawOffset_mm - midpoint) <= tolerance && midpoint >= minOffset && midpoint <= maxOffset) {
+    return {
+      offset_along_wall_mm: midpoint,
+      description: `Midpoint / กึ่งกลางผนัง (${(midpoint / 1000).toFixed(2)}m)`,
+      snap_type: 'midpoint',
+    }
+  }
+
+  // 4. Quantize to step increment (50 mm)
+  const quantized = Math.round(rawOffset_mm / step) * step
+  const clamped = Math.max(minOffset, Math.min(maxOffset, quantized))
+  return {
+    offset_along_wall_mm: clamped,
+    description: `Step / ระยะ ${clamped} มม. (${(clamped / 1000).toFixed(2)}m)`,
+    snap_type: 'increment',
+  }
+}
+
+/**
+ * Snaps a proposed opening width to standard architectural catalog increments
+ * while respecting maximum width constraints based on wall clearance.
+ */
+export function snapOpeningWidthBimAware(
+  rawWidth_mm: number,
+  maxWidth_mm: number,
+  options: {
+    standardWidths_mm?: number[]
+    stepIncrement_mm?: number
+    snapTolerance_mm?: number
+  } = {}
+): number {
+  const standards = options.standardWidths_mm ?? [600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1800, 2000, 2400]
+  const step = options.stepIncrement_mm ?? 50
+  const tolerance = options.snapTolerance_mm ?? 40
+
+  const validMax = Math.max(100, maxWidth_mm)
+
+  // 1. Check nearby standard width
+  for (const std of standards) {
+    if (std <= validMax && Math.abs(rawWidth_mm - std) <= tolerance) {
+      return std
+    }
+  }
+
+  // 2. Quantize to step increment
+  const quantized = Math.round(rawWidth_mm / step) * step
+  return Math.max(100, Math.min(validMax, quantized))
+}

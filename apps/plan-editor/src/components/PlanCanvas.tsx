@@ -26,7 +26,7 @@ import {
   worldToScreen,
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
-import { constrainPointToReference, DEFAULT_SNAP_MODES, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, snapPoint, snapToWallHost, WallHostSnapResult } from '@constructflow/snapping-engine'
+import { constrainPointToReference, DEFAULT_SNAP_MODES, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware, snapOpeningWidthBimAware } from '@constructflow/snapping-engine'
 import { renderPlanView, PlacementGhost, UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import { Maximize2, Pencil, Trash2, ZoomIn, ZoomOut, PlusCircle, Copy } from 'lucide-react'
 
@@ -655,7 +655,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   // Direct-manipulation state for objects whose geometry can move in plan.
   const [draggingObject, setDraggingObject] = useState<{
     id: string
-    kind: 'column' | 'wall' | 'opening' | 'grid' | 'column-corner' | 'foundation-corner' | 'wall-endpoint' | 'beam-endpoint' | 'grid-endpoint' | 'separator-endpoint' | 'opening-edge' | 'polygon-vertex'
+    kind: 'column' | 'wall' | 'opening' | 'opening-center' | 'grid' | 'column-corner' | 'foundation-corner' | 'wall-endpoint' | 'beam-endpoint' | 'grid-endpoint' | 'separator-endpoint' | 'opening-edge' | 'polygon-vertex'
     startWorldMm: [number, number]
     startScreenPx: [number, number]
     endpointIndex?: number
@@ -822,6 +822,34 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         if (length < 1) continue
         const ux = (ex - sx) / length, uy = (ey - sy) / length
         const halfWidth = object.module_data.width_mm / 2
+        const cx = sx + ux * object.module_data.offset_along_wall_mm
+        const cy = sy + uy * object.module_data.offset_along_wall_mm
+
+        // Door Flip Handing Button hit test
+        if (isDoorObject(object) && onFlipDoorHanding) {
+          const nx = -uy, ny = ux
+          const handing = object.module_data.handing || 'left_in'
+          const swingSign = handing.endsWith('_out') ? -1 : 1
+          const flipBtnX = cx + nx * (object.module_data.width_mm * 0.42 * swingSign)
+          const flipBtnY = cy + ny * (object.module_data.width_mm * 0.42 * swingSign)
+          const [sfx, sfy] = worldToScreen([flipBtnX, flipBtnY], viewport)
+          if (Math.hypot(screenPoint[0] - sfx, screenPoint[1] - sfy) <= 16) {
+            onFlipDoorHanding(object.id)
+            return null
+          }
+        }
+
+        // Center Move Handle hit test
+        const [scx, scy] = worldToScreen([cx, cy], viewport)
+        if (Math.hypot(screenPoint[0] - scx, screenPoint[1] - scy) <= tolerance) {
+          return {
+            id, kind: 'opening-center' as const,
+            hostStartMm: [sx, sy] as [number, number], hostEndMm: [ex, ey] as [number, number],
+            openingWidthMm: object.module_data.width_mm, openingCenterOffsetMm: object.module_data.offset_along_wall_mm,
+          }
+        }
+
+        // Edge Resize Handles hit test
         for (const [endpointIndex, offset] of [[0, object.module_data.offset_along_wall_mm - halfWidth], [1, object.module_data.offset_along_wall_mm + halfWidth]] as const) {
           const [x, y] = worldToScreen([sx + ux * offset, sy + uy * offset], viewport)
           if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
@@ -969,7 +997,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         const object = planProject.objects[id]
         if (!object) continue
         const data = object.module_data as unknown as Record<string, unknown>
-        const points: Array<[number, number, 'linear' | 'opening']> = []
+        const points: Array<[number, number, 'linear' | 'opening' | 'opening-center']> = []
         if (isColumnObject(object)) {
           const [cx, cy] = object.module_data.location_mm, [w, d] = object.module_data.section_mm
           points.push([cx - w / 2, cy - d / 2, 'linear'], [cx + w / 2, cy - d / 2, 'linear'], [cx + w / 2, cy + d / 2, 'linear'], [cx - w / 2, cy + d / 2, 'linear'])
@@ -992,7 +1020,34 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             const length = Math.hypot(ex - sx, ey - sy)
             if (length > 1) {
               const ux = (ex - sx) / length, uy = (ey - sy) / length, halfWidth = object.module_data.width_mm / 2
-              points.push([sx + ux * (object.module_data.offset_along_wall_mm - halfWidth), sy + uy * (object.module_data.offset_along_wall_mm - halfWidth), 'opening'], [sx + ux * (object.module_data.offset_along_wall_mm + halfWidth), sy + uy * (object.module_data.offset_along_wall_mm + halfWidth), 'opening'])
+              const cx = sx + ux * object.module_data.offset_along_wall_mm
+              const cy = sy + uy * object.module_data.offset_along_wall_mm
+              points.push(
+                [sx + ux * (object.module_data.offset_along_wall_mm - halfWidth), sy + uy * (object.module_data.offset_along_wall_mm - halfWidth), 'opening'],
+                [sx + ux * (object.module_data.offset_along_wall_mm + halfWidth), sy + uy * (object.module_data.offset_along_wall_mm + halfWidth), 'opening'],
+                [cx, cy, 'opening-center']
+              )
+
+              // Draw Flip Handing Icon Button for doors
+              if (isDoorObject(object)) {
+                const nx = -uy, ny = ux
+                const handing = object.module_data.handing || 'left_in'
+                const swingSign = handing.endsWith('_out') ? -1 : 1
+                const flipBtnX = cx + nx * (object.module_data.width_mm * 0.42 * swingSign)
+                const flipBtnY = cy + ny * (object.module_data.width_mm * 0.42 * swingSign)
+                const [sfx, sfy] = worldToScreen([flipBtnX, flipBtnY], viewport)
+                ctx.save()
+                ctx.fillStyle = '#ffffff'
+                ctx.strokeStyle = '#16a34a'
+                ctx.lineWidth = 1.8
+                ctx.beginPath(); ctx.arc(sfx, sfy, 11, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+                ctx.fillStyle = '#16a34a'
+                ctx.font = 'bold 12px sans-serif'
+                ctx.textAlign = 'center'
+                ctx.textBaseline = 'middle'
+                ctx.fillText('⇄', sfx, sfy)
+                ctx.restore()
+              }
             }
           }
         } else if (['structure.slab', 'architecture.floor', 'architecture.ceiling'].includes(object.object_type)) {
@@ -1001,10 +1056,19 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         }
         for (const [x, y, kind] of points) {
           const [sx, sy] = worldToScreen([x, y], viewport)
-          ctx.fillStyle = kind === 'opening' ? '#fff7ed' : '#ffffff'
-          ctx.strokeStyle = kind === 'opening' ? '#f97316' : '#087cf0'
-          ctx.lineWidth = 2
-          ctx.beginPath(); ctx.arc(sx, sy, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+          if (kind === 'opening-center') {
+            ctx.fillStyle = '#ea580c'
+            ctx.strokeStyle = '#ffffff'
+            ctx.lineWidth = 2
+            ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+            ctx.fillStyle = '#ffffff'
+            ctx.beginPath(); ctx.arc(sx, sy, 2.5, 0, Math.PI * 2); ctx.fill()
+          } else {
+            ctx.fillStyle = kind === 'opening' ? '#fff7ed' : '#ffffff'
+            ctx.strokeStyle = kind === 'opening' ? '#f97316' : '#087cf0'
+            ctx.lineWidth = 2
+            ctx.beginPath(); ctx.arc(sx, sy, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+          }
         }
       }
       ctx.restore()
@@ -1575,12 +1639,13 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             if (host && isWallObject(host) && Number.isFinite(object.module_data.width_mm) && object.module_data.width_mm > 0) {
               setDraggingObject({
                 id: hitId,
-                kind: 'opening',
+                kind: 'opening-center',
                 startWorldMm: rawWorld,
                 startScreenPx,
                 hostStartMm: [host.module_data.start_point_mm[0], host.module_data.start_point_mm[1]],
                 hostEndMm: [host.module_data.end_point_mm[0], host.module_data.end_point_mm[1]],
                 openingWidthMm: object.module_data.width_mm,
+                openingCenterOffsetMm: object.module_data.offset_along_wall_mm,
               })
               e.currentTarget.setPointerCapture(e.pointerId)
             }
@@ -1857,8 +1922,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             if (offset !== undefined) {
               const halfWidth = draggingObject.endpointIndex === 0 ? draggingObject.openingCenterOffsetMm - offset : offset - draggingObject.openingCenterOffsetMm
               const hostLength = Math.hypot(draggingObject.hostEndMm[0] - draggingObject.hostStartMm[0], draggingObject.hostEndMm[1] - draggingObject.hostStartMm[1])
-              const maxWidth = 2 * Math.min(draggingObject.openingCenterOffsetMm, hostLength - draggingObject.openingCenterOffsetMm)
-              onResizeOpening?.(draggingObject.id, Math.max(100, Math.min(Math.round(halfWidth * 2), Math.floor(maxWidth))))
+              const maxWidth = 2 * Math.min(draggingObject.openingCenterOffsetMm - 100, hostLength - 100 - draggingObject.openingCenterOffsetMm)
+              const rawWidth = Math.round(halfWidth * 2)
+              const snappedWidth = e.ctrlKey ? Math.max(100, Math.min(rawWidth, Math.floor(maxWidth))) : snapOpeningWidthBimAware(rawWidth, Math.floor(maxWidth))
+              onResizeOpening?.(draggingObject.id, snappedWidth)
             }
           } else if (draggingObject.kind === 'column') {
             const snap = e.ctrlKey
@@ -1877,9 +1944,28 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
               start_point_mm: [draggingObject.gridStartMm[0] + delta[0], draggingObject.gridStartMm[1] + delta[1]],
               end_point_mm: [draggingObject.gridEndMm[0] + delta[0], draggingObject.gridEndMm[1] + delta[1]],
             })
-          } else if (draggingObject.hostStartMm && draggingObject.hostEndMm && draggingObject.openingWidthMm) {
-            const offset = projectPointToWallOffsetMm(rawWorld, draggingObject.hostStartMm, draggingObject.hostEndMm, draggingObject.openingWidthMm)
-            if (offset !== undefined) onMoveOpening(draggingObject.id, offset)
+          } else if ((draggingObject.kind === 'opening' || draggingObject.kind === 'opening-center') && draggingObject.hostStartMm && draggingObject.hostEndMm && draggingObject.openingWidthMm) {
+            const hostLength = Math.hypot(draggingObject.hostEndMm[0] - draggingObject.hostStartMm[0], draggingObject.hostEndMm[1] - draggingObject.hostStartMm[1])
+            const rawOffset = projectPointToWallOffsetMm(rawWorld, draggingObject.hostStartMm, draggingObject.hostEndMm, draggingObject.openingWidthMm)
+            if (rawOffset !== undefined) {
+              let startColW: number | undefined
+              let endColW: number | undefined
+              for (const col of Object.values(planProject.objects)) {
+                if (!isColumnObject(col)) continue
+                const [colX, colY] = col.module_data.location_mm
+                const colDim = Math.max(...col.module_data.section_mm)
+                if (Math.hypot(colX - draggingObject.hostStartMm[0], colY - draggingObject.hostStartMm[1]) <= colDim) startColW = colDim
+                if (Math.hypot(colX - draggingObject.hostEndMm[0], colY - draggingObject.hostEndMm[1]) <= colDim) endColW = colDim
+              }
+              const snapped = e.ctrlKey
+                ? { offset_along_wall_mm: Math.round(rawOffset) }
+                : snapOpeningOffsetBimAware(rawOffset, hostLength, draggingObject.openingWidthMm, {
+                    startColumnWidth_mm: startColW,
+                    endColumnWidth_mm: endColW,
+                    minClearance_mm: 100,
+                  })
+              onMoveOpening(draggingObject.id, snapped.offset_along_wall_mm)
+            }
           }
         }
       }
@@ -2109,7 +2195,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       {activeTool === 'select' && editableSelectionIds.some(id => {
         const object = planProject.objects[id]
         return object && (isColumnObject(object) || isFoundationObject(object) || isWallObject(object) || isBeamObject(object) || isGridObject(object) || isDoorObject(object) || isWindowObject(object) || ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'architecture.room_separator'].includes(object.object_type))
-      }) && <div className="cf-tape-measure-hint" aria-live="polite">จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด และมุมขอบเขต · จุดสีส้ม: ลากขอบประตู/หน้าต่างปรับความกว้าง</div>}
+      }) && <div className="cf-tape-measure-hint" aria-live="polite">จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด · จุดสีส้ม: ลากขอบปรับความกว้าง หรือลากจุดกึ่งกลางปรับตำแหน่ง (BIM Snap ขอบเสา 100 มม.) · ปุ่ม ⇄: สลับด้านบานประตู</div>}
       {placementHint && <div className="cf-tape-measure-hint" aria-live="polite">{placementHint} · Esc ยกเลิกขั้นตอน หรือออกเมื่อว่าง</div>}
       {supportsPlacementDimensions && dimensionOverlayPosition && (showXDimension || showYDimension || hasLineGeometryInput) && <div className="cf-dynamic-dimensions" role="group" aria-label="ระยะและแนวระหว่างวางวัตถุ" onPointerDown={event => event.stopPropagation()} style={{
         left: Math.max(8, Math.min(dimensionOverlayPosition[0] + 14, (containerRef.current?.clientWidth ?? 800) - 300)),

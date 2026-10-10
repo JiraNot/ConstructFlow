@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { createEmptyProjectDocument, deserializeProject } from '../../project-model/dist/index.js'
-import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getPlanViewProject, getPlanVisibleObjects, getRepresentationTriangles, getVisibleElevationMeshEdges, isWallFacadeForElevation, resolveCeilingGridStyle, resolveElevationWallPhaseStyle, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '../dist/index.js'
+import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getOpeningPlanLinework, getPlanViewProject, getPlanVisibleObjects, getRepresentationTriangles, getVisibleElevationMeshEdges, isWallFacadeForElevation, resolveCeilingGridStyle, resolveElevationWallPhaseStyle, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '../dist/index.js'
 
 const fixture = deserializeProject(await readFile(new URL('../../../examples/kitchen-extension-proof.cfproj', import.meta.url), 'utf8'))
 
@@ -395,4 +395,24 @@ test('orthographic elevations include only walls whose long axis forms that faca
   }
   assert.equal(getElevationVisibleOpeningIds(project, 'north').has('side-window'), false)
   assert.equal(getElevationVisibleOpeningIds(project, 'east').has('side-window'), true)
+})
+
+test('getOpeningPlanLinework returns unified jamb polygons, sashes, and swing arcs', () => {
+  const door = Object.values(fixture.objects).find(o => o.object_type === 'door_window.door')
+  const doorRep = buildProjectRepresentations3D(fixture).objects.find(o => o.object_id === door.id)
+  assert.ok(doorRep && doorRep.shape.kind === 'opening')
+
+  const doorPlanPaths = getOpeningPlanLinework(doorRep.shape, 100)
+  assert.ok(doorPlanPaths.length > 0)
+  assert.ok(doorPlanPaths.some(p => p.kind === 'polygon' && p.points_mm.length === 4), 'has jamb profiles')
+  assert.ok(doorPlanPaths.some(p => p.kind === 'arc' && p.arc?.radius > 0), 'has door swing arc')
+
+  const window = Object.values(fixture.objects).find(o => o.object_type === 'door_window.window')
+  const winRep = buildProjectRepresentations3D(fixture).objects.find(o => o.object_id === window.id)
+  assert.ok(winRep && winRep.shape.kind === 'opening')
+
+  const winPlanPaths = getOpeningPlanLinework(winRep.shape, 100)
+  assert.ok(winPlanPaths.length > 0)
+  assert.ok(winPlanPaths.some(p => p.kind === 'polygon'), 'has window jamb profiles')
+  assert.ok(winPlanPaths.some(p => p.kind === 'line'), 'has window sill and sash lines')
 })
