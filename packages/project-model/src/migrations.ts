@@ -270,7 +270,7 @@ export function validateProjectV2(project: ProjectDocument): void {
       const total = Number(values.masonry_thickness_mm) + Number(values.plaster_inside_thickness_mm ?? 0) + Number(values.plaster_outside_thickness_mm ?? 0)
       if (!owner.endsWith('instance overrides') && values.thickness_mm !== undefined && Math.abs(Number(values.thickness_mm) - total) > 1) throw new Error(`Invalid project format: ${owner} overall thickness must equal masonry and plaster layers`)
     }
-    if (values.opening_operation !== undefined && !['hinged', 'sliding', 'fixed', 'awning', 'louver'].includes(String(values.opening_operation))) {
+    if (values.opening_operation !== undefined && !['hinged', 'sliding', 'fixed', 'awning', 'louver', 'bifold', 'pocket', 'surface_sliding'].includes(String(values.opening_operation))) {
       throw new Error(`Invalid project format: ${owner} has an invalid opening operation`)
     }
     for (const field of ['frame_material', 'panel_material'] as const) {
@@ -303,7 +303,7 @@ export function validateProjectV2(project: ProjectDocument): void {
     }
     if (values.panel_layout !== undefined) {
       const layouts = values.panel_layout
-      const validLayouts = ['hinged', 'sliding', 'fixed', 'awning', 'louver']
+      const validLayouts = ['hinged', 'sliding', 'fixed', 'awning', 'louver', 'bifold', 'pocket', 'surface_sliding']
       if (!Array.isArray(layouts) || layouts.length < 1 || layouts.length > 8 || layouts.some(value => !validLayouts.includes(String(value)))) {
         throw new Error(`Invalid project format: ${owner} has an invalid panel layout`)
       }

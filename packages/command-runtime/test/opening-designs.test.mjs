@@ -7,7 +7,7 @@ import { ProjectCommandSession } from '../dist/index.js'
 test('all opening designs create through commands, roundtrip and undo without touching existing objects', async () => {
   const project = deserializeProject(await readFile(new URL('../../../examples/kitchen-extension-proof.cfproj', import.meta.url), 'utf8'))
   const session = new ProjectCommandSession(project)
-  assert.equal(new Set(OPENING_DESIGNS.map(d => d.key)).size, 16)
+  assert.equal(new Set(OPENING_DESIGNS.map(d => d.key)).size, 24)
   for (const design of OPENING_DESIGNS) {
     const id = crypto.randomUUID()
     const result = session.execute([{ name: 'DefineStructuralType', input: {
