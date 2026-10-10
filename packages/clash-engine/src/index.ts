@@ -318,3 +318,5 @@ export function classifySpatialInteractions(
 }
 
 export * from './legalEngine.js'
+
+export * from './clashRules.js';

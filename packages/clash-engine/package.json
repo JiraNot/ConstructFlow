@@ -6,6 +6,10 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": { "build": "tsc", "test": "node --test test/*.test.mjs" },
-  "dependencies": { "@constructflow/project-model": "file:../project-model", "@constructflow/domain-providers":"file:../domain-providers" },
+  "dependencies": { 
+    "@constructflow/project-model": "file:../project-model", 
+    "@constructflow/domain-providers": "file:../domain-providers",
+    "@constructflow/geometry-kernel": "file:../geometry-kernel"
+  },
   "devDependencies": { "typescript": "^5.7.3" }
 }

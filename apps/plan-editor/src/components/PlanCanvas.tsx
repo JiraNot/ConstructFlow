@@ -20,6 +20,7 @@ import {
 } from '@constructflow/project-model'
 import { projectPointToWallOffsetMm } from '@constructflow/architecture-engine'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
+import { analyzeProjectSpatialBounds, classifySpatialInteractions, detectHardClashes } from '@constructflow/clash-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
 import { TypePicker } from './TypePicker.js'
 import { TOOL_FAMILIES } from './catalogPresentation.js'
@@ -564,6 +565,17 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const hasInitialFitRef = useRef(false)
   const planVisibleObjects = useMemo(() => getPlanVisibleObjects(project), [project])
   const planProject = useMemo(() => getPlanViewProject(project, planVisibleObjects), [project, planVisibleObjects])
+
+  const clashes = useMemo(() => {
+    try {
+      const analysis = analyzeProjectSpatialBounds(planProject)
+      const interactions = classifySpatialInteractions(analysis)
+      return detectHardClashes(planProject, interactions)
+    } catch (err) {
+      console.warn('Clash detection error:', err)
+      return []
+    }
+  }, [planProject])
 
   // Viewport state: 0.08 zoom = 1000mm -> 80px on screen.
   const [viewport, setViewport] = useState<ViewportState>({
@@ -1188,6 +1200,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       project,
       labelMode,
       labelVisibility,
+      clashes
     )
     if (activeTool === 'select') {
       ctx.save()

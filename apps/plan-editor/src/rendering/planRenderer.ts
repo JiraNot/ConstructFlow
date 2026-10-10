@@ -78,7 +78,8 @@ export function renderPlanView(
   calibration?: CalibrationOverlay | null,
   sourceProject: ProjectDocument = project,
   labelMode: 'name' | 'name-size' = 'name-size',
-  labelVisibility: PlanLabelVisibility = DEFAULT_PLAN_LABEL_VISIBILITY
+  labelVisibility: PlanLabelVisibility = DEFAULT_PLAN_LABEL_VISIBILITY,
+  clashes: any[] = []
 ) {
   const isSelected = (id: string) => Array.isArray(selectedId) ? selectedId.includes(id) : selectedId === id
   beginPlanLabels(ctx, viewport.zoom)
@@ -266,6 +267,51 @@ export function renderPlanView(
   // 10. Snap Target Indicator
   if (activeSnap && activeSnap.kind !== 'free') {
     drawSnapMarker(ctx, activeSnap, viewport)
+  }
+
+  // 10.5 Render Hard & Soft Clashes
+  if (clashes && clashes.length > 0) {
+    for (const clash of clashes) {
+      const objA = project.objects[clash.interaction.first.object_id]
+      const objB = project.objects[clash.interaction.second.object_id]
+      if (!objA || !objB) continue
+      
+      const isClearance = clash.severity === 'clearance'
+      const blinkAlpha = 0.5 + 0.5 * Math.sin(Date.now() / 150)
+      ctx.strokeStyle = isClearance ? `rgba(245, 158, 11, ${blinkAlpha})` : `rgba(239, 68, 68, ${blinkAlpha})`
+      ctx.fillStyle = isClearance ? `rgba(245, 158, 11, 0.2)` : `rgba(239, 68, 68, 0.2)`
+      ctx.lineWidth = 3
+
+      // Draw bounding box overlap as clash indicator
+      const boundsA = clash.interaction.first.bounds
+      const boundsB = clash.interaction.second.bounds
+      const minX = Math.max(boundsA.min[0], boundsB.min[0])
+      const minY = Math.max(boundsA.min[1], boundsB.min[1])
+      const maxX = Math.min(boundsA.max[0], boundsB.max[0])
+      const maxY = Math.min(boundsA.max[1], boundsB.max[1])
+      
+      // Add padding to make it visible even if flat
+      const [sx1, sy1] = worldToScreen([minX - 50, minY - 50], viewport)
+      const [sx2, sy2] = worldToScreen([maxX + 50, maxY + 50], viewport)
+
+      ctx.save()
+      ctx.setLineDash([10, 5])
+      ctx.beginPath()
+      ctx.rect(sx1, sy1, sx2 - sx1, sy2 - sy1)
+      ctx.fill()
+      ctx.stroke()
+
+      // Draw floating clash label
+      ctx.fillStyle = isClearance ? 'rgba(217, 119, 6, 0.9)' : 'rgba(220, 38, 38, 0.9)'
+      ctx.setLineDash([])
+      ctx.fillRect(sx2, sy2 - 20, 160, 24)
+      ctx.fillStyle = 'white'
+      ctx.font = 'bold 10px sans-serif'
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(isClearance ? '⚠️ CLEARANCE CLASH' : '🚨 HARD CLASH', sx2 + 8, sy2 - 8)
+      ctx.restore()
+    }
   }
 
   // 11. Calibration Overlay (Point-to-Point Scale Measure)
