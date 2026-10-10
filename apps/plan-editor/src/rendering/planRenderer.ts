@@ -50,6 +50,7 @@ export interface CalibrationOverlay {
 
 export interface PlanLabelVisibility {
   structure: boolean
+  beams?: boolean
   walls: boolean
   openings: boolean
   grids: boolean
@@ -57,6 +58,7 @@ export interface PlanLabelVisibility {
 
 export const DEFAULT_PLAN_LABEL_VISIBILITY: PlanLabelVisibility = {
   structure: true,
+  beams: false,
   walls: true,
   openings: true,
   grids: true,
@@ -92,12 +94,45 @@ export function renderPlanView(
     drawUnderlayImage(ctx, underlay, viewport)
   }
 
+  // Active level room filtering and deduplication
+  const activeLevelId = project.project.active_level_id
+  const rawRooms = Object.values(project.objects).filter(obj => {
+    if (obj.object_type !== 'architecture.room') return false
+    const d = obj.module_data as Record<string, unknown>
+    return !activeLevelId || !d.level_id || d.level_id === activeLevelId
+  })
+  const dedupedRoomMap = new Map<string, SmartObject>()
+  for (const r of rawRooms) {
+    const d = r.module_data as Record<string, unknown>
+    const ring = d.boundary_mm as [number, number][] | undefined
+    if (!ring || ring.length < 3) continue
+    const centerKey = [
+      Math.round(ring.reduce((s, p) => s + p[0], 0) / ring.length / 500) * 500,
+      Math.round(ring.reduce((s, p) => s + p[1], 0) / ring.length / 500) * 500,
+    ].join(',')
+    const existing = dedupedRoomMap.get(centerKey)
+    if (!existing) {
+      dedupedRoomMap.set(centerKey, r)
+    } else {
+      const existingData = existing.module_data as Record<string, unknown>
+      const isManual = d.boundary_source === 'manual' || (typeof d.name === 'string' && !d.name.startsWith('Room '))
+      const isExistingManual = existingData.boundary_source === 'manual' || (typeof existingData.name === 'string' && !existingData.name.startsWith('Room '))
+      if (isManual && !isExistingManual) {
+        dedupedRoomMap.set(centerKey, r)
+      }
+    }
+  }
+  const visibleRooms = new Set(dedupedRoomMap.values())
+
   // Architectural finishes and room tags are separate semantic objects from structural slabs.
   for (const obj of Object.values(project.objects)) {
     const data = obj.module_data as Record<string, unknown>
     if (obj.object_type === 'architecture.room_separator') {
       const a=data.start_point_mm as [number,number],b=data.end_point_mm as [number,number]
       if(a?.length===2&&b?.length===2){const [ax,ay]=worldToScreen(a,viewport),[bx,by]=worldToScreen(b,viewport);ctx.save();ctx.strokeStyle=isSelected(obj.id)?'#087cf0':'#f59e0b';ctx.lineWidth=isSelected(obj.id)?2:1.4;ctx.setLineDash([5,3]);ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke();ctx.restore()}
+      continue
+    }
+    if (obj.object_type === 'architecture.room' && !visibleRooms.has(obj)) {
       continue
     }
     if (obj.object_type === 'architecture.floor' || obj.object_type === 'architecture.room') {
@@ -140,7 +175,9 @@ export function renderPlanView(
         ctx.fillStyle=boundaryOpen?'rgba(239,68,68,.08)':'rgba(148,163,184,.04)';ctx.fill();ctx.strokeStyle=boundaryOpen?'#dc2626':'#94a3b8';ctx.lineWidth=.8;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([])
         const center=polygonInteriorPoint(ring) ?? [ring.reduce((s,p)=>s+p[0],0)/ring.length,ring.reduce((s,p)=>s+p[1],0)/ring.length]
         const areaLabel=formatRoomAreaM2(data.area_mm2,data.boundary_status)
-        const [x,y]=worldToScreen(center,viewport);ctx.font='11px sans-serif';ctx.textAlign='center';ctx.fillStyle=boundaryOpen?'#b91c1c':'#334155';ctx.fillText(`${String(data.number??'')} ${String(data.name??'Room')}${areaLabel?` · ${areaLabel} m²`:''}${boundaryOpen?' · วงผนังเปิด':''}`,x,y)
+        const [x,y]=worldToScreen(center,viewport)
+        const labelText = `${String(data.number??'')} ${String(data.name??'Room')}${areaLabel?` · ${areaLabel} m²`:''}${boundaryOpen?' · วงผนังเปิด':''}`
+        queuePlanLabel(ctx, x, y, labelText, boundaryOpen ? '#b91c1c' : '#334155', boundaryOpen ? '#fca5a5' : '#cbd5e1', isSelected(obj.id) ? 10 : 2, '#fbfdff', false, 'rect')
       }
       ctx.restore()
     }
@@ -189,10 +226,12 @@ export function renderPlanView(
     }
   }
 
-  // 5. Beams (rendered connecting columns/grids)
-  for (const obj of Object.values(project.objects)) {
-    if (isBeamObject(obj)) {
-      drawBeam(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id, labelMode, labelVisibility.structure)
+  // 5. Beams (rendered connecting columns/grids - enabled via beams toggle or framing plan)
+  if (labelVisibility.beams) {
+    for (const obj of Object.values(project.objects)) {
+      if (isBeamObject(obj)) {
+        drawBeam(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id, labelMode, labelVisibility.structure)
+      }
     }
   }
 
@@ -907,16 +946,18 @@ function drawDoor(
   ctx.beginPath()
   ctx.moveTo(sj1x - nx * halfWall, sj1y - ny * halfWall)
   ctx.lineTo(sj1x + nx * halfWall, sj1y + ny * halfWall)
-  ctx.lineTo(sj1x + ux * jambFaceWidthPx + nx * halfWall, sj1y + uy * jambFaceWidthPx + ny * halfWall)
   if (swingSign > 0) {
-    ctx.lineTo(sj1x + ux * jambFaceWidthPx - nx * (leafThicknessPx - halfWall), sj1y + uy * jambFaceWidthPx - ny * (leafThicknessPx - halfWall))
-    ctx.lineTo(sj1x + ux * (jambFaceWidthPx - rebateDepthPx) - nx * (leafThicknessPx - halfWall), sj1y + uy * (jambFaceWidthPx - rebateDepthPx) - ny * (leafThicknessPx - halfWall))
-    ctx.lineTo(sj1x + ux * (jambFaceWidthPx - rebateDepthPx) - nx * halfWall, sj1y + uy * (jambFaceWidthPx - rebateDepthPx) - ny * halfWall)
-  } else {
+    // Door swings to +nx face: rebate cutout is on +nx face
     ctx.lineTo(sj1x + ux * (jambFaceWidthPx - rebateDepthPx) + nx * halfWall, sj1y + uy * (jambFaceWidthPx - rebateDepthPx) + ny * halfWall)
     ctx.lineTo(sj1x + ux * (jambFaceWidthPx - rebateDepthPx) + nx * (halfWall - leafThicknessPx), sj1y + uy * (jambFaceWidthPx - rebateDepthPx) + ny * (halfWall - leafThicknessPx))
     ctx.lineTo(sj1x + ux * jambFaceWidthPx + nx * (halfWall - leafThicknessPx), sj1y + uy * jambFaceWidthPx + ny * (halfWall - leafThicknessPx))
     ctx.lineTo(sj1x + ux * jambFaceWidthPx - nx * halfWall, sj1y + uy * jambFaceWidthPx - ny * halfWall)
+  } else {
+    // Door swings to -nx face: rebate cutout is on -nx face
+    ctx.lineTo(sj1x + ux * jambFaceWidthPx + nx * halfWall, sj1y + uy * jambFaceWidthPx + ny * halfWall)
+    ctx.lineTo(sj1x + ux * jambFaceWidthPx - nx * (halfWall - leafThicknessPx), sj1y + uy * jambFaceWidthPx - ny * (halfWall - leafThicknessPx))
+    ctx.lineTo(sj1x + ux * (jambFaceWidthPx - rebateDepthPx) - nx * (halfWall - leafThicknessPx), sj1y + uy * (jambFaceWidthPx - rebateDepthPx) - ny * (halfWall - leafThicknessPx))
+    ctx.lineTo(sj1x + ux * (jambFaceWidthPx - rebateDepthPx) - nx * halfWall, sj1y + uy * (jambFaceWidthPx - rebateDepthPx) - ny * halfWall)
   }
   ctx.closePath()
   ctx.fill()
@@ -926,16 +967,18 @@ function drawDoor(
   ctx.beginPath()
   ctx.moveTo(sj2x - nx * halfWall, sj2y - ny * halfWall)
   ctx.lineTo(sj2x + nx * halfWall, sj2y + ny * halfWall)
-  ctx.lineTo(sj2x - ux * jambFaceWidthPx + nx * halfWall, sj2y - uy * jambFaceWidthPx + ny * halfWall)
   if (swingSign > 0) {
-    ctx.lineTo(sj2x - ux * jambFaceWidthPx - nx * (leafThicknessPx - halfWall), sj2y - uy * jambFaceWidthPx - ny * (leafThicknessPx - halfWall))
-    ctx.lineTo(sj2x - ux * (jambFaceWidthPx - rebateDepthPx) - nx * (leafThicknessPx - halfWall), sj2y - uy * (jambFaceWidthPx - rebateDepthPx) - ny * (leafThicknessPx - halfWall))
-    ctx.lineTo(sj2x - ux * (jambFaceWidthPx - rebateDepthPx) - nx * halfWall, sj2y - uy * (jambFaceWidthPx - rebateDepthPx) - ny * halfWall)
-  } else {
+    // Door swings to +nx face: rebate cutout is on +nx face
     ctx.lineTo(sj2x - ux * (jambFaceWidthPx - rebateDepthPx) + nx * halfWall, sj2y - uy * (jambFaceWidthPx - rebateDepthPx) + ny * halfWall)
     ctx.lineTo(sj2x - ux * (jambFaceWidthPx - rebateDepthPx) + nx * (halfWall - leafThicknessPx), sj2y - uy * (jambFaceWidthPx - rebateDepthPx) + ny * (halfWall - leafThicknessPx))
     ctx.lineTo(sj2x - ux * jambFaceWidthPx + nx * (halfWall - leafThicknessPx), sj2y - uy * jambFaceWidthPx + ny * (halfWall - leafThicknessPx))
     ctx.lineTo(sj2x - ux * jambFaceWidthPx - nx * halfWall, sj2y - uy * jambFaceWidthPx - ny * halfWall)
+  } else {
+    // Door swings to -nx face: rebate cutout is on -nx face
+    ctx.lineTo(sj2x - ux * jambFaceWidthPx + nx * halfWall, sj2y - uy * jambFaceWidthPx + ny * halfWall)
+    ctx.lineTo(sj2x - ux * jambFaceWidthPx - nx * (halfWall - leafThicknessPx), sj2y - uy * jambFaceWidthPx - ny * (halfWall - leafThicknessPx))
+    ctx.lineTo(sj2x - ux * (jambFaceWidthPx - rebateDepthPx) - nx * (halfWall - leafThicknessPx), sj2y - uy * (jambFaceWidthPx - rebateDepthPx) - ny * (halfWall - leafThicknessPx))
+    ctx.lineTo(sj2x - ux * (jambFaceWidthPx - rebateDepthPx) - nx * halfWall, sj2y - uy * (jambFaceWidthPx - rebateDepthPx) - ny * halfWall)
   }
   ctx.closePath()
   ctx.fill()
@@ -957,11 +1000,21 @@ function drawDoor(
     const clearEnd = [sj2x - ux * jambFaceWidthPx, sj2y - uy * jambFaceWidthPx] as const
     const clearSpan = Math.hypot(clearEnd[0] - clearStart[0], clearEnd[1] - clearStart[1])
     const count = panelCount >= 4 ? 4 : 2
-    const overlapPx = Math.min(25 * viewport.zoom, clearSpan * 0.1)
+    const stileWidthPx = Math.max(3, Math.min(45 * viewport.zoom, clearSpan * 0.08))
+    const overlapPx = Math.max(stileWidthPx, Math.min(30 * viewport.zoom, clearSpan * 0.1))
     const panelLengthPx = (clearSpan + overlapPx * (count - 1)) / count
     const sashThickPx = Math.max(2.5, Math.min(30 * viewport.zoom, thick_px * 0.3))
 
-    ctx.lineWidth = 1.1
+    // Continuous track lines
+    ctx.beginPath()
+    ctx.strokeStyle = '#cbd5e1'
+    ctx.lineWidth = 0.7
+    ctx.moveTo(clearStart[0] - nx * trackGap, clearStart[1] - ny * trackGap)
+    ctx.lineTo(clearEnd[0] - nx * trackGap, clearEnd[1] - ny * trackGap)
+    ctx.moveTo(clearStart[0] + nx * trackGap, clearStart[1] + ny * trackGap)
+    ctx.lineTo(clearEnd[0] + nx * trackGap, clearEnd[1] + ny * trackGap)
+    ctx.stroke()
+
     for (let i = 0; i < count; i++) {
       const trackIdx = count === 2 ? (i === 0 ? -1 : 1) : (i === 0 || i === 3 ? -1 : 1)
       const trackOffsetPx = trackIdx * trackGap
@@ -970,23 +1023,35 @@ function drawDoor(
       const pEndX = pStartX + ux * panelLengthPx
       const pEndY = pStartY + uy * panelLengthPx
 
+      // Start Stile Box (Left vertical profile)
       ctx.beginPath()
       ctx.fillStyle = '#ffffff'
       ctx.strokeStyle = leafColor
+      ctx.lineWidth = 1.2
       ctx.moveTo(pStartX - nx * (sashThickPx / 2), pStartY - ny * (sashThickPx / 2))
-      ctx.lineTo(pEndX - nx * (sashThickPx / 2), pEndY - ny * (sashThickPx / 2))
-      ctx.lineTo(pEndX + nx * (sashThickPx / 2), pEndY + ny * (sashThickPx / 2))
+      ctx.lineTo(pStartX + ux * stileWidthPx - nx * (sashThickPx / 2), pStartY + uy * stileWidthPx - ny * (sashThickPx / 2))
+      ctx.lineTo(pStartX + ux * stileWidthPx + nx * (sashThickPx / 2), pStartY + uy * stileWidthPx + ny * (sashThickPx / 2))
       ctx.lineTo(pStartX + nx * (sashThickPx / 2), pStartY + ny * (sashThickPx / 2))
       ctx.closePath()
       ctx.fill()
       ctx.stroke()
 
-      // Glass line
+      // End Stile Box (Right vertical profile)
+      ctx.beginPath()
+      ctx.moveTo(pEndX - ux * stileWidthPx - nx * (sashThickPx / 2), pEndY - uy * stileWidthPx - ny * (sashThickPx / 2))
+      ctx.lineTo(pEndX - nx * (sashThickPx / 2), pEndY - ny * (sashThickPx / 2))
+      ctx.lineTo(pEndX + nx * (sashThickPx / 2), pEndY + ny * (sashThickPx / 2))
+      ctx.lineTo(pEndX - ux * stileWidthPx + nx * (sashThickPx / 2), pEndY - uy * stileWidthPx + ny * (sashThickPx / 2))
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+
+      // Glass line connecting the inner faces of both vertical stiles
       ctx.beginPath()
       ctx.strokeStyle = '#0284c7'
-      ctx.lineWidth = 0.8
-      ctx.moveTo(pStartX, pStartY)
-      ctx.lineTo(pEndX, pEndY)
+      ctx.lineWidth = 1.0
+      ctx.moveTo(pStartX + ux * stileWidthPx, pStartY + uy * stileWidthPx)
+      ctx.lineTo(pEndX - ux * stileWidthPx, pEndY - uy * stileWidthPx)
       ctx.stroke()
 
       // Direction arrow
@@ -1000,10 +1065,9 @@ function drawDoor(
         ctx.lineWidth = 1.2
         ctx.moveTo(amx - ux * asz * arrDir, amy - uy * asz * arrDir)
         ctx.lineTo(amx + ux * asz * arrDir, amy + uy * asz * arrDir)
+        // AutoCAD 45-degree single barb
         ctx.moveTo(amx + ux * asz * arrDir, amy + uy * asz * arrDir)
-        ctx.lineTo(amx + ux * asz * arrDir * 0.4 + nx * asz * 0.5, amy + uy * asz * arrDir * 0.4 + ny * asz * 0.5)
-        ctx.moveTo(amx + ux * asz * arrDir, amy + uy * asz * arrDir)
-        ctx.lineTo(amx + ux * asz * arrDir * 0.4 - nx * asz * 0.5, amy + uy * asz * arrDir * 0.4 - ny * asz * 0.5)
+        ctx.lineTo(amx + ux * asz * arrDir * 0.4 + nx * asz * 0.45 * (arrDir > 0 ? 1 : -1), amy + uy * asz * arrDir * 0.4 + ny * asz * 0.45 * (arrDir > 0 ? 1 : -1))
         ctx.stroke()
       }
     }
@@ -1288,109 +1352,145 @@ function drawWindow(
   const sashColor = isSelected ? '#1682e8' : isHovered ? '#0284c7' : phaseStyle.stroke
   const glassColor = isSelected ? '#0284c7' : '#0ea5e9'
 
+  // Wall interior/exterior orientation
+  const wallType = project.types.find(type => type.id === hostWall.module_data.type_id)
+    ?? project.types.find(type => type.object_type === 'architecture.wall' && type.name.toLowerCase() === (hostWall.module_data.mark || '').toLowerCase())
+  const interiorSideVal = hostWall.module_data.instance_overrides?.interior_side ?? hostWall.module_data.interior_side ?? wallType?.parameters?.interior_side ?? 'left'
+  const interiorSign = interiorSideVal === 'right' ? -1 : 1
+  const exteriorSign = -interiorSign
+  const outNx = nx * exteriorSign
+  const outNy = ny * exteriorSign
+
   if (operation === 'sliding' && panelCount === 2) {
-    // Standard 2-Panel Bypass Sliding Window (W1)
+    // Standard 2-Panel Bypass Sliding Window (W1): Stile boxes at ends + crisp glass centerline
     const trackGap = Math.max(2, Math.min(thickPx * 0.2, 8))
-    const sashThickPx = Math.max(2.5, Math.min(30 * viewport.zoom, thickPx * 0.3))
-    const overlapPx = Math.min(25 * viewport.zoom, clearSpan * 0.12)
+    const sashThickPx = Math.max(2.5, Math.min(28 * viewport.zoom, thickPx * 0.28))
+    const stileWidthPx = Math.max(3, Math.min(32 * viewport.zoom, clearSpan * 0.08))
+    const overlapPx = Math.max(stileWidthPx * 1.2, Math.min(28 * viewport.zoom, clearSpan * 0.12))
     const panelLen = (clearSpan + overlapPx) / 2
 
-    // Outer Sash (Left panel, top track: +nx * trackGap)
+    // Continuous sill track lines
+    ctx.beginPath()
+    ctx.strokeStyle = '#cbd5e1'
+    ctx.lineWidth = 0.7
+    ctx.moveTo(clearStart[0] + nx * trackGap, clearStart[1] + ny * trackGap)
+    ctx.lineTo(clearEnd[0] + nx * trackGap, clearEnd[1] + ny * trackGap)
+    ctx.moveTo(clearStart[0] - nx * trackGap, clearStart[1] - ny * trackGap)
+    ctx.lineTo(clearEnd[0] - nx * trackGap, clearEnd[1] - ny * trackGap)
+    ctx.stroke()
+
+    // Outer Sash (Left panel, track 1: +nx * trackGap)
     const oStartX = clearStart[0] + nx * trackGap
     const oStartY = clearStart[1] + ny * trackGap
     const oEndX = oStartX + ux * panelLen
     const oEndY = oStartY + uy * panelLen
 
+    // Outer Sash - Left Stile Box
     ctx.beginPath()
     ctx.fillStyle = '#ffffff'
     ctx.strokeStyle = sashColor
-    ctx.lineWidth = 1.1
+    ctx.lineWidth = 1.2
     ctx.moveTo(oStartX - nx * (sashThickPx / 2), oStartY - ny * (sashThickPx / 2))
-    ctx.lineTo(oEndX - nx * (sashThickPx / 2), oEndY - ny * (sashThickPx / 2))
-    ctx.lineTo(oEndX + nx * (sashThickPx / 2), oEndY + ny * (sashThickPx / 2))
+    ctx.lineTo(oStartX + ux * stileWidthPx - nx * (sashThickPx / 2), oStartY + uy * stileWidthPx - ny * (sashThickPx / 2))
+    ctx.lineTo(oStartX + ux * stileWidthPx + nx * (sashThickPx / 2), oStartY + uy * stileWidthPx + ny * (sashThickPx / 2))
     ctx.lineTo(oStartX + nx * (sashThickPx / 2), oStartY + ny * (sashThickPx / 2))
     ctx.closePath()
     ctx.fill()
     ctx.stroke()
 
-    // Glass line for Outer Sash
+    // Outer Sash - Right Interlock Stile Box
     ctx.beginPath()
-    ctx.strokeStyle = glassColor
-    ctx.lineWidth = 0.8
-    ctx.moveTo(oStartX, oStartY)
-    ctx.lineTo(oEndX, oEndY)
+    ctx.moveTo(oEndX - ux * stileWidthPx - nx * (sashThickPx / 2), oEndY - uy * stileWidthPx - ny * (sashThickPx / 2))
+    ctx.lineTo(oEndX - nx * (sashThickPx / 2), oEndY - ny * (sashThickPx / 2))
+    ctx.lineTo(oEndX + nx * (sashThickPx / 2), oEndY + ny * (sashThickPx / 2))
+    ctx.lineTo(oEndX - ux * stileWidthPx + nx * (sashThickPx / 2), oEndY - uy * stileWidthPx + ny * (sashThickPx / 2))
+    ctx.closePath()
+    ctx.fill()
     ctx.stroke()
 
-    // Inner Sash (Right panel, bottom track: -nx * trackGap)
+    // Outer Sash - Glass line connecting stiles
+    ctx.beginPath()
+    ctx.strokeStyle = glassColor
+    ctx.lineWidth = 1.0
+    ctx.moveTo(oStartX + ux * stileWidthPx, oStartY + uy * stileWidthPx)
+    ctx.lineTo(oEndX - ux * stileWidthPx, oEndY - uy * stileWidthPx)
+    ctx.stroke()
+
+    // Inner Sash (Right panel, track 2: -nx * trackGap)
     const iEndX = clearEnd[0] - nx * trackGap
     const iEndY = clearEnd[1] - ny * trackGap
     const iStartX = iEndX - ux * panelLen
     const iStartY = iEndY - uy * panelLen
 
+    // Inner Sash - Left Interlock Stile Box
     ctx.beginPath()
     ctx.fillStyle = '#ffffff'
     ctx.strokeStyle = sashColor
-    ctx.lineWidth = 1.1
+    ctx.lineWidth = 1.2
     ctx.moveTo(iStartX - nx * (sashThickPx / 2), iStartY - ny * (sashThickPx / 2))
-    ctx.lineTo(iEndX - nx * (sashThickPx / 2), iEndY - ny * (sashThickPx / 2))
-    ctx.lineTo(iEndX + nx * (sashThickPx / 2), iEndY + ny * (sashThickPx / 2))
+    ctx.lineTo(iStartX + ux * stileWidthPx - nx * (sashThickPx / 2), iStartY + uy * stileWidthPx - ny * (sashThickPx / 2))
+    ctx.lineTo(iStartX + ux * stileWidthPx + nx * (sashThickPx / 2), iStartY + uy * stileWidthPx + ny * (sashThickPx / 2))
     ctx.lineTo(iStartX + nx * (sashThickPx / 2), iStartY + ny * (sashThickPx / 2))
     ctx.closePath()
     ctx.fill()
     ctx.stroke()
 
-    // Glass line for Inner Sash
+    // Inner Sash - Right Stile Box
+    ctx.beginPath()
+    ctx.moveTo(iEndX - ux * stileWidthPx - nx * (sashThickPx / 2), iEndY - uy * stileWidthPx - ny * (sashThickPx / 2))
+    ctx.lineTo(iEndX - nx * (sashThickPx / 2), iEndY - ny * (sashThickPx / 2))
+    ctx.lineTo(iEndX + nx * (sashThickPx / 2), iEndY + ny * (sashThickPx / 2))
+    ctx.lineTo(iEndX - ux * stileWidthPx + nx * (sashThickPx / 2), iEndY - uy * stileWidthPx + ny * (sashThickPx / 2))
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+
+    // Inner Sash - Glass line connecting stiles
     ctx.beginPath()
     ctx.strokeStyle = glassColor
-    ctx.lineWidth = 0.8
-    ctx.moveTo(iStartX, iStartY)
-    ctx.lineTo(iEndX, iEndY)
+    ctx.lineWidth = 1.0
+    ctx.moveTo(iStartX + ux * stileWidthPx, iStartY + uy * stileWidthPx)
+    ctx.lineTo(iEndX - ux * stileWidthPx, iEndY - uy * stileWidthPx)
     ctx.stroke()
 
-    // Meeting Stiles: Interlocking vertical ticks at the overlap zone
-    ctx.beginPath()
-    ctx.strokeStyle = sashColor
-    ctx.lineWidth = 1.2
-    ctx.moveTo(oEndX - nx * (sashThickPx / 2), oEndY - ny * (sashThickPx / 2))
-    ctx.lineTo(oEndX + nx * (sashThickPx / 2), oEndY + ny * (sashThickPx / 2))
-    ctx.moveTo(iStartX - nx * (sashThickPx / 2), iStartY - ny * (sashThickPx / 2))
-    ctx.lineTo(iStartX + nx * (sashThickPx / 2), iStartY + ny * (sashThickPx / 2))
-    ctx.stroke()
-
-    // Direction arrows:
-    // Left sash arrow points RIGHT (->)
+    // Subtle direction arrows
     const omx = (oStartX + oEndX) / 2
     const omy = (oStartY + oEndY) / 2
-    const asz = Math.min(12, panelLen * 0.22)
+    const asz = Math.min(10, panelLen * 0.18)
     ctx.beginPath()
     ctx.strokeStyle = sashColor
-    ctx.lineWidth = 1.1
+    ctx.lineWidth = 1.0
     ctx.moveTo(omx - ux * asz, omy - uy * asz)
     ctx.lineTo(omx + ux * asz, omy + uy * asz)
     ctx.moveTo(omx + ux * asz, omy + uy * asz)
-    ctx.lineTo(omx + ux * asz * 0.45 + nx * asz * 0.45, omy + uy * asz * 0.45 + ny * asz * 0.45)
-    ctx.moveTo(omx + ux * asz, omy + uy * asz)
-    ctx.lineTo(omx + ux * asz * 0.45 - nx * asz * 0.45, omy + uy * asz * 0.45 - ny * asz * 0.45)
+    ctx.lineTo(omx + ux * asz * 0.45 + nx * asz * 0.4, omy + uy * asz * 0.45 + ny * asz * 0.4)
     ctx.stroke()
 
-    // Right sash arrow points LEFT (<-)
     const imx = (iStartX + iEndX) / 2
     const imy = (iStartY + iEndY) / 2
     ctx.beginPath()
     ctx.moveTo(imx + ux * asz, imy + uy * asz)
     ctx.lineTo(imx - ux * asz, imy - uy * asz)
     ctx.moveTo(imx - ux * asz, imy - uy * asz)
-    ctx.lineTo(imx - ux * asz * 0.45 + nx * asz * 0.45, imy - uy * asz * 0.45 + ny * asz * 0.45)
-    ctx.moveTo(imx - ux * asz, imy - uy * asz)
-    ctx.lineTo(imx - ux * asz * 0.45 - nx * asz * 0.45, imy - uy * asz * 0.45 - ny * asz * 0.45)
+    ctx.lineTo(imx - ux * asz * 0.45 - nx * asz * 0.4, imy - uy * asz * 0.45 - ny * asz * 0.4)
     ctx.stroke()
   } else if (operation === 'sliding' && panelCount >= 4) {
     // 4-Panel Sliding Window (W2): Center panels parting <- | ->
     const trackGap = Math.max(2, Math.min(thickPx * 0.2, 8))
-    const sashThickPx = Math.max(2.5, Math.min(30 * viewport.zoom, thickPx * 0.3))
-    const count = 4
-    const overlapPx = Math.min(20 * viewport.zoom, clearSpan * 0.08)
+    const sashThickPx = Math.max(2.5, Math.min(28 * viewport.zoom, thickPx * 0.28))
+    const stileWidthPx = Math.max(3, Math.min(30 * viewport.zoom, clearSpan * 0.06))
+    const overlapPx = Math.max(stileWidthPx * 1.2, Math.min(24 * viewport.zoom, clearSpan * 0.08))
     const panelLen = (clearSpan + overlapPx * 3) / 4
+
+    // Continuous sill track lines
+    ctx.beginPath()
+    ctx.strokeStyle = '#cbd5e1'
+    ctx.lineWidth = 0.7
+    ctx.moveTo(clearStart[0] + nx * trackGap, clearStart[1] + ny * trackGap)
+    ctx.lineTo(clearEnd[0] + nx * trackGap, clearEnd[1] + ny * trackGap)
+    ctx.moveTo(clearStart[0] - nx * trackGap, clearStart[1] - ny * trackGap)
+    ctx.lineTo(clearEnd[0] - nx * trackGap, clearEnd[1] - ny * trackGap)
+    ctx.stroke()
 
     for (let i = 0; i < 4; i++) {
       const isInner = i === 1 || i === 2
@@ -1400,14 +1500,25 @@ function drawWindow(
       const pEndX = pStartX + ux * panelLen
       const pEndY = pStartY + uy * panelLen
 
+      // Left Stile Box
       ctx.beginPath()
       ctx.fillStyle = '#ffffff'
       ctx.strokeStyle = sashColor
-      ctx.lineWidth = 1.1
+      ctx.lineWidth = 1.2
       ctx.moveTo(pStartX - nx * (sashThickPx / 2), pStartY - ny * (sashThickPx / 2))
+      ctx.lineTo(pStartX + ux * stileWidthPx - nx * (sashThickPx / 2), pStartY + uy * stileWidthPx - ny * (sashThickPx / 2))
+      ctx.lineTo(pStartX + ux * stileWidthPx + nx * (sashThickPx / 2), pStartY + uy * stileWidthPx + ny * (sashThickPx / 2))
+      ctx.lineTo(pStartX + nx * (sashThickPx / 2), pStartY + ny * (sashThickPx / 2))
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+
+      // Right Stile Box
+      ctx.beginPath()
+      ctx.moveTo(pEndX - ux * stileWidthPx - nx * (sashThickPx / 2), pEndY - uy * stileWidthPx - ny * (sashThickPx / 2))
       ctx.lineTo(pEndX - nx * (sashThickPx / 2), pEndY - ny * (sashThickPx / 2))
       ctx.lineTo(pEndX + nx * (sashThickPx / 2), pEndY + ny * (sashThickPx / 2))
-      ctx.lineTo(pStartX + nx * (sashThickPx / 2), pStartY + ny * (sashThickPx / 2))
+      ctx.lineTo(pEndX - ux * stileWidthPx + nx * (sashThickPx / 2), pEndY - uy * stileWidthPx + ny * (sashThickPx / 2))
       ctx.closePath()
       ctx.fill()
       ctx.stroke()
@@ -1415,62 +1526,116 @@ function drawWindow(
       // Glass line
       ctx.beginPath()
       ctx.strokeStyle = glassColor
-      ctx.lineWidth = 0.8
-      ctx.moveTo(pStartX, pStartY)
-      ctx.lineTo(pEndX, pEndY)
+      ctx.lineWidth = 1.0
+      ctx.moveTo(pStartX + ux * stileWidthPx, pStartY + uy * stileWidthPx)
+      ctx.lineTo(pEndX - ux * stileWidthPx, pEndY - uy * stileWidthPx)
       ctx.stroke()
 
-      // Direction arrow for middle panels
+      // Direction arrow for middle moving panels
       const arrDir = i === 1 ? -1 : i === 2 ? 1 : 0
       if (arrDir !== 0) {
         const pmx = (pStartX + pEndX) / 2
         const pmy = (pStartY + pEndY) / 2
-        const asz = Math.min(10, panelLen * 0.2)
+        const asz = Math.min(8, panelLen * 0.16)
         ctx.beginPath()
         ctx.strokeStyle = sashColor
-        ctx.lineWidth = 1.1
+        ctx.lineWidth = 1.0
         ctx.moveTo(pmx - ux * asz * arrDir, pmy - uy * asz * arrDir)
         ctx.lineTo(pmx + ux * asz * arrDir, pmy + uy * asz * arrDir)
         ctx.moveTo(pmx + ux * asz * arrDir, pmy + uy * asz * arrDir)
-        ctx.lineTo(pmx + ux * asz * arrDir * 0.45 + nx * asz * 0.45, pmy + uy * asz * arrDir * 0.45 + ny * asz * 0.45)
-        ctx.moveTo(pmx + ux * asz, pmy + uy * asz)
-        ctx.lineTo(pmx + ux * asz * arrDir * 0.45 - nx * asz * 0.45, pmy + uy * asz * arrDir * 0.45 - ny * asz * 0.45)
+        ctx.lineTo(pmx + ux * asz * arrDir * 0.45 + nx * asz * 0.4 * (arrDir > 0 ? 1 : -1), pmy + uy * asz * arrDir * 0.45 + ny * asz * 0.4 * (arrDir > 0 ? 1 : -1))
         ctx.stroke()
       }
     }
-  } else if (operation === 'awning' || operation === 'casement' || operation === 'hinged') {
-    // Awning / Casement Window (W3, W4)
+  } else if (operation === 'awning') {
+    // Standard Architectural Awning Window (บานกระทุ้ง W2/W3): In-wall glass + projected sash frame + dashed swing lines
+    // 1. In-wall frame glass line
+    ctx.beginPath()
+    ctx.strokeStyle = glassColor
+    ctx.lineWidth = 1.0
+    ctx.moveTo(clearStart[0], clearStart[1])
+    ctx.lineTo(clearEnd[0], clearEnd[1])
+    ctx.stroke()
+
+    // 2. Projected outward sash frame
+    const projDepthPx = Math.max(14, Math.min(200 * viewport.zoom, clearSpan * 0.35))
+    const frameProfilePx = Math.max(2.5, Math.min(30 * viewport.zoom, 18))
+
+    const pWall1 = [clearStart[0] + outNx * halfWall, clearStart[1] + outNy * halfWall] as const
+    const pWall2 = [clearEnd[0] + outNx * halfWall, clearEnd[1] + outNy * halfWall] as const
+    const pOut1 = [clearStart[0] + outNx * (halfWall + projDepthPx), clearStart[1] + outNy * (halfWall + projDepthPx)] as const
+    const pOut2 = [clearEnd[0] + outNx * (halfWall + projDepthPx), clearEnd[1] + outNy * (halfWall + projDepthPx)] as const
+
+    // Outer sash frame rectangle
     ctx.beginPath()
     ctx.fillStyle = '#ffffff'
     ctx.strokeStyle = sashColor
     ctx.lineWidth = 1.2
-    const sashThickPx = Math.max(3, Math.min(35 * viewport.zoom, thickPx * 0.35))
-    ctx.moveTo(clearStart[0] - nx * (sashThickPx / 2), clearStart[1] - ny * (sashThickPx / 2))
-    ctx.lineTo(clearEnd[0] - nx * (sashThickPx / 2), clearEnd[1] - ny * (sashThickPx / 2))
-    ctx.lineTo(clearEnd[0] + nx * (sashThickPx / 2), clearEnd[1] + ny * (sashThickPx / 2))
-    ctx.lineTo(clearStart[0] + nx * (sashThickPx / 2), clearStart[1] + ny * (sashThickPx / 2))
+    ctx.moveTo(pWall1[0], pWall1[1])
+    ctx.lineTo(pOut1[0], pOut1[1])
+    ctx.lineTo(pOut2[0], pOut2[1])
+    ctx.lineTo(pWall2[0], pWall2[1])
     ctx.closePath()
     ctx.fill()
     ctx.stroke()
 
-    // Glass line
-    ctx.beginPath()
-    ctx.strokeStyle = glassColor
-    ctx.lineWidth = 0.8
-    ctx.moveTo(clearStart[0], clearStart[1])
-    ctx.lineTo(clearEnd[0], clearEnd[1])
-    ctx.stroke()
+    // Inner glass frame margin
+    const ipWall1 = [pWall1[0] + ux * frameProfilePx + outNx * frameProfilePx, pWall1[1] + uy * frameProfilePx + outNy * frameProfilePx] as const
+    const ipWall2 = [pWall2[0] - ux * frameProfilePx + outNx * frameProfilePx, pWall2[1] - uy * frameProfilePx + outNy * frameProfilePx] as const
+    const ipOut1 = [pOut1[0] + ux * frameProfilePx - outNx * frameProfilePx, pOut1[1] + uy * frameProfilePx - outNy * frameProfilePx] as const
+    const ipOut2 = [pOut2[0] - ux * frameProfilePx - outNx * frameProfilePx, pOut2[1] - uy * frameProfilePx - outNy * frameProfilePx] as const
 
-    // Dashed projection triangle
     ctx.beginPath()
     ctx.strokeStyle = sashColor
-    ctx.lineWidth = 1
-    ctx.setLineDash([3, 3])
-    const outOffset = nx * (halfWall + 12)
-    const outOffsetY = ny * (halfWall + 12)
-    ctx.moveTo(clearStart[0], clearStart[1])
-    ctx.lineTo(scx + outOffset, scy + outOffsetY)
-    ctx.lineTo(clearEnd[0], clearEnd[1])
+    ctx.lineWidth = 0.8
+    ctx.moveTo(ipWall1[0], ipWall1[1])
+    ctx.lineTo(ipOut1[0], ipOut1[1])
+    ctx.lineTo(ipOut2[0], ipOut2[1])
+    ctx.lineTo(ipWall2[0], ipWall2[1])
+    ctx.closePath()
+    ctx.stroke()
+
+    // 3. Dashed hinge swing lines from outer corners to frame center (per Thai standard A-01/A-08)
+    const midWall = [(pWall1[0] + pWall2[0]) / 2, (pWall1[1] + pWall2[1]) / 2] as const
+    ctx.beginPath()
+    ctx.setLineDash([4, 3])
+    ctx.strokeStyle = sashColor
+    ctx.lineWidth = 0.9
+    ctx.moveTo(pOut1[0], pOut1[1])
+    ctx.lineTo(midWall[0], midWall[1])
+    ctx.lineTo(pOut2[0], pOut2[1])
+    ctx.stroke()
+    ctx.setLineDash([])
+  } else if (operation === 'casement' || operation === 'hinged') {
+    // Casement / Hinged Window (บานเปิดข้าง)
+    const sashThickPx = Math.max(3, Math.min(30 * viewport.zoom, thickPx * 0.3))
+    const pWall1 = [clearStart[0] + outNx * halfWall, clearStart[1] + outNy * halfWall] as const
+    const pWall2 = [clearEnd[0] + outNx * halfWall, clearEnd[1] + outNy * halfWall] as const
+
+    // 90-degree open sash leaf
+    const leafTipX = pWall1[0] + outNx * clearSpan
+    const leafTipY = pWall1[1] + outNy * clearSpan
+
+    ctx.beginPath()
+    ctx.fillStyle = '#ffffff'
+    ctx.strokeStyle = sashColor
+    ctx.lineWidth = 1.2
+    ctx.moveTo(pWall1[0], pWall1[1])
+    ctx.lineTo(leafTipX, leafTipY)
+    ctx.lineTo(leafTipX + ux * sashThickPx, leafTipY + uy * sashThickPx)
+    ctx.lineTo(pWall1[0] + ux * sashThickPx, pWall1[1] + uy * sashThickPx)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+
+    // 90° Swing Arc
+    const angleClosed = Math.atan2(pWall2[1] - pWall1[1], pWall2[0] - pWall1[0])
+    const angleOpen = Math.atan2(leafTipY - pWall1[1], leafTipX - pWall1[0])
+    ctx.beginPath()
+    ctx.strokeStyle = sashColor
+    ctx.lineWidth = 0.9
+    ctx.setLineDash([4, 3])
+    ctx.arc(pWall1[0], pWall1[1], clearSpan, angleClosed, angleOpen, exteriorSign < 0)
     ctx.stroke()
     ctx.setLineDash([])
   } else if (operation === 'louver') {

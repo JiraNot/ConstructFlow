@@ -1529,7 +1529,10 @@ export const App: React.FC = () => {
           <label className="cf-header-field">
             <span>ชั้น</span>
             <select value={project.project.active_level_id} onChange={(e) => handleSetWorkingLevel(e.target.value)} aria-label="ชั้นอาคาร">
-              {project.levels.map((lvl) => <option key={lvl.id} value={lvl.id}>{lvl.name} ({lvl.elevation_mm >= 0 ? '+' : ''}{formatLengthMm(lvl.elevation_mm, displayUnit)} {displayUnit})</option>)}
+              {project.levels.map((lvl) => {
+                const thaiPrefix = lvl.name.includes('ชั้น') ? '' : lvl.id === 'GF' || lvl.name.toLowerCase().includes('ground') ? 'ชั้น 1 · ' : lvl.id === 'L1' || lvl.name.toLowerCase().includes('first') ? 'ชั้น 2 · ' : lvl.name.toLowerCase().includes('roof') ? 'ระดับหลังคา · ' : ''
+                return <option key={lvl.id} value={lvl.id}>{thaiPrefix}{lvl.name} ({lvl.elevation_mm >= 0 ? '+' : ''}{formatLengthMm(lvl.elevation_mm, displayUnit)} {displayUnit})</option>
+              })}
             </select>
           </label>
           {activeTool === 'column' && <label className="cf-header-field">
@@ -1669,12 +1672,13 @@ export const App: React.FC = () => {
                 </div>
                 <div className="cf-label-category-list">
                   {([
-                    ['structure', 'โครงสร้าง · เสา ฐานราก คาน'],
+                    ['structure', 'โครงสร้าง · เสา ฐานราก'],
+                    ['beams', 'คานโครงสร้าง'],
                     ['walls', 'ผนัง · รหัสผิวสองด้าน'],
                     ['openings', 'ประตูและหน้าต่าง'],
                     ['grids', 'กริดไลน์'],
                   ] as const).map(([key, label]) => <label key={key}>
-                    <input type="checkbox" checked={labelVisibility[key]} onChange={event => setLabelVisibility(current => ({ ...current, [key]: event.target.checked }))} />
+                    <input type="checkbox" checked={Boolean(labelVisibility[key])} onChange={event => setLabelVisibility(current => ({ ...current, [key]: event.target.checked }))} />
                     <span>{label}</span>
                   </label>)}
                 </div>

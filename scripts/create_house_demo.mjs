@@ -116,6 +116,11 @@ run('CreateStair', {
   has_handrail: true, handrail_height_mm: 900,
 })
 
+// Remove any wall-derived auto-rooms so only clean manual rooms are created.
+Object.values(model.objects).filter(o => o.object_type === 'architecture.room').forEach(o => {
+  delete model.objects[o.id]
+})
+
 // Add editable room regions, then associate finish floors and ceilings to each room.
 for (const level of ['GF', 'L1']) {
   const roomSpecs = [
