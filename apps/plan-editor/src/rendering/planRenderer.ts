@@ -1054,20 +1054,22 @@ function drawDoor(
       ctx.lineTo(pEndX - ux * stileWidthPx, pEndY - uy * stileWidthPx)
       ctx.stroke()
 
-      // Direction arrow
+      // Direction arrow placed OUTSIDE door frame
       const arrDir = count === 2 ? (i === 0 ? 1 : -1) : (i === 1 ? -1 : i === 2 ? 1 : 0)
       if (arrDir !== 0) {
-        const amx = (pStartX + pEndX) / 2
-        const amy = (pStartY + pEndY) / 2
-        const asz = Math.min(10, panelLengthPx * 0.2)
+        const arrowOutDist = halfWall + Math.max(5, Math.min(60 * viewport.zoom, 8))
+        const arrowSideSign = count === 2 ? (i === 0 ? 1 : -1) : -1
+        const amx = (pStartX + pEndX) / 2 + nx * (arrowSideSign * arrowOutDist - trackOffsetPx)
+        const amy = (pStartY + pEndY) / 2 + ny * (arrowSideSign * arrowOutDist - trackOffsetPx)
+        const asz = Math.min(12, Math.max(7, panelLengthPx * 0.18))
         ctx.beginPath()
         ctx.strokeStyle = leafColor
-        ctx.lineWidth = 1.2
+        ctx.lineWidth = 1.0
         ctx.moveTo(amx - ux * asz * arrDir, amy - uy * asz * arrDir)
         ctx.lineTo(amx + ux * asz * arrDir, amy + uy * asz * arrDir)
         // AutoCAD 45-degree single barb
         ctx.moveTo(amx + ux * asz * arrDir, amy + uy * asz * arrDir)
-        ctx.lineTo(amx + ux * asz * arrDir * 0.4 + nx * asz * 0.45 * (arrDir > 0 ? 1 : -1), amy + uy * asz * arrDir * 0.4 + ny * asz * 0.45 * (arrDir > 0 ? 1 : -1))
+        ctx.lineTo(amx + ux * asz * arrDir * 0.45 + nx * arrowSideSign * asz * 0.4, amy + uy * asz * arrDir * 0.45 + ny * arrowSideSign * asz * 0.4)
         ctx.stroke()
       }
     }
@@ -1453,26 +1455,32 @@ function drawWindow(
     ctx.lineTo(iEndX - ux * stileWidthPx, iEndY - uy * stileWidthPx)
     ctx.stroke()
 
-    // Subtle direction arrows
-    const omx = (oStartX + oEndX) / 2
-    const omy = (oStartY + oEndY) / 2
-    const asz = Math.min(10, panelLen * 0.18)
+    // Direction arrows placed OUTSIDE the window frame (per AutoCAD/Revit architectural standard)
+    const arrowOutDist = halfWall + Math.max(5, Math.min(60 * viewport.zoom, 8))
+    const asz = Math.min(14, Math.max(8, panelLen * 0.2))
+
+    // Outer Sash arrow: placed outside wall on +nx side
+    const oMidX = (oStartX + oEndX) / 2 + nx * (arrowOutDist - trackGap)
+    const oMidY = (oStartY + oEndY) / 2 + ny * (arrowOutDist - trackGap)
     ctx.beginPath()
     ctx.strokeStyle = sashColor
     ctx.lineWidth = 1.0
-    ctx.moveTo(omx - ux * asz, omy - uy * asz)
-    ctx.lineTo(omx + ux * asz, omy + uy * asz)
-    ctx.moveTo(omx + ux * asz, omy + uy * asz)
-    ctx.lineTo(omx + ux * asz * 0.45 + nx * asz * 0.4, omy + uy * asz * 0.45 + ny * asz * 0.4)
+    ctx.moveTo(oMidX - ux * asz, oMidY - uy * asz)
+    ctx.lineTo(oMidX + ux * asz, oMidY + uy * asz)
+    // 45-degree barb pointing in direction of movement (+ux) and angling outward (+nx)
+    ctx.moveTo(oMidX + ux * asz, oMidY + uy * asz)
+    ctx.lineTo(oMidX + ux * asz * 0.45 + nx * asz * 0.4, oMidY + uy * asz * 0.45 + ny * asz * 0.4)
     ctx.stroke()
 
-    const imx = (iStartX + iEndX) / 2
-    const imy = (iStartY + iEndY) / 2
+    // Inner Sash arrow: placed outside wall on -nx side
+    const iMidX = (iStartX + iEndX) / 2 - nx * (arrowOutDist - trackGap)
+    const iMidY = (iStartY + iEndY) / 2 - ny * (arrowOutDist - trackGap)
     ctx.beginPath()
-    ctx.moveTo(imx + ux * asz, imy + uy * asz)
-    ctx.lineTo(imx - ux * asz, imy - uy * asz)
-    ctx.moveTo(imx - ux * asz, imy - uy * asz)
-    ctx.lineTo(imx - ux * asz * 0.45 - nx * asz * 0.4, imy - uy * asz * 0.45 - ny * asz * 0.4)
+    ctx.moveTo(iMidX + ux * asz, iMidY + uy * asz)
+    ctx.lineTo(iMidX - ux * asz, iMidY - uy * asz)
+    // 45-degree barb pointing in direction of movement (-ux) and angling outward (-nx)
+    ctx.moveTo(iMidX - ux * asz, iMidY - uy * asz)
+    ctx.lineTo(iMidX - ux * asz * 0.45 - nx * asz * 0.4, iMidY - uy * asz * 0.45 - ny * asz * 0.4)
     ctx.stroke()
   } else if (operation === 'sliding' && panelCount >= 4) {
     // 4-Panel Sliding Window (W2): Center panels parting <- | ->
@@ -1531,19 +1539,20 @@ function drawWindow(
       ctx.lineTo(pEndX - ux * stileWidthPx, pEndY - uy * stileWidthPx)
       ctx.stroke()
 
-      // Direction arrow for middle moving panels
+      // Direction arrow for middle moving panels placed OUTSIDE the window frame
       const arrDir = i === 1 ? -1 : i === 2 ? 1 : 0
       if (arrDir !== 0) {
-        const pmx = (pStartX + pEndX) / 2
-        const pmy = (pStartY + pEndY) / 2
-        const asz = Math.min(8, panelLen * 0.16)
+        const arrowOutDist = halfWall + Math.max(5, Math.min(60 * viewport.zoom, 8))
+        const pmx = (pStartX + pEndX) / 2 - nx * (arrowOutDist + trackOffset)
+        const pmy = (pStartY + pEndY) / 2 - ny * (arrowOutDist + trackOffset)
+        const asz = Math.min(12, Math.max(6, panelLen * 0.16))
         ctx.beginPath()
         ctx.strokeStyle = sashColor
         ctx.lineWidth = 1.0
         ctx.moveTo(pmx - ux * asz * arrDir, pmy - uy * asz * arrDir)
         ctx.lineTo(pmx + ux * asz * arrDir, pmy + uy * asz * arrDir)
         ctx.moveTo(pmx + ux * asz * arrDir, pmy + uy * asz * arrDir)
-        ctx.lineTo(pmx + ux * asz * arrDir * 0.45 + nx * asz * 0.4 * (arrDir > 0 ? 1 : -1), pmy + uy * asz * arrDir * 0.45 + ny * asz * 0.4 * (arrDir > 0 ? 1 : -1))
+        ctx.lineTo(pmx + ux * asz * arrDir * 0.45 - nx * asz * 0.4, pmy + uy * asz * arrDir * 0.45 - ny * asz * 0.4)
         ctx.stroke()
       }
     }
