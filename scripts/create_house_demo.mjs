@@ -72,30 +72,40 @@ for (const level of ['GF', 'L1']) {
     })
   }
   // Perimeter, then room partitions; divisions create living/dining, kitchen, bath, and bedrooms.
-  wall('front', [0, 0], [8000, 0])
-  wall('right', [8000, 0], [8000, 10000])
-  wall('back', [8000, 10000], [0, 10000])
-  wall('left', [0, 10000], [0, 0])
-  wall('partition-x-south', [4000, 0], [4000, 5000])
-  wall('partition-x-north', [4000, 5000], [4000, 10000])
-  wall('partition-y-west', [0, 5000], [4000, 5000])
-  wall('partition-y-east', [4000, 5000], [8000, 5000])
+  // Exterior walls aligned flush with the outer face of the 200×200mm columns (ชิดขอบเสานอก):
+  // Column extents: X: [-100, 100]..[7900, 8100], Y: [-100, 100]..[9900, 10100]
+  // With 100mm wall thickness:
+  // - South (front) outer face at Y = -100, inner face at Y = 0 => centerline at Y = -50
+  // - East (right) outer face at X = 8100, inner face at X = 8000 => centerline at X = 8050
+  // - North (back) outer face at Y = 10100, inner face at Y = 10000 => centerline at Y = 10050
+  // - West (left) outer face at X = -100, inner face at X = 0 => centerline at X = -50
+  // Interior partition walls aligned flush with one column face:
+  // - partition-x (Grid B): West face at X = 3900, East face at X = 4000 => centerline at X = 3950
+  // - partition-y (Grid 2): South face at Y = 4900, North face at Y = 5000 => centerline at Y = 4950
+  wall('front', [-50, -50], [8050, -50])
+  wall('right', [8050, -50], [8050, 10050])
+  wall('back', [8050, 10050], [-50, 10050])
+  wall('left', [-50, 10050], [-50, -50])
+  wall('partition-x-south', [3950, -50], [3950, 4950])
+  wall('partition-x-north', [3950, 4950], [3950, 10050])
+  wall('partition-y-west', [-50, 4950], [3950, 4950])
+  wall('partition-y-east', [3950, 4950], [8050, 4950])
   wallsByLevel[level] = walls
 }
 
 // Hosted openings use the wall's own centerline offset. Front doors and windows on the exterior walls.
 for (const level of ['GF', 'L1']) {
   const w = wallsByLevel[level]
-  run('CreateDoor', { mark: 'D1', wall_id: w.front, location_mm: [4000, 0, 0], offset_along_wall_mm: 4000, width_mm: 900, height_mm: 2100, handing: 'left_in', level_id: level })
+  run('CreateDoor', { mark: 'D1', wall_id: w.front, location_mm: [4000, -50, 0], offset_along_wall_mm: 4050, width_mm: 900, height_mm: 2100, handing: 'left_in', level_id: level })
   if (level === 'GF') {
-    run('CreateDoor', { mark: 'D2', wall_id: w['partition-x-south'], location_mm: [4000, 2500, 0], offset_along_wall_mm: 2500, width_mm: 800, height_mm: 2000, handing: 'right_in', level_id: level })
+    run('CreateDoor', { mark: 'D2', wall_id: w['partition-x-south'], location_mm: [3950, 2500, 0], offset_along_wall_mm: 2550, width_mm: 800, height_mm: 2000, handing: 'right_in', level_id: level })
   } else {
-    run('CreateDoor', { mark: 'D1', wall_id: w['partition-x-north'], location_mm: [4000, 7500, 0], offset_along_wall_mm: 2500, width_mm: 800, height_mm: 2000, handing: 'left_in', level_id: level })
+    run('CreateDoor', { mark: 'D1', wall_id: w['partition-x-north'], location_mm: [3950, 7500, 0], offset_along_wall_mm: 2550, width_mm: 800, height_mm: 2000, handing: 'left_in', level_id: level })
   }
-  run('CreateWindow', { mark: 'W1', wall_id: w.front, location_mm: [1800, 0, 0], offset_along_wall_mm: 1800, width_mm: 1400, height_mm: 1200, sill_height_mm: 900, level_id: level })
-  run('CreateWindow', { mark: 'W1', wall_id: w.front, location_mm: [6200, 0, 0], offset_along_wall_mm: 6200, width_mm: 1400, height_mm: 1200, sill_height_mm: 900, level_id: level })
-  run('CreateWindow', { mark: 'W2', wall_id: w.back, location_mm: [6000, 10000, 0], offset_along_wall_mm: 2000, width_mm: 1600, height_mm: 1200, sill_height_mm: 900, level_id: level })
-  run('CreateWindow', { mark: 'W2', wall_id: w.left, location_mm: [0, 7000, 0], offset_along_wall_mm: 3000, width_mm: 1200, height_mm: 1200, sill_height_mm: 900, level_id: level })
+  run('CreateWindow', { mark: 'W1', wall_id: w.front, location_mm: [1800, -50, 0], offset_along_wall_mm: 1850, width_mm: 1400, height_mm: 1200, sill_height_mm: 900, level_id: level })
+  run('CreateWindow', { mark: 'W1', wall_id: w.front, location_mm: [6200, -50, 0], offset_along_wall_mm: 6250, width_mm: 1400, height_mm: 1200, sill_height_mm: 900, level_id: level })
+  run('CreateWindow', { mark: 'W2', wall_id: w.back, location_mm: [6000, 10050, 0], offset_along_wall_mm: 2050, width_mm: 1600, height_mm: 1200, sill_height_mm: 900, level_id: level })
+  run('CreateWindow', { mark: 'W2', wall_id: w.left, location_mm: [-50, 7000, 0], offset_along_wall_mm: 3050, width_mm: 1200, height_mm: 1200, sill_height_mm: 900, level_id: level })
 }
 
 // Main stair and stairwell are included as editable objects, not drawing-only linework.
@@ -154,7 +164,7 @@ for (const [index, point] of [[1, [2000, 2500, 2700]], [2, [6000, 2500, 2700]], 
   lightIds.push(run('PlaceElectricalFixture', { mark: `L${index}`, level_id: 'GF', kind: 'light', location_mm: point, watts: 18, grounded: true, controlled_ids: [], switch_ways: 1 }))
 }
 const outletId = run('PlaceElectricalFixture', { mark: 'SO1', level_id: 'GF', kind: 'outlet', location_mm: [1000, 500, 700], watts: 1000, grounded: true, controlled_ids: [], switch_ways: 1 })
-run('PlaceElectricalFixture', { mark: 'SW1', level_id: 'GF', kind: 'switch', location_mm: [500, 700, 1600], watts: 0, grounded: true, controlled_ids: [lightIds[0], lightIds[1]], switch_ways: 2 })
+run('PlaceElectricalFixture', { mark: 'SW1', level_id: 'GF', kind: 'switch', location_mm: [600, 900, 1600], watts: 0, grounded: true, controlled_ids: [lightIds[0], lightIds[1]], switch_ways: 2 })
 run('CreateCircuit', { mark: 'CKT1', level_id: 'GF', panel_id: panelId, device_ids: [...lightIds, outletId], voltage: 230, breaker_a: 16, cable_mm2: 2.5, allowable_current_a: 20 })
 
 await mkdir(resolve('examples'), { recursive: true })

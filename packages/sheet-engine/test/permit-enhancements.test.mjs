@@ -594,8 +594,8 @@ test("elevation wall finish tags follow the visible face and omit end-on wall ta
   const project = deserializeProject(readFileSync(new URL("../../../examples/constructflow-house-demo.cfproj", import.meta.url), "utf8"));
   const wall = Object.values(project.objects).find((object) => object.object_type === "architecture.wall"
     && object.module_data.level_id === "GF"
-    && object.module_data.start_point_mm?.[1] === 0
-    && object.module_data.end_point_mm?.[1] === 0);
+    && object.module_data.start_point_mm?.[1] === -50
+    && object.module_data.end_point_mm?.[1] === -50);
   assert.ok(wall, "the demo has a ground-level north facade wall");
   project.objects = { [wall.id]: wall };
   wall.module_data.interior_side = "left";
