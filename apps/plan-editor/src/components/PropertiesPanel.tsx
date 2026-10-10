@@ -147,6 +147,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const roomAreaLabel = formatRoomAreaM2(roomData?.area_mm2, roomData?.boundary_status)
   const roomLastKnownAreaLabel = roomBoundaryOpen ? formatRoomAreaM2(roomData?.area_mm2, 'closed') : roomAreaLabel
   const grdObj = selectedObj && isGridObject(selectedObj) ? selectedObj : null
+  const roofObj = selectedObj && selectedObj.object_type.startsWith('roof.') ? selectedObj : null
 
   const currentMark = colObj
     ? colObj.module_data.mark
@@ -352,6 +353,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? `Window ${winObj.module_data.mark}`
             : grdObj
             ? `Grid ${grdObj.module_data.tag}`
+            : roofObj
+            ? `Roof ${String((roofObj.module_data as Record<string, unknown>).name ?? roofObj.id)}`
             : 'วัตถุ'}
         </div>
       </div>
@@ -706,8 +709,99 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </div>
             )}
           </div>
+
+          {/* Thai Building Code Rule 50 Setback Info */}
+          <div style={{
+            background: '#ffffff',
+            padding: 8,
+            borderRadius: 6,
+            border: '1px solid #e2e8f0',
+            display: 'grid',
+            gap: 4,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>
+                ระยะร่นแนวอาคาร (กฎกระทรวง 55 ข้อ 50)
+              </span>
+              <span style={{
+                fontSize: 10,
+                padding: '1px 5px',
+                borderRadius: 4,
+                fontWeight: 600,
+                background: hostedOpenings.length > 0 ? '#e0f2fe' : '#f1f5f9',
+                color: hostedOpenings.length > 0 ? '#0284c7' : '#475569',
+              }}>
+                {hostedOpenings.length > 0 ? 'ผนังมีช่องเปิด' : 'ผนังทึบ'}
+              </span>
+            </div>
+            <div style={{ fontSize: 10, color: '#64748b', lineHeight: 1.4 }}>
+              {hostedOpenings.length > 0
+                ? '• อาคารสูง ≤ 9.00 ม. ต้องร่นห่างแนวเขตที่ดิน ≥ 2.00 ม. (อาคารสูงเกิน 9 ม. ร่น ≥ 3.00 ม.)'
+                : '• ผนังทึบต้องร่นห่างแนวเขตที่ดิน ≥ 0.50 ม. (สร้างชิดเขต 0.00 ม. ได้เมื่อมีหนังสือยินยอมข้างเคียง)'}
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Roof Properties */}
+      {roofObj && (() => {
+        const rData = (roofObj.module_data ?? {}) as Record<string, unknown>
+        const overhangMm = Number(rData.eaves_overhang_mm ?? 1000)
+        const hasGutter = rData.has_gutter !== false
+        const slopeDeg = Number(rData.slope_deg ?? 25)
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{
+              background: '#f8fafc',
+              padding: '8px 10px',
+              borderRadius: 6,
+              border: '1px solid #e2e8f0',
+              display: 'grid',
+              gap: 6,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <span style={{ color: '#475569' }}>ความลาดชัน (Slope):</span>
+                <strong style={{ color: '#0f172a' }}>{slopeDeg}&deg;</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <span style={{ color: '#475569' }}>ระยะยื่นชายคา (Eaves Overhang):</span>
+                <strong style={{ color: '#0873c4' }}>{formatLengthMm(overhangMm, displayUnit)} {displayUnit}</strong>
+              </div>
+            </div>
+
+            {/* Thai Building Code Rule 50 Eaves Setback Card */}
+            <div style={{
+              background: '#ffffff',
+              padding: 8,
+              borderRadius: 6,
+              border: '1px solid #e2e8f0',
+              display: 'grid',
+              gap: 4,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>
+                  ระยะร่นแนวชายคา (กฎกระทรวง 55 ข้อ 50)
+                </span>
+                <span style={{
+                  fontSize: 10,
+                  padding: '1px 5px',
+                  borderRadius: 4,
+                  fontWeight: 600,
+                  background: '#dcfce7',
+                  color: '#15803d',
+                }}>
+                  เกณฑ์ &ge; 0.50 ม.
+                </span>
+              </div>
+              <div style={{ fontSize: 10, color: '#64748b', lineHeight: 1.4 }}>
+                • ชายคาหรือส่วนที่ยื่นมากที่สุด ต้องร่นห่างแนวเขตที่ดิน &ge; 0.50 ม.<br />
+                • ต้องจัดให้มีรางระบายน้ำฝน ({hasGutter ? '✅ มีรางน้ำฝน' : '⚠️ ไม่มีรางน้ำฝน'}) เพื่อไม่ให้น้ำฝนตกลงในที่ดินข้างเคียง
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Door Properties */}
       {doorObj && (

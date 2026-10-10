@@ -163,10 +163,29 @@ export interface WallSetbackEvaluationItem {
   distance_to_road_edge_m?: number
 }
 
+export interface EavesSetbackEvaluationItem {
+  roof_id: string
+  roof_name?: string
+  distance_to_boundary_m: number
+  eaves_overhang_m?: number
+  neighbor_consent?: boolean
+  has_gutter?: boolean
+}
+
+export interface WaterwaySetbackEvaluationItem {
+  waterway_name?: string
+  waterway_type: 'small_canal' | 'large_canal' | 'large_waterbody'
+  waterway_width_m?: number
+  distance_to_waterway_boundary_m: number
+}
+
 export interface ThaiComplianceInputs {
   building_height_m: number
   road_width_m?: number
+  front_road_setback_m?: number
   walls: WallSetbackEvaluationItem[]
+  eaves?: EavesSetbackEvaluationItem[]
+  waterways?: WaterwaySetbackEvaluationItem[]
 }
 
 export type ComplianceStatus = 'pass' | 'fail' | 'warning' | 'insufficient_data'
@@ -306,6 +325,135 @@ export function evaluateThaiBuildingCompliance(inputs: ThaiComplianceInputs): Th
           })
         }
       }
+    }
+  }
+
+  // -------------------------------------------------------------
+  // Eaves & Roof Overhang Setback Check (กฎกระทรวง 55 ข้อ 50)
+  // -------------------------------------------------------------
+  if (inputs.eaves && inputs.eaves.length > 0) {
+    for (const eave of inputs.eaves) {
+      const roofLabel = eave.roof_name ? `${eave.roof_name} [${eave.roof_id}]` : eave.roof_id
+      const minEavesSetback = 0.50
+
+      if (eave.distance_to_boundary_m >= minEavesSetback) {
+        findings.push({
+          rule_id: 'TH-MR55-RULE-50-EAVES',
+          title: `Roof Eaves Setback (${roofLabel})`,
+          title_th: `ระยะร่นแนวชายคาหลังคา (${roofLabel})`,
+          status: 'pass',
+          actual: `${eave.distance_to_boundary_m.toFixed(2)} ม.`,
+          required: `>= ${minEavesSetback.toFixed(2)} ม.`,
+          citation: 'กฎกระทรวง ฉบับที่ 55 (พ.ศ. 2543) ข้อ 50',
+          description_th: `ชายคาหรือส่วนยื่นของอาคารร่นห่างแนวเขตที่ดิน ${eave.distance_to_boundary_m.toFixed(2)} ม. (>= 0.50 ม.) ถูกต้องตามกฎกระทรวง`,
+        })
+      } else {
+        if (eave.neighbor_consent === true) {
+          findings.push({
+            rule_id: 'TH-MR55-RULE-50-EAVES-CONSENT',
+            title: `Roof Eaves on Boundary with Consent (${roofLabel})`,
+            title_th: `ชายคาชิดเขตที่ดินโดยได้รับความยินยอม (${roofLabel})`,
+            status: 'pass',
+            actual: `${eave.distance_to_boundary_m.toFixed(2)} ม. (มีหนังสือยินยอม)`,
+            required: '0.00 ม. (พร้อมหนังสือยินยอม)',
+            citation: 'กฎกระทรวง ฉบับที่ 55 (พ.ศ. 2543) ข้อ 50',
+            description_th: `ชายคาร่นห่างเขตที่ดินน้อยกว่า 0.50 ม. ได้เนื่องจากมีหนังสือยินยอมเป็นลายลักษณ์อักษรจากเจ้าของที่ดินข้างเคียง`,
+          })
+        } else {
+          findings.push({
+            rule_id: 'TH-MR55-RULE-50-EAVES-VIOLATION',
+            title: `Roof Eaves Setback Violation (${roofLabel})`,
+            title_th: `ระยะร่นแนวชายคาหลังคาผิดกฎหมาย (${roofLabel})`,
+            status: 'fail',
+            actual: `${eave.distance_to_boundary_m.toFixed(2)} ม. (ไม่มีหนังสือยินยอม)`,
+            required: `>= ${minEavesSetback.toFixed(2)} ม. หรือหนังสือยินยอมข้างเคียง`,
+            citation: 'กฎกระทรวง ฉบับที่ 55 (พ.ศ. 2543) ข้อ 50',
+            description_th: `ชายคาหรือส่วนของอาคารที่ยื่นออกมามากที่สุด ร่นห่างเขตที่ดิน ${eave.distance_to_boundary_m.toFixed(2)} ม. (< 0.50 ม.) ผิดกฎกระทรวง ฉบับที่ 55 ข้อ 50 (ต้องร่นไม่น้อยกว่า 0.50 ม.)`,
+          })
+        }
+      }
+
+      if (eave.has_gutter === false) {
+        findings.push({
+          rule_id: 'TH-MR55-RULE-50-GUTTER',
+          title: `Roof Eaves Drainage Gutter (${roofLabel})`,
+          title_th: `รางระบายน้ำฝนชายคา (${roofLabel})`,
+          status: 'warning',
+          actual: 'ไม่มีรางระบายน้ำฝน',
+          required: 'มีรางระบายน้ำฝน',
+          citation: 'กฎกระทรวง ฉบับที่ 55 (พ.ศ. 2543) ข้อ 50',
+          description_th: `ชายคาใกล้อาคารอื่นหรือแนวเขตที่ดิน ต้องมีรางระบายน้ำฝนเพื่อป้องกันน้ำฝนตกลงในที่ดินข้างเคียง`,
+        })
+      }
+    }
+  }
+
+  // -------------------------------------------------------------
+  // Street Width vs Maximum Building Height Check (กฎกระทรวง 55 ข้อ 44)
+  // -------------------------------------------------------------
+  if (road_width_m !== undefined && road_width_m > 0) {
+    const frontRoadSetback =
+      inputs.front_road_setback_m ??
+      walls.reduce<number | undefined>((min, w) => {
+        if (w.distance_to_road_edge_m !== undefined && w.distance_to_road_edge_m >= 0) {
+          return min === undefined ? w.distance_to_road_edge_m : Math.min(min, w.distance_to_road_edge_m)
+        }
+        return min
+      }, undefined)
+
+    if (frontRoadSetback !== undefined) {
+      const distToOppositeRoadEdge = frontRoadSetback + road_width_m
+      const maxAllowedHeight = 2.0 * distToOppositeRoadEdge
+      const heightPass = building_height_m <= maxAllowedHeight
+
+      findings.push({
+        rule_id: 'TH-MR55-RULE-44-HEIGHT',
+        title: 'Maximum Building Height from Road Width',
+        title_th: 'ความสูงอาคารสูงสุดตามความกว้างถนนสาธารณะ',
+        status: heightPass ? 'pass' : 'fail',
+        actual: `${building_height_m.toFixed(2)} ม.`,
+        required: `<= ${maxAllowedHeight.toFixed(2)} ม. (2 เท่าของระยะห่างเขตทางฝั่งตรงข้าม)`,
+        citation: 'กฎกระทรวง ฉบับที่ 55 (พ.ศ. 2543) ข้อ 44',
+        description_th: heightPass
+          ? `ความสูงอาคาร ${building_height_m.toFixed(2)} ม. ไม่เกิน 2 เท่าของระยะราบถึงเขตทางฝั่งตรงข้ามของถนนสาธารณะ (${maxAllowedHeight.toFixed(2)} ม.) ถูกต้องตามกฎกระทรวง`
+          : `ความสูงอาคาร ${building_height_m.toFixed(2)} ม. เกินกว่า 2 เท่าของระยะราบถึงเขตทางฝั่งตรงข้ามของถนนสาธารณะ (${maxAllowedHeight.toFixed(2)} ม.) ผิดกฎกระทรวง ฉบับที่ 55 ข้อ 44`,
+      })
+    }
+  }
+
+  // -------------------------------------------------------------
+  // Waterway Setbacks Check (กฎกระทรวง 55 ข้อ 42)
+  // -------------------------------------------------------------
+  if (inputs.waterways && inputs.waterways.length > 0) {
+    for (const ww of inputs.waterways) {
+      const wwLabel = ww.waterway_name ?? (ww.waterway_type === 'large_waterbody' ? 'แหล่งน้ำขนาดใหญ่' : 'แหล่งน้ำสาธารณะ')
+      let requiredSetback = 3.0
+      let categoryDesc = 'แหล่งน้ำสาธารณะกว้าง < 10.00 ม.'
+
+      if (ww.waterway_type === 'large_waterbody') {
+        requiredSetback = 12.0
+        categoryDesc = 'แหล่งน้ำสาธารณะขนาดใหญ่ (บึง ทะเลสาบ ทะเล)'
+      } else if (
+        ww.waterway_type === 'large_canal' ||
+        (typeof ww.waterway_width_m === 'number' && ww.waterway_width_m >= 10.0)
+      ) {
+        requiredSetback = 6.0
+        categoryDesc = 'แหล่งน้ำสาธารณะกว้าง >= 10.00 ม.'
+      }
+
+      const passWw = ww.distance_to_waterway_boundary_m >= requiredSetback
+      findings.push({
+        rule_id: 'TH-MR55-RULE-42-WATERWAY',
+        title: `Setback from Waterway (${wwLabel})`,
+        title_th: `ระยะร่นจากแหล่งน้ำสาธารณะ (${wwLabel})`,
+        status: passWw ? 'pass' : 'fail',
+        actual: `${ww.distance_to_waterway_boundary_m.toFixed(2)} ม.`,
+        required: `>= ${requiredSetback.toFixed(2)} ม.`,
+        citation: 'กฎกระทรวง ฉบับที่ 55 (พ.ศ. 2543) ข้อ 42',
+        description_th: `${categoryDesc} ต้องร่นแนวอาคารห่างไม่น้อยกว่า ${requiredSetback.toFixed(2)} ม. (วัดได้ ${ww.distance_to_waterway_boundary_m.toFixed(2)} ม.) ${
+          passWw ? 'ถูกต้องตามกฎกระทรวง' : 'ผิดกฎกระทรวง ฉบับที่ 55 ข้อ 42'
+        }`,
+      })
     }
   }
 
@@ -908,3 +1056,279 @@ export function evaluateRoomVentilationCompliance(
     findings: allFindings,
   }
 }
+
+// -------------------------------------------------------------
+// Site Grade, Fill Height & Drainage Compliance (พ.ร.บ. การขุดดินและถมดิน & ข้อบัญญัติ กทม.)
+// -------------------------------------------------------------
+
+export interface SiteGradeEvaluationInputs {
+  land_area_sq_m: number
+  fill_height_m: number
+  has_drainage_system: boolean
+  has_retaining_wall?: boolean
+  finished_floor_elevation_m?: number
+  road_crown_elevation_m?: number
+}
+
+export interface SiteGradeEvaluationResult {
+  overall_status: ComplianceStatus
+  findings: ComplianceFinding[]
+}
+
+/**
+ * Evaluates land fill and site grade drainage compliance according to
+ * Thai Soil Excavation & Land Fill Act (พระราชบัญญัติการขุดดินและถมดิน พ.ศ. 2543 มาตรา 26)
+ * and Bangkok Municipal Authority (BMA) building standards for ground floor elevation.
+ */
+export function evaluateSiteGradeAndDrainage(
+  inputs: SiteGradeEvaluationInputs,
+): SiteGradeEvaluationResult {
+  const findings: ComplianceFinding[] = []
+
+  // มาตรา 26: การถมดินพื้นที่เกิน 2,000 ตร.ม. หรือมีความสูงของเนินดินเกินกว่าระดับที่ดินข้างเคียง
+  const isLargeArea = inputs.land_area_sq_m > 2000
+  const isFilled = inputs.fill_height_m > 0
+
+  if (isLargeArea || isFilled) {
+    const drainagePass = inputs.has_drainage_system === true
+    findings.push({
+      rule_id: 'TH-SOIL-ACT-SEC26-DRAINAGE',
+      title: 'Site Land Fill Drainage System',
+      title_th: 'ระบบระบายน้ำสำหรับพื้นที่ถมดิน',
+      status: drainagePass ? 'pass' : 'fail',
+      actual: drainagePass ? 'มีระบบระบายน้ำเพียงพอ' : 'ไม่มีระบบระบายน้ำ',
+      required: 'ต้องจัดให้มีระบบระบายน้ำเพียงพอ',
+      citation: 'พระราชบัญญัติการขุดดินและถมดิน พ.ศ. 2543 มาตรา 26',
+      description_th: `การถมดินพื้นที่ ${inputs.land_area_sq_m.toFixed(1)} ตร.ม. สูง ${inputs.fill_height_m.toFixed(2)} ม. ${
+        drainagePass
+          ? 'จัดให้มีระบบระบายน้ำเพียงพอเพื่อป้องกันผลกระทบต่อที่ดินข้างเคียง ถูกต้องตามกฎหมาย'
+          : 'ต้องจัดให้มีระบบระบายน้ำเพียงพอที่จะไม่ก่อให้เกิดความเดือดร้อนแก่เจ้าของที่ดินข้างเคียง'
+      }`,
+    })
+  }
+
+  // มาตรา 26: การถมดินสูงเกิน 1.50 ม.
+  if (inputs.fill_height_m > 1.50) {
+    const wallPass = inputs.has_retaining_wall === true
+    findings.push({
+      rule_id: 'TH-SOIL-ACT-SEC26-RETAINING-WALL',
+      title: 'Earth Retaining Wall for Land Fill > 1.50m',
+      title_th: 'กำแพงกันดินสำหรับการถมดินสูงเกิน 1.50 ม.',
+      status: wallPass ? 'pass' : 'fail',
+      actual: wallPass ? 'มีกำแพงกันดิน/คันดินลาดชันปลอดภัย' : 'ไม่มีกำแพงกันดิน',
+      required: 'มีกำแพงกันดินหรือคันดินลาดชันปลอดภัย',
+      citation: 'พระราชบัญญัติการขุดดินและถมดิน พ.ศ. 2543 มาตรา 26',
+      description_th: `การถมดินสูง ${inputs.fill_height_m.toFixed(2)} ม. (> 1.50 ม.) ${
+        wallPass
+          ? 'มีกำแพงกันดินป้องกันดินพังทลาย ถูกต้องตามกฎหมาย'
+          : 'ต้องจัดให้มีกำแพงกันดินหรือคันดินที่มีความลาดชันปลอดภัยป้องกันการพังทลาย'
+      }`,
+    })
+  }
+
+  // ข้อบัญญัติ กทม. เรื่องการควบคุมอาคาร (ระดับพื้นชั้นล่าง FFL เทียบกับระดับกึ่งกลางถนน)
+  if (
+    inputs.finished_floor_elevation_m !== undefined &&
+    inputs.road_crown_elevation_m !== undefined
+  ) {
+    const deltaM =
+      Math.round((inputs.finished_floor_elevation_m - inputs.road_crown_elevation_m) * 1000) /
+      1000
+    let fflStatus: ComplianceStatus = 'pass'
+    let fflDesc = ''
+
+    if (deltaM >= 0.50) {
+      fflStatus = 'pass'
+      fflDesc = `ระดับพื้นชั้นล่าง FFL (+${inputs.finished_floor_elevation_m.toFixed(3)} ม.) สูงกว่าระดับกึ่งกลางถนน (+${inputs.road_crown_elevation_m.toFixed(3)} ม.) อยู่ ${deltaM.toFixed(2)} ม. (>= +0.50 ม.) ปลอดภัยจากน้ำท่วมขังตามข้อบัญญัติ กทม.`
+    } else if (deltaM >= 0.0) {
+      fflStatus = 'warning'
+      fflDesc = `ระดับพื้นชั้นล่าง FFL (+${inputs.finished_floor_elevation_m.toFixed(3)} ม.) สูงกว่าระดับกึ่งกลางถนนเพียง ${deltaM.toFixed(2)} ม. (< +0.50 ม.) มีความเสี่ยงน้ำท่วมขังรอการระบายในพื้นที่ กทม.`
+    } else {
+      fflStatus = 'fail'
+      fflDesc = `ระดับพื้นชั้นล่าง FFL (+${inputs.finished_floor_elevation_m.toFixed(3)} ม.) ต่ำกว่าระดับกึ่งกลางถนน (${deltaM.toFixed(2)} ม.) ผิดมาตรฐานควบคุมอาคาร กทม.`
+    }
+
+    findings.push({
+      rule_id: 'BMA-BUILDING-CODE-FFL',
+      title: 'Finished Floor Level relative to Road Crown',
+      title_th: 'ระดับพื้นชั้นล่างเทียบกับระดับกึ่งกลางถนนสาธารณะ',
+      status: fflStatus,
+      actual: `+${deltaM.toFixed(2)} ม. จากระดับถนน`,
+      required: '>= +0.50 ม. จากระดับกึ่งกลางถนน',
+      citation: 'ข้อบัญญัติกรุงเทพมหานคร เรื่องควบคุมอาคาร พ.ศ. 2544',
+      description_th: fflDesc,
+    })
+  }
+
+  const hasFail = findings.some((f) => f.status === 'fail')
+  const hasWarning = findings.some((f) => f.status === 'warning')
+
+  return {
+    overall_status: hasFail ? 'fail' : hasWarning ? 'warning' : 'pass',
+    findings,
+  }
+}
+
+// -------------------------------------------------------------
+// Unified Project-wide Site & Legal Compliance Audit
+// -------------------------------------------------------------
+
+export interface ProjectSiteComplianceOptions {
+  road_width_m?: number
+  front_road_setback_m?: number
+  waterways?: WaterwaySetbackEvaluationItem[]
+  land_fill_inputs?: SiteGradeEvaluationInputs
+  zoning_inputs?: BmaZoningEvaluationInputs
+}
+
+export interface ProjectSiteComplianceReport {
+  overall_status: ComplianceStatus
+  building_compliance: ThaiComplianceResult
+  zoning_compliance?: BmaZoningEvaluationResult
+  ventilation_compliance: ProjectVentilationComplianceSummary
+  site_grade_compliance?: SiteGradeEvaluationResult
+  all_findings: ComplianceFinding[]
+}
+
+/**
+ * Conducts a comprehensive legal and site survey audit across the entire project model,
+ * consolidating Thai Building Code Rule 50 (walls and roof eaves), Rule 44 (road height),
+ * Rule 42 (waterways), BMA Zoning (FAR/OSR), Daylighting & Ventilation (Rules 40, 41),
+ * and Soil Excavation / Land Fill Act Section 26.
+ */
+export function evaluateProjectSiteAndLegalCompliance(
+  project: ProjectDocument,
+  options?: ProjectSiteComplianceOptions,
+): ProjectSiteComplianceReport {
+  const allObjects = Object.values(project.objects).filter(
+    (o) => o.status !== 'archived' && !o.removed_phase,
+  )
+
+  const walls = allObjects.filter((o) => o.object_type === 'architecture.wall')
+  const openings = allObjects.filter(
+    (o) => o.object_type === 'door_window.door' || o.object_type === 'door_window.window',
+  )
+  const roofs = allObjects.filter((o) => o.object_type.startsWith('roof.'))
+
+  // Estimate building height
+  let buildingHeightM = 3.5
+  if (project.levels && project.levels.length > 0) {
+    const elevations = project.levels.map((l) => l.elevation_mm)
+    const minElev = Math.min(...elevations)
+    const maxElev = Math.max(...elevations)
+    const spanM = (maxElev - minElev) / 1000
+    buildingHeightM = Math.max(3.2, spanM + 3.0)
+  }
+
+  // Build wall evaluation items
+  const wallItems: WallSetbackEvaluationItem[] = walls.map((w) => {
+    const wData = (w.module_data ?? {}) as Record<string, unknown>
+    const wallId = w.id
+    const hasHostedOpening = openings.some((op) => {
+      const opData = (op.module_data ?? {}) as Record<string, unknown>
+      return opData.wall_id === wallId
+    })
+
+    const distToBoundaryM =
+      typeof wData.distance_to_boundary_m === 'number'
+        ? wData.distance_to_boundary_m
+        : typeof wData.setback_m === 'number'
+          ? wData.setback_m
+          : 2.5
+
+    const neighborConsent = Boolean(wData.neighbor_consent)
+    const distToRoadCenter =
+      typeof wData.distance_to_road_center_m === 'number'
+        ? wData.distance_to_road_center_m
+        : undefined
+    const distToRoadEdge =
+      typeof wData.distance_to_road_edge_m === 'number'
+        ? wData.distance_to_road_edge_m
+        : undefined
+
+    return {
+      wall_id: wallId,
+      wall_name: typeof wData.name === 'string' ? wData.name : undefined,
+      has_openings: hasHostedOpening,
+      distance_to_boundary_m: distToBoundaryM,
+      neighbor_consent: neighborConsent,
+      distance_to_road_center_m: distToRoadCenter,
+      distance_to_road_edge_m: distToRoadEdge,
+    }
+  })
+
+  // Build eaves items from roofs
+  const eavesItems: EavesSetbackEvaluationItem[] = roofs.map((r) => {
+    const rData = (r.module_data ?? {}) as Record<string, unknown>
+    const distM =
+      typeof rData.distance_to_boundary_m === 'number'
+        ? rData.distance_to_boundary_m
+        : typeof rData.eaves_setback_m === 'number'
+          ? rData.eaves_setback_m
+          : 1.5
+    const overhangM =
+      typeof rData.eaves_overhang_mm === 'number'
+        ? rData.eaves_overhang_mm / 1000
+        : undefined
+    const consent = Boolean(rData.neighbor_consent)
+    const hasGutter = rData.has_gutter !== false
+
+    return {
+      roof_id: r.id,
+      roof_name: typeof rData.name === 'string' ? rData.name : 'Roof',
+      distance_to_boundary_m: distM,
+      eaves_overhang_m: overhangM,
+      neighbor_consent: consent,
+      has_gutter: hasGutter,
+    }
+  })
+
+  // Evaluate building compliance
+  const buildingCompliance = evaluateThaiBuildingCompliance({
+    building_height_m: buildingHeightM,
+    road_width_m: options?.road_width_m,
+    front_road_setback_m: options?.front_road_setback_m,
+    walls:
+      wallItems.length > 0
+        ? wallItems
+        : [{ wall_id: 'default-wall', has_openings: false, distance_to_boundary_m: 2.0 }],
+    eaves: eavesItems.length > 0 ? eavesItems : undefined,
+    waterways: options?.waterways,
+  })
+
+  // Evaluate ventilation
+  const ventilationCompliance = evaluateRoomVentilationCompliance(project)
+
+  // Evaluate zoning if inputs provided
+  let zoningCompliance: BmaZoningEvaluationResult | undefined
+  if (options?.zoning_inputs) {
+    zoningCompliance = evaluateBmaZoning(options.zoning_inputs)
+  }
+
+  // Evaluate site grade if inputs provided
+  let siteGradeCompliance: SiteGradeEvaluationResult | undefined
+  if (options?.land_fill_inputs) {
+    siteGradeCompliance = evaluateSiteGradeAndDrainage(options.land_fill_inputs)
+  }
+
+  const allFindings: ComplianceFinding[] = [
+    ...buildingCompliance.findings,
+    ...(zoningCompliance ? zoningCompliance.findings : []),
+    ...ventilationCompliance.findings,
+    ...(siteGradeCompliance ? siteGradeCompliance.findings : []),
+  ]
+
+  const hasFail = allFindings.some((f) => f.status === 'fail')
+  const hasWarning = allFindings.some((f) => f.status === 'warning')
+  const overallStatus: ComplianceStatus = hasFail ? 'fail' : hasWarning ? 'warning' : 'pass'
+
+  return {
+    overall_status: overallStatus,
+    building_compliance: buildingCompliance,
+    zoning_compliance: zoningCompliance,
+    ventilation_compliance: ventilationCompliance,
+    site_grade_compliance: siteGradeCompliance,
+    all_findings: allFindings,
+  }
+}
+

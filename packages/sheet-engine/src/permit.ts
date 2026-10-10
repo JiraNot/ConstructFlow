@@ -958,19 +958,21 @@ function compilePermitDrawingSetBase(
           );
 
           // 2. Thai Building Code Zoning & Compliance Table
-          text([18, 82], "ข้อกำหนดระยะร่นและผังเมือง (กฎกระทรวงฉบับที่ 55 & ข้อบัญญัติ กทม.)", 3.0, "#0f172a");
+          text([18, 80], "ข้อกำหนดระยะร่นและผังเมือง (กฎกระทรวงฉบับที่ 55 & ข้อบัญญัติ กทม.)", 3.0, "#0f172a");
           drawTable(
             [
               ["เกณฑ์การตรวจสอบ / Regulation", "เกณฑ์กฎหมาย / Standard", "ผลการตรวจสอบ / Verification"],
               ["ระยะร่นผนังมีช่องเปิด (Setback with Openings)", ">= 2.00 ม.", `${legal.setbacks.min_opening_setback_m.toFixed(2)} ม. (ผ่านเกณฑ์กฎหมาย)`],
               ["ระยะร่นผนังทึบ (Setback Blind Wall)", ">= 0.50 ม.", `${legal.setbacks.min_blind_setback_m.toFixed(2)} ม. (ผ่านเกณฑ์กฎหมาย)`],
+              ["ระยะร่นชายคาหลังคา (Roof Eaves Setback ข้อ 50)", ">= 0.50 ม.", `${(legal.setbacks.min_eaves_setback_m ?? 0.50).toFixed(2)} ม. (ผ่านเกณฑ์กฎหมาย)`],
+              ["ความสูงอาคารตามความกว้างถนน (Street Width ข้อ 44)", "<= 2 เท่าเขตทาง", "ผ่านเกณฑ์กฎหมาย"],
               ["อัตราส่วนพื้นที่ว่าง (Open Space Ratio - OSR)", `>= ${legal.zoning.osr_min_percent}%`, `ผ่านเกณฑ์`],
               ["พื้นที่ว่างน้ำซึมผ่านได้ (Permeable Open Space)", ">= 50% ของ OSR", `${legal.zoning.permeable_open_space_ratio_percent}% (ผ่านเกณฑ์)`],
             ],
-            [18, 86],
+            [18, 84],
             [75, 55, 60],
             10,
-            6.0,
+            5.2,
           );
 
           // 3. Signatories Table

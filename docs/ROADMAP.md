@@ -18,6 +18,62 @@ The roadmap now favors **depth of editing behavior over breadth of object invent
 
 ---
 
+## Master Construction Engineering Roadmap (6 Pillars)
+
+แผนงานวิศวกรรมและการพัฒนาระบบก่อสร้าง 6 เสาหลักของ ConstructFlow (อ้างอิงกฎกระทรวงฉบับที่ 55, ข้อบัญญัติ กทม., มาตรฐาน วสท., กรมบัญชีกลาง, และแบบขออนุญาต อ.1 20 แผ่น):
+
+```mermaid
+flowchart TD
+    subgraph Pillar1["🏛️ เสาที่ 1: งานสำรวจ ที่ดิน และกฎหมายอาคารไทย (เสร็จสมบูรณ์)"]
+        P1_1["1.1 ระยะร่นแนวชายคาหลังคา (Roof Eaves Setback ข้อ 50) ✅"]
+        P1_2["1.2 ความกว้างถนนสาธารณะกับความสูงอาคาร (ข้อ 44) ✅"]
+        P1_3["1.3 ระยะร่นแหล่งน้ำสาธารณะ (ข้อ 42) ✅"]
+        P1_4["1.4 ระดับดินถม vs ระดับกึ่งกลางถนน (พ.ร.บ. ขุดดินถมดิน & ข้อบัญญัติ กทม.) ✅"]
+    end
+
+    subgraph Pillar2["🏗️ เสาที่ 2: วิศวกรรมโครงสร้างและฐานราก (ถัดไป)"]
+        P2_1["2.1 ฐานรากตีนเป็ดชิดเขต (Strap Footing) & คานดึงรั้ง (Strap Beam)"]
+        P2_2["2.2 รอยต่อการทรุดตัว (Settlement Joint) & เคมีเจาะเสียบเหล็ก (Chemical Dowels)"]
+        P2_3["2.3 รายละเอียดดัด/ตัดเหล็กคาน 3 ตอน (วสท. Beam Schedule)"]
+        P2_4["2.4 โครงสร้างแม่บันได คสล. & คานรับชานพัก (Stair Framing)"]
+    end
+
+    subgraph Pillar3["🧱 เสาที่ 3: งานสถาปัตยกรรมและเปลือกอาคาร"]
+        P3_1["3.1 เสาเอ็นและทับหลัง คสล. (Lintels & Stiffeners บนแบบขยาย)"]
+        P3_2["3.2 รอยต่อกันซึมหลังคาชนผนังเดิม (Flashing & PU Sealant)"]
+        P3_3["3.3 ธรณีกันน้ำ (Shower Curb) และสโลปพื้นห้องน้ำ 1:50"]
+        P3_4["3.4 ปริมาณและระดับกรุกระเบื้องผนังห้องน้ำ (Wall Tile Finish)"]
+    end
+
+    subgraph Pillar4["💧 เสาที่ 4: งานระบบสุขาภิบาลและไฟฟ้า (MEP)"]
+        P4_1["4.1 ช่องเปิดล้างท่อ Cleanout (FCO / CO วสท.)"]
+        P4_2["4.2 ท่อระบายอากาศป้องกันกลิ่น (Vent Pipe / Vent Stack)"]
+        P4_3["4.3 ระบบประปาน้ำดี ถังพักน้ำ และปั๊มน้ำ (Cold Water Supply)"]
+        P4_4["4.4 ระบบหลักดิน (Ground Rod) และเบรกเกอร์กันดูด (RCBO 30mA)"]
+    end
+
+    subgraph Pillar5["💰 เสาที่ 5: งานประมาณราคาและ BOQ (Cost Engineering)"]
+        P5_1["5.1 ตัวคูณเผื่อเศษวัสดุ (Waste Factor: กระเบื้อง, ปูน, เหล็กเส้น)"]
+        P5_2["5.2 ไม้แบบและการคิดรอบการใช้ซ้ำ (Formwork Reuse Factor)"]
+        P5_3["5.3 หมวดงานเตรียมการและงานชั่วคราว (Preliminaries: Shoring, นั่งร้าน)"]
+        P5_4["5.4 สรุป Factor F และภาษีมูลค่าเพิ่ม 7% (Gov Standard)"]
+    end
+
+    subgraph Pillar6["📐 เสาที่ 6: การประสานมิติแบบก่อสร้าง (BIM Coordination)"]
+        P6_1["6.1 Hard Clash ท่อสโลป 1:100 ลอดใต้คาน คสล. ชนระดับฝ้า"]
+        P6_2["6.2 Soft Clash วงสวิงบานประตูชนสุขภัณฑ์และอุปกรณ์"]
+        P6_3["6.3 แบบขยาย Detail มาตรฐานงานต่อเติมและรอยต่อวัสดุ"]
+    end
+
+    Pillar1 --> Pillar2
+    Pillar2 --> Pillar3
+    Pillar3 --> Pillar4
+    Pillar4 --> Pillar5
+    Pillar5 --> Pillar6
+```
+
+---
+
 ## R0 — Standalone Project Reliability Gate
 
 **Goal:** prove canonical project persistence, command transactions and derived output consistency in ConstructFlow without external CAD/BIM software.

@@ -409,6 +409,9 @@ export interface ThaiBuildingCodeSetbacks {
   right_m: number
   min_opening_setback_m: number // 2.00m (กฎกระทรวงฉบับที่ 55)
   min_blind_setback_m: number // 0.50m
+  min_eaves_setback_m?: number // 0.50m (กฎกระทรวงฉบับที่ 55 ข้อ 50)
+  front_road_width_m?: number // ความกว้างถนนสาธารณะหน้าโครงการ
+  road_crown_level_m?: number // ระดับกึ่งกลางถนนสาธารณะ
 }
 
 export interface ThaiZoningData {
