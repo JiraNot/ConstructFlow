@@ -957,7 +957,81 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
         emittedEnvelope: envelope,
       }
     }
-
-
   }
+}
+
+/** Return child/hosted structure entities that must be deleted when this host is deleted */
+export function getStructureDeletionDependents(project: ProjectDocument, objectId: string): string[] {
+  const target = project.objects[objectId]
+  if (!target) return []
+  const dependentIds: string[] = []
+
+  if (target.object_type === 'structure.column') {
+    // 1. Hosted foundations
+    for (const obj of Object.values(project.objects)) {
+      if (obj.object_type === 'structure.foundation') {
+        const data = obj.module_data as Record<string, unknown>
+        if (data.supported_column_id === objectId || obj.host_refs.includes(objectId)) {
+          dependentIds.push(obj.id)
+        }
+      }
+    }
+  }
+
+  // 2. Rebar sets hosted on this object or any dependent foundations
+  const hostsToCheck = new Set([objectId, ...dependentIds])
+  for (const obj of Object.values(project.objects)) {
+    if (obj.object_type === 'structure.rebar_set') {
+      const data = obj.module_data as Record<string, unknown>
+      if (hostsToCheck.has(String(data.host_id)) || obj.host_refs.some(h => hostsToCheck.has(h))) {
+        dependentIds.push(obj.id)
+      }
+    }
+  }
+
+  return [...new Set(dependentIds)]
+}
+
+/** Reconcile connected structure entities (e.g., detach beam endpoints) when columns or other hosts are deleted */
+export function reconcileStructureDeletion(updated: ProjectDocument, deletedIds: string[], now: string): string[] {
+  const updatedIds: string[] = []
+  const deletedSet = new Set(deletedIds)
+
+  for (const [id, obj] of Object.entries(updated.objects)) {
+    if (obj.object_type === 'structure.beam') {
+      const data = obj.module_data as Record<string, unknown>
+      let changed = false
+      let startCol = data.start_column_id
+      let endCol = data.end_column_id
+
+      if (typeof startCol === 'string' && deletedSet.has(startCol)) {
+        startCol = undefined
+        changed = true
+      }
+      if (typeof endCol === 'string' && deletedSet.has(endCol)) {
+        endCol = undefined
+        changed = true
+      }
+      const newHostRefs = obj.host_refs.filter(h => !deletedSet.has(h))
+      if (newHostRefs.length !== obj.host_refs.length) {
+        changed = true
+      }
+
+      if (changed) {
+        updated.objects[id] = {
+          ...obj,
+          host_refs: newHostRefs,
+          module_data: {
+            ...data,
+            start_column_id: startCol,
+            end_column_id: endCol,
+          },
+          updated_at: now,
+        }
+        updatedIds.push(id)
+      }
+    }
+  }
+
+  return updatedIds
 }

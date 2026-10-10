@@ -1,4 +1,5 @@
 import { getArchitectureDeletionDependents } from '@constructflow/architecture-engine'
+import { getStructureDeletionDependents, reconcileStructureDeletion } from '@constructflow/structure-engine'
 import { DeleteObjectInput } from '@constructflow/command-schema'
 import { validateDrawingSettings } from '@constructflow/project-model'
 import type { UpdateSheetViewportInput } from '@constructflow/command-schema'
@@ -126,7 +127,14 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
         }
       }
 
-      const hostedIdsToDelete = getArchitectureDeletionDependents(updated, delInput.object_id)
+      const archDependents = getArchitectureDeletionDependents(updated, delInput.object_id)
+      const structDependents = getStructureDeletionDependents(updated, delInput.object_id)
+      const decorativeDependents = Object.values(updated.objects)
+        .filter(obj => (obj.object_type === 'decorative.moulding_run' || obj.object_type === 'decorative.wall_panel') &&
+          ((obj.module_data as Record<string, unknown>).host_id === delInput.object_id || obj.host_refs.includes(delInput.object_id)))
+        .map(obj => obj.id)
+
+      const hostedIdsToDelete = [...new Set([...archDependents, ...structDependents, ...decorativeDependents])]
 
       delete updated.objects[delInput.object_id]
       for (const hid of hostedIdsToDelete) {
@@ -134,6 +142,8 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       }
 
       const allDeletedIds = [delInput.object_id, ...hostedIdsToDelete]
+      const structUpdated = reconcileStructureDeletion(updated, allDeletedIds, now)
+
       const treatmentHostsUpdated: string[] = []
       for (const [objectId, object] of Object.entries(updated.objects)) {
         if (object.object_type !== 'architecture.wall') continue
@@ -156,7 +166,8 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       updated.relationships = updated.relationships.filter(
         (r) => !allDeletedIds.includes(r.source_id) && !allDeletedIds.includes(r.target_id)
       )
-      const affectedIds = [...allDeletedIds, ...treatmentHostsUpdated]
+      const updatedObjectIds = [...new Set([...treatmentHostsUpdated, ...structUpdated])]
+      const affectedIds = [...allDeletedIds, ...updatedObjectIds]
 
       return {
         result: {
@@ -165,7 +176,7 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
           command_name: commandName,
           affected_object_ids: affectedIds,
           deleted_object_ids: allDeletedIds,
-          updated_object_ids: treatmentHostsUpdated,
+          updated_object_ids: updatedObjectIds,
         },
         updatedProject: updated,
         emittedEnvelope: envelope,

@@ -1146,6 +1146,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       {/* ลบชิ้นงาน Action */}
       <div style={{ borderTop: '1px solid #dce4ed', paddingTop: 10 }}>
         <button
+          type="button"
           onClick={() => onDeleteObject(selectedObj.id)}
           title="ลบชิ้นงาน (Delete / Backspace)"
           aria-label="ลบชิ้นงาน (Delete / Backspace)"

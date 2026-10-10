@@ -36,12 +36,13 @@ import { exportProjectToDxf } from '@constructflow/cad-adapter'
 import { exportProjectToIfc } from '@constructflow/bim-adapter'
 import type { ProjectLegalMetadata } from '@constructflow/project-model'
 import { UnderlayConfig, PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
-import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown } from 'lucide-react'
+import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home } from 'lucide-react'
 import { calculateTakeoff } from '@constructflow/takeoff-engine'
 import { createKitchenProofProject } from '@constructflow/extension-engine'
 import { renderPermitDrawingSetHtml } from '@constructflow/sheet-engine'
 import { readProjectFile, writeProjectFile, type LocalProjectFileHandle } from './projectFileIO.js'
 import { loadLocalProjectSnapshot, saveLocalProjectSnapshot } from './projectAutosave.js'
+import houseDemoRaw from '../../../examples/constructflow-house-demo.cfproj?raw'
 
 const headerActionStyle: React.CSSProperties = {
   display: 'inline-flex',
@@ -1191,16 +1192,22 @@ export const App: React.FC = () => {
   const handleDeleteObjects = (objectIds: string[]) => {
     let current = project
     const envelopes: CommandEnvelope[] = []
+    let failureReason: string | null = null
     for (const objectId of [...new Set(objectIds)]) {
       if (!current.objects[objectId]) continue
       const result = CommandBus.execute(current, 'DeleteObject', { object_id: objectId })
-      if (result.result.status !== 'success') continue
+      if (result.result.status !== 'success') {
+        failureReason = result.result.errors?.[0] ?? 'ลบชิ้นงานไม่สำเร็จ'
+        continue
+      }
       current = result.updatedProject
       if (result.emittedEnvelope) envelopes.push(result.emittedEnvelope)
     }
     if (current !== project) {
       setProject(current); setSelectedId(null); setSelectedIds([])
       setCommandQueue(queue => [...queue, ...envelopes])
+    } else if (failureReason) {
+      setFileFeedback(failureReason)
     }
   }
   const handleDeleteObject = (objectId: string) => handleDeleteObjects([objectId])
@@ -1404,6 +1411,24 @@ export const App: React.FC = () => {
     setViewMode('plan')
   }
 
+  const handleStartHouseDemo = () => {
+    if (!confirmReplaceUnsavedProject()) return
+    try {
+      const restored = deserializeProject(houseDemoRaw)
+      projectSessionRef.current!.reset(restored)
+      setProjectState(restored)
+      setSavedProjectJson(null)
+      setReplacementBaselineJson(serializeProject(restored))
+      setFileFeedback('เปิดแบบบ้านเดโม 2 ชั้นแล้ว')
+      setSelectedId(null)
+      setSelectedIds([])
+      setCommandQueue([])
+      setViewMode('plan')
+    } catch (error) {
+      window.alert(`เปิดแบบบ้านเดโมไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   // Counts & Schedule breakdown
   const columnCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.column').length
   const foundationCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.foundation').length
@@ -1567,7 +1592,8 @@ export const App: React.FC = () => {
               <div className="cf-menu-label">ตั้งค่าและช่วยเหลือ</div>
               <button type="button" onClick={()=>setIsSettingsOpen(true)}>ตั้งค่า · ชั้น/ระดับ/พื้นที่ทำงาน</button>
               <button type="button" onClick={()=>setInspectorOpen(value=>!value)}>{inspectorOpen?'ยุบ':'แสดง'}แผงข้อมูล</button>
-              <button type="button" aria-label="เปิดโครงการตัวอย่างครัว" onClick={handleStartKitchenProof}><CookingPot size={15} /> เปิดโครงการตัวอย่างครัว</button>
+              <button type="button" aria-label="เปิดแบบบ้านเดโม 2 ชั้น" onClick={handleStartHouseDemo}><Home size={15} /> เปิดแบบบ้านเดโม 2 ชั้น (House Demo)</button>
+              <button type="button" aria-label="เปิดโครงการตัวอย่างครัว" onClick={handleStartKitchenProof}><CookingPot size={15} /> เปิดโครงการตัวอย่างครัว (Kitchen Proof)</button>
             </div>
           </details>
         </div>

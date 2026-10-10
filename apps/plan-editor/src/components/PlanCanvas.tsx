@@ -1248,15 +1248,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
 
     // 3. Columns
+    const colTol = Math.max(40, 8 / viewport.zoom)
     for (const obj of pickObjects) {
       if (isColumnObject(obj)) {
         const [cx, cy] = obj.module_data.location_mm
         const [w, d] = obj.module_data.section_mm
         if (
-          wx >= cx - w / 2 &&
-          wx <= cx + w / 2 &&
-          wy >= cy - d / 2 &&
-          wy <= cy + d / 2
+          wx >= cx - w / 2 - colTol &&
+          wx <= cx + w / 2 + colTol &&
+          wy >= cy - d / 2 - colTol &&
+          wy <= cy + d / 2 + colTol
         ) {
           return obj.id
         }

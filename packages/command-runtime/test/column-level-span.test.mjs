@@ -73,3 +73,56 @@ test('beams use a level datum and signed embed offset instead of a hard-coded wo
   assert.equal(repositioned.status, 'success', JSON.stringify(repositioned.errors))
   assert.equal(resolveBeamBaseElevation(repositioned.updatedProject, repositioned.updatedProject.objects[beam.id]), 2600)
 })
+
+test('deleting a column cascades to hosted foundations and rebar, and detaches connected beam endpoints cleanly', () => {
+  const project = createEmptyProjectDocument('COLUMN-DELETE-TEST')
+  const session = new ProjectCommandSession(project)
+
+  const c1Id = '00000000-0000-4000-8000-000000000010'
+  const c2Id = '00000000-0000-4000-8000-000000000020'
+  const fId = '00000000-0000-4000-8000-000000000030'
+  const bId = '00000000-0000-4000-8000-000000000040'
+
+  session.execute([
+    { name: 'CreateColumn', input: { id: c1Id, mark: 'C1', location_mm: [0, 0, 0], section_mm: [200, 200] } },
+    { name: 'CreateColumn', input: { id: c2Id, mark: 'C1', location_mm: [4000, 0, 0], section_mm: [200, 200] } },
+    { name: 'CreateFoundation', input: { id: fId, supported_column_id: c1Id, mark: 'F1' } },
+    { name: 'CreateBeam', input: { id: bId, mark: 'B1', start_point_mm: [0, 0, 0], end_point_mm: [4000, 0, 0], start_column_id: c1Id, end_column_id: c2Id } },
+  ])
+
+  // Verify setup
+  assert.ok(session.project.objects[c1Id])
+  assert.ok(session.project.objects[fId])
+  assert.ok(session.project.objects[bId])
+  assert.equal(session.project.objects[bId].module_data.start_column_id, c1Id)
+  assert.ok(session.project.objects[bId].host_refs.includes(c1Id))
+
+  // Delete column C1
+  const delRes = session.execute([{ name: 'DeleteObject', input: { object_id: c1Id } }])
+  assert.equal(delRes.status, 'success', JSON.stringify(delRes.errors))
+
+  // C1 and hosted foundation F1 must be deleted
+  assert.equal(session.project.objects[c1Id], undefined)
+  assert.equal(session.project.objects[fId], undefined)
+
+  // Beam B1 must survive with start_column_id detached
+  const beam = session.project.objects[bId]
+  assert.ok(beam)
+  assert.equal(beam.module_data.start_column_id, undefined)
+  assert.equal(beam.module_data.end_column_id, c2Id)
+  assert.equal(beam.host_refs.includes(c1Id), false)
+  assert.equal(beam.host_refs.includes(c2Id), true)
+
+  // Undo restores column, foundation, and beam host
+  const undone = session.undo()
+  assert.ok(undone.objects[c1Id])
+  assert.ok(undone.objects[fId])
+  assert.equal(undone.objects[bId].module_data.start_column_id, c1Id)
+  assert.ok(undone.objects[bId].host_refs.includes(c1Id))
+
+  // Redo re-applies clean deletion
+  const redone = session.redo()
+  assert.equal(redone.objects[c1Id], undefined)
+  assert.equal(redone.objects[fId], undefined)
+  assert.equal(redone.objects[bId].module_data.start_column_id, undefined)
+})
