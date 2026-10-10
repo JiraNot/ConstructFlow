@@ -53,6 +53,8 @@ export function decodeBathroom(
     wet_wall_length_mm: num(d.wet_wall_length_mm, "wet wall length", 0),
     tile_mm: vec2(d.tile_mm, "tile module"),
     toilet_rough_in_mm: positive(d.toilet_rough_in_mm, "toilet rough-in"),
+    shower_curb_mm: d.shower_curb_mm !== undefined ? (vec2(d.shower_curb_mm, "shower curb") as [number, number]) : undefined,
+    wall_tile_height_mm: d.wall_tile_height_mm !== undefined ? positive(d.wall_tile_height_mm, "wall tile height") : undefined,
   };
   if (result.tile_mm.some((v) => v <= 0))
     throw new Error("Tile dimensions must be positive");
@@ -181,6 +183,11 @@ export function bathroomOutputs(p: ProjectDocument): DomainOutput[] {
           d.wet_wall_length_mm *
             (d.wet_wall_height_mm - d.waterproof_upstand_mm)) /
           1e6;
+      const wallTileHeight = d.wall_tile_height_mm ?? (d.wet_wall_length_mm > 0 ? d.wet_wall_height_mm : 2400);
+      const doorCutoutM2 = 1.6; // standard bathroom door 0.80m x 2.00m
+      const wallTileArea = Math.max(0, (perimeter * wallTileHeight) / 1e6 - doorCutoutM2);
+      const curbLengthM = d.wet_wall_length_mm > 0 ? (d.shower_curb_mm?.[0] ? d.shower_curb_mm[0] / 1000 : 0.90) : 0;
+
       out.quantities = [
         {
           classification: "bathroom.floor_tile",
@@ -197,7 +204,23 @@ export function bathroomOutputs(p: ProjectDocument): DomainOutput[] {
           formula:
             "floor + perimeter upstand + incremental wet wall zone / 1e6",
         },
+        {
+          classification: "bathroom.wall_tile",
+          description: d.mark + " wall tiling (full height)",
+          quantity: Number(wallTileArea.toFixed(4)),
+          unit: "m2",
+          formula: `(perimeter * ${wallTileHeight}mm - door opening) / 1e6`,
+        },
       ];
+      if (curbLengthM > 0) {
+        out.quantities.push({
+          classification: "bathroom.shower_curb",
+          description: d.mark + " RC shower curb",
+          quantity: Number(curbLengthM.toFixed(4)),
+          unit: "m",
+          formula: "shower curb length (m)",
+        });
+      }
       out.schedule = {
         Area_m2: area,
         Drop_m: d.drop_mm / 1000,
@@ -206,6 +229,8 @@ export function bathroomOutputs(p: ProjectDocument): DomainOutput[] {
         Upstand_m: d.waterproof_upstand_mm / 1000,
         Wet_wall_m: d.wet_wall_height_mm / 1000,
         Toilet_rough_in_m: d.toilet_rough_in_mm / 1000,
+        Wall_tile_m2: Number(wallTileArea.toFixed(2)),
+        Shower_curb_m: Number(curbLengthM.toFixed(2)),
         Tile: d.tile_mm.join("×") + " mm",
       };
       return out;

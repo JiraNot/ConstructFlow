@@ -901,3 +901,138 @@ test("Pillar 2: S-05 and S-06 compile detailed structural cards (3-section detai
   assert.ok(s06Texts.some((t) => t.includes("รูปตัด 3-3")), "S-06 includes Section 3-3");
   assert.ok(s06Texts.some((t) => t.includes("เหล็กข้างคาน 2-DB12")), "S-06 includes side skin rebar text for 25x60 beam");
 });
+
+test("Pillar 3: A-08 lintel/stiffener details, A-09 bathroom drop-slab/shower-curb & roof flashing", () => {
+  const p = createEmptyProjectDocument("PILLAR3-TEST", "เสาที่ 3 สถาปัตยกรรมและเปลือกอาคาร");
+  const levelId = "lvl-1";
+  p.levels = [
+    {
+      id: levelId,
+      name: "1F",
+      elevation_mm: 0,
+      storey_index: 0,
+      height_mm: 3000,
+    },
+  ];
+
+  // Add Wall and hosted Door & Window
+  const wallId = "wall-1";
+  p.objects[wallId] = {
+    id: wallId,
+    object_type: "architecture.wall",
+    created_phase: "new_construction",
+    removed_phase: null,
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [],
+    connector_refs: [],
+    status: "active",
+    module_data: {
+      mark: "W1",
+      start_point_mm: [0, 0, 0],
+      end_point_mm: [5000, 0, 0],
+      thickness_mm: 100,
+      height_mm: 2800,
+      length_mm: 5000,
+      level_id: levelId,
+      material: "brick_masonry",
+    },
+  };
+
+  const doorId = "door-1";
+  p.objects[doorId] = {
+    id: doorId,
+    object_type: "door_window.door",
+    created_phase: "new_construction",
+    removed_phase: null,
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [wallId],
+    connector_refs: [],
+    status: "active",
+    module_data: {
+      mark: "D1",
+      wall_id: wallId,
+      width_mm: 900,
+      height_mm: 2000,
+      offset_along_wall_mm: 1000,
+      level_id: levelId,
+      handing: "left_in",
+      location_mm: [1000, 0, 0],
+    },
+  };
+
+  const windowId = "win-1";
+  p.objects[windowId] = {
+    id: windowId,
+    object_type: "door_window.window",
+    created_phase: "new_construction",
+    removed_phase: null,
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [wallId],
+    connector_refs: [],
+    status: "active",
+    module_data: {
+      mark: "W1",
+      wall_id: wallId,
+      width_mm: 1200,
+      height_mm: 1100,
+      sill_height_mm: 900,
+      offset_along_wall_mm: 3000,
+      level_id: levelId,
+      location_mm: [3000, 0, 900],
+    },
+  };
+
+  // Add Bathroom
+  const bathId = "bath-1";
+  p.objects[bathId] = {
+    id: bathId,
+    object_type: "architecture.bathroom",
+    created_phase: "new_construction",
+    removed_phase: null,
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [],
+    connector_refs: [],
+    status: "active",
+    module_data: {
+      mark: "WC1",
+      boundary_mm: [[0, 0], [2000, 0], [2000, 1500], [0, 1500]],
+      elevation_mm: 0,
+      drop_mm: 50,
+      slope_ratio: 0.02,
+      drain_mm: [1500, 1000],
+      waterproof_upstand_mm: 300,
+      wet_wall_height_mm: 1800,
+      wet_wall_length_mm: 3500,
+      tile_mm: [300, 300],
+      toilet_rough_in_mm: 305,
+      shower_curb_mm: [100, 50],
+      wall_tile_height_mm: 2400,
+      level_id: levelId,
+    },
+  };
+
+  const set = compilePermitDrawingSet(p);
+
+  // 1. Check Sheet A-08 for Typical RC Lintel & Stiffener Detail Card
+  const a08 = set.sheets.find((sheet) => sheet.id === "A-08");
+  assert.ok(a08, "Sheet A-08 exists");
+  const a08Texts = a08.primitives.filter((pr) => pr.kind === "text").map((pr) => pr.text);
+  assert.ok(a08Texts.some((t) => t.includes("DETAIL-LS")), "A-08 includes [ DETAIL-LS ] Lintel & Stiffener card");
+  assert.ok(a08Texts.some((t) => t.includes("ทับหลัง คสล.")), "A-08 includes lintel text");
+  assert.ok(a08Texts.some((t) => t.includes("เสาเอ็น คสล.")), "A-08 includes stiffener text");
+  assert.ok(a08Texts.some((t) => t.includes("เอ็นธรณี คสล.")), "A-08 includes sill text");
+  assert.ok(a08Texts.some((t) => t.includes("ฝาก >= 0.20ม.")), "A-08 includes bearing extension text");
+
+  // 2. Check Sheet A-09 for Bathroom Details, Rough-In Specs, and Roof Flashing
+  const a09 = set.sheets.find((sheet) => sheet.id === "A-09");
+  assert.ok(a09, "Sheet A-09 exists");
+  const a09Texts = a09.primitives.filter((pr) => pr.kind === "text").map((pr) => pr.text);
+  assert.ok(a09Texts.some((t) => t.includes("DETAIL-B1")), "A-09 includes [ DETAIL-B1 ] Drop Slab & Curb card");
+  assert.ok(a09Texts.some((t) => t.includes("DETAIL-B2")), "A-09 includes [ DETAIL-B2 ] Sanitary Fixtures card");
+  assert.ok(a09Texts.some((t) => t.includes("DETAIL-RF")), "A-09 includes [ DETAIL-RF ] Roof Flashing card");
+  assert.ok(a09Texts.some((t) => t.includes("โซนแห้ง -0.05")), "A-09 includes Dry Zone datum -0.05");
+  assert.ok(a09Texts.some((t) => t.includes("โซนเปียก -0.10")), "A-09 includes Wet Zone datum -0.10");
+  assert.ok(a09Texts.some((t) => t.includes("ธรณี 10x5ซม.")), "A-09 includes shower curb text");
+  assert.ok(a09Texts.some((t) => t.includes("PU Sealant")), "A-09 includes Flashing PU Sealant text");
+});
+

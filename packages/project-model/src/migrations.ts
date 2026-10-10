@@ -226,6 +226,8 @@ export function validateProjectV2(project: ProjectDocument): void {
       beam_system: ['structure.beam'],
       continuity_type: ['structure.beam'],
       skin_rebar_required: ['structure.beam'],
+      shower_curb_mm: ['architecture.bathroom'],
+      wall_tile_height_mm: ['architecture.bathroom'],
     }
     for (const [field, families] of Object.entries(allowedFamilies)) {
       if (values[field] !== undefined && !families.includes(objectType)) {

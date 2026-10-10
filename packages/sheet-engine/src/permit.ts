@@ -1045,7 +1045,9 @@ function compilePermitDrawingSetBase(
           for (const o of selected)
             unique.set(String(data(o).type_id ?? data(o).mark), o);
 
-          const items = [...unique.values()].slice(0, 6);
+          const items = [...unique.values()];
+          const maxOpeningCards = items.length <= 4 ? items.length : 4;
+          const displayItems = items.slice(0, maxOpeningCards);
           const cardWidth = 59;
           const cardHeight = 115;
           const startX = 20;
@@ -1053,7 +1055,7 @@ function compilePermitDrawingSetBase(
 
           text([startX, startY - 4], "แบบขยายประตูและหน้าต่าง (TYPE ELEVATIONS & SCHEDULE DETAILS) · มาตราส่วน 1:50", 2.8, "#0f172a");
 
-          for (const [i, o] of items.entries()) {
+          for (const [i, o] of displayItems.entries()) {
             const d = data(o);
             const mark = String(d.mark ?? "D1");
             const isDoor = o.object_type === "door_window.door";
@@ -1191,6 +1193,164 @@ function compilePermitDrawingSetBase(
               );
               text([cardX + 2.5, curY], label, 1.8, "#64748b");
               text([cardX + 2.5, curY + 4.2], val, 2.0, "#0f172a", cardWidth - 5);
+            });
+          }
+
+          // 4. Typical RC Lintel & Stiffener Detail Card
+          const detailX = startX + maxOpeningCards * (cardWidth + 4);
+          const detailW = Math.max(cardWidth, 395 - detailX);
+          if (detailW >= 55) {
+            const cardY = startY;
+            path(
+              [
+                [detailX, cardY],
+                [detailX + detailW, cardY],
+                [detailX + detailW, cardY + cardHeight],
+                [detailX, cardY + cardHeight],
+              ],
+              "#cbd5e1",
+              0.25,
+              undefined,
+              true,
+              "#ffffff",
+            );
+            path(
+              [
+                [detailX, cardY],
+                [detailX + detailW, cardY],
+                [detailX + detailW, cardY + 9],
+                [detailX, cardY + 9],
+              ],
+              "#e2e8f0",
+              0.2,
+              undefined,
+              true,
+              "#f1f5f9",
+            );
+            text([detailX + 2.5, cardY + 6.2], "[ DETAIL-LS ] แบบขยายมาตรฐาน เสาเอ็นและทับหลัง คสล.", 2.2, "#0f172a");
+            text([detailX + detailW - 18, cardY + 6.2], "มาตราส่วน NTS", 1.9, "#475569");
+
+            const dBoxX = detailX + 3.5;
+            const dBoxY = cardY + 12;
+            const dBoxW = detailW - 7;
+            const dBoxH = 50;
+            path(
+              [
+                [dBoxX, dBoxY],
+                [dBoxX + dBoxW, dBoxY],
+                [dBoxX + dBoxW, dBoxY + dBoxH],
+                [dBoxX, dBoxY + dBoxH],
+              ],
+              "#e2e8f0",
+              0.15,
+              undefined,
+              true,
+              "#fafafa",
+            );
+
+            const wallLeftW = Math.min(22, dBoxW * 0.22);
+            const wallRightW = wallLeftW;
+            const openW = dBoxW - wallLeftW - wallRightW - 12;
+            const openLeftX = dBoxX + wallLeftW + 6;
+            const openRightX = openLeftX + openW;
+            const lintelTopY = dBoxY + 10;
+            const lintelH = 6;
+            const lintelBotY = lintelTopY + lintelH;
+            const floorLineY = dBoxY + dBoxH - 6;
+            const sillTopY = floorLineY - 14;
+            const sillH = 5;
+
+            // Masonry walls left & right
+            path([[dBoxX + 3, lintelTopY - 4], [openLeftX, lintelTopY - 4], [openLeftX, floorLineY], [dBoxX + 3, floorLineY]], "#cbd5e1", 0.2, undefined, true, "#f8fafc");
+            path([[openRightX, lintelTopY - 4], [dBoxX + dBoxW - 3, lintelTopY - 4], [dBoxX + dBoxW - 3, floorLineY], [openRightX, floorLineY]], "#cbd5e1", 0.2, undefined, true, "#f8fafc");
+
+            // Concrete Lintel (ทับหลัง)
+            const bearingLen = Math.min(12, wallLeftW - 2);
+            path(
+              [
+                [openLeftX - bearingLen, lintelTopY],
+                [openRightX + bearingLen, lintelTopY],
+                [openRightX + bearingLen, lintelBotY],
+                [openLeftX - bearingLen, lintelBotY],
+              ],
+              "#0284c7",
+              0.35,
+              undefined,
+              true,
+              "#e0f2fe",
+            );
+            path([[openLeftX - bearingLen + 1, lintelTopY + 3], [openRightX + bearingLen - 1, lintelTopY + 3]], "#0369a1", 0.35);
+
+            // Left Stiffener (เสาเอ็นซ้าย)
+            path(
+              [
+                [openLeftX - 6, lintelBotY],
+                [openLeftX, lintelBotY],
+                [openLeftX, floorLineY],
+                [openLeftX - 6, floorLineY],
+              ],
+              "#0284c7",
+              0.3,
+              undefined,
+              true,
+              "#e0f2fe",
+            );
+            path([[openLeftX - 3, lintelBotY + 1], [openLeftX - 3, floorLineY - 1]], "#0369a1", 0.3);
+
+            // Right Stiffener (เสาเอ็นขวา)
+            path(
+              [
+                [openRightX, lintelBotY],
+                [openRightX + 6, lintelBotY],
+                [openRightX + 6, floorLineY],
+                [openRightX, floorLineY],
+              ],
+              "#0284c7",
+              0.3,
+              undefined,
+              true,
+              "#e0f2fe",
+            );
+            path([[openRightX + 3, lintelBotY + 1], [openRightX + 3, floorLineY - 1]], "#0369a1", 0.3);
+
+            // Concrete Sill (เอ็นธรณี)
+            path(
+              [
+                [openLeftX, sillTopY],
+                [openRightX, sillTopY],
+                [openRightX, sillTopY + sillH],
+                [openLeftX, sillTopY + sillH],
+              ],
+              "#0284c7",
+              0.3,
+              undefined,
+              true,
+              "#e0f2fe",
+            );
+
+            // Floor datum line
+            path([[dBoxX + 2, floorLineY], [dBoxX + dBoxW - 2, floorLineY]], "#94a3b8", 0.3, [2, 1]);
+
+            // Callout labels
+            text([openLeftX + openW / 2 - 14, lintelTopY - 2], "ทับหลัง คสล. 10x10 ซม. (2-RB9, ปลอก RB6@0.20)", 1.8, "#0369a1");
+            text([openLeftX - bearingLen - 1, lintelTopY + 4], "ฝาก >= 0.20ม.", 1.5, "#475569");
+            text([openRightX + 1, lintelTopY + 4], "ฝาก >= 0.20ม.", 1.5, "#475569");
+            text([openLeftX + 2, lintelBotY + 12], "เสาเอ็น คสล. 10x10 ซม.", 1.7, "#0369a1");
+            text([openLeftX + openW / 2 - 10, sillTopY + 3.5], "เอ็นธรณี คสล. ลาดเอียงกันน้ำ", 1.7, "#0369a1");
+
+            // Specification notes
+            const lsSpecY = cardY + 65;
+            const lsNotes = [
+              "1. ช่องเปิดกว้าง >= 0.80 ม. ต้องมีเสาเอ็นและทับหลัง คสล. โดยรอบ",
+              "2. ผนังก่ออิฐยาวเกิน 3.00 ม. ต้องมีเสาเอ็น คสล. คั่นทุกระยะ <= 3.00 ม.",
+              "3. ผนังก่ออิฐสูงเกิน 3.00 ม. ต้องมีทับหลัง คสล. คั่นทุกระยะ <= 3.00 ม.",
+              "4. ทับหลังต้องยื่นฝากผนังก่ออิฐทั้งสองข้าง ข้างละไม่น้อยกว่า 0.20 ม.",
+              "5. เหล็กเสริมแกน 2-RB9, เหล็กปลอก RB6 @ 0.20 ม., คอนกรีต 240 ksc",
+            ];
+            lsNotes.forEach((note, nIdx) => {
+              const curY = lsSpecY + nIdx * 9.5;
+              path([[detailX + 2, curY - 2.5], [detailX + detailW - 2, curY - 2.5]], "#e2e8f0", 0.15);
+              text([detailX + 2.5, curY + 2], note, 1.85, "#334155", detailW - 5);
             });
           }
         }
@@ -3058,22 +3218,164 @@ function compilePermitDrawingSetBase(
         if (id === "A-09") {
           const bath = selected[0],
             d = bath ? data(bath) : undefined;
-          if (d) {
-            text(
-              [18, 214],
-              `Waterproof upstand ${Number(d.waterproof_upstand_mm) / 1000} m | Wet wall ${Number(d.wet_wall_height_mm) / 1000} m | WC rough-in ${Number(d.toilet_rough_in_mm) / 1000} m`,
-              2.5,
-              "#0f172a",
-              370,
-            );
-            text(
-              [18, 220],
-              `Tile module ${((d.tile_mm ?? []) as number[]).map((v) => v / 1000).join(" x ")} m | Surface fall to drain | Slab detailing by structural model`,
-              2.5,
-              "#475569",
-              370,
-            );
-          }
+
+          const startY = 182;
+          const cardH = 82;
+
+          // Card 1: [ DETAIL-B1 ] แบบขยายรูปตัดพื้นลดระดับและธรณีกันน้ำ คสล. · 1:20
+          const c1X = 18;
+          const c1W = 124;
+          path([[c1X, startY], [c1X + c1W, startY], [c1X + c1W, startY + cardH], [c1X, startY + cardH]], "#cbd5e1", 0.25, undefined, true, "#ffffff");
+          path([[c1X, startY], [c1X + c1W, startY], [c1X + c1W, startY + 8], [c1X, startY + 8]], "#e2e8f0", 0.2, undefined, true, "#f1f5f9");
+          text([c1X + 2.5, startY + 5.5], "[ DETAIL-B1 ] แบบขยายรูปตัดพื้นลดระดับและธรณีกันน้ำ คสล. · 1:20", 2.1, "#0f172a");
+
+          // Sub-box for drawing
+          const sb1X = c1X + 3;
+          const sb1Y = startY + 10;
+          const sb1W = c1W - 6;
+          const sb1H = 46;
+          path([[sb1X, sb1Y], [sb1X + sb1W, sb1Y], [sb1X + sb1W, sb1Y + sb1H], [sb1X, sb1Y + sb1H]], "#e2e8f0", 0.15, undefined, true, "#fafafa");
+
+          // Profile of slab
+          const slabY0 = sb1Y + 12; // Exterior floor
+          const slabYDry = slabY0 + 6; // Dry zone (-50mm)
+          const curbW = 10;
+          const curbH = 6;
+          const curbX = sb1X + 54;
+          const slabYWet = slabYDry + 6; // Wet zone (-100mm)
+          const baseThick = 12;
+
+          // Concrete fill
+          path([
+            [sb1X + 3, slabY0],
+            [sb1X + 25, slabY0],
+            [sb1X + 25, slabYDry],
+            [curbX, slabYDry],
+            [curbX, slabYDry - curbH],
+            [curbX + curbW, slabYDry - curbH],
+            [curbX + curbW, slabYWet],
+            [sb1X + sb1W - 3, slabYWet],
+            [sb1X + sb1W - 3, slabYWet + baseThick],
+            [sb1X + 3, slabY0 + baseThick + 12],
+          ], "#0284c7", 0.35, undefined, true, "#e0f2fe");
+
+          // Waterproof membrane (dashed blue line)
+          path([
+            [sb1X + 25, slabYDry - 8],
+            [sb1X + 25, slabYDry + 1],
+            [curbX - 1, slabYDry + 1],
+            [curbX - 1, slabYDry - curbH + 1],
+            [curbX + curbW + 1, slabYDry - curbH + 1],
+            [curbX + curbW + 1, slabYWet + 1],
+            [sb1X + sb1W - 3, slabYWet + 1],
+            [sb1X + sb1W - 3, slabYWet - 18],
+          ], "#0284c7", 0.3, [2, 1]);
+
+          // Drain point
+          const drainX = sb1X + sb1W - 14;
+          path([[drainX - 3, slabYWet], [drainX + 3, slabYWet], [drainX + 3, slabYWet + 4], [drainX - 3, slabYWet + 4]], "#0f172a", 0.25, undefined, true, "#334155");
+          path([[drainX - 1.5, slabYWet + 4], [drainX - 1.5, slabYWet + 10], [drainX + 1.5, slabYWet + 10], [drainX + 1.5, slabYWet + 4]], "#475569", 0.2);
+
+          // Labels
+          text([sb1X + 4, slabY0 - 2], "▲ ทางเดิน +0.00", 1.7, "#0f172a");
+          text([sb1X + 28, slabYDry - 2], "▼ โซนแห้ง -0.05", 1.7, "#0369a1");
+          text([curbX - 1, slabYDry - curbH - 2], "▲ ธรณี 10x5ซม.", 1.7, "#b45309");
+          text([curbX + curbW + 4, slabYWet - 2], "▼ โซนเปียก -0.10", 1.7, "#0369a1");
+          text([drainX - 10, slabYWet + 8], "FD (Slope 1:50)", 1.6, "#475569");
+          text([sb1X + sb1W - 28, slabYWet - 19], "กันซึมสูง >= 1.80ม.", 1.5, "#0284c7");
+
+          // Notes below sub-box
+          const b1NoteY = startY + 59;
+          text([c1X + 3, b1NoteY], "• พื้น คสล. ลดระดับ 50-100 มม. หล่อในที่ ป้องกันน้ำรั่วซึม", 1.7, "#334155");
+          text([c1X + 3, b1NoteY + 4.5], "• ธรณีกันน้ำ คสล. 10x5 ซม. ปูกระเบื้องทับด้วยกาวซีเมนต์กันซึม", 1.7, "#334155");
+          text([c1X + 3, b1NoteY + 9], "• ระบบกันซึมสูตรซีเมนต์ยืดหยุ่น ทาสูงรอบห้อง >= 30 ซม. (โซนอาบน้ำ >= 1.80 ม.)", 1.7, "#334155");
+          text([c1X + 3, b1NoteY + 13.5], "• กระเบื้องปูพื้นเซรามิกกันลื่น (R10) ปูลาดเอียง 1:50 สู่ Floor Drain", 1.7, "#334155");
+
+          // Card 2: [ DETAIL-B2 ] ข้อกำหนดระยะติดตั้งสุขภัณฑ์และท่อน้ำ (วสท.)
+          const c2X = 146;
+          const c2W = 126;
+          path([[c2X, startY], [c2X + c2W, startY], [c2X + c2W, startY + cardH], [c2X, startY + cardH]], "#cbd5e1", 0.25, undefined, true, "#ffffff");
+          path([[c2X, startY], [c2X + c2W, startY], [c2X + c2W, startY + 8], [c2X, startY + 8]], "#e2e8f0", 0.2, undefined, true, "#f1f5f9");
+          text([c2X + 2.5, startY + 5.5], "[ DETAIL-B2 ] ข้อกำหนดระยะติดตั้งสุขภัณฑ์และท่อน้ำ (วสท.)", 2.1, "#0f172a");
+
+          const toiletRoughIn = d ? Number(d.toilet_rough_in_mm) : 305;
+          const slopeRatio = d ? Math.round(1 / Number(d.slope_ratio)) : 50;
+          const b2Specs = [
+            `1. โถสุขภัณฑ์ (WC): ท่อโสโครก Ø4" กึ่งกลางห่างผนัง ${toiletRoughIn} มม. (Rough-in)`,
+            "2. สายฉีดชำระ (Bidet): กึ่งกลางก๊อกสูง +0.60 ม. (ด้านขวาโถสุขภัณฑ์)",
+            "3. อ่างล้างหน้า (Basin): กึ่งกลางก๊อกสูง +0.80 ม. / ท่อน้ำทิ้ง Ø1.5\" สูง +0.50 ม.",
+            "4. ฝักบัวอาบน้ำ (Shower): วาล์วผสมสูง +1.00 ม. / ฝักบัวก้านแข็งสูง +2.00 ม.",
+            "5. ที่ใส่กระดาษชำระ: กึ่งกลางสูง +0.70 ม. จากพื้นกระเบื้อง",
+            "6. ตะแกรงดักกลิ่น (FD): ตะแกรงสแตนเลส Ø2\"-3\" ดักกลิ่นด้วย P-Trap ลึก >= 50 มม.",
+            `7. สโลปพื้นห้องน้ำ: ลาดเอียง 1:${slopeRatio} (2 ซม./เมตร) สู่ Floor Drain โดยไม่มีน้ำขัง`,
+          ];
+          b2Specs.forEach((spec, sIdx) => {
+            const rowY = startY + 12 + sIdx * 9.8;
+            path([[c2X + 2, rowY + 6.5], [c2X + c2W - 2, rowY + 6.5]], "#f1f5f9", 0.15);
+            text([c2X + 3, rowY + 4], spec, 1.8, "#334155", c2W - 6);
+          });
+
+          // Card 3: [ DETAIL-RF ] รอยต่อกันซึมหลังคาชนผนังเดิม (Flashing & PU)
+          const c3X = 276;
+          const c3W = 119;
+          path([[c3X, startY], [c3X + c3W, startY], [c3X + c3W, startY + cardH], [c3X, startY + cardH]], "#cbd5e1", 0.25, undefined, true, "#ffffff");
+          path([[c3X, startY], [c3X + c3W, startY], [c3X + c3W, startY + 8], [c3X, startY + 8]], "#e2e8f0", 0.2, undefined, true, "#f1f5f9");
+          text([c3X + 2.5, startY + 5.5], "[ DETAIL-RF ] รอยต่อกันซึมหลังคาชนผนังเดิม (Flashing & PU)", 2.1, "#0f172a");
+
+          // Sub-box for drawing
+          const sb3X = c3X + 3;
+          const sb3Y = startY + 10;
+          const sb3W = c3W - 6;
+          const sb3H = 46;
+          path([[sb3X, sb3Y], [sb3X + sb3W, sb3Y], [sb3X + sb3W, sb3Y + sb3H], [sb3X, sb3Y + sb3H]], "#e2e8f0", 0.15, undefined, true, "#fafafa");
+
+          // Existing wall on the left
+          const wallEndX = sb3X + 28;
+          path([[sb3X + 2, sb3Y + 2], [wallEndX, sb3Y + 2], [wallEndX, sb3Y + sb3H - 2], [sb3X + 2, sb3Y + sb3H - 2]], "#94a3b8", 0.35, undefined, true, "#f1f5f9");
+
+          // Chase groove in wall (25mm deep)
+          const chaseY = sb3Y + 14;
+          const chaseDepth = 6;
+          path([
+            [wallEndX, chaseY - 3],
+            [wallEndX - chaseDepth, chaseY - 3],
+            [wallEndX - chaseDepth, chaseY + 3],
+            [wallEndX, chaseY + 3],
+          ], "#475569", 0.3, undefined, true, "#0284c7");
+
+          // Flashing sheet
+          path([
+            [wallEndX - chaseDepth + 1, chaseY],
+            [wallEndX, chaseY],
+            [wallEndX + 3, chaseY + 4],
+            [wallEndX + 4, chaseY + 12],
+            [sb3X + sb3W - 8, chaseY + 22],
+          ], "#0284c7", 0.5);
+
+          // Roof sheet
+          path([
+            [wallEndX + 6, chaseY + 14],
+            [sb3X + sb3W - 4, chaseY + 25],
+          ], "#0f172a", 0.45);
+
+          // Fastener screw
+          const screwX = wallEndX + 22;
+          const screwY = chaseY + 16.5;
+          path([[screwX, screwY - 3], [screwX, screwY + 4]], "#0f172a", 0.3);
+          path([[screwX - 2, screwY - 2], [screwX + 2, screwY - 2]], "#b45309", 0.3);
+
+          // Callouts
+          text([sb3X + 4, sb3Y + 6], "ผนังอาคารเดิม", 1.7, "#475569");
+          text([wallEndX - 20, chaseY + 9], "กรีดร่อง 25มม. + PU Sealant", 1.5, "#0284c7");
+          text([screwX - 8, screwY - 5], "สกรู + ซีลยาง EPDM", 1.5, "#475569");
+          text([sb3X + sb3W - 35, chaseY + 30], "หลังคาใหม่ (สโลป >= 5°)", 1.7, "#0f172a");
+
+          // Notes below sub-box
+          const rfNoteY = startY + 59;
+          text([c3X + 3, rfNoteY], "• รอยต่อระหว่างอาคารเดิมและส่วนต่อเติมต้องแยกโครงสร้างขาดจากกัน", 1.7, "#334155");
+          text([c3X + 3, rfNoteY + 4.5], "• แผ่น Flashing สเตนเลส/กัลวาไนซ์ 0.5 มม. พับปีกเสียบร่องลึก 25 มม.", 1.7, "#334155");
+          text([c3X + 3, rfNoteY + 9], "• ยาแนวด้วย Polyurethane (PU) Sealant ป้องกันการแตกร้าวและน้ำซึม 100%", 1.7, "#334155");
+          text([c3X + 3, rfNoteY + 13.5], "• รอยต่อ Flashing ทับซ้อนกันไม่น้อยกว่า 150 มม. พร้อมย้ำรีเวทและยาแนว", 1.7, "#334155");
         }
         if (id === "M-01")
           text(

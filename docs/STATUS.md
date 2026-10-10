@@ -1,5 +1,13 @@
 # ConstructFlow Specification Status
 
+Master Construction Roadmap & Pillar 3: Architecture, Envelope & Wet Area Details (2026-10-10): complete implementation and verification of Pillar 3 across Domain 3:
+1. Sheet A-08 Typical RC Lintel, Stiffener & Sill Details: added `[ DETAIL-LS ]` standard detail card rendering concrete lintel ($10\times 10$ cm, 2-RB9 + stirrup RB6@0.20) with bearing extensions $\ge 0.20$ m into masonry, RC jamb stiffeners (2-RB9), and outward-sloping concrete window sill, complete with วสท. standard engineering notes.
+2. Sheet A-09 Typical Drop Slab & Shower Curb Section: added `[ DETAIL-B1 ]` cross section rendering exterior FFL, -50 mm drop slab in dry zone, 10x5 cm RC shower curb, -100 mm wet zone, floor slope 1:50 to floor drain with P-Trap, and multi-height waterproofing membrane upturns ($\ge 0.30$ m dry, $\ge 1.80$ m shower).
+3. Sheet A-09 Sanitary Fixture Rough-in Specifications: added `[ DETAIL-B2 ]` table rendering Thai EIT standards for WC rough-in center (305 mm from wall), bidet spray (+0.60 m), washbasin (+0.80 m / drain +0.50 m), shower (+1.00 m / head +2.00 m), paper holder (+0.70 m), and anti-odor P-trap floor drain.
+4. Sheet A-09 Roof Flashing & Sealant Joint Detail: added `[ DETAIL-RF ]` detail card for extension/renovation joints rendering existing wall chase groove (25 mm depth), 0.5 mm stainless/colorbond flashing cap, polyurethane (PU) sealant bead, and EPDM-gasket fasteners to metal roofing.
+5. Bathroom Finish Takeoff: added automatic takeoff computation for full-height wall tiling (`bathroom.wall_tile`) and concrete shower curbs (`bathroom.shower_curb`) in `bathroomOutputs`, increasing total takeoff rows from 54 to 56 in `verify:phases`.
+6. Full test suite passes 100%: 42/42 tests in `sheet-engine` (including new Pillar 3 regression assertions), 82/82 in `command-runtime`, 13/13 in `cad-adapter`, 3/3 in `bim-adapter`, and all three verifiers pass cleanly.
+
 Master Construction Roadmap & Pillar 2: Structural Engineering & Detail Schedules (2026-10-10): complete implementation and verification of Pillar 2 across Domain 2:
 1. Long-Span Beam Detailing & Automatic Side Skin Rebar: added automatic side-skin reinforcement (`side_skin` 2-DB12) when beam depth $\ge 500$ mm per วสท. / ACI 318 code, supporting 7.00 m span beams ($25\times 60$ cm).
 2. Beam System & Continuity: added `BeamSystem` ('simple' | 'continuous' | 'cantilever') and `BeamContinuityType` with intermediate support (`middle_support_column_id`) tracking and connected relationships.

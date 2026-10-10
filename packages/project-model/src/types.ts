@@ -371,6 +371,8 @@ export interface BathroomModuleData extends CatalogPlacement {
   wet_wall_length_mm:number
   tile_mm:Point2Mm
   toilet_rough_in_mm:number
+  shower_curb_mm?: [number, number]
+  wall_tile_height_mm?: number
 }
 export interface ElectricalFixtureModuleData extends CatalogPlacement {
   location_mm:Point3Mm
