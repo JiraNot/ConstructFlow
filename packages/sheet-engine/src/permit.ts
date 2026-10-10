@@ -2563,6 +2563,32 @@ function compilePermitDrawingSetBase(
               }
             }
             if (
+              id === "E-01" &&
+              mode === "xy" &&
+              o.object_type === "electrical.fixture" &&
+              data(o).kind === "switch"
+            ) {
+              const d = data(o);
+              const swLoc = d.location_mm as number[];
+              if (Array.isArray(swLoc) && swLoc.length >= 2) {
+                const swPt = mapped([swLoc[0], swLoc[1]]);
+                for (const loadId of ((d.controlled_ids ?? []) as string[])) {
+                  const target = project.objects[loadId];
+                  if (target) {
+                    const tLoc = data(target).location_mm as number[];
+                    if (Array.isArray(tLoc) && tLoc.length >= 2) {
+                      const loadPt = mapped([tLoc[0], tLoc[1]]);
+                      const midPt: Vec2 = [
+                        (swPt[0] + loadPt[0]) / 2 + (swPt[1] - loadPt[1]) * 0.15,
+                        (swPt[1] + loadPt[1]) / 2 + (loadPt[0] - swPt[0]) * 0.15,
+                      ];
+                      path([swPt, midPt, loadPt], "#0284c7", 0.25, [3, 2]);
+                    }
+                  }
+                }
+              }
+            }
+            if (
               id === "A-04" &&
               mode === "xy" &&
               o.object_type === "roof.system"
@@ -3206,6 +3232,7 @@ function compilePermitDrawingSetBase(
         const hasDedicatedScheduleSheet = [
           "A-02", "A-03", "A-04", "A-05", "A-06", "A-07", "A-08",
           "A-09", "A-10", "S-01", "S-02", "S-03", "S-04", "S-05", "S-06",
+          "M-01", "M-02", "E-01", "E-02",
         ].includes(id);
         if (schedules.length && !hasDedicatedScheduleSheet)
           drawTable(
@@ -3377,14 +3404,324 @@ function compilePermitDrawingSetBase(
           text([c3X + 3, rfNoteY + 9], "• ยาแนวด้วย Polyurethane (PU) Sealant ป้องกันการแตกร้าวและน้ำซึม 100%", 1.7, "#334155");
           text([c3X + 3, rfNoteY + 13.5], "• รอยต่อ Flashing ทับซ้อนกันไม่น้อยกว่า 150 มม. พร้อมย้ำรีเวทและยาแนว", 1.7, "#334155");
         }
-        if (id === "M-01")
-          text(
-            [18, 225],
-            "Isometric bypass schematic - inlet, outlet, bypass valves and one-way check valve. NTS.",
-            2.5,
-            "#475569",
-            370,
-          );
+        if (id === "M-01") {
+          const startY = 181;
+          const cardH = 72;
+
+          // Card 1: [ DETAIL-PB ] แบบขยายระบบถังพักน้ำ ปั๊มน้ำอัตโนมัติ และระบบ 3-Valve Bypass · NTS
+          const c1X = 18;
+          const c1W = 230;
+          path([[c1X, startY], [c1X + c1W, startY], [c1X + c1W, startY + cardH], [c1X, startY + cardH]], "#cbd5e1", 0.25, undefined, true, "#ffffff");
+          path([[c1X, startY], [c1X + c1W, startY], [c1X + c1W, startY + 7.5], [c1X, startY + 7.5]], "#0284c7", 0.2, undefined, true, "#f0f9ff");
+          text([c1X + 2.5, startY + 5.2], "[ DETAIL-PB ] แบบขยายระบบถังพักน้ำ ปั๊มน้ำอัตโนมัติ และระบบ 3-Valve Bypass · มาตราส่วน NTS", 2.1, "#0369a1");
+
+          // Sub-box for drawing
+          const sb1X = c1X + 3;
+          const sb1Y = startY + 9.5;
+          const sb1W = c1W - 6;
+          const sb1H = 39;
+          path([[sb1X, sb1Y], [sb1X + sb1W, sb1Y], [sb1X + sb1W, sb1Y + sb1H], [sb1X, sb1Y + sb1H]], "#e2e8f0", 0.15, undefined, true, "#f8fafc");
+
+          // City main line and meter
+          const mainY = sb1Y + 20;
+          path([[sb1X + 4, mainY], [sb1X + 36, mainY]], "#0284c7", 0.4);
+          text([sb1X + 4, mainY - 3], "ท่อเมนประปา Ø3/4\"", 1.8, "#0369a1");
+          // Gate valve symbol
+          path([[sb1X + 16, mainY - 2.5], [sb1X + 16, mainY + 2.5], [sb1X + 22, mainY - 2.5], [sb1X + 22, mainY + 2.5]], "#0284c7", 0.3, undefined, true, "#0284c7");
+          // Water meter symbol: circle with "M"
+          const mX = sb1X + 29;
+          path([[mX - 2.5, mainY - 2.5], [mX + 2.5, mainY - 2.5], [mX + 2.5, mainY + 2.5], [mX - 2.5, mainY + 2.5]], "#0284c7", 0.3, undefined, true, "#ffffff");
+          text([mX - 1.2, mainY + 1.2], "M", 2.0, "#0284c7");
+          text([mX - 6, mainY + 5.5], "มาตรวัดน้ำ Ø1/2\"", 1.6, "#475569");
+
+          // Split tee junction
+          const teeX = sb1X + 38;
+          path([[sb1X + 36, mainY], [teeX, mainY]], "#0284c7", 0.4);
+
+          // Branch 1: Up to Tank & Pump
+          const branch1Y = sb1Y + 9;
+          path([[teeX, mainY], [teeX, branch1Y], [sb1X + 54, branch1Y]], "#0284c7", 0.35);
+          // Valve V1 (Inlet)
+          const v1X = sb1X + 46;
+          path([[v1X - 2.5, branch1Y - 2], [v1X - 2.5, branch1Y + 2], [v1X + 2.5, branch1Y - 2], [v1X + 2.5, branch1Y + 2]], "#0284c7", 0.25, undefined, true, "#0284c7");
+          text([v1X - 6, branch1Y - 3.5], "V1 (ปกติเปิด)", 1.7, "#047857");
+
+          // Ground Water Tank (DOS 1000-2000L)
+          const tX = sb1X + 54;
+          const tW = 34;
+          const tH = 26;
+          const tY = sb1Y + 6;
+          path([[tX, tY], [tX + tW, tY], [tX + tW, tY + tH], [tX, tY + tH]], "#0284c7", 0.35, undefined, true, "#e0f2fe");
+          path([[tX + 10, tY - 2], [tX + tW - 10, tY - 2], [tX + tW - 10, tY], [tX + 10, tY]], "#0284c7", 0.25, undefined, true, "#bae6fd");
+          text([tX + 3, tY + 8], "ถังเก็บน้ำบนดิน", 2.0, "#0369a1");
+          text([tX + 3, tY + 13], "DOS 1,000-2,000L", 1.8, "#0369a1");
+          text([tX + 3, tY + 18], "+ วาล์วลูกลอยตัดน้ำ", 1.6, "#64748b");
+          path([[tX + tW - 2, tY + 5], [tX + tW + 3, tY + 5], [tX + tW + 3, tY + 24]], "#94a3b8", 0.25);
+          text([tX + tW + 4, tY + 15], "ท่อล้น", 1.5, "#64748b");
+
+          // Pipe from tank outlet to booster pump
+          const pInX = tX + tW;
+          const pY = sb1Y + 23;
+          path([[tX + tW - 5, tY + tH - 4], [pInX + 10, tY + tH - 4], [pInX + 10, pY]], "#0284c7", 0.35);
+
+          // Booster pump
+          const pX = pInX + 10;
+          const pW = 24;
+          const pH = 13;
+          path([[pX, pY - pH / 2], [pX + pW, pY - pH / 2], [pX + pW, pY + pH / 2], [pX, pY + pH / 2]], "#0f172a", 0.35, undefined, true, "#f8fafc");
+          path([[pX + 2, pY - pH / 2 - 3], [pX + 16, pY - pH / 2 - 3], [pX + 16, pY - pH / 2], [pX + 2, pY - pH / 2]], "#475569", 0.25, undefined, true, "#cbd5e1");
+          text([pX + 2, pY - 0.5], "ปั๊มน้ำอัตโนมัติ", 1.8, "#0f172a");
+          text([pX + 2, pY + 4], "250W - 300W", 1.7, "#0284c7");
+
+          // Outlet pipe from pump through Check Valve and V2
+          const pOutX = pX + pW;
+          path([[pOutX, pY], [sb1X + sb1W - 32, pY]], "#0284c7", 0.35);
+
+          // Check valve (CV)
+          const cvX = pOutX + 8;
+          path([[cvX - 3, pY - 2.5], [cvX + 3, pY], [cvX - 3, pY + 2.5]], "#0284c7", 0.3, undefined, true, "#e0f2fe");
+          path([[cvX + 3, pY - 2.5], [cvX + 3, pY + 2.5]], "#0284c7", 0.3);
+          text([cvX - 5, pY - 4], "CV (เช็ควาล์ว)", 1.6, "#0284c7");
+
+          // Valve V2 (Outlet)
+          const v2X = cvX + 16;
+          path([[v2X - 2.5, pY - 2], [v2X - 2.5, pY + 2], [v2X + 2.5, pY - 2], [v2X + 2.5, pY + 2]], "#0284c7", 0.25, undefined, true, "#0284c7");
+          text([v2X - 6, pY - 4], "V2 (ปกติเปิด)", 1.7, "#047857");
+
+          // Branch 2: Bypass Line (Direct)
+          const bypassY = sb1Y + 33;
+          path([[teeX, mainY], [teeX, bypassY], [sb1X + sb1W - 32, bypassY], [sb1X + sb1W - 32, pY]], "#0284c7", 0.35, [2, 1]);
+          const v3X = teeX + 45;
+          path([[v3X - 2.5, bypassY - 2], [v3X - 2.5, bypassY + 2], [v3X + 2.5, bypassY - 2], [v3X + 2.5, bypassY + 2]], "#b45309", 0.25, undefined, true, "#fef3c7");
+          text([v3X - 16, bypassY + 4.5], "V3 (วาล์วบายพาส - ปิดปกติ / เปิดเมื่อไฟดับ)", 1.7, "#b45309");
+
+          // Combined supply pipe to house
+          const houseX = sb1X + sb1W - 32;
+          path([[houseX, pY], [sb1X + sb1W - 4, pY]], "#0284c7", 0.45);
+          path([[sb1X + sb1W - 7, pY - 2], [sb1X + sb1W - 3, pY], [sb1X + sb1W - 7, pY + 2]], "#0284c7", 0.35, undefined, true, "#0284c7");
+          text([houseX + 2, pY - 4], "จ่ายเข้าอาคาร", 1.9, "#0369a1");
+          text([houseX + 2, pY - 1], "Ø3/4\" - 1\"", 1.7, "#0369a1");
+
+          // Notes below sub-box
+          const pbNoteY = startY + 52.5;
+          text([c1X + 3, pbNoteY], "• โหมดปกติ: เปิด V1 และ V2 ปิด V3 — น้ำเข้าถังเก็บและจ่ายด้วยแรงดันปั๊มน้ำสม่ำเสมอทุกจุดใช้งาน", 1.8, "#334155");
+          text([c1X + 3, pbNoteY + 4.5], "• โหมดบายพาส (ไฟดับ/ปั๊มชำรุด): ปิด V1 และ V2 เปิด V3 — ใช้น้ำตรงจากท่อประปาสาธารณะโดยไม่ต้องรื้อท่อ", 1.8, "#334155");
+          text([c1X + 3, pbNoteY + 9], "• เช็ควาล์ว (Swing Check Valve): ป้องกันแรงดันน้ำจากปั๊มไหลย้อนกลับเข้าท่อประปาสาธารณะตามข้อกำหนด กปน./กปภ.", 1.8, "#334155");
+          text([c1X + 3, pbNoteY + 13.5], "• ฐานตั้งถังน้ำและปั๊ม: เทพื้น คสล. หนา 10 ซม. แยกโครงสร้างจากตัวบ้านเพื่อลดแรงสั่นสะเทือน", 1.8, "#334155");
+
+          // Card 2: [ SPECS-PB ] ข้อกำหนดและมาตรฐานระบบท่อประปา
+          const c2X = 252;
+          const c2W = 143;
+          path([[c2X, startY], [c2X + c2W, startY], [c2X + c2W, startY + cardH], [c2X, startY + cardH]], "#cbd5e1", 0.25, undefined, true, "#ffffff");
+          path([[c2X, startY], [c2X + c2W, startY], [c2X + c2W, startY + 7.5], [c2X, startY + 7.5]], "#0284c7", 0.2, undefined, true, "#f0f9ff");
+          text([c2X + 2.5, startY + 5.2], "[ SPECS-PB ] ข้อกำหนดและมาตรฐานระบบประปา (วสท. / กปน.)", 2.1, "#0369a1");
+
+          const pbSpecs = [
+            "1. ท่อประปาน้ำดี: ท่อ PVC สีฟ้า มอก. 17-2532 ชั้น 13.5 (13.5 bar)",
+            "2. ท่อน้ำร้อน/อุ่น: ท่อ PP-R 80 Class 20 (PN20) ทนความร้อน >= 95°C",
+            "3. ข้อต่อและอุปกรณ์: PVC ชั้น 13.5 มอก. 1131 น้ำยาประสาน มอก. 1032",
+            "4. วาล์วควบคุม: บอลวาล์วทองเหลืองแท้ (Brass Ball Valve) PN16",
+            "5. เช็ควาล์ว: สวิงเช็ควาล์วทองเหลือง ป้องกันน้ำไหลย้อน (Backflow)",
+            "6. ทดสอบแรงดัน (Hydrostatic): อัดแรงดัน >= 8.0 บาร์ นาน >= 2 ชม.",
+            "   โดยแรงดันต้องไม่ตกและไม่มีจุดรั่วซึมตลอดแนวท่อและข้อต่อ",
+            "7. การยึดท่อ: แคลมป์ยึดท่อทุกระยะ <= 1.00 ม. (ราบ) และ <= 1.50 ม. (ดิ่ง)",
+            "8. ปั๊มน้ำ: ชนิดแรงดันคงที่อัตโนมัติ (Inverter / Constant Pressure)",
+          ];
+          pbSpecs.forEach((spec, idx) => {
+            text([c2X + 3.5, startY + 12.5 + idx * 5.6], spec, 1.75, "#334155");
+          });
+        }
+        if (id === "M-02") {
+          const startY = 181;
+          const cardH = 72;
+
+          // Card 1: [ DETAIL-CO ] แบบขยายช่องเปิดล้างท่อ Cleanout (FCO / WCO · NTS)
+          const c1X = 18;
+          const c1W = 123;
+          path([[c1X, startY], [c1X + c1W, startY], [c1X + c1W, startY + cardH], [c1X, startY + cardH]], "#cbd5e1", 0.25, undefined, true, "#ffffff");
+          path([[c1X, startY], [c1X + c1W, startY], [c1X + c1W, startY + 7.5], [c1X, startY + 7.5]], "#0284c7", 0.2, undefined, true, "#f0f9ff");
+          text([c1X + 2.5, startY + 5.2], "[ DETAIL-CO ] แบบขยายช่องเปิดล้างท่อ Cleanout · NTS", 2.0, "#0369a1");
+
+          const sb1X = c1X + 3;
+          const sb1Y = startY + 9.5;
+          const sb1W = c1W - 6;
+          const sb1H = 34;
+          path([[sb1X, sb1Y], [sb1X + sb1W, sb1Y], [sb1X + sb1W, sb1Y + sb1H], [sb1X, sb1Y + sb1H]], "#e2e8f0", 0.15, undefined, true, "#f8fafc");
+
+          // Floor level and brass cleanout plug
+          const fcoFloorY = sb1Y + 7;
+          path([[sb1X + 4, fcoFloorY], [sb1X + sb1W - 4, fcoFloorY]], "#64748b", 0.35, [2, 1]);
+          text([sb1X + 4, fcoFloorY - 2], "ระดับพื้นกระเบื้อง FFL", 1.6, "#475569");
+          // Brass cover plug
+          const plugX = sb1X + 54;
+          path([[plugX - 8, fcoFloorY - 1], [plugX + 8, fcoFloorY - 1], [plugX + 8, fcoFloorY + 2], [plugX - 8, fcoFloorY + 2]], "#d97706", 0.35, undefined, true, "#fef3c7");
+          text([plugX - 10, fcoFloorY - 2.5], "ฝาทองเหลืองเกลียว FCO Ø4\"", 1.6, "#b45309");
+
+          // Vertical riser pipe
+          path([[plugX - 4, fcoFloorY + 2], [plugX - 4, fcoFloorY + 14]], "#0284c7", 0.3);
+          path([[plugX + 4, fcoFloorY + 2], [plugX + 4, fcoFloorY + 14]], "#0284c7", 0.3);
+
+          // 45 deg wye branch to main horizontal pipe
+          const mainPipeY = fcoFloorY + 21;
+          path([[sb1X + 12, mainPipeY], [sb1X + sb1W - 12, mainPipeY]], "#0284c7", 0.45);
+          path([[plugX - 4, fcoFloorY + 14], [plugX + 10, mainPipeY]], "#0284c7", 0.3);
+          path([[plugX + 4, fcoFloorY + 14], [plugX + 14, mainPipeY]], "#0284c7", 0.3);
+          text([sb1X + 14, mainPipeY - 2.5], "ท่อเมนระบายน้ำ Ø4\"", 1.7, "#0369a1");
+          text([plugX + 16, mainPipeY + 4.5], "สโลป >= 1:100 -->", 1.6, "#047857");
+
+          // Notes below sub-box
+          const coNoteY = startY + 47.5;
+          text([c1X + 3, coNoteY], "• บังคับติดตั้งที่ปลายท่อเมนระบายน้ำโสโครกและน้ำทิ้งทุกสาย", 1.7, "#334155");
+          text([c1X + 3, coNoteY + 4.5], "• ติดตั้ง ณ จุดเลี้ยวเปลี่ยนทิศทางของท่อที่มีมุมหัก >= 45°", 1.7, "#334155");
+          text([c1X + 3, coNoteY + 9], "• ท่อตรงยาวต่อเนื่อง ต้องติดตั้ง Cleanout ทุกระยะ <= 15.00 ม.", 1.7, "#334155");
+          text([c1X + 3, coNoteY + 13.5], "• ฝาเกลียวทองเหลืองชุบโครเมียม ขอบเรียบเสมอแนวหน้ากระเบื้อง", 1.7, "#334155");
+          text([c1X + 3, coNoteY + 18], "• ข้อต่อสามทางวาย (45° Wye) ห้ามใช้สามทางฉาก 90° ทีเด็ดขาด", 1.7, "#dc2626");
+
+          // Card 2: [ DETAIL-VT ] แบบขยายท่อระบายอากาศ (Vent Stack · NTS)
+          const c2X = 145;
+          const c2W = 123;
+          path([[c2X, startY], [c2X + c2W, startY], [c2X + c2W, startY + cardH], [c2X, startY + cardH]], "#cbd5e1", 0.25, undefined, true, "#ffffff");
+          path([[c2X, startY], [c2X + c2W, startY], [c2X + c2W, startY + 7.5], [c2X, startY + 7.5]], "#0284c7", 0.2, undefined, true, "#f0f9ff");
+          text([c2X + 2.5, startY + 5.2], "[ DETAIL-VT ] แบบขยายท่อระบายอากาศ (Vent Stack) · NTS", 2.0, "#0369a1");
+
+          const sb2X = c2X + 3;
+          const sb2Y = startY + 9.5;
+          const sb2W = c2W - 6;
+          const sb2H = 34;
+          path([[sb2X, sb2Y], [sb2X + sb2W, sb2Y], [sb2X + sb2W, sb2Y + sb2H], [sb2X, sb2Y + sb2H]], "#e2e8f0", 0.15, undefined, true, "#f8fafc");
+
+          // Sloped roof line
+          const rY1 = sb2Y + 22;
+          const rY2 = sb2Y + 16;
+          path([[sb2X + 10, rY1], [sb2X + sb2W - 10, rY2]], "#475569", 0.45);
+          text([sb2X + 10, rY1 - 2], "แนวหลังคา (Roof Line)", 1.6, "#475569");
+
+          // Flashing at roof penetration
+          const vPipeX = sb2X + 60;
+          path([[vPipeX - 8, rY1 - 4], [vPipeX + 8, rY2 + 2]], "#0284c7", 0.35);
+          text([vPipeX - 16, rY1 + 4.5], "Flashing กันซึม", 1.5, "#0284c7");
+
+          // Vent pipe extending above roof
+          const capTopY = sb2Y + 5;
+          path([[vPipeX - 3, capTopY + 3], [vPipeX - 3, sb2Y + sb2H - 4]], "#0284c7", 0.35);
+          path([[vPipeX + 3, capTopY + 3], [vPipeX + 3, sb2Y + sb2H - 4]], "#0284c7", 0.35);
+
+          // Weatherproof Vent Cap with mesh
+          path([[vPipeX - 7, capTopY + 3], [vPipeX, capTopY], [vPipeX + 7, capTopY + 3]], "#0284c7", 0.35, undefined, true, "#bae6fd");
+          text([vPipeX - 18, capTopY + 1], "หมวกครอบกันฝน (Vent Cap)", 1.6, "#0369a1");
+          text([vPipeX + 6, capTopY + 8], "สูงพ้นหลังคา >= 0.30 ม.", 1.7, "#047857");
+          text([vPipeX + 6, sb2Y + sb2H - 6], "ท่ออากาศ PVC Ø1.5\" - Ø2\"", 1.6, "#0369a1");
+
+          // Notes below sub-box
+          const vtNoteY = startY + 47.5;
+          text([c2X + 3, vtNoteY], "• ท่อระบายอากาศ PVC Ø1.5\" - Ø2\" ต่อแยกจากหลังคอดักกลิ่น (P-Trap)", 1.7, "#334155");
+          text([c2X + 3, vtNoteY + 4.5], "• โผล่พ้นหลังคา >= 0.30 ม. พร้อมหมวกครอบกันฝนและตะแกรงกันแมลง", 1.7, "#334155");
+          text([c2X + 3, vtNoteY + 9], "• ป้องกันการเกิดสุญญากาศและกาลักน้ำ (Siphonage) ดูดน้ำหล่อ P-Trap", 1.7, "#334155");
+          text([c2X + 3, vtNoteY + 13.5], "• ระบายก๊าซมีเทนและกลิ่นเหม็นขึ้นสู่บรรยากาศเหนือระดับตัวอาคาร", 1.7, "#334155");
+          text([c2X + 3, vtNoteY + 18], "• จุดเจาะหลังคาต้องใส่ Flashing สเตนเลสและยาแนว PU กันรั่วซึม 100%", 1.7, "#334155");
+
+          // Card 3: [ DETAIL-ST ] แบบขยายถังบำบัดน้ำเสียและถังดักไขมัน (NTS)
+          const c3X = 272;
+          const c3W = 123;
+          path([[c3X, startY], [c3X + c3W, startY], [c3X + c3W, startY + cardH], [c3X, startY + cardH]], "#cbd5e1", 0.25, undefined, true, "#ffffff");
+          path([[c3X, startY], [c3X + c3W, startY], [c3X + c3W, startY + 7.5], [c3X, startY + 7.5]], "#0284c7", 0.2, undefined, true, "#f0f9ff");
+          text([c3X + 2.5, startY + 5.2], "[ DETAIL-ST ] แบบขยายถังบำบัดน้ำเสียและถังดักไขมัน · NTS", 2.0, "#0369a1");
+
+          const sb3X = c3X + 3;
+          const sb3Y = startY + 9.5;
+          const sb3W = c3W - 6;
+          const sb3H = 34;
+          path([[sb3X, sb3Y], [sb3X + sb3W, sb3Y], [sb3X + sb3W, sb3Y + sb3H], [sb3X, sb3Y + sb3H]], "#e2e8f0", 0.15, undefined, true, "#f8fafc");
+
+          // Ground line
+          const stGndY = sb3Y + 5;
+          path([[sb3X + 6, stGndY], [sb3X + sb3W - 6, stGndY]], "#64748b", 0.35, [2, 1]);
+          text([sb3X + 6, stGndY - 1.5], "ระดับดินเดิม / ทางเดิน", 1.5, "#64748b");
+
+          // Septic tank shape
+          const stX = sb3X + 32;
+          const stW = 48;
+          const stH = 22;
+          const stY = stGndY + 4;
+          path([[stX, stY], [stX + stW, stY], [stX + stW, stY + stH], [stX, stY + stH]], "#2563eb", 0.35, undefined, true, "#eff6ff");
+          path([[stX + 22, stY], [stX + 22, stY + stH]], "#93c5fd", 0.25, [1, 1]);
+          path([[stX + 16, stGndY], [stX + 30, stGndY], [stX + 30, stY], [stX + 16, stY]], "#2563eb", 0.25, undefined, true, "#dbeafe");
+          text([stX + 18, stGndY + 2.5], "ฝาตรวจ", 1.4, "#1d4ed8");
+
+          // Inlet & Outlet
+          path([[stX - 16, stY + 5], [stX, stY + 5]], "#0284c7", 0.35);
+          text([stX - 22, stY + 3.5], "ท่อส้วม Ø4\"", 1.5, "#0284c7");
+          path([[stX + stW, stY + 8], [stX + stW + 16, stY + 8]], "#0284c7", 0.35);
+          text([stX + stW + 2, stY + 6.5], "ท่อน้ำทิ้ง Ø4\"", 1.5, "#0284c7");
+
+          text([stX + 2, stY + 8], "ส่วนเกรอะ", 1.6, "#1e40af");
+          text([stX + 25, stY + 8], "ส่วนกรองมีเดีย", 1.6, "#1e40af");
+          text([stX + 7, stY + 16], "ถังบำบัดสำเร็จรูป (DOS 1000L)", 1.6, "#1d4ed8");
+
+          // RC base slab
+          path([[stX - 4, stY + stH + 1], [stX + stW + 4, stY + stH + 1], [stX + stW + 4, stY + stH + 3.5], [stX - 4, stY + stH + 3.5]], "#64748b", 0.25, undefined, true, "#cbd5e1");
+          text([stX + 10, stY + stH + 3], "ฐาน คสล. หนา 10 ซม.", 1.5, "#475569");
+
+          // Notes below sub-box
+          const stNoteY = startY + 47.5;
+          text([c3X + 3, stNoteY], "• ถังบำบัดน้ำเสียสำเร็จรูป (Septic Tank) ชนิดเกรอะ-กรองไร้อากาศ", 1.7, "#334155");
+          text([c3X + 3, stNoteY + 4.5], "• ติดตั้งบนฐานราก คสล. รองรับน้ำหนัก ป้องกันการทรุดตัวแตกร้าว", 1.7, "#334155");
+          text([c3X + 3, stNoteY + 9], "• ท่อระบายน้ำโสโครกและน้ำทิ้ง สโลปไม่น้อยกว่า 1:100 (1 ซม./เมตร)", 1.7, "#334155");
+          text([c3X + 3, stNoteY + 13.5], "• ถังดักไขมัน (Grease Trap) 15-30 ลิตร ติดตั้งใต้อ่างล้างจานครัวไทย", 1.7, "#334155");
+          text([c3X + 3, stNoteY + 18], "• น้ำทิ้งที่ผ่านการบำบัดแล้ว ระบายสู่บ่อพักคอนกรีตก่อนออกสู่ท่อสาธารณะ", 1.7, "#334155");
+        }
+        if (id === "E-01") {
+          const startY = 181;
+          const cardH = 72;
+
+          // Card 1: [ SYMBOLS-E1 ] ตารางสัญลักษณ์ระบบไฟฟ้ามาตรฐาน (วสท. / กฟน. / กฟภ.)
+          const c1X = 18;
+          const c1W = 186;
+          path([[c1X, startY], [c1X + c1W, startY], [c1X + c1W, startY + cardH], [c1X, startY + cardH]], "#cbd5e1", 0.25, undefined, true, "#ffffff");
+          path([[c1X, startY], [c1X + c1W, startY], [c1X + c1W, startY + 7.5], [c1X, startY + 7.5]], "#0284c7", 0.2, undefined, true, "#f0f9ff");
+          text([c1X + 2.5, startY + 5.2], "[ SYMBOLS-E1 ] ตารางสัญลักษณ์ระบบไฟฟ้ามาตรฐาน (วสท. / กฟน. / กฟภ.)", 2.1, "#0369a1");
+
+          const eSymbols = [
+            { sym: "[ DL ]", name: "โคมไฟ LED Downlight 9W-12W ฝังฝ้าเพดาน (แสง Warm / Daylight)" },
+            { sym: "[ T8 ]", name: "โคมไฟ LED Batten / Fluorescent T8 (1x18W, 1x36W, 2x18W)" },
+            { sym: "S", name: "สวิตช์ทางเดียว 1 ขั้ว (Single-pole Switch 16A 250V มอก. 824)" },
+            { sym: "S3", name: "สวิตช์ 3 ทาง (3-Way Switch) สำหรับบันไดและโถงทางเดิน" },
+            { sym: "SWP", name: "สวิตช์กันน้ำภายนอกอาคาร (Weatherproof Switch IP55)" },
+            { sym: "2P+G", name: "เต้ารับคู่มีกราวด์และม่านนิรภัย (Duplex Receptacle with Ground 16A)" },
+            { sym: "[ CU ]", name: "ตู้ควบคุมไฟฟ้า Consumer Unit พร้อม Main CB และเบรกเกอร์ RCBO" },
+            { sym: "---", name: "แนวท่อร้อยสายไฟฝังผนัง/ใต้ฝ้าเพดาน (Conduit in Wall/Ceiling)" },
+          ];
+          eSymbols.forEach((item, idx) => {
+            const rowY = startY + 12.5 + idx * 7.2;
+            path([[c1X + 4, rowY - 4.5], [c1X + 24, rowY - 4.5], [c1X + 24, rowY + 1.5], [c1X + 4, rowY + 1.5]], "#e2e8f0", 0.15, undefined, true, "#f8fafc");
+            text([c1X + 6, rowY - 0.5], item.sym, 2.0, "#0284c7");
+            text([c1X + 27, rowY - 0.5], item.name, 1.8, "#334155");
+          });
+
+          // Card 2: [ HEIGHT-E1 ] ตารางระดับความสูงมาตรฐานการติดตั้ง (EIT / วสท.)
+          const c2X = 209;
+          const c2W = 186;
+          path([[c2X, startY], [c2X + c2W, startY], [c2X + c2W, startY + cardH], [c2X, startY + cardH]], "#cbd5e1", 0.25, undefined, true, "#ffffff");
+          path([[c2X, startY], [c2X + c2W, startY], [c2X + c2W, startY + 7.5], [c2X, startY + 7.5]], "#0284c7", 0.2, undefined, true, "#f0f9ff");
+          text([c2X + 2.5, startY + 5.2], "[ HEIGHT-E1 ] ตารางระดับความสูงมาตรฐานการติดตั้ง (EIT / วสท.)", 2.1, "#0369a1");
+
+          const eHeights = [
+            { item: "สวิตช์ไฟฟ้าแสงสว่างทั่วไป (Lighting Switch):", h: "+1.20 ม. จากระดับ FFL" },
+            { item: "สวิตช์หัวเตียง / ข้างโต๊ะทำงาน (Bedside Switch):", h: "+0.90 ม. จากระดับ FFL" },
+            { item: "เต้ารับไฟฟ้าทั่วไป (General Outlet):", h: "+0.30 ม. จากระดับ FFL" },
+            { item: "เต้ารับเคาน์เตอร์ครัว (Kitchen Counter):", h: "+1.10 ม. จากระดับ FFL" },
+            { item: "เต้ารับห้องน้ำ (พร้อมฝาครอบกันน้ำ IP54):", h: "+1.10 ม. (ห่างสุขภัณฑ์ >= 0.60 ม.)" },
+            { item: "เต้ารับเครื่องซักผ้า / ตู้เย็น (Appliances):", h: "+1.10 ม. จากระดับ FFL" },
+            { item: "เต้ารับแอร์ / เครื่องทำน้ำอุ่น (AC / Heater):", h: "+2.00 ม. / +1.40 ม. จากระดับ FFL" },
+            { item: "ตู้ควบคุมไฟฟ้า Consumer Unit (CU):", h: "+1.80 ม. ถึงกึ่งกลางตู้" },
+            { item: "กริ่งสัญญาณหน้าบ้าน (Door Chime):", h: "+1.50 ม. จากระดับ FFL" },
+          ];
+          eHeights.forEach((row, idx) => {
+            const rY = startY + 12.5 + idx * 6.4;
+            text([c2X + 4, rY], row.item, 1.8, "#1e293b");
+            text([c2X + 130, rY], row.h, 1.8, "#047857");
+          });
+        }
         if (id === "E-02") {
           const circuits = selected.filter(
             (o) => o.object_type === "electrical.circuit",
@@ -3481,19 +3818,97 @@ function compilePermitDrawingSetBase(
             warnings.push(
               "Panel single line diagram requires circuit source objects",
             );
+
+          // Card 1: [ DETAIL-GR ] แบบขยายระบบต่อลงดินและแท่งหลักดิน (Grounding System Detail)
+          const startY = 181;
+          const cardH = 72;
+
+          const c1X = 18;
+          const c1W = 206;
+          path([[c1X, startY], [c1X + c1W, startY], [c1X + c1W, startY + cardH], [c1X, startY + cardH]], "#cbd5e1", 0.25, undefined, true, "#ffffff");
+          path([[c1X, startY], [c1X + c1W, startY], [c1X + c1W, startY + 7.5], [c1X, startY + 7.5]], "#0284c7", 0.2, undefined, true, "#f0f9ff");
+          text([c1X + 2.5, startY + 5.2], "[ DETAIL-GR ] แบบขยายระบบต่อลงดินและแท่งหลักดิน (วสท. / กฟน. / กฟภ.) · NTS", 2.0, "#0369a1");
+
+          const sb1X = c1X + 3;
+          const sb1Y = startY + 9.5;
+          const sb1W = c1W - 6;
+          const sb1H = 34;
+          path([[sb1X, sb1Y], [sb1X + sb1W, sb1Y], [sb1X + sb1W, sb1Y + sb1H], [sb1X, sb1Y + sb1H]], "#e2e8f0", 0.15, undefined, true, "#f8fafc");
+
+          // Ground line
+          const grGndY = sb1Y + 7;
+          path([[sb1X + 4, grGndY], [sb1X + sb1W - 4, grGndY]], "#64748b", 0.35, [2, 1]);
+          text([sb1X + 4, grGndY - 2], "ระดับพื้นดินเดิม / ผิวดิน", 1.6, "#64748b");
+
+          // Consumer Unit box at upper left
+          const cuBoxX = sb1X + 8;
+          const cuBoxY = sb1Y + 12;
+          path([[cuBoxX, cuBoxY], [cuBoxX + 28, cuBoxY], [cuBoxX + 28, cuBoxY + 18], [cuBoxX, cuBoxY + 18]], "#0f172a", 0.35, undefined, true, "#ffffff");
+          text([cuBoxX + 2, cuBoxY + 4.5], "ตู้ Consumer Unit", 1.6, "#0f172a");
+          // Bars inside CU
+          path([[cuBoxX + 3, cuBoxY + 8], [cuBoxX + 12, cuBoxY + 8]], "#0284c7", 0.4); // Neutral Bar
+          text([cuBoxX + 3, cuBoxY + 7], "N Bar", 1.3, "#0284c7");
+          path([[cuBoxX + 16, cuBoxY + 8], [cuBoxX + 25, cuBoxY + 8]], "#16a34a", 0.4); // Ground Bar
+          text([cuBoxX + 16, cuBoxY + 7], "G Bar", 1.3, "#16a34a");
+          // Main bonding jumper (N-G Bond)
+          path([[cuBoxX + 12, cuBoxY + 8], [cuBoxX + 16, cuBoxY + 8]], "#16a34a", 0.3, [1, 1]);
+          text([cuBoxX + 3, cuBoxY + 13], "N-G Bond", 1.4, "#16a34a");
+          text([cuBoxX + 3, cuBoxY + 16], "(ต่อก่อนเมน CB)", 1.3, "#64748b");
+
+          // Ground Inspection Pit at right
+          const pitX = sb1X + 105;
+          const pitY = grGndY - 1;
+          const pitW = 34;
+          const pitH = 18;
+          path([[pitX, pitY], [pitX + pitW, pitY], [pitX + pitW, pitY + pitH], [pitX, pitY + pitH]], "#64748b", 0.35, undefined, true, "#e2e8f0");
+          text([pitX + 2, pitY + 4], "บ่อตรวจกราวด์ 30x30", 1.5, "#334155");
+
+          // Ground wire from CU to pit
+          const rodX = pitX + pitW / 2;
+          path([[cuBoxX + 20, cuBoxY + 18], [cuBoxX + 20, grGndY + 4], [rodX, grGndY + 4]], "#16a34a", 0.45);
+          text([sb1X + 42, grGndY + 2.5], "สายต่อหลักดิน THW สีเขียว >= 10 mm2 ร้อยท่อ uPVC", 1.5, "#15803d");
+
+          // Heavy-duty clamp in pit
+          path([[rodX - 2.5, grGndY + 3], [rodX + 2.5, grGndY + 3], [rodX + 2.5, grGndY + 6], [rodX - 2.5, grGndY + 6]], "#d97706", 0.3, undefined, true, "#fef3c7");
+          text([pitX + 2, pitY + 12], "แคลมป์ทองเหลือง", 1.4, "#b45309");
+
+          // Ground Rod driven deep into earth
+          path([[rodX, grGndY + 3], [rodX, sb1Y + sb1H - 2]], "#b45309", 0.7);
+          text([rodX + 4, grGndY + 14], "แท่งหลักดินทองแดง Ø5/8\" (16 มม.)", 1.6, "#b45309");
+          text([rodX + 4, grGndY + 18], "ยาว 2.40 ม. ตอกจมมิดดิน", 1.6, "#b45309");
+
+          // Notes below sub-box
+          const grNoteY = startY + 47.5;
+          text([c1X + 3, grNoteY], "• แท่งหลักดินเหล็กหุ้มทองแดง (Copper-bonded) ขนาด Ø5/8\" ยาว 2.40 ม. ตอกจมดิน", 1.7, "#334155");
+          text([c1X + 3, grNoteY + 4.5], "• สายต่อหลักดินใช้สายทองแดงหุ้มฉนวน THW สีเขียว >= 10 mm2 เดินในท่อร้อยสาย uPVC", 1.7, "#334155");
+          text([c1X + 3, grNoteY + 9], "• ระบบการต่อลงดิน TN-C-S: สายนิวทรัล (N) ต้องต่อลง Ground Bar ที่ตู้เมนก่อนเข้าเมนเบรกเกอร์", 1.7, "#334155");
+          text([c1X + 3, grNoteY + 13.5], "• ค่าความต้านทานการต่อลงดิน (Earth Ground Resistance): ต้องวัดได้ไม่เกิน 5 โอห์ม (<= 5 Ohm)", 1.7, "#334155");
+          text([c1X + 3, grNoteY + 18], "• ฝาบ่อตรวจกราวด์ คสล. ชนิดเปิดตรวจวัดค่าความต้านทานได้สะดวก", 1.7, "#334155");
+
+          // Card 2: [ SPECS-RCBO ] ข้อกำหนดอุปกรณ์ตัดไฟรั่ว (RCBO) และความปลอดภัย
+          const c2X = 228;
+          const c2W = 167;
+          path([[c2X, startY], [c2X + c2W, startY], [c2X + c2W, startY + cardH], [c2X, startY + cardH]], "#cbd5e1", 0.25, undefined, true, "#ffffff");
+          path([[c2X, startY], [c2X + c2W, startY], [c2X + c2W, startY + 7.5], [c2X, startY + 7.5]], "#0284c7", 0.2, undefined, true, "#f0f9ff");
+          text([c2X + 2.5, startY + 5.2], "[ SPECS-RCBO ] ข้อกำหนดความปลอดภัยและการป้องกันไฟฟ้ารั่ว (วสท.)", 2.0, "#0369a1");
+
+          const rcboSpecs = [
+            "1. วงจรบังคับติดตั้งเครื่องตัดไฟรั่ว RCBO (มอก. 909-2548):",
+            "   • วงจรเครื่องทำน้ำอุ่น / เครื่องทำน้ำร้อน (ตัดไฟรั่ว <= 30 mA ในเวลา <= 0.04 วินาที)",
+            "   • วงจรเต้ารับไฟฟ้าห้องน้ำ บริเวณเปียกชื้น และเต้ารับภายนอกอาคาร",
+            "   • วงจรปั๊มน้ำอัตโนมัติ และเต้ารับเคาน์เตอร์ครัว",
+            "2. มาตรฐานสายไฟฟ้า (มอก. 11-2553):",
+            "   • สายแกนเดี่ยวร้อยท่อ: 60227 IEC 01 (THW) ทองแดง ทนอุณหภูมิ 70°C 450/750V",
+            "   • สายแบนเดินตีกิ๊บ: 60227 IEC 52 / VAF ทองแดง ทนอุณหภูมิ 70°C 300/500V",
+            "3. โค้ดสีสายไฟตามมาตรฐาน วสท. / มอก. ใหม่:",
+            "   • สายเฟส (Line): น้ำตาล (Phase A), ดำ (Phase B), เทา (Phase C)",
+            "   • สายนิวทรัล (Neutral): สีฟ้า (Blue) | สายดิน (Ground): เขียวแถบเหลือง",
+            "4. ข้อห้าม: ห้ามตัดต่อสายไฟในท่อร้อยสาย ต้องตัดต่อในกล่องต่อสาย (Junction Box) เท่านั้น",
+          ];
+          rcboSpecs.forEach((spec, idx) => {
+            text([c2X + 3.5, startY + 12.5 + idx * 5.4], spec, 1.75, "#334155");
+          });
         }
-        if (id === "E-01")
-          for (const o of selected) {
-            const d = data(o);
-            if (d.kind === "switch")
-              for (const loadId of (d.controlled_ids ?? []) as string[])
-                if (project.objects[loadId])
-                  text(
-                    [18, 184],
-                    `${String(d.mark)} -> ${String(data(project.objects[loadId]).mark)} (${d.switch_ways}-way)`,
-                    2.4,
-                  );
-          }
       }
       if (!selected.length && id !== "A-01")
         warnings.push(

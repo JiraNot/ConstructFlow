@@ -1036,3 +1036,210 @@ test("Pillar 3: A-08 lintel/stiffener details, A-09 bathroom drop-slab/shower-cu
   assert.ok(a09Texts.some((t) => t.includes("PU Sealant")), "A-09 includes Flashing PU Sealant text");
 });
 
+test("Pillar 4: M-01 pump & bypass card, M-02 cleanout/vent/septic details, E-01 symbols/heights, and E-02 grounding/RCBO specs", () => {
+  const p = createEmptyProjectDocument("TEST-P4-MEP");
+  const levelId = "level-1";
+  p.levels = [{ id: levelId, name: "Ground Floor", elevation_mm: 0 }];
+
+  // 1. Plumbing smart object for M-01
+  const pbId = "pump-bypass-1";
+  p.objects[pbId] = {
+    id: pbId,
+    object_type: "plumbing.pump_bypass",
+    owner_module: "constructflow.plumbing",
+    created_phase: "new_construction",
+    removed_phase: null,
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [],
+    connector_refs: [],
+    status: "active",
+    module_data: {
+      mark: "P1",
+      location_mm: [1000, 1000, 0],
+      span_mm: 1200,
+      diameter_mm: 25,
+      mode: "pump",
+      valve_states: { inlet: true, outlet: true, bypass: false },
+    },
+  };
+
+  // 2. Drainage objects for M-02
+  const mh1Id = "mh-1";
+  p.objects[mh1Id] = {
+    id: mh1Id,
+    object_type: "drainage.manhole",
+    owner_module: "constructflow.drainage",
+    created_phase: "new_construction",
+    removed_phase: null,
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [],
+    connector_refs: [],
+    status: "active",
+    module_data: {
+      mark: "MH1",
+      location_mm: [0, 0, 0],
+      size_mm: [600, 600, 800],
+      invert_mm: -400,
+      system: "waste",
+    },
+  };
+  const pipe1Id = "pipe-1";
+  p.objects[pipe1Id] = {
+    id: pipe1Id,
+    object_type: "drainage.pipe_route",
+    owner_module: "constructflow.drainage",
+    created_phase: "new_construction",
+    removed_phase: null,
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [mh1Id],
+    connector_refs: [],
+    status: "active",
+    module_data: {
+      mark: "SP1",
+      system: "waste",
+      nodes_mm: [[0, 0, -400], [4000, 0, -440]],
+      diameter_mm: 100,
+      start_node_id: mh1Id,
+      start_invert_mm: -400,
+      end_invert_mm: -440,
+      minimum_slope_ratio: 0.01,
+      material: "PVC",
+    },
+  };
+
+  // 3. Electrical fixtures for E-01 (Light + Switch)
+  const lightId = "light-1";
+  p.objects[lightId] = {
+    id: lightId,
+    object_type: "electrical.fixture",
+    owner_module: "constructflow.electrical",
+    created_phase: "new_construction",
+    removed_phase: null,
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [],
+    connector_refs: [],
+    status: "active",
+    module_data: {
+      mark: "L1",
+      kind: "light",
+      location_mm: [2000, 2000, 2600],
+      watts: 18,
+      grounded: true,
+      controlled_ids: [],
+    },
+  };
+  const switchId = "sw-1";
+  p.objects[switchId] = {
+    id: switchId,
+    object_type: "electrical.fixture",
+    owner_module: "constructflow.electrical",
+    created_phase: "new_construction",
+    removed_phase: null,
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [],
+    connector_refs: [],
+    status: "active",
+    module_data: {
+      mark: "S1",
+      kind: "switch",
+      location_mm: [1000, 2000, 1200],
+      watts: 0,
+      grounded: true,
+      controlled_ids: [lightId],
+      switch_ways: 1,
+    },
+  };
+
+  // 4. Panel & Circuit for E-02
+  const panelId = "panel-1";
+  p.objects[panelId] = {
+    id: panelId,
+    object_type: "electrical.fixture",
+    owner_module: "constructflow.electrical",
+    created_phase: "new_construction",
+    removed_phase: null,
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [],
+    connector_refs: [],
+    status: "active",
+    module_data: {
+      mark: "CU-1",
+      kind: "panel",
+      location_mm: [500, 500, 1800],
+      watts: 0,
+      grounded: true,
+      controlled_ids: [],
+    },
+  };
+  const cktId = "ckt-1";
+  p.objects[cktId] = {
+    id: cktId,
+    object_type: "electrical.circuit",
+    owner_module: "constructflow.electrical",
+    created_phase: "new_construction",
+    removed_phase: null,
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [],
+    connector_refs: [],
+    status: "active",
+    module_data: {
+      mark: "C1",
+      panel_id: panelId,
+      device_ids: [lightId],
+      voltage: 230,
+      breaker_a: 16,
+      allowable_current_a: 20,
+      cable_mm2: 2.5,
+    },
+  };
+
+  const set = compilePermitDrawingSet(p);
+
+  // Assert Sheet M-01 (Plumbing & 3-Valve Bypass)
+  const m01 = set.sheets.find((s) => s.id === "M-01");
+  assert.ok(m01, "Sheet M-01 exists");
+  const m01Texts = m01.primitives.filter((pr) => pr.kind === "text").map((pr) => pr.text);
+  assert.ok(m01Texts.some((t) => t.includes("DETAIL-PB")), "M-01 includes [ DETAIL-PB ] card");
+  assert.ok(m01Texts.some((t) => t.includes("3-Valve Bypass")), "M-01 includes 3-Valve Bypass title");
+  assert.ok(m01Texts.some((t) => t.includes("ถังเก็บน้ำบนดิน")), "M-01 includes Ground Water Tank");
+  assert.ok(m01Texts.some((t) => t.includes("ปั๊มน้ำอัตโนมัติ")), "M-01 includes Booster Pump");
+  assert.ok(m01Texts.some((t) => t.includes("CV (เช็ควาล์ว)")), "M-01 includes Check Valve CV");
+  assert.ok(m01Texts.some((t) => t.includes("SPECS-PB")), "M-01 includes [ SPECS-PB ] card");
+  assert.ok(m01Texts.some((t) => t.includes("Hydrostatic")), "M-01 includes Hydrostatic Pressure Test");
+
+  // Assert Sheet M-02 (Drainage, Cleanout, Vent, Septic)
+  const m02 = set.sheets.find((s) => s.id === "M-02");
+  assert.ok(m02, "Sheet M-02 exists");
+  const m02Texts = m02.primitives.filter((pr) => pr.kind === "text").map((pr) => pr.text);
+  assert.ok(m02Texts.some((t) => t.includes("DETAIL-CO")), "M-02 includes [ DETAIL-CO ] Cleanout card");
+  assert.ok(m02Texts.some((t) => t.includes("FCO")), "M-02 includes FCO text");
+  assert.ok(m02Texts.some((t) => t.includes("DETAIL-VT")), "M-02 includes [ DETAIL-VT ] Vent Stack card");
+  assert.ok(m02Texts.some((t) => t.includes("Vent Stack")), "M-02 includes Vent Stack title");
+  assert.ok(m02Texts.some((t) => t.includes("DETAIL-ST")), "M-02 includes [ DETAIL-ST ] Septic Tank card");
+  assert.ok(m02Texts.some((t) => t.includes("ถังบำบัดน้ำเสีย")), "M-02 includes Septic tank description");
+  assert.ok(m02Texts.some((t) => t.includes("Grease Trap")), "M-02 includes Grease Trap reference");
+
+  // Assert Sheet E-01 (Lighting, Symbols, Mounting Heights, Switch Loops)
+  const e01 = set.sheets.find((s) => s.id === "E-01");
+  assert.ok(e01, "Sheet E-01 exists");
+  const e01Texts = e01.primitives.filter((pr) => pr.kind === "text").map((pr) => pr.text);
+  assert.ok(e01Texts.some((t) => t.includes("SYMBOLS-E1")), "E-01 includes [ SYMBOLS-E1 ] Symbols card");
+  assert.ok(e01Texts.some((t) => t.includes("HEIGHT-E1")), "E-01 includes [ HEIGHT-E1 ] Mounting Heights card");
+  assert.ok(e01Texts.some((t) => t.includes("+1.20 ม.")), "E-01 includes Switch height +1.20m");
+  assert.ok(e01Texts.some((t) => t.includes("+0.30 ม.")), "E-01 includes Receptacle height +0.30m");
+  // Check dashed switch control loop in viewport
+  const dashedPaths = e01.primitives.filter((pr) => pr.kind === "path" && pr.dash && pr.dash.length === 2);
+  assert.ok(dashedPaths.length > 0, "E-01 draws dashed switch control loop polyline");
+
+  // Assert Sheet E-02 (Power, Panel, SLD, Grounding, RCBO)
+  const e02 = set.sheets.find((s) => s.id === "E-02");
+  assert.ok(e02, "Sheet E-02 exists");
+  const e02Texts = e02.primitives.filter((pr) => pr.kind === "text").map((pr) => pr.text);
+  assert.ok(e02Texts.some((t) => t.includes("DETAIL-GR")), "E-02 includes [ DETAIL-GR ] Grounding card");
+  assert.ok(e02Texts.some((t) => t.includes("แท่งหลักดินทองแดง")), "E-02 includes Ground Rod text");
+  assert.ok(e02Texts.some((t) => t.includes("SPECS-RCBO")), "E-02 includes [ SPECS-RCBO ] RCBO card");
+  assert.ok(e02Texts.some((t) => t.includes("เครื่องตัดไฟรั่ว RCBO")), "E-02 includes RCBO description");
+  assert.ok(e02Texts.some((t) => t.includes("<= 5 Ohm")), "E-02 includes <= 5 Ohm ground resistance standard");
+});
+
+

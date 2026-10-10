@@ -45,11 +45,11 @@ flowchart TD
         P3_4["3.4 ปริมาณและระดับกรุกระเบื้องผนังห้องน้ำ (Wall Tile Finish Takeoff) ✅"]
     end
 
-    subgraph Pillar4["💧 เสาที่ 4: งานระบบสุขาภิบาลและไฟฟ้า (MEP) (ถัดไป)"]
-        P4_1["4.1 ช่องเปิดล้างท่อ Cleanout (FCO / CO วสท.)"]
-        P4_2["4.2 ท่อระบายอากาศป้องกันกลิ่น (Vent Pipe / Vent Stack)"]
-        P4_3["4.3 ระบบประปาน้ำดี ถังพักน้ำ และปั๊มน้ำ (Cold Water Supply)"]
-        P4_4["4.4 ระบบหลักดิน (Ground Rod) และเบรกเกอร์กันดูด (RCBO 30mA)"]
+    subgraph Pillar4["💧 เสาที่ 4: งานระบบสุขาภิบาลและไฟฟ้า (MEP) (เสร็จสมบูรณ์)"]
+        P4_1["4.1 ระบบประปาน้ำดี ถังพักน้ำ ปั๊มน้ำ & 3-Valve Bypass บน M-01 ✅"]
+        P4_2["4.2 ช่องเปิดล้างท่อ Cleanout (FCO/WCO) & ท่อระบายอากาศ (Vent Stack) บน M-02 ✅"]
+        P4_3["4.3 ถังบำบัดน้ำเสีย (Septic Tank) & ถังดักไขมัน (Grease Trap) บน M-02 ✅"]
+        P4_4["4.4 สัญลักษณ์/ระดับติดตั้ง E-01 & ระบบหลักดิน (Ground Rod) + RCBO 30mA บน E-02 ✅"]
     end
 
     subgraph Pillar5["💰 เสาที่ 5: งานประมาณราคาและ BOQ (Cost Engineering)"]

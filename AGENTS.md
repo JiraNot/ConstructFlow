@@ -316,10 +316,10 @@ ConstructFlow compiles vector drawings directly into a standardized 20-Sheet A3 
 | S-04   | Roof Framing Plan (Steel Truss / Purlins / Chemical Dowels) | 1:100      |
 | S-05   | Structural Schedule: Column, Footing & Retaining Details    | 1:25 / 1:20|
 | S-06   | Structural Schedule: RC Beam Sections & Rebar Schedule (BBS)| 1:25 / 1:20|
-| M-01   | Water Supply & Pump Bypass Isometric Diagram                | 1:100/NTS  |
-| M-02   | Drainage, Waste, Soil & Vent Pipe Layout & Manhole Slopes   | 1:100      |
-| E-01   | Lighting & Switching Circuit Layout                         | 1:100      |
-| E-02   | Power Receptacle Layout, Single Line Diagram & Consumer Unit| 1:100/NTS  |
+| M-01   | Water Supply, Storage, Booster Pump & 3-Valve Bypass Scheme  | 1:100/NTS  |
+| M-02   | Drainage, Cleanout (FCO), Vent Stack & Septic Tank Details   | 1:100/NTS  |
+| E-01   | Lighting, Standard Symbol Legend & Mounting Heights Table    | 1:100/NTS  |
+| E-02   | Power, Single Line Diagram (SLD), Grounding (GR) & RCBO Specs| 1:100/NTS  |
 +--------+-------------------------------------------------------------+------------+
 ```
 
