@@ -124,7 +124,7 @@ export interface CreateFoundationInput {
   supported_column_id?: string
 
   /** Foundation type */
-  foundation_type?: 'spread_footing' | 'pile_cap'
+  foundation_type?: 'spread_footing' | 'pile_cap' | 'eccentric_footing'
   topping_mm?:number
   slab_system?:'slab_on_ground'|'suspended'|'precast_plank'|'hollow_core'
   drop_mm?:number
@@ -133,6 +133,8 @@ export interface CreateFoundationInput {
   pile_type?: PileSystem
   pile_offsets_mm?: [number, number][]
   pile_length_mm?: number
+  eccentric_offset_mm?: [number, number]
+  strap_beam_id?: string
 
   /** Footing dimensions: [width, length, thickness] in mm */
   size_mm?: [number, number, number]
@@ -200,6 +202,10 @@ export interface CreateBeamInput {
   /** Connected Column UUIDs */
   start_column_id?: string
   end_column_id?: string
+  middle_support_column_id?: string
+  beam_system?: 'simple' | 'continuous' | 'cantilever'
+  continuity_type?: 'simple_span' | 'end_span' | 'interior_span' | 'cantilever'
+  skin_rebar_required?: boolean
 
   material?: 'reinforced_concrete' | 'steel' | 'timber' | 'generic' | string
   phase?: Phase

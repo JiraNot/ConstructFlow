@@ -79,11 +79,15 @@ export interface FoundationModuleData {
   type_id?: string
   instance_overrides?: Record<string, unknown>
   mark: string // Human-readable mark, e.g. "F01"
-  foundation_type: 'spread_footing' | 'pile_cap'
+  foundation_type: 'spread_footing' | 'pile_cap' | 'eccentric_footing'
   pile_type?: PileSystem
   /** Pile head offsets from the pile-cap center, in millimeters; pile lengths remain independently specified. */
   pile_offsets_mm?: [number, number][]
   pile_length_mm?: number
+  /** Eccentric offset for property-line/boundary footings (ฐานรากตีนเป็ดชิดเขต) */
+  eccentric_offset_mm?: [number, number]
+  /** Connected strap beam UUID to resist overturning moments */
+  strap_beam_id?: string
   center_mm: [number, number, number] // [x, y, z] in mm
   size_mm: [number, number, number] // [width, length, thickness] in mm
   top_elevation_mm: number
@@ -91,6 +95,9 @@ export interface FoundationModuleData {
   material: 'reinforced_concrete' | string
   engineering_status: 'preliminary' | 'engineer_approved' | 'as_built'
 }
+
+export type BeamSystem = 'simple' | 'continuous' | 'cantilever'
+export type BeamContinuityType = 'simple_span' | 'end_span' | 'interior_span' | 'cantilever'
 
 export interface BeamModuleData {
   placement_reference?: PlacementReference
@@ -109,6 +116,10 @@ export interface BeamModuleData {
   base_offset_mm?: number
   start_column_id?: string // optional connected column UUID
   end_column_id?: string // optional connected column UUID
+  middle_support_column_id?: string // optional intermediate/middle support column UUID
+  beam_system?: BeamSystem
+  continuity_type?: BeamContinuityType
+  skin_rebar_required?: boolean
   material: 'reinforced_concrete' | 'steel' | 'timber' | 'generic' | string
   engineering_status: 'preliminary' | 'engineer_approved' | 'as_built'
 }
@@ -258,8 +269,24 @@ export interface CeilingModuleData extends CatalogPlacement {
   follows_room_boundary: boolean
 }
 export interface RebarSpacingZone { start_mm:number; end_mm:number; spacing_mm:number }
+export type RebarRole =
+  | 'top'
+  | 'bottom'
+  | 'top_extra'
+  | 'top_extra_left'
+  | 'top_extra_mid'
+  | 'top_extra_right'
+  | 'bottom_extra'
+  | 'side_skin'
+  | 'stirrups'
+  | 'general'
+  | 'main'
+  | 'ties'
+  | 'bottom_x'
+  | 'bottom_y'
+  | 'starter';
 export interface RebarModuleData extends CatalogPlacement {
-  role?: 'top' | 'bottom' | 'stirrups' | 'general' | 'main' | 'ties' | 'bottom_x' | 'bottom_y' | 'starter'
+  role?: RebarRole
   inherit_host_type?: boolean
   host_id:string
   mode:'longitudinal'|'stirrups'|'explicit'

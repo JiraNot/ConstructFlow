@@ -220,6 +220,12 @@ export function validateProjectV2(project: ProjectDocument): void {
       placement_reference: ['structure.beam', 'architecture.wall'],
       interior_side: ['architecture.wall'],
       drop_mm:['structure.beam','architecture.bathroom'],rebar_type:['structure.beam','structure.column'],topping_mm:['structure.slab'],slab_system:['structure.slab'],
+      eccentric_offset_mm: ['structure.foundation'],
+      strap_beam_id: ['structure.foundation'],
+      middle_support_column_id: ['structure.beam'],
+      beam_system: ['structure.beam'],
+      continuity_type: ['structure.beam'],
+      skin_rebar_required: ['structure.beam'],
     }
     for (const [field, families] of Object.entries(allowedFamilies)) {
       if (values[field] !== undefined && !families.includes(objectType)) {
@@ -352,7 +358,7 @@ export function validateProjectV2(project: ProjectDocument): void {
     if (values.rebar_type !== undefined) {
       const config = values.rebar_type
       if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error(`Invalid project format: ${owner} reinforcement must be an object`)
-      const roles = ['top', 'bottom', 'stirrups', 'main', 'ties', 'bottom_x', 'bottom_y', 'starter']
+      const roles = ['top', 'bottom', 'stirrups', 'main', 'ties', 'bottom_x', 'bottom_y', 'starter', 'top_extra', 'top_extra_left', 'top_extra_mid', 'top_extra_right', 'bottom_extra', 'side_skin']
       const entries: [string, unknown][] = roles.some(role => role in config) ? Object.entries(config) : [['general', config]]
       for (const [role, raw] of entries) {
         if ((!roles.includes(role) && role !== 'general') || !raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`Invalid project format: ${owner} invalid reinforcement role`)
@@ -377,7 +383,7 @@ export function validateProjectV2(project: ProjectDocument): void {
         }
       }
     }
-    if (values.foundation_type !== undefined && values.foundation_type !== 'spread_footing' && values.foundation_type !== 'pile_cap') {
+    if (values.foundation_type !== undefined && values.foundation_type !== 'spread_footing' && values.foundation_type !== 'pile_cap' && values.foundation_type !== 'eccentric_footing') {
       throw new Error(`Invalid project format: ${owner} has an invalid foundation type`)
     }
     if (values.pile_type !== undefined && (objectType !== 'structure.foundation' || typeof values.pile_type !== 'string' || !PILE_TYPES.has(values.pile_type))) {
@@ -504,7 +510,7 @@ export function validateProjectV2(project: ProjectDocument): void {
         requirePoint(moduleData.center_mm, id, 'center_mm')
         requireTuple(moduleData.size_mm, 3, id, 'size_mm', true)
         requireFinite(moduleData.top_elevation_mm, id, 'top_elevation_mm')
-        if (moduleData.foundation_type !== 'spread_footing' && moduleData.foundation_type !== 'pile_cap') throw new Error(`Invalid project format: foundation ${id} has an invalid foundation type`)
+        if (moduleData.foundation_type !== 'spread_footing' && moduleData.foundation_type !== 'pile_cap' && moduleData.foundation_type !== 'eccentric_footing') throw new Error(`Invalid project format: foundation ${id} has an invalid foundation type`)
         if (moduleData.foundation_type === 'pile_cap' && moduleData.pile_type === undefined) throw new Error(`Invalid project format: pile cap ${id} is missing its pile type`)
         if (moduleData.pile_offsets_mm && moduleData.size_mm) {
           const offsets = moduleData.pile_offsets_mm as [number, number][]

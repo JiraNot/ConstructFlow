@@ -1,5 +1,13 @@
 # ConstructFlow Specification Status
 
+Master Construction Roadmap & Pillar 2: Structural Engineering & Detail Schedules (2026-10-10): complete implementation and verification of Pillar 2 across Domain 2:
+1. Long-Span Beam Detailing & Automatic Side Skin Rebar: added automatic side-skin reinforcement (`side_skin` 2-DB12) when beam depth $\ge 500$ mm per วสท. / ACI 318 code, supporting 7.00 m span beams ($25\times 60$ cm).
+2. Beam System & Continuity: added `BeamSystem` ('simple' | 'continuous' | 'cantilever') and `BeamContinuityType` with intermediate support (`middle_support_column_id`) tracking and connected relationships.
+3. Cantilever Beams: automatic cantilever detection, assigning top tension reinforcement (Top Extra / Continuous DB20) and bottom assembly bars.
+4. Eccentric Footing (ฐานรากตีนเป็ดชิดเขต) & Strap Beam: added `eccentric_footing` with `eccentric_offset_mm` and `strap_beam_id` connections to resist overturning moments at site boundaries.
+5. Bar Bending Schedules (BBS) & 3-Section Detailing (S-05 & S-06): upgraded permit sheets S-05 (Columns & Footings) and S-06 (Beam Schedules) with L-Section profile, 3 stirrup zones, and 3 cross sections (Section 1-1 Head/Support 1, Section 2-2 Mid-span, Section 3-3 Tail/Middle Support/Cantilever End).
+6. 100% test pass rate across `@constructflow/structure-engine`, `@constructflow/command-runtime` (82/82), `@constructflow/sheet-engine` (41/41), `@constructflow/cad-adapter` (13/13), and full standalone monorepo test suite.
+
 Master Construction Roadmap & Pillar 1: Site Survey, Title Deed & Thai Building Code Compliance (2026-10-10): complete implementation and verification of Pillar 1 across Domain 1:
 1. Master Engineering Roadmap (6 Pillars): recorded complete engineering roadmap in `docs/ROADMAP.md` and Artifact directory covering all 6 Pillars (Legal/Deed, Structure/Foundation, Architecture/Envelope, MEP Detailing, Takeoff/BOQ, and BIM Coordination).
 2. Roof Eaves & Overhang Setbacks (กฎกระทรวงฉบับที่ 55 ข้อ 50): added `EavesSetbackEvaluationItem` and `TH-MR55-RULE-50-EAVES` checking building projections/overhangs $\ge 0.50$ m from property lines, neighbor consent handling (`TH-MR55-RULE-50-EAVES-CONSENT`), violation detection (`TH-MR55-RULE-50-EAVES-VIOLATION`), and rain gutter compliance warnings (`TH-MR55-RULE-50-GUTTER`).

@@ -804,3 +804,100 @@ test("F04: Hidden-line solver and depth occlusion on elevations and section cuts
   const pdf = await PDFDocument.load(pdfBytes);
   assert.equal(pdf.getPageCount(), 20, "20-page permit PDF should compile successfully");
 });
+
+test("Pillar 2: S-05 and S-06 compile detailed structural cards (3-section detailing, cantilever, and eccentric footing)", () => {
+  const p = createEmptyProjectDocument("STRUCT-DETAIL", "ทดสอบแบบขยายโครงสร้าง S-05 และ S-06");
+  const levelId = p.levels[0].id;
+  const colId = "col-1";
+  const fndId = "fnd-ecc";
+  const beamId = "beam-7m";
+  const cantId = "beam-cant";
+
+  p.objects[colId] = {
+    id: colId,
+    object_type: "structure.column",
+    created_phase: "new_construction",
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [],
+    module_data: {
+      mark: "C1",
+      location_mm: [1000, 1000, 0],
+      section_mm: [250, 250],
+      base_level_id: levelId,
+      base_elevation_mm: 0,
+      top_elevation_mm: 3500,
+    },
+  };
+
+  p.objects[fndId] = {
+    id: fndId,
+    object_type: "structure.foundation",
+    created_phase: "new_construction",
+    level_refs: [],
+    host_refs: [colId],
+    module_data: {
+      mark: "F-ECC",
+      foundation_type: "eccentric_footing",
+      center_mm: [1000, 1000, -300],
+      size_mm: [1000, 1000, 350],
+      eccentric_offset_mm: [200, 0],
+      supported_column_id: colId,
+      material: "reinforced_concrete",
+    },
+  };
+
+  p.objects[beamId] = {
+    id: beamId,
+    object_type: "structure.beam",
+    created_phase: "new_construction",
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [colId],
+    module_data: {
+      mark: "B1",
+      start_point_mm: [0, 0, 3500],
+      end_point_mm: [7000, 0, 3500],
+      section_mm: [250, 600],
+      span_mm: 7000,
+      level_id: levelId,
+      beam_system: "continuous",
+      skin_rebar_required: true,
+      material: "reinforced_concrete",
+    },
+  };
+
+  p.objects[cantId] = {
+    id: cantId,
+    object_type: "structure.beam",
+    created_phase: "new_construction",
+    level_refs: [{ role: "base_level", level_id: levelId }],
+    host_refs: [colId],
+    module_data: {
+      mark: "CB1",
+      start_point_mm: [1000, 1000, 3500],
+      end_point_mm: [3000, 1000, 3500],
+      section_mm: [200, 400],
+      span_mm: 2000,
+      level_id: levelId,
+      beam_system: "cantilever",
+      material: "reinforced_concrete",
+    },
+  };
+
+  const set = compilePermitDrawingSet(p);
+  const s05 = set.sheets.find((sheet) => sheet.id === "S-05");
+  assert.ok(s05, "Sheet S-05 exists");
+  const s05Texts = s05.primitives.filter((pr) => pr.kind === "text").map((pr) => pr.text);
+  assert.ok(s05Texts.some((t) => t.includes("แบบขยายฐานรากและเสา")), "S-05 includes footing & column card header");
+  assert.ok(s05Texts.some((t) => t.includes("ฐานรากตีนเป็ดชิดเขต")), "S-05 includes eccentric footing detailing");
+  assert.ok(s05Texts.some((t) => t.includes("คานดึงรั้ง (Strap Beam)")), "S-05 includes strap beam specification");
+
+  const s06 = set.sheets.find((sheet) => sheet.id === "S-06");
+  assert.ok(s06, "Sheet S-06 exists");
+  const s06Texts = s06.primitives.filter((pr) => pr.kind === "text").map((pr) => pr.text);
+  assert.ok(s06Texts.some((t) => t.includes("แบบขยายคานและไดอะแกรมการเสริมเหล็ก 3 ตอน")), "S-06 includes 3-section schedule header");
+  assert.ok(s06Texts.some((t) => t.includes("คาน B1 (250 × 600 mm)")), "S-06 includes 25x60cm beam card");
+  assert.ok(s06Texts.some((t) => t.includes("รูปตัด 1-1")), "S-06 includes Section 1-1");
+  assert.ok(s06Texts.some((t) => t.includes("รูปตัด 2-2")), "S-06 includes Section 2-2");
+  assert.ok(s06Texts.some((t) => t.includes("รูปตัด 3-3")), "S-06 includes Section 3-3");
+  assert.ok(s06Texts.some((t) => t.includes("เหล็กข้างคาน 2-DB12")), "S-06 includes side skin rebar text for 25x60 beam");
+});

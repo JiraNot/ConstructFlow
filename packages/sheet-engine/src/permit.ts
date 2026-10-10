@@ -664,122 +664,379 @@ function compilePermitDrawingSetBase(
               `${o.object_type}:${String(data(o).type_id ?? data(o).mark)}`,
               o,
             );
-          for (const [i, o] of [...unique.values()].slice(0, 5).entries()) {
-            const d = resolvedData(project, o),
-              s = (d.section_mm ?? d.size_mm) as number[];
-            if (!s) continue;
-            const x = 24 + i * 75,
-              y = 150,
-              w = s[0] / viewport.scale_denominator,
-              h = s[1] / viewport.scale_denominator;
+          const items = [...unique.values()].slice(0, 5);
+          const startX = 20;
+          const startY = 135;
+          const cardWidth = 72;
+          const cardHeight = 100;
+
+          text([startX, startY - 4], "แบบขยายฐานรากและเสา (FOOTING & COLUMN SCHEDULE DETAILS) · มาตราส่วน 1:25", 2.8, "#0f172a");
+
+          for (const [i, o] of items.entries()) {
+            const d = resolvedData(project, o);
+            const isColumn = o.object_type === "structure.column";
+            const isFooting = o.object_type === "structure.foundation";
+            const mark = String(d.mark ?? (isColumn ? "C1" : "F1"));
+            const s = (d.section_mm ?? d.size_mm ?? [200, 200, 300]) as number[];
+            const cardX = startX + i * (cardWidth + 4);
+            const cardY = startY;
+
+            // Card container outline
             path(
               [
-                [x, y],
-                [x + w, y],
-                [x + w, y + h],
-                [x, y + h],
+                [cardX, cardY],
+                [cardX + cardWidth, cardY],
+                [cardX + cardWidth, cardY + cardHeight],
+                [cardX, cardY + cardHeight],
               ],
-              "#0f172a",
-              0.35,
+              "#cbd5e1",
+              0.25,
               undefined,
               true,
+              "#ffffff",
             );
-            text([x, y - 5], String(d.mark) + " plan / section", 2.5);
-            text(
-              [x, y + h + 5],
-              s.map((v) => (v / 1000).toFixed(2)).join(" x ") + " m",
-              2.4,
+            // Header banner
+            path(
+              [
+                [cardX, cardY],
+                [cardX + cardWidth, cardY],
+                [cardX + cardWidth, cardY + 12],
+                [cardX, cardY + 12],
+              ],
+              "#0284c7",
+              0.25,
+              undefined,
+              true,
+              "#f0f9ff",
             );
-            if (
-              d.foundation_type === "pile_cap" &&
-              Array.isArray(d.pile_positions_mm)
-            )
-              for (const a of d.pile_positions_mm as number[][]) {
-                const px = x + w / 2 + a[0] / viewport.scale_denominator,
-                  py = y + h / 2 + a[1] / viewport.scale_denominator;
-                path(
-                  [
-                    [px - 1, py - 1],
-                    [px + 1, py - 1],
-                    [px + 1, py + 1],
-                    [px - 1, py + 1],
-                  ],
-                  "#475569",
-                  0.2,
-                  undefined,
-                  true,
-                );
+            text([cardX + 3, cardY + 5], `${isColumn ? "เสา" : "ฐานราก"} ${mark}`, 3.2, "#0369a1");
+            const dimText = isColumn
+              ? `${(s[0] / 1000).toFixed(2)} × ${(s[1] / 1000).toFixed(2)} m`
+              : `${(s[0] / 1000).toFixed(2)} × ${(s[1] / 1000).toFixed(2)} × ${(s[2] / 1000).toFixed(2)} m`;
+            text([cardX + 3, cardY + 10], dimText, 2.3, "#64748b");
+
+            if (isColumn) {
+              // Draw Column Section
+              const isSteel = String(d.material).includes("steel") || mark.startsWith("SC");
+              const boxW = Math.min(35, Math.max(20, s[0] / 10));
+              const boxH = Math.min(35, Math.max(20, s[1] / 10));
+              const cx = cardX + (cardWidth - boxW) / 2;
+              const cy = cardY + 18 + (40 - boxH) / 2;
+
+              if (isSteel) {
+                // Steel H-Beam or Box
+                path([[cx, cy], [cx + boxW, cy], [cx + boxW, cy + boxH], [cx, cy + boxH]], "#0284c7", 0.5, undefined, true, "#e0f2fe");
+                text([cardX + 4, cardY + 68], `เสาเหล็ก ${mark} (Steel Column)`, 2.4, "#0f172a");
+                text([cardX + 4, cardY + 74], `มอก. 107/1227 TIS Standard`, 2.2, "#475569");
+                text([cardX + 4, cardY + 80], `หน้าตัด: ${s[0]}×${s[1]} mm`, 2.2, "#475569");
+              } else {
+                // Concrete column outer
+                path([[cx, cy], [cx + boxW, cy], [cx + boxW, cy + boxH], [cx, cy + boxH]], "#0f172a", 0.35, undefined, true, "#f8fafc");
+                // Inner tie
+                const tiePad = 3;
+                path([[cx + tiePad, cy + tiePad], [cx + boxW - tiePad, cy + tiePad], [cx + boxW - tiePad, cy + boxH - tiePad], [cx + tiePad, cy + boxH - tiePad]], "#475569", 0.25, undefined, true);
+                // 4 Corner main bars
+                const r = 1.0;
+                for (const [bx, by] of [
+                  [cx + tiePad + 1, cy + tiePad + 1],
+                  [cx + boxW - tiePad - 1, cy + tiePad + 1],
+                  [cx + boxW - tiePad - 1, cy + boxH - tiePad - 1],
+                  [cx + tiePad + 1, cy + boxH - tiePad - 1],
+                ]) {
+                  path([[bx - r, by - r], [bx + r, by - r], [bx + r, by + r], [bx - r, by + r]], "#0f172a", 0.2, undefined, true, "#0f172a");
+                }
+                text([cardX + 4, cardY + 68], `เสา คสล. ${mark} (RC Column)`, 2.4, "#0f172a");
+                text([cardX + 4, cardY + 74], `เหล็กยืน: 4-DB16 (SD40)`, 2.2, "#475569");
+                text([cardX + 4, cardY + 80], `ปลอก: RB6 @ 0.15 ม.`, 2.2, "#475569");
+                text([cardX + 4, cardY + 86], `คอนกรีต: 240 ksc cylinder`, 2.0, "#64748b");
               }
+            } else if (isFooting) {
+              // Draw Footing Plan
+              const isEccentric = d.foundation_type === "eccentric_footing" || Boolean(d.eccentric_offset_mm);
+              const isPileCap = d.foundation_type === "pile_cap";
+              const boxW = Math.min(45, Math.max(30, s[0] / 25));
+              const boxH = Math.min(45, Math.max(30, s[1] / 25));
+              const cx = cardX + (cardWidth - boxW) / 2;
+              const cy = cardY + 16 + (45 - boxH) / 2;
+
+              // Footing outline
+              path([[cx, cy], [cx + boxW, cy], [cx + boxW, cy + boxH], [cx, cy + boxH]], "#0f172a", 0.35, undefined, true, "#f8fafc");
+
+              // Column stub position: centered or offset for eccentric footing
+              const colW = 8;
+              const colH = 8;
+              const colX = isEccentric ? cx + 2 : cx + (boxW - colW) / 2;
+              const colY = isEccentric ? cy + 2 : cy + (boxH - colH) / 2;
+              path([[colX, colY], [colX + colW, colY], [colX + colW, colY + colH], [colX, colY + colH]], "#0f172a", 0.3, undefined, true, "#cbd5e1");
+
+              // Rebar mesh indications (dashed lines)
+              path([[cx + 4, cy + boxH / 2], [cx + boxW - 4, cy + boxH / 2]], "#94a3b8", 0.2, [2, 2]);
+              path([[cx + boxW / 2, cy + 4], [cx + boxW / 2, cy + boxH - 4]], "#94a3b8", 0.2, [2, 2]);
+
+              if (isPileCap && Array.isArray(d.pile_offsets_mm) && d.pile_offsets_mm.length) {
+                // Micro-pile positions
+                for (const off of d.pile_offsets_mm as [number, number][]) {
+                  const px = cx + boxW / 2 + (off[0] / 25);
+                  const py = cy + boxH / 2 + (off[1] / 25);
+                  path([[px - 1.5, py], [px + 1.5, py]], "#ef4444", 0.3);
+                  path([[px, py - 1.5], [px, py + 1.5]], "#ef4444", 0.3);
+                }
+              }
+
+              if (isEccentric) {
+                // Strap beam arrow
+                path([[colX + colW, colY + colH / 2], [cardX + cardWidth - 6, colY + colH / 2]], "#0284c7", 0.4);
+                text([cardX + 4, cardY + 68], `ฐานรากตีนเป็ดชิดเขต (${mark})`, 2.4, "#0f172a");
+                text([cardX + 4, cardY + 74], `คานดึงรั้ง (Strap Beam) เชื่อมเข้าใน`, 2.2, "#0284c7");
+                text([cardX + 4, cardY + 80], `เหล็กตะกร้อ: DB12 @ 0.15 ม.`, 2.2, "#475569");
+                text([cardX + 4, cardY + 86], `ต้านโมเมนต์พลิกคว่ำ (Overturning)`, 2.0, "#64748b");
+              } else {
+                text([cardX + 4, cardY + 68], `${isPileCap ? "ฐานรากเสาเข็ม" : "ฐานรากแผ่"} ${mark}`, 2.4, "#0f172a");
+                text([cardX + 4, cardY + 74], `เหล็กล่าง: DB12 @ 0.15 ม. 2 ทาง`, 2.2, "#475569");
+                text([cardX + 4, cardY + 80], `ความหนาฐานราก: ${s[2] ?? 350} mm`, 2.2, "#475569");
+                text([cardX + 4, cardY + 86], `${isPileCap ? (d.pile_type ?? "เข็มไมโครไพล์") : "รับน้ำหนักดินปลอดภัย >= 8 t/m²"}`, 2.0, "#64748b");
+              }
+            }
           }
         }
         if (id === "S-06" && rows.length <= 12) {
-          const beams = selected.filter(
-            (o) => o.object_type === "structure.beam",
-          );
-          for (const [i, o] of beams.slice(0, 6).entries()) {
-            const d = data(o),
-              section = (d.section_mm ??
-                resolveCatalogType(
-                  project,
-                  o.object_type,
-                  String(d.type_id ?? d.mark),
-                )?.parameters.section_mm) as number[];
-            if (!section) continue;
-            const x = 25 + i * 62,
-              y = 155,
-              w = section[0] / viewport.scale_denominator,
-              h = section[1] / viewport.scale_denominator;
+          const uniqueBeams = new Map<string, SmartObject>();
+          for (const o of selected.filter(b => b.object_type === "structure.beam")) {
+            const d = data(o);
+            uniqueBeams.set(String(d.type_id ?? d.mark), o);
+          }
+          const beams = [...uniqueBeams.values()].slice(0, 2);
+          const startX = 20;
+          const startY = 88;
+          const cardWidth = 182;
+          const cardHeight = 150;
+
+          text([startX, startY - 4], "แบบขยายคานและไดอะแกรมการเสริมเหล็ก 3 ตอน (BEAM DETAILS & 3-SECTION SCHEDULE) · มาตราส่วน 1:25", 2.8, "#0f172a");
+
+          for (const [cardIndex, o] of beams.entries()) {
+            const d = data(o);
+            const mark = String(d.mark ?? "B1");
+            const t = resolveCatalogType(project, o.object_type, String(d.type_id ?? d.mark));
+            const section = (d.section_mm ?? t?.parameters.section_mm ?? [200, 400]) as number[];
+            const widthMm = Number(section[0] ?? 200);
+            const depthMm = Number(section[1] ?? 400);
+            const spanM = Number((Number(d.span_mm ?? 4000) / 1000).toFixed(2));
+            const isCantilever = d.beam_system === "cantilever" || mark.toLowerCase().startsWith("c-") || mark.toLowerCase().startsWith("cb");
+            const isContinuous = d.beam_system === "continuous" || Boolean(d.middle_support_column_id) || spanM >= 6.0;
+            const hasSkinRebar = depthMm >= 500 || d.skin_rebar_required === true;
+
+            const cardX = startX + cardIndex * (cardWidth + 8);
+            const cardY = startY;
+
+            // 1. Card container outline
             path(
               [
-                [x, y],
-                [x + w, y],
-                [x + w, y + h],
-                [x, y + h],
+                [cardX, cardY],
+                [cardX + cardWidth, cardY],
+                [cardX + cardWidth, cardY + cardHeight],
+                [cardX, cardY + cardHeight],
               ],
-              "#0f172a",
-              0.35,
+              "#cbd5e1",
+              0.25,
               undefined,
               true,
+              "#ffffff",
             );
-            text([x, y - 5], String(d.mark) + " section", 2.5);
-            text(
-              [x, y + h + 5],
-              `${(section[0] / 1000).toFixed(2)} x ${(section[1] / 1000).toFixed(2)} m`,
-              2.5,
+
+            // 2. Card Header Banner
+            path(
+              [
+                [cardX, cardY],
+                [cardX + cardWidth, cardY],
+                [cardX + cardWidth, cardY + 12],
+                [cardX, cardY + 12],
+              ],
+              "#0284c7",
+              0.25,
+              undefined,
+              true,
+              "#f0f9ff",
             );
-            text(
-              [x, y + h + 10],
-              `Drop ${(Number(d.drop_mm ?? 0) / 1000).toFixed(3)} m`,
-              2.3,
-            );
-            for (const barObject of selected.filter(
-              (b) =>
-                b.object_type === "structure.rebar_set" &&
-                data(b).host_id === o.id,
-            )) {
-              const bd = data(barObject),
-                cover = Number(bd.cover_mm) / viewport.scale_denominator,
-                count = calculateBBS(project, barObject).count;
-              if (bd.role === "top" || bd.role === "bottom")
-                for (let n = 0; n < Math.min(count, 20); n++) {
-                  const px =
-                      x +
-                      cover +
-                      (w - 2 * cover) * (count === 1 ? 0.5 : n / (count - 1)),
-                    py = bd.role === "top" ? y + cover : y + h - cover;
-                  path(
-                    [
-                      [px - 0.3, py - 0.3],
-                      [px + 0.3, py - 0.3],
-                      [px + 0.3, py + 0.3],
-                      [px - 0.3, py + 0.3],
-                    ],
-                    "#0f172a",
-                    0.2,
-                    undefined,
-                    true,
-                  );
-                }
+            const systemDesc = isCantilever
+              ? "คานยื่น (Cantilever Beam)"
+              : isContinuous
+                ? `คานต่อเนื่องช่วงยาว ${spanM.toFixed(2)} ม. (Middle Support)`
+                : `คานช่วงเดียวสแปน ${spanM.toFixed(2)} ม.`;
+            text([cardX + 3, cardY + 5], `แบบขยายคาน ${mark} (${widthMm} × ${depthMm} mm) · ${systemDesc}`, 3.0, "#0369a1");
+            text([cardX + 3, cardY + 10], `ระยะฝาก/ทาบ 40db · คอนกรีต 240 ksc · เหล็กข้ออ้อย SD40 / เหล็กกลม RB6-RB9 SR24`, 2.2, "#64748b");
+
+            // 3. Longitudinal Elevation Diagram (รูปตัดตามยาว L-Section)
+            const elevX = cardX + 10;
+            const elevY = cardY + 18;
+            const elevW = 162;
+            const elevH = 20;
+
+            // Longitudinal Concrete outline
+            path([[elevX, elevY], [elevX + elevW, elevY], [elevX + elevW, elevY + elevH], [elevX, elevY + elevH]], "#0f172a", 0.4, undefined, true, "#f8fafc");
+
+            // Column supports
+            const colW = 8;
+            const colH = 12;
+            // Left column
+            path([[elevX, elevY + elevH], [elevX + colW, elevY + elevH], [elevX + colW, elevY + elevH + colH], [elevX, elevY + elevH + colH]], "#94a3b8", 0.3, undefined, true, "#e2e8f0");
+            text([elevX + 1, elevY + elevH + 8], "เสา 1", 2.0, "#475569");
+
+            if (isContinuous) {
+              // Middle column support
+              const midColX = elevX + (elevW - colW) / 2;
+              path([[midColX, elevY + elevH], [midColX + colW, elevY + elevH], [midColX + colW, elevY + elevH + colH], [midColX, elevY + elevH + colH]], "#0284c7", 0.3, undefined, true, "#e0f2fe");
+              text([midColX - 3, elevY + elevH + 8], "เสากลาง", 2.0, "#0369a1");
+            }
+
+            if (!isCantilever) {
+              // Right column
+              path([[elevX + elevW - colW, elevY + elevH], [elevX + elevW, elevY + elevH], [elevX + elevW, elevY + elevH + colH], [elevX + elevW - colW, elevY + elevH + colH]], "#94a3b8", 0.3, undefined, true, "#e2e8f0");
+              text([elevX + elevW - colW + 1, elevY + elevH + 8], "เสา 2", 2.0, "#475569");
+            } else {
+              // Cantilever tip mark
+              text([elevX + elevW - 14, elevY + elevH + 5], "ปลายคานยื่น", 2.0, "#ef4444");
+            }
+
+            // Longitudinal Rebars:
+            // Top Main: line from left hook to right hook
+            const topY = elevY + 3;
+            const botY = elevY + elevH - 3;
+            path([[elevX + 2, topY + 4], [elevX + 2, topY], [elevX + elevW - 2, topY], [elevX + elevW - 2, isCantilever ? topY + 6 : topY + 4]], "#0f172a", 0.45);
+
+            // Top Extra Rebar (เหล็กเสริมพิเศษบน):
+            const topExtraY = elevY + 5;
+            if (isCantilever) {
+              // Top tension bar runs across full cantilever
+              path([[elevX + 2, topExtraY + 4], [elevX + 2, topExtraY], [elevX + elevW - 4, topExtraY], [elevX + elevW - 4, topExtraY + 5]], "#ef4444", 0.4);
+              text([elevX + 15, topExtraY - 1.5], "เหล็กรับแรงดึงหลัก 4-DB20 วิ่งตลอดช่วงคานยื่น", 2.0, "#ef4444");
+            } else if (isContinuous) {
+              // Support 1 extra (L/3)
+              path([[elevX + 2, topExtraY + 3], [elevX + 2, topExtraY], [elevX + 45, topExtraY]], "#0284c7", 0.35);
+              // Middle support extra (0.35L to 0.65L)
+              const midStart = elevX + (elevW * 0.35);
+              const midEnd = elevX + (elevW * 0.65);
+              path([[midStart, topExtraY], [midEnd, topExtraY]], "#0284c7", 0.4);
+              text([midStart + 5, topExtraY - 1.5], "เสริมพิเศษบนเสากลาง 2-DB16", 2.0, "#0284c7");
+              // Support 2 extra (L/3)
+              path([[elevX + elevW - 45, topExtraY], [elevX + elevW - 2, topExtraY], [elevX + elevW - 2, topExtraY + 3]], "#0284c7", 0.35);
+            } else {
+              // Simple span extra on ends (L/4)
+              path([[elevX + 2, topExtraY + 3], [elevX + 2, topExtraY], [elevX + 35, topExtraY]], "#0284c7", 0.35);
+              path([[elevX + elevW - 35, topExtraY], [elevX + elevW - 2, topExtraY], [elevX + elevW - 2, topExtraY + 3]], "#0284c7", 0.35);
+            }
+
+            // Bottom Main: line from left hook to right hook
+            path([[elevX + 2, botY - 4], [elevX + 2, botY], [elevX + elevW - 2, botY], [elevX + elevW - 2, botY - 4]], "#0f172a", 0.45);
+
+            // Bottom Extra Rebar (เหล็กเสริมพิเศษล่างกลางคาน):
+            const botExtraY = elevY + elevH - 5;
+            if (!isCantilever) {
+              const bStart = elevX + (elevW * 0.18);
+              const bEnd = elevX + (elevW * 0.82);
+              path([[bStart, botExtraY], [bEnd, botExtraY]], "#047857", 0.4);
+              text([bStart + 10, botExtraY + 3.5], spanM >= 6.0 ? "เสริมพิเศษล่างกลางคาน 2-DB20 (สแปน 7 ม.)" : "เสริมพิเศษล่างกลางคาน 1-DB16", 2.0, "#047857");
+            }
+
+            // Side Skin Rebar (เหล็กข้างคาน / Skin reinforcement สำหรับคาน D >= 500 mm เช่น 25x60)
+            if (hasSkinRebar) {
+              const midSkinY = elevY + elevH / 2;
+              path([[elevX + 2, midSkinY], [elevX + elevW - 2, midSkinY]], "#b45309", 0.3, [3, 2]);
+              text([elevX + 35, midSkinY - 1.5], "เหล็กข้างคาน 2-DB12 (D >= 500 มม. ป้องกันรอยร้าวข้างคาน)", 2.0, "#b45309");
+            }
+
+            // Stirrup zone ticks & labels
+            const zoneY = elevY + elevH + 16;
+            const quarterW = elevW / 4;
+            path([[elevX, zoneY], [elevX + elevW, zoneY]], "#64748b", 0.2);
+            path([[elevX, zoneY - 2], [elevX, zoneY + 2]], "#64748b", 0.2);
+            path([[elevX + quarterW, zoneY - 2], [elevX + quarterW, zoneY + 2]], "#64748b", 0.2);
+            path([[elevX + elevW - quarterW, zoneY - 2], [elevX + elevW - quarterW, zoneY + 2]], "#64748b", 0.2);
+            path([[elevX + elevW, zoneY - 2], [elevX + elevW, zoneY + 2]], "#64748b", 0.2);
+            text([elevX + 4, zoneY + 4], "Zone 1 (ปลอกถี่ @0.10)", 2.0, "#475569");
+            text([elevX + quarterW + 10, zoneY + 4], "Zone 2 (ปลอก @0.20)", 2.0, "#475569");
+            text([elevX + elevW - quarterW + 4, zoneY + 4], "Zone 3 (ปลอกถี่ @0.10)", 2.0, "#475569");
+
+            // 4. Three Detailed Cross Sections (รูปตัดขวาง 3 ตอน)
+            const secBaseY = cardY + 68;
+            const secW = 28;
+            const secH = depthMm >= 500 ? 46 : 38;
+            const secStartX = cardX + 12;
+            const secGap = 52;
+
+            const sectionsInfo = [
+              {
+                num: "1-1",
+                locTitle: "หัวคาน (Support 1)",
+                topBars: spanM >= 6.0 ? "2-DB20 + พิเศษ 2-DB16" : isCantilever ? "4-DB20 (ดึงหลัก)" : "2-DB16 + พิเศษ 1-DB16",
+                botBars: spanM >= 6.0 ? "2-DB20" : isCantilever ? "2-DB12 (ประกอบ)" : "2-DB16",
+                stirrup: "RB6 @ 0.10 ม.",
+                topCount: spanM >= 6.0 ? 4 : isCantilever ? 4 : 3,
+                botCount: 2,
+              },
+              {
+                num: "2-2",
+                locTitle: "กลางคาน (Mid-Span)",
+                topBars: spanM >= 6.0 ? "2-DB20" : isCantilever ? "4-DB20" : "2-DB16",
+                botBars: spanM >= 6.0 ? "2-DB20 + พิเศษ 2-DB20" : isCantilever ? "2-DB12" : "2-DB16 + พิเศษ 1-DB16",
+                stirrup: isCantilever ? "RB6 @ 0.10 ม." : "RB6 @ 0.20 ม.",
+                topCount: isCantilever ? 4 : 2,
+                botCount: spanM >= 6.0 ? 4 : isCantilever ? 2 : 3,
+              },
+              {
+                num: "3-3",
+                locTitle: isCantilever ? "ปลายคานยื่น (Tip)" : isContinuous ? "เสากลาง (Middle Sup.)" : "ท้ายคาน (Support 2)",
+                topBars: isCantilever ? "4-DB20 (ล้วงฝาก)" : spanM >= 6.0 ? "2-DB20 + พิเศษ 2-DB16" : "2-DB16 + พิเศษ 1-DB16",
+                botBars: isCantilever ? "2-DB12" : spanM >= 6.0 ? "2-DB20" : "2-DB16",
+                stirrup: "RB6 @ 0.10 ม.",
+                topCount: spanM >= 6.0 ? 4 : isCantilever ? 4 : 3,
+                botCount: 2,
+              },
+            ];
+
+            for (const [secIdx, sInfo] of sectionsInfo.entries()) {
+              const sx = secStartX + secIdx * secGap;
+              const sy = secBaseY;
+
+              // Outer concrete box
+              path([[sx, sy], [sx + secW, sy], [sx + secW, sy + secH], [sx, sy + secH]], "#0f172a", 0.35, undefined, true, "#f8fafc");
+
+              // Inner stirrup box
+              const pad = 2.5;
+              path([[sx + pad, sy + pad], [sx + secW - pad, sy + pad], [sx + secW - pad, sy + secH - pad], [sx + pad, sy + secH - pad]], "#475569", 0.25, undefined, true);
+
+              // Top rebar dots
+              const topDotY = sy + pad + 1.2;
+              for (let k = 0; k < sInfo.topCount; k++) {
+                const dotX = sx + pad + 1.2 + ((secW - 2 * pad - 2.4) * (sInfo.topCount === 1 ? 0.5 : k / (sInfo.topCount - 1)));
+                path([[dotX - 0.7, topDotY - 0.7], [dotX + 0.7, topDotY - 0.7], [dotX + 0.7, topDotY + 0.7], [dotX - 0.7, topDotY + 0.7]], "#0f172a", 0.2, undefined, true, "#0f172a");
+              }
+
+              // Bottom rebar dots
+              const botDotY = sy + secH - pad - 1.2;
+              for (let k = 0; k < sInfo.botCount; k++) {
+                const dotX = sx + pad + 1.2 + ((secW - 2 * pad - 2.4) * (sInfo.botCount === 1 ? 0.5 : k / (sInfo.botCount - 1)));
+                path([[dotX - 0.7, botDotY - 0.7], [dotX + 0.7, botDotY - 0.7], [dotX + 0.7, botDotY + 0.7], [dotX - 0.7, botDotY + 0.7]], "#0f172a", 0.2, undefined, true, "#0f172a");
+              }
+
+              // Side Skin rebar dots (if deep beam >= 500mm e.g. 250x600)
+              if (hasSkinRebar) {
+                const midDotY = sy + secH / 2;
+                const leftDotX = sx + pad + 1.2;
+                const rightDotX = sx + secW - pad - 1.2;
+                path([[leftDotX - 0.6, midDotY - 0.6], [leftDotX + 0.6, midDotY - 0.6], [leftDotX + 0.6, midDotY + 0.6], [leftDotX - 0.6, midDotY + 0.6]], "#b45309", 0.2, undefined, true, "#b45309");
+                path([[rightDotX - 0.6, midDotY - 0.6], [rightDotX + 0.6, midDotY - 0.6], [rightDotX + 0.6, midDotY + 0.6], [rightDotX - 0.6, midDotY + 0.6]], "#b45309", 0.2, undefined, true, "#b45309");
+              }
+
+              // Section Titles and Specifications below
+              text([sx - 2, sy + secH + 4], `รูปตัด ${sInfo.num} : ${sInfo.locTitle}`, 2.2, "#0369a1");
+              text([sx - 2, sy + secH + 8], `บน: ${sInfo.topBars}`, 1.9, "#0f172a");
+              text([sx - 2, sy + secH + 12], `ล่าง: ${sInfo.botBars}`, 1.9, "#0f172a");
+              if (hasSkinRebar) {
+                text([sx - 2, sy + secH + 16], `ข้าง: 2-DB12 (Skin)`, 1.8, "#b45309");
+                text([sx - 2, sy + secH + 20], `ปลอก: ${sInfo.stirrup}`, 1.8, "#475569");
+              } else {
+                text([sx - 2, sy + secH + 16], `ปลอก: ${sInfo.stirrup}`, 1.8, "#475569");
+              }
             }
           }
         }

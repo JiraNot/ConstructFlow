@@ -578,11 +578,13 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       )
       const size_mm: [number, number, number] = fInput.size_mm || tuple3(typeDef?.parameters.size_mm, [800, 800, 300])
       const catalogFoundationType = typeDef?.parameters.foundation_type
-      const foundation_type = fInput.foundation_type || (catalogFoundationType === 'pile_cap' || catalogFoundationType === 'spread_footing' ? catalogFoundationType : 'spread_footing')
+      const foundation_type = fInput.foundation_type || (catalogFoundationType === 'pile_cap' || catalogFoundationType === 'spread_footing' || catalogFoundationType === 'eccentric_footing' ? catalogFoundationType : 'spread_footing')
       const material = fInput.material || catalogString(typeDef?.parameters.material, 'reinforced_concrete')
       const pile_type = fInput.pile_type ?? typeDef?.parameters.pile_type
       const pile_offsets_mm = fInput.pile_offsets_mm ?? typeDef?.parameters.pile_offsets_mm
       const pile_length_mm = fInput.pile_length_mm ?? typeDef?.parameters.pile_length_mm
+      const eccentric_offset_mm = fInput.eccentric_offset_mm ?? (typeDef?.parameters.eccentric_offset_mm as [number, number] | undefined)
+      const strap_beam_id = fInput.strap_beam_id
 
       const rawLoc: [number, number, number] | undefined = fInput.center_mm
         ? fInput.center_mm
@@ -612,11 +614,13 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
         module_data: {
           mark,
           type_id: typeDef?.id,
-          instance_overrides: catalogInstanceOverrides('structure.foundation', { size_mm, foundation_type, pile_type, pile_offsets_mm, pile_length_mm, material }, typeDef),
+          instance_overrides: catalogInstanceOverrides('structure.foundation', { size_mm, foundation_type, pile_type, pile_offsets_mm, pile_length_mm, material, eccentric_offset_mm }, typeDef),
           foundation_type,
           pile_type,
           pile_offsets_mm,
           pile_length_mm,
+          eccentric_offset_mm,
+          strap_beam_id,
           center_mm,
           size_mm,
           top_elevation_mm: fInput.top_elevation_mm || center_mm[2],
@@ -641,6 +645,14 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
           source_id: column.id,
           target_id: id,
           role: 'foundation_support',
+        })
+      }
+      if (strap_beam_id) {
+        updated.relationships.push({
+          kind: 'connects_to',
+          source_id: id,
+          target_id: strap_beam_id,
+          role: 'strap_beam_connection',
         })
       }
 
@@ -693,6 +705,11 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
         end_point_mm[1] - start_point_mm[1]
       ))
 
+      const isCantileverMark = mark.toLowerCase().startsWith('c-') || mark.toLowerCase().startsWith('cb') || mark.toLowerCase().includes('cantilever')
+      const beam_system = beamInput.beam_system || (beamInput.middle_support_column_id ? 'continuous' : isCantileverMark ? 'cantilever' : 'simple')
+      const continuity_type = beamInput.continuity_type || (beam_system === 'cantilever' ? 'cantilever' : beam_system === 'continuous' ? 'interior_span' : 'simple_span')
+      const skin_rebar_required = beamInput.skin_rebar_required ?? (section_mm[1] >= 500)
+
       const smartObject: SmartObject<BeamModuleData> = {
         id,
         object_type: 'structure.beam',
@@ -701,7 +718,7 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
         created_phase: beamInput.phase || project.project.active_phase,
         removed_phase: null,
         level_refs: [{ role: 'base_level', level_id }],
-        host_refs: [beamInput.start_column_id, beamInput.end_column_id].filter(Boolean) as string[],
+        host_refs: [beamInput.start_column_id, beamInput.middle_support_column_id, beamInput.end_column_id].filter(Boolean) as string[],
         connector_refs: [],
         status: 'active',
         module_data: {
@@ -717,6 +734,10 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
           base_offset_mm,
           start_column_id: beamInput.start_column_id,
           end_column_id: beamInput.end_column_id,
+          middle_support_column_id: beamInput.middle_support_column_id,
+          beam_system,
+          continuity_type,
+          skin_rebar_required,
           material,
           engineering_status: beamInput.engineering_status || 'preliminary',
         },
@@ -731,6 +752,14 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
           kind: 'connects_to',
           source_id: id,
           target_id: beamInput.start_column_id,
+          role: 'beam_column_connection',
+        })
+      }
+      if (beamInput.middle_support_column_id) {
+        updated.relationships.push({
+          kind: 'connects_to',
+          source_id: id,
+          target_id: beamInput.middle_support_column_id,
           role: 'beam_column_connection',
         })
       }

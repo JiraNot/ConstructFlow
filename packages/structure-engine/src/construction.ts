@@ -254,6 +254,12 @@ export function decodeRebar(
       "bottom_x",
       "bottom_y",
       "starter",
+      "top_extra",
+      "top_extra_left",
+      "top_extra_mid",
+      "top_extra_right",
+      "bottom_extra",
+      "side_skin",
     ] as const,
     "rebar role",
   );
@@ -285,8 +291,17 @@ export function calculateBBS(p: ProjectDocument, o: SmartObject): BBSRow {
     const isFootingX =
       hostObj?.object_type === "structure.foundation" && d.role === "bottom_x";
     const span = isFootingX ? h.width : h.length;
-    if (d.mode === "longitudinal")
-      len = span - 2 * d.cover_mm + hook + d.lap_mm;
+    if (d.mode === "longitudinal") {
+      let effectiveSpan = span;
+      if (d.role === "top_extra_left" || d.role === "top_extra_right" || d.role === "top_extra") {
+        effectiveSpan = Math.round(span / 3);
+      } else if (d.role === "top_extra_mid") {
+        effectiveSpan = Math.round(span * 0.4);
+      } else if (d.role === "bottom_extra") {
+        effectiveSpan = Math.round(span * 0.7);
+      }
+      len = effectiveSpan - 2 * d.cover_mm + hook + d.lap_mm;
+    }
     else {
       const w = h.width - 2 * d.cover_mm - d.diameter_mm,
         depth = h.depth - 2 * d.cover_mm - d.diameter_mm,
@@ -335,9 +350,20 @@ export function executeStructureConstructionCommand(
     if (host?.object_type !== "structure.beam")
       throw new Error("Beam host required");
     const config = record(c.input.reinforcement, "reinforcement"),
-      roles = ["top", "bottom", "stirrups"] as const,
+      roles = [
+        "top",
+        "bottom",
+        "stirrups",
+        "top_extra",
+        "top_extra_left",
+        "top_extra_mid",
+        "top_extra_right",
+        "bottom_extra",
+        "side_skin",
+      ] as const,
       affected: string[] = [host.id];
     for (const role of roles) {
+      if (!config[role]) continue;
       const params = record(config[role], role),
         old = Object.values(c.updated.objects).find(
           (o) =>
@@ -695,18 +721,36 @@ export function structureOutputs(p: ProjectDocument): DomainOutput[] {
                 at(h.length - d.cover_mm, x, y),
               ]);
             } else {
+              let startAlong = d.cover_mm;
+              let endAlong = h.length - d.cover_mm;
+              if (d.role === "top_extra_left" || d.role === "top_extra") {
+                endAlong = Math.min(h.length - d.cover_mm, h.length * 0.33);
+              } else if (d.role === "top_extra_right") {
+                startAlong = Math.max(d.cover_mm, h.length * 0.67);
+              } else if (d.role === "top_extra_mid") {
+                startAlong = Math.max(d.cover_mm, h.length * 0.35);
+                endAlong = Math.min(h.length - d.cover_mm, h.length * 0.65);
+              } else if (d.role === "bottom_extra") {
+                startAlong = Math.max(d.cover_mm, h.length * 0.15);
+                endAlong = Math.min(h.length - d.cover_mm, h.length * 0.85);
+              }
               out.paths = Array.from({ length: d.count }, (_, i) => {
                 const x =
                     d.count === 1 ? 0 : -halfW + (2 * halfW * i) / (d.count - 1),
                   y =
                     d.role === "bottom" ||
                     d.role === "bottom_x" ||
-                    d.role === "bottom_y"
+                    d.role === "bottom_y" ||
+                    d.role === "bottom_extra"
                       ? -halfD
-                      : d.role === "top"
+                      : d.role === "top" ||
+                        d.role === "top_extra" ||
+                        d.role === "top_extra_left" ||
+                        d.role === "top_extra_mid" ||
+                        d.role === "top_extra_right"
                       ? halfD
                       : 0;
-                return [at(d.cover_mm, x, y), at(h.length - d.cover_mm, x, y)];
+                return [at(startAlong, x, y), at(endAlong, x, y)];
               });
             }
           } else {

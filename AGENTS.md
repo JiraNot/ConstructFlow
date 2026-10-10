@@ -211,15 +211,23 @@ When a user or agent modifies a Type Catalog entry (e.g. changing beam `B1` dept
 ### Domain 2: Structural Engineering & Detail Schedules
 * **Substructure & Foundation:**
   * ฐานรากแผ่ (Isolated Spread Footing), ฐานรากเสาเข็มไมโครไพล์เจาะกด (Micro-pile $I-18, I-22$, Spun Micro-pile $\varnothing 20, \varnothing 25$), ฐานรากเสาเข็มเจาะ (Bored Pile).
+  * **ฐานรากตีนเป็ดชิดเขต (Eccentric Footing / Strap Footing):** รองรับการก่อสร้างชิดแนวเขตที่ดินด้วยระยะเยื้องศูนย์ `eccentric_offset_mm` พร้อมคานดึงรั้ง (Strap Beam `strap_beam_id`) ถ่ายแรงดัดและการพลิกคว่ำ (Overturning Moment) เข้าสู่ฐานรากหลักตัวในอย่างถูกต้องตามหลักวิศวกรรมโครงสร้าง.
   * Footing Reinforcement Detailing Template (`ConfigureFoundationReinforcement`): ตะแกรงเหล็กเสริมฐานราก 2 ทิศทาง (Bottom Mat X/Y เช่น DB12@0.15m, DB16@0.15m), เหล็กหนวดกุ้งเดือยเสา (Starter Dowels).
 * **Superstructure (Reinforced Concrete & Steel):**
   * เสา (RC Columns), คาน (RC Beams), คานลดระดับ (Drop Beams) สำหรับห้องน้ำและระเบียงซักล้าง (Drop 50–100 mm). การจัดระดับคานใช้ Top Level Datum (`top = level + offset`, `bottom = top - depth`) สไตล์ Revit เพื่อให้ท้องคานห้อยลงใต้ระดับพื้นชั้นนั้นอย่างถูกต้อง.
+  * **คานช่วงกว้างพิเศษ (Long-Span Beams เช่น 7.00 ม. $25\times 60$ ซม.):** รองรับคานหน้าตัดลึก พร้อมระบบตรวจจับใส่ **เหล็กข้างคาน (Side Face / Skin Reinforcement 2-DB12)** อัตโนมัติเมื่อคานลึก $\ge 500$ มม. ตามมาตรฐาน วสท. และ ACI 318 เพื่อป้องกันการแตกร้าวที่ผิวด้านข้าง.
+  * **ระบบคานต่อเนื่องและเสากลาง (Continuous Beams & Middle Support):** รองรับ `middle_support_column_id`, การจัดโซนเหล็กเสริมพิเศษหัว-กลาง-ท้าย (Top Extra Support 1, Top Extra Mid Support, Bottom Extra Mid Span) และการแบ่งโซนปลอกรับแรงเฉือน 3 โซน (End Zones @0.10 ม., Mid Zone @0.20 ม.).
+  * **คานยื่น (Cantilever Beams):** ตรวจจับระบบคานยื่นอัตโนมัติ จัดเหล็กรับแรงดึงหลักไว้ "ด้านบน" (Top Tension Rebars เช่น 4-DB20) ล้วนๆ วิ่งฝากคานตัวใน $\ge 1.5 L_{\text{cantilever}}$ พร้อมเหล็กประกอบล่าง 2-DB12.
   * Column Reinforcement Detailing Template (`ConfigureColumnReinforcement`): เหล็กยืนแกนหลัก (Main Bars เช่น 4-DB16, 6-DB20), เหล็กปลอกรัด (Ties / Stirrups RB6, RB9) พร้อมการแบ่งโซนระยะเรียงช่วงปลายหนาแน่น @0.10 ม. และช่วงกลาง @0.15–@0.20 ม.
   * พื้นโครงสร้าง (Structural Slabs): พื้นหล่อในที่ (Slab on Beam), พื้นคอนกรีตสำเร็จรูปท้องเรียบ (Precast Solid Plank / Hollow Core) พร้อมคอนกรีตทับหน้า (Topping 50 mm + Wire Mesh $\varnothing 4$ @0.20 ม.), พื้นวางบนดิน (Slab on Ground พร้อมแผ่นพลาสติกกันชื้น PE sheet). รองรับการจัดระดับสไตล์ Revit: กำหนดระดับอ้างอิง `level_id`, ระยะเยื้อง `elevation_offset_mm` (รองรับค่าบวก/ลบ เช่น -0.120 ม. สำหรับพื้นลดระดับห้องน้ำ/ระเบียง หรือลดระดับสำหรับปูแผ่นพื้นสำเร็จรูป), ความหนา `thickness_mm`, พร้อมป้ายแสดงระดับหลังพื้นและท้องพื้น Real-time บน PropertiesPanel.
   * โครงสร้างเหล็กรูปพรรณ (Structural Steel): Thai TIS standard H-Beam, I-Beam, C-Channel (แปเหล็ก), แผ่นเหล็ก Base plate ยึด Chemical Anchor เข้ากับเสา/คานเดิม.
-* **Rebar Detailing & Bar Bending Schedules (BBS):**
+* **Rebar Detailing & Bar Bending Schedules (BBS) & แบบขยายขออนุญาต S-05/S-06:**
   * เหล็กยืน (Main Longitudinal Bars): DB12, DB16, DB20, DB25 (SD40 / SD50).
+  * เหล็กเสริมพิเศษ (Special Reinforcement): เหล็กเสริมพิเศษบนหัวเสา (`top_extra`, `top_extra_left`, `top_extra_mid`, `top_extra_right`), เหล็กเสริมพิเศษล่างกลางคาน (`bottom_extra`), เหล็กข้างคาน (`side_skin`).
   * เหล็กปลอก (Stirrups / Ties): RB6, RB9 (SR24) กำหนดระยะเรียง @0.10 ม. (ช่วงปลายคาน/เสา) และ @0.15–@0.20 ม. (ช่วงกลางคาน).
+  * **แบบขยายคานและเสามาตรฐาน วสท. / อ.1 บนแผ่น S-05 & S-06:**
+    * แสดงไดอะแกรมรูปตัดตามยาว (L-Section Profile) แสดงเสาหัว-กลาง-ท้าย, แนวเหล็กเสริมหลัก, เหล็กเสริมพิเศษ, เหล็กข้างคาน, และระยะเรียงปลอก 3 โซน.
+    * **รูปตัดขวาง 3 ตอน (3 Cross-Sections):** Section 1-1 (หัวคาน), Section 2-2 (กลางคาน), Section 3-3 (ท้ายคาน/เสากลาง หรือ ปลายคานยื่น) แสดงตำแหน่งจุดเหล็กเสริมและป้ายกำกับอย่างสมบูรณ์.
   * ตารางรายการคำนวณและตัดดัดเหล็ก: คำนวณระยะทาบ (Lap Splice Length $\ge 40 d_b$), ระยะงอขอ (Standard Hooks $90^\circ, 135^\circ$), หักระยะคอนกรีตหุ้ม (Concrete Cover 25–40 mm) และน้ำหนักเหล็กอัตโนมัติ (Tonnage Takeoff).
 
 ### Domain 3: Architectural Envelope & Finish Detailing
