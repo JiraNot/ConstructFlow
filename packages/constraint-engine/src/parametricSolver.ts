@@ -1,5 +1,5 @@
 import * as kiwi from 'kiwi.js';
-import type { ParametricSymbolDefinition, EvaluatedSymbolLine } from '@constructflow/project-model/src/parametricSymbol.js';
+import type { ParametricSymbolDefinition, EvaluatedSymbolLine } from '@constructflow/project-model';
 
 export function evaluateParametricSymbol(
     symbol: ParametricSymbolDefinition,
@@ -49,11 +49,12 @@ export function evaluateParametricSymbol(
     solver.updateVariables();
 
     // 4. Extract evaluated lines
+    const clean = (n: number) => (Math.abs(n) < 1e-9 ? 0 : n);
     return symbol.lines.map(line => {
-        const sx = getVar(`${line.start_point}.x`).value();
-        const sy = getVar(`${line.start_point}.y`).value();
-        const ex = getVar(`${line.end_point}.x`).value();
-        const ey = getVar(`${line.end_point}.y`).value();
+        const sx = clean(getVar(`${line.start_point}.x`).value());
+        const sy = clean(getVar(`${line.start_point}.y`).value());
+        const ex = clean(getVar(`${line.end_point}.x`).value());
+        const ey = clean(getVar(`${line.end_point}.y`).value());
         return {
             id: line.id,
             start: [sx, sy],

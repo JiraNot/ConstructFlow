@@ -140,41 +140,55 @@ export interface OpeningElevationPath {
   fill?: string
 }
 
-import { evaluateParametricSymbol } from '@constructflow/constraint-engine'
-import { createDoorElevationSymbol, createWindowElevationSymbol } from '@constructflow/project-model/src/parametricSymbolGenerators.js'
-
 /**
  * Build front-elevation linework in opening-local coordinates (origin at its
  * lower-left corner). Canvas, PDF and DXF use this same catalog-resolved shape
  * so their frame, sash and glazing divisions cannot drift independently.
- * 
- * NOW USES THE SMART PARAMETRIC CONSTRAINT ENGINE!
  */
 export function getOpeningElevationLinework(shape: Extract<RepresentationShape, { kind: 'opening' }>): OpeningElevationPath[] {
   const width = shape.width_mm, height = shape.height_mm
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return []
   const frame = Math.min(width / 5, Math.max(25, shape.frame_face_width_mm || 50))
-  const sash = 50 // default sash width
   const paths: OpeningElevationPath[] = []
-  
-  // Create and solve the Smart Parametric Symbol
-  const parameters = { W: width, H: height, F: frame, S: sash }
-  const symbol = shape.opening_type === 'door' 
-    ? createDoorElevationSymbol(Math.max(1, Math.min(4, Math.floor(shape.panel_count || 1))), true)
-    : createWindowElevationSymbol(Math.max(1, Math.min(8, Math.floor(shape.panel_count || 2))))
-  
-  const evaluatedLines = evaluateParametricSymbol(symbol, parameters)
-  
-  // We still draw the solid white background to cover the wall lines behind the opening
-  paths.push({ points_mm: [[0, 0], [width, 0], [width, height], [0, height]], closed: true, line_width_mm: 0.35, fill: '#ffffff' })
-  
-  // Map evaluated lines to paths
-  for (const line of evaluatedLines) {
-    paths.push({ 
-      points_mm: [line.start, line.end], 
-      closed: false, 
-      line_width_mm: line.thickness === 2 ? 0.35 : line.thickness === 1 ? 0.2 : 0.25 
-    })
+  const rect = (left: number, bottom: number, right: number, top: number, line_width_mm: number, fill?: string) => {
+    if (right <= left || top <= bottom) return
+    paths.push({ points_mm: [[left, bottom], [right, bottom], [right, top], [left, top]], closed: true, line_width_mm, fill })
+  }
+  const line = (x1: number, z1: number, x2: number, z2: number, line_width_mm: number) => {
+    paths.push({ points_mm: [[x1, z1], [x2, z2]], closed: false, line_width_mm })
+  }
+
+  rect(0, 0, width, height, 0.35, '#ffffff')
+  rect(frame, frame, width - frame, height - frame, 0.25)
+  if (shape.opening_type === 'window') {
+    const panels = Math.max(1, Math.min(8, Math.floor(shape.panel_count || 2)))
+    const ratios = shape.panel_width_ratios && shape.panel_width_ratios.length === panels && shape.panel_width_ratios.every(value => Number.isFinite(value) && value > 0)
+      ? shape.panel_width_ratios
+      : Array.from({ length: panels }, () => 1 / panels)
+    let accumulated = 0
+    for (let index = 0; index < panels - 1; index++) {
+      accumulated += ratios[index]
+      const x = width * accumulated
+      line(x, frame, x, height - frame, 0.3)
+    }
+    const rows = Math.max(1, Math.min(8, Math.floor(shape.muntin_rows || 1)))
+    const columns = Math.max(1, Math.min(8, Math.floor(shape.muntin_columns || 1)))
+    for (let index = 1; index <= rows; index++) {
+      const z = frame + (height - frame * 2) * index / (rows + 1)
+      line(frame, z, width - frame, z, 0.2)
+    }
+    for (let index = 1; index <= columns; index++) {
+      const x = frame + (width - frame * 2) * index / (columns + 1)
+      line(x, frame, x, height - frame, 0.2)
+    }
+  } else {
+    const inset = frame * 1.7
+    rect(inset, inset, width - inset, height - inset, 0.2)
+    const panels = Math.max(1, Math.min(4, Math.floor(shape.panel_count || 1)))
+    for (let index = 1; index <= panels; index++) {
+      const z = inset + (height - inset * 2) * index / (panels + 1)
+      line(inset, z, width - inset, z, 0.2)
+    }
   }
 
   return paths

@@ -60,7 +60,8 @@ export class ConstructFlowSolver {
         this.solver.updateVariables();
         const results = new Map<string, number>();
         for (const [key, variable] of this.variables.entries()) {
-            results.set(key, variable.value());
+            const val = variable.value();
+            results.set(key, Math.abs(val) < 1e-9 ? 0 : val);
         }
         return results;
     }
