@@ -177,7 +177,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
         </div>
 
         {/* Preset Selector Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, padding: '16px 20px 0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, padding: '16px 20px 0' }}>
           {/* Preset 1: Carport */}
           <div
             onClick={() => handleSelectPreset('carport')}
@@ -276,7 +276,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             <div style={{ background: '#f2f6fa', padding: 10, borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#40566e' }}>1. ขนาดและตำแหน่ง ({displayUnit})</span>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
                 <div>
                   <label style={{ fontSize: 11, color: '#52677d' }}>ความกว้าง (Width):</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
@@ -328,7 +328,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
                 <div>
                   <label style={{ fontSize: 11, color: '#52677d' }}>พิกัดจุดเริ่มต้น X:</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>

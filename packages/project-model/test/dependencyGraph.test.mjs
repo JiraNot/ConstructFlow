@@ -202,3 +202,42 @@ test('unknown seeds resolve to a warning instead of a crash', () => {
   assert.match(impact.warnings[0], /ไม่พบวัตถุ missing/)
   assert.deepEqual(impact.messages, ['ไม่พบวัตถุอื่นที่ผูกกับรายการนี้'])
 })
+
+test('a declared support field outranks the host_refs fallback for the same pair', () => {
+  const project = baseProject()
+  addObject(project, 'col-a', 'structure.column', { mark: 'C1', level_id: 'GF', location_mm: [0, 0, 0], section_mm: [200, 200] })
+  addObject(project, 'col-b', 'structure.column', { mark: 'C2', level_id: 'GF', location_mm: [4000, 0, 0], section_mm: [200, 200] })
+  addObject(project, 'beam-a', 'structure.beam', {
+    mark: 'B1', level_id: 'GF', start_point_mm: [0, 0, 0], end_point_mm: [4000, 0, 0],
+    section_mm: [200, 400], start_column_id: 'col-a', end_column_id: 'col-b',
+  }, { host_refs: ['col-a', 'col-b'] })
+
+  const graph = buildDependencyGraph(project)
+  const beamEdges = graph.nodes['beam-a'].outgoing.filter(edge => edge.target_id === 'col-a')
+  // `start_column_id` describes the support; the beam must survive losing it (rehost), while a
+  // door losing its wall (`wall_id`) is deleted with it.
+  assert.deepEqual(beamEdges.map(edge => [edge.kind, edge.cascade]), [['supported_by', 'rehost']])
+  const impact = analyzeDependencyImpact(graph, ['col-a'], 'delete')
+  assert.equal(impact.entries.filter(entry => entry.object_id === 'beam-a').length, 1)
+  assert.equal(impact.entries.find(entry => entry.object_id === 'beam-a').disposition, 'needs_rehost')
+  assert.deepEqual(cascadeDeletionSet(graph, ['col-a']), ['col-a'])
+
+  addObject(project, 'wall-a', 'architecture.wall', { mark: 'W1', level_id: 'GF', start_point_mm: [0, 0, 0], end_point_mm: [4000, 0, 0], thickness_mm: 100, height_mm: 2800 })
+  addObject(project, 'door-a', 'door_window.door', { mark: 'D1', level_id: 'GF', wall_id: 'wall-a' }, { host_refs: ['wall-a'] })
+  const wallImpact = analyzeDependencyImpact(buildDependencyGraph(project), ['wall-a'], 'delete')
+  const doorEntry = wallImpact.entries.find(entry => entry.object_id === 'door-a')
+  assert.equal(doorEntry.disposition, 'cascade_delete')
+  assert.equal(doorEntry.via, 'hosted_on')
+})
+
+test('the strongest policy wins when a pair carries several edges', () => {
+  const project = baseProject()
+  addObject(project, 'wall-a', 'architecture.wall', { mark: 'W1', level_id: 'GF', start_point_mm: [0, 0, 0], end_point_mm: [4000, 0, 0], thickness_mm: 100, height_mm: 2800 })
+  addObject(project, 'socket-a', 'electrical.fixture', { mark: 'S1', level_id: 'GF', kind: 'outlet', location_mm: [1000, 40, 300] }, { host_refs: ['wall-a'] })
+  // A second, weaker relationship must not downgrade the delete cascade.
+  project.relationships.push({ kind: 'connects_to', source_id: 'socket-a', target_id: 'wall-a' })
+  const impact = analyzeDependencyImpact(buildDependencyGraph(project), ['wall-a'], 'delete')
+  const entry = impact.entries.find(candidate => candidate.object_id === 'socket-a')
+  assert.equal(entry.disposition, 'cascade_delete')
+  assert.equal(entry.via, 'hosted_on')
+})

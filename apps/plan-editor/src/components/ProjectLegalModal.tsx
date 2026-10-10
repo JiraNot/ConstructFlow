@@ -141,14 +141,14 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
             <MapPin size={18} color="#0873c4" />
             <strong style={{ fontSize: 14, color: "#33465b" }}>ข้อมูลโฉนดที่ดิน (น.ส. 4 จ.)</strong>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 7 }}>
             <div>
               <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>เลขที่โฉนด</label>
               <input
                 type="text"
                 value={deedNo}
                 onChange={(e) => setDeedNo(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
             <div>
@@ -157,7 +157,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 type="text"
                 value={landNo}
                 onChange={(e) => setLandNo(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
             <div>
@@ -166,19 +166,19 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 type="text"
                 value={surveyPage}
                 onChange={(e) => setSurveyPage(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7, marginTop: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 7, marginTop: 10 }}>
             <div>
               <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>ตำบล / แขวง</label>
               <input
                 type="text"
                 value={subdistrict}
                 onChange={(e) => setSubdistrict(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
             <div>
@@ -187,7 +187,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 type="text"
                 value={district}
                 onChange={(e) => setDistrict(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
             <div>
@@ -196,19 +196,19 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 type="text"
                 value={province}
                 onChange={(e) => setProvince(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1.5fr", gap: 7, marginTop: 10, alignItems: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 7, marginTop: 10, alignItems: "center" }}>
             <div>
               <label style={{ fontSize: 11, color: "#52677d", display: "block" }}>ไร่</label>
               <input
                 type="number"
                 value={rai}
                 onChange={(e) => setRai(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
             <div>
@@ -217,7 +217,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 type="number"
                 value={ngan}
                 onChange={(e) => setNgan(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
             <div>
@@ -226,7 +226,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 type="number"
                 value={sqWa}
                 onChange={(e) => setSqWa(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
             <div style={{ fontSize: 12, color: "#0873c4", paddingTop: 16 }}>
@@ -249,7 +249,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 step="0.1"
                 value={setbackFront}
                 onChange={(e) => setSetbackFront(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
             <div>
@@ -259,7 +259,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 step="0.1"
                 value={setbackRear}
                 onChange={(e) => setSetbackRear(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
             <div>
@@ -269,7 +269,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 step="0.1"
                 value={setbackLeft}
                 onChange={(e) => setSetbackLeft(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
             <div>
@@ -279,7 +279,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 step="0.1"
                 value={setbackRight}
                 onChange={(e) => setSetbackRight(Number(e.target.value))}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
           </div>
@@ -297,7 +297,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
               type="text"
               value={ownerName}
               onChange={(e) => setOwnerName(e.target.value)}
-              style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+              style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
             />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 7, marginBottom: 10 }}>
@@ -307,7 +307,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 type="text"
                 value={archName}
                 onChange={(e) => setArchName(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
             <div>
@@ -316,7 +316,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 type="text"
                 value={archLicense}
                 onChange={(e) => setArchLicense(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
           </div>
@@ -327,7 +327,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 type="text"
                 value={engName}
                 onChange={(e) => setEngName(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
             <div>
@@ -336,7 +336,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
                 type="text"
                 value={engLicense}
                 onChange={(e) => setEngLicense(e.target.value)}
-                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #53657b", color: "#fff", borderRadius: 2 }}
+                style={{ width: "100%", padding: "6px 8px", background: "#ffffff", border: "1px solid #ccd9e5", color: "#24364b", borderRadius: 2 }}
               />
             </div>
           </div>

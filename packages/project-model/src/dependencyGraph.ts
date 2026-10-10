@@ -227,11 +227,16 @@ export function buildDependencyGraph(project: ProjectDocument): DependencyGraph 
 
   for (const object of Object.values(project.objects)) {
     const data = dataOf(object)
+    // A host that a declared field already describes keeps that field's policy: a beam names its
+    // supporting column, and losing a support must not delete the beam the way losing a wall
+    // deletes the door hosted in it.
+    const declaredHosts = new Set<string>()
     for (const rule of DEPENDENCY_REFERENCE_FIELDS) {
       if (!rule.object_types.includes(object.object_type)) continue
       for (const targetId of resolveReferenceIds(data, rule.field)) {
         const target = nodes[targetId]
         if (target && rule.ignore_target_types?.includes(target.object_type)) continue
+        declaredHosts.add(targetId)
         push({
           kind: rule.kind,
           source_id: object.id,
@@ -245,8 +250,7 @@ export function buildDependencyGraph(project: ProjectDocument): DependencyGraph 
     }
 
     for (const hostId of object.host_refs) {
-      const declared = edges.some(edge => edge.source_id === object.id && edge.target_id === hostId && edge.kind === 'hosted_on')
-      if (declared) continue
+      if (declaredHosts.has(hostId)) continue
       push({ kind: 'hosted_on', source_id: object.id, target_id: hostId, basis: 'host_refs', origin: 'host_refs', cascade: 'delete', role: 'host' })
     }
 
