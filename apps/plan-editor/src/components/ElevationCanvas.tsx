@@ -360,13 +360,13 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
         const {x,y,w,h,topElev,baseElev,height:objHeight}=selectedVisual
         // 1. Highlight bounding box with Revit Sky Blue stroke & translucent wash
         ctx.strokeStyle='#0284c7'
-        ctx.lineWidth=2
-        ctx.fillStyle='rgba(2, 132, 199, 0.09)'
+        ctx.lineWidth=3
+        ctx.fillStyle='rgba(2, 132, 199, 0.2)'
         ctx.fillRect(x,y,w,h)
         ctx.strokeRect(x,y,w,h)
 
         // 2. Eight Revit / CAD-style square grip handles
-        const handleSize=7,half=handleSize/2
+        const handleSize=9,half=handleSize/2
         const gripPoints:[number,number][]=[
           [x,y],
           [x+w/2,y],

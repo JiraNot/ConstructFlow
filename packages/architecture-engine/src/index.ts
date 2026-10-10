@@ -1111,8 +1111,8 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         ...(dDimInput.head_level_id && !isFixedHeight ? { head_level_id: dDimInput.head_level_id, head_offset_mm: Number(dDimInput.head_offset_mm ?? 0), vertical_constraint: 'head_level' as const } : {}),
       }
       if (isFixedHeight) {
-        delete (nextDoorData as any).head_level_id
-        delete (nextDoorData as any).head_offset_mm
+        nextDoorData.head_level_id = undefined
+        nextDoorData.head_offset_mm = undefined
         nextDoorData.vertical_constraint = 'fixed_height' as const
       }
       if (nextDoorData.head_level_id !== undefined && !resolveOpeningVerticalExtent(updated, nextDoorData)) throw new Error('Door head level must be above its sill')
@@ -1351,8 +1351,8 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         ...(wDimInput.head_level_id && !isFixedHeight ? { head_level_id: wDimInput.head_level_id, head_offset_mm: Number(wDimInput.head_offset_mm ?? 0), vertical_constraint: 'head_level' as const } : {}),
       }
       if (isFixedHeight) {
-        delete (nextWindowData as any).head_level_id
-        delete (nextWindowData as any).head_offset_mm
+        nextWindowData.head_level_id = undefined
+        nextWindowData.head_offset_mm = undefined
         nextWindowData.vertical_constraint = 'fixed_height' as const
       }
       if (nextWindowData.head_level_id !== undefined && !resolveOpeningVerticalExtent(updated, nextWindowData)) throw new Error('Window head level must be above its sill')
