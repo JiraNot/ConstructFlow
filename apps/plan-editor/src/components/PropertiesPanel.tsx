@@ -22,6 +22,7 @@ import {
   resolveOpeningVerticalExtent,
   resolveColumnVerticalExtent,
   resolveBeamBaseElevation,
+  resolveSlabElevation,
   resolveArchitectureSurfaceElevation,
   formatLengthMm,
   parseLengthMm,
@@ -61,6 +62,7 @@ interface PropertiesPanelProps {
   onUpdateColumnVerticalReference: (objectId: string, changes: { base_level_id?: string; top_level_id?: string | null; base_offset_mm?: number; top_offset_mm?: number }) => void
   onUpdateBeamVerticalReference: (objectId: string, changes: { level_id?: string; base_offset_mm?: number }) => void
   onUpdateArchitectureSurface?: (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; material?: string; finish_layers?: Array<{ material: string; thickness_mm: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number; grid_mm?: [number, number] }) => void
+  onUpdateSlab?: (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; slab_system?: string; material?: string }) => void
   onUpdateFoundationMark: (objectId: string, newMark: string) => void
   onUpdateGridTag: (objectId: string, newTag: string) => void
   onModifyGrid: (objectId: string, changes: { start_point_mm?: [number, number]; end_point_mm?: [number, number]; bubble_visible?: boolean; auto_tag?: boolean; sequence_style?: 'auto' | 'alpha' | 'numeric' }) => void
@@ -90,6 +92,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateColumnVerticalReference,
   onUpdateBeamVerticalReference,
   onUpdateArchitectureSurface,
+  onUpdateSlab,
   onUpdateFoundationMark,
   onUpdateGridTag,
   onModifyGrid,
@@ -751,14 +754,24 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับประตู</strong>
             <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ธรณี/ยกจากพื้น ({displayUnit})<LengthInput aria-label="ระดับธรณีประตู" value={doorObj.module_data.sill_height_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { sill_height_mm: value })} style={verticalSelectStyle} /></label>
             <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>หัวประตูจบที่ระดับ
-              <select aria-label="ระดับหัวประตู" value={doorObj.module_data.head_level_id ?? ''} onChange={e => e.target.value
-                ? onUpdateOpeningVertical(doorObj.id, { head_level_id: e.target.value, head_offset_mm: 0 })
-                : onUpdateOpeningVertical(doorObj.id, { head_level_id: undefined, vertical_constraint: 'fixed_height', height_mm: doorVertical?.height_mm ?? doorObj.module_data.height_mm })} style={verticalSelectStyle}>
-                <option value="">กำหนดความสูงบานเอง</option>
-                {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === doorObj.module_data.level_id)?.elevation_mm ?? 0)).map(level => <option key={level.id} value={level.id}>{level.name} · +{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit}</option>)}
+              <select aria-label="ระดับหัวประตู" value={doorObj.module_data.head_level_id || ''} onChange={e => e.target.value
+                ? onUpdateOpeningVertical(doorObj.id, { head_level_id: e.target.value, head_offset_mm: 0, vertical_constraint: 'head_level' })
+                : onUpdateOpeningVertical(doorObj.id, { head_level_id: '', vertical_constraint: 'fixed_height', height_mm: doorVertical?.height_mm ?? doorObj.module_data.height_mm })} style={verticalSelectStyle}>
+                <option value="">กำหนดความสูงบานเอง (Fixed Height)</option>
+                {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === (doorObj.module_data.level_id || doorObj.level_refs?.[0]?.level_id))?.elevation_mm ?? 0)).map(level => <option key={level.id} value={level.id}>{level.name} · +{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit}</option>)}
               </select>
             </label>
-            {doorObj.module_data.head_level_id ? <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระยะหัวประตูจากระดับ ({displayUnit})<LengthInput aria-label="ระยะหัวประตูจากระดับ" value={doorObj.module_data.head_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { head_offset_mm: value })} style={verticalSelectStyle} /></label> : <div style={{ fontSize: 10, color: '#52677d' }}>ความสูงช่อง {formatLengthMm(doorVertical?.height_mm ?? doorObj.module_data.height_mm, displayUnit)} {displayUnit}</div>}
+            {doorObj.module_data.head_level_id ? (
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+                ระยะหัวประตูจากระดับ ({displayUnit})
+                <LengthInput aria-label="ระยะหัวประตูจากระดับ" value={doorObj.module_data.head_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { head_offset_mm: value })} style={verticalSelectStyle} />
+              </label>
+            ) : (
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+                ความสูงประตู ({displayUnit})
+                <LengthInput aria-label="ความสูงประตู" value={doorObj.module_data.height_mm} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { vertical_constraint: 'fixed_height', height_mm: value })} style={verticalSelectStyle} />
+              </label>
+            )}
           </section>
 
           {/* Door Handing with Flip button */}
@@ -851,14 +864,24 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับหน้าต่าง</strong>
             <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ธรณีหน้าต่างจากพื้น ({displayUnit})<LengthInput aria-label="ระดับธรณีหน้าต่าง" value={winObj.module_data.sill_height_mm} unit={displayUnit} onChange={value => onUpdateOpeningVertical(winObj.id, { sill_height_mm: value })} style={verticalSelectStyle} /></label>
             <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>หัวหน้าต่างจบที่ระดับ
-              <select aria-label="ระดับหัวหน้าต่าง" value={winObj.module_data.head_level_id ?? ''} onChange={e => e.target.value
-                ? onUpdateOpeningVertical(winObj.id, { head_level_id: e.target.value, head_offset_mm: 0 })
-                : onUpdateOpeningVertical(winObj.id, { head_level_id: undefined, vertical_constraint: 'fixed_height', height_mm: windowVertical?.height_mm ?? winObj.module_data.height_mm })} style={verticalSelectStyle}>
-                <option value="">กำหนดความสูงเอง</option>
-                {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === winObj.module_data.level_id)?.elevation_mm ?? 0)).map(level => <option key={level.id} value={level.id}>{level.name} · +{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit}</option>)}
+              <select aria-label="ระดับหัวหน้าต่าง" value={winObj.module_data.head_level_id || ''} onChange={e => e.target.value
+                ? onUpdateOpeningVertical(winObj.id, { head_level_id: e.target.value, head_offset_mm: 0, vertical_constraint: 'head_level' })
+                : onUpdateOpeningVertical(winObj.id, { head_level_id: '', vertical_constraint: 'fixed_height', height_mm: windowVertical?.height_mm ?? winObj.module_data.height_mm })} style={verticalSelectStyle}>
+                <option value="">กำหนดความสูงเอง (Fixed Height)</option>
+                {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === (winObj.module_data.level_id || winObj.level_refs?.[0]?.level_id))?.elevation_mm ?? 0)).map(level => <option key={level.id} value={level.id}>{level.name} · +{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit}</option>)}
               </select>
             </label>
-            {winObj.module_data.head_level_id ? <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>ระยะหัวหน้าต่างจากระดับ ({displayUnit})<LengthInput aria-label="ระยะหัวหน้าต่างจากระดับ" value={winObj.module_data.head_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(winObj.id, { head_offset_mm: value })} style={verticalSelectStyle} /></label> : <div style={{ fontSize: 10, color: '#52677d' }}>ความสูงช่อง {formatLengthMm(windowVertical?.height_mm ?? winObj.module_data.height_mm, displayUnit)} {displayUnit}</div>}
+            {winObj.module_data.head_level_id ? (
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+                ระยะหัวหน้าต่างจากระดับ ({displayUnit})
+                <LengthInput aria-label="ระยะหัวหน้าต่างจากระดับ" value={winObj.module_data.head_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(winObj.id, { head_offset_mm: value })} style={verticalSelectStyle} />
+              </label>
+            ) : (
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+                ความสูงหน้าต่าง ({displayUnit})
+                <LengthInput aria-label="ความสูงหน้าต่าง" value={winObj.module_data.height_mm} unit={displayUnit} onChange={value => onUpdateOpeningVertical(winObj.id, { vertical_constraint: 'fixed_height', height_mm: value })} style={verticalSelectStyle} />
+              </label>
+            )}
           </section>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#52677d' }}>
@@ -944,13 +967,56 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       {slabObj && (
         (() => {
           const slabData = slabObj.module_data as Record<string, unknown>
-          return <section style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid #dbe3ed', borderRadius: 8 }}>
-            <strong style={{ fontSize: 12 }}>พื้น {String(slabData.mark ?? '')}</strong>
-            <span style={{ fontSize: 11, color: '#52677d' }}>
-              ระดับ {project.levels.find(level => level.id === slabData.level_id)?.name ?? String(slabData.level_id ?? '')} · หนา {formatLengthMm(Number(slabData.thickness_mm ?? 0), displayUnit)} {displayUnit} · ช่องเจาะ {Array.isArray(slabData.voids_mm) ? slabData.voids_mm.length : 0} ช่อง
-            </span>
-            <button type="button" onClick={() => onDrawSurfaceVoid(slabObj.id)} style={verticalSelectStyle}>วาดช่องเจาะพื้น</button>
-          </section>
+          const levelId = typeof slabData.level_id === 'string' ? slabData.level_id : project.project.active_level_id
+          const level = project.levels.find(item => item.id === levelId)
+          const resolvedElevation = resolveSlabElevation(project, slabObj)
+          const currentOffset = resolvedElevation !== undefined && level ? resolvedElevation - level.elevation_mm : Number(slabData.elevation_offset_mm ?? 0)
+          const thickness = Number(slabData.thickness_mm ?? 120)
+          return (
+            <section style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid #dbe3ed', borderRadius: 8, background: '#f8fafc' }}>
+              <strong style={{ fontSize: 12 }}>แผ่นพื้นโครงสร้าง {String(slabData.mark ?? '')}</strong>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+                อ้างอิงระดับชั้น
+                <select
+                  aria-label="ระดับอ้างอิงพื้นโครงสร้าง"
+                  value={levelId}
+                  onChange={event => onUpdateSlab?.(slabObj.id, { level_id: event.target.value })}
+                  style={verticalSelectStyle}
+                >
+                  {project.levels.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} · {(item.elevation_mm / 1000).toFixed(3)} m
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+                เยื้องจากระดับชั้น (Offset) ({displayUnit})
+                <LengthInput
+                  aria-label={`ระยะเยื้องพื้นโครงสร้าง (${displayUnit})`}
+                  value={currentOffset}
+                  unit={displayUnit}
+                  onChange={value => onUpdateSlab?.(slabObj.id, { elevation_offset_mm: value })}
+                  style={verticalSelectStyle}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: '#52677d' }}>
+                ความหนาพื้น ({displayUnit})
+                <LengthInput
+                  aria-label={`ความหนาพื้นโครงสร้าง (${displayUnit})`}
+                  value={thickness}
+                  unit={displayUnit}
+                  onChange={value => onUpdateSlab?.(slabObj.id, { thickness_mm: value })}
+                  style={verticalSelectStyle}
+                />
+              </label>
+              <div style={{ fontSize: 10, color: '#52677d', display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                <span>หลังพื้น: +{formatLengthMm(resolvedElevation ?? 0, displayUnit)} {displayUnit}</span>
+                <span>ท้องพื้น: +{formatLengthMm((resolvedElevation ?? 0) - thickness, displayUnit)} {displayUnit}</span>
+              </div>
+              <button type="button" onClick={() => onDrawSurfaceVoid(slabObj.id)} style={verticalSelectStyle}>วาดช่องเจาะพื้น</button>
+            </section>
+          )
         })()
       )}
       {architectureSurfaceObj && (() => {

@@ -1078,6 +1078,34 @@ export const App: React.FC = () => {
     } else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
   }
 
+  const handleUpdateSlab = (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; slab_system?: string; material?: string }) => {
+    const object = project.objects[objectId]
+    if (!object || object.object_type !== 'structure.slab') return
+    const data = object.module_data as Record<string, unknown>
+    const oldLevelId = typeof data.level_id === 'string' ? data.level_id : project.project.active_level_id
+    const levelId = changes.level_id ?? oldLevelId
+    const level = project.levels.find(item => item.id === levelId)
+    if (!level) { setFileFeedback(`ไม่พบระดับชั้น ${levelId}`); return }
+    const oldLevel = project.levels.find(item => item.id === oldLevelId)
+    const currentResolved = Number(data.elevation_mm ?? (oldLevel ? oldLevel.elevation_mm + Number(data.elevation_offset_mm ?? 0) : 0))
+    const currentOffset = Number(data.elevation_offset_mm ?? (oldLevel ? currentResolved - oldLevel.elevation_mm : 0))
+    const offset = changes.elevation_offset_mm !== undefined ? changes.elevation_offset_mm : currentOffset
+    const res = CommandBus.execute(project, 'UpdateSlab', {
+      ...data,
+      ...changes,
+      id: objectId,
+      level_id: levelId,
+      elevation_offset_mm: offset,
+      elevation_mm: level.elevation_mm + offset,
+    })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
+    } else if (res.result.errors?.length) {
+      setFileFeedback(res.result.errors.join(' · '))
+    }
+  }
+
   // Rename Foundation Mark handler
   const handleUpdateFoundationMark = (objectId: string, newMark: string) => {
     const res = CommandBus.execute(project, 'UpdateFoundationMark', {
@@ -1156,12 +1184,14 @@ export const App: React.FC = () => {
     const opening = project.objects[objectId]
     if (!opening || (!isDoorObject(opening) && !isWindowObject(opening))) return
     const data = opening.module_data
+    const isFixed = changes.vertical_constraint === 'fixed_height' || changes.head_level_id === '' || changes.head_level_id === null
     const result = CommandBus.execute(project, isDoorObject(opening) ? 'UpdateDoorDimensions' : 'UpdateWindowDimensions', {
       object_id: objectId,
       width_mm: data.width_mm,
-      height_mm: data.height_mm,
-      ...(isWindowObject(opening) ? { sill_height_mm: data.sill_height_mm } : {}),
+      height_mm: changes.height_mm ?? data.height_mm,
+      ...(isWindowObject(opening) ? { sill_height_mm: changes.sill_height_mm ?? data.sill_height_mm } : {}),
       ...changes,
+      ...(isFixed ? { head_level_id: '', vertical_constraint: 'fixed_height' } : {}),
     })
     if (result.result.status === 'success') {
       setProject(result.updatedProject)
@@ -1817,6 +1847,7 @@ export const App: React.FC = () => {
             onUpdateColumnVerticalReference={handleUpdateColumnVerticalReference}
             onUpdateBeamVerticalReference={handleUpdateBeamVerticalReference}
             onUpdateArchitectureSurface={handleUpdateArchitectureSurface}
+            onUpdateSlab={handleUpdateSlab}
             onUpdateFoundationMark={handleUpdateFoundationMark}
             onUpdateGridTag={handleUpdateGridTag}
             onModifyGrid={handleModifyGrid}

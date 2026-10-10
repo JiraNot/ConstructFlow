@@ -230,6 +230,18 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
         ctx.restore();ctx.strokeStyle='#64748b';ctx.lineWidth=1.3;ctx.beginPath();ctx.moveTo(0,groundY);ctx.lineTo(width,groundY);ctx.stroke()
       }
       hitRegions.current=[]
+      let selectedVisual: {
+        id: string
+        x: number
+        y: number
+        w: number
+        h: number
+        topElev?: number
+        baseElev?: number
+        height?: number
+        label?: string
+      } | null = null
+
       for(const o of orderedItems){
         if(!groundDrawn&&o.object_type!=='structure.column'&&o.object_type!=='structure.beam'&&o.object_type!=='structure.slab'){drawGroundHatch();groundDrawn=true}
         const d=o.module_data as Record<string,unknown>; let left=0,right=0,bottom=0,top=0; let fill='#d8e1ea',stroke='#475569'
@@ -241,6 +253,9 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           bottom=sy(extent.base_elevation_mm);top=sy(extent.top_elevation_mm)
           const wallStyle=getElevationWallStyle(getDisplayPhase(o),selectedId===o.id)
           fill=wallStyle.fill;ctx.fillStyle=wallStyle.fill;ctx.strokeStyle=wallStyle.stroke;ctx.lineWidth=wallStyle.lineWidth;ctx.setLineDash(wallStyle.dash);ctx.fillRect(left,top,right-left,bottom-top);ctx.strokeRect(left,top,right-left,bottom-top);ctx.setLineDash([])
+          if(selectedId===o.id){
+            selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:extent.top_elevation_mm,baseElev:extent.base_elevation_mm,height:extent.height_mm,label:String(d.mark||'Wall')}
+          }
           const faceMark=resolveElevationWallFaceMark(project,o,direction as Exclude<ElevationDirection,'rcp'>)
           // Place the wall-face mark in the longest uninterrupted facade span,
           // so hosted doors/windows do not cover it and it stays on the wall.
@@ -256,14 +271,30 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           if(best[1]-best[0]>=markWidth+8)elevationTags.push({x:(best[0]+best[1])/2,y:(top+bottom)/2,width:markWidth,height:18,text:markText,shape:'triangle',selected:selectedId===o.id})
         }else if(o.object_type==='structure.column'){
           const p=d.location_mm as number[];if(!p)continue;const extent=resolveColumnVerticalExtent(project,o);if(!extent)continue;const half=Number((d.section_mm as number[]|undefined)?.[isEastWest?0:1]??200)/2,base=extent.base_elevation_mm,topElevation=extent.top_elevation_mm
-          left=sx(horizontalCoordinate(p)-half);right=sx(horizontalCoordinate(p)+half);bottom=sy(topElevation);top=sy(base);fill='#b9d6e8'
+          left=sx(horizontalCoordinate(p)-half);right=sx(horizontalCoordinate(p)+half);bottom=sy(topElevation);top=sy(base)
+          fill=selectedId===o.id?'#a2cbe5':'#b9d6e8';stroke=selectedId===o.id?'#0284c7':'#475569'
+          ctx.lineWidth=selectedId===o.id?2:1
           ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.fillRect(left,bottom,right-left,top-bottom);ctx.strokeRect(left,bottom,right-left,top-bottom)
+          if(selectedId===o.id){
+            selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:extent.top_elevation_mm,baseElev:extent.base_elevation_mm,height:extent.height_mm,label:String(d.mark||'Column')}
+          }
         }else if(o.object_type==='structure.beam'){
           const a=d.start_point_mm as number[],b=d.end_point_mm as number[];if(!a||!b)continue
-          const z=resolveBeamBaseElevation(project,o);if(z===undefined)continue;const dep=Number((d.section_mm as number[]|undefined)?.[1]??400),drop=Number(d.drop_mm??0);left=sx(Math.min(horizontalCoordinate(a),horizontalCoordinate(b)));right=sx(Math.max(horizontalCoordinate(a),horizontalCoordinate(b)));top=sy(z+dep-drop);bottom=sy(z-drop);fill='#9ca3af'
+          const z=resolveBeamBaseElevation(project,o);if(z===undefined)continue;const dep=Number((d.section_mm as number[]|undefined)?.[1]??400),drop=Number(d.drop_mm??0);left=sx(Math.min(horizontalCoordinate(a),horizontalCoordinate(b)));right=sx(Math.max(horizontalCoordinate(a),horizontalCoordinate(b)));top=sy(z+dep-drop);bottom=sy(z-drop)
+          fill=selectedId===o.id?'#8ea7bf':'#9ca3af';stroke=selectedId===o.id?'#0284c7':'#475569'
+          ctx.lineWidth=selectedId===o.id?2:1
           ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.fillRect(left,top,right-left,bottom-top);ctx.strokeRect(left,top,right-left,bottom-top)
+          if(selectedId===o.id){
+            selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:z+dep-drop,baseElev:z-drop,height:dep,label:String(d.mark||'Beam')}
+          }
         }else if(o.object_type==='structure.slab'){
-          const ring=d.boundary_mm as number[][];if(!ring?.length)continue;const coords=ring.map(p=>sx(horizontalCoordinate(p)));left=Math.min(...coords);right=Math.max(...coords);const z=resolveSlabElevation(project,o);if(z===undefined)continue;top=sy(z);bottom=sy(z-Number(d.thickness_mm??120));fill='#a8b2bf';ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.fillRect(left,top,right-left,bottom-top);ctx.strokeRect(left,top,right-left,bottom-top)
+          const ring=d.boundary_mm as number[][];if(!ring?.length)continue;const coords=ring.map(p=>sx(horizontalCoordinate(p)));left=Math.min(...coords);right=Math.max(...coords);const z=resolveSlabElevation(project,o);if(z===undefined)continue;top=sy(z);bottom=sy(z-Number(d.thickness_mm??120))
+          fill=selectedId===o.id?'#97b4cd':'#a8b2bf';stroke=selectedId===o.id?'#0284c7':'#475569'
+          ctx.lineWidth=selectedId===o.id?2:1
+          ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.fillRect(left,top,right-left,bottom-top);ctx.strokeRect(left,top,right-left,bottom-top)
+          if(selectedId===o.id){
+            selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:z,baseElev:z-Number(d.thickness_mm??120),height:Number(d.thickness_mm??120),label:String(d.mark||'Slab')}
+          }
         }else if(o.object_type==='door_window.door'||o.object_type==='door_window.window'){
           const p=d.location_mm as number[];if(!p)continue;const vertical=resolveOpeningVerticalExtent(project,o);if(!vertical)continue
           const representation=representations.get(o.id),shape=representation?.shape.kind==='opening'?representation.shape:undefined
@@ -281,6 +312,9 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
             if(path.fill){ctx.fillStyle=path.fill;ctx.fill()}
             ctx.lineWidth=selectedId===o.id?Math.max(1.2,path.line_width_mm*scale):Math.max(.7,path.line_width_mm*scale)
             ctx.stroke()
+          }
+          if(selectedId===o.id){
+            selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:vertical.top_elevation_mm,baseElev:vertical.base_elevation_mm,height:vertical.height_mm,label:String(d.mark||(o.object_type==='door_window.door'?'Door':'Window'))}
           }
           ctx.font='bold 10px sans-serif'
           const tagText=String(d.mark??'')
@@ -303,6 +337,9 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           ctx.stroke();ctx.setLineDash([])
           const projected=shape.triangles_mm.flat().map(point=>[sx(horizontalCoordinate(point)),sy(point[2])])
           left=Math.min(...projected.map(point=>point[0]));right=Math.max(...projected.map(point=>point[0]));top=Math.min(...projected.map(point=>point[1]));bottom=Math.max(...projected.map(point=>point[1]))
+          if(selectedId===o.id){
+            selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),label:String(d.mark||'Roof')}
+          }
         }else continue
         hitRegions.current.push({id:o.id,x:left,y:Math.min(top,bottom),w:Math.max(5,right-left),h:Math.max(5,Math.abs(bottom-top))})
       }
@@ -316,6 +353,72 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
       // Level labels are annotation, so keep them above facade fills, columns,
       // and the earth hatch. Datum lines remain behind the model geometry.
       drawLevelLabels()
+
+      // Revit-style selection outline, grip handles, and temporary elevation badges
+      if(selectedVisual){
+        ctx.save()
+        const {x,y,w,h,topElev,baseElev,height:objHeight}=selectedVisual
+        // 1. Highlight bounding box with Revit Sky Blue stroke & translucent wash
+        ctx.strokeStyle='#0284c7'
+        ctx.lineWidth=2
+        ctx.fillStyle='rgba(2, 132, 199, 0.09)'
+        ctx.fillRect(x,y,w,h)
+        ctx.strokeRect(x,y,w,h)
+
+        // 2. Eight Revit / CAD-style square grip handles
+        const handleSize=7,half=handleSize/2
+        const gripPoints:[number,number][]=[
+          [x,y],
+          [x+w/2,y],
+          [x+w,y],
+          [x,y+h/2],
+          [x+w,y+h/2],
+          [x,y+h],
+          [x+w/2,y+h],
+          [x+w,y+h],
+        ]
+        for(const [gx,gy] of gripPoints){
+          ctx.fillStyle='#ffffff'
+          ctx.fillRect(gx-half,gy-half,handleSize,handleSize)
+          ctx.strokeStyle='#0284c7'
+          ctx.lineWidth=1.5
+          ctx.strokeRect(gx-half,gy-half,handleSize,handleSize)
+        }
+
+        // 3. Temporary Elevation & Dimension Badges (Revit style)
+        ctx.font='bold 9px sans-serif'
+        ctx.textBaseline='middle'
+        const drawBadge=(bx:number,by:number,text:string)=>{
+          const textW=ctx.measureText(text).width
+          const pw=textW+10,ph=15
+          ctx.fillStyle='rgba(15, 23, 42, 0.88)'
+          ctx.beginPath()
+          if(typeof ctx.roundRect==='function'){
+            ctx.roundRect(bx-pw/2,by-ph/2,pw,ph,3)
+          }else{
+            ctx.rect(bx-pw/2,by-ph/2,pw,ph)
+          }
+          ctx.fill()
+          ctx.strokeStyle='#38bdf8'
+          ctx.lineWidth=0.8
+          ctx.stroke()
+          ctx.fillStyle='#ffffff'
+          ctx.textAlign='center'
+          ctx.fillText(text,bx,by+0.5)
+        }
+        if(topElev!==undefined){
+          const topSign=topElev>=0?'+':''
+          drawBadge(x+w/2,y-11,`▲ ${topSign}${(topElev/1000).toFixed(3)} m`)
+        }
+        if(baseElev!==undefined){
+          const baseSign=baseElev>=0?'+':''
+          drawBadge(x+w/2,y+h+11,`▼ ${baseSign}${(baseElev/1000).toFixed(3)} m`)
+        }
+        if(objHeight!==undefined&&objHeight>0){
+          drawBadge(x+w+28,y+h/2,`H ${(objHeight/1000).toFixed(3)} m`)
+        }
+        ctx.restore()
+      }
       ctx.textBaseline='alphabetic'
       ctx.fillStyle='#64748b';ctx.font='12px sans-serif';ctx.fillText(`${isEastWest?'รูปด้านตะวันออก/ตะวันตก · แกนฉาย Y':'รูปด้านเหนือ/ใต้ · แกนฉาย X'} · ${Math.round(viewState.current[direction].zoom*100)}%`,12,20)
     }

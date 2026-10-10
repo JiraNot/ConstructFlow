@@ -47,6 +47,7 @@ export function decodeSlab(
     ...placement(d, p),
     boundary_mm,
     elevation_mm: resolveSlabElevation(p, d) ?? num(d.elevation_mm, "elevation_mm"),
+    ...(typeof d.elevation_offset_mm === "number" ? { elevation_offset_mm: d.elevation_offset_mm } : {}),
     ...(voids_mm.length ? { voids_mm } : {}),
     thickness_mm: positive(d.thickness_mm, "thickness_mm"),
     topping_mm: num(d.topping_mm ?? 0, "topping_mm", 0),

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createEmptyProjectDocument, deserializeProject, serializeProject } from '@constructflow/project-model'
+import { createEmptyProjectDocument, deserializeProject, serializeProject, resolveSlabElevation, resolveOpeningVerticalExtent } from '@constructflow/project-model'
 import { CommandBus, ProjectCommandSession } from '../dist/index.js'
 import { detectClosedWallRooms } from '../../architecture-engine/dist/index.js'
 import { resolveArchitectureSurfaceElevation } from '@constructflow/project-model'
@@ -535,3 +535,85 @@ test('stair width is a valid architecture property and the demo stair survives p
   assert.ok(stair)
   assert.equal(stair.module_data.width_mm, 1000)
 })
+
+test('window head level can switch to roof level and reliably revert to fixed_height', () => {
+  let project = createEmptyProjectDocument(crypto.randomUUID())
+  project.levels = [
+    { id: 'GF', name: 'Ground Floor', elevation_mm: 400, storey_index: 1, height_mm: 2900 },
+    { id: 'L1', name: 'First Floor', elevation_mm: 3300, storey_index: 2, height_mm: 3200 },
+    { id: 'RF', name: 'Roof Level', elevation_mm: 6500, storey_index: 3, height_mm: 500 },
+  ]
+  const wallId = crypto.randomUUID(), windowId = crypto.randomUUID()
+  project = run(project, 'CreateWall', { id: wallId, mark: 'W1', start_point_mm: [0, 0, 0], end_point_mm: [4000, 0, 0], thickness_mm: 100, height_mm: 2800, level_id: 'L1' })
+  project = run(project, 'CreateWindow', { id: windowId, mark: 'W1', wall_id: wallId, location_mm: [1500, 0, 0], offset_along_wall_mm: 1500, width_mm: 1200, height_mm: 1200, sill_height_mm: 900, level_id: 'L1' })
+
+  // 1. Constrain window head to Roof Level
+  project = run(project, 'UpdateWindowDimensions', {
+    object_id: windowId,
+    width_mm: 1200,
+    head_level_id: 'RF',
+    head_offset_mm: 0,
+  })
+  let win = project.objects[windowId]
+  assert.equal(win.module_data.head_level_id, 'RF')
+  assert.equal(win.module_data.vertical_constraint, 'head_level')
+  let extent = resolveOpeningVerticalExtent(project, win)
+  assert.ok(extent)
+  assert.equal(extent.top_elevation_mm, 6500)
+
+  // 2. Revert back to custom/fixed height
+  project = run(project, 'UpdateWindowDimensions', {
+    object_id: windowId,
+    width_mm: 1200,
+    height_mm: 1400,
+    head_level_id: undefined,
+    vertical_constraint: 'fixed_height',
+  })
+  win = project.objects[windowId]
+  assert.equal(win.module_data.head_level_id, undefined)
+  assert.equal(win.module_data.vertical_constraint, 'fixed_height')
+  assert.equal(win.module_data.height_mm, 1400)
+  extent = resolveOpeningVerticalExtent(project, win)
+  assert.ok(extent)
+  assert.equal(extent.height_mm, 1400)
+  assert.equal(extent.top_elevation_mm, 3300 + 900 + 1400)
+})
+
+test('structural slab can be updated with level_id, elevation_offset_mm, and thickness_mm', () => {
+  let project = createEmptyProjectDocument(crypto.randomUUID())
+  project.levels = [
+    { id: 'GF', name: 'Ground Floor', elevation_mm: 400, storey_index: 1, height_mm: 2900 },
+    { id: 'L1', name: 'First Floor', elevation_mm: 3300, storey_index: 2, height_mm: 3200 },
+  ]
+  const slabId = crypto.randomUUID()
+  project = run(project, 'CreateSlab', {
+    id: slabId,
+    mark: 'S1',
+    level_id: 'GF',
+    boundary_mm: [[0, 0], [4000, 0], [4000, 3000], [0, 3000]],
+    elevation_mm: 400,
+    elevation_offset_mm: 0,
+    thickness_mm: 120,
+    slab_system: 'suspended',
+    material: 'reinforced_concrete',
+  })
+
+  // Update slab: move to L1 with -100mm offset (for topping) and 150mm thickness
+  project = run(project, 'UpdateSlab', {
+    id: slabId,
+    mark: 'S1',
+    level_id: 'L1',
+    boundary_mm: [[0, 0], [4000, 0], [4000, 3000], [0, 3000]],
+    elevation_offset_mm: -100,
+    thickness_mm: 150,
+    slab_system: 'suspended',
+    material: 'reinforced_concrete',
+  })
+  const slab = project.objects[slabId]
+  assert.equal(slab.module_data.level_id, 'L1')
+  assert.equal(slab.module_data.elevation_offset_mm, -100)
+  assert.equal(slab.module_data.thickness_mm, 150)
+  const resolved = resolveSlabElevation(project, slab)
+  assert.equal(resolved, 3300 - 100) // 3200 mm
+})
+

@@ -1102,15 +1102,20 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         }
       }
 
+      const isFixedHeight = dDimInput.vertical_constraint === 'fixed_height' || dDimInput.head_level_id === '' || dDimInput.head_level_id === null || dDimInput.head_level_id === undefined
       const nextDoorData = {
         ...target.module_data,
         width_mm: dDimInput.width_mm,
         height_mm: dDimInput.height_mm ?? target.module_data.height_mm,
         sill_height_mm: dDimInput.sill_height_mm ?? target.module_data.sill_height_mm ?? 0,
-        ...(dDimInput.head_level_id !== undefined ? { head_level_id: dDimInput.head_level_id, head_offset_mm: Number(dDimInput.head_offset_mm ?? 0), vertical_constraint: 'head_level' as const } : {}),
-        ...(dDimInput.vertical_constraint === 'fixed_height' ? { head_level_id: undefined, vertical_constraint: 'fixed_height' as const } : {}),
+        ...(dDimInput.head_level_id && !isFixedHeight ? { head_level_id: dDimInput.head_level_id, head_offset_mm: Number(dDimInput.head_offset_mm ?? 0), vertical_constraint: 'head_level' as const } : {}),
       }
-      if (dDimInput.head_level_id !== undefined && !resolveOpeningVerticalExtent(updated, nextDoorData)) throw new Error('Door head level must be above its sill')
+      if (isFixedHeight) {
+        delete (nextDoorData as any).head_level_id
+        delete (nextDoorData as any).head_offset_mm
+        nextDoorData.vertical_constraint = 'fixed_height' as const
+      }
+      if (nextDoorData.head_level_id !== undefined && !resolveOpeningVerticalExtent(updated, nextDoorData)) throw new Error('Door head level must be above its sill')
       const doorType = resolveCatalogType(updated, target.object_type, typeof nextDoorData.type_id === 'string' ? nextDoorData.type_id : nextDoorData.mark)
       updated.objects[dDimInput.object_id] = {
         ...target,
@@ -1337,15 +1342,20 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         }
       }
 
+      const isFixedHeight = wDimInput.vertical_constraint === 'fixed_height' || wDimInput.head_level_id === '' || wDimInput.head_level_id === null || wDimInput.head_level_id === undefined
       const nextWindowData = {
         ...target.module_data,
         width_mm: wDimInput.width_mm,
         height_mm: wDimInput.height_mm ?? target.module_data.height_mm,
         sill_height_mm: wDimInput.sill_height_mm ?? target.module_data.sill_height_mm,
-        ...(wDimInput.head_level_id !== undefined ? { head_level_id: wDimInput.head_level_id, head_offset_mm: Number(wDimInput.head_offset_mm ?? 0), vertical_constraint: 'head_level' as const } : {}),
-        ...(wDimInput.vertical_constraint === 'fixed_height' ? { head_level_id: undefined, vertical_constraint: 'fixed_height' as const } : {}),
+        ...(wDimInput.head_level_id && !isFixedHeight ? { head_level_id: wDimInput.head_level_id, head_offset_mm: Number(wDimInput.head_offset_mm ?? 0), vertical_constraint: 'head_level' as const } : {}),
       }
-      if (wDimInput.head_level_id !== undefined && !resolveOpeningVerticalExtent(updated, nextWindowData)) throw new Error('Window head level must be above its sill')
+      if (isFixedHeight) {
+        delete (nextWindowData as any).head_level_id
+        delete (nextWindowData as any).head_offset_mm
+        nextWindowData.vertical_constraint = 'fixed_height' as const
+      }
+      if (nextWindowData.head_level_id !== undefined && !resolveOpeningVerticalExtent(updated, nextWindowData)) throw new Error('Window head level must be above its sill')
       const windowType = resolveCatalogType(updated, target.object_type, typeof nextWindowData.type_id === 'string' ? nextWindowData.type_id : nextWindowData.mark)
       updated.objects[wDimInput.object_id] = {
         ...target,
