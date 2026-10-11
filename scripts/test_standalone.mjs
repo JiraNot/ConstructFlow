@@ -54,6 +54,7 @@ for (const directory of [
   "packages/extension-engine",
   "packages/cad-adapter",
   "packages/bim-adapter",
+  "apps/plan-editor",
 ]) {
   const result = run(directory, ["test"], true)
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`

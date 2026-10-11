@@ -5,7 +5,7 @@ import type { ProjectDocument } from '@constructflow/project-model'
 import { resolveOpeningMuntinGrid, muntinGridPositions, type OpeningGridZone } from '@constructflow/architecture-engine'
 import { buildProjectRepresentations3D, getPlanVisibleObjects, doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement, type ObjectRepresentation3D, type RepresentationInteraction } from '@constructflow/representation-engine'
 import type { CoordinationFinding } from '@constructflow/clash-engine'
-import { buildCoordinationHighlightGroup, disposeCoordinationHighlightGroup } from '../rendering/coordinationHighlight3d.js'
+import { buildCoordinationHighlightGroup, disposeCoordinationHighlightGroup } from '../rendering/coordinationHighlight3d.mjs'
 
 type ModelObject3D = THREE.Object3D & { userData: { objectId: string; objectType: string; moveable: boolean; interaction: RepresentationInteraction } }
 const mmToM = (value: number) => value / 1000
