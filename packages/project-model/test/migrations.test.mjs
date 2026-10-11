@@ -6,6 +6,7 @@ import { DEFAULT_TYPES, createEmptyProjectDocument, deserializeProject, serializ
 const fixtureUrl = new URL('../../../examples/kitchen-extension-proof-v1.cfproj', import.meta.url)
 const fixtureText = await readFile(fixtureUrl, 'utf8')
 const currentFixtureText = await readFile(new URL('../../../examples/kitchen-extension-proof.cfproj', import.meta.url), 'utf8')
+const houseDemoText = await readFile(new URL('../../../examples/constructflow-house-demo.cfproj', import.meta.url), 'utf8')
 const fixture = JSON.parse(fixtureText)
 const typeUuidV5 = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
@@ -68,6 +69,38 @@ test('S0: v1 migration preserves extension fields and resolves every fixture obj
     assert.equal(type.object_type, object.object_type, `${object.id} resolves within its object family`)
   }
   assert.deepEqual(deserializeProject(serializeProject(migrated)).extensions, legacy.extensions)
+})
+
+test('S0: v1 envelope migration validates a representative multi-storey, multi-domain model', () => {
+  const legacyEnvelope = JSON.parse(houseDemoText)
+  legacyEnvelope.schema_version = 1
+
+  const migrated = deserializeProject(JSON.stringify(legacyEnvelope))
+  const migratedAgain = deserializeProject(JSON.stringify(legacyEnvelope))
+  const sourceIds = Object.keys(legacyEnvelope.objects).sort()
+  const typeById = new Map(migrated.types.map(type => [type.id, type]))
+  const familyCounts = new Map()
+
+  assert.equal(migrated.schema_version, 2)
+  assert.equal(Object.keys(migrated.objects).length, 115)
+  assert.deepEqual(Object.keys(migrated.objects).sort(), sourceIds)
+  assert.equal(migrated.relationships.length, 44)
+  assert.ok(migrated.levels.length >= 2)
+  assert.ok(new Set(Object.values(migrated.objects).map(object => object.object_type)).size >= 15)
+  assert.equal(serializeProject(migratedAgain), serializeProject(migrated))
+
+  for (const object of Object.values(migrated.objects)) {
+    familyCounts.set(object.object_type, (familyCounts.get(object.object_type) ?? 0) + 1)
+    const typeId = object.module_data.type_id
+    if (!typeId) continue
+    const type = typeById.get(typeId)
+    assert.ok(type, `${object.id} resolves to a catalog type`)
+    assert.equal(type.object_type, object.object_type, `${object.id} resolves within its family`)
+  }
+  assert.ok(familyCounts.get('structure.beam') >= 20)
+  assert.ok(familyCounts.get('architecture.wall') >= 16)
+  assert.ok(familyCounts.has('electrical.fixture'))
+  assert.ok(familyCounts.has('interior.cabinet_run'))
 })
 
 test('S0: uppercase UUID type references normalize before resolving', () => {
