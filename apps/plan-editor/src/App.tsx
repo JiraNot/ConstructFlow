@@ -1582,6 +1582,24 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     }
   }
 
+  const handleNewBlankProject = () => {
+    if (!confirmReplaceUnsavedProject()) return
+    if (!window.confirm('สร้างโครงการใหม่แบบว่างหรือไม่? งานที่เปิดอยู่จะถูกแทนที่ด้วยโครงการค่าเริ่มต้น')) return
+    const blank = createDefaultResidentialProjectDocument(`CF-${crypto.randomUUID()}`, 'โครงการใหม่')
+    const serialized = serializeProject(blank)
+    projectSessionRef.current!.reset(blank)
+    updateActiveProjectFileHandle(null)
+    setProjectState(blank)
+    setSavedProjectJson(null)
+    setReplacementBaselineJson(serialized)
+    setFileFeedback('สร้างโครงการใหม่แบบว่างแล้ว')
+    setSelectedId(null)
+    setSelectedIds([])
+    setCommandQueue([])
+    setActiveTool('select')
+    setViewMode('plan')
+  }
+
   // Counts & Schedule breakdown
   const columnCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.column').length
   const foundationCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.foundation').length
@@ -1737,6 +1755,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             <summary className="cf-button cf-button-quiet" aria-label="เมนูโครงการ" title="เมนูโครงการ">เมนู</summary>
             <div className="cf-more-popover">
               <div className="cf-menu-label">โครงการ</div>
+              <button type="button" onClick={handleNewBlankProject}>สร้างโครงการใหม่ (ว่าง)</button>
               <button type="button" aria-label="โฉนดและผู้เซ็นแบบ" onClick={() => setIsLegalModalOpen(true)}><FileCheck size={15} /> โฉนดและผู้เซ็นแบบ</button>
               <div className="cf-menu-label">สร้าง</div>
               <button type="button" onClick={()=>{setWorkbenchTab('model');setIsConstructionOpen(true)}}><Layers2 size={15}/> เครื่องมืองานอาคาร</button>
