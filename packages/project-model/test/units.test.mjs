@@ -1,6 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createEmptyProjectDocument, deserializeProject, formatLengthMm, parseLengthMm, serializeProject } from '../dist/index.js'
+import { createDefaultResidentialProjectDocument, createEmptyProjectDocument, deserializeProject, formatLengthMm, parseLengthMm, serializeProject } from '../dist/index.js'
+
+test('new residential projects use the standard Thai house datums', () => {
+  const project = createDefaultResidentialProjectDocument('default-residential')
+  assert.deepEqual(project.levels.map(({ id, elevation_mm }) => [id, elevation_mm]), [
+    ['DATUM', 0], ['GF', 400], ['L1', 3800], ['EAVES', 7200],
+  ])
+  assert.equal(project.project.active_level_id, 'GF')
+})
 
 test('display units format and parse lengths without changing canonical millimeters', () => {
   assert.equal(formatLengthMm(1760, 'm'), '1.760')

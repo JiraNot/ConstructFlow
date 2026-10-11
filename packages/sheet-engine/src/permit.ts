@@ -125,6 +125,12 @@ const colors = {
 };
 const data = (o: SmartObject) =>
   ((o.module_data ?? (o as unknown as { properties?: unknown }).properties ?? {}) as Record<string, unknown>);
+const projectStoreyLevels = (project: ProjectDocument) => {
+  const levels = project.levels.filter(level =>
+    !(level.storey_index === 0 && (level.id.toLowerCase() === "datum" || /project datum/i.test(level.name)))
+  )
+  return [...(levels.length ? levels : project.levels)].sort((a, b) => a.elevation_mm - b.elevation_mm)
+}
 const format = (v: unknown) =>
   typeof v === "number"
     ? Number.isInteger(v)
@@ -153,9 +159,7 @@ function compilePermitDrawingSetBase(
   });
   const outputs = constructionOutputs(project),
     representations = buildProjectRepresentations3D(project).objects;
-  const levels = [...project.levels].sort(
-    (a, b) => a.elevation_mm - b.elevation_mm,
-  );
+  const levels = projectStoreyLevels(project);
   const all = Object.values(project.objects),
     ground = levels[0]?.id,
     upper = levels[1]?.id;
@@ -4009,9 +4013,7 @@ export function compilePermitDrawingSet(
   options: PermitOptions = {},
 ): PermitDrawingSet {
   const base = compilePermitDrawingSetBase(project, options);
-  const levels = [...project.levels].sort(
-    (a, b) => a.elevation_mm - b.elevation_mm,
-  );
+  const levels = projectStoreyLevels(project);
   const savedViewports = {
     ...project.drawing_settings?.viewports,
     ...options.viewports,

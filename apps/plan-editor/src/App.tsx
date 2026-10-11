@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'rea
 import {
   ProjectDocument,
   TypeDefinition,
-  createEmptyProjectDocument,
+  createDefaultResidentialProjectDocument,
   deserializeProject,
   serializeProject,
   Phase,
@@ -103,7 +103,7 @@ const projectFileName = (project: ProjectDocument) => {
 export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const fileWindow = projectFileAccess ?? (window as ProjectSaveWindow)
   const [project, setProjectState] = useState<ProjectDocument>(() =>
-    createEmptyProjectDocument('CF-UNTITLED', 'Untitled Project')
+    createDefaultResidentialProjectDocument('CF-UNTITLED', 'Untitled Project')
   )
   const displayUnit: DisplayLengthUnit = project.project.display_unit ?? 'm'
   const projectJson = useMemo(() => serializeProject(project), [project])
@@ -334,11 +334,16 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (document.querySelector('[role="dialog"]')) return
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
+      const target = e.target
+      const isTextEditing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      const isUndoRedo = (e.ctrlKey || e.metaKey) && ['z', 'y'].includes(e.key.toLowerCase())
+      if (isTextEditing && !isUndoRedo) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
         void handleSaveProject()
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        if (isTextEditing) return
         e.preventDefault()
         const session = projectSessionRef.current!
         if (e.shiftKey) {
@@ -351,6 +356,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           setCommandQueue([])
         }
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        if (isTextEditing) return
         e.preventDefault()
         const session = projectSessionRef.current!
         if (session.canRedo) {
@@ -388,8 +394,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         setActiveTool('slab')
       }
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [])
 
   // Update Object Phase (Existing / Demolition / New Construction)

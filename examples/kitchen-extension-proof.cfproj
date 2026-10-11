@@ -12,18 +12,25 @@
   },
   "levels": [
     {
+      "id": "DATUM",
+      "name": "Project Datum",
+      "elevation_mm": 0,
+      "storey_index": 0,
+      "height_mm": 400
+    },
+    {
       "id": "GF",
       "name": "Ground Floor",
-      "elevation_mm": 0,
+      "elevation_mm": 400,
       "storey_index": 1,
-      "height_mm": 3000
+      "height_mm": 3400
     },
     {
       "id": "L2",
-      "name": "Roof Level",
-      "elevation_mm": 3000,
+      "name": "Roof Eaves",
+      "elevation_mm": 3800,
       "storey_index": 2,
-      "height_mm": 3000
+      "height_mm": 500
     }
   ],
   "phases": [
@@ -626,7 +633,7 @@
         "location_mm": [
           0,
           0,
-          0
+          400
         ],
         "section_mm": [
           200,
@@ -671,7 +678,7 @@
         "location_mm": [
           4000,
           0,
-          0
+          400
         ],
         "section_mm": [
           200,
@@ -716,7 +723,7 @@
         "location_mm": [
           4000,
           2500,
-          0
+          400
         ],
         "section_mm": [
           200,
@@ -761,7 +768,7 @@
         "location_mm": [
           0,
           2500,
-          0
+          400
         ],
         "section_mm": [
           200,
@@ -830,14 +837,14 @@
         "center_mm": [
           0,
           0,
-          0
+          400
         ],
         "size_mm": [
           800,
           800,
           300
         ],
-        "top_elevation_mm": 0,
+        "top_elevation_mm": 400,
         "supported_column_id": "4677b216-810a-4925-b6e5-c75d5b03cd9a",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
@@ -896,14 +903,14 @@
         "center_mm": [
           4000,
           0,
-          0
+          400
         ],
         "size_mm": [
           800,
           800,
           300
         ],
-        "top_elevation_mm": 0,
+        "top_elevation_mm": 400,
         "supported_column_id": "49debbc2-002f-41fe-854c-0f048e9a18a4",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
@@ -962,14 +969,14 @@
         "center_mm": [
           4000,
           2500,
-          0
+          400
         ],
         "size_mm": [
           800,
           800,
           300
         ],
-        "top_elevation_mm": 0,
+        "top_elevation_mm": 400,
         "supported_column_id": "f5136274-d377-42e3-8c2c-8558b3bc9778",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
@@ -1028,14 +1035,14 @@
         "center_mm": [
           0,
           2500,
-          0
+          400
         ],
         "size_mm": [
           800,
           800,
           300
         ],
-        "top_elevation_mm": 0,
+        "top_elevation_mm": 400,
         "supported_column_id": "35321e17-35fd-480e-98bb-093afa4d8687",
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
@@ -1070,12 +1077,12 @@
         "start_point_mm": [
           0,
           0,
-          3000
+          3200
         ],
         "end_point_mm": [
           4000,
           0,
-          3000
+          3200
         ],
         "section_mm": [
           200,
@@ -1083,7 +1090,7 @@
         ],
         "span_mm": 4000,
         "level_id": "L2",
-        "base_offset_mm": 0,
+        "base_offset_mm": -600,
         "start_column_id": "4677b216-810a-4925-b6e5-c75d5b03cd9a",
         "end_column_id": "49debbc2-002f-41fe-854c-0f048e9a18a4",
         "beam_system": "simple",
@@ -1122,12 +1129,12 @@
         "start_point_mm": [
           4000,
           0,
-          3000
+          3200
         ],
         "end_point_mm": [
           4000,
           2500,
-          3000
+          3200
         ],
         "section_mm": [
           200,
@@ -1135,7 +1142,7 @@
         ],
         "span_mm": 2500,
         "level_id": "L2",
-        "base_offset_mm": 0,
+        "base_offset_mm": -600,
         "start_column_id": "49debbc2-002f-41fe-854c-0f048e9a18a4",
         "end_column_id": "f5136274-d377-42e3-8c2c-8558b3bc9778",
         "beam_system": "simple",
@@ -1174,12 +1181,12 @@
         "start_point_mm": [
           4000,
           2500,
-          3000
+          3200
         ],
         "end_point_mm": [
           0,
           2500,
-          3000
+          3200
         ],
         "section_mm": [
           200,
@@ -1187,7 +1194,7 @@
         ],
         "span_mm": 4000,
         "level_id": "L2",
-        "base_offset_mm": 0,
+        "base_offset_mm": -600,
         "start_column_id": "f5136274-d377-42e3-8c2c-8558b3bc9778",
         "end_column_id": "35321e17-35fd-480e-98bb-093afa4d8687",
         "beam_system": "simple",
@@ -1226,12 +1233,12 @@
         "start_point_mm": [
           0,
           2500,
-          3000
+          3200
         ],
         "end_point_mm": [
           0,
           0,
-          3000
+          3200
         ],
         "section_mm": [
           200,
@@ -1239,7 +1246,7 @@
         ],
         "span_mm": 2500,
         "level_id": "L2",
-        "base_offset_mm": 0,
+        "base_offset_mm": -600,
         "start_column_id": "35321e17-35fd-480e-98bb-093afa4d8687",
         "end_column_id": "4677b216-810a-4925-b6e5-c75d5b03cd9a",
         "beam_system": "simple",
@@ -1275,12 +1282,12 @@
         "start_point_mm": [
           0,
           0,
-          0
+          400
         ],
         "end_point_mm": [
           4000,
           0,
-          0
+          400
         ],
         "thickness_mm": 120,
         "masonry_thickness_mm": 100,
@@ -1323,12 +1330,12 @@
         "start_point_mm": [
           4000,
           0,
-          0
+          400
         ],
         "end_point_mm": [
           4000,
           2500,
-          0
+          400
         ],
         "thickness_mm": 120,
         "masonry_thickness_mm": 100,
@@ -1371,12 +1378,12 @@
         "start_point_mm": [
           4000,
           2500,
-          0
+          400
         ],
         "end_point_mm": [
           0,
           2500,
-          0
+          400
         ],
         "thickness_mm": 120,
         "masonry_thickness_mm": 100,
@@ -1423,7 +1430,7 @@
         "location_mm": [
           2000,
           0,
-          0
+          400
         ],
         "offset_along_wall_mm": 2000,
         "width_mm": 900,
@@ -1461,7 +1468,7 @@
         "location_mm": [
           2000,
           2500,
-          0
+          400
         ],
         "offset_along_wall_mm": 2000,
         "width_mm": 1200,
@@ -1509,7 +1516,7 @@
             2500
           ]
         ],
-        "elevation_mm": 0,
+        "elevation_mm": 400,
         "elevation_offset_mm": 0,
         "thickness_mm": 120,
         "topping_mm": 0,
@@ -1562,7 +1569,7 @@
             2500
           ]
         ],
-        "elevation_mm": 3000,
+        "elevation_mm": 3800,
         "edges": [
           {
             "defines_slope": false,

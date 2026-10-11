@@ -42,7 +42,7 @@ test('3D representations are deterministic and keep phase and supported interact
   const column = first.objects.find(object => object.object_type === 'structure.column')
   assert.equal(column.display_phase, 'new_construction')
   assert.equal(column.shape.kind, 'box')
-  assert.deepEqual(column.shape.size_mm, [200, 200, 3000])
+  assert.deepEqual(column.shape.size_mm, [200, 200, 3400])
   assert.deepEqual(column.interaction, { kind: 'column' })
 
   const foundation = first.objects.find(object => object.object_type === 'structure.foundation')
@@ -59,10 +59,10 @@ test('3D representations are deterministic and keep phase and supported interact
   }
   const slabExtents = verticalExtents(slab)
   const roofExtents = verticalExtents(roof)
-  assert.ok(Math.abs(slabExtents[0] + 120) < 1e-6)
-  assert.ok(Math.abs(slabExtents[1] - 40) < 1e-6)
-  assert.ok(Math.abs(roofExtents[0] - 3000) < 1e-6)
-  assert.ok(Math.abs(roofExtents[1] - 3000) < 1e-6)
+  assert.ok(Math.abs(slabExtents[0] - 280) < 1e-6)
+  assert.ok(Math.abs(slabExtents[1] - 440) < 1e-6)
+  assert.ok(Math.abs(roofExtents[0] - 3800) < 1e-6)
+  assert.ok(Math.abs(roofExtents[1] - 3800) < 1e-6)
 })
 
 test('wall geometry contains catalog-resolved door and window cutouts', () => {
@@ -100,7 +100,7 @@ test('shared elevation mesh expansion returns world-space structural edges and k
   assert.equal(columnTriangles.length, 12)
   const columnPoints = columnTriangles.flat()
   assert.equal(Math.min(...columnPoints.map(point => point[0])), column.position_mm[0] - 100)
-  assert.equal(Math.max(...columnPoints.map(point => point[2])), column.position_mm[2] + 1500)
+  assert.equal(Math.max(...columnPoints.map(point => point[2])), 3800)
 
   const door = result.objects.find(object => object.object_type === 'door_window.door')
   assert.deepEqual(getRepresentationTriangles(door), [])
@@ -283,13 +283,15 @@ test('plan visibility filters objects by active level while showing spanning col
 test('plan visibility keeps room and ceiling representations on their own active storey', () => {
   const project = structuredClone(fixture)
   const template = Object.values(project.objects).find(object => object.object_type === 'architecture.wall')
+  const groundLevelId = 'GF'
+  const upperLevelId = 'L2'
   for (const [id, object_type, level_id] of [
-    ['room-ground', 'architecture.room', project.levels[0].id],
-    ['room-upper', 'architecture.room', project.levels[1].id],
-    ['floor-ground', 'architecture.floor', project.levels[0].id],
-    ['floor-upper', 'architecture.floor', project.levels[1].id],
-    ['ceiling-ground', 'architecture.ceiling', project.levels[0].id],
-    ['ceiling-upper', 'architecture.ceiling', project.levels[1].id],
+    ['room-ground', 'architecture.room', groundLevelId],
+    ['room-upper', 'architecture.room', upperLevelId],
+    ['floor-ground', 'architecture.floor', groundLevelId],
+    ['floor-upper', 'architecture.floor', upperLevelId],
+    ['ceiling-ground', 'architecture.ceiling', groundLevelId],
+    ['ceiling-upper', 'architecture.ceiling', upperLevelId],
   ]) {
     project.objects[id] = { ...structuredClone(template), id, object_type, module_data: { level_id, boundary_mm: [[0, 0], [4000, 0], [4000, 3000], [0, 3000]] } }
   }
@@ -304,7 +306,7 @@ test('plan visibility keeps room and ceiling representations on their own active
   assert.ok(groundPlan.has('floor-ground'))
   assert.equal(groundPlan.has('floor-upper'), false, 'the rendered plan project must not append semantic floors from another storey')
 
-  project.project.active_level_id = project.levels[1].id
+  project.project.active_level_id = upperLevelId
   const upper = new Set(getPlanVisibleObjects(project).map(object => object.id))
   const upperPlan = new Set(Object.keys(getPlanViewProject(project).objects))
   assert.ok(upper.has('room-upper'))

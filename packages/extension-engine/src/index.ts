@@ -117,7 +117,10 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
     const topLevel = project.levels
       .filter(level => level.elevation_mm > baseElevation_mm)
       .sort((a, b) => a.elevation_mm - b.elevation_mm)[0]
-    const beamElevation_mm = topLevel?.elevation_mm ?? baseElevation_mm + 3000
+    const beamElevation_mm = baseElevation_mm + H_mm
+    const roofElevation_mm = topLevel?.elevation_mm ?? beamElevation_mm + 400
+    const beamLevelId = topLevel?.id ?? project.project.active_level_id
+    const beamBaseOffset_mm = beamElevation_mm - (topLevel?.elevation_mm ?? baseElevation_mm)
     const columnLevels = {
       base_level_id: project.project.active_level_id,
       ...(topLevel ? { top_level_id: topLevel.id } : {}),
@@ -142,11 +145,10 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
     if (c4Id) queueCreate('CreateFoundation', { mark: 'F1', center_mm: [X_mm, Y_mm + L_mm, baseElevation_mm], size_mm: [800, 800, 300], supported_column_id: c4Id, ...kitchenPileCap, phase: 'new_construction' })
 
     // 3. Four Perimeter Beams
-    const beamLevelId = topLevel?.id ?? project.project.active_level_id
-    queueCreate('CreateBeam', { mark: 'B1', start_point_mm: [X_mm, Y_mm, beamElevation_mm], end_point_mm: [X_mm + W_mm, Y_mm, beamElevation_mm], start_column_id: c1Id, end_column_id: c2Id, section_mm: [200, 400], level_id: beamLevelId, phase: 'new_construction' })
-    queueCreate('CreateBeam', { mark: 'B1', start_point_mm: [X_mm + W_mm, Y_mm, beamElevation_mm], end_point_mm: [X_mm + W_mm, Y_mm + L_mm, beamElevation_mm], start_column_id: c2Id, end_column_id: c3Id, section_mm: [200, 400], level_id: beamLevelId, phase: 'new_construction' })
-    queueCreate('CreateBeam', { mark: 'B1', start_point_mm: [X_mm + W_mm, Y_mm + L_mm, beamElevation_mm], end_point_mm: [X_mm, Y_mm + L_mm, beamElevation_mm], start_column_id: c3Id, end_column_id: c4Id, section_mm: [200, 400], level_id: beamLevelId, phase: 'new_construction' })
-    queueCreate('CreateBeam', { mark: 'B1', start_point_mm: [X_mm, Y_mm + L_mm, beamElevation_mm], end_point_mm: [X_mm, Y_mm, beamElevation_mm], start_column_id: c4Id, end_column_id: c1Id, section_mm: [200, 400], level_id: beamLevelId, phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B1', start_point_mm: [X_mm, Y_mm, beamElevation_mm], end_point_mm: [X_mm + W_mm, Y_mm, beamElevation_mm], start_column_id: c1Id, end_column_id: c2Id, section_mm: [200, 400], level_id: beamLevelId, base_offset_mm: beamBaseOffset_mm, phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B1', start_point_mm: [X_mm + W_mm, Y_mm, beamElevation_mm], end_point_mm: [X_mm + W_mm, Y_mm + L_mm, beamElevation_mm], start_column_id: c2Id, end_column_id: c3Id, section_mm: [200, 400], level_id: beamLevelId, base_offset_mm: beamBaseOffset_mm, phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B1', start_point_mm: [X_mm + W_mm, Y_mm + L_mm, beamElevation_mm], end_point_mm: [X_mm, Y_mm + L_mm, beamElevation_mm], start_column_id: c3Id, end_column_id: c4Id, section_mm: [200, 400], level_id: beamLevelId, base_offset_mm: beamBaseOffset_mm, phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B1', start_point_mm: [X_mm, Y_mm + L_mm, beamElevation_mm], end_point_mm: [X_mm, Y_mm, beamElevation_mm], start_column_id: c4Id, end_column_id: c1Id, section_mm: [200, 400], level_id: beamLevelId, base_offset_mm: beamBaseOffset_mm, phase: 'new_construction' })
 
     // 4. AAC Lightweight Walls
     // South Wall (Front exit)
@@ -237,8 +239,8 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
       slope_ratio: 0.01, drain_direction_deg: 180, phase: 'new_construction',
     })
     queueCreate('GenerateRoof', {
-      mark: 'R1', level_id: beamLevelId, boundary_mm: footprint,
-      elevation_mm: beamElevation_mm,
+      mark: 'R1', level_id: topLevel?.id ?? beamLevelId, boundary_mm: footprint,
+      elevation_mm: roofElevation_mm,
       edges: Array.from({ length: 4 }, () => ({ defines_slope: false, slope_deg: 0 })),
       thickness_mm: 25.4, material: 'insulated_metal_sheet_pu_25', phase: 'new_construction',
     })
@@ -301,8 +303,9 @@ export function applyExtensionPreset(project: ProjectDocument, options: Extensio
 export function createKitchenProofProject(actorKind: CommandActorKind = 'human'): CommandBatchResult {
   const seed = createEmptyProjectDocument('CF-KITCHEN-PROOF-001', 'Kitchen Extension Proof · 4.00 × 2.50 m')
   seed.levels = [
-    { id: 'GF', name: 'Ground Floor', elevation_mm: 0, storey_index: 1, height_mm: 3000 },
-    { id: 'L2', name: 'Roof Level', elevation_mm: 3000, storey_index: 2, height_mm: 3000 },
+    { id: 'DATUM', name: 'Project Datum', elevation_mm: 0, storey_index: 0, height_mm: 400 },
+    { id: 'GF', name: 'Ground Floor', elevation_mm: 400, storey_index: 1, height_mm: 3400 },
+    { id: 'L2', name: 'Roof Eaves', elevation_mm: 3800, storey_index: 2, height_mm: 500 },
   ]
   seed.project.active_level_id = 'GF'
   try {

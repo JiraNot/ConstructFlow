@@ -12,23 +12,30 @@
   },
   "levels": [
     {
+      "id": "DATUM",
+      "name": "Project Datum",
+      "elevation_mm": 0,
+      "storey_index": 0,
+      "height_mm": 400
+    },
+    {
       "id": "GF",
       "name": "Ground Floor",
       "elevation_mm": 400,
       "storey_index": 1,
-      "height_mm": 2900
+      "height_mm": 3400
     },
     {
       "id": "L1",
       "name": "First Floor",
-      "elevation_mm": 3300,
+      "elevation_mm": 3800,
       "storey_index": 2,
-      "height_mm": 3200
+      "height_mm": 3400
     },
     {
       "id": "RF",
-      "name": "Roof Level",
-      "elevation_mm": 6500,
+      "name": "Roof Eaves",
+      "elevation_mm": 7200,
       "storey_index": 3,
       "height_mm": 500
     }
@@ -1741,7 +1748,7 @@
         ],
         "span_mm": 4000,
         "level_id": "GF",
-        "base_offset_mm": 2600,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -1785,7 +1792,7 @@
         ],
         "span_mm": 4000,
         "level_id": "GF",
-        "base_offset_mm": 2600,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -1829,7 +1836,7 @@
         ],
         "span_mm": 4000,
         "level_id": "GF",
-        "base_offset_mm": 2600,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -1873,7 +1880,7 @@
         ],
         "span_mm": 4000,
         "level_id": "GF",
-        "base_offset_mm": 2600,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -1917,7 +1924,7 @@
         ],
         "span_mm": 4000,
         "level_id": "GF",
-        "base_offset_mm": 2600,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -1961,7 +1968,7 @@
         ],
         "span_mm": 4000,
         "level_id": "GF",
-        "base_offset_mm": 2600,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2010,7 +2017,7 @@
         ],
         "span_mm": 5000,
         "level_id": "GF",
-        "base_offset_mm": 2600,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2059,7 +2066,7 @@
         ],
         "span_mm": 5000,
         "level_id": "GF",
-        "base_offset_mm": 2600,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2108,7 +2115,7 @@
         ],
         "span_mm": 5000,
         "level_id": "GF",
-        "base_offset_mm": 2600,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2157,7 +2164,7 @@
         ],
         "span_mm": 5000,
         "level_id": "GF",
-        "base_offset_mm": 2600,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2206,7 +2213,7 @@
         ],
         "span_mm": 5000,
         "level_id": "GF",
-        "base_offset_mm": 2600,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2255,7 +2262,7 @@
         ],
         "span_mm": 5000,
         "level_id": "GF",
-        "base_offset_mm": 2600,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2299,7 +2306,7 @@
         ],
         "span_mm": 4000,
         "level_id": "L1",
-        "base_offset_mm": 3200,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2343,7 +2350,7 @@
         ],
         "span_mm": 4000,
         "level_id": "L1",
-        "base_offset_mm": 3200,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2387,7 +2394,7 @@
         ],
         "span_mm": 4000,
         "level_id": "L1",
-        "base_offset_mm": 3200,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2431,7 +2438,7 @@
         ],
         "span_mm": 4000,
         "level_id": "L1",
-        "base_offset_mm": 3200,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2475,7 +2482,7 @@
         ],
         "span_mm": 4000,
         "level_id": "L1",
-        "base_offset_mm": 3200,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2519,7 +2526,7 @@
         ],
         "span_mm": 4000,
         "level_id": "L1",
-        "base_offset_mm": 3200,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2568,7 +2575,7 @@
         ],
         "span_mm": 5000,
         "level_id": "L1",
-        "base_offset_mm": 3200,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2617,7 +2624,7 @@
         ],
         "span_mm": 5000,
         "level_id": "L1",
-        "base_offset_mm": 3200,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2666,7 +2673,7 @@
         ],
         "span_mm": 5000,
         "level_id": "L1",
-        "base_offset_mm": 3200,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2715,7 +2722,7 @@
         ],
         "span_mm": 5000,
         "level_id": "L1",
-        "base_offset_mm": 3200,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2764,7 +2771,7 @@
         ],
         "span_mm": 5000,
         "level_id": "L1",
-        "base_offset_mm": 3200,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -2813,7 +2820,7 @@
         ],
         "span_mm": 5000,
         "level_id": "L1",
-        "base_offset_mm": 3200,
+        "base_offset_mm": 3000,
         "material": "reinforced_concrete",
         "engineering_status": "preliminary"
       },
@@ -4232,10 +4239,10 @@
           3000,
           400
         ],
-        "total_rise_mm": 2900,
+        "total_rise_mm": 3400,
         "width_mm": 900,
-        "num_risers": 17,
-        "riser_height_mm": 170.59,
+        "num_risers": 20,
+        "riser_height_mm": 170,
         "tread_depth_mm": 220,
         "landing_depth_mm": 1000,
         "turn_direction": "right",
@@ -4380,7 +4387,7 @@
         "mark": "CL1",
         "room_id": "eafb718e-ded9-4f6b-9f2c-f7bb84fb4da8",
         "level_id": "GF",
-        "elevation_mm": 2800,
+        "elevation_mm": 3200,
         "elevation_offset_mm": 2400,
         "thickness_mm": 9,
         "voids_mm": [],
@@ -4539,7 +4546,7 @@
         "mark": "CL1",
         "room_id": "5d64ae65-4e1a-4153-b32f-1d56e56d3a63",
         "level_id": "GF",
-        "elevation_mm": 2800,
+        "elevation_mm": 3200,
         "elevation_offset_mm": 2400,
         "thickness_mm": 9,
         "voids_mm": [],
@@ -4698,7 +4705,7 @@
         "mark": "CL1",
         "room_id": "ea473b82-6fb7-41e6-a743-521d7f5dbcdd",
         "level_id": "GF",
-        "elevation_mm": 2800,
+        "elevation_mm": 3200,
         "elevation_offset_mm": 2400,
         "thickness_mm": 9,
         "voids_mm": [],
@@ -4857,7 +4864,7 @@
         "mark": "CL1",
         "room_id": "566b2dd4-6d97-47bb-9b29-cb10d04a40c2",
         "level_id": "GF",
-        "elevation_mm": 2800,
+        "elevation_mm": 3200,
         "elevation_offset_mm": 2400,
         "thickness_mm": 9,
         "voids_mm": [],
@@ -4959,7 +4966,7 @@
         "mark": "AF1",
         "room_id": "f05fe104-d1a2-4d73-80ca-530812c9c3ca",
         "level_id": "L1",
-        "elevation_mm": 3300,
+        "elevation_mm": 3800,
         "elevation_offset_mm": 0,
         "thickness_mm": 50,
         "voids_mm": [],
@@ -5016,7 +5023,7 @@
         "mark": "CL1",
         "room_id": "f05fe104-d1a2-4d73-80ca-530812c9c3ca",
         "level_id": "L1",
-        "elevation_mm": 5800,
+        "elevation_mm": 6600,
         "elevation_offset_mm": 2500,
         "thickness_mm": 9,
         "voids_mm": [],
@@ -5118,7 +5125,7 @@
         "mark": "AF1",
         "room_id": "83dedff7-4e69-45f3-8ee0-b39a50ac1136",
         "level_id": "L1",
-        "elevation_mm": 3300,
+        "elevation_mm": 3800,
         "elevation_offset_mm": 0,
         "thickness_mm": 50,
         "voids_mm": [],
@@ -5175,7 +5182,7 @@
         "mark": "CL1",
         "room_id": "83dedff7-4e69-45f3-8ee0-b39a50ac1136",
         "level_id": "L1",
-        "elevation_mm": 5800,
+        "elevation_mm": 6600,
         "elevation_offset_mm": 2500,
         "thickness_mm": 9,
         "voids_mm": [],
@@ -5277,7 +5284,7 @@
         "mark": "AF1",
         "room_id": "e45dcbde-746c-41f2-aa16-4b1d2fc8e0fb",
         "level_id": "L1",
-        "elevation_mm": 3300,
+        "elevation_mm": 3800,
         "elevation_offset_mm": 0,
         "thickness_mm": 50,
         "voids_mm": [],
@@ -5334,7 +5341,7 @@
         "mark": "CL1",
         "room_id": "e45dcbde-746c-41f2-aa16-4b1d2fc8e0fb",
         "level_id": "L1",
-        "elevation_mm": 5800,
+        "elevation_mm": 6600,
         "elevation_offset_mm": 2500,
         "thickness_mm": 9,
         "voids_mm": [],
@@ -5436,7 +5443,7 @@
         "mark": "AF1",
         "room_id": "491cf46f-92f0-4c36-a7ff-3611ca7bad3f",
         "level_id": "L1",
-        "elevation_mm": 3300,
+        "elevation_mm": 3800,
         "elevation_offset_mm": 0,
         "thickness_mm": 50,
         "voids_mm": [],
@@ -5493,7 +5500,7 @@
         "mark": "CL1",
         "room_id": "491cf46f-92f0-4c36-a7ff-3611ca7bad3f",
         "level_id": "L1",
-        "elevation_mm": 5800,
+        "elevation_mm": 6600,
         "elevation_offset_mm": 2500,
         "thickness_mm": 9,
         "voids_mm": [],
@@ -5561,7 +5568,7 @@
             10300
           ]
         ],
-        "elevation_mm": 6500,
+        "elevation_mm": 7200,
         "edges": [
           {
             "defines_slope": true,
@@ -5728,12 +5735,12 @@
           [
             4300,
             1200,
-            1220
+            1620
           ],
           [
             7300,
             1200,
-            1220
+            1620
           ]
         ],
         "watts_per_m": 9.6,
@@ -5772,7 +5779,7 @@
         "location_mm": [
           500,
           500,
-          1900
+          2300
         ],
         "kind": "panel",
         "watts": 0,
@@ -5809,7 +5816,7 @@
         "location_mm": [
           2000,
           2500,
-          2700
+          3100
         ],
         "kind": "light",
         "watts": 18,
@@ -5846,7 +5853,7 @@
         "location_mm": [
           6000,
           2500,
-          2700
+          3100
         ],
         "kind": "light",
         "watts": 18,
@@ -5883,7 +5890,7 @@
         "location_mm": [
           2000,
           7500,
-          2700
+          3100
         ],
         "kind": "light",
         "watts": 18,
@@ -5920,7 +5927,7 @@
         "location_mm": [
           6000,
           7500,
-          2700
+          3100
         ],
         "kind": "light",
         "watts": 18,
@@ -5957,7 +5964,7 @@
         "location_mm": [
           1000,
           500,
-          700
+          1100
         ],
         "kind": "outlet",
         "watts": 1000,
@@ -5994,7 +6001,7 @@
         "location_mm": [
           600,
           900,
-          1600
+          2000
         ],
         "kind": "switch",
         "watts": 0,

@@ -402,7 +402,7 @@ test("second-project A-10 compiles a voided ceiling at 1:50 and exports its same
   assert.ok(sheet);
   assert.equal(sheet.scale, "1:50", "the second-project reflected ceiling plan fits at 1:50");
   assert.ok(sheet.source_object_ids.includes(ceilingId));
-  assert.ok(sheet.primitives.some(item => item.kind === "text" && item.text.includes("CL1:") && item.text.includes("+2.700 m")));
+  assert.ok(sheet.primitives.some(item => item.kind === "text" && item.text.includes("CL1:") && item.text.includes("+3.100 m")));
   const sourceGridCount = sheet.primitives.filter(item => item.kind === "path" && item.width === 0.12 && item.color === "#94a3b8" && !item.dash?.length).length;
   assert.ok(sourceGridCount > 0, "the RCP contains compiled grid segments around the ceiling void");
 

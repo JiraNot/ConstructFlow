@@ -35,7 +35,10 @@ function objectsAtLevel(project: ProjectDocument, levelId: string) {
 }
 
 function groundLevelId(project: ProjectDocument): string {
-  return [...project.levels].sort((a, b) => a.elevation_mm - b.elevation_mm)[0]?.id ?? project.project.active_level_id
+  if (project.levels.some(level => level.id === project.project.active_level_id)) return project.project.active_level_id
+  return [...project.levels].filter(level => level.storey_index > 0).sort((a, b) => a.elevation_mm - b.elevation_mm)[0]?.id
+    ?? [...project.levels].sort((a, b) => a.elevation_mm - b.elevation_mm)[0]?.id
+    ?? project.project.active_level_id
 }
 
 function pageFrame(project: ProjectDocument, id: SheetId, title: string, scale: string, content: string, notes: string, scope: string): CompiledSheet {

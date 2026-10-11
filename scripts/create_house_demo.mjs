@@ -6,9 +6,10 @@ import { CommandBus } from '../packages/command-runtime/dist/index.js'
 const out = resolve('examples/constructflow-house-demo.cfproj')
 const project = createEmptyProjectDocument('CF-HOUSE-DEMO', 'บ้านเดโมสองชั้น · ConstructFlow')
 project.levels = [
-  { id: 'GF', name: 'Ground Floor', elevation_mm: 400, storey_index: 1, height_mm: 2900 },
-  { id: 'L1', name: 'First Floor', elevation_mm: 3300, storey_index: 2, height_mm: 3200 },
-  { id: 'RF', name: 'Roof Level', elevation_mm: 6500, storey_index: 3, height_mm: 500 },
+  { id: 'DATUM', name: 'Project Datum', elevation_mm: 0, storey_index: 0, height_mm: 400 },
+  { id: 'GF', name: 'Ground Floor', elevation_mm: 400, storey_index: 1, height_mm: 3400 },
+  { id: 'L1', name: 'First Floor', elevation_mm: 3800, storey_index: 2, height_mm: 3400 },
+  { id: 'RF', name: 'Roof Eaves', elevation_mm: 7200, storey_index: 3, height_mm: 500 },
 ]
 project.project.active_level_id = 'GF'
 
@@ -41,7 +42,7 @@ for (const y of [0, 5000, 10000]) for (const x of [0, 4000, 8000]) {
 }
 
 // Continuous beam lines at both floor/roof bands, with their tops aligned to levels.
-for (const [level, offset, mark] of [['GF', 2600, 'B1'], ['L1', 3200, 'B1']]) {
+for (const [level, offset, mark] of [['GF', 3000, 'B1'], ['L1', 3000, 'B1']]) {
   for (const y of [0, 5000, 10000]) for (const [x0, x1] of [[0, 4000], [4000, 8000]]) {
     run('CreateBeam', { mark, start_point_mm: [x0, y, 0], end_point_mm: [x1, y, 0], section_mm: [200, 400], level_id: level, base_offset_mm: offset })
   }
@@ -111,8 +112,8 @@ for (const level of ['GF', 'L1']) {
 // Main stair and stairwell are included as editable objects, not drawing-only linework.
 run('CreateStair', {
   mark: 'ST1', level_id: 'GF', stair_type: 'u_shape', structure_type: 'rc_monolithic',
-  start_point_mm: [4500, 3000, 400], total_rise_mm: 2900, width_mm: 900, num_risers: 17,
-  riser_height_mm: 170.59, tread_depth_mm: 220, landing_depth_mm: 1000, turn_direction: 'right',
+  start_point_mm: [4500, 3000, 400], total_rise_mm: 3400, width_mm: 900, num_risers: 20,
+  riser_height_mm: 170, tread_depth_mm: 220, landing_depth_mm: 1000, turn_direction: 'right',
   has_handrail: true, handrail_height_mm: 900,
 })
 
@@ -133,12 +134,12 @@ for (const level of ['GF', 'L1']) {
     const roomId = run('CreateRoom', { mark: `R${number}`, name, number, level_id: level, boundary_mm, boundary_source: 'manual', device_ids: [] })
     run('CreateArchitecturalFloor', {
       mark: 'AF1', room_id: roomId, level_id: level,
-      elevation_mm: level === 'GF' ? 400 : 3300, elevation_offset_mm: 0, thickness_mm: 50,
+      elevation_mm: level === 'GF' ? 400 : 3800, elevation_offset_mm: 0, thickness_mm: 50,
       voids_mm: [], finish_layers: [{ material: index === 2 && level === 'GF' ? 'ceramic_tile' : 'porcelain_tile', thickness_mm: 10 }],
     })
     run('CreateCeiling', {
       mark: 'CL1', room_id: roomId, level_id: level,
-      elevation_mm: level === 'GF' ? 2800 : 5800, elevation_offset_mm: 0, thickness_mm: 9,
+      elevation_mm: level === 'GF' ? 3200 : 6600, elevation_offset_mm: 0, thickness_mm: 9,
       voids_mm: [], grid_mm: [600, 600],
     })
   })
@@ -146,7 +147,7 @@ for (const level of ['GF', 'L1']) {
 
 // Roof, wet area, kitchen millwork and representative electrical fixtures/circuit.
 run('GenerateRoof', {
-  mark: 'RF1', level_id: 'RF', elevation_mm: 6500, thickness_mm: 30, material: 'pu_metal_sheet',
+  mark: 'RF1', level_id: 'RF', elevation_mm: 7200, thickness_mm: 30, material: 'pu_metal_sheet',
   boundary_mm: [[-300, -300], [8300, -300], [8300, 10300], [-300, 10300]],
   edges: [0, 1, 2, 3].map(() => ({ defines_slope: true, slope_deg: 25 })),
 })
@@ -165,7 +166,7 @@ const cabinetId = run('CreateCabinetRun', {
 run('CreateLEDRun', { mark: 'LED1', level_id: 'GF', host_id: cabinetId, path_mm: [[4300, 1200, 1220], [7300, 1200, 1220]], watts_per_m: 9.6, voltage: 24, driver_watts: 40, derating_ratio: 0.8, material: 'aluminium_profile_diffuser' })
 const panelId = run('PlaceElectricalFixture', { mark: 'DB1', level_id: 'GF', kind: 'panel', location_mm: [500, 500, 1900], watts: 0, grounded: true, controlled_ids: [], switch_ways: 1 })
 const lightIds = []
-for (const [index, point] of [[1, [2000, 2500, 2700]], [2, [6000, 2500, 2700]], [3, [2000, 7500, 2700]], [4, [6000, 7500, 2700]]]) {
+for (const [index, point] of [[1, [2000, 2500, 3100]], [2, [6000, 2500, 3100]], [3, [2000, 7500, 3100]], [4, [6000, 7500, 3100]]]) {
   lightIds.push(run('PlaceElectricalFixture', { mark: `L${index}`, level_id: 'GF', kind: 'light', location_mm: point, watts: 18, grounded: true, controlled_ids: [], switch_ways: 1 }))
 }
 const outletId = run('PlaceElectricalFixture', { mark: 'SO1', level_id: 'GF', kind: 'outlet', location_mm: [1000, 500, 700], watts: 1000, grounded: true, controlled_ids: [], switch_ways: 1 })

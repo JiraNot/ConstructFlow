@@ -36,14 +36,14 @@ test('S2: moving kitchen walls keeps hosted openings together and one Undo resto
   const movedDoorWall = moved.objects[originalDoorWall.id]
   const movedWindow = moved.objects[originalWindow.id]
   const movedWindowWall = moved.objects[originalWindowWall.id]
-  assert.deepEqual(movedDoorWall.module_data.start_point_mm, [originalDoorWall.module_data.start_point_mm[0] + doorDelta[0], originalDoorWall.module_data.start_point_mm[1] + doorDelta[1], 0])
-  assert.deepEqual(movedDoorWall.module_data.end_point_mm, [originalDoorWall.module_data.end_point_mm[0] + doorDelta[0], originalDoorWall.module_data.end_point_mm[1] + doorDelta[1], 0])
-  assert.deepEqual(movedDoor.module_data.location_mm, [originalDoor.module_data.location_mm[0] + doorDelta[0], originalDoor.module_data.location_mm[1] + doorDelta[1], 0])
+  assert.deepEqual(movedDoorWall.module_data.start_point_mm, [originalDoorWall.module_data.start_point_mm[0] + doorDelta[0], originalDoorWall.module_data.start_point_mm[1] + doorDelta[1], originalDoorWall.module_data.start_point_mm[2]])
+  assert.deepEqual(movedDoorWall.module_data.end_point_mm, [originalDoorWall.module_data.end_point_mm[0] + doorDelta[0], originalDoorWall.module_data.end_point_mm[1] + doorDelta[1], originalDoorWall.module_data.end_point_mm[2]])
+  assert.deepEqual(movedDoor.module_data.location_mm, [originalDoor.module_data.location_mm[0] + doorDelta[0], originalDoor.module_data.location_mm[1] + doorDelta[1], originalDoor.module_data.location_mm[2]])
   assert.equal(movedDoor.module_data.wall_id, originalDoor.module_data.wall_id)
   assert.deepEqual(movedDoor.host_refs, originalDoor.host_refs)
   assert.equal(movedDoor.module_data.offset_along_wall_mm, originalDoor.module_data.offset_along_wall_mm)
-  assert.deepEqual(movedWindowWall.module_data.start_point_mm, [originalWindowWall.module_data.start_point_mm[0] + windowDelta[0], originalWindowWall.module_data.start_point_mm[1] + windowDelta[1], 0])
-  assert.deepEqual(movedWindow.module_data.location_mm, [originalWindow.module_data.location_mm[0] + windowDelta[0], originalWindow.module_data.location_mm[1] + windowDelta[1], 0])
+  assert.deepEqual(movedWindowWall.module_data.start_point_mm, [originalWindowWall.module_data.start_point_mm[0] + windowDelta[0], originalWindowWall.module_data.start_point_mm[1] + windowDelta[1], originalWindowWall.module_data.start_point_mm[2]])
+  assert.deepEqual(movedWindow.module_data.location_mm, [originalWindow.module_data.location_mm[0] + windowDelta[0], originalWindow.module_data.location_mm[1] + windowDelta[1], originalWindow.module_data.location_mm[2]])
   assert.equal(movedWindow.module_data.wall_id, originalWindow.module_data.wall_id)
   assert.deepEqual(movedWindow.host_refs, originalWindow.host_refs)
   assert.equal(movedWindow.module_data.offset_along_wall_mm, originalWindow.module_data.offset_along_wall_mm)
