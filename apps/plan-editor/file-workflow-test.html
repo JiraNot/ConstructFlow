@@ -27,12 +27,33 @@
       let openCount = 0
       const query = new URLSearchParams(window.location.search)
       const diskBacked = query.get('disk') === '1'
+      const opfsBacked = query.get('opfs') === '1'
+      const opfsCleanup = query.get('opfs-cleanup') === '1'
+      const opfsFileName = 'CF-UI-ACCEPTANCE.opfs.cfproj'
       const diskEndpoint = '/__constructflow-acceptance-file'
       const output = document.getElementById('workflow-result')
+      let opfsFileHandle = null
+      if (opfsBacked) {
+        const storageRoot = await navigator.storage.getDirectory()
+        if (opfsCleanup) {
+          try { await storageRoot.removeEntry(opfsFileName) } catch (error) {
+            if (error.name !== 'NotFoundError') throw error
+          }
+          output.textContent = 'opfs-cleaned'
+        } else {
+          opfsFileHandle = await storageRoot.getFileHandle(opfsFileName, { create: true })
+          if ((await opfsFileHandle.getFile()).size === 0) {
+            const seed = await opfsFileHandle.createWritable()
+            await seed.write(source)
+            await seed.close()
+          }
+        }
+      }
       const handle = {
         getFile: async () => {
           openCount += 1
           let text = committedSnapshot || source
+          if (opfsBacked && !opfsCleanup) text = await (await opfsFileHandle.getFile()).text()
           if (diskBacked) {
             const response = await fetch(diskEndpoint)
             if (response.ok) text = await response.text()
@@ -52,11 +73,16 @@
         },
         createWritable: async () => {
           let pending = ''
+          const opfsWritable = opfsBacked ? await opfsFileHandle.createWritable() : null
           return {
-            write: async value => { pending = value },
+            write: async value => {
+              pending = value
+              if (opfsWritable) await opfsWritable.write(value)
+            },
             close: async () => {
+              if (opfsWritable) await opfsWritable.close()
               committedSnapshot = pending
-              let diskReceipt = null
+              let diskReceipt = opfsBacked ? { saved: true, storage: 'opfs', bytes: new Blob([pending]).size } : null
               if (diskBacked) {
                 const response = await fetch(diskEndpoint, { method: 'PUT', body: pending })
                 if (!response.ok) throw new Error(`Disk acceptance save failed: ${response.status}`)
@@ -78,7 +104,11 @@
         showOpenFilePicker: async () => { output.textContent = 'open-picker-called'; return [handle] },
         showSaveFilePicker: async () => { output.textContent = 'save-picker-called'; return handle },
       }
-      if (forceHtmlFileInput) {
+      if (opfsCleanup) {
+        // Dedicated cleanup URL removes only the acceptance file created in this origin's OPFS.
+      } else if (opfsBacked) {
+        output.textContent = 'Browser OPFS acceptance: Open → set phase Existing → Save → Open.'
+      } else if (forceHtmlFileInput) {
         // Exercise the real local-file input route when the browser's native picker cannot be automated.
         output.textContent = 'HTML file input mode: choose a local .cfproj; Save uses the browser download fallback.'
       } else {
@@ -86,7 +116,7 @@
           ? 'Disk-backed acceptance: Open → set phase Existing → Save → Open.'
           : 'In-memory acceptance: Open → set phase Existing → Save → Open.'
       }
-      ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App, { projectFileAccess }))
+      if (!opfsCleanup) ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App, { projectFileAccess }))
     </script>
   </body>
 </html>

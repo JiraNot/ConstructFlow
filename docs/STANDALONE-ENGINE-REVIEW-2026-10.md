@@ -100,7 +100,9 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   disk-backed browser UI acceptance รอบล่าสุดใช้ injected picker adapter ทดสอบ Open → เปลี่ยน
   phase เป็น Existing → Save → Open; mocked handle เขียนและอ่านไฟล์ `.cfproj` ชั่วคราวบนดิสก์
   จริง. ยืนยัน project ID, phase `existing` และ UUID ของวัตถุครบ 21 ชิ้นตรงกันหลังเปิดซ้ำ.
-  ผลนี้ยังไม่ยืนยัน native picker หรือการเขียน/เปิดซ้ำผ่าน browser handle จริงที่ผู้ใช้เลือกเอง
+  acceptance เพิ่มเติมผ่าน browser OPFS `FileSystemFileHandle` จริงยืนยัน write/close/reopen และ
+  UUID 21/21; HTML file input เปิดไฟล์ local จริง แล้ว Save As/download/reopen โดย UUID ตรงต้นฉบับ
+  18/18. ยังไม่ยืนยันการเลือกผ่าน native OS picker หรือเขียนทับไฟล์ user-selected ผ่าน handle จริง
 - ต่อ Undo/Redo เข้ากับ editor, shortcut และเปิด/บันทึก `.cfproj`; File System Access handle
   ที่ได้จาก Open/Save As ใช้ Save กลับไฟล์เดิมได้ใน editor session ปัจจุบัน ส่วน fallback ใช้
   file input/download และ Save-to-browser snapshot; handle ยังไม่ persist/restore ข้าม reload.
@@ -124,8 +126,8 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
 - Type rename now runs through the UI and `RenameCatalogType` command. Runtime acceptance checks
   family-scoped cascade, stable UUIDs, invalid-name rejection, serialization/reload and Undo/Redo;
   browser smoke confirmed schedule/BOQ propagation and Undo clearing the pending queue.
-- Gate ที่เหลือ: broader migration/domain fixtures, native picker และ browser-owned handle
-  overwrite/reopen acceptance สำหรับไฟล์ที่ผู้ใช้เลือก,
+- Gate ที่เหลือ: native OS picker selection และ browser-owned handle overwrite/reopen สำหรับไฟล์
+  ที่ผู้ใช้เลือก, broader migration/domain fixtures,
   and file-handle permission/restore behavior across application restart
 
 ### S1 — Takeoff แนวตั้งจากโมเดลเดียว (มี engine และ phased BOQ สำหรับรายการที่รองรับ)
