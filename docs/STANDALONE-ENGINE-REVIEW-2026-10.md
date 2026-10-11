@@ -122,6 +122,9 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   Generator เขียนไฟล์แล้วอ่านกลับผ่าน serializer โดยได้ canonical JSON เท่าเดิม; disk-backed
   browser UI roundtrip ผ่าน injected mocked handle บน temporary `.cfproj` จริง โดย UUID คงเดิม
   ครบ 18 ชิ้น; native picker และการเขียนกลับ browser handle ของไฟล์ที่ผู้ใช้เลือกผ่านแล้วตาม acceptance
+- เพิ่ม S0 migration regression: unknown extension data ระดับ project/level/object และ relationship
+  อยู่ครบหลัง v1→v2; object ทั้ง 18 ชิ้นใน Kitchen Proof resolve `type_id` ไป catalog type ที่อยู่
+  ใน family เดียวกัน. `project-model` ผ่าน 55 tests; full standalone runner ยังไม่ได้รันซ้ำหลังเพิ่ม test นี้.
 - เพิ่ม validation สำหรับ finite coordinates, positive dimensions, valid host, hosted
   opening bounds และการอ้างอิงเสา/ฐานราก/คานในโดเมนที่รองรับแล้ว; v1 migration contract
   เปลี่ยนจาก `any` เป็น `unknown` พร้อม narrowing; project/catalog และ CQRS public contracts

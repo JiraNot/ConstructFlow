@@ -43,6 +43,33 @@ test('S0: v1 migration is deterministic and preserves object UUIDs and instance 
   assert.equal(existingWall.module_data.instance_overrides?.thickness_mm, 150)
 })
 
+test('S0: v1 migration preserves extension fields and resolves every fixture object to its family type', () => {
+  const legacy = structuredClone(fixture)
+  legacy.extensions = { survey: { revision: 'A', datum_mm: 125 } }
+  legacy.project.client_metadata = { source: 'legacy-import', reviewed: true }
+  legacy.levels[0].survey_marker = 'BM-01'
+  const extensionWall = Object.values(legacy.objects).find(object =>
+    object.object_type === 'architecture.wall' && object.created_phase === 'existing'
+  )
+  extensionWall.module_data.client_finish_code = 'EXT-WALL-7'
+
+  const migrated = deserializeProject(JSON.stringify(legacy))
+  const typeById = new Map(migrated.types.map(type => [type.id, type]))
+
+  assert.deepEqual(migrated.extensions, legacy.extensions)
+  assert.deepEqual(migrated.project.client_metadata, legacy.project.client_metadata)
+  assert.equal(migrated.levels[0].survey_marker, 'BM-01')
+  assert.equal(migrated.objects[extensionWall.id].module_data.client_finish_code, 'EXT-WALL-7')
+  assert.deepEqual(migrated.relationships, legacy.relationships)
+  assert.equal(Object.values(migrated.objects).filter(object => object.module_data.type_id).length, 18)
+  for (const object of Object.values(migrated.objects)) {
+    const type = typeById.get(object.module_data.type_id)
+    assert.ok(type, `${object.id} resolves to a catalog type`)
+    assert.equal(type.object_type, object.object_type, `${object.id} resolves within its object family`)
+  }
+  assert.deepEqual(deserializeProject(serializeProject(migrated)).extensions, legacy.extensions)
+})
+
 test('S0: uppercase UUID type references normalize before resolving', () => {
   const migratedBaseline = deserializeProject(fixtureText)
   const transitionalV1 = structuredClone(fixture)
