@@ -10,7 +10,7 @@
 ตัวเลข test/build ในรายงานเป็นหลักฐาน ณ วันที่ระบุ ไม่ใช่การยืนยันว่ารันผ่านในวันนี้.
 
 **Snapshot ล่าสุด 11 ต.ค. 2026:** `npm run test:standalone` ผ่าน build targets 25 รายการ,
-Node tests 342 รายการ (package 333 + MCP runtime 9), Python MCP tests 11 รายการ และ integration
+Node tests 344 รายการ, Python MCP tests 11 รายการ และ integration
 verifiers ทั้ง 4 ชุด (`kitchen`, `file-io`, `phases`, `coordination`). MCP standalone ต่อ native
 mutation, query, takeoff, coordination, unified site/legal compliance, DXF/IFC/Revit-transfer
 interchange exports และ caller-held undo/redo แล้ว; ข้อจำกัดที่เหลือ
@@ -95,14 +95,17 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   generator ที่ตรวจ migration ซ้ำได้, คง UUID ของวัตถุ, สร้าง type UUID v5 และเก็บ instance
   override; migration canonicalize catalog UUID references ที่เป็นรูปแบบ UUID ให้เป็นตัวพิมพ์เล็ก
   ก่อน resolve; v2 import บังคับ Smart Object ID เป็น RFC-4122 UUID และปฏิเสธ ID ซ้ำที่ต่างกัน
-  เพียงตัวพิมพ์; editor Open/edit/Save/Open ผ่าน UI จริงด้วย mocked File System Access handle แล้ว
-  ส่วน native picker และการเขียนทับไฟล์จริงยังต้องทดสอบ
+  เพียงตัวพิมพ์; editor Save ใช้ File System Access handle ปัจจุบันที่ได้จาก Open หรือ Save As
+  เพื่อเขียนกลับไฟล์เดิม; ถ้าไม่มี handle จะบันทึก browser snapshot และอัปเดต replacement baseline.
+  UI roundtrip ผ่าน mocked handle มีหลักฐานเดิม; native picker และ real-file overwrite/reopen
+  ยังต้องทดสอบ
 - ต่อ Undo/Redo เข้ากับ editor, shortcut และเปิด/บันทึก `.cfproj`; File System Access handle
   ที่ได้จาก Open/Save As ใช้ Save กลับไฟล์เดิมได้ใน editor session ปัจจุบัน ส่วน fallback ใช้
   file input/download และ Save-to-browser snapshot; handle ยังไม่ persist/restore ข้าม reload.
   Undo/Redo ล้าง incremental sync queue แล้ว จึงต้อง full sync ใหม่; adapter Undo/Redo replay ยังไม่ทำ
-- Plan Editor แสดงสถานะ unsaved โดยเทียบ serialized model กับไฟล์ที่เปิด/บันทึกผ่าน file handle;
-  download fallback รายงานเพียงว่าเริ่มคำขอดาวน์โหลดและคงสถานะ unsaved ไว้
+- Confirmation ก่อนแทนที่โปรเจกต์เทียบ serialized model กับ replacement baseline; explicit
+  Save/Save As/Open จะเลื่อน baseline ส่วน background autosave ไม่ได้เลื่อน baseline. File handle
+  ใช้เฉพาะ editor session ปัจจุบันและยังไม่ persist/restore ข้าม reload.
 - ย้าย Kitchen Proof factory เข้า `extension-engine`; Existing host wall และ preset 4.00 × 2.50 m
   เป็น atomic batch เดียวกันทั้งใน editor และ generator ของ `examples/kitchen-extension-proof.cfproj`.
   Generator เขียนไฟล์แล้วอ่านกลับผ่าน serializer โดยได้ canonical JSON เท่าเดิม; UI roundtrip
@@ -177,6 +180,10 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   โดยไม่อิง Three.js; React viewport ทำเฉพาะแปลง descriptors เป็น mesh และต่อ interaction
   เข้ากับ command callbacks. Tests ครอบคลุม deterministic output, phase, foundation/opening
   interactions, wall cutouts และข้อมูลช่องเปิดผิดรูปแบบ
+- 3D viewport รับ coordination findings ชุดเดียวกับ Plan/Elevation แล้ววาด impact เป็น volume,
+  object extents เป็น wireframe และระยะเป็นเส้นประ; สีจัดลำดับตาม hard/clearance/soft และ
+  geometry/material ถูก dispose เมื่อรายงานหรือโปรเจกต์เปลี่ยน. Production build ผ่าน;
+  ยังไม่มี visual acceptance ของ overlay บน representative projects.
 - Runtime acceptance ยืนยันว่าการย้ายเสาประสาน foundation/beam endpoints/span, Undo/Redo
   รักษา model และการย้ายที่ทำให้ span เป็นศูนย์ rollback ทั้งรายการ; gizmo คืน preview mesh เมื่อ
   command reject หรือ drag น้อยกว่า 1 mm
