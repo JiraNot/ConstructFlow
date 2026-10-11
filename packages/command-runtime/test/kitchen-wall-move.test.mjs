@@ -16,6 +16,7 @@ test('S2: moving kitchen walls keeps hosted openings together and one Undo resto
   const originalWindow = openingForWall(original, 'door_window.window')
   const originalDoorWall = wallForOpening(original, originalDoor)
   const originalWindowWall = wallForOpening(original, originalWindow)
+  const originalRoom = Object.values(original.objects).find(object => object.object_type === 'architecture.room')
   const doorDelta = [250, -100]
   const windowDelta = [-100, 50]
 
@@ -27,7 +28,7 @@ test('S2: moving kitchen walls keeps hosted openings together and one Undo resto
   assert.equal(result.status, 'success')
   assert.equal(result.results.length, 2)
   assert.equal(result.emittedEnvelopes.length, 2)
-  assert.deepEqual(result.results[0].affected_object_ids, [originalDoorWall.id, originalDoor.id])
+  assert.deepEqual(result.results[0].affected_object_ids, [originalDoorWall.id, originalDoor.id, originalRoom.id])
   assert.deepEqual(result.results[1].affected_object_ids, [originalWindowWall.id, originalWindow.id])
 
   const moved = session.project

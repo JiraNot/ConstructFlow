@@ -36,12 +36,21 @@ test('S0: v1 migration is deterministic and preserves object UUIDs and instance 
   const existingWall = Object.values(migrated.objects).find(object =>
     object.object_type === 'architecture.wall' && object.created_phase === 'existing'
   )
+  const customThicknessV1 = structuredClone(fixture)
+  const customThicknessWall = Object.values(customThicknessV1.objects).find(object =>
+    object.object_type === 'architecture.wall' && object.created_phase === 'existing'
+  )
+  customThicknessWall.module_data.thickness_mm = 150
+  customThicknessWall.module_data.masonry_thickness_mm = 130
+  const customThicknessMigration = deserializeProject(JSON.stringify(customThicknessV1))
 
   assert.equal(migrated.schema_version, 2)
   assert.equal(serializeProject(migratedAgain), serializeProject(migrated))
   assert.deepEqual(Object.keys(migrated.objects).sort(), Object.keys(fixture.objects).sort())
   assert.ok(migrated.types.every(type => typeUuidV5.test(type.id)))
-  assert.equal(existingWall.module_data.instance_overrides?.thickness_mm, 150)
+  assert.equal(existingWall.module_data.instance_overrides?.material, 'brick_masonry')
+  assert.equal(customThicknessMigration.objects[customThicknessWall.id].module_data.instance_overrides?.thickness_mm, 150)
+  assert.equal(customThicknessMigration.objects[customThicknessWall.id].module_data.instance_overrides?.masonry_thickness_mm, 130)
 })
 
 test('S0: v1 migration preserves extension fields and resolves every fixture object to its family type', () => {
@@ -62,8 +71,10 @@ test('S0: v1 migration preserves extension fields and resolves every fixture obj
   assert.equal(migrated.levels[0].survey_marker, 'BM-01')
   assert.equal(migrated.objects[extensionWall.id].module_data.client_finish_code, 'EXT-WALL-7')
   assert.deepEqual(migrated.relationships, legacy.relationships)
-  assert.equal(Object.values(migrated.objects).filter(object => object.module_data.type_id).length, 18)
-  for (const object of Object.values(migrated.objects)) {
+  const typedObjects = Object.values(migrated.objects).filter(object => object.module_data.type_id)
+  assert.equal(typedObjects.length, 18)
+  assert.equal(Object.keys(migrated.objects).length, 21)
+  for (const object of typedObjects) {
     const type = typeById.get(object.module_data.type_id)
     assert.ok(type, `${object.id} resolves to a catalog type`)
     assert.equal(type.object_type, object.object_type, `${object.id} resolves within its object family`)
@@ -211,7 +222,7 @@ test('S0: opening families validate operation, panel count, glazing and placemen
 
 test('S0: v2 import requires persistent Smart Object UUIDs and rejects case-variant duplicates', () => {
   const invalidId = deserializeProject(fixtureText)
-  const [validId] = Object.keys(invalidId.objects)
+  const validId = Object.values(invalidId.objects).find(object => object.object_type === 'roof.system').id
   const invalidObject = invalidId.objects[validId]
   delete invalidId.objects[validId]
   invalidObject.id = 'column-1'

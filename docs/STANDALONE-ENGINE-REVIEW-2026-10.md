@@ -75,6 +75,19 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
    และรายการชิ้นส่วนตรงกับสิ่งที่สร้างจริง เอาตัวเลือกหลังคา/บันไดที่ยังไม่มีผลออก
 7. เพิ่ม regression tests และ CI entrypoint สำหรับ standalone packages และ production build
 
+### Kitchen Proof fixture correction (2026-10-11)
+
+The demo saved in the earlier picker test was an 18-object fixture from before the current
+kitchen preset added floor and roof geometry. Regenerated `examples/kitchen-extension-proof.cfproj`
+and its v1 migration source from `createKitchenProofProject`; both now contain 21 Smart Objects.
+Renamed its +3.000 m level from `First Floor` to `Roof Level`. A preset regression pins Ground
+Floor at 0, roof datum at +3000, columns between those levels, beams at +3000, walls from 0 to
++2800, and slab/roof elevations. A representation regression confirms the slab mesh spans
+−120…+40 mm (including its 1:100 slope) and the roof mesh is at +3000 mm. Saved-file verification
+passes. This is model and geometry evidence only: live-editor visual review of the regenerated
+file remains open. The older native-picker evidence below refers to the separate 18-object copy
+the user had selected; it does not verify the regenerated 21-object fixture.
+
 ### ขอบเขต preset ปัจจุบัน
 
 | Preset | สิ่งที่สร้าง | ส่วนที่ยังไม่สร้าง |

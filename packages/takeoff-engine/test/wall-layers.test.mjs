@@ -23,7 +23,7 @@ test('renovation BOQ reports exactly three work cost centers and omits untouched
 
 test('wall takeoff separates masonry volume from inside and outside plaster areas', () => {
   const project = structuredClone(fixture)
-  const wall = Object.values(project.objects).find(object => object.object_type === 'architecture.wall')
+  const wall = Object.values(project.objects).find(object => object.object_type === 'architecture.wall' && object.created_phase === 'new_construction')
   const type = project.types.find(candidate => candidate.id === wall.module_data.type_id)
   type.parameters = {
     ...type.parameters,
@@ -40,6 +40,8 @@ test('wall takeoff separates masonry volume from inside and outside plaster area
     masonry_thickness_mm: 100,
     plaster_inside_thickness_mm: 10,
     plaster_outside_thickness_mm: 10,
+    plaster_inside_material: 'cement_plaster',
+    plaster_outside_material: 'cement_plaster',
   }
   project.objects = { [wall.id]: wall }
 

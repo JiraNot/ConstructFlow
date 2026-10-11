@@ -302,7 +302,7 @@ export function createKitchenProofProject(actorKind: CommandActorKind = 'human')
   const seed = createEmptyProjectDocument('CF-KITCHEN-PROOF-001', 'Kitchen Extension Proof · 4.00 × 2.50 m')
   seed.levels = [
     { id: 'GF', name: 'Ground Floor', elevation_mm: 0, storey_index: 1, height_mm: 3000 },
-    { id: 'L2', name: 'First Floor', elevation_mm: 3000, storey_index: 2, height_mm: 3000 },
+    { id: 'L2', name: 'Roof Level', elevation_mm: 3000, storey_index: 2, height_mm: 3000 },
   ]
   seed.project.active_level_id = 'GF'
   try {

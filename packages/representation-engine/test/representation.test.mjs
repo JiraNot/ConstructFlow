@@ -35,7 +35,8 @@ test('3D representations are deterministic and keep phase and supported interact
 
   assert.deepEqual(first, second)
   assert.deepEqual(first.objects.map(object => object.object_id), [...first.objects.map(object => object.object_id)].sort())
-  assert.equal(first.objects.length, 18)
+  assert.equal(Object.keys(fixture.objects).length, 21)
+  assert.equal(first.objects.length, 20)
   assert.deepEqual(first.warnings, [])
 
   const column = first.objects.find(object => object.object_type === 'structure.column')
@@ -47,6 +48,21 @@ test('3D representations are deterministic and keep phase and supported interact
   const foundation = first.objects.find(object => object.object_type === 'structure.foundation')
   assert.equal(foundation.interaction.kind, 'supported_foundation')
   assert.ok(first.objects.some(object => object.display_phase === 'existing'))
+
+  const slab = first.objects.find(object => object.object_type === 'structure.slab')
+  const roof = first.objects.find(object => object.object_type === 'roof.system')
+  assert.equal(slab.shape.kind, 'triangle_mesh')
+  assert.equal(roof.shape.kind, 'triangle_mesh')
+  const verticalExtents = representation => {
+    const elevations = getRepresentationTriangles(representation).flatMap(triangle => triangle.map(vertex => vertex[2]))
+    return [Math.min(...elevations), Math.max(...elevations)]
+  }
+  const slabExtents = verticalExtents(slab)
+  const roofExtents = verticalExtents(roof)
+  assert.ok(Math.abs(slabExtents[0] + 120) < 1e-6)
+  assert.ok(Math.abs(slabExtents[1] - 40) < 1e-6)
+  assert.ok(Math.abs(roofExtents[0] - 3000) < 1e-6)
+  assert.ok(Math.abs(roofExtents[1] - 3000) < 1e-6)
 })
 
 test('wall geometry contains catalog-resolved door and window cutouts', () => {

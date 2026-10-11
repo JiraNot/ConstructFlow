@@ -2,10 +2,34 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createEmptyProjectDocument, serializeProject, deserializeProject } from '@constructflow/project-model'
 import { ProjectCommandSession } from '@constructflow/command-runtime'
-import { planExtensionPreset, applyExtensionPreset } from '../dist/index.js'
+import { createKitchenProofProject, planExtensionPreset, applyExtensionPreset } from '../dist/index.js'
 
 const options = { preset: 'kitchen', posX_m: 1.25, posY_m: 4, width_m: 4, length_m: 2.5 }
 const document = () => createEmptyProjectDocument(crypto.randomUUID())
+
+test('Kitchen Proof uses a roof datum and keeps all vertical members on explicit levels', () => {
+  const result = createKitchenProofProject()
+  assert.equal(result.status, 'success', result.errors?.join('; '))
+  const project = result.updatedProject
+  const levelById = new Map(project.levels.map(level => [level.id, level]))
+  const objects = Object.values(project.objects)
+  const columns = objects.filter(object => object.object_type === 'structure.column')
+  const beams = objects.filter(object => object.object_type === 'structure.beam')
+  const walls = objects.filter(object => object.object_type === 'architecture.wall' && object.created_phase === 'new_construction')
+  const slab = objects.find(object => object.object_type === 'structure.slab')
+  const roof = objects.find(object => object.object_type === 'roof.system')
+
+  assert.equal(levelById.get('GF').elevation_mm, 0)
+  assert.equal(levelById.get('L2').name, 'Roof Level')
+  assert.equal(levelById.get('L2').elevation_mm, 3000)
+  assert.ok(columns.every(column => column.module_data.base_level_id === 'GF' && column.module_data.top_level_id === 'L2'))
+  assert.ok(beams.every(beam => beam.module_data.level_id === 'L2' && beam.module_data.start_point_mm[2] === 3000 && beam.module_data.end_point_mm[2] === 3000))
+  assert.ok(walls.every(wall => wall.module_data.level_id === 'GF' && wall.module_data.start_point_mm[2] === 0 && wall.module_data.height_mm === 2800))
+  assert.equal(slab.module_data.level_id, 'GF')
+  assert.equal(slab.module_data.elevation_mm, 0)
+  assert.equal(roof.module_data.level_id, 'L2')
+  assert.equal(roof.module_data.elevation_mm, 3000)
+})
 
 test('AC-STAND-006: kitchen contains its requested hosted doors/windows and column footings', () => {
   const original = document()

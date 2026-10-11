@@ -8,6 +8,7 @@ const fixtureUrl = new URL('../../../examples/kitchen-extension-proof.cfproj', i
 
 test('S0: renaming a catalog type cascades by stable type UUID and survives undo, redo and reload', async () => {
   const project = deserializeProject(await readFile(fixtureUrl, 'utf8'))
+  for (const wall of Object.values(project.objects).filter(object => object.object_type === 'architecture.wall')) wall.module_data.mark = 'W1'
   const windowType = project.types.find(type => type.object_type === 'door_window.window' && type.name === 'W1')
   assert.ok(windowType)
   const originalWindowIds = Object.values(project.objects)

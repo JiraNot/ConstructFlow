@@ -953,5 +953,6 @@ export function buildProjectRepresentations3D(project: ProjectDocument, options:
     if(triangles.length) objects.push(baseObject(object,data,[0,0,0],0,{kind:'triangle_mesh',triangles_mm:triangles},{kind:'select_only'}))
     warnings.push(...out.warnings.map(w=>`${object.id}: ${w}`))
   }
+  objects.sort((a, b) => a.object_id.localeCompare(b.object_id))
   return { objects, warnings }
 }

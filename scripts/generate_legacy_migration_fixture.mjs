@@ -34,7 +34,7 @@ assert.ok(firstLoad.types.every(type => /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[
 const retainedExistingWall = Object.values(firstLoad.objects).find(object =>
   object.object_type === 'architecture.wall' && object.created_phase === 'existing'
 )
-assert.equal(retainedExistingWall?.module_data.instance_overrides?.thickness_mm, 150, 'legacy wall instance dimensions must survive as a catalog override')
+assert.equal(retainedExistingWall?.module_data.instance_overrides?.material, 'brick_masonry', 'legacy existing-wall material override must survive catalog migration')
 
 process.stdout.write(`Wrote ${fixturePath}\n`)
-process.stdout.write(`Migrated ${Object.keys(firstLoad.objects).length} Smart Objects and ${firstLoad.types.length} type definitions to schema v2; UUIDs and a legacy wall override were preserved.\n`)
+process.stdout.write(`Migrated ${Object.keys(firstLoad.objects).length} Smart Objects and ${firstLoad.types.length} type definitions to schema v2; UUIDs and the legacy existing-wall material override were preserved.\n`)
