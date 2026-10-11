@@ -410,6 +410,7 @@ ConstructFlow maintains dedicated adapters to ensure flawless bi-directional syn
 
 ### 7.1 Adapter 1: SketchUp Live Bridge & Native LayOut Adapter (`apps/sketchup-extension`)
 * **Primary Role:** Seamless 3D viewing, client presentation, photorealistic rendering (V-Ray, Enscape, D5 Render), and LayOut drafting synchronization.
+* **Authoring Boundary (ADR-0006):** The extension hosts no drawing tools, toolbar or tool catalog. Every object is authored in the standalone workbench and reaches SketchUp through `.cfproj` import / non-destructive UUID sync. Do not re-introduce a Ruby authoring surface; the retired actions answer with `HtmlDialogManager::RETIRED_ACTIONS`.
 * **Bi-Directional IPC Communication:**
   * Local WebSocket Server / JSON File Bridge (`Core::PlanEditorSync`, `Core::Host::*`).
   * 1-Click Sync or Auto-Sync on Save without interrupting user workflow.

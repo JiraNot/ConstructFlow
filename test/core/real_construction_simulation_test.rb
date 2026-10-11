@@ -43,7 +43,6 @@ end
 # Load all core & module engines
 require File.join(CORE, 'tools', 'extension_scene_generator')
 require File.join(CORE, 'tools', 'auto_dimension_engine')
-require File.join(CORE, 'tools', 'spot_elevation_tool')
 require File.join(CORE, 'takeoff_hud_service')
 require File.join(CORE, 'smart_stretch_engine')
 require File.join(CORE, 'structural_profile_catalog')

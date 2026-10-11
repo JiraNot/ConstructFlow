@@ -836,32 +836,6 @@ module JiraNot
           rescue StandardError => error
             UI.messagebox(error.message)
           end
-          menu.add_item('Place Door/Window in Architecture Plan') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
-              ['Category (door/window)', 'Operation (fixed/sliding/swing/swing_double/casement/awning/hopper/pivot/louver/shutter)', 'Frame material', 'Panel style', 'Handing', 'Schedule mark', 'Width (mm)', 'Height (mm)', 'Sill (mm)', 'Base level ID (optional)'],
-              ['window', 'fixed', 'aluminium', 'glazed', 'default', '', '900', '2100', '0', ''],
-              'ConstructFlow Plan Door / Window'
-            )
-            next unless values
-
-            runtime.active_model.select_tool(
-              Tools::PlaceTool.new(
-                runtime: runtime,
-                category: values[0],
-                operation: values[1],
-                frame_material: values[2],
-                panel_style: values[3],
-                handing: values[4],
-                schedule_mark: values[5],
-                width_mm: values[6],
-                height_mm: values[7],
-                sill_mm: values[8],
-                level_id: values[9]
-              )
-            )
-          rescue ArgumentError => error
-            UI.messagebox(error.message)
-          end
         end
 
         def selected_opening(runtime, opening_host)

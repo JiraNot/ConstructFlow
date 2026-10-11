@@ -53,32 +53,21 @@ module Sketchup
 end
 
 require_relative '../../apps/sketchup-extension/constructflow/core/tag_manager'
-require_relative '../../apps/sketchup-extension/constructflow/core/viewport_snap_helper'
 require_relative '../../apps/sketchup-extension/constructflow/core/html_dialog'
-require_relative '../../apps/sketchup-extension/constructflow/modules/structure/tools/beam_tool'
-require_relative '../../apps/sketchup-extension/constructflow/modules/structure/tools/grid_tool'
-require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/tools/floor_tool'
-require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/tools/ceiling_tool'
-require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/tools/wall_edit_tool'
 
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/stair_definition'
-require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/tools/stair_tool'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/roof_framing_definition'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/roof_framing_repository'
-require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/tools/roof_framing_tool'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/grid_framing_definition'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/grid_framing_repository'
-require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/tools/grid_framing_tool'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/curtain_wall_definition'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/curtain_wall_repository'
-require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/tools/curtain_wall_tool'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/stretch_by_target_area'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/revit_auto_roof'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/hip_gable_roof_generator'
 require_relative '../../apps/sketchup-extension/constructflow/core/smart_stretch_engine'
 require_relative '../../apps/sketchup-extension/constructflow/core/custom_profile_store'
 
-require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/tools/stretch_by_area_tool'
 
 
 
@@ -168,32 +157,6 @@ module JiraNot
           assert_equal tag, entity.layer
         end
 
-        # ── 2. ViewportSnapHelper Tests ─────────────────────────
-        def test_viewport_snap_helper_draws_glyphs
-          view = MockView.new
-          pt = Geom::Point3d.new(100, 200, 0)
-
-          # Endpoint (Green Box)
-          ViewportSnapHelper.draw_snap_glyph(view, pt, { kind: 'endpoint' })
-          assert view.points_drawn.any? { |p| p[:color] == 'green' && p[:style] == 1 }
-          assert view.text_drawn.any? { |t| t[:text].include?('Endpoint') }
-
-          # Midpoint (Cyan Triangle)
-          ViewportSnapHelper.draw_snap_glyph(view, pt, { kind: 'midpoint' })
-          assert view.points_drawn.any? { |p| p[:color] == 'cyan' && p[:style] == 6 }
-          assert view.text_drawn.any? { |t| t[:text].include?('Midpoint') }
-
-          # Intersection (Orange X)
-          ViewportSnapHelper.draw_snap_glyph(view, pt, { kind: 'intersection' })
-          assert view.points_drawn.any? { |p| p[:color] == 'orange' && p[:style] == 4 }
-          assert view.text_drawn.any? { |t| t[:text].include?('Intersection') }
-
-          # Close Loop (Gold badge)
-          ViewportSnapHelper.draw_snap_glyph(view, pt, { kind: 'close_loop' })
-          assert view.points_drawn.any? { |p| p[:color] == 'gold' && p[:style] == 2 }
-          assert view.text_drawn.any? { |t| t[:text].include?('Close Loop') }
-        end
-
         # ── 3. BOQ Generator Tests ──────────────────────────────
         def test_generate_boq_data
           boq = HtmlDialogManager.generate_boq_data(@runtime)
@@ -221,62 +184,6 @@ module JiraNot
         end
 
         # ── 4. Core Tool Selection Handlers ──────────────────────
-        def test_draw_beam_action
-          handler = HtmlDialogManager::ACTIONS['draw_beam']
-          assert handler
-          handler.call(@runtime, { 'section_mm' => [200, 400] })
-          assert_instance_of Structure::Tools::BeamTool, @model.selected_tool
-        end
-
-        def test_draw_grid_action
-          handler = HtmlDialogManager::ACTIONS['draw_grid']
-          assert handler
-          handler.call(@runtime, { 'name' => 'B' })
-          assert_instance_of Structure::Tools::GridTool, @model.selected_tool
-        end
-
-        def test_draw_floor_action
-          handler = HtmlDialogManager::ACTIONS['draw_floor']
-          assert handler
-          handler.call(@runtime, { 'thickness_mm' => 120 })
-          assert_instance_of Architecture::Tools::FloorTool, @model.selected_tool
-        end
-
-        def test_draw_ceiling_action
-          handler = HtmlDialogManager::ACTIONS['draw_ceiling']
-          assert handler
-          handler.call(@runtime, { 'height_mm' => 2700, 'thickness_mm' => 9 })
-          assert_instance_of Architecture::Tools::CeilingTool, @model.selected_tool
-        end
-
-        def test_edit_selected_wall_action
-          handler = HtmlDialogManager::ACTIONS['edit_selected_wall']
-          assert handler
-          handler.call(@runtime, {})
-          assert_instance_of Architecture::Tools::WallEditTool, @model.selected_tool
-        end
-
-        def test_draw_stair_action
-          handler = HtmlDialogManager::ACTIONS['draw_stair']
-          assert handler
-          handler.call(@runtime, {})
-          assert_instance_of Architecture::Tools::StairTool, @model.selected_tool
-        end
-
-        def test_draw_roof_framing_action
-          handler = HtmlDialogManager::ACTIONS['draw_roof_framing']
-          assert handler
-          handler.call(@runtime, {})
-          assert_instance_of Architecture::Tools::RoofFramingTool, @model.selected_tool
-        end
-
-        def test_draw_grid_framing_action
-          handler = HtmlDialogManager::ACTIONS['draw_grid_framing']
-          assert handler
-          handler.call(@runtime, {})
-          assert_instance_of Architecture::Tools::GridFramingTool, @model.selected_tool
-        end
-
         def test_roof_framing_editable_and_rebuild_repository
           repo = Architecture::RoofFramingRepository.new
           entity = Struct.new(:dict) do
@@ -359,13 +266,6 @@ module JiraNot
           assert_equal 'RC-C-0.20x0.20', loaded.column_type_id
         end
 
-        def test_draw_curtain_wall_action
-          handler = HtmlDialogManager::ACTIONS['draw_curtain_wall']
-          assert handler
-          handler.call(@runtime, {})
-          assert_instance_of Architecture::Tools::CurtainWallTool, @model.selected_tool
-        end
-
         def test_curtain_wall_repository_and_editability
           repo = Architecture::CurtainWallRepository.new
           entity = Struct.new(:dict) do
@@ -434,13 +334,6 @@ module JiraNot
           scaled_x = Architecture::StretchByTargetArea.scale_boundary_mm(pts, 40.0, mode: :stretch_x)
           scaled_x_area = Architecture::StretchByTargetArea.polygon_area_m2(scaled_x)
           assert_in_delta 40.0, scaled_x_area, 0.001
-        end
-
-        def test_stretch_by_area_tool_action
-          handler = HtmlDialogManager::ACTIONS['stretch_by_area']
-          assert handler
-          handler.call(@runtime, {})
-          assert_instance_of Architecture::Tools::StretchByAreaTool, @model.selected_tool
         end
 
         def test_rebar_and_bbs_actions
@@ -605,11 +498,6 @@ module JiraNot
           )
           new_header_mm = Core::Units.su_to_mm((Core::Units.mm_to_su(2000.0) + dz_top_out) - (Core::Units.mm_to_su(1975.0) + dz_top_in))
           assert_in_delta 25.0, new_header_mm, 0.001, 'Top header frame thickness must remain exactly 25mm without distortion'
-        end
-
-        def test_smart_stretch_dialog_action
-          handler = HtmlDialogManager::ACTIONS['smart_stretch']
-          assert handler, 'smart_stretch action must be registered in HtmlDialogManager'
         end
 
         # ── 16. Meter Unit Consistency Tests ──

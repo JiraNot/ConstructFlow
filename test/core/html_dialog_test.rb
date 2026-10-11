@@ -47,16 +47,15 @@ module JiraNot
 
         # ── ACTIONS table completeness ───────────────────────────
         EXPECTED_ACTIONS = %w[
-          show_inspector get_state
-          create_level set_phase
-          place_foundation place_column draw_beam draw_grid
-          draw_wall cut_opening place_door_window create_roof add_gutter
-          draw_floor draw_ceiling draw_profile_sweep use_laser_level generate_paving array_on_face
-          place_manhole route_pipe place_panelboard route_conduit
-          apply_surface place_cabinet place_wardrobe
-          place_asset show_costing get_boq_data
-          zoom_selected flip_selected_wall delete_selected trigger_shortcut
-          update_selected_wall edit_selected_wall
+          add_gutter apply_surface array_on_face assign_rebar
+          auto_dimension create_extension_preset create_level create_roof
+          delete_selected detect_rooms dispatch_ai_command export_boq_csv
+          export_thai_boq_excel fetch_takeoff_hud flip_selected_wall generate_a3_drawing_sheets
+          generate_extension_scenes generate_hip_gable_roof generate_paving get_boq_data
+          get_state place_panelboard revit_auto_roof save_catalog_asset
+          save_custom_profile set_phase show_bbs show_costing
+          show_inspector sweep_on_selection toggle_lod update_property
+          update_selected_wall zoom_selected
         ].freeze
 
         def test_all_expected_actions_registered
@@ -118,9 +117,18 @@ module JiraNot
         end
 
         # ── Panel shortcut badges must not contradict ShortcutManager ──
+        # The panel badges are static labels now that the keyboard tool
+        # shortcut layer (Core::ShortcutManager) is retired with the drawing
+        # UI, so the expected codes live here instead of in a Ruby registry.
+        PANEL_ROOF_BADGES = {
+          'drawRoofFraming' => 'FRM',
+          'modifyRoofFraming' => 'MFR',
+          'generateHipGableRoof' => 'HGR',
+          'drawRevitAutoRoof' => 'AR'
+        }.freeze
+
         def test_panel_roof_badges_use_canonical_codes
           html = File.read(File.join(HtmlDialogManager::UI_DIR, 'panel.html'))
-          shortcuts = JiraNot::ConstructFlow::Core::ShortcutManager::SHORTCUTS
 
           # data-action -> badge, for every ribbon button that declares one.
           badges = {}
@@ -132,24 +140,14 @@ module JiraNot
             badges[action] = badge.strip
           end
 
-          expected = {
-            'drawRoofFraming'       => 'FRM',
-            'modifyRoofFraming'     => 'MFR',
-            'generateHipGableRoof'  => 'HGR',
-            'drawRevitAutoRoof'     => 'AR'
-          }
-          expected.each do |action, code|
+          PANEL_ROOF_BADGES.each do |action, code|
             assert_equal code, badges[action],
                          "Ribbon action #{action} must be badged [#{code}]"
-            assert shortcuts.key?(code),
-                   "Ribbon badge [#{code}] for #{action} must be a registered shortcut"
           end
 
           # The historic conflict: roof framing badged as the roof-system code.
           refute_equal 'RF', badges['drawRoofFraming'],
                        'Roof framing must never be badged as RF (roof system)'
-          assert_equal :roof, shortcuts['RF'][:action]
-          assert_equal :roof_framing, shortcuts['FRM'][:action]
         end
 
         def test_panel_css_exists

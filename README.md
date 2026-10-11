@@ -110,7 +110,7 @@ The implementation has achieved major milestones across the **Plan-Driven Modeli
 3. **20-Sheet A3 Vector Permit Set & Graphics:**
    * Embedded Type0 Sarabun Thai font, ground baseline with 45° double-tick earth hatching, elevation datums, stair walklines, and saved viewport persistence.
 4. **Downstream Adapters & Interoperability:**
-   * **SketchUp Bridge & Packaging:** Bi-directional synchronization bridge and cross-platform `.rbz` extension builder (`npm run package:sketchup`).
+   * **SketchUp Bridge & Packaging:** Non-destructive import/sync bridge and LayOut adapter (authoring stays in the standalone workbench — [ADR-0006](docs/decisions/ADR-0006-standalone-first-engine.md)) plus the cross-platform `.rbz` extension builder (`npm run package:sketchup`).
    * **AutoCAD DWG/DXF:** Native R2018 DXF generator with 20 PaperSpace layouts and AIA/วสท. phase layering.
    * **OpenBIM & Revit:** IFC 4.3 ADD2 STEP serializer with RFC-4122 to 22-character GUID conversion, plus Revit direct transfer schema.
 

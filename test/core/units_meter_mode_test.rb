@@ -26,7 +26,6 @@ end
 
 require_relative '../../apps/sketchup-extension/constructflow/core/units'
 require_relative '../../apps/sketchup-extension/constructflow/core/plan_interaction_engine'
-require_relative '../../apps/sketchup-extension/constructflow/modules/structure/tools/column_tool'
 
 module JiraNot
   module ConstructFlow
@@ -96,23 +95,6 @@ module JiraNot
         assert_raises(ArgumentError) { @engine.numeric_distance_mm('3500mm') }
         assert_raises(ArgumentError) { @engine.numeric_distance_mm('10,000') }
         assert_raises(ArgumentError) { @engine.numeric_distance_mm('3 ft') }
-      end
-
-      def test_column_tool_accepts_meter_inputs_and_displays_meters
-        rt = Struct.new(:levels, :active_model).new({ '1FL' => Struct.new(:id, :elevation_mm).new('1FL', 0) }, nil)
-        tool = Structure::Tools::ColumnTool.new(
-          runtime: rt, section_mm: [200, 200], base_level_id: '1FL', top_level_id: '1FL'
-        )
-
-        tool.onUserText('0.2, 0.2', nil)
-        assert_equal [200.0, 200.0], tool.instance_variable_get(:@section_mm)
-        assert_match(/0.200 m × 0.200 m/, Sketchup.status_text)
-        tool.onUserText('0.4', nil)
-        assert_equal [400.0, 400.0], tool.instance_variable_get(:@section_mm)
-        tool.onUserText('0.4, 0.4', nil)
-        assert_equal [400.0, 400.0], tool.instance_variable_get(:@section_mm)
-        assert_equal 21_000.0, Core::Units.m_input_to_mm('21')
-        assert_raises(ArgumentError) { Core::Units.m_input_to_mm('21', max_meters: 20) }
       end
 
       private

@@ -78,6 +78,12 @@ Suggested order:
 8. mark unresolved objects rather than deleting them;
 9. expose model health diagnostics.
 
+For standalone `.cfproj` v2 imports, persisted relationships must have a non-empty kind,
+valid object endpoints and well-formed optional role/metadata. Persisted parametric constraints,
+when present, must have a stable UUID, a supported kind, the expected entity-reference count,
+valid object/property references and a finite optional value. Invalid records reject the import;
+unknown sibling module payloads remain preserved by the migration contract.
+
 ## Unknown/unavailable module
 
 If a project contains objects owned by an unavailable module:

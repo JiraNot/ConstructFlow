@@ -9,7 +9,6 @@ require File.join(INTERIOR_TEST_ROOT, 'joinery_part_generator')
 require File.join(INTERIOR_TEST_ROOT, 'repository')
 require File.join(INTERIOR_TEST_ROOT, 'validators', 'interior_validator')
 require File.join(INTERIOR_TEST_ROOT, 'quantity', 'interior_quantity_provider')
-require File.join(INTERIOR_TEST_ROOT, 'tools', 'cabinet_run_tool')
 
 class InteriorJoineryTest < Minitest::Test
   Interior = JiraNot::ConstructFlow::Interior
@@ -46,16 +45,6 @@ class InteriorJoineryTest < Minitest::Test
 
     restored = Interior::CabinetRunDefinition.from_h(definition.to_h)
     assert_equal definition.to_h, restored.to_h
-  end
-
-  def test_plan_placement_reads_level_from_symbol_or_string_params
-    tool = Interior::Tools::CabinetRunTool.allocate
-
-    tool.instance_variable_set(:@params, { base_level_id: 'level.symbol' })
-    assert_equal 'level.symbol', tool.send(:placement_level_id)
-
-    tool.instance_variable_set(:@params, { 'level_id' => 'level.string' })
-    assert_equal 'level.string', tool.send(:placement_level_id)
   end
 
   def test_explicit_split_requires_exact_usable_width

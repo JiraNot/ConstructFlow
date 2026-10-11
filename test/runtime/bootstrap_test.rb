@@ -120,4 +120,15 @@ class BootstrapContractTest < Minitest::Test
 
     assert JiraNot::ConstructFlow::Runtime.booted?
   end
+
+  # The ported roof junction command only has to be reachable through the same
+  # Command Bus as every other mutation. Behaviour is covered by
+  # test/roof/roof_junction_test.rb against an isolated runtime, because the
+  # runtime-level tests here share one global Runtime and one model.
+  def test_roof_junction_command_is_registered_by_boot
+    require BOOTSTRAP
+
+    assert JiraNot::ConstructFlow::Runtime.commands.registered?('SetRoofJunction'),
+           'the roof module must register SetRoofJunction during boot'
+  end
 end

@@ -13,8 +13,8 @@ module JiraNot
           optional_capabilities: %w[extension.boundary structure.member_generator drainage.network],
           provides: %w[roof.generator roof.edge_host roof.quantity],
           objects: %w[roof.system roof.gutter],
-          commands: %w[GenerateRoof ModifyRoofBoundary SetRoofSlope ChangeRoofSystem AddGutter],
-          events: %w[RoofGenerated RoofChanged GutterAdded HostedGutterRegenerated GeometryChanged QuantityDirty DrawingDirty ValidationStateChanged],
+          commands: %w[GenerateRoof ModifyRoofBoundary SetRoofSlope ChangeRoofSystem AddGutter SetRoofJunction],
+          events: %w[RoofGenerated RoofChanged RoofJunctionSet GutterAdded HostedGutterRegenerated GeometryChanged QuantityDirty DrawingDirty ValidationStateChanged],
           providers: ['constructflow.roof.quantity'],
           validators: %w[roof.validity roof.gutter.validity]
         }.freeze
@@ -197,6 +197,64 @@ module JiraNot
             }
           end
 
+          runtime.commands.register(
+            'SetRoofJunction',
+            owner_module: 'constructflow.roof',
+            validator: lambda { |command|
+              junction_validation_errors(command[:input], runtime, repository)
+            }
+          ) do |command|
+            input = command[:input]
+            roof_object = resolve_roof(input, runtime)
+            roof_definition = repository.read_roof(roof_object.entity)
+            definition = junction_definition_from_input(input, roof_object, roof_definition)
+            # Re-setting the junction replaces the previous host link instead of
+            # accumulating one relationship per edit.
+            runtime.smart_objects.remove_relationship(roof_object.entity, kind: 'host')
+            repository.write_junction(roof_object.entity, definition)
+            runtime.smart_objects.add_relationship(
+              roof_object.entity,
+              kind: 'host',
+              target_id: definition.host_object_id,
+              role: 'roof_junction_host',
+              metadata: {
+                'junction_type' => definition.junction_type,
+                'edge_index' => definition.edge_index,
+                'flashing_profile' => definition.flashing_profile
+              }
+            )
+            runtime.smart_objects.mark_dirty(roof_object.entity, 'dirty_quantity', 'dirty_drawing')
+
+            {
+              updated_object_ids: [roof_object.id],
+              events: [
+                {
+                  name: 'RoofJunctionSet',
+                  object_ids: [roof_object.id, definition.host_object_id],
+                  payload: {
+                    edge_index: definition.edge_index,
+                    junction_type: definition.junction_type,
+                    flashing_profile: definition.flashing_profile,
+                    upstand_mm: definition.upstand_mm,
+                    cover_mm: definition.cover_mm
+                  }
+                },
+                {
+                  name: 'RoofChanged',
+                  object_ids: [roof_object.id],
+                  payload: { change: 'junction', host_object_id: definition.host_object_id }
+                },
+                {
+                  name: 'RelationshipChanged',
+                  object_ids: [roof_object.id, definition.host_object_id],
+                  payload: { kind: 'host', role: 'roof_junction_host' }
+                },
+                { name: 'QuantityDirty', object_ids: [roof_object.id] },
+                { name: 'DrawingDirty', object_ids: [roof_object.id] }
+              ]
+            }
+          end
+
           install_ui(runtime)
         end
 
@@ -317,6 +375,56 @@ module JiraNot
           [error.message]
         end
 
+        # Derives the flashing path from the addressed roof edge when the caller
+        # does not supply one, so a junction can never be stored against an edge
+        # that the roof does not have.
+        def junction_definition_from_input(input, roof_object, roof_definition)
+          edge_index = value_or(input, :edge_index, 0)
+          path = input[:path_mm] || input['path_mm']
+          path = roof_definition ? roof_definition.edge_points_mm(edge_index) : [] if path.nil? || Array(path).empty?
+
+          RoofJunctionDefinition.new(
+            roof_object_id: roof_object.id,
+            host_object_id: value_or(input, :host_object_id, nil),
+            edge_index: edge_index,
+            path_mm: path,
+            junction_type: value_or(input, :junction_type, 'new_roof_to_existing_wall'),
+            flashing_profile: value_or(input, :flashing_profile, 'wall_apron'),
+            material: value_or(input, :material, 'metal'),
+            upstand_mm: value_or(input, :upstand_mm, 150),
+            cover_mm: value_or(input, :cover_mm, 150)
+          )
+        end
+
+        def junction_validation_errors(input, runtime, repository)
+          roof_object = resolve_roof(input, runtime)
+          return ['roof not found'] unless roof_object
+
+          roof_definition = repository.read_roof(roof_object.entity)
+          return ['roof definition missing'] unless roof_definition
+
+          definition = junction_definition_from_input(input, roof_object, roof_definition)
+          errors = definition.errors.dup
+          host = runtime.smart_objects.fetch_by_id(definition.host_object_id)
+          if host.nil?
+            errors << 'roof junction host object not found'
+          else
+            errors << 'roof junction host cannot be the roof itself' if host.id.to_s == roof_object.id.to_s
+            if definition.junction_type == 'new_roof_to_existing_wall' && host.type.to_s != 'architecture.wall'
+              errors << 'new_roof_to_existing_wall junction requires an architecture wall host'
+            end
+          end
+          unless definition.edge_index >= 0 && definition.edge_index < roof_definition.sloped_points_mm.length
+            errors << 'roof edge index out of range'
+          end
+          unless definition.matches_edge?(roof_definition.edge_points_mm(definition.edge_index))
+            errors << 'roof junction path must follow the addressed roof edge'
+          end
+          errors
+        rescue StandardError => error
+          [error.message]
+        end
+
         def resolve_roof(input, runtime)
           entity = input[:entity] || input['entity'] || input[:roof_entity] || input['roof_entity']
           object_id = input[:object_id] || input['object_id'] || input[:roof_object_id] || input['roof_object_id']
@@ -413,40 +521,6 @@ module JiraNot
 
         def install_ui(runtime)
           menu = runtime.menu.add_submenu('Roof')
-          menu.add_item('Draw Roof Footprint in Plan') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
-              ['Roof form (lean_to/flat/gable/hip)', 'Slope (%)', 'Covering'],
-              ['lean_to', '5', 'metal_sheet'],
-              'ConstructFlow Plan Roof'
-            )
-            next unless values
-
-            runtime.active_model.select_tool(
-              Tools::BoundaryTool.new(
-                runtime: runtime,
-                roof_form: values[0],
-                slope_percent: Float(values[1]),
-                covering_system: values[2]
-              )
-            )
-          rescue ArgumentError => error
-            UI.messagebox(error.message)
-          end
-          menu.add_item('Edit Roof Footprint in Plan') do
-            runtime.plan_scenes.refresh_preset('architecture.construction') if runtime.respond_to?(:plan_scenes)
-            runtime.active_model.select_tool(
-              Architecture::Tools::BoundaryEditTool.new(
-                runtime: runtime,
-                object_type: 'roof.system',
-                repository: Repository.new,
-                command: 'ModifyRoofBoundary',
-                label: 'Roof',
-                read_method: :read_roof
-              )
-            )
-          rescue StandardError => error
-            UI.messagebox("ConstructFlow Roof edit error: #{error.message}")
-          end
           menu.add_item('Generate Roof from Selected Face') do
             face = runtime.active_model.selection.find { |entity| entity.is_a?(Sketchup::Face) }
             unless face

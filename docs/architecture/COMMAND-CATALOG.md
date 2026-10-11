@@ -137,6 +137,7 @@ Extension orchestration follows the same rule. `GenerateOrUpdateArchitectureFrom
 - `AddSoffitSystem`
 - `AddFlashing`
 - `AddGutter`
+- `SetRoofJunction` — persists the flashing detail where a new roof meets an existing wall host, replacing any previous junction host link.
 - `ConnectDownpipe`
 
 ### Structure

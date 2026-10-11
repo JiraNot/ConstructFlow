@@ -78,7 +78,6 @@ module JiraNot
                 ->(runtime) { Drainage::RoutingRegistration.install(runtime) },
                 ->(runtime) { Drainage::RouteDetourRegistration.install(runtime) },
                 ->(runtime) { Drainage::QualityRegistration.install(runtime) },
-                ->(runtime) { Drainage::RouteNodeUiRegistration.install(runtime) },
                 ->(runtime) { Drainage::RepresentationRegistration.install(runtime) }
               ]
             ),

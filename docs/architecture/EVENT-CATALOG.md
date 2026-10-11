@@ -91,6 +91,7 @@ timestamp: <runtime timestamp>
 
 ### Domain-specific coordination
 
+- `RoofJunctionSet` — emitted by `SetRoofJunction`; payload carries `edge_index`, `junction_type`, `flashing_profile`, `upstand_mm` and `cover_mm` so the flashing detail can be reported without re-reading the Roof attribute dictionary.
 - `RoofBoundaryChanged`
 - `RoofDrainageChanged`
 - `StructuralMemberChanged`

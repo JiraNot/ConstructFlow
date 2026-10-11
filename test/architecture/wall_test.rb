@@ -3,7 +3,6 @@
 require_relative '../test_helper'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/registration'
 require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/wall_geometry'
-require_relative '../../apps/sketchup-extension/constructflow/modules/architecture/tools/wall_edit_tool'
 
 class WallDefinitionTest < Minitest::Test
   WallDefinition = JiraNot::ConstructFlow::Architecture::WallDefinition
@@ -389,49 +388,6 @@ class WallDefinitionTest < Minitest::Test
     )
 
     assert_equal [[0.0, -100.0, 0.0], [3000.0, -100.0, 0.0]], wall.centerline_path_mm
-  end
-
-  def test_wall_edit_session_uses_selected_wall_level_for_plan_references
-    tool = JiraNot::ConstructFlow::Architecture::Tools::WallEditTool.allocate
-    object = Struct.new(:level_refs).new([{ 'level_id' => 'level.2' }])
-    definition = WallDefinition.new(path_mm: [[0, 0, 0], [3000, 0, 0]])
-
-    assert_equal 'level.2', tool.send(:editing_level_id, object, definition)
-  end
-
-  def test_numeric_middle_vertex_stretch_uses_adjacent_anchor
-    interaction = Class.new do
-      attr_reader :anchor
-
-      def segment_preview(anchor, _cursor, **_options)
-        @anchor = anchor
-        { finish_mm: [1500.0, 1200.0, 0.0] }
-      end
-    end.new
-    tool = JiraNot::ConstructFlow::Architecture::Tools::WallEditTool.allocate
-    tool.instance_variable_set(:@interaction, interaction)
-    tool.instance_variable_set(:@definition, WallDefinition.new(
-      path_mm: [[0, 0, 0], [1000, 0, 0], [1000, 1000, 0], [2000, 1000, 0]]
-    ))
-    tool.instance_variable_set(:@endpoint_index, 2)
-    tool.instance_variable_set(:@numeric_length_mm, 500)
-    tool.instance_variable_set(:@constraint_mode, :free)
-
-    tool.send(:stretch_cursor_point, [1300, 1200, 0])
-
-    assert_equal [1000.0, 0.0, 0.0], interaction.anchor
-  end
-
-  def test_wall_edit_relative_numeric_stretch_adds_to_current_segment_length
-    tool = JiraNot::ConstructFlow::Architecture::Tools::WallEditTool.allocate
-    tool.instance_variable_set(:@interaction, JiraNot::ConstructFlow::Core::PlanInteractionEngine.new)
-    tool.instance_variable_set(:@definition, WallDefinition.new(path_mm: [[0, 0, 0], [3000, 0, 0]]))
-    tool.instance_variable_set(:@endpoint_index, 1)
-    tool.instance_variable_set(:@action, :stretch)
-
-    assert_equal 3500.0, tool.send(:typed_stretch_length, '+0.5')
-    assert_equal 2500.0, tool.send(:typed_stretch_length, '-0.5')
-    assert_equal 1200.0, tool.send(:typed_stretch_length, '1.2')
   end
 
   def test_wall_geometry_builds_one_continuous_mitered_outline_for_polyline

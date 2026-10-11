@@ -550,27 +550,6 @@ module JiraNot
           return unless runtime.respond_to?(:menu) && runtime.menu
 
           menu = runtime.menu.add_submenu('Drainage')
-          menu.add_item('Place Manhole') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
-              ['Size (mm)', 'Cover level mm (blank=unknown)', 'Invert in mm (blank=unknown)', 'Invert out mm (blank=unknown)'],
-              ['600', '', '', ''],
-              'ConstructFlow Manhole'
-            )
-            next unless values
-
-            runtime.active_model.select_tool(
-              Tools::ManholeTool.new(
-                runtime: runtime,
-                size_mm: [Float(values[0]), Float(values[0])],
-                cover_level_mm: optional_ui_float(values[1]),
-                invert_in_mm: optional_ui_float(values[2]),
-                invert_out_mm: optional_ui_float(values[3])
-              )
-            )
-          rescue ArgumentError => error
-            UI.messagebox(error.message)
-          end
-
           menu.add_item('Connect Selected Manholes') do
             manholes = selected_manhole_objects(runtime)
             if manholes.length != 2
@@ -588,16 +567,6 @@ module JiraNot
             UI.messagebox(result[:errors].join("\n")) unless result[:status] == 'success'
           end
 
-          menu.add_item('Relocate Selected Manhole') do
-            manholes = selected_manhole_objects(runtime)
-            if manholes.length != 1
-              UI.messagebox('Select one Existing ConstructFlow manhole first.')
-              next
-            end
-            runtime.active_model.select_tool(
-              Tools::RelocateManholeTool.new(runtime: runtime, manhole_object_id: manholes.first.id)
-            )
-          end
         end
 
         def selected_manhole_objects(runtime)

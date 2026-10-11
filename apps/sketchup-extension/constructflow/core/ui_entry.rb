@@ -7,18 +7,22 @@ module JiraNot
       # Domain registrations attach their submenus into THIS menu via
       # UiEntry.install_domain_menu instead of creating parallel
       # "ConstructFlow" menus, which used to duplicate the whole tree on boot.
+      #
+      # This is the adapter surface only: import/sync, project and level
+      # setup, drawing/documentation output and inspection. Native
+      # authoring (toolbars, plan tools) is retired in favour of the
+      # standalone workbench; see docs/decisions/ADR-0006.
       module UiEntry
         module_function
 
         # Entry point called by Runtime#install_ui_entry (during boot!).
-        # Creates the ONE ConstructFlow menu, the quick-access items and the
-        # toolbar. Domain registrations then use install_domain_menu to
-        # attach into the same menu.
+        # Creates the ONE ConstructFlow menu and the quick-access items.
+        # Domain registrations then use install_domain_menu to attach into
+        # the same menu.
         def install(runtime)
           menu = UI.menu('Extensions').add_submenu('ConstructFlow')
           runtime.instance_variable_set(:@menu, menu)
           define_menu_items(runtime, menu)
-          Toolbar.install(runtime, menu)
         end
 
         # Single place for domain submenus. Every registration that used to

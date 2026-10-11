@@ -733,16 +733,6 @@ module JiraNot
           return unless runtime.respond_to?(:menu) && runtime.menu
 
           menu = runtime.menu.add_submenu('Surface & Paving')
-          menu.add_item('Draw Surface Boundary in Plan') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Surface type', 'Base level ID (optional)'], ['paver', ''], 'ConstructFlow Plan Surface')
-            next unless values
-
-            runtime.active_model.select_tool(
-              Tools::BoundaryTool.new(runtime: runtime, surface_type: values[0], base_level_id: values[1])
-            )
-          rescue ArgumentError => error
-            UI.messagebox(error.message)
-          end
           menu.add_item('Create Surface from Selected Face') do
             face = runtime.active_model.selection.find { |entity| entity.is_a?(Sketchup::Face) }
             unless face

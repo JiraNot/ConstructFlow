@@ -56,3 +56,37 @@ history before large-model claims. Domain provider registration and adapter pari
 subsequent milestones; the runtime currently assembles the implemented handlers explicitly.
 
 See `../STANDALONE-ENGINE-REVIEW-2026-10.md` for priorities and acceptance evidence.
+
+## Amendment (2026-10-11) — the SketchUp adapter loses its authoring surface
+
+The adapter boundary above also applies *inside* `apps/sketchup-extension`. SketchUp keeps the
+downstream adapter role — `.cfproj` import, non-destructive UUID sync, automated scene/section
+tabs, native LayOut export, drawing/quantity output — and drops its native authoring UI, because
+ADR-0006 makes the standalone workbench the only place objects are drawn and edited. Two documents
+already said so: `../architecture/UI-UX-SPEC.md` ("The React standalone workbench uses its existing
+toolbar and canvas keyboard handlers") and `../UX-CATALOG-MENUS-PLAN-2026-10-08.md` (the Ruby
+ToolCatalog and Extensions menus are the *old* adapter contract, not a standalone requirement).
+
+Removed from the extension:
+
+| Removed | Path |
+| :--- | :--- |
+| Toolbar, stage palette, tool catalog, shortcut manager, tool properties | `constructflow/core/{toolbar,tool_catalog,stage_palette,shortcut_manager,tool_properties}.rb` |
+| Interactive plan tools (35 classes) | `constructflow/core/tools/{laser_level,spot_elevation}_tool.rb`, `constructflow/modules/*/tools/*.rb` |
+| Interaction helpers with no remaining consumer | `constructflow/core/{ghost_preview,viewport_snap_helper}.rb` |
+| Route-grip menu registration whose only item launched a retired tool | `constructflow/modules/drainage/route_node_ui_registration.rb` |
+| Toolbar icons and their generator | `constructflow/icons/*` (94 PNG), `scripts/generate_icons.rb` |
+
+The rest of the bridge stays, and it is not decorative: `core/plan_editor_sync.rb` is the target of
+the Ruby script that `apps/plan-editor/src/components/SyncBridgePanel.tsx` generates, and that path
+executes `CreateLevel`, `CreateStructuralGrid`, `CreateColumn`, `CreateFoundation`, `CreateBeam`,
+`CreateWall` and `PlaceDoorWindowOnWall` on the Ruby domain engine. Deleting the Ruby engine or its
+Command Bus would break the standalone editor's own SketchUp sync. `core/smart_stretch_engine.rb`
+stays because the panel's `update_property` path still resizes a selection with it, and
+`core/tools/{extension_scene_generator,auto_dimension_engine}.rb` stay as documentation output.
+
+`HtmlDialogManager::RETIRED_ACTIONS` answers a panel that still posts a retired action with an
+explicit migration message instead of an "unknown command" error. The panel cards still carry those
+buttons; pruning that UI (and its `CF.actions` entries) is follow-up work, not part of this
+decision. The Ruby `PlanInteractionEngine` is also retained although its only production consumers
+were the retired tools; it is pure, renderer-neutral geometry with its own tests.

@@ -44,59 +44,27 @@ begin
 
   Core = JiraNot::ConstructFlow::Core
   lines << "SketchUp #{Sketchup.version} / Ruby #{RUBY_VERSION}"
-  lines << "ToolCatalog: #{defined?(Core::ToolCatalog) ? 'loaded' : 'MISSING'}"
+  drawing_ui = [Core::Toolbar, Core::ToolCatalog, Core::ShortcutManager, Core::ToolProperties,
+                Core::StagePalette].select { |constant| Core.const_defined?(constant, false) }
+  lines << "drawing UI: #{drawing_ui.empty? ? 'retired' : "STILL LOADED -> #{drawing_ui.join(', ')}"}"
 
-  check(failures, lines, 'ToolCatalog exposes 7 stages / 46 tools') do
-    Core::ToolCatalog::STAGES.size == 7 && Core::ToolCatalog::TOOLS.size == 46
+  check(failures, lines, 'Native drawing UI is retired (no toolbar / catalog / shortcuts)') do
+    drawing_ui.empty?
   end
 
-  check(failures, lines, 'Every catalog icon exists on disk (24px + 48px)') do
-    Core::ToolCatalog::TOOLS.all? do |tool|
-      File.exist?(Core::ToolCatalog.icon_path(tool[:icon])) &&
-        File.exist?(Core::ToolCatalog.icon_path(tool[:icon], large: true))
-    end
+  check(failures, lines, 'Retired panel actions answer with a migration message') do
+    Core::HtmlDialogManager::RETIRED_ACTIONS.include?('draw_wall') &&
+      Core::HtmlDialogManager::RETIRED_ACTIONS.include?('trigger_shortcut') &&
+      !Core::HtmlDialogManager::ACTIONS.key?('draw_wall')
   end
 
-  check(failures, lines, 'Roof family codes are in the catalog') do
-    %w[RF FRM MFR HGR AR].all? { |c| Core::ToolCatalog.tool(c) }
+  check(failures, lines, 'Adapter handlers stay registered (project, sheets, BOQ, scenes)') do
+    %w[get_state create_level set_phase generate_a3_drawing_sheets generate_extension_scenes
+       auto_dimension get_boq_data].all? { |a| Core::HtmlDialogManager::ACTIONS.key?(a) }
   end
 
-  check(failures, lines, 'Roof family has parameter schemas and opens a dialog') do
-    %w[FRM MFR HGR AR].all? do |c|
-      Core::ToolProperties.drawing?(c) && !Core::ToolProperties.schema_for(c).empty?
-    end
-  end
-
-  check(failures, lines, 'Every catalog code is a registered shortcut') do
-    Core::ToolCatalog::TOOLS.all? { |t| Core::ShortcutManager::SHORTCUTS.key?(t[:code]) }
-  end
-
-  check(failures, lines, 'No catalog code shadows another (typing reachable)') do
-    codes = Core::ToolCatalog::TOOLS.map { |t| t[:code] }
-    codes.combination(2).none? { |a, b| a.start_with?(b) || b.start_with?(a) }
-  end
-
-  check(failures, lines, 'Every stage palette wires its tools with embedded icons') do
-    Core::ToolCatalog::STAGES.all? do |stage|
-      html = Core::StagePalette.build_html(stage[:key])
-      tools = Core::ToolCatalog.tools_for(stage[:key])
-      !html.include?('ไม่พบกลุ่มเครื่องมือ') &&
-        tools.all? { |t| html.include?("runTool('#{t[:code]}')") } &&
-        html.scan('data:image/png;base64,').size >= tools.size
-    end
-  end
-
-  check(failures, lines, 'RoofFramingTool keeps the settings from the dialog') do
-    tool = JiraNot::ConstructFlow::Architecture::Tools::RoofFramingTool.new(
-      settings: { pitch_degrees: 35.0, roof_type: 'shed' }
-    )
-    s = tool.instance_variable_get(:@settings)
-    s[:pitch_degrees] == 35.0 && s[:roof_type] == 'shed'
-  end
-
-  check(failures, lines, 'ShortcutManager.panel_payload stringifies symbol keys') do
-    Core::ShortcutManager.panel_payload({ form: 'hip', slope_deg: 30.0 }) ==
-      { 'form' => 'hip', 'slope_deg' => 30.0 }
+  check(failures, lines, 'Bridge and LayOut export services are available') do
+    defined?(Core::PlanEditorSync) && defined?(Core::NativeLayoutExportService)
   end
 
   # Drawing must never yank the user's working viewport. The managed plan
@@ -125,14 +93,13 @@ begin
     before == after
   end
 
-  # Real-model API touch: a blank model must accept our tool without erroring.
-  check(failures, lines, 'Active model accepts RoofFramingTool selection') do
+  # Real-model API touch: the adapter must render a managed plan scene on a
+  # blank model without touching the user's live camera.
+  check(failures, lines, 'Active model accepts the plan-scene renderer') do
     model = Sketchup.active_model
-    tool = JiraNot::ConstructFlow::Architecture::Tools::RoofFramingTool.new(
-      settings: { pitch_degrees: 30.0, roof_type: 'gable' }
-    )
-    model.select_tool(tool)
-    tool.respond_to?(:activate) && tool.respond_to?(:onLButtonDown)
+    runtime = JiraNot::ConstructFlow::Runtime
+    runtime.respond_to?(:plan_scenes) && model.respond_to?(:entities) &&
+      Core::SketchupPlanRenderer.new.respond_to?(:render)
   end
 
   lines << ''

@@ -347,6 +347,14 @@ module JiraNot
           action = forced_action || data['action']
           params = data['params'] || {}
 
+          if RETIRED_ACTIONS.include?(action)
+
+            toast("ย้ายเครื่องมือ '#{action}' ไปที่ ConstructFlow Standalone Workbench แล้ว — ส่วนขยาย SketchUp เหลือ นำเข้า/Sync/LayOut/เอกสาร", level: 'warning')
+
+            return
+
+          end
+
           handler = ACTIONS[action]
           if handler.nil? && !extended_action?(action)
             toast("ไม่รู้จักคำสั่ง: #{action}", level: 'error')
@@ -365,6 +373,21 @@ module JiraNot
         # Extended panel actions that are plain module functions instead of
         # entries in the ACTIONS lambda table.
         EXTENDED_ACTIONS = %w[save_door_window_favorite delete_door_window_favorite].freeze
+        # Authoring actions retired with the native SketchUp drawing UI (ADR-0006).
+        # The standalone workbench owns authoring; this extension is the downstream
+        # adapter. They stay listed so a panel built before the retirement gets an
+        # explicit migration message instead of an "unknown command" error.
+        RETIRED_ACTIONS = %w[
+          activate_spot_elevation cut_opening draw_beam draw_ceiling
+          draw_curtain_wall draw_floor draw_grid draw_grid_framing
+          draw_profile_sweep draw_roof_framing draw_stair draw_wall
+          edit_selected_wall modify_curtain_wall modify_roof_framing
+          place_asset place_cabinet place_column place_door_window
+          place_foundation place_manhole place_wardrobe route_conduit
+          route_pipe smart_stretch stretch_by_area trigger_shortcut
+          use_laser_level
+        ].freeze
+
 
         private_class_method def extended_action?(action)
           EXTENDED_ACTIONS.include?(action)
@@ -844,29 +867,12 @@ module JiraNot
             :no_state_push
           },
 
-          'activate_spot_elevation' => lambda { |runtime, _p|
-            tool = Core::Tools::SpotElevationTool.new(runtime)
-            runtime.active_model.select_tool(tool)
-            HtmlDialogManager.toast('เปิดเครื่องมือปักหมุดระดับ (Spot Elevation) แล้ว • คลิกบนพื้นผิว', level: 'info')
-            :no_state_push
-          },
-
           'fetch_takeoff_hud' => lambda { |runtime, _p|
             hud = Core::TakeoffHUDService.compute(runtime)
             js = "window.ConstructFlowUI && window.ConstructFlowUI.renderTakeoffHUD(#{hud.to_json})"
             HtmlDialogManager.instance_variable_get(:@dialog)&.execute_script(js)
             :no_state_push
           },
-
-          'trigger_shortcut' => lambda { |runtime, p|
-            code = p['code'].to_s.strip.upcase
-            success = Core::ShortcutManager.execute(code, runtime, prompt: true)
-            unless success
-              HtmlDialogManager.toast("ไม่พบคีย์ลัดหรือยกเลิก: #{code}", level: 'warning')
-            end
-            :no_state_push
-          },
-
           'delete_selected' => lambda { |runtime, _p|
             sel = runtime.active_model.selection
             if sel && sel.any?
@@ -908,13 +914,6 @@ module JiraNot
             HtmlDialogManager.toast('อัปเดตขนาดผนังสำเร็จ', level: 'success')
           },
 
-          'edit_selected_wall' => lambda { |runtime, _p|
-            runtime.active_model.select_tool(
-              Architecture::Tools::WallEditTool.new(runtime: runtime)
-            )
-            :no_state_push
-          },
-
           'get_boq_data' => lambda { |runtime, _p|
             boq = HtmlDialogManager.generate_boq_data(runtime)
             HtmlDialogManager.execute_script("ConstructFlowUI.renderBOQ(#{boq.to_json});")
@@ -947,111 +946,7 @@ module JiraNot
           },
 
           # -- Structure -------------------------------------------
-          'place_foundation' => lambda { |runtime, p|
-            size = (p['size_mm'] || [1000, 1000, 400]).map(&:to_f)
-            runtime.active_model.select_tool(
-              Structure::Tools::FoundationTool.new(
-                runtime:         runtime,
-                size_mm:         size,
-                foundation_type: p['foundation_type'].to_s
-              )
-            )
-            :no_state_push
-          },
-
-          'place_column' => lambda { |runtime, p|
-            section = (p['section_mm'] || [200, 200]).map(&:to_f)
-            anchor = (p['anchor'] || :center).to_sym
-            profile_code = p['profile_code']
-            runtime.active_model.select_tool(
-              Structure::Tools::ColumnTool.new(
-                runtime:           runtime,
-                section_mm:        section,
-                explicit_height_mm: p['height_mm'].to_f > 0 ? p['height_mm'].to_f : 2800.0,
-                base_level_id:     p['base_level_id'].to_s,
-                top_level_id:      p['top_level_id'].to_s,
-                anchor:            anchor,
-                profile_code:      profile_code
-              )
-            )
-            :no_state_push
-          },
-
-          'draw_beam' => lambda { |runtime, p|
-            section = (p['section_mm'] || [200, 300]).map(&:to_f)
-            anchor = (p['anchor'] || :top_center).to_sym
-            profile_code = p['profile_code']
-            runtime.active_model.select_tool(
-              Structure::Tools::BeamTool.new(
-                runtime:        runtime,
-                section_mm:     section,
-                level_id:       p['level_id'].to_s,
-                base_offset_mm: p['base_offset_mm'].to_f,
-                anchor:         anchor,
-                profile_code:   profile_code
-              )
-            )
-            :no_state_push
-          },
-
-          'draw_grid' => lambda { |runtime, p|
-            runtime.active_model.select_tool(
-              Structure::Tools::GridTool.new(
-                runtime:   runtime,
-                name:      p['name'] || 'Grid',
-                level_id:  p['level_id'].to_s,
-                offset_mm: p['offset_mm'].to_f
-              )
-            )
-            :no_state_push
-          },
-
           # -- Architecture ----------------------------------------
-                    'draw_grid_framing' => lambda { |runtime, _p|
-            runtime.active_model.select_tool(
-              Architecture::Tools::GridFramingTool.new(runtime: runtime)
-            )
-            :no_state_push
-          },
-
-          'draw_stair' => lambda { |runtime, _p|
-            runtime.active_model.select_tool(
-              Architecture::Tools::StairTool.new(runtime: runtime)
-            )
-            :no_state_push
-          },
-
-          'draw_roof_framing' => lambda { |runtime, _p|
-            runtime.active_model.select_tool(
-              (Architecture::Tools::RoofFramingTool.new(runtime: runtime) rescue Architecture::Tools::RoofFramingTool.new)
-            )
-            :no_state_push
-          },
-
-          'modify_roof_framing' => lambda { |runtime, _p|
-            Architecture::Tools::RoofFramingTool.modify_selected(runtime.active_model)
-            :no_state_push
-          },
-
-          'draw_curtain_wall' => lambda { |runtime, _p|
-            runtime.active_model.select_tool(
-              (Architecture::Tools::CurtainWallTool.new(runtime: runtime) rescue Architecture::Tools::CurtainWallTool.new)
-            )
-            :no_state_push
-          },
-
-          'modify_curtain_wall' => lambda { |runtime, _p|
-            Architecture::Tools::CurtainWallTool.modify_selected(runtime.active_model)
-            :no_state_push
-          },
-
-          'stretch_by_area' => lambda { |runtime, _p|
-            runtime.active_model.select_tool(
-              Architecture::Tools::StretchByAreaTool.new
-            )
-            :no_state_push
-          },
-
           'detect_rooms' => lambda { |runtime, p|
             res = runtime.commands.execute(
               'DetectRoomsFromWalls',
@@ -1131,50 +1026,6 @@ module JiraNot
 
 
 
-          'draw_wall' => lambda { |runtime, p|
-            runtime.active_model.select_tool(
-              Architecture::Tools::WallTool.new(
-                runtime:       runtime,
-                thickness_mm:  p['thickness_mm'].to_f,
-                height_mm:     p['height_mm'].to_f,
-                level_id:      p['level_id'].to_s
-              )
-            )
-            :no_state_push
-          },
-
-          'cut_opening' => lambda { |runtime, p|
-            runtime.active_model.select_tool(
-              Opening::Tools::OpeningTool.new(
-                runtime:   runtime,
-                width_mm:  p['width_mm'].to_f,
-                height_mm: p['height_mm'].to_f,
-                sill_mm:   p['sill_mm'].to_f
-              )
-            )
-            :no_state_push
-          },
-
-          'place_door_window' => lambda { |runtime, p|
-            runtime.active_model.select_tool(
-              DoorWindow::Tools::DoorWindowTool.new(
-                runtime:        runtime,
-                category:       p['category'].to_s,
-                operation:      p['operation'].to_s,
-                frame_material: p['frame_material'].to_s,
-                panel_style:    p['panel_style'].to_s,
-                frame_depth_mm: p['frame_depth_mm'],
-                leaf_thickness_mm: p['leaf_thickness_mm'],
-                mullion_width_mm: p['mullion_width_mm'],
-                type_id:        p['type_id'],
-                type_name:      p['type_name'],
-                width_mm:       p['width_mm'],
-                height_mm:      p['height_mm']
-              )
-            )
-            :no_state_push
-          },
-
           'create_roof' => lambda { |runtime, p|
             face = runtime.active_model.selection.find { |e| e.is_a?(Sketchup::Face) }
             raise 'กรุณาเลือก Face ก่อนสร้างหลังคา' unless face
@@ -1209,51 +1060,6 @@ module JiraNot
             )
             msg = result[:status] == 'success' ? 'ติดตั้งรางน้ำฝนสำเร็จ' : result[:errors].join(', ')
             HtmlDialogManager.toast(msg, level: result[:status] == 'success' ? 'success' : 'error')
-          },
-
-          'draw_floor' => lambda { |runtime, p|
-            thickness = p['thickness_mm'].to_f > 0 ? p['thickness_mm'].to_f : 100.0
-            runtime.active_model.select_tool(
-              Architecture::Tools::FloorTool.new(
-                runtime:      runtime,
-                thickness_mm: thickness,
-                level_id:     p['level_id'].to_s
-              )
-            )
-            :no_state_push
-          },
-
-          'draw_ceiling' => lambda { |runtime, p|
-            height = p['height_mm'].to_f > 0 ? p['height_mm'].to_f : 2600.0
-            thickness = p['thickness_mm'].to_f > 0 ? p['thickness_mm'].to_f : 12.0
-            runtime.active_model.select_tool(
-              Architecture::Tools::CeilingTool.new(
-                runtime:      runtime,
-                height_mm:    height,
-                thickness_mm: thickness,
-                level_id:     p['level_id'].to_s
-              )
-            )
-            :no_state_push
-          },
-
-          'draw_profile_sweep' => lambda { |runtime, p|
-            runtime.active_model.select_tool(
-              Architecture::Tools::ProfileSweepTool.new(
-                runtime:      runtime,
-                profile_code: p['profile_code'] || 'SKIRT-100x15',
-                anchor:       (p['anchor'] || :bottom_left).to_sym,
-                level_id:     p['level_id'].to_s
-              )
-            )
-            :no_state_push
-          },
-
-          'use_laser_level' => lambda { |runtime, _p|
-            runtime.active_model.select_tool(
-              Core::Tools::LaserLevelTool.new(runtime: runtime)
-            )
-            :no_state_push
           },
 
           'generate_paving' => lambda { |runtime, p|
@@ -1414,30 +1220,6 @@ module JiraNot
             end
             :no_state_push
           },
-
-          'smart_stretch' => lambda { |runtime, p|
-            ent = runtime.active_model.selection.find { |e| e.is_a?(Sketchup::Group) || e.is_a?(Sketchup::ComponentInstance) }
-            unless ent
-              UI.messagebox('กรุณาเลือก Group หรือ Component (ประตู/หน้าต่าง/ตู้) ก่อนยืดสเกล')
-              return :no_state_push
-            end
-
-            opts = {
-              target_width_mm: p['target_width_mm']&.to_f,
-              target_height_mm: p['target_height_mm']&.to_f,
-              target_depth_mm: p['target_depth_mm']&.to_f,
-              delta_width_mm: p['delta_width_mm']&.to_f,
-              delta_height_mm: p['delta_height_mm']&.to_f,
-              frame_margin_mm: (p['frame_margin_mm'] || 50.0).to_f
-            }
-
-            Core::SmartStretchEngine.new(ent, opts).execute(runtime.active_model)
-            width_m = p['target_width_m'] || (p['target_width_mm'] && Core::Units.mm_to_m(p['target_width_mm'])) || 'คงเดิม'
-            height_m = p['target_height_m'] || (p['target_height_mm'] && Core::Units.mm_to_m(p['target_height_mm'])) || 'คงเดิม'
-            UI.messagebox("ยืดขยายขนาดสำเร็จโดยขอบเฟรมไม่เพี้ยน!\nกว้างเป้าหมาย: #{width_m} m | สูงเป้าหมาย: #{height_m} m")
-            :no_state_push
-          },
-
           'revit_auto_roof' => lambda { |runtime, p|
             form = (p['form'] || 'hip').to_s
             slope = (p['slope_deg'] || 30.0).to_f
@@ -1512,31 +1294,6 @@ module JiraNot
 
 
           # -- MEP -------------------------------------------------
-          'place_manhole' => lambda { |runtime, p|
-            size = (p['size_mm'] || [600, 600]).map(&:to_f)
-            runtime.active_model.select_tool(
-              Drainage::Tools::ManholeTool.new(
-                runtime:        runtime,
-                size_mm:        size,
-                cover_level_mm: p['cover_level_mm']&.to_f,
-                invert_in_mm:   p['invert_in_mm']&.to_f,
-                invert_out_mm:  p['invert_out_mm']&.to_f
-              )
-            )
-            :no_state_push
-          },
-
-          'route_pipe' => lambda { |runtime, p|
-            runtime.active_model.select_tool(
-              Drainage::Tools::PipeTool.new(
-                runtime:     runtime,
-                diameter_mm: p['diameter_mm'].to_f,
-                system:      p['system'].to_s
-              )
-            )
-            :no_state_push
-          },
-
           'place_panelboard' => lambda { |runtime, p|
             name = p['name'].to_s
             result = runtime.commands.execute(
@@ -1556,17 +1313,6 @@ module JiraNot
             HtmlDialogManager.toast(msg, level: result[:status] == 'success' ? 'success' : 'error')
           },
 
-          'route_conduit' => lambda { |runtime, p|
-            runtime.active_model.select_tool(
-              Electrical::Tools::ConduitTool.new(
-                runtime:      runtime,
-                ceiling_z_mm: p['ceiling_z_mm'].to_f,
-                strategy:     p['strategy'].to_s
-              )
-            )
-            :no_state_push
-          },
-
           # -- Interior --------------------------------------------
           'apply_surface' => lambda { |runtime, p|
             face = runtime.active_model.selection.find { |e| e.is_a?(Sketchup::Face) }
@@ -1583,50 +1329,7 @@ module JiraNot
             HtmlDialogManager.toast(msg, level: result[:status] == 'success' ? 'success' : 'error')
           },
 
-          'place_cabinet' => lambda { |runtime, p|
-            runtime.active_model.select_tool(
-              Interior::Tools::CabinetRunTool.new(
-                runtime: runtime,
-                params:  {
-                  width_mm:            p['width_mm'].to_f,
-                  height_mm:           p['height_mm'].to_f,
-                  depth_mm:            p['depth_mm'].to_f,
-                  module_count:        p['module_count'].to_i,
-                  carcass_material_id: p['carcass_material_id'].to_s
-                }
-              )
-            )
-            :no_state_push
-          },
-
-          'place_wardrobe' => lambda { |runtime, p|
-            runtime.active_model.select_tool(
-              Interior::Tools::WardrobeTool.new(
-                runtime:   runtime,
-                width_mm:  p['width_mm'].to_f,
-                height_mm: p['height_mm'].to_f,
-                depth_mm:  p['depth_mm'].to_f,
-                door_type: p['door_type'].to_s
-              )
-            )
-            :no_state_push
-          },
-
           # -- Library & Costing -----------------------------------
-          'place_asset' => lambda { |runtime, p|
-            asset_id = p['asset_id'].to_s.strip
-            raise 'กรุณาระบุ Asset ID' if asset_id.empty?
-
-            runtime.active_model.select_tool(
-              Library::Tools::AssetTool.new(
-                runtime:      runtime,
-                asset_id:     asset_id,
-                rotation_deg: p['rotation_deg'].to_f
-              )
-            )
-            :no_state_push
-          },
-
           'create_extension_preset' => lambda { |runtime, p|
             preset_id = p['preset_id'].to_s.strip
             raise 'กรุณาระบุพรีเซ็ตที่ต้องการสร้าง' if preset_id.empty?

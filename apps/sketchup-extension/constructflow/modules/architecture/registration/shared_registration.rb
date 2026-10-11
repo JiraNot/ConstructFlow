@@ -968,30 +968,6 @@ module JiraNot
 
         def install_ui(runtime)
           architecture_menu = runtime.menu.add_submenu('Architecture')
-          architecture_menu.add_item('Draw Roof Framing') do
-            runtime.active_model.select_tool(Tools::RoofFramingTool.new)
-          end
-
-          architecture_menu.add_item('Modify Steel Roof Framing') do
-            Tools::RoofFramingTool.modify_selected(runtime.active_model)
-          end
-
-          architecture_menu.add_item('Draw Structural Grid Framing') do
-            runtime.active_model.select_tool(Tools::GridFramingTool.new(runtime: runtime))
-          end
-
-          architecture_menu.add_item('Draw Curtain Wall & Lattice') do
-            runtime.active_model.select_tool(Tools::CurtainWallTool.new)
-          end
-
-          architecture_menu.add_item('Modify Curtain Wall & Lattice') do
-            Tools::CurtainWallTool.modify_selected(runtime.active_model)
-          end
-
-          architecture_menu.add_item('Revit-Style Auto Roof (Roof by Footprint) [AR]') do
-            runtime.active_model.select_tool(Tools::RevitAutoRoofTool.new(runtime: runtime))
-          end
-
           architecture_menu.add_item('Generate Hip/Gable Roof') do
             prompts = ['รูปแบบหลังคา (Form):', 'ความลาดชัน (องศา Deg):', 'ระยะยื่นชายคา (เมตร m):', 'ความสูงไม้เชิงชาย (เมตร m):', 'ความหนาแผ่นมุง (เมตร m):']
             defaults = ['hip', '30.0', '0.80', '0.20', '0.035']
@@ -1007,14 +983,6 @@ module JiraNot
                 thickness_mm: input[4].to_f * 1000.0
               )
             end
-          end
-
-          architecture_menu.add_item('Non-Distort Smart Stretch (9-Slice) [SS]') do
-            runtime.active_model.select_tool(Tools::SmartStretchTool.new(runtime: runtime))
-          end
-
-          architecture_menu.add_item('Stretch by Target Area') do
-            runtime.active_model.select_tool(Tools::StretchByAreaTool.new)
           end
 
           architecture_menu.add_item('Save Selected Face as Profile') do
@@ -1067,86 +1035,6 @@ module JiraNot
 
 
 
-          architecture_menu.add_item('Draw Staircase') do
-            runtime.active_model.select_tool(Tools::StairTool.new)
-          end
-
-          architecture_menu.add_item('Draw Smart Wall') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
-              ['Thickness (mm)', 'Height (mm)', 'Base level ID (optional)'],
-              ['100', '2800', ''],
-              'ConstructFlow Smart Wall'
-            )
-            next unless values
-
-            thickness = Float(values[0])
-            height = Float(values[1])
-            level_id = values[2].to_s
-            runtime.active_model.select_tool(
-              Tools::WallTool.new(
-                runtime: runtime,
-                thickness_mm: thickness,
-                height_mm: height,
-                level_id: level_id
-              )
-            )
-          rescue ArgumentError => error
-            UI.messagebox(error.message)
-          end
-          architecture_menu.add_item('Open Architecture Plan Editor') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
-              ['Base level ID (optional)'],
-              [''],
-              'ConstructFlow Architecture Plan'
-            )
-            next unless values
-
-            level_id = values[0].to_s.strip
-            runtime.plan_scenes.refresh_preset('architecture.construction') if runtime.respond_to?(:plan_scenes)
-            runtime.active_model.select_tool(Tools::WallTool.new(
-              runtime: runtime,
-              thickness_mm: WallDefinition::DEFAULT_THICKNESS_MM,
-              height_mm: WallDefinition::DEFAULT_HEIGHT_MM,
-              level_id: level_id
-            ))
-          rescue StandardError => error
-            UI.messagebox("ConstructFlow Architecture Plan error: #{error.message}")
-          end
-          architecture_menu.add_item('Draw Architectural Floor in Plan') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
-              ['Thickness (mm)', 'Base level ID (optional)'],
-              ['150', ''],
-              'ConstructFlow Architectural Floor'
-            )
-            next unless values
-
-            runtime.active_model.select_tool(
-              Tools::FloorTool.new(
-                runtime: runtime,
-                thickness_mm: Float(values[0]),
-                level_id: values[1]
-              )
-            )
-          rescue ArgumentError => error
-            UI.messagebox(error.message)
-          end
-          architecture_menu.add_item('Draw Room in Plan') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
-              ['Room name', 'Room number', 'Program', 'Base level ID (optional)'],
-              ['', '', 'generic', ''],
-              'ConstructFlow Room'
-            )
-            next unless values
-
-            runtime.active_model.select_tool(
-              Tools::RoomTool.new(
-                runtime: runtime,
-                name: values[0], number: values[1], program: values[2], level_id: values[3]
-              )
-            )
-          rescue ArgumentError => error
-            UI.messagebox(error.message)
-          end
           architecture_menu.add_item('Detect Rooms from Smart Walls') do
             values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
               ['Room name prefix', 'Program', 'Base level ID (optional)'],
@@ -1164,84 +1052,6 @@ module JiraNot
             runtime.plan_scenes.refresh_preset('architecture.construction') if result[:status] == 'success' && runtime.respond_to?(:plan_scenes)
           rescue StandardError => error
             UI.messagebox("ConstructFlow Room detection error: #{error.message}")
-          end
-          architecture_menu.add_item('Draw Ceiling in Plan') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
-              ['Height above base level (mm)', 'Thickness (mm)', 'Base level ID (optional)'],
-              ['2700', '12', ''],
-              'ConstructFlow Architectural Ceiling'
-            )
-            next unless values
-
-            runtime.active_model.select_tool(
-              Tools::CeilingTool.new(
-                runtime: runtime, height_mm: Float(values[0]), thickness_mm: Float(values[1]), level_id: values[2]
-              )
-            )
-          rescue ArgumentError => error
-            UI.messagebox(error.message)
-          end
-          architecture_menu.add_item('Edit Floor Boundary in Plan') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Base level ID (optional)'], [''], 'ConstructFlow Floor Boundary Edit')
-            next unless values
-
-            runtime.plan_scenes.refresh_preset('architecture.construction') if runtime.respond_to?(:plan_scenes)
-            runtime.active_model.select_tool(Tools::BoundaryEditTool.new(
-              runtime: runtime, object_type: 'architecture.floor', repository: FloorRepository.new,
-              command: 'ModifyFloorBoundary', label: 'Floor', level_id: values[0]
-            ))
-          rescue StandardError => error
-            UI.messagebox("ConstructFlow Floor edit error: #{error.message}")
-          end
-          architecture_menu.add_item('Edit Room Boundary in Plan') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Base level ID (optional)'], [''], 'ConstructFlow Room Boundary Edit')
-            next unless values
-
-            runtime.plan_scenes.refresh_preset('architecture.construction') if runtime.respond_to?(:plan_scenes)
-            runtime.active_model.select_tool(Tools::BoundaryEditTool.new(
-              runtime: runtime, object_type: 'architecture.room', repository: RoomRepository.new,
-              command: 'ModifyRoomBoundary', label: 'Room', level_id: values[0]
-            ))
-          rescue StandardError => error
-            UI.messagebox("ConstructFlow Room edit error: #{error.message}")
-          end
-          architecture_menu.add_item('Edit Ceiling Boundary in Plan') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(['Base level ID (optional)'], [''], 'ConstructFlow Ceiling Boundary Edit')
-            next unless values
-
-            runtime.plan_scenes.refresh_preset('architecture.construction') if runtime.respond_to?(:plan_scenes)
-            runtime.active_model.select_tool(Tools::BoundaryEditTool.new(
-              runtime: runtime, object_type: 'architecture.ceiling', repository: CeilingRepository.new,
-              command: 'ModifyCeilingBoundary', label: 'Ceiling', level_id: values[0]
-            ))
-          rescue StandardError => error
-            UI.messagebox("ConstructFlow Ceiling edit error: #{error.message}")
-          end
-          architecture_menu.add_item('Edit Smart Wall in Plan') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
-              ['Base level ID (optional)'],
-              [''],
-              'ConstructFlow Smart Wall Edit'
-            )
-            next unless values
-
-            runtime.plan_scenes.refresh_preset('architecture.construction') if runtime.respond_to?(:plan_scenes)
-            runtime.active_model.select_tool(Tools::WallEditTool.new(runtime: runtime, level_id: values[0]))
-          rescue StandardError => error
-            UI.messagebox("ConstructFlow Architecture Plan error: #{error.message}")
-          end
-          architecture_menu.add_item('Copy Smart Wall in Plan') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
-              ['Base level ID (optional)'],
-              [''],
-              'ConstructFlow Smart Wall Copy'
-            )
-            next unless values
-
-            runtime.plan_scenes.refresh_preset('architecture.construction') if runtime.respond_to?(:plan_scenes)
-            runtime.active_model.select_tool(Tools::WallEditTool.new(runtime: runtime, copy: true, level_id: values[0]))
-          rescue StandardError => error
-            UI.messagebox("ConstructFlow Architecture Plan copy error: #{error.message}")
           end
         end
       end

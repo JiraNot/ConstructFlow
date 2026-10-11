@@ -143,6 +143,11 @@ reports `penetration 250 mm → ยกขึ้น 280 มม.` with the equal-c
   millimetre tag, and a badge with the severity, rule id and the suggested fix.
 * **Elevation** — the same overlay, projected onto the facade (horizontal axis/height), so a clash
   seen in plan is shown at the same height in elevation.
+* **3D** — [coordinationHighlight3d.ts](../apps/plan-editor/src/rendering/coordinationHighlight3d.ts)
+  draws the same markers as a dedicated three.js group: a translucent impact volume where the two
+  objects occupy the same space, wireframe extents, and a dashed measurement line, all tinted by
+  severity. The group is rebuilt only when the findings change (editing the model never rebuilds
+  it) and disposed with its geometries and materials on every replacement.
 * **Inspector** — [CoordinationPanel.tsx](../apps/plan-editor/src/components/CoordinationPanel.tsx)
   lists every finding with severity chips, rule provenance, clickable objects, measured distance,
   fix suggestion and alternatives, engineer-review flags, phase context, and a per-rule
@@ -153,14 +158,15 @@ reports `penetration 250 mm → ยกขึ้น 280 มม.` with the equal-c
 
 | Command | Covers |
 | :--- | :--- |
-| `npm --prefix packages/project-model test` | 48 tests incl. dependency graph |
+| `npm --prefix packages/project-model test` | 50 tests incl. dependency graph + cascade policy precedence |
 | `npm --prefix packages/clash-engine test` | 42 tests incl. exact contact + coordination |
 | `npm run verify:coordination` | 47 acceptance checks on a real extension project |
 | `npm run build:standalone` | type-checks every package and the editor |
+| `npm run dev:standalone` | browser check of plan overlay, 3D highlight and inspector panel |
 
 The acceptance script seeds the real 4.00 × 2.50 m kitchen-extension project through the
-CommandBus, routes a new cold-water line across an existing beam at mid-depth, places a luminaire
-inside it, and then asserts: graph edges, cascade vs re-host behaviour, hard-clash penetration and
+CommandBus — the same path the editor uses — routes a new cold-water line across an existing beam
+at mid-depth, places a luminaire inside it, and then asserts: graph edges, cascade vs re-host behaviour, hard-clash penetration and
 its 5 mm-rounded fix, deterministic output, override round-trip (including rejection of a malformed
 override), atomic undo/redo of both a cascade delete and a settings change, and the overlay plan
 produced for both plan and elevation projections.

@@ -432,25 +432,6 @@ module JiraNot
           return unless runtime.respond_to?(:menu) && runtime.menu
 
           menu = runtime.menu.add_submenu('Interior & Joinery')
-          menu.add_item('Place Cabinet Run') do
-            values = JiraNot::ConstructFlow::Core::Units.meter_inputbox(
-              ['Width (mm)', 'Height (mm)', 'Depth (mm)', 'Modules', 'Carcass material'],
-              ['1800', '800', '600', '3', 'board.hmr.18'],
-              'ConstructFlow Cabinet Run'
-            )
-            next unless values
-            params = {
-              width_mm: Float(values[0]),
-              height_mm: Float(values[1]),
-              depth_mm: Float(values[2]),
-              module_count: Integer(values[3]),
-              carcass_material_id: values[4].to_s
-            }
-            runtime.active_model.select_tool(Tools::CabinetRunTool.new(runtime: runtime, params: params))
-          rescue StandardError => error
-            UI.messagebox("ConstructFlow Interior error: #{error.message}")
-          end
-
           menu.add_item('Split Selected Cabinet Modules') do
             cabinet = selected_cabinet(runtime)
             unless cabinet

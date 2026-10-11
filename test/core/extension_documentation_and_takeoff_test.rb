@@ -33,7 +33,6 @@ end
 
 require File.join(CORE, 'tools', 'extension_scene_generator')
 require File.join(CORE, 'tools', 'auto_dimension_engine')
-require File.join(CORE, 'tools', 'spot_elevation_tool')
 require File.join(CORE, 'takeoff_hud_service')
 
 class ExtensionDocumentationAndTakeoffTest < Minitest::Test

@@ -6,7 +6,7 @@ This is the active product roadmap under [ADR-0006](decisions/ADR-0006-standalon
 
 The detailed rationale and upgrade tracks are defined in [`PLAN-DRIVEN-MODELING-UPGRADE.md`](./PLAN-DRIVEN-MODELING-UPGRADE.md).
 
-Standalone engine delivery uses S0–S5 from [`STANDALONE-ENGINE-REVIEW-2026-10.md`](STANDALONE-ENGINE-REVIEW-2026-10.md): S0 schema/history supports R0/R3; S1 takeoff supports R9; S2 native 3D/assemblies supports R1/R2/R4/R6; S3 spatial/MEP/rule inputs supports R7/QA; S4 sheets supports R5/R9; S5 adapters/MCP supports interoperability/R10. These are cross-cutting engine milestones, not a second competing product roadmap.
+Standalone engine delivery uses S0–S5 from [`STANDALONE-ENGINE-REVIEW-2026-10.md`](STANDALONE-ENGINE-REVIEW-2026-10.md): S0 schema/history supports R0/R3; S1 takeoff supports R9; S2 native 3D/assemblies supports R1/R2/R4/R6; S3 spatial/MEP/rule inputs supports R7/QA; S4 sheets supports R5/R9; S5 adapters/MCP supports interoperability/R10. These are cross-cutting engine milestones, not a second competing product roadmap. Their current closeout status, evidence and exact remaining gates are recorded in [`STANDALONE-PHASES-1-6.md`](implementation/STANDALONE-PHASES-1-6.md); none should be treated as fully complete against Master scope until its listed acceptance gates are closed.
 
 ## Roadmap policy
 
@@ -20,49 +20,41 @@ The roadmap now favors **depth of editing behavior over breadth of object invent
 
 ## Master Construction Engineering Roadmap (6 Pillars)
 
-แผนงานวิศวกรรมและการพัฒนาระบบก่อสร้าง 6 เสาหลักของ ConstructFlow (อ้างอิงกฎกระทรวงฉบับที่ 55, ข้อบัญญัติ กทม., มาตรฐาน วสท., กรมบัญชีกลาง, และแบบขออนุญาต อ.1 20 แผ่น):
+แผนงานวิศวกรรม 6 เสาหลักของ ConstructFlow เป็นขอบเขตเป้าหมาย ไม่ใช่รายการที่ส่งมอบครบแล้ว สถานะในผังแสดงเฉพาะ implementation slices ที่มีในโค้ด; ชุดแบบ 20 แผ่นยังเป็น draft compiler และไม่ใช่หลักฐานความพร้อมยื่นขออนุญาต ดูข้อจำกัดและ gates ใน `STATUS.md` และ `implementation/STANDALONE-PHASES-1-6.md`:
 
 ```mermaid
 flowchart TD
-    subgraph Pillar1["🏛️ เสาที่ 1: งานสำรวจ ที่ดิน และกฎหมายอาคารไทย (เสร็จสมบูรณ์)"]
-        P1_1["1.1 ระยะร่นแนวชายคาหลังคา (Roof Eaves Setback ข้อ 50) ✅"]
-        P1_2["1.2 ความกว้างถนนสาธารณะกับความสูงอาคาร (ข้อ 44) ✅"]
-        P1_3["1.3 ระยะร่นแหล่งน้ำสาธารณะ (ข้อ 42) ✅"]
-        P1_4["1.4 ระดับดินถม vs ระดับกึ่งกลางถนน (พ.ร.บ. ขุดดินถมดิน & ข้อบัญญัติ กทม.) ✅"]
+    subgraph Pillar1["🏛️ เสาที่ 1: งานสำรวจ ที่ดิน และกฎหมายอาคารไทย (มี evaluator บางส่วน)"]
+        P1_1["1.1 ชายคา / ถนน / แหล่งน้ำ: rule evaluators มี; inputs และ legal coverage ยังจำกัด"]
+        P1_2["1.2 ระดับดินถม / ระบายน้ำ / FFL: evaluator มี; ต้องใช้ข้อมูลโครงการจริง"]
     end
 
-    subgraph Pillar2["🏗️ เสาที่ 2: วิศวกรรมโครงสร้างและฐานราก (เสร็จสมบูรณ์)"]
-        P2_1["2.1 ฐานรากตีนเป็ดชิดเขต (Strap Footing) & คานดึงรั้ง (Strap Beam) ✅"]
-        P2_2["2.2 คานยาว 7 ม. 25x60 ซม. พร้อมเหล็กข้างคาน (Side Skin) & เสากลาง ✅"]
-        P2_3["2.3 รายละเอียดดัด/ตัดเหล็กคาน 3 ตอน (L-Section & วสท. 1-1, 2-2, 3-3) ✅"]
-        P2_4["2.4 คานยื่น (Cantilever) เหล็กรับแรงดึงบน & ตารางขยายเสา-คาน S-05/S-06 ✅"]
+    subgraph Pillar2["🏗️ เสาที่ 2: วิศวกรรมโครงสร้างและฐานราก (มี detailing slices; ไม่ใช่การรับรองออกแบบ)"]
+        P2_1["2.1 Eccentric footing / strap beam model และ schedule รองรับ"]
+        P2_2["2.2 Beam continuity / cantilever / side-skin data และ BBS รองรับในขอบเขตที่ระบุ"]
+        P2_3["2.3 S-05/S-06 มีรายละเอียดบางชนิด; engineering approval ไม่ได้อนุมาน"]
     end
 
-    subgraph Pillar3["🧱 เสาที่ 3: งานสถาปัตยกรรมและเปลือกอาคาร (เสร็จสมบูรณ์)"]
-        P3_1["3.1 เสาเอ็นและทับหลัง คสล. (Lintels & Stiffeners บนแบบขยาย A-08) ✅"]
-        P3_2["3.2 รอยต่อกันซึมหลังคาชนผนังเดิม (Flashing & PU Sealant บน A-09) ✅"]
-        P3_3["3.3 ธรณีกันน้ำ (Shower Curb) และสโลปพื้นห้องน้ำ 1:50 บน A-09 ✅"]
-        P3_4["3.4 ปริมาณและระดับกรุกระเบื้องผนังห้องน้ำ (Wall Tile Finish Takeoff) ✅"]
+    subgraph Pillar3["🧱 เสาที่ 3: งานสถาปัตยกรรมและเปลือกอาคาร (มีรายละเอียดบางส่วน)"]
+        P3_1["3.1 Lintel / stiffener / sill และ wet-area detail บางรายการบน A-08/A-09"]
+        P3_2["3.2 Flashing/joint detail และ bathroom takeoff มีในขอบเขต fixture ที่รองรับ"]
+        P3_3["3.3 ไม่ครอบคลุมระบบ envelope และ topology ทุกแบบ"]
     end
 
-    subgraph Pillar4["💧 เสาที่ 4: งานระบบสุขาภิบาลและไฟฟ้า (MEP) (เสร็จสมบูรณ์)"]
-        P4_1["4.1 ระบบประปาน้ำดี ถังพักน้ำ ปั๊มน้ำ & 3-Valve Bypass บน M-01 ✅"]
-        P4_2["4.2 ช่องเปิดล้างท่อ Cleanout (FCO/WCO) & ท่อระบายอากาศ (Vent Stack) บน M-02 ✅"]
-        P4_3["4.3 ถังบำบัดน้ำเสีย (Septic Tank) & ถังดักไขมัน (Grease Trap) บน M-02 ✅"]
-        P4_4["4.4 สัญลักษณ์/ระดับติดตั้ง E-01 & ระบบหลักดิน (Ground Rod) + RCBO 30mA บน E-02 ✅"]
+    subgraph Pillar4["💧 เสาที่ 4: งานระบบสุขาภิบาลและไฟฟ้า (มี domain/detail slices)"]
+        P4_1["4.1 Plumbing/drainage/electrical engines และ detail cards บางรายการ"]
+        P4_2["4.2 Sizing/topology ทำงานตาม inputs ที่กำหนด; ยังไม่ใช่ MEP coordination ครบชุด"]
     end
 
-    subgraph Pillar5["💰 เสาที่ 5: งานประมาณราคาและ BOQ (Cost Engineering)"]
-        P5_1["5.1 ตัวคูณเผื่อเศษวัสดุ (Waste Factor: กระเบื้อง, ปูน, เหล็กเส้น)"]
-        P5_2["5.2 ไม้แบบและการคิดรอบการใช้ซ้ำ (Formwork Reuse Factor)"]
-        P5_3["5.3 หมวดงานเตรียมการและงานชั่วคราว (Preliminaries: Shoring, นั่งร้าน)"]
-        P5_4["5.4 สรุป Factor F และภาษีมูลค่าเพิ่ม 7% (Gov Standard)"]
+    subgraph Pillar5["💰 เสาที่ 5: งานประมาณราคาและ BOQ (มี engine; coverage/rates จำกัด)"]
+        P5_1["5.1 Phased takeoff, waste factors, formwork และ preliminaries สำหรับรายการที่รองรับ"]
+        P5_2["5.2 Factor F / VAT และ 3 cost centers; estimate ขึ้นกับ inputs และ rate coverage"]
     end
 
-    subgraph Pillar6["📐 เสาที่ 6: การประสานมิติแบบก่อสร้าง (BIM Coordination)"]
-        P6_1["6.1 Hard Clash ท่อสโลป 1:100 ลอดใต้คาน คสล. ชนระดับฝ้า"]
-        P6_2["6.2 Soft Clash วงสวิงบานประตูชนสุขภัณฑ์และอุปกรณ์"]
-        P6_3["6.3 แบบขยาย Detail มาตรฐานงานต่อเติมและรอยต่อวัสดุ"]
+    subgraph Pillar6["📐 เสาที่ 6: การประสาน BIM (ฐาน candidate detection; ยังไม่ครบ)"]
+        P6_1["6.1 AABB/R-tree overlap candidates; ไม่ใช่ hard-clash verdict และยังไม่หักช่องเปิดครบ"]
+        P6_2["6.2 MEP clearance / door-swing soft-clash workflows ยังเปิด"]
+        P6_3["6.3 Detail outputs บางส่วนอยู่ใน sheet engine"]
     end
 
     Pillar1 --> Pillar2
