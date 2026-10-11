@@ -97,10 +97,10 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   ก่อน resolve; v2 import บังคับ Smart Object ID เป็น RFC-4122 UUID และปฏิเสธ ID ซ้ำที่ต่างกัน
   เพียงตัวพิมพ์; editor Save ใช้ File System Access handle ปัจจุบันที่ได้จาก Open หรือ Save As
   เพื่อเขียนกลับไฟล์เดิม; ถ้าไม่มี handle จะบันทึก browser snapshot และอัปเดต replacement baseline.
-  browser UI acceptance รอบล่าสุดใช้ injected picker adapter ทดสอบ Open → เปลี่ยน phase เป็น
-  Existing → Save → Open ผ่าน mocked handle เดิม; ยืนยัน project ID และ UUID ของวัตถุครบ 21 ชิ้น
-  ตรงกันหลังเปิดซ้ำ. ผลนี้ยืนยันปุ่มและการผูก handle ใน editor แต่ไม่ได้ยืนยัน native picker หรือ
-  การเขียนทับ/เปิดซ้ำไฟล์จริง; สองกรณีนั้นยังเป็น gate แยกต่างหาก
+  disk-backed browser UI acceptance รอบล่าสุดใช้ injected picker adapter ทดสอบ Open → เปลี่ยน
+  phase เป็น Existing → Save → Open; mocked handle เขียนและอ่านไฟล์ `.cfproj` ชั่วคราวบนดิสก์
+  จริง. ยืนยัน project ID, phase `existing` และ UUID ของวัตถุครบ 21 ชิ้นตรงกันหลังเปิดซ้ำ.
+  ผลนี้ยังไม่ยืนยัน native picker หรือการเขียน/เปิดซ้ำผ่าน browser handle จริงที่ผู้ใช้เลือกเอง
 - ต่อ Undo/Redo เข้ากับ editor, shortcut และเปิด/บันทึก `.cfproj`; File System Access handle
   ที่ได้จาก Open/Save As ใช้ Save กลับไฟล์เดิมได้ใน editor session ปัจจุบัน ส่วน fallback ใช้
   file input/download และ Save-to-browser snapshot; handle ยังไม่ persist/restore ข้าม reload.
@@ -110,9 +110,9 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   ใช้เฉพาะ editor session ปัจจุบันและยังไม่ persist/restore ข้าม reload.
 - ย้าย Kitchen Proof factory เข้า `extension-engine`; Existing host wall และ preset 4.00 × 2.50 m
   เป็น atomic batch เดียวกันทั้งใน editor และ generator ของ `examples/kitchen-extension-proof.cfproj`.
-  Generator เขียนไฟล์แล้วอ่านกลับผ่าน serializer โดยได้ canonical JSON เท่าเดิม; browser UI
-  roundtrip ผ่าน injected mocked handle โดย UUID คงเดิมครบ 21 ชิ้น; native picker และ real-file
-  overwrite/reopen ยังเป็น gate แยกต่างหาก
+  Generator เขียนไฟล์แล้วอ่านกลับผ่าน serializer โดยได้ canonical JSON เท่าเดิม; disk-backed
+  browser UI roundtrip ผ่าน injected mocked handle บน temporary `.cfproj` จริง โดย UUID คงเดิม
+  ครบ 21 ชิ้น; native picker และการใช้ browser handle จริงกับไฟล์ที่ผู้ใช้เลือกยังเป็น gate แยกต่างหาก
 - เพิ่ม validation สำหรับ finite coordinates, positive dimensions, valid host, hosted
   opening bounds และการอ้างอิงเสา/ฐานราก/คานในโดเมนที่รองรับแล้ว; v1 migration contract
   เปลี่ยนจาก `any` เป็น `unknown` พร้อม narrowing; project/catalog และ CQRS public contracts
@@ -124,7 +124,8 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
 - Type rename now runs through the UI and `RenameCatalogType` command. Runtime acceptance checks
   family-scoped cascade, stable UUIDs, invalid-name rejection, serialization/reload and Undo/Redo;
   browser smoke confirmed schedule/BOQ propagation and Undo clearing the pending queue.
-- Gate ที่เหลือ: broader migration/domain fixtures, native picker/overwrite/reopen acceptance,
+- Gate ที่เหลือ: broader migration/domain fixtures, native picker และ browser-owned handle
+  overwrite/reopen acceptance สำหรับไฟล์ที่ผู้ใช้เลือก,
   and file-handle permission/restore behavior across application restart
 
 ### S1 — Takeoff แนวตั้งจากโมเดลเดียว (มี engine และ phased BOQ สำหรับรายการที่รองรับ)
