@@ -97,8 +97,10 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   ก่อน resolve; v2 import บังคับ Smart Object ID เป็น RFC-4122 UUID และปฏิเสธ ID ซ้ำที่ต่างกัน
   เพียงตัวพิมพ์; editor Save ใช้ File System Access handle ปัจจุบันที่ได้จาก Open หรือ Save As
   เพื่อเขียนกลับไฟล์เดิม; ถ้าไม่มี handle จะบันทึก browser snapshot และอัปเดต replacement baseline.
-  UI roundtrip ผ่าน mocked handle มีหลักฐานเดิม; native picker และ real-file overwrite/reopen
-  ยังต้องทดสอบ
+  browser UI acceptance รอบล่าสุดใช้ injected picker adapter ทดสอบ Open → เปลี่ยน phase เป็น
+  Existing → Save → Open ผ่าน mocked handle เดิม; ยืนยัน project ID และ UUID ของวัตถุครบ 21 ชิ้น
+  ตรงกันหลังเปิดซ้ำ. ผลนี้ยืนยันปุ่มและการผูก handle ใน editor แต่ไม่ได้ยืนยัน native picker หรือ
+  การเขียนทับ/เปิดซ้ำไฟล์จริง; สองกรณีนั้นยังเป็น gate แยกต่างหาก
 - ต่อ Undo/Redo เข้ากับ editor, shortcut และเปิด/บันทึก `.cfproj`; File System Access handle
   ที่ได้จาก Open/Save As ใช้ Save กลับไฟล์เดิมได้ใน editor session ปัจจุบัน ส่วน fallback ใช้
   file input/download และ Save-to-browser snapshot; handle ยังไม่ persist/restore ข้าม reload.
@@ -108,8 +110,9 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   ใช้เฉพาะ editor session ปัจจุบันและยังไม่ persist/restore ข้าม reload.
 - ย้าย Kitchen Proof factory เข้า `extension-engine`; Existing host wall และ preset 4.00 × 2.50 m
   เป็น atomic batch เดียวกันทั้งใน editor และ generator ของ `examples/kitchen-extension-proof.cfproj`.
-  Generator เขียนไฟล์แล้วอ่านกลับผ่าน serializer โดยได้ canonical JSON เท่าเดิม; UI roundtrip
-  ผ่าน handle จำลองแล้ว การเลือกไฟล์จาก native browser picker และการเขียนทับไฟล์จริงยังเป็น gate แยกต่างหาก
+  Generator เขียนไฟล์แล้วอ่านกลับผ่าน serializer โดยได้ canonical JSON เท่าเดิม; browser UI
+  roundtrip ผ่าน injected mocked handle โดย UUID คงเดิมครบ 21 ชิ้น; native picker และ real-file
+  overwrite/reopen ยังเป็น gate แยกต่างหาก
 - เพิ่ม validation สำหรับ finite coordinates, positive dimensions, valid host, hosted
   opening bounds และการอ้างอิงเสา/ฐานราก/คานในโดเมนที่รองรับแล้ว; v1 migration contract
   เปลี่ยนจาก `any` เป็น `unknown` พร้อม narrowing; project/catalog และ CQRS public contracts

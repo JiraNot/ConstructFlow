@@ -45,6 +45,8 @@
               active_phase: reopened.project.active_phase, object_count: Object.keys(reopened.objects).length,
               UUIDs: Object.keys(reopened.objects).sort(),
             })
+          } else {
+            output.textContent = 'open-handle-read'
           }
           return new File([text], 'CF-UI-ACCEPTANCE.cfproj', { type: 'application/json' })
         },
@@ -72,19 +74,19 @@
         },
       }
       const forceHtmlFileInput = query.get('fileInput') === '1'
+      const projectFileAccess = forceHtmlFileInput ? {} : {
+        showOpenFilePicker: async () => { output.textContent = 'open-picker-called'; return [handle] },
+        showSaveFilePicker: async () => { output.textContent = 'save-picker-called'; return handle },
+      }
       if (forceHtmlFileInput) {
         // Exercise the real local-file input route when the browser's native picker cannot be automated.
-        window.showOpenFilePicker = undefined
-        window.showSaveFilePicker = undefined
         output.textContent = 'HTML file input mode: choose a local .cfproj; Save uses the browser download fallback.'
       } else {
-        window.showOpenFilePicker = async () => [handle]
-        window.showSaveFilePicker = async () => handle
         output.textContent = diskBacked
           ? 'Disk-backed acceptance: Open → set phase Existing → Save → Open.'
           : 'In-memory acceptance: Open → set phase Existing → Save → Open.'
       }
-      ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App))
+      ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App, { projectFileAccess }))
     </script>
   </body>
 </html>

@@ -86,6 +86,11 @@ type ProjectSaveWindow = Window & {
   }) => Promise<LocalProjectFileHandle>
 }
 
+export interface AppProps {
+  /** Optional picker injection for controlled acceptance runs; production uses the browser APIs. */
+  projectFileAccess?: Pick<ProjectSaveWindow, 'showOpenFilePicker' | 'showSaveFilePicker'>
+}
+
 const projectFileName = (project: ProjectDocument) => {
   const safeName = project.project.name.trim()
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
@@ -95,7 +100,8 @@ const projectFileName = (project: ProjectDocument) => {
   return `${safeName || project.project.id || 'project'}.cfproj`
 }
 
-export const App: React.FC = () => {
+export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
+  const fileWindow = projectFileAccess ?? (window as ProjectSaveWindow)
   const [project, setProjectState] = useState<ProjectDocument>(() =>
     createEmptyProjectDocument('CF-UNTITLED', 'Untitled Project')
   )
@@ -108,7 +114,7 @@ export const App: React.FC = () => {
   const [isProjectNameEditing, setIsProjectNameEditing] = useState(false)
   const [projectNameDraft, setProjectNameDraft] = useState(project.project.name)
   const [fileFeedback, setFileFeedback] = useState('')
-  const supportsProjectFileOpen = typeof (window as ProjectSaveWindow).showOpenFilePicker === 'function'
+  const supportsProjectFileOpen = typeof fileWindow.showOpenFilePicker === 'function'
   const projectSessionRef = useRef<ProjectCommandSession | null>(null)
   const activeProjectFileHandleRef = useRef<LocalProjectFileHandle | null>(null)
   if (!projectSessionRef.current) projectSessionRef.current = new ProjectCommandSession(project)
@@ -1351,7 +1357,6 @@ export const App: React.FC = () => {
   const handleSaveAsProject = async () => {
     const json = projectJson
     const filename = projectFileName(project)
-    const fileWindow = window as ProjectSaveWindow
     if (fileWindow.showSaveFilePicker) {
       try {
         const handle = await fileWindow.showSaveFilePicker.call(window, {
@@ -1468,7 +1473,6 @@ export const App: React.FC = () => {
   }
 
   const handleChooseProject = async () => {
-    const fileWindow = window as ProjectSaveWindow
     if (!fileWindow.showOpenFilePicker) return
     try {
       const handles = await fileWindow.showOpenFilePicker.call(window, {
