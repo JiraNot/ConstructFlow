@@ -230,6 +230,10 @@ export interface SlabModuleData extends CatalogPlacement {
   material: string
   slope_ratio?: number
   drain_direction_deg?: number
+  finish_layers?: Array<{ material: string; thickness_mm: number; offset_mm?: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>
+  finish_pattern_mm?: Point2Mm
+  finish_pattern_origin_mm?: Point2Mm
+  finish_pattern_rotation_deg?: number
 }
 export interface RoomModuleData extends CatalogPlacement {
   name: string
@@ -249,7 +253,7 @@ export interface ArchitecturalFloorModuleData extends CatalogPlacement {
   elevation_reference?: 'level' | 'absolute'
   elevation_offset_mm: number
   thickness_mm: number
-  finish_layers: Array<{ material: string; thickness_mm: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>
+  finish_layers: Array<{ material: string; thickness_mm: number; offset_mm?: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>
   /** Tile/finish layout grid in model millimetres; omitted values use 600 × 600 mm at 0°. */
   finish_pattern_mm?: Point2Mm
   finish_pattern_origin_mm?: Point2Mm

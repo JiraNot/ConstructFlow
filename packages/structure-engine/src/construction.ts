@@ -43,6 +43,22 @@ export function decodeSlab(
   const voids_mm = Array.isArray(d.voids_mm)
     ? d.voids_mm.map((ring, index) => simplePolygon(list(ring, `voids_mm[${index}]`, (v) => vec2(v, "void point"), 3)))
     : [];
+  const finish_layers = Array.isArray(d.finish_layers) ? d.finish_layers.map((raw, index) => {
+    const layer = record(raw, `finish_layers[${index}]`);
+    return {
+      material: text(layer.material, `finish_layers[${index}].material`),
+      thickness_mm: positive(layer.thickness_mm, `finish_layers[${index}].thickness_mm`),
+      ...(layer.offset_mm !== undefined ? { offset_mm: num(layer.offset_mm, `finish_layers[${index}].offset_mm`) } : {}),
+      ...(typeof layer.mark === "string" ? { mark: layer.mark } : {}),
+      ...(layer.quantity_unit === "m2" || layer.quantity_unit === "m3" ? { quantity_unit: layer.quantity_unit as "m2" | "m3" } : {}),
+    };
+  }) : [];
+  const finish_pattern_mm = Array.isArray(d.finish_pattern_mm) && d.finish_pattern_mm.length === 2
+    ? [positive(d.finish_pattern_mm[0], "finish_pattern_mm[0]"), positive(d.finish_pattern_mm[1], "finish_pattern_mm[1]")] as [number, number]
+    : undefined;
+  const finish_pattern_origin_mm = Array.isArray(d.finish_pattern_origin_mm) && d.finish_pattern_origin_mm.length === 2
+    ? [num(d.finish_pattern_origin_mm[0], "finish_pattern_origin_mm[0]"), num(d.finish_pattern_origin_mm[1], "finish_pattern_origin_mm[1]")] as [number, number]
+    : undefined;
   return {
     ...placement(d, p),
     boundary_mm,
@@ -59,6 +75,10 @@ export function decodeSlab(
     material: text(d.material, "material"),
     slope_ratio: num(d.slope_ratio ?? 0, "slope_ratio", 0),
     drain_direction_deg: num(d.drain_direction_deg ?? 0, "drain_direction_deg"),
+    finish_layers,
+    ...(finish_pattern_mm ? { finish_pattern_mm } : {}),
+    ...(finish_pattern_origin_mm ? { finish_pattern_origin_mm } : {}),
+    ...(typeof d.finish_pattern_rotation_deg === "number" && Number.isFinite(d.finish_pattern_rotation_deg) ? { finish_pattern_rotation_deg: d.finish_pattern_rotation_deg } : {}),
   };
 }
 function hostGeometry(
@@ -574,6 +594,12 @@ export function structureOutputs(p: ProjectDocument): DomainOutput[] {
         d.elevation_mm - d.thickness_mm,
         d.elevation_mm + d.topping_mm,
       );
+      let finishBase = d.elevation_mm + d.topping_mm;
+      for (const layer of d.finish_layers ?? []) {
+        finishBase += layer.offset_mm ?? 0;
+        out.meshes.push(...extrude(d.boundary_mm, finishBase, finishBase + layer.thickness_mm));
+        finishBase += layer.thickness_mm;
+      }
       out.paths = [d.boundary_mm, ...(d.voids_mm ?? [])].map(ring => ring.map((v) => [...v, d.elevation_mm] as Vec3));
       out.quantities = [
         {
@@ -600,12 +626,22 @@ export function structureOutputs(p: ProjectDocument): DomainOutput[] {
           formula: "shoelace / 1e6",
           material: d.material,
         },
+        ...(d.finish_layers ?? []).map((layer, index) => ({
+          classification: "slab.finish",
+          description: `${d.mark} finish ${layer.mark ?? index + 1} (${layer.material})`,
+          quantity: layer.quantity_unit === "m3" ? area * layer.thickness_mm / 1000 : area,
+          unit: layer.quantity_unit === "m3" ? "m3" as const : "m2" as const,
+          formula: layer.quantity_unit === "m3" ? "net_area_m2 * thickness_mm / 1000" : "net_area_m2",
+          material: layer.material,
+        })),
       ];
       out.schedule = {
         System: d.slab_system,
         Thickness_m: d.thickness_mm / 1000,
         Topping_m: d.topping_mm / 1000,
         Area_m2: area,
+        Finish_layers: d.finish_layers?.length ?? 0,
+        Finish_thickness_m: (d.finish_layers ?? []).reduce((sum, layer) => sum + (layer.offset_mm ?? 0) + layer.thickness_mm, 0) / 1000,
       };
       if (d.slope_ratio) {
         const a = ((d.drain_direction_deg ?? 0) * Math.PI) / 180,

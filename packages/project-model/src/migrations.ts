@@ -195,10 +195,12 @@ export function validateProjectV2(project: ProjectDocument): void {
       head_offset_mm: ['door_window.door', 'door_window.window'],
       elevation_offset_mm: ['structure.slab', 'architecture.floor', 'architecture.ceiling'],
       voids_mm: ['structure.slab', 'architecture.floor', 'architecture.ceiling'],
-      finish_layers: ['architecture.floor'],
-      finish_pattern_mm: ['architecture.floor'],
-      finish_pattern_origin_mm: ['architecture.floor'],
-      finish_pattern_rotation_deg: ['architecture.floor'],
+      finish_layers: ['architecture.floor', 'structure.slab'],
+      finish_pattern_mm: ['architecture.floor', 'structure.slab'],
+      finish_pattern_origin_mm: ['architecture.floor', 'structure.slab'],
+      finish_pattern_rotation_deg: ['architecture.floor', 'structure.slab'],
+      slope_ratio: ['structure.slab', 'architecture.bathroom'],
+      drain_direction_deg: ['structure.slab', 'architecture.bathroom'],
       grid_mm: ['architecture.ceiling'],
       opening_operation: ['door_window.door', 'door_window.window'],
       panel_count: ['door_window.door', 'door_window.window'],
@@ -250,6 +252,7 @@ export function validateProjectV2(project: ProjectDocument): void {
         const layer = rawLayer as Record<string, unknown>
         if (typeof layer.material !== 'string' || !layer.material.trim()) throw new Error(`Invalid project format: ${owner} finish layer ${index + 1} has no material`)
         requirePositive(layer.thickness_mm, owner, `finish_layers[${index}].thickness_mm`)
+        if (layer.offset_mm !== undefined) requireFinite(layer.offset_mm, owner, `finish_layers[${index}].offset_mm`)
         if (layer.mark !== undefined && (typeof layer.mark !== 'string' || !layer.mark.trim())) throw new Error(`Invalid project format: ${owner} finish layer ${index + 1} has an invalid mark`)
         if (layer.quantity_unit !== undefined && layer.quantity_unit !== 'm2' && layer.quantity_unit !== 'm3') throw new Error(`Invalid project format: ${owner} finish layer ${index + 1} has an invalid quantity unit`)
       })
@@ -257,6 +260,11 @@ export function validateProjectV2(project: ProjectDocument): void {
     if (values.finish_pattern_mm !== undefined) requireTuple(values.finish_pattern_mm, 2, owner, 'finish_pattern_mm', true)
     if (values.finish_pattern_origin_mm !== undefined) requireTuple(values.finish_pattern_origin_mm, 2, owner, 'finish_pattern_origin_mm')
     if (values.finish_pattern_rotation_deg !== undefined) requireFinite(values.finish_pattern_rotation_deg, owner, 'finish_pattern_rotation_deg')
+    if (values.slope_ratio !== undefined) {
+      requireFinite(values.slope_ratio, owner, 'slope_ratio')
+      if (Number(values.slope_ratio) < 0) throw new Error(`Invalid project format: ${owner} has a negative slope_ratio`)
+    }
+    if (values.drain_direction_deg !== undefined) requireFinite(values.drain_direction_deg, owner, 'drain_direction_deg')
     if (values.grid_mm !== undefined) requireTuple(values.grid_mm, 2, owner, 'grid_mm', true)
     if (values.placement_reference !== undefined && !['centerline', 'left_face', 'right_face'].includes(String(values.placement_reference))) {
       throw new Error(`Invalid project format: ${owner} has an invalid placement reference`)

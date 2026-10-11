@@ -623,6 +623,12 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       topping_mm: Number(type.parameters.topping_mm ?? 0),
       slab_system: type.parameters.slab_system ?? 'slab_on_ground',
       material: String(type.parameters.material ?? 'reinforced_concrete'),
+      slope_ratio: Number(type.parameters.slope_ratio ?? 0),
+      drain_direction_deg: Number(type.parameters.drain_direction_deg ?? 0),
+      finish_layers: Array.isArray(type.parameters.finish_layers) ? type.parameters.finish_layers : [],
+      finish_pattern_mm: Array.isArray(type.parameters.finish_pattern_mm) ? type.parameters.finish_pattern_mm : [600, 600],
+      finish_pattern_origin_mm: Array.isArray(type.parameters.finish_pattern_origin_mm) ? type.parameters.finish_pattern_origin_mm : [0, 0],
+      finish_pattern_rotation_deg: Number(type.parameters.finish_pattern_rotation_deg ?? 0),
     })
     if (result.result.status === 'success') {
       setProject(result.updatedProject)
@@ -1143,7 +1149,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     } else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
   }
 
-  const handleUpdateSlab = (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; slab_system?: string; material?: string }) => {
+  const handleUpdateSlab = (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; slab_system?: string; material?: string; slope_ratio?: number; drain_direction_deg?: number; finish_layers?: Array<{ material: string; thickness_mm: number; offset_mm?: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number }) => {
     const object = project.objects[objectId]
     if (!object || object.object_type !== 'structure.slab') return
     const data = object.module_data as Record<string, unknown>

@@ -215,6 +215,21 @@ export function renderPlanView(
         }
         ctx.fillStyle = phase === 'demolition' ? 'rgba(239,68,68,.08)' : 'rgba(148,163,184,.12)'
         ctx.fill('evenodd')
+        const finishLayers = Array.isArray(data?.finish_layers) ? data.finish_layers as Array<{ material?: string }> : []
+        const patternKind = resolveArchitecturalFloorPatternKind(finishLayers)
+        if (patternKind) {
+          const spacing: [number, number] = Array.isArray(data?.finish_pattern_mm) ? data.finish_pattern_mm as [number, number] : [600, 600]
+          const origin: [number, number] = Array.isArray(data?.finish_pattern_origin_mm) ? data.finish_pattern_origin_mm as [number, number] : [0, 0]
+          const rotation = Number(data?.finish_pattern_rotation_deg ?? 0)
+          const segments = patternKind === 'staggered_plank' || patternKind === 'concrete_block'
+            ? clippedStaggeredPlankSegments(boundary, spacing[0], spacing[1], voids, origin, rotation)
+            : patternKind === 'carpet' ? clippedCarpetSegments(boundary, spacing[0], voids)
+            : patternKind === 'terrazzo' ? clippedTerrazzoSegments(boundary, spacing[0], voids)
+            : clippedGridSegments(boundary, spacing[0], spacing[1], voids, origin, rotation)
+          ctx.beginPath(); ctx.strokeStyle = isSelected(out.object_id) ? '#059669' : '#cbd5e1'; ctx.lineWidth = .7
+          for (const [a, b] of segments) { const [ax, ay] = worldToScreen(a, viewport), [bx, by] = worldToScreen(b, viewport); ctx.moveTo(ax, ay); ctx.lineTo(bx, by) }
+          ctx.stroke()
+        }
       }
     }
     // Triangle meshes are for 3D/quantity calculations. Projecting every triangle

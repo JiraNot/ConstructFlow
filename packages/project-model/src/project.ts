@@ -458,15 +458,15 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
 
 export const DEFAULT_TYPES = DEFAULT_STRUCTURAL_TYPES
 DEFAULT_TYPES.push(
-  { id: 'aed33941-9ba8-5e5c-977a-b35a81d2b903', object_type: 'structure.slab', name: 'GS', parameters: { thickness_mm: 120, topping_mm: 0, slab_system: 'slab_on_ground', material: 'reinforced_concrete' } },
-  { id: '1a6d1781-cf3a-5c29-9f43-4b1efa2577cf', object_type: 'structure.slab', name: 'S1', parameters: { thickness_mm: 150, topping_mm: 50, slab_system: 'precast_plank', material: 'precast_concrete' } }
+  { id: 'aed33941-9ba8-5e5c-977a-b35a81d2b903', object_type: 'structure.slab', name: 'GS', parameters: { thickness_mm: 120, topping_mm: 0, slab_system: 'slab_on_ground', material: 'reinforced_concrete', finish_layers: [], finish_pattern_mm: [600, 600], slope_ratio: 0, drain_direction_deg: 0 } },
+  { id: '1a6d1781-cf3a-5c29-9f43-4b1efa2577cf', object_type: 'structure.slab', name: 'S1', parameters: { thickness_mm: 150, topping_mm: 50, slab_system: 'precast_plank', material: 'precast_concrete', finish_layers: [{ mark: 'Tile', material: 'porcelain_tile', thickness_mm: 10, quantity_unit: 'm2' }], finish_pattern_mm: [600, 600], slope_ratio: 0, drain_direction_deg: 0 } }
 )
 
 export const CATALOG_PARAMETER_FIELDS: Record<string, string[]> = {
   'structure.column': ['section_mm', 'plaster_thickness_mm', 'material'],
   'structure.foundation': ['size_mm', 'foundation_type', 'pile_type', 'pile_offsets_mm', 'pile_length_mm', 'material'],
   'structure.beam': ['section_mm', 'material', 'drop_mm', 'rebar_type', 'mass_per_m_kg'],
-  'structure.slab': ['thickness_mm', 'topping_mm', 'slab_system', 'material'],
+  'structure.slab': ['thickness_mm', 'topping_mm', 'slab_system', 'material', 'slope_ratio', 'drain_direction_deg', 'finish_layers', 'finish_pattern_mm', 'finish_pattern_origin_mm', 'finish_pattern_rotation_deg'],
   'architecture.floor': ['thickness_mm', 'material', 'finish_layers', 'finish_pattern_mm', 'finish_pattern_origin_mm', 'finish_pattern_rotation_deg'],
   'architecture.ceiling': ['thickness_mm', 'material', 'grid_mm'],
   'interior.cabinet_run': ['width_mm','height_mm','depth_mm','board_mm','back_mm','plinth_mm','front','carcass_material','front_material','back_material','countertop_material','countertop_mm'],

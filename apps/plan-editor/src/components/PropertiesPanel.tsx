@@ -63,7 +63,7 @@ interface PropertiesPanelProps {
   onUpdateColumnVerticalReference: (objectId: string, changes: { base_level_id?: string; top_level_id?: string | null; base_offset_mm?: number; top_offset_mm?: number }) => void
   onUpdateBeamVerticalReference: (objectId: string, changes: { level_id?: string; base_offset_mm?: number }) => void
   onUpdateArchitectureSurface?: (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; material?: string; finish_layers?: Array<{ material: string; thickness_mm: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number; grid_mm?: [number, number] }) => void
-  onUpdateSlab?: (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; slab_system?: string; material?: string }) => void
+  onUpdateSlab?: (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; slab_system?: string; material?: string; slope_ratio?: number; drain_direction_deg?: number; finish_layers?: Array<{ material: string; thickness_mm: number; offset_mm?: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number }) => void
   onUpdateFoundationMark: (objectId: string, newMark: string) => void
   onUpdateGridTag: (objectId: string, newTag: string) => void
   onModifyGrid: (objectId: string, changes: { start_point_mm?: [number, number]; end_point_mm?: [number, number]; bubble_visible?: boolean; auto_tag?: boolean; sequence_style?: 'auto' | 'alpha' | 'numeric' }) => void
@@ -1079,6 +1079,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           const resolvedElevation = resolveSlabElevation(project, slabObj)
           const currentOffset = resolvedElevation !== undefined && level ? resolvedElevation - level.elevation_mm : Number(slabData.elevation_offset_mm ?? 0)
           const thickness = Number(slabData.thickness_mm ?? 120)
+          const finishLayers = Array.isArray(slabData.finish_layers) ? slabData.finish_layers as Array<{ material?: string; thickness_mm?: number; offset_mm?: number; mark?: string; quantity_unit?: 'm2' | 'm3' }> : []
+          const updateSlab = (changes: Parameters<NonNullable<typeof onUpdateSlab>>[1]) => onUpdateSlab?.(slabObj.id, changes)
+          const writeFinishLayers = (layers: typeof finishLayers) => updateSlab({ finish_layers: layers.map(layer => ({ material: String(layer.material ?? 'tile'), thickness_mm: Number(layer.thickness_mm ?? 10), offset_mm: Number(layer.offset_mm ?? 0), ...(layer.mark ? { mark: layer.mark } : {}), quantity_unit: layer.quantity_unit ?? 'm2' })) })
           return (
             <section style={{ display: 'grid', gap: 6, padding: 7, border: '1px solid #dbe3ed', borderRadius: 4, background: '#f8fafc' }}>
               <strong style={{ fontSize: 12 }}>แผ่นพื้นโครงสร้าง {String(slabData.mark ?? '')}</strong>
@@ -1117,10 +1120,30 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   style={verticalSelectStyle}
                 />
               </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+                <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ความลาด (%)
+                  <input aria-label="ความลาดพื้น เปอร์เซ็นต์" type="number" min="0" max="100" step="0.1" value={(Number(slabData.slope_ratio ?? 0) * 100).toFixed(1)} onChange={event => updateSlab({ slope_ratio: Math.max(0, Number(event.target.value) || 0) / 100 })} style={verticalSelectStyle} />
+                </label>
+                <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ทิศด้านสูง (° จากแกน X)
+                  <input aria-label="ทิศด้านสูงของพื้น องศา" type="number" step="1" value={Number(slabData.drain_direction_deg ?? 0)} onChange={event => updateSlab({ drain_direction_deg: Number(event.target.value) || 0 })} style={verticalSelectStyle} />
+                </label>
+              </div>
+              <small style={{ fontSize: 10, color: '#64748b' }}>น้ำไหลลงทิศตรงข้ามด้านสูง · 0° = ตะวันออก, 90° = เหนือ · เช่น 1.0% = ลาด 1:100</small>
+              <strong style={{ fontSize: 11, marginTop: 3 }}>ชั้นปิดผิวในพื้นชิ้นนี้</strong>
+              {finishLayers.length > 0 && <small style={{ fontSize: 9, color: '#64748b' }}>วัสดุ · ความหนา · Offset จากชั้นก่อน · หน่วยปริมาณ</small>}
+              {finishLayers.map((layer, index) => <div key={`${slabObj.id}:finish:${index}`} style={{ display: 'grid', gridTemplateColumns: '1fr 0.7fr 0.7fr 0.6fr auto', gap: 4, alignItems: 'center' }}>
+                <input aria-label={`วัสดุปิดผิวพื้น ${index + 1}`} value={String(layer.material ?? '')} onChange={event => writeFinishLayers(finishLayers.map((item, i) => i === index ? { ...item, material: event.target.value } : item))} style={verticalSelectStyle} />
+                <LengthInput aria-label={`ความหนาชั้นปิดผิว ${index + 1} (${displayUnit})`} value={Number(layer.thickness_mm ?? 10)} unit={displayUnit} onChange={value => writeFinishLayers(finishLayers.map((item, i) => i === index ? { ...item, thickness_mm: value } : item))} style={verticalSelectStyle} />
+                <LengthInput aria-label={`ระยะ offset ชั้นปิดผิว ${index + 1} (${displayUnit})`} value={Number(layer.offset_mm ?? 0)} unit={displayUnit} onChange={value => writeFinishLayers(finishLayers.map((item, i) => i === index ? { ...item, offset_mm: value } : item))} style={verticalSelectStyle} />
+                <select aria-label={`หน่วยถอดปริมาณชั้นปิดผิว ${index + 1}`} value={layer.quantity_unit ?? 'm2'} onChange={event => writeFinishLayers(finishLayers.map((item, i) => i === index ? { ...item, quantity_unit: event.target.value as 'm2' | 'm3' } : item))} style={verticalSelectStyle}><option value="m2">ตร.ม.</option><option value="m3">ลบ.ม.</option></select>
+                <button type="button" aria-label={`ลบชั้นปิดผิว ${index + 1}`} onClick={() => writeFinishLayers(finishLayers.filter((_, i) => i !== index))} style={{ ...verticalSelectStyle, color: '#b91c1c', padding: 4 }}>×</button>
+              </div>)}
+              <button type="button" onClick={() => writeFinishLayers([...finishLayers, { material: 'porcelain_tile', thickness_mm: 10, mark: `Tile ${finishLayers.length + 1}`, quantity_unit: 'm2' }])} style={verticalSelectStyle}>+ เพิ่มชั้นกระเบื้อง / วัสดุปิดผิว</button>
               <div style={{ fontSize: 10, color: '#52677d', display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-                <span>หลังพื้น: +{formatLengthMm(resolvedElevation ?? 0, displayUnit)} {displayUnit}</span>
+                <span>หลังพื้นโครงสร้าง: +{formatLengthMm((resolvedElevation ?? 0) + Number(slabData.topping_mm ?? 0), displayUnit)} {displayUnit}</span>
                 <span>ท้องพื้น: +{formatLengthMm((resolvedElevation ?? 0) - thickness, displayUnit)} {displayUnit}</span>
               </div>
+              {finishLayers.length > 0 && <small style={{ fontSize: 10, color: '#64748b' }}>ผิวสำเร็จ: +{formatLengthMm((resolvedElevation ?? 0) + Number(slabData.topping_mm ?? 0) + finishLayers.reduce((sum, layer) => sum + Number(layer.offset_mm ?? 0) + Number(layer.thickness_mm ?? 0), 0), displayUnit)} {displayUnit}</small>}
               <button type="button" onClick={() => onDrawSurfaceVoid(slabObj.id)} style={verticalSelectStyle}>วาดช่องเจาะพื้น</button>
             </section>
           )
