@@ -61,6 +61,7 @@ export class DxfGenerator {
     layer: string;
     entityLines: string[];
   }> = new Map();
+  private activeModelObject: SmartObject | null = null;
 
   constructor(project: ProjectDocument, options: DxfGeneratorOptions = {}) {
     this.project = project;
@@ -755,6 +756,10 @@ export class DxfGenerator {
   }
 
   private writeModelSpaceEntity(lines: string[], obj: SmartObject): void {
+    this.withModelObject(obj, () => this.writeModelSpaceEntityBody(lines, obj));
+  }
+
+  private writeModelSpaceEntityBody(lines: string[], obj: SmartObject): void {
     const phase = getDisplayPhase(obj);
     const type = obj.object_type;
     const layer = resolveCadLayer(type, phase);
@@ -963,7 +968,7 @@ export class DxfGenerator {
         const panelCount = Math.max(1, Math.floor(Number(openingData.panel_count ?? 2)));
         const safeMark = mark.replace(/[^A-Za-z0-9_]/g, "_");
         const blockName = `CF_WIN_${safeMark}_${Math.round(width)}_T${thickness}_${panelCount}P`;
-        this.writeInsert(lines, blockName, openingLayer, 0, center, angleDeg);
+        this.withModelObject(object, () => this.writeInsert(lines, blockName, openingLayer, 0, center, angleDeg));
       } else {
         const mark = String(openingData.mark ?? "D").trim() || "D";
         const wallInteriorSide = d.interior_side === "right" ? -1 : 1;
@@ -973,7 +978,7 @@ export class DxfGenerator {
           : handing;
         const safeMark = mark.replace(/[^A-Za-z0-9_]/g, "_");
         const blockName = `CF_DOOR_${safeMark}_${Math.round(width)}_T${thickness}_${effectiveHanding.toUpperCase()}`;
-        this.writeInsert(lines, blockName, openingLayer, 0, center, angleDeg);
+        this.withModelObject(object, () => this.writeInsert(lines, blockName, openingLayer, 0, center, angleDeg));
       }
     }
   }
@@ -1541,6 +1546,7 @@ export class DxfGenerator {
       " 31",
       "0.000",
     );
+    this.appendModelObjectXdata(lines, space);
   }
 
   private writeCircle(
@@ -1574,6 +1580,7 @@ export class DxfGenerator {
       " 40",
       radius.toFixed(3),
     );
+    this.appendModelObjectXdata(lines, space);
   }
 
   private writeSolid(
@@ -1591,6 +1598,7 @@ export class DxfGenerator {
     else if (colorNumber !== undefined) lines.push(" 62", String(colorNumber));
     lines.push("100", "AcDbTrace");
     points.forEach((point, index) => lines.push(` ${10 + index}`, point[0].toFixed(3), ` ${20 + index}`, point[1].toFixed(3), ` ${30 + index}`, "0.000"));
+    this.appendModelObjectXdata(lines, space);
   }
 
   private writeLwPolyline(
@@ -1634,6 +1642,7 @@ export class DxfGenerator {
     for (const pt of points) {
       lines.push(" 10", pt[0].toFixed(3), " 20", pt[1].toFixed(3));
     }
+    this.appendModelObjectXdata(lines, space);
   }
 
 
@@ -1681,6 +1690,7 @@ export class DxfGenerator {
       " 50",
       rotationDeg.toFixed(3),
     );
+    this.appendModelObjectXdata(lines, space);
   }
 
   private registerCustomBlocks(): void {
@@ -1891,6 +1901,26 @@ export class DxfGenerator {
       this.encodeDxfText(text),
       "  7",
       "STANDARD",
+    );
+    this.appendModelObjectXdata(lines, space);
+  }
+
+  private withModelObject<T>(object: SmartObject, write: () => T): T {
+    const previous = this.activeModelObject;
+    this.activeModelObject = object;
+    try { return write(); }
+    finally { this.activeModelObject = previous; }
+  }
+
+  private appendModelObjectXdata(lines: string[], space: number): void {
+    const object = this.activeModelObject;
+    if (space !== 0 || !object) return;
+    lines.push(
+      "1001", "CONSTRUCTFLOW",
+      "1000", object.id,
+      "1000", object.object_type,
+      "1000", object.created_phase,
+      "1000", object.removed_phase ?? "none",
     );
   }
 }

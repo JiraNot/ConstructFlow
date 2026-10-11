@@ -10,7 +10,7 @@
 ตัวเลข test/build ในรายงานเป็นหลักฐาน ณ วันที่ระบุ ไม่ใช่การยืนยันว่ารันผ่านในวันนี้.
 
 **Snapshot ล่าสุด 11 ต.ค. 2026:** `npm run test:standalone` ผ่าน build targets 25 รายการ,
-Node tests 341 รายการ (package 332 + MCP runtime 9), Python MCP tests 11 รายการ และ integration
+Node tests 342 รายการ (package 333 + MCP runtime 9), Python MCP tests 11 รายการ และ integration
 verifiers ทั้ง 4 ชุด (`kitchen`, `file-io`, `phases`, `coordination`). MCP standalone ต่อ native
 mutation, query, takeoff, coordination, unified site/legal compliance, DXF/IFC/Revit-transfer
 interchange exports และ caller-held undo/redo แล้ว; ข้อจำกัดที่เหลือ
@@ -233,7 +233,9 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   history snapshot ล่าสุดเอง; MCP รองรับ undo/redo โดยจำกัด 100 snapshots ต่อทิศทางและตรวจ
   project UUID. IFC/Revit transfer exports retain the created phase, removal phase and resulting
   display phase, preventing removed-existing elements from reverting to Existing in transfer.
-  DXF, IFC 4.3 STEP และ Revit transfer JSON export ผ่าน standalone adapter serializers แล้ว;
+  DXF ModelSpace entities carry `CONSTRUCTFLOW` XDATA with persistent object UUID, object type
+  and lifecycle phases, including hosted opening block references. DXF, IFC 4.3 STEP และ Revit
+  transfer JSON export ผ่าน standalone adapter serializers แล้ว;
   เป็น interchange exports ไม่ใช่ live sync หรือการรับรอง fidelity/roundtrip ของปลายทาง.
 - เครื่องมือ SketchUp-forwarding ยังใช้ WebSocket bridge และต้องทดสอบ roundtrip บน SketchUp จริง.
   DXF/IFC/Revit ยังเป็น exporters/transfer serializer ไม่ใช่ diff-based synchronization ที่ยืนยัน

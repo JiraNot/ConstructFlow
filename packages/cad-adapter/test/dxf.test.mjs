@@ -548,6 +548,32 @@ test("DXF ModelSpace uses the removal phase for architectural and structural obj
     assert.ok(modelSpace.includes(`  8\n${layerName}`), `removed objects must use ${layerName}`);
 });
 
+test("DXF ModelSpace XDATA carries stable UUID and lifecycle metadata for hosts and hosted openings", () => {
+  const project = createEmptyProjectDocument("DXF-UUID-XDATA", "Stable identity");
+  project.objects.host = {
+    id: "host-wall-uuid", object_type: "architecture.wall", created_phase: "existing", removed_phase: "demolition",
+    level_refs: [], host_refs: [], connector_refs: [], relationships: [], status: "active",
+    module_data: { start_point_mm: [0, 0, 0], end_point_mm: [4000, 0, 0], thickness_mm: 100, height_mm: 2800 },
+  };
+  project.objects.opening = {
+    id: "opening-uuid", object_type: "door_window.door", created_phase: "new_construction",
+    level_refs: [], host_refs: [], connector_refs: [], relationships: [], status: "active",
+    module_data: { wall_id: "host-wall-uuid", offset_along_wall_mm: 2000, width_mm: 900, height_mm: 2000, mark: "D1" },
+  };
+
+  const records = parseDxfRecords(exportProjectToDxf(project).dxfContent);
+  const identified = records.filter(record => record.fields.get("1001")?.includes("CONSTRUCTFLOW"));
+  assert.ok(identified.some(record => {
+    const values = record.fields.get("1000") ?? [];
+    return values.includes("host-wall-uuid") && values.includes("architecture.wall")
+      && values.includes("existing") && values.includes("demolition");
+  }), "wall geometry carries its UUID and created/removal phases");
+  assert.ok(identified.some(record => {
+    const values = record.fields.get("1000") ?? [];
+    return values.includes("opening-uuid") && values.includes("door_window.door");
+  }), "hosted opening block reference carries the opening UUID");
+});
+
 test("DXF exports hosted openings, both wall finish marks, and floor cutout rings", () => {
   const project = createEmptyProjectDocument("CAD-VERTICAL-PLAN");
   project.levels = [{ id: "GF", name: "Ground", elevation_mm: 0, storey_index: 0, height_mm: 3000 }];
