@@ -2,6 +2,10 @@
 
 Status: **verified 2026-10-11** against `origin/main` @ `9a44c71`.
 
+That table is the original branch-only comparison before the port commits. The current local
+`main` includes the two ports and the SketchUp authoring UI retirement; see the current disposition
+below before pruning remote refs.
+
 Reproduce with:
 
 ```bash
@@ -151,11 +155,17 @@ wanted from the coordination plan.
 
 ## Remaining branch hygiene
 
-1. Delete the stale remote branches once each is either ported or explicitly rejected; nothing else
-   on those 24 branches is outstanding.
-2. Re-run `npm run verify:branches` after this work is committed: until then the script still reads
-   `origin/main`, where the two ported files do not exist yet, and keeps reporting the original
-   22 rows.
+Current check against local `main` at `16b45c8`:
+
+- All 24 remote `feat/*` refs are stale snapshots and not ancestors of current `main`.
+- The file comparison found 22 branch-only path records. Five are SketchUp authoring tools now
+  intentionally retired under ADR-0006; the rest are superseded file names, old tests, or an old
+  contract document.
+- Every branch-only path is explicitly listed in `EXPLICITLY_RETIRED_OR_SUPERSEDED` in
+  `scripts/verify_feature_branches.mjs`; `CF_BASE_REF=main node scripts/verify_feature_branches.mjs`
+  exits 0 with no unresolved paths.
+- The stale branches can now be pruned after publishing current `main`, so the two ported features
+  and the branch disposition remain reachable from the shared remote.
 
 ## Verification of the ported work
 

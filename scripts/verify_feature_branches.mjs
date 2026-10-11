@@ -35,6 +35,32 @@ const BASE_REF = process.env.CF_BASE_REF ?? 'origin/main'
 const BRANCH_PREFIX = process.env.CF_BRANCH_PREFIX ?? 'refs/remotes/origin/feat/'
 const AS_JSON = process.argv.includes('--json')
 
+// Old feature-branch paths may remain absent from main after an explicit product decision.
+// Keep this list narrow and reviewed: tools were retired by the standalone-first decision;
+// the other entries are old files whose contracts were ported into newer implementations.
+const EXPLICITLY_RETIRED_OR_SUPERSEDED = new Set([
+  'apps/sketchup-extension/constructflow/modules/architecture/tools/wall_tool.rb',
+  'apps/sketchup-extension/constructflow/modules/drainage/tools/manhole_tool.rb',
+  'apps/sketchup-extension/constructflow/modules/interior/tools/cabinet_run_tool.rb',
+  'apps/sketchup-extension/constructflow/modules/opening/tools/opening_tool.rb',
+  'apps/sketchup-extension/constructflow/modules/structure/tools/column_tool.rb',
+  'apps/sketchup-extension/constructflow/modules/extension/domain_handlers.rb',
+  'apps/sketchup-extension/constructflow/modules/extension/execution_engine.rb',
+  'apps/sketchup-extension/constructflow/modules/extension/execution_result.rb',
+  'docs/implementation/DOMAIN-VERTICAL-SLICE-v1.md',
+  'test/extension/execution_engine_test.rb',
+  'test/extension/orchestrator_test.rb',
+  'apps/sketchup-extension/constructflow/modules/roof/extension_gutter_service.rb',
+  'apps/sketchup-extension/constructflow/modules/drainage/downpipe_endpoint_sync_registration.rb',
+  'apps/sketchup-extension/constructflow/modules/drainage/downpipe_endpoint_sync_service.rb',
+  'apps/sketchup-extension/constructflow/modules/roof/hosted_gutter_registration.rb',
+  'test/drainage/downpipe_endpoint_sync_service_test.rb',
+  'test/core/native_layout_export_service_test.rb',
+  'test/core/native_acceptance_layout_evidence_test.rb',
+  'docs/implementation/ROOF-IDEMPOTENT-REGENERATION-v1.md',
+  'test/roof/extension_command_registration_test.rb',
+])
+
 function git(args, { allowFailure = false } = {}) {
   try {
     return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
@@ -118,11 +144,23 @@ function main() {
   const branchOnlyFiles = results.flatMap(result =>
     result.branchOnly.map(path => ({ path, branch: result.branch })),
   )
+  const unresolvedBranchOnlyFiles = branchOnlyFiles.filter(
+    entry => !EXPLICITLY_RETIRED_OR_SUPERSEDED.has(entry.path),
+  )
+  const retiredOrSupersededBranchOnlyFiles = branchOnlyFiles.filter(
+    entry => EXPLICITLY_RETIRED_OR_SUPERSEDED.has(entry.path),
+  )
   const totalDeletions = results.reduce((sum, result) => sum + result.mergeDeletions, 0)
 
   if (AS_JSON) {
-    console.log(JSON.stringify({ baseRef: BASE_REF, totalDeletions, branches: results, branchOnlyFiles }, null, 2))
-    return branchOnlyFiles.length ? 1 : 0
+    console.log(JSON.stringify({
+      baseRef: BASE_REF,
+      totalDeletions,
+      branches: results,
+      retiredOrSupersededBranchOnlyFiles,
+      unresolvedBranchOnlyFiles,
+    }, null, 2))
+    return unresolvedBranchOnlyFiles.length ? 1 : 0
   }
 
   console.log(`Base ref: ${BASE_REF}`)
@@ -142,13 +180,14 @@ function main() {
 
   console.log(`\nA blind merge of all ${results.length} branches would delete ${totalDeletions.toLocaleString()} lines from ${BASE_REF}.`)
 
-  if (!branchOnlyFiles.length) {
-    console.log('\nOK: every file these branches touch already exists in the base ref.')
+  if (!unresolvedBranchOnlyFiles.length) {
+    console.log(`\nExplicitly retired/superseded branch-only paths: ${retiredOrSupersededBranchOnlyFiles.length}.`)
+    console.log(`OK: every remaining branch-only path has a reviewed disposition against ${BASE_REF}.`)
     return 0
   }
 
-  console.log(`\nFiles that exist ONLY on a feature branch (${branchOnlyFiles.length}) — triage these:`)
-  for (const entry of branchOnlyFiles) console.log(`  ${entry.path}  <- ${entry.branch}`)
+  console.log(`\nFiles that exist ONLY on a feature branch and lack a disposition (${unresolvedBranchOnlyFiles.length}) — triage these:`)
+  for (const entry of unresolvedBranchOnlyFiles) console.log(`  ${entry.path}  <- ${entry.branch}`)
   console.log('\nEverything else on those branches is already represented in the base ref, usually under a newer name.')
   return 1
 }
