@@ -107,9 +107,10 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   เปิดสำเนา `.cfproj` จริงจากดิสก์ผ่าน Open picker, อนุญาต read/write, เปลี่ยนเฟสเป็น Existing,
   Save กลับ handle เดิม, reload editor, restore handle แล้ว Save ซ้ำ และเปิดไฟล์ผ่าน picker อีกครั้ง;
   รอบแรก editor อ่านเฟส Existing กลับมาได้ และตรวจดิสก์ได้ project ID เดิม, phase `existing` กับ UUID
-  ตรง fixture 18/18. แต่ follow-up ล่าสุดพบ editor แสดง Demolition/19 objects ขณะที่ไฟล์บนดิสก์ยังเป็น
-  Existing/18 objects และ UUID ตรง fixture; ไม่ได้ Save สถานะที่ไม่ตรงนี้ จึงเปิด native picker
-  UI/readback gate ไว้จนกว่าจะระบุสาเหตุและยืนยัน Open ซ้ำ. โฟลเดอร์ชั่วคราวถูก Edge ปฏิเสธว่าเป็น
+  ตรง fixture 18/18. follow-up ครั้งหนึ่งเห็น editor อยู่ที่ Demolition/19 objects ขณะที่ไฟล์บนดิสก์ยังเป็น
+  Existing/18 objects; หลัง rollback ตรวจ live editor ซ้ำได้ Existing/18 objects และตรวจดิสก์ได้
+  UUID ตรง fixture 18/18 โดยไม่ได้ Save สถานะที่ไม่ตรง. สถานะปัจจุบันของ editor กับไฟล์จึงตรงกัน;
+  ยังไม่พบสาเหตุของมุมมองชั่วคราวนั้น. โฟลเดอร์ชั่วคราวถูก Edge ปฏิเสธว่าเป็น
   system files; ย้ายสำเนาทดสอบไป Documents แล้วการเลือกและเขียนสำเร็จ.
 - ต่อ Undo/Redo เข้ากับ editor, shortcut และเปิด/บันทึก `.cfproj`; File System Access handle
   ที่ได้จาก Open/Save As ใช้ Save กลับไฟล์เดิมได้ และ browser-owned handle ที่ clone ได้ persist/
