@@ -18,6 +18,8 @@ import {
   PlacementReference,
   formatLengthMm,
   resolveArchitectureSurfaceElevation,
+  resolveColumnVerticalExtent,
+  resolveSlabElevation,
   type DisplayLengthUnit,
 } from '@constructflow/project-model'
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
@@ -1069,6 +1071,50 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     } else if (res.result.errors?.length) window.alert(res.result.errors.join('\n'))
   }
 
+  const handleUpdateLevelMany = (objectIds: string[], levelId: string) => {
+    const targetLevel = project.levels.find(level => level.id === levelId)
+    if (!targetLevel) return
+    const commands: CommandRequest[] = []
+    for (const objectId of [...new Set(objectIds)]) {
+      const object = project.objects[objectId]
+      if (!object) continue
+      const data = object.module_data as Record<string, unknown>
+      if (isBeamObject(object)) {
+        commands.push({ name: 'UpdateBeamVerticalReference', input: { object_id: objectId, level_id: levelId, base_offset_mm: Number(data.base_offset_mm ?? 0) } })
+      } else if (isColumnObject(object)) {
+        const oldBaseLevel = project.levels.find(level => level.id === data.base_level_id)
+        const oldTopLevel = project.levels.find(level => level.id === data.top_level_id)
+        if (oldBaseLevel && resolveColumnVerticalExtent(project, object)) {
+          const oldFallbackTop = oldTopLevel ?? project.levels.filter(level => level.elevation_mm > oldBaseLevel.elevation_mm).sort((a, b) => a.elevation_mm - b.elevation_mm)[0]
+          const storeyDelta = oldFallbackTop ? oldFallbackTop.storey_index - oldBaseLevel.storey_index : 1
+          const newTopLevel = project.levels.find(level => level.storey_index === targetLevel.storey_index + storeyDelta)
+          commands.push({ name: 'UpdateColumnVerticalReference', input: {
+            object_id: objectId,
+            base_level_id: levelId,
+            ...(newTopLevel ? { top_level_id: newTopLevel.id } : { top_level_id: null }),
+            base_offset_mm: Number(data.base_offset_mm ?? 0),
+            top_offset_mm: Number(data.top_offset_mm ?? 0),
+          } })
+        }
+      } else if (object.object_type === 'structure.slab' || object.object_type === 'architecture.floor' || object.object_type === 'architecture.ceiling') {
+        const oldLevel = project.levels.find(level => level.id === data.level_id)
+        const worldElevation = object.object_type === 'structure.slab' ? resolveSlabElevation(project, object) : resolveArchitectureSurfaceElevation(project, object)
+        if (worldElevation !== undefined && oldLevel) {
+          const command = object.object_type === 'structure.slab' ? 'UpdateSlab' : object.object_type === 'architecture.floor' ? 'UpdateArchitecturalFloor' : 'UpdateCeiling'
+          const elevationOffset = Number(data.elevation_offset_mm ?? (worldElevation - oldLevel.elevation_mm))
+          commands.push({ name: command, input: { ...data, id: objectId, level_id: levelId, elevation_offset_mm: elevationOffset, elevation_mm: targetLevel.elevation_mm + elevationOffset, ...(object.object_type !== 'structure.slab' ? { elevation_reference: 'level' } : {}) } })
+        }
+      }
+    }
+    if (!commands.length) return
+    const result = dispatchCommandBatch(commands)
+    if (result.status !== 'success') {
+      setFileFeedback(result.errors?.[0] ?? 'เปลี่ยนระดับให้วัตถุที่เลือกไม่สำเร็จ')
+      return
+    }
+    setFileFeedback(`ย้าย ${commands.length} ชิ้นไปยัง ${targetLevel.name} แล้ว`)
+  }
+
   const handleUpdateArchitectureSurface = (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; material?: string; finish_layers?: Array<{ material: string; thickness_mm: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number; grid_mm?: [number, number] }) => {
     const object = project.objects[objectId]
     if (!object || (object.object_type !== 'architecture.floor' && object.object_type !== 'architecture.ceiling')) return
@@ -1936,6 +1982,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             selectedIds={selectedIds}
             onAssignType={handleAssignType}
             onAssignTypeMany={handleAssignTypeMany}
+            onUpdateLevelMany={handleUpdateLevelMany}
             onDeleteObjects={handleDeleteObjects}
             onUpdateColumnMark={handleUpdateColumnMark}
             onUpdateColumnVerticalReference={handleUpdateColumnVerticalReference}

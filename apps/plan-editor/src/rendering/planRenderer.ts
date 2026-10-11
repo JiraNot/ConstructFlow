@@ -58,7 +58,7 @@ export interface PlanLabelVisibility {
 
 export const DEFAULT_PLAN_LABEL_VISIBILITY: PlanLabelVisibility = {
   structure: true,
-  beams: false,
+  beams: true,
   walls: true,
   openings: true,
   grids: true,

@@ -57,6 +57,7 @@ interface PropertiesPanelProps {
   selectedIds?: string[]
   onAssignType: (objectId: string, typeName: string) => void
   onAssignTypeMany?: (objectIds: string[], typeId: string) => void
+  onUpdateLevelMany?: (objectIds: string[], levelId: string) => void
   onDeleteObjects?: (objectIds: string[]) => void
   onUpdateColumnMark: (objectId: string, newMark: string) => void
   onUpdateColumnVerticalReference: (objectId: string, changes: { base_level_id?: string; top_level_id?: string | null; base_offset_mm?: number; top_offset_mm?: number }) => void
@@ -87,6 +88,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   selectedIds = selectedId ? [selectedId] : [],
   onAssignType,
   onAssignTypeMany,
+  onUpdateLevelMany,
   onDeleteObjects,
   onUpdateColumnMark,
   onUpdateColumnVerticalReference,
@@ -124,6 +126,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const selectedCommonTypeId = selectedObjects.length > 1 && selectedResolvedTypeIds[0] && selectedResolvedTypeIds.every(id => id === selectedResolvedTypeIds[0])
     ? selectedResolvedTypeIds[0]
     : ''
+  const bulkLevelObjects = selectedObjects.filter(object => isBeamObject(object) || isColumnObject(object) || object.object_type === 'structure.slab' || object.object_type === 'architecture.floor' || object.object_type === 'architecture.ceiling')
+  const canBulkUpdateLevel = selectedObjects.length > 1 && bulkLevelObjects.length === selectedObjects.length
   const [editingMark, setEditingMark] = useState('')
 
   const colObj = selectedObj && isColumnObject(selectedObj) ? selectedObj : null
@@ -299,6 +303,15 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 6, color: '#24364b' }}>
           <option value="">เลือก Type{selectedCommonTypeId ? '' : ' (หลายค่า)'}</option>
           {selectedFamilyTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+        </select>
+      </label>}
+      {canBulkUpdateLevel && <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#52677d', fontWeight: 600 }}>
+        ย้ายระดับอ้างอิงให้ทั้ง {selectedObjects.length} ชิ้น
+        <select aria-label="ย้ายระดับให้วัตถุที่เลือก" value="" onChange={event => {
+          if (event.target.value) onUpdateLevelMany?.(selectedObjects.map(object => object.id), event.target.value)
+        }} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 6, color: '#24364b' }}>
+          <option value="">เลือกระดับปลายทาง…</option>
+          {project.levels.map(level => <option key={level.id} value={level.id}>{level.name} · {(level.elevation_mm / 1000).toFixed(3)} m</option>)}
         </select>
       </label>}
       <button type="button" className="cf-button" onClick={() => onDeleteObjects?.(selectedObjects.map(object => object.id))} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, color: '#dc2626', borderColor: '#fecaca', background: '#fff7f7' }}>
