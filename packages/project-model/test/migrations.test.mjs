@@ -103,6 +103,46 @@ test('S0: v1 envelope migration validates a representative multi-storey, multi-d
   assert.ok(familyCounts.has('interior.cabinet_run'))
 })
 
+test('S0: legacy mark-based migration resolves every typed object in the representative house model', () => {
+  const legacyProject = JSON.parse(houseDemoText)
+  legacyProject.schema_version = 1
+  const typeById = new Map(legacyProject.types.map(type => [type.id, type]))
+  legacyProject.types = legacyProject.types.map(type => ({ ...type, id: type.name }))
+  for (const object of Object.values(legacyProject.objects)) {
+    const data = object.module_data
+    const type = data.type_id ? typeById.get(data.type_id) : undefined
+    if (!type) continue
+    data.mark = type.name
+    delete data.type_id
+    delete data.instance_overrides
+  }
+
+  const sourceIds = Object.keys(legacyProject.objects).sort()
+  const resolvableLegacyMarks = Object.values(legacyProject.objects).filter(object =>
+    typeof object.module_data.mark === 'string' && legacyProject.types.some(type =>
+      type.object_type === object.object_type && type.name.trim().toLowerCase() === object.module_data.mark.trim().toLowerCase()
+    )
+  ).length
+  const migrated = deserializeProject(JSON.stringify(legacyProject))
+  const migratedAgain = deserializeProject(JSON.stringify(legacyProject))
+  const migratedTypeById = new Map(migrated.types.map(type => [type.id, type]))
+  const migratedTypedObjects = Object.values(migrated.objects).filter(object => object.module_data.type_id)
+
+  assert.equal(migrated.schema_version, 2)
+  assert.deepEqual(Object.keys(migrated.objects).sort(), sourceIds)
+  assert.equal(migratedTypedObjects.length, resolvableLegacyMarks)
+  assert.deepEqual(migrated.relationships, legacyProject.relationships)
+  assert.equal(serializeProject(migratedAgain), serializeProject(migrated))
+  assert.ok(migrated.types.every(type => typeUuidV5.test(type.id)))
+
+  for (const object of migratedTypedObjects) {
+    const type = migratedTypeById.get(object.module_data.type_id)
+    assert.ok(type, `${object.id} resolves from its legacy mark`)
+    assert.equal(type.object_type, object.object_type, `${object.id} resolves within its object family`)
+    assert.ok(object.module_data.instance_overrides && typeof object.module_data.instance_overrides === 'object')
+  }
+})
+
 test('S0: uppercase UUID type references normalize before resolving', () => {
   const migratedBaseline = deserializeProject(fixtureText)
   const transitionalV1 = structuredClone(fixture)

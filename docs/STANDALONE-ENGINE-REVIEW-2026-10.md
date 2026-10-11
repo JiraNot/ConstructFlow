@@ -10,7 +10,7 @@
 ตัวเลข test/build ในรายงานเป็นหลักฐาน ณ วันที่ระบุ ไม่ใช่การยืนยันว่ารันผ่านในวันนี้.
 
 **Snapshot ล่าสุด 11 ต.ค. 2026:** `npm run test:standalone` ผ่าน build targets 25 รายการ,
-Node tests 366 รายการ, Python MCP tests 11 รายการ และ integration
+Node tests 367 รายการ, Python MCP tests 11 รายการ และ integration
 verifiers ทั้ง 4 ชุด (`kitchen`, `file-io`, `phases`, `coordination`). MCP standalone ต่อ native
 mutation, query, takeoff, coordination, unified site/legal compliance, DXF/IFC/Revit-transfer
 interchange exports และ caller-held undo/redo แล้ว; ข้อจำกัดที่เหลือ
@@ -128,8 +128,9 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
 - เพิ่ม S0 migration regression: unknown extension data ระดับ project/level/object และ relationship
   อยู่ครบหลัง v1→v2; object ทั้ง 18 ชิ้นใน Kitchen Proof resolve `type_id` ไป catalog type ที่อยู่
   ใน family เดียวกัน. เพิ่ม synthetic v1 envelope บน house demo เพื่อทดสอบ 115 objects/44
-  relationships ในโมเดลหลายชั้นและหลาย family. `project-model` ผ่าน 56 tests; full standalone
-  runner ผ่านแล้วด้วย 366 Node tests รวม regression เหล่านี้.
+  relationships ในโมเดลหลายชั้นและหลาย family, พร้อม mark-based legacy catalog migration ที่
+  resolve typed objects 56 ชิ้นในโมเดลเดียวกันแบบ deterministic. `project-model` ผ่าน 57 tests;
+  full standalone runner ผ่านแล้วด้วย 367 Node tests รวม regression เหล่านี้.
 - เพิ่ม validation สำหรับ finite coordinates, positive dimensions, valid host, hosted
   opening bounds และการอ้างอิงเสา/ฐานราก/คานในโดเมนที่รองรับแล้ว; v1 migration contract
   เปลี่ยนจาก `any` เป็น `unknown` พร้อม narrowing; project/catalog และ CQRS public contracts
