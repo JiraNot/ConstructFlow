@@ -21,7 +21,9 @@ interface Props {
   project: ProjectDocument
   direction: ElevationDirection
   selectedId: string | null
+  selectedIds?: string[]
   onSelectObject: (id: string | null) => void
+  onSelectionChange?: (ids: string[], primaryId: string | null) => void
   underlay?: UnderlayConfig | null
   onMoveObject?: (id: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move' | 'top') => void
   /** Same coordination report the plan canvas draws, projected onto this elevation. */
@@ -56,7 +58,8 @@ function drawTag(ctx: CanvasRenderingContext2D, centerX: number, centerY: number
 }
 
 /** Orthographic, semantic projection of the project model. The canvas never becomes an editable copy of model edges. */
-export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedId, onSelectObject, underlay, onMoveObject, coordination = [] }) => {
+export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedId, selectedIds = selectedId ? [selectedId] : [], onSelectObject, onSelectionChange, underlay, onMoveObject, coordination = [] }) => {
+  const isSelected = (id: string) => selectedIds.includes(id) || selectedId === id
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hitRegions = useRef<Array<{ id: string; x: number; y: number; w: number; h: number }>>([])
   const viewTransform = useRef({ scale: 0.1, reversed: false, isEastWest: false, panX: 0, panY: 0 })
@@ -64,7 +67,8 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
   // Zooming the north facade must not unexpectedly zoom the RCP or west side.
   const viewState = useRef(createElevationViewStates())
   const [viewRevision, setViewRevision] = useState(0)
-  const pointerDown = useRef<{ id: string | null; x: number; y: number; verticalIntent: 'move' | 'top'; mode: 'pan' | 'object'; panX: number; panY: number; clearOnTap: boolean } | null>(null)
+  const pointerDown = useRef<{ id: string | null; x: number; y: number; localX: number; localY: number; verticalIntent: 'move' | 'top'; mode: 'pan' | 'object' | 'select'; panX: number; panY: number; additive: boolean } | null>(null)
+  const [selectionBox, setSelectionBox] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -109,7 +113,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           ctx.beginPath(); traceRing(ring)
           ctx.fillStyle = boundaryOpen ? 'rgba(239,68,68,.10)' : displayPhase === 'existing' ? 'rgba(148,163,184,.4)' : phaseStyle.fill
           ctx.fill()
-          ctx.strokeStyle = boundaryOpen ? '#dc2626' : selectedId === ceiling.id ? '#7c3aed' : phaseStyle.stroke
+          ctx.strokeStyle = boundaryOpen ? '#dc2626' : isSelected(ceiling.id) ? '#7c3aed' : phaseStyle.stroke
           ctx.lineWidth = phaseStyle.dash.length ? 1.5 : 1.6; ctx.setLineDash(boundaryOpen ? [5, 3] : phaseStyle.dash); ctx.stroke(); ctx.setLineDash([])
           for (const hole of voids) {
             if (!Array.isArray(hole) || hole.length < 3) continue
@@ -257,9 +261,9 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           const extent=resolveWallVerticalExtent(project,o);if(!extent)continue
           left=sx(Math.min(horizontalCoordinate(a),horizontalCoordinate(b)));right=sx(Math.max(horizontalCoordinate(a),horizontalCoordinate(b)))
           bottom=sy(extent.base_elevation_mm);top=sy(extent.top_elevation_mm)
-          const wallStyle=getElevationWallStyle(getDisplayPhase(o),selectedId===o.id)
+          const wallStyle=getElevationWallStyle(getDisplayPhase(o),isSelected(o.id))
           fill=wallStyle.fill;ctx.fillStyle=wallStyle.fill;ctx.strokeStyle=wallStyle.stroke;ctx.lineWidth=wallStyle.lineWidth;ctx.setLineDash(wallStyle.dash);ctx.fillRect(left,top,right-left,bottom-top);ctx.strokeRect(left,top,right-left,bottom-top);ctx.setLineDash([])
-          if(selectedId===o.id){
+          if(isSelected(o.id)){
             selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:extent.top_elevation_mm,baseElev:extent.base_elevation_mm,height:extent.height_mm,label:String(d.mark||'Wall')}
           }
           const faceMark=resolveElevationWallFaceMark(project,o,direction as Exclude<ElevationDirection,'rcp'>)
@@ -274,31 +278,31 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           let cursor=left,best:[number,number]=[left,left]
           for(const [a0,a1] of openings){if(a0-cursor>best[1]-best[0])best=[cursor,a0];cursor=Math.max(cursor,a1)}
           if(right-cursor>best[1]-best[0])best=[cursor,right]
-          if(best[1]-best[0]>=markWidth+8)elevationTags.push({x:(best[0]+best[1])/2,y:(top+bottom)/2,width:markWidth,height:18,text:markText,shape:'triangle',selected:selectedId===o.id})
+          if(best[1]-best[0]>=markWidth+8)elevationTags.push({x:(best[0]+best[1])/2,y:(top+bottom)/2,width:markWidth,height:18,text:markText,shape:'triangle',selected:isSelected(o.id)})
         }else if(o.object_type==='structure.column'){
           const p=d.location_mm as number[];if(!p)continue;const extent=resolveColumnVerticalExtent(project,o);if(!extent)continue;const half=Number((d.section_mm as number[]|undefined)?.[isEastWest?0:1]??200)/2,base=extent.base_elevation_mm,topElevation=extent.top_elevation_mm
           left=sx(horizontalCoordinate(p)-half);right=sx(horizontalCoordinate(p)+half);bottom=sy(topElevation);top=sy(base)
-          fill=selectedId===o.id?'#a2cbe5':'#b9d6e8';stroke=selectedId===o.id?'#0284c7':'#475569'
-          ctx.lineWidth=selectedId===o.id?2:1
+          fill=isSelected(o.id)?'#a2cbe5':'#b9d6e8';stroke=isSelected(o.id)?'#0284c7':'#475569'
+          ctx.lineWidth=isSelected(o.id)?2:1
           ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.fillRect(left,bottom,right-left,top-bottom);ctx.strokeRect(left,bottom,right-left,top-bottom)
-          if(selectedId===o.id){
+          if(isSelected(o.id)){
             selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:extent.top_elevation_mm,baseElev:extent.base_elevation_mm,height:extent.height_mm,label:String(d.mark||'Column')}
           }
         }else if(o.object_type==='structure.beam'){
           const a=d.start_point_mm as number[],b=d.end_point_mm as number[];if(!a||!b)continue
           const z=resolveBeamBaseElevation(project,o);if(z===undefined)continue;const section=d.section_mm as number[]|undefined,width=Number(section?.[0]??200),dep=Number(section?.[1]??400),drop=Number(d.drop_mm??0),beamBounds=getElevationBeamHorizontalBounds(a,b,width,direction);if(!beamBounds)continue;left=sx(beamBounds[0]);right=sx(beamBounds[1]);top=sy(z+dep-drop);bottom=sy(z-drop)
-          fill=selectedId===o.id?'#8ea7bf':'#9ca3af';stroke=selectedId===o.id?'#0284c7':'#475569'
-          ctx.lineWidth=selectedId===o.id?2:1
+          fill=isSelected(o.id)?'#8ea7bf':'#9ca3af';stroke=isSelected(o.id)?'#0284c7':'#475569'
+          ctx.lineWidth=isSelected(o.id)?2:1
           ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.fillRect(left,top,right-left,bottom-top);ctx.strokeRect(left,top,right-left,bottom-top)
-          if(selectedId===o.id){
+          if(isSelected(o.id)){
             selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:z+dep-drop,baseElev:z-drop,height:dep,label:String(d.mark||'Beam')}
           }
         }else if(o.object_type==='structure.slab'){
           const ring=d.boundary_mm as number[][];if(!ring?.length)continue;const coords=ring.map(p=>sx(horizontalCoordinate(p)));left=Math.min(...coords);right=Math.max(...coords);const z=resolveSlabElevation(project,o);if(z===undefined)continue;top=sy(z);bottom=sy(z-Number(d.thickness_mm??120))
-          fill=selectedId===o.id?'#97b4cd':'#a8b2bf';stroke=selectedId===o.id?'#0284c7':'#475569'
-          ctx.lineWidth=selectedId===o.id?2:1
+          fill=isSelected(o.id)?'#97b4cd':'#a8b2bf';stroke=isSelected(o.id)?'#0284c7':'#475569'
+          ctx.lineWidth=isSelected(o.id)?2:1
           ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.fillRect(left,top,right-left,bottom-top);ctx.strokeRect(left,top,right-left,bottom-top)
-          if(selectedId===o.id){
+          if(isSelected(o.id)){
             selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:z,baseElev:z-Number(d.thickness_mm??120),height:Number(d.thickness_mm??120),label:String(d.mark||'Slab')}
           }
         }else if(o.object_type==='door_window.door'||o.object_type==='door_window.window'){
@@ -307,7 +311,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           if(!shape)continue
           const center=horizontalCoordinate(p),directionSign=reversed?-1:1
           const x=sx(center),w=shape.width_mm*scale/2,h=vertical.height_mm*scale,y=sy(vertical.top_elevation_mm);left=x-w;right=x+w;top=y;bottom=y+h
-          ctx.strokeStyle=selectedId===o.id?'#087cf0':'#334155';ctx.fillStyle='#fbfdff'
+          ctx.strokeStyle=isSelected(o.id)?'#087cf0':'#334155';ctx.fillStyle='#fbfdff'
           for(const path of getOpeningElevationLinework(shape)){
             ctx.beginPath()
             path.points_mm.forEach(([localX,localZ],index)=>{
@@ -316,19 +320,19 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
             })
             if(path.closed)ctx.closePath()
             if(path.fill){ctx.fillStyle=path.fill;ctx.fill()}
-            ctx.lineWidth=selectedId===o.id?Math.max(1.2,path.line_width_mm*scale):Math.max(.7,path.line_width_mm*scale)
+            ctx.lineWidth=isSelected(o.id)?Math.max(1.2,path.line_width_mm*scale):Math.max(.7,path.line_width_mm*scale)
             ctx.stroke()
           }
-          if(selectedId===o.id){
+          if(isSelected(o.id)){
             selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:vertical.top_elevation_mm,baseElev:vertical.base_elevation_mm,height:vertical.height_mm,label:String(d.mark||(o.object_type==='door_window.door'?'Door':'Window'))}
           }
           ctx.font='bold 10px sans-serif'
           const tagText=String(d.mark??'')
-          elevationTags.push({x,y:top-17,width:Math.max(26,ctx.measureText(tagText).width+12),height:18,text:tagText,shape:o.object_type==='door_window.window'?'hexagon':'circle',selected:selectedId===o.id})
+          elevationTags.push({x,y:top-17,width:Math.max(26,ctx.measureText(tagText).width+12),height:18,text:tagText,shape:o.object_type==='door_window.window'?'hexagon':'circle',selected:isSelected(o.id)})
         }else if(o.object_type==='roof.system'){
           const shape=representations.get(o.id)?.shape
           if(shape?.kind!=='triangle_mesh')continue
-          const style=getElevationWallStyle(getDisplayPhase(o),selectedId===o.id)
+          const style=getElevationWallStyle(getDisplayPhase(o),isSelected(o.id))
           const visibleEdges=new Map<string,[[number,number],[number,number]]>()
           for(const [a,b] of getVisibleElevationMeshEdges(shape.triangles_mm,direction as Exclude<ElevationDirection,'rcp'>,scale)){
             const start:[number,number]=[sx(horizontalCoordinate(a)),sy(a[2])]
@@ -338,12 +342,12 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
             const keys=[pointKey(start),pointKey(end)].sort()
             visibleEdges.set(keys.join('|'),keys[0]===pointKey(start)?[start,end]:[end,start])
           }
-          ctx.beginPath();ctx.strokeStyle=style.stroke;ctx.lineWidth=selectedId===o.id?2:1.6;ctx.setLineDash(style.dash)
+          ctx.beginPath();ctx.strokeStyle=style.stroke;ctx.lineWidth=isSelected(o.id)?2:1.6;ctx.setLineDash(style.dash)
           for(const [start,end] of visibleEdges.values()){ctx.moveTo(start[0],start[1]);ctx.lineTo(end[0],end[1])}
           ctx.stroke();ctx.setLineDash([])
           const projected=shape.triangles_mm.flat().map(point=>[sx(horizontalCoordinate(point)),sy(point[2])])
           left=Math.min(...projected.map(point=>point[0]));right=Math.max(...projected.map(point=>point[0]));top=Math.min(...projected.map(point=>point[1]));bottom=Math.max(...projected.map(point=>point[1]))
-          if(selectedId===o.id){
+          if(isSelected(o.id)){
             selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),label:String(d.mark||'Roof')}
           }
         }else continue
@@ -439,7 +443,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     draw()
     const observer=new ResizeObserver(draw);observer.observe(canvas)
     return ()=>observer.disconnect()
-  },[project,direction,selectedId,underlay,viewRevision,coordination])
+  },[project,direction,selectedId,selectedIds,underlay,viewRevision,coordination])
 
   const zoomBy = (factor: number) => {
     const currentView = viewState.current[direction]
@@ -457,38 +461,58 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
   }
 
   return <div style={{position:'relative',width:'100%',height:'100%'}}>
-    <canvas ref={canvasRef} aria-label={`มุมมอง${direction}`} title="ล้อเมาส์เพื่อซูม · ลากพื้นที่ว่างหรือกดเมาส์กลางค้างเพื่อเลื่อน · ดับเบิลคลิกเพื่อจัดภาพพอดี" style={{width:'100%',height:'100%',display:'block',touchAction:'none',cursor:pointerDown.current?.mode==='pan'?'grabbing':'default'}} onWheel={event=>{
+    <canvas ref={canvasRef} aria-label={`มุมมอง${direction}`} title="ลากคลุมพื้นที่ว่างเพื่อเลือกวัตถุ · กดเมาส์กลางค้างเพื่อลากมุมมอง · ล้อเมาส์เพื่อซูม · ดับเบิลคลิกเพื่อจัดภาพพอดี" style={{width:'100%',height:'100%',display:'block',touchAction:'none',cursor:pointerDown.current?.mode==='pan'?'grabbing':pointerDown.current?.mode==='select'?'crosshair':'default'}} onWheel={event=>{
     event.preventDefault()
     const canvas=event.currentTarget,rect=canvas.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top
     const currentView=viewState.current[direction],factor=Math.exp(-event.deltaY*.001)
     viewState.current[direction]=zoomElevationViewAtPoint(currentView,currentView.zoom*factor,x,y,rect.width,rect.height)
     setViewRevision(value=>value+1)
   }} onDoubleClick={()=>{viewState.current[direction]={zoom:1,panX:0,panY:0};setViewRevision(value=>value+1)}} onPointerDown={event=>{
+    if(event.button!==0&&event.button!==1)return
     const rect=event.currentTarget.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top
     const hit=hitRegions.current.filter(r=>x>=r.x-4&&x<=r.x+r.w+4&&y>=r.y-4&&y<=r.y+r.h+4).sort((a,b)=>a.w*a.h-b.w*b.h)[0]
     const target=hit?.id?project.objects[hit.id]:undefined
     const isVerticalShape=target?.object_type==='architecture.wall'||target?.object_type==='door_window.door'||target?.object_type==='door_window.window'
-    const panMode=event.button===1||!hit
+    const panMode=event.button===1
     const view=viewState.current[direction]
-    pointerDown.current={id:hit?.id??null,x:event.clientX,y:event.clientY,verticalIntent:isVerticalShape&&hit&&Math.abs(y-hit.y)<12?'top':'move',mode:panMode?'pan':'object',panX:view.panX,panY:view.panY,clearOnTap:event.button===0&&!hit}
+    const mode=panMode?'pan':hit?'object':'select'
+    pointerDown.current={id:hit?.id??null,x:event.clientX,y:event.clientY,localX:x,localY:y,verticalIntent:isVerticalShape&&hit&&Math.abs(y-hit.y)<12?'top':'move',mode,panX:view.panX,panY:view.panY,additive:event.shiftKey}
+    if(mode==='select')setSelectionBox({x1:x,y1:y,x2:x,y2:y})
+    else if(mode==='object'&&event.button===0){onSelectionChange?.([hit.id],hit.id);onSelectObject(hit.id)}
+    if(event.button===1)event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
   }} onPointerMove={event=>{
     const start=pointerDown.current
-    if(!start||start.mode!=='pan')return
+    if(!start)return
     const dx=event.clientX-start.x,dy=event.clientY-start.y
-    if(Math.hypot(dx,dy)<=2)return
-    viewState.current[direction]=panElevationView({ ...viewState.current[direction], panX:start.panX, panY:start.panY },dx,dy)
-    setViewRevision(value=>value+1)
+    if(start.mode==='pan'){
+      if(Math.hypot(dx,dy)<=2)return
+      viewState.current[direction]=panElevationView({ ...viewState.current[direction], panX:start.panX, panY:start.panY },dx,dy)
+      setViewRevision(value=>value+1)
+    }else if(start.mode==='select'){
+      const rect=event.currentTarget.getBoundingClientRect()
+      setSelectionBox({x1:start.localX,y1:start.localY,x2:event.clientX-rect.left,y2:event.clientY-rect.top})
+    }
   }} onPointerUp={event=>{
     const start=pointerDown.current;pointerDown.current=null;if(!start)return
     const dx=event.clientX-start.x,dy=event.clientY-start.y
     if(start.mode==='pan'){
-      if(start.clearOnTap&&Math.hypot(dx,dy)<=3)onSelectObject(null)
+      setViewRevision(value=>value+1)
+      return
+    }
+    if(start.mode==='select'){
+      const rect=event.currentTarget.getBoundingClientRect(),x2=event.clientX-rect.left,y2=event.clientY-rect.top
+      const left=Math.min(start.localX,x2),right=Math.max(start.localX,x2),top=Math.min(start.localY,y2),bottom=Math.max(start.localY,y2)
+      setSelectionBox(null)
+      const hitIds=Math.hypot(dx,dy)>3?hitRegions.current.filter(region=>region.x<=right&&region.x+region.w>=left&&region.y<=bottom&&region.y+region.h>=top).map(region=>region.id):[]
+      const next=[...new Set([...(start.additive?selectedIds:[]),...hitIds])]
+      const primary=next.at(-1)??null
+      onSelectionChange?.(next,primary);onSelectObject(primary)
       return
     }
     if(start.id&&project.objects[start.id]?.object_type!=='roof.system'&&Math.hypot(dx,dy)>3&&onMoveObject){const view=viewTransform.current,horizontal=(dx/view.scale)*(view.reversed?-1:1);onMoveObject(start.id,view.isEastWest?[0,horizontal]:[horizontal,0],-dy/view.scale,start.verticalIntent);onSelectObject(start.id)}
-    else onSelectObject(start.id)
   }}/>
+    {selectionBox&&<div aria-hidden="true" style={{position:'absolute',left:Math.min(selectionBox.x1,selectionBox.x2),top:Math.min(selectionBox.y1,selectionBox.y2),width:Math.abs(selectionBox.x2-selectionBox.x1),height:Math.abs(selectionBox.y2-selectionBox.y1),border:'1px solid #0284c7',background:'rgba(2,132,199,.12)',pointerEvents:'none'}}/>}
     <div role="group" aria-label="ควบคุมสเกลรูปด้าน" style={{position:'absolute',bottom:10,right:10,display:'flex',alignItems:'center',gap: 4,padding: 3,border:'1px solid #dbe3ec',borderRadius: 4,background:'rgba(248,250,252,.94)',boxShadow:'0 2px 8px rgba(15,23,42,.08)'}}>
       <button type="button" aria-label="ย่อรูปด้าน" title="ย่อ" style={controlStyle} onClick={()=>zoomBy(1/1.25)}>−</button>
       <input type="range" min={20} max={800} step={5} value={Math.round(viewState.current[direction].zoom*100)} aria-label="เปอร์เซ็นต์ซูมรูปด้าน" aria-valuetext={`${Math.round(viewState.current[direction].zoom*100)}% จากภาพพอดี`} title="ปรับซูมจากภาพพอดี · 20–800%" style={{width:84,accentColor:'#2563eb',cursor:'ew-resize'}} onChange={event=>{

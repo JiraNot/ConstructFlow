@@ -1912,7 +1912,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 setCursorCoords_mm(coords)
                 setSnapKind(kind)
               }}
-            /> : viewMode !== 'model3d' ? <ElevationCanvas project={project} direction={viewMode} selectedId={selectedId} onSelectObject={setSelectedId} underlay={underlay} coordination={coordinationFindings} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
+            /> : viewMode !== 'model3d' ? <ElevationCanvas project={project} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
               <Model3DViewport project={project} onSelectObject={setSelectedId} coordination={coordinationFindings} />
             </Suspense>}
           </div>
