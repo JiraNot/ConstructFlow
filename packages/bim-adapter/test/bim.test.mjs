@@ -180,3 +180,23 @@ test("bim-adapter: generates Revit direct transfer JSON format", () => {
   assert.equal(removedWall.created_phase, "Existing");
   assert.equal(removedWall.removed_phase, "Demolition");
 });
+
+test("bim-adapter: preserves hosted opening UUIDs and resolves offsets along angled host walls", () => {
+  const project = createEmptyProjectDocument("REVIT-HOSTED-OPENING");
+  project.objects.wall = {
+    id: "wall-uuid", object_type: "architecture.wall", created_phase: "existing",
+    level_refs: [], relationships: [],
+    module_data: { start_point_mm: [1000, 2000, 300], end_point_mm: [5000, 5000, 300], thickness_mm: 100, height_mm: 2800 },
+  };
+  project.objects.window = {
+    id: "window-uuid", object_type: "door_window.window", created_phase: "new_construction",
+    level_refs: [], relationships: [],
+    module_data: { wall_id: "wall-uuid", offset_along_wall_mm: 2500, width_mm: 1200, height_mm: 1100, sill_height_mm: 900 },
+  };
+
+  const window = serializeRevitTransfer(project).elements.openings[0];
+  assert.equal(window.cf_uuid, "window-uuid");
+  assert.equal(window.host_wall_uuid, "wall-uuid");
+  assert.equal(window.category, "Window");
+  assert.deepEqual(window.location_on_host_mm, [3000, 3500, 1200]);
+});

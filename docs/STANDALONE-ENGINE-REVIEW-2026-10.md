@@ -233,6 +233,9 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   history snapshot ล่าสุดเอง; MCP รองรับ undo/redo โดยจำกัด 100 snapshots ต่อทิศทางและตรวจ
   project UUID. IFC/Revit transfer exports retain the created phase, removal phase and resulting
   display phase, preventing removed-existing elements from reverting to Existing in transfer.
+  Revit transfer recognizes canonical `door_window.door/window` types, retains the `wall_id`
+  host UUID and resolves `offset_along_wall_mm` against straight or angled host geometry when
+  no absolute opening point is stored.
   DXF ModelSpace entities carry `CONSTRUCTFLOW` XDATA with persistent object UUID, object type
   and lifecycle phases, including hosted opening block references. DXF, IFC 4.3 STEP และ Revit
   transfer JSON export ผ่าน standalone adapter serializers แล้ว;

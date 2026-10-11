@@ -304,14 +304,14 @@ export class IfcSerializer {
         `#${solidId}=IFCEXTRUDEDAREASOLID(#${profileId},$,#${axisZ},${toM(hMm)});`,
       );
       shapeRepId = this.createShapeRepresentation(lines, subContextId, solidId);
-    } else if (type.startsWith("arch.door") || type.startsWith("opening.door")) {
+    } else if (type.startsWith("arch.door") || type.startsWith("opening.door") || type.startsWith("door_window.door")) {
       ifcClass = "IFCDOOR";
       predefinedType = ".DOOR.";
       const loc = d.location_mm ?? [0, 0, 0];
       const locPt = this.nextId();
       lines.push(`#${locPt}=IFCCARTESIANPOINT((${toM(loc[0])},${toM(loc[1])},${toM(loc[2])}));`);
       placementId = this.createLocalPlacement(lines, locPt, axisZ, axisX);
-    } else if (type.startsWith("arch.window") || type.startsWith("opening.window")) {
+    } else if (type.startsWith("arch.window") || type.startsWith("opening.window") || type.startsWith("door_window.window")) {
       ifcClass = "IFCWINDOW";
       predefinedType = ".WINDOW.";
       const loc = d.location_mm ?? [0, 0, 0];

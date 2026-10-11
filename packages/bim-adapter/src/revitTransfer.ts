@@ -94,6 +94,40 @@ export interface RevitOpening {
   sill_height_mm: number;
 }
 
+function openingHostId(data: Record<string, any>): string {
+  return data.wall_id ?? data.host_wall_id ?? "";
+}
+
+function openingLocationMm(
+  project: ProjectDocument,
+  data: Record<string, any>,
+  sillHeightMm: number,
+  fallback: [number, number, number],
+): [number, number, number] {
+  const location = data.location_mm;
+  if (Array.isArray(location) && location.length >= 3 && location.slice(0, 3).every(Number.isFinite)) {
+    return [location[0], location[1], location[2]];
+  }
+
+  const offset = data.offset_along_wall_mm;
+  const hostId = openingHostId(data);
+  const host = project.objects[hostId] ?? Object.values(project.objects).find(object => object.id === hostId);
+  const hostData = host?.module_data as Record<string, any> | undefined;
+  const start = hostData?.start_point_mm;
+  const end = hostData?.end_point_mm;
+  if (Number.isFinite(offset) && Array.isArray(start) && Array.isArray(end)
+    && start.length >= 3 && end.length >= 3
+    && [...start.slice(0, 3), ...end.slice(0, 3)].every(Number.isFinite)) {
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    const span = Math.hypot(dx, dy);
+    if (span > 0 && offset >= 0 && offset <= span) {
+      return [start[0] + dx * offset / span, start[1] + dy * offset / span, start[2] + sillHeightMm];
+    }
+  }
+  return fallback;
+}
+
 export function serializeRevitTransfer(project: ProjectDocument): RevitTransferDocument {
   const walls: RevitWall[] = [];
   const columns: RevitColumn[] = [];
@@ -175,30 +209,30 @@ export function serializeRevitTransfer(project: ProjectDocument): RevitTransferD
         ],
         thickness_mm: d.thickness_mm ?? 120,
       });
-    } else if (type.startsWith("arch.door") || type.startsWith("opening.door")) {
+    } else if (type.startsWith("arch.door") || type.startsWith("opening.door") || type.startsWith("door_window.door")) {
       openings.push({
         cf_uuid: obj.id,
         phase,
         created_phase: createdPhase,
         ...(removedPhase ? { removed_phase: removedPhase } : {}),
-        host_wall_uuid: d.host_wall_id ?? "",
+        host_wall_uuid: openingHostId(d),
         category: "Door",
         family_type: d.mark ?? "Single-Flush 0915 x 2134mm",
-        location_on_host_mm: d.location_mm ?? [1000, 0, 0],
+        location_on_host_mm: openingLocationMm(project, d, d.sill_height_mm ?? 0, [1000, 0, 0]),
         width_mm: d.width_mm ?? 900,
         height_mm: d.height_mm ?? 2000,
         sill_height_mm: 0,
       });
-    } else if (type.startsWith("arch.window") || type.startsWith("opening.window")) {
+    } else if (type.startsWith("arch.window") || type.startsWith("opening.window") || type.startsWith("door_window.window")) {
       openings.push({
         cf_uuid: obj.id,
         phase,
         created_phase: createdPhase,
         ...(removedPhase ? { removed_phase: removedPhase } : {}),
-        host_wall_uuid: d.host_wall_id ?? "",
+        host_wall_uuid: openingHostId(d),
         category: "Window",
         family_type: d.mark ?? "Sliding 2-Panel",
-        location_on_host_mm: d.location_mm ?? [2000, 0, 900],
+        location_on_host_mm: openingLocationMm(project, d, d.sill_height_mm ?? 900, [2000, 0, 900]),
         width_mm: d.width_mm ?? 1200,
         height_mm: d.height_mm ?? 1100,
         sill_height_mm: d.sill_height_mm ?? 900,
