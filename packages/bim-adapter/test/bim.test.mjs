@@ -109,6 +109,28 @@ test("bim-adapter: generates valid OpenBIM IFC 4.3 ADD2 STEP file", () => {
   assert.ok(result.ifcContent.includes("New_Construction"));
 });
 
+test("bim-adapter: escapes user-provided STEP strings without splitting entity records", () => {
+  const project = createEmptyProjectDocument("IFC-ESCAPING", "Owner's house\nPhase 2");
+  project.levels = [{ id: "level-1", name: "Owner's Level\nTwo", elevation_mm: 0, storey_index: 0, height_mm: 3000 }];
+  project.objects.beam = {
+    id: "beam-1", object_type: "structure.beam", created_phase: "new_construction",
+    level_refs: [], relationships: [],
+    module_data: {
+      start_point_mm: [0, 0, 3000], end_point_mm: [4000, 0, 3000],
+      section_mm: [200, 400], span_mm: 4000, mark: "Owner's beam\nB1",
+    },
+  };
+
+  const { ifcContent } = exportProjectToIfc(project, { authorName: "O'Brien\nEngineer" });
+  const entityLines = ifcContent.split(/\r?\n/).filter(line => line.startsWith("#"));
+  assert.ok(entityLines.every(line => !line.includes("\r") && !line.includes("\n")));
+  assert.ok(ifcContent.includes("Owner''s house\\X0A\\Phase 2"));
+  assert.ok(ifcContent.includes("Owner''s Level\\X0A\\Two"));
+  assert.ok(ifcContent.includes("Owner''s beam\\X0A\\B1"));
+  assert.ok(ifcContent.includes("O''Brien\\X0A\\Engineer"));
+  assert.match(ifcContent, /IFCBEAM\('[^']+'[^\n]*'Owner''s beam\\X0A\\B1'/);
+});
+
 test("bim-adapter: generates Revit direct transfer JSON format", () => {
   const project = createEmptyProjectDocument("REVIT-TEST", "บ้านสองชั้น");
 

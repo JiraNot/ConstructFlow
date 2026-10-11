@@ -4,6 +4,16 @@
 import { getDisplayPhase, type ProjectDocument, type SmartObject, type Phase } from "@constructflow/project-model";
 import { uuidToIfcGuid } from "./ifcGuid.js";
 
+/** Quote a value for an ISO 10303-21 STEP string literal. */
+function stepString(value: unknown): string {
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "''")
+    .replace(/\r/g, "\\X0D\\")
+    .replace(/\n/g, "\\X0A\\")
+    .replace(/\t/g, "\\X09\\");
+}
+
 export interface IfcExportOptions {
   projectName?: string;
   authorName?: string;
@@ -34,7 +44,7 @@ export class IfcSerializer {
       "ISO-10303-21;",
       "HEADER;",
       "FILE_DESCRIPTION(('ViewDefinition [DesignTransferView_V1.0]'),'2;1');",
-      `FILE_NAME('${this.project.project.id}.ifc','${timestamp}',('${this.options.authorName ?? "ConstructFlow User"}'),('${this.options.organization ?? "JiraNot ConstructFlow"}'),'ConstructFlow IFC Engine','ConstructFlow IFC4.3 Serializer','');`,
+      `FILE_NAME('${stepString(this.project.project.id)}.ifc','${timestamp}',('${stepString(this.options.authorName ?? "ConstructFlow User")}'),('${stepString(this.options.organization ?? "JiraNot ConstructFlow")}'),'ConstructFlow IFC Engine','ConstructFlow IFC4.3 Serializer','');`,
       "FILE_SCHEMA(('IFC4X3_ADD2'));",
       "ENDSEC;",
       "DATA;",
@@ -86,7 +96,7 @@ export class IfcSerializer {
     const idProject = this.nextId();
     const projName = this.options.projectName ?? this.project.project.name ?? "ConstructFlow Project";
     lines.push(
-      `#${idProject}=IFCPROJECT('${projGuid}',$,'${projName}',$,$,$,$,(#${idGeomContext}),#${idUnitAssign});`,
+      `#${idProject}=IFCPROJECT('${projGuid}',$,'${stepString(projName)}',$,$,$,$,(#${idGeomContext}),#${idUnitAssign});`,
     );
 
     // Site
@@ -94,7 +104,7 @@ export class IfcSerializer {
     const idSitePlacement = this.createLocalPlacement(lines, idWorldPt, idAxisZ, idAxisX);
     const idSite = this.nextId();
     lines.push(
-      `#${idSite}=IFCSITE('${siteGuid}',$,'${this.options.siteName ?? "Bangkok Property Plot"}',$,$,#${idSitePlacement},$,$,.ELEMENT.,(13,45,0),(100,30,0),0.,$,$);`,
+      `#${idSite}=IFCSITE('${siteGuid}',$,'${stepString(this.options.siteName ?? "Bangkok Property Plot")}',$,$,#${idSitePlacement},$,$,.ELEMENT.,(13,45,0),(100,30,0),0.,$,$);`,
     );
 
     // Building
@@ -118,7 +128,7 @@ export class IfcSerializer {
       const placeStorey = this.createLocalPlacement(lines, ptElev, idAxisZ, idAxisX, idBldgPlacement);
       const idStorey = this.nextId();
       lines.push(
-        `#${idStorey}=IFCBUILDINGSTOREY('${storeyGuid}',$,'${lvl.name}',$,$,#${placeStorey},$,$,.ELEMENT.,${elevM.toFixed(4)});`,
+        `#${idStorey}=IFCBUILDINGSTOREY('${storeyGuid}',$,'${stepString(lvl.name)}',$,$,#${placeStorey},$,$,.ELEMENT.,${elevM.toFixed(4)});`,
       );
       storeyIds.push(idStorey);
       levelMap.set(lvl.id, { storeyId: idStorey, elevationM: elevM });
@@ -208,7 +218,7 @@ export class IfcSerializer {
       // Rectangular profile extruded solid
       const profileId = this.nextId();
       lines.push(
-        `#${profileId}=IFCRECTANGLEPROFILEDEF(.AREA.,'${d.mark ?? "C1"}',$,${toM(sec[0])},${toM(sec[1])});`,
+        `#${profileId}=IFCRECTANGLEPROFILEDEF(.AREA.,'${stepString(d.mark ?? "C1")}',$,${toM(sec[0])},${toM(sec[1])});`,
       );
       const solidId = this.nextId();
       lines.push(
@@ -229,7 +239,7 @@ export class IfcSerializer {
 
       const profileId = this.nextId();
       lines.push(
-        `#${profileId}=IFCRECTANGLEPROFILEDEF(.AREA.,'${d.mark ?? "B1"}',$,${toM(sec[0])},${toM(sec[1])});`,
+        `#${profileId}=IFCRECTANGLEPROFILEDEF(.AREA.,'${stepString(d.mark ?? "B1")}',$,${toM(sec[0])},${toM(sec[1])});`,
       );
       const solidId = this.nextId();
       lines.push(
@@ -248,7 +258,7 @@ export class IfcSerializer {
 
       const profileId = this.nextId();
       lines.push(
-        `#${profileId}=IFCRECTANGLEPROFILEDEF(.AREA.,'${d.mark ?? "F1"}',$,${toM(sz[0])},${toM(sz[1])});`,
+        `#${profileId}=IFCRECTANGLEPROFILEDEF(.AREA.,'${stepString(d.mark ?? "F1")}',$,${toM(sz[0])},${toM(sz[1])});`,
       );
       const solidId = this.nextId();
       lines.push(
@@ -265,7 +275,7 @@ export class IfcSerializer {
 
       const profileId = this.nextId();
       lines.push(
-        `#${profileId}=IFCRECTANGLEPROFILEDEF(.AREA.,'${d.slab_system ?? "S1"}',$,4.0,5.0);`,
+        `#${profileId}=IFCRECTANGLEPROFILEDEF(.AREA.,'${stepString(d.slab_system ?? "S1")}',$,4.0,5.0);`,
       );
       const solidId = this.nextId();
       lines.push(
@@ -346,7 +356,7 @@ export class IfcSerializer {
     // Primary IFC Element instance
     const elemId = this.nextId();
     lines.push(
-      `#${elemId}=${ifcClass}('${guid}',$,'${d.mark ?? obj.object_type}',$,'${obj.object_type}',#${placementId},${prodDefShapeId},'${obj.id}',${predefinedType});`,
+      `#${elemId}=${ifcClass}('${guid}',$,'${stepString(d.mark ?? obj.object_type)}',$,'${stepString(obj.object_type)}',#${placementId},${prodDefShapeId},'${stepString(obj.id)}',${predefinedType});`,
     );
 
     // Renovation Phasing Property Set: Pset_ConstructionPhase

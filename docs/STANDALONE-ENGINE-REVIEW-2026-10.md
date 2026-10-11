@@ -236,7 +236,9 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   DXF ModelSpace entities carry `CONSTRUCTFLOW` XDATA with persistent object UUID, object type
   and lifecycle phases, including hosted opening block references. DXF, IFC 4.3 STEP และ Revit
   transfer JSON export ผ่าน standalone adapter serializers แล้ว;
-  เป็น interchange exports ไม่ใช่ live sync หรือการรับรอง fidelity/roundtrip ของปลายทาง.
+  IFC STEP strings escape apostrophes and common control characters in user-provided names and
+  marks so those values cannot break entity records. These remain interchange exports, not live
+  sync or a guarantee of destination fidelity/roundtrip.
 - เครื่องมือ SketchUp-forwarding ยังใช้ WebSocket bridge และต้องทดสอบ roundtrip บน SketchUp จริง.
   DXF/IFC/Revit ยังเป็น exporters/transfer serializer ไม่ใช่ diff-based synchronization ที่ยืนยัน
   unchanged/update/delete policy และรักษา customization ครบทุกปลายทาง.
