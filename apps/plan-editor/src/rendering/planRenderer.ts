@@ -237,9 +237,32 @@ export function renderPlanView(
         lines = [perimeter, ...tileLines]
       }
     }
-    const seen=new Set<string>()
-    for(const points of lines){const key=points.map(v=>v.slice(0,2).join(',')).join('|');if(seen.has(key))continue;seen.add(key);ctx.beginPath();points.forEach((p,i)=>{const [x,y]=worldToScreen([p[0],p[1]],viewport);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y)});ctx.stroke()}
-    const anchor=lines[0]?.[0];if(anchor && labelVisibility.structure){const [x,y]=worldToScreen([anchor[0],anchor[1]],viewport);ctx.font='11px sans-serif';const family=project.objects[out.object_id]?.object_type ?? '';const shape=family.endsWith('.ceiling')?'ellipse':'rect';queuePlanLabel(ctx,x+4,y-12,out.mark,String(ctx.strokeStyle),'#c7d3df',isSelected(out.object_id)?10:0,'#fbfdff',false,shape)}
+    const seen = new Set<string>()
+    const drawPaths = (paths: typeof lines, color: string, width: number) => {
+      ctx.strokeStyle = color
+      ctx.lineWidth = width
+      for (const points of paths) {
+        const key = points.map(point => point.slice(0, 2).join(',')).join('|')
+        if (seen.has(key)) continue
+        seen.add(key)
+        ctx.beginPath()
+        points.forEach((point, index) => {
+          const [x, y] = worldToScreen([point[0], point[1]], viewport)
+          if (index) ctx.lineTo(x, y)
+          else ctx.moveTo(x, y)
+        })
+        ctx.stroke()
+      }
+    }
+    if (family === 'architecture.bathroom' && lines.length > 0) {
+      // Keep the tile layout subdued even when selected; selection belongs to the
+      // room boundary, while the tile joints remain ordinary construction detail.
+      drawPaths(lines.slice(0, 1), isSelected(out.object_id) ? '#f59e0b' : '#64748b', isSelected(out.object_id) ? 1.8 : 1)
+      drawPaths(lines.slice(1), '#cbd5e1', 0.65)
+    } else {
+      drawPaths(lines, String(ctx.strokeStyle), ctx.lineWidth)
+    }
+    const anchor=lines[0]?.[0];if(anchor && labelVisibility.structure){const [x,y]=worldToScreen([anchor[0],anchor[1]],viewport);ctx.font='11px sans-serif';const shape=family.endsWith('.ceiling')?'ellipse':'rect';queuePlanLabel(ctx,x+4,y-12,out.mark,isSelected(out.object_id)?'#f59e0b':String(ctx.strokeStyle),'#c7d3df',isSelected(out.object_id)?10:0,'#fbfdff',false,shape)}
     ctx.restore()
   }
   const standaloneGrids = Object.values(project.objects).filter(isGridObject).filter(object => !object.module_data.system_id)
