@@ -10,7 +10,7 @@
 ตัวเลข test/build ในรายงานเป็นหลักฐาน ณ วันที่ระบุ ไม่ใช่การยืนยันว่ารันผ่านในวันนี้.
 
 **Snapshot ล่าสุด 11 ต.ค. 2026:** `npm run test:standalone` ผ่าน build targets 25 รายการ,
-Node tests 344 รายการ, Python MCP tests 11 รายการ และ integration
+Node tests 364 รายการ, Python MCP tests 11 รายการ และ integration
 verifiers ทั้ง 4 ชุด (`kitchen`, `file-io`, `phases`, `coordination`). MCP standalone ต่อ native
 mutation, query, takeoff, coordination, unified site/legal compliance, DXF/IFC/Revit-transfer
 interchange exports และ caller-held undo/redo แล้ว; ข้อจำกัดที่เหลือ
@@ -182,8 +182,9 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   interactions, wall cutouts และข้อมูลช่องเปิดผิดรูปแบบ
 - 3D viewport รับ coordination findings ชุดเดียวกับ Plan/Elevation แล้ววาด impact เป็น volume,
   object extents เป็น wireframe และระยะเป็นเส้นประ; สีจัดลำดับตาม hard/clearance/soft และ
-  geometry/material ถูก dispose เมื่อรายงานหรือโปรเจกต์เปลี่ยน. Production build ผ่าน;
-  ยังไม่มี visual acceptance ของ overlay บน representative projects.
+  geometry/material ถูก dispose เมื่อรายงานหรือโปรเจกต์เปลี่ยน. มีห้า Node tests ตรวจการแปลง
+  mm→m, material/สี, filter/cap ตาม severity และ disposal; production build ผ่าน แต่ยังไม่มี
+  visual acceptance ของ overlay บน representative projects.
 - Runtime acceptance ยืนยันว่าการย้ายเสาประสาน foundation/beam endpoints/span, Undo/Redo
   รักษา model และการย้ายที่ทำให้ span เป็นศูนย์ rollback ทั้งรายการ; gizmo คืน preview mesh เมื่อ
   command reject หรือ drag น้อยกว่า 1 mm
