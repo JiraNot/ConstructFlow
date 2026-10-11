@@ -110,7 +110,7 @@ export const App: React.FC = () => {
   const [fileFeedback, setFileFeedback] = useState('')
   const supportsProjectFileOpen = typeof (window as ProjectSaveWindow).showOpenFilePicker === 'function'
   const projectSessionRef = useRef<ProjectCommandSession | null>(null)
-  const locallySavedProjectJsonRef = useRef<string | null>(null)
+  const activeProjectFileHandleRef = useRef<LocalProjectFileHandle | null>(null)
   if (!projectSessionRef.current) projectSessionRef.current = new ProjectCommandSession(project)
   useEffect(() => {
     let active = true
@@ -118,12 +118,10 @@ export const App: React.FC = () => {
       .then(snapshot => {
         if (!active) return
         if (!snapshot) {
-          locallySavedProjectJsonRef.current = projectJson
           return
         }
         const restored = deserializeProject(snapshot.projectJson)
         projectSessionRef.current!.reset(restored)
-        locallySavedProjectJsonRef.current = snapshot.projectJson
         setProjectState(restored)
         setSavedProjectJson(snapshot.savedProjectJson)
         setReplacementBaselineJson(snapshot.replacementBaselineJson)
@@ -152,7 +150,6 @@ export const App: React.FC = () => {
       saving = true
       void saveLocalProjectSnapshot({ projectJson, savedProjectJson, replacementBaselineJson })
         .then(() => {
-          locallySavedProjectJsonRef.current = projectJson
           setLocalAutosaveState('saved')
         })
         .catch(error => {
@@ -328,7 +325,7 @@ export const App: React.FC = () => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
-        void handleSaveLocalProject()
+        void handleSaveProject()
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         const session = projectSessionRef.current!
@@ -1305,8 +1302,8 @@ export const App: React.FC = () => {
   }, [selectedId, selectedIds, project, handleDeleteObject])
 
   const confirmReplaceUnsavedProject = () => {
-    const hasUnsavedLocalEdits = locallySavedProjectJsonRef.current !== projectJson
-    return !hasUnsavedLocalEdits || window.confirm('มีการแก้ไขที่ยังไม่ได้บันทึกในเบราว์เซอร์นี้ ต้องการแทนที่โครงการปัจจุบันหรือไม่?')
+    const hasUnsavedProjectChanges = replacementBaselineJson !== projectJson
+    return !hasUnsavedProjectChanges || window.confirm('มีการแก้ไขโครงการหลังเปิดหรือบันทึกไฟล์ครั้งล่าสุด ต้องการแทนที่โครงการปัจจุบันหรือไม่?')
   }
 
   // Export .cfproj file
@@ -1323,17 +1320,27 @@ export const App: React.FC = () => {
     a.remove()
     setSavedProjectJson(json)
     setReplacementBaselineJson(json)
+    activeProjectFileHandleRef.current = null
     setFileFeedback(`ส่งคำขอดาวน์โหลด ${filename} แล้ว`)
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
-  const handleSaveLocalProject = async () => {
+  const handleSaveProject = async () => {
     setLocalAutosaveState('saving')
+    const handle = activeProjectFileHandleRef.current
     try {
-      await saveLocalProjectSnapshot({ projectJson, savedProjectJson, replacementBaselineJson })
-      locallySavedProjectJsonRef.current = projectJson
-      setLocalAutosaveState('saved')
-      setFileFeedback('บันทึกในเบราว์เซอร์เครื่องนี้แล้ว')
+      if (handle) {
+        await writeProjectFile(handle, projectJson)
+        setSavedProjectJson(projectJson)
+        setReplacementBaselineJson(projectJson)
+        setLocalAutosaveState('saved')
+        setFileFeedback(`บันทึกไฟล์ ${projectFileName(project)} แล้ว`)
+      } else {
+        await saveLocalProjectSnapshot({ projectJson, savedProjectJson, replacementBaselineJson: projectJson })
+        setReplacementBaselineJson(projectJson)
+        setLocalAutosaveState('saved')
+        setFileFeedback('บันทึกในเบราว์เซอร์เครื่องนี้แล้ว')
+      }
     } catch (error) {
       console.error('Unable to save local ConstructFlow project', error)
       setLocalAutosaveState('error')
@@ -1352,6 +1359,7 @@ export const App: React.FC = () => {
           types: [{ description: 'ConstructFlow Project', accept: { 'application/json': ['.cfproj'] } }],
         })
         await writeProjectFile(handle, json)
+        activeProjectFileHandleRef.current = handle
         setSavedProjectJson(json)
         setReplacementBaselineJson(json)
         setFileFeedback(`บันทึกไฟล์ ${filename} แล้ว`)
@@ -1361,6 +1369,7 @@ export const App: React.FC = () => {
       }
       return
     }
+    activeProjectFileHandleRef.current = null
     handleDownloadProjectCopy()
   }
 
@@ -1440,12 +1449,13 @@ export const App: React.FC = () => {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
-  const handleOpenProject = async (file?: File) => {
+  const handleOpenProject = async (file?: File, fileHandle: LocalProjectFileHandle | null = null) => {
     if (!file) return
     try {
       const { project: loaded, serialized: loadedJson } = await readProjectFile(file)
       if (!confirmReplaceUnsavedProject()) return
       projectSessionRef.current!.reset(loaded)
+      activeProjectFileHandleRef.current = fileHandle
       setProjectState(loaded)
       setSavedProjectJson(loadedJson)
       setReplacementBaselineJson(loadedJson)
@@ -1466,7 +1476,7 @@ export const App: React.FC = () => {
         types: [{ description: 'ConstructFlow Project', accept: { 'application/json': ['.cfproj'] } }],
       })
       const handle = handles[0]
-      if (handle) await handleOpenProject(await handle.getFile())
+      if (handle) await handleOpenProject(await handle.getFile(), handle)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       window.alert(`เปิดไฟล์โครงการไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
@@ -1481,6 +1491,7 @@ export const App: React.FC = () => {
       return
     }
     projectSessionRef.current!.reset(generated.updatedProject)
+    activeProjectFileHandleRef.current = null
     setProjectState(generated.updatedProject)
     setSavedProjectJson(null)
     setReplacementBaselineJson(serializeProject(generated.updatedProject))
@@ -1495,6 +1506,7 @@ export const App: React.FC = () => {
     try {
       const restored = deserializeProject(houseDemoRaw)
       projectSessionRef.current!.reset(restored)
+      activeProjectFileHandleRef.current = null
       setProjectState(restored)
       setSavedProjectJson(null)
       setReplacementBaselineJson(serializeProject(restored))
@@ -1642,7 +1654,7 @@ export const App: React.FC = () => {
           ) : (
             <label htmlFor="cfproj-open" role="button" tabIndex={0} className="cf-button cf-button-quiet" onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); document.getElementById('cfproj-open')?.click() } }}><FolderOpen size={16} /><span>เปิด</span></label>
           )}
-          <button type="button" className="cf-button cf-button-primary" onClick={() => void handleSaveLocalProject()} title="บันทึกงานในเบราว์เซอร์เครื่องนี้"><Save size={16} /><span>บันทึก</span></button>
+          <button type="button" className="cf-button cf-button-primary" onClick={() => void handleSaveProject()} title={activeProjectFileHandleRef.current ? 'บันทึกกลับไปยังไฟล์โครงการที่เปิดอยู่' : 'บันทึกงานในเบราว์เซอร์เครื่องนี้'}><Save size={16} /><span>บันทึก</span></button>
           <details className="cf-save-menu" onClick={(event) => {
             if ((event.target as HTMLElement).closest('button')) event.currentTarget.open = false
           }}>
