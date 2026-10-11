@@ -3,7 +3,22 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { deserializeProject } from '@constructflow/project-model'
 import { buildProjectRepresentations3D, getVisibleElevationMeshEdges } from '@constructflow/representation-engine'
-import { getElevationMeshEdges, getElevationWallStyle, getVisibleElevationLevelRows, layoutElevationTags, packElevationLevelLabelCenters, panElevationView, resolveElevationWallFaceMark, sortElevationObjectsForDrawing, zoomElevationViewAtPoint, zoomElevationViewFromCenter } from '../src/elevationLabelLayout.mjs'
+import { getElevationBeamHorizontalBounds, getElevationMeshEdges, getElevationWallStyle, getVisibleElevationLevelRows, layoutElevationTags, packElevationLevelLabelCenters, panElevationView, resolveElevationWallFaceMark, sortElevationObjectsForDrawing, zoomElevationViewAtPoint, zoomElevationViewFromCenter } from '../src/elevationLabelLayout.mjs'
+
+test('beam elevation projection shows its section when viewed end-on and its span from the side', () => {
+  const beamAlongX = { start: [0, 1000, 0], end: [4000, 1000, 0] }
+  const beamAlongY = { start: [2000, 0, 0], end: [2000, 4000, 0] }
+
+  assert.deepEqual(getElevationBeamHorizontalBounds(beamAlongX.start, beamAlongX.end, 200, 'north'), [0, 4000])
+  assert.deepEqual(getElevationBeamHorizontalBounds(beamAlongX.start, beamAlongX.end, 200, 'south'), [-4000, 0])
+  assert.deepEqual(getElevationBeamHorizontalBounds(beamAlongX.start, beamAlongX.end, 200, 'east'), [900, 1100])
+  assert.deepEqual(getElevationBeamHorizontalBounds(beamAlongX.start, beamAlongX.end, 200, 'west'), [-1100, -900])
+  assert.deepEqual(getElevationBeamHorizontalBounds(beamAlongY.start, beamAlongY.end, 200, 'north'), [1900, 2100])
+  assert.deepEqual(getElevationBeamHorizontalBounds(beamAlongY.start, beamAlongY.end, 200, 'south'), [-2100, -1900])
+  assert.deepEqual(getElevationBeamHorizontalBounds(beamAlongY.start, beamAlongY.end, 200, 'east'), [0, 4000])
+  assert.deepEqual(getElevationBeamHorizontalBounds(beamAlongY.start, beamAlongY.end, 200, 'west'), [-4000, 0])
+  assert.deepEqual(getElevationBeamHorizontalBounds([0, 0], [0, 0], 200, 'north'), null)
+})
 
 test('elevation level labels stay ordered and point to their datum when levels are tightly spaced', () => {
   const datums = [100, 104, 108, 400]

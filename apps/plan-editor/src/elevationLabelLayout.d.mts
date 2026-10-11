@@ -10,6 +10,13 @@ export function getVisibleElevationLevelRows<T>(
   viewportHeight: number,
 ): Array<{ level: T; y: number }>
 
+export function getElevationBeamHorizontalBounds(
+  start: number[],
+  end: number[],
+  sectionWidthMm: number,
+  direction: 'north' | 'south' | 'east' | 'west',
+): [number, number] | null
+
 export function resolveElevationWallFaceMark(
   project: { types?: Array<{ id: string; object_type?: string; name?: string; parameters?: Record<string, unknown> }> },
   wall: { object_type?: string; module_data?: object },

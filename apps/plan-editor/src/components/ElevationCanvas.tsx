@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { getDisplayPhase, resolveBeamBaseElevation, resolveColumnVerticalExtent, resolveOpeningVerticalExtent, resolveSlabElevation, resolveWallVerticalExtent, type ProjectDocument } from '@constructflow/project-model'
 import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getPlanVisibleObjects, getVisibleElevationMeshEdges, resolveCeilingGridStyle, resolvePlanPhaseStyle } from '@constructflow/representation-engine'
 import { clippedGridSegments, polygonDiagonalHatchSegments, polygonInteriorPoint } from '@constructflow/geometry-kernel'
-import { getElevationWallStyle, getVisibleElevationLevelRows, layoutElevationTags, packElevationLevelLabelCenters, panElevationView, resolveElevationWallFaceMark, sortElevationObjectsForDrawing, zoomElevationViewAtPoint, zoomElevationViewFromCenter } from '../elevationLabelLayout.mjs'
+import { getElevationBeamHorizontalBounds, getElevationWallStyle, getVisibleElevationLevelRows, layoutElevationTags, packElevationLevelLabelCenters, panElevationView, resolveElevationWallFaceMark, sortElevationObjectsForDrawing, zoomElevationViewAtPoint, zoomElevationViewFromCenter } from '../elevationLabelLayout.mjs'
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
 
 import type { CoordinationFinding } from '@constructflow/clash-engine'
@@ -177,7 +177,9 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
         } else if (object.object_type === 'structure.beam') {
           const a=d.start_point_mm as number[], b=d.end_point_mm as number[]; if (!a||!b) continue
           const z=resolveBeamBaseElevation(project,object);if(z===undefined)continue;const depth=Number((d.section_mm as number[]|undefined)?.[1]??400),drop=Number(d.drop_mm??0)
-          bounds[0]=Math.min(bounds[0],horizontalCoordinate(a),horizontalCoordinate(b)); bounds[1]=Math.max(bounds[1],horizontalCoordinate(a),horizontalCoordinate(b)); bounds[2]=Math.min(bounds[2],z-drop); bounds[3]=Math.max(bounds[3],z+depth-drop)
+          const beamBounds=getElevationBeamHorizontalBounds(a,b,Number((d.section_mm as number[]|undefined)?.[0]??200),direction)
+          if(!beamBounds)continue
+          bounds[0]=Math.min(bounds[0],beamBounds[0]); bounds[1]=Math.max(bounds[1],beamBounds[1]); bounds[2]=Math.min(bounds[2],z-drop); bounds[3]=Math.max(bounds[3],z+depth-drop)
         } else if (object.object_type === 'structure.slab') {
           const ring=d.boundary_mm as number[][]; if (!ring) continue
           for(const p of ring){bounds[0]=Math.min(bounds[0],horizontalCoordinate(p));bounds[1]=Math.max(bounds[1],horizontalCoordinate(p))}
@@ -284,7 +286,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           }
         }else if(o.object_type==='structure.beam'){
           const a=d.start_point_mm as number[],b=d.end_point_mm as number[];if(!a||!b)continue
-          const z=resolveBeamBaseElevation(project,o);if(z===undefined)continue;const dep=Number((d.section_mm as number[]|undefined)?.[1]??400),drop=Number(d.drop_mm??0);left=sx(Math.min(horizontalCoordinate(a),horizontalCoordinate(b)));right=sx(Math.max(horizontalCoordinate(a),horizontalCoordinate(b)));top=sy(z+dep-drop);bottom=sy(z-drop)
+          const z=resolveBeamBaseElevation(project,o);if(z===undefined)continue;const section=d.section_mm as number[]|undefined,width=Number(section?.[0]??200),dep=Number(section?.[1]??400),drop=Number(d.drop_mm??0),beamBounds=getElevationBeamHorizontalBounds(a,b,width,direction);if(!beamBounds)continue;left=sx(beamBounds[0]);right=sx(beamBounds[1]);top=sy(z+dep-drop);bottom=sy(z-drop)
           fill=selectedId===o.id?'#8ea7bf':'#9ca3af';stroke=selectedId===o.id?'#0284c7':'#475569'
           ctx.lineWidth=selectedId===o.id?2:1
           ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.fillRect(left,top,right-left,bottom-top);ctx.strokeRect(left,top,right-left,bottom-top)

@@ -50,6 +50,33 @@ export function getVisibleElevationLevelRows(levels, toScreenY, viewportHeight) 
 }
 
 /**
+ * Project a beam's plan rectangle onto an orthographic elevation. Along the
+ * beam axis the visible extent is its span; when viewed end-on the extent is
+ * the section width. Oblique views include both projected dimensions.
+ * @param {number[]} start
+ * @param {number[]} end
+ * @param {number} sectionWidthMm
+ * @param {'north'|'south'|'east'|'west'} direction
+ * @returns {[number, number] | null}
+ */
+export function getElevationBeamHorizontalBounds(start, end, sectionWidthMm, direction) {
+  if (!Array.isArray(start) || !Array.isArray(end) || start.length < 2 || end.length < 2
+    || ![start[0], start[1], end[0], end[1], sectionWidthMm].every(Number.isFinite)
+    || sectionWidthMm <= 0) return null
+  const dx = end[0] - start[0], dy = end[1] - start[1]
+  const length = Math.hypot(dx, dy)
+  if (length <= 0) return null
+  const eastWest = direction === 'east' || direction === 'west'
+  const sign = direction === 'south' || direction === 'west' ? -1 : 1
+  const horizontal = point => (eastWest ? point[1] : point[0]) * sign
+  const span = Math.abs(horizontal(end) - horizontal(start))
+  const projectedSectionWidth = sectionWidthMm * (eastWest ? Math.abs(dx) : Math.abs(dy)) / length
+  const halfExtent = (span + projectedSectionWidth) / 2
+  const center = (horizontal(start) + horizontal(end)) / 2
+  return [center - halfExtent, center + halfExtent]
+}
+
+/**
  * Resolve the finish mark shown on the visible side of an elevation wall.
  * Instance overrides and wall instance data take precedence over its catalog
  * type, matching the sheet and DXF annotation rules.
