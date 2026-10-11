@@ -543,9 +543,9 @@ export function createDefaultResidentialProjectDocument(
 ): ProjectDocument {
   const project = createEmptyProjectDocument(id, name)
   project.levels = [
-    { id: 'DATUM', name: 'Project Datum', elevation_mm: 0, storey_index: 0, height_mm: 400 },
-    { id: 'GF', name: 'Ground Floor', elevation_mm: 400, storey_index: 1, height_mm: 3400 },
-    { id: 'L1', name: 'First Floor', elevation_mm: 3800, storey_index: 2, height_mm: 3400 },
+    { id: 'DATUM', name: 'Ground Floor', elevation_mm: 0, storey_index: 0, height_mm: 400 },
+    { id: 'GF', name: 'First Floor', elevation_mm: 400, storey_index: 1, height_mm: 3400 },
+    { id: 'L1', name: 'Second Floor', elevation_mm: 3800, storey_index: 2, height_mm: 3400 },
     { id: 'EAVES', name: 'Roof Eaves', elevation_mm: 7200, storey_index: 3, height_mm: 500 },
   ]
   project.project.active_level_id = 'GF'

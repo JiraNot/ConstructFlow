@@ -4,8 +4,11 @@ import { createDefaultResidentialProjectDocument, createEmptyProjectDocument, de
 
 test('new residential projects use the standard Thai house datums', () => {
   const project = createDefaultResidentialProjectDocument('default-residential')
-  assert.deepEqual(project.levels.map(({ id, elevation_mm }) => [id, elevation_mm]), [
-    ['DATUM', 0], ['GF', 400], ['L1', 3800], ['EAVES', 7200],
+  assert.deepEqual(project.levels.map(({ id, name, elevation_mm, height_mm }) => [id, name, elevation_mm, height_mm]), [
+    ['DATUM', 'Ground Floor', 0, 400],
+    ['GF', 'First Floor', 400, 3400],
+    ['L1', 'Second Floor', 3800, 3400],
+    ['EAVES', 'Roof Eaves', 7200, 500],
   ])
   assert.equal(project.project.active_level_id, 'GF')
 })

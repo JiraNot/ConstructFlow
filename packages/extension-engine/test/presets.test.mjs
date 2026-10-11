@@ -7,7 +7,7 @@ import { createKitchenProofProject, planExtensionPreset, applyExtensionPreset } 
 const options = { preset: 'kitchen', posX_m: 1.25, posY_m: 4, width_m: 4, length_m: 2.5 }
 const document = () => createEmptyProjectDocument(crypto.randomUUID())
 
-test('Kitchen Proof uses a roof datum and keeps all vertical members on explicit levels', () => {
+test('Kitchen Proof uses the standard house level datums and keeps vertical members explicitly levelled', () => {
   const result = createKitchenProofProject()
   assert.equal(result.status, 'success', result.errors?.join('; '))
   const project = result.updatedProject
@@ -19,9 +19,13 @@ test('Kitchen Proof uses a roof datum and keeps all vertical members on explicit
   const slab = objects.find(object => object.object_type === 'structure.slab')
   const roof = objects.find(object => object.object_type === 'roof.system')
 
-  assert.equal(levelById.get('DATUM').elevation_mm, 0)
-  assert.equal(levelById.get('GF').elevation_mm, 400)
-  assert.equal(levelById.get('L2').name, 'Roof Eaves')
+  assert.deepEqual(project.levels.map(({ id, name, elevation_mm, height_mm }) => [id, name, elevation_mm, height_mm]), [
+    ['DATUM', 'Ground Floor', 0, 400],
+    ['GF', 'First Floor', 400, 3400],
+    ['L2', 'Second Floor', 3800, 3400],
+    ['EAVES', 'Roof Eaves', 7200, 500],
+  ])
+  assert.equal(levelById.get('L2').name, 'Second Floor')
   assert.equal(levelById.get('L2').elevation_mm, 3800)
   assert.ok(columns.every(column => column.module_data.base_level_id === 'GF' && column.module_data.top_level_id === 'L2'))
   assert.ok(beams.every(beam => beam.module_data.level_id === 'L2' && beam.module_data.base_offset_mm === -600 && beam.module_data.start_point_mm[2] === 3200 && beam.module_data.end_point_mm[2] === 3200))

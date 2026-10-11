@@ -13,21 +13,21 @@
   "levels": [
     {
       "id": "DATUM",
-      "name": "Project Datum",
+      "name": "Ground Floor",
       "elevation_mm": 0,
       "storey_index": 0,
       "height_mm": 400
     },
     {
       "id": "GF",
-      "name": "Ground Floor",
+      "name": "First Floor",
       "elevation_mm": 400,
       "storey_index": 1,
       "height_mm": 3400
     },
     {
       "id": "L1",
-      "name": "First Floor",
+      "name": "Second Floor",
       "elevation_mm": 3800,
       "storey_index": 2,
       "height_mm": 3400
