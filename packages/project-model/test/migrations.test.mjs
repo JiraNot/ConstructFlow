@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { DEFAULT_TYPES, deserializeProject, serializeProject, validateDrawingSettings } from '../dist/index.js'
+import { DEFAULT_TYPES, createEmptyProjectDocument, deserializeProject, serializeProject, validateDrawingSettings } from '../dist/index.js'
 
 const fixtureUrl = new URL('../../../examples/kitchen-extension-proof-v1.cfproj', import.meta.url)
 const fixtureText = await readFile(fixtureUrl, 'utf8')
@@ -164,4 +164,79 @@ test('S0/S1: v2 import rejects an interface treatment with a missing target wall
     () => deserializeProject(JSON.stringify(invalidInterface)),
     /interface treatment references a missing or non-new wall/,
   )
+})
+
+test('S0: v1 migration supplies canonical phases when the legacy phase list is absent', () => {
+  const legacy = structuredClone(fixture)
+  delete legacy.phases
+
+  const migrated = deserializeProject(JSON.stringify(legacy))
+  assert.deepEqual(migrated.phases.map(phase => phase.id), ['existing', 'demolition', 'new_construction'])
+})
+
+test('S0: v2 import validates canonical phase definitions and required Smart Object envelope fields', () => {
+  const invalidPhase = deserializeProject(fixtureText)
+  invalidPhase.phases[1].id = 'renovation'
+  assert.throws(() => deserializeProject(JSON.stringify(invalidPhase)), /phase 2 is malformed/)
+
+  const missingConnectorRefs = deserializeProject(fixtureText)
+  const object = Object.values(missingConnectorRefs.objects)[0]
+  delete object.connector_refs
+  assert.throws(() => deserializeProject(JSON.stringify(missingConnectorRefs)), /malformed Smart Object/)
+
+  const invalidStatus = deserializeProject(fixtureText)
+  Object.values(invalidStatus.objects)[0].status = 'deleted'
+  assert.throws(() => deserializeProject(JSON.stringify(invalidStatus)), /invalid status/)
+})
+
+test('S0: v2 import rejects case-variant catalog UUID duplicates and duplicate relationships or constraints', () => {
+  const duplicateType = deserializeProject(fixtureText)
+  duplicateType.types.push({ ...structuredClone(duplicateType.types[0]), id: duplicateType.types[0].id.toUpperCase() })
+  assert.throws(() => deserializeProject(JSON.stringify(duplicateType)), /duplicate catalog type UUID/)
+
+  const duplicateRelationship = deserializeProject(fixtureText)
+  const [sourceId, targetId] = Object.keys(duplicateRelationship.objects)
+  const relationship = { kind: 'connects_to', source_id: sourceId, target_id: targetId }
+  duplicateRelationship.relationships = [relationship, structuredClone(relationship)]
+  assert.throws(() => deserializeProject(JSON.stringify(duplicateRelationship)), /duplicate relationship/)
+
+  const duplicateConstraint = deserializeProject(fixtureText)
+  const entityId = Object.keys(duplicateConstraint.objects)[0]
+  const constraint = { id: crypto.randomUUID(), kind: 'lock', entities: [{ id: entityId, property: 'location_mm' }] }
+  duplicateConstraint.constraints = [constraint, structuredClone(constraint)]
+  assert.throws(() => deserializeProject(JSON.stringify(duplicateConstraint)), /duplicate constraint 2 UUID/)
+})
+
+test('S0: persisted slab and roof geometry reject invalid systems, offsets and degenerate rings', () => {
+  const base = createEmptyProjectDocument('SCHEMA-SURFACES', 'Schema surfaces')
+  const object = (id, type, module_data) => ({
+    id, object_type: type, owner_module: `constructflow.${type.split('.')[0]}`, schema_version: 1,
+    created_phase: 'new_construction', removed_phase: null, level_refs: [], host_refs: [], connector_refs: [],
+    status: 'active', module_data, created_at: 0, updated_at: 0,
+  })
+  const ring = [[0, 0], [4000, 0], [4000, 2500], [0, 2500]]
+  const validSlab = {
+    mark: 'SOG-120', level_id: 'L1', boundary_mm: ring, elevation_mm: 0, elevation_offset_mm: -120,
+    thickness_mm: 120, topping_mm: 0, slab_system: 'slab_on_ground', material: 'concrete',
+  }
+  const validRoof = {
+    mark: 'R1', level_id: 'L1', boundary_mm: ring, elevation_mm: 3000,
+    edges: ring.map(() => ({ defines_slope: false, slope_deg: 0 })), thickness_mm: 25.4, material: 'metal_sheet',
+  }
+  const project = () => structuredClone(base)
+  const roundTrip = (entities) => {
+    const candidate = project()
+    for (const entity of entities) candidate.objects[entity.id] = entity
+    return () => serializeProject(candidate)
+  }
+  assert.doesNotThrow(roundTrip([object(crypto.randomUUID(), 'structure.slab', validSlab), object(crypto.randomUUID(), 'roof.system', validRoof)]))
+  assert.throws(roundTrip([object(crypto.randomUUID(), 'structure.slab', { ...validSlab, slab_system: 'unknown' })]), /slab_system/)
+  assert.throws(roundTrip([object(crypto.randomUUID(), 'structure.slab', { ...validSlab, elevation_offset_mm: NaN })]), /elevation_offset_mm/)
+  assert.throws(roundTrip([object(crypto.randomUUID(), 'roof.system', { ...validRoof, boundary_mm: [[0, 0], [4000, 0], [0, 0], [0, 0]] })]), /boundary_mm/)
+  assert.throws(roundTrip([object(crypto.randomUUID(), 'roof.system', { ...validRoof, voids_mm: [[[100, 100], [200, 200]]] })]), /voids_mm/)
+  assert.throws(roundTrip([object(crypto.randomUUID(), 'structure.slab', { ...validSlab, voids_mm: [[[4100, 100], [4300, 100], [4300, 300], [4100, 300]]] })]), /voids_mm/)
+  assert.throws(roundTrip([object(crypto.randomUUID(), 'roof.system', { ...validRoof, voids_mm: [
+    [[500, 500], [1500, 500], [1500, 1500], [500, 1500]],
+    [[1000, 1000], [2000, 1000], [2000, 2000], [1000, 2000]],
+  ] })]), /voids_mm/)
 })

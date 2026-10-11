@@ -66,6 +66,34 @@ python apps/mcp-server/server.py
 python apps/mcp-server/openai_agent.py
 ```
 
+### Standalone TypeScript tools
+
+MCP clients can use standalone tools without a running SketchUp process:
+
+- `cf_standalone_mutate_geometry`: pass canonical `.cfproj` JSON in `project_json` and an
+  array of `{name, input}` command requests in `commands`. The server validates/migrates the
+  project and executes one atomic batch through the same TypeScript `CommandBus` as Plan
+  Editor. On success the response contains updated canonical project JSON; on rejection it
+  returns the original JSON and no committed mutation. Batches are limited to 100 commands.
+- `cf_standalone_query_model`: return Smart Objects with optional phase, level and category
+  filters; result size is capped.
+- `cf_standalone_calculate_takeoff`: run the native phased takeoff engine.
+- `cf_standalone_run_coordination`: run the native geometry-aware coordination engine.
+- `cf_standalone_validate_compliance`: run the unified Thai site/building compliance audit;
+  optional `options` provide project-specific road, waterway, land-fill and zoning inputs.
+- `cf_standalone_export_model`: export `dxf`, `ifc` (IFC 4.3 STEP), or `revit_transfer`
+  JSON from the canonical model. These are interchange exports, not live diff-based sync.
+- `cf_standalone_history`: undo or redo one mutation batch. Pass the latest `project_json`
+  and `history` returned by mutation/history calls. History is caller-held, limited to 100
+  snapshots in each direction, and bound to its project UUID.
+
+These tools take the project JSON on each call, so the MCP client must retain and pass back
+the latest returned JSON after a successful mutation. Build the standalone packages first
+with `npm run build:standalone` (or `npm run test:standalone`).
+
+Tools that export directly to a live SketchUp session still require the WebSocket bridge;
+when no SketchUp client is connected they return `unavailable`, never a simulated success.
+
 คุณสามารถพิมพ์สั่งงานด้วยภาษาไทยหรืออังกฤษได้ทันที เช่น:
 - *"สร้างเสา ค.ส.ล. 4 ต้น ขนาด 0.3x0.3 เมตร สูง 3.5 เมตร ที่พิกัด 0,0 และ 0,6 และ 4,0 และ 4,6"*
 - *"สร้างกำแพงรอบห้อง 4x6 เมตร ความหนา 0.15 เมตร"*

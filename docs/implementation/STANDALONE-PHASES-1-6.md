@@ -1,9 +1,32 @@
 # Standalone Phases 1–6 Delivery Contract
 
-Date: 2026-10-07
-Status: Native implementation slices exist and pass the current fixture suite within supported inputs below. Permit issue readiness remains blocked by project/design information and missing legal-engine integration.
+Date: 2026-10-07 · Status snapshot updated: 2026-10-11
+
+Status: Native implementation slices and acceptance evidence exist for the supported inputs below. Current standalone verification on 2026-10-11: all 25 configured build targets passed; the configured `test:standalone` run passed 341 Node tests plus 11 Python MCP tests; `verify:kitchen`, `verify:file-io`, `verify:phases`, and `verify:coordination` passed. Older test totals and PDF/browser observations below are dated delivery evidence, not current-run results. Permit issue readiness remains blocked by missing project/design inputs and because `issue_ready` is not gated by legal-engine results.
 
 The Master scope remains AGENTS.md. This contract specifies native domain slices and their supported geometry/rule inputs. Unsupported inputs must reject or report insufficient data; they must never produce a passing or production-complete claim.
+
+## S0–S5 closeout snapshot
+
+S0–S5 are cross-cutting delivery tracks in `../STANDALONE-ENGINE-REVIEW-2026-10.md`,
+not six claims that the full Master Blueprint has shipped. A track is closed only when its
+supported contract, automated acceptance and required native/visual gates are evidenced;
+package existence or a green unit suite alone does not close it.
+
+| Track | Current disposition | Evidence in this working tree | Remaining closure gate |
+|---|---|---|---|
+| S0 Schema / Catalog / History | Core implementation delivered; acceptance open | v1→v2 migration, UUID/type cascade, transactional history, and persisted slab/roof boundary, void-containment, void-overlap and parameter validation | Broader domain migration fixtures; native picker, overwrite/reopen and file-handle permission/restart acceptance; large-project history/performance limits |
+| S1 Takeoff / BOQ | Supported takeoff delivered; coverage open | phased providers, rate/waste/formwork/preliminaries/Factor F functions; takeoff-engine is included in the standalone runner; flashing and vertical-joint regressions, with optional explicit partial-treatment length | Provider/rate coverage and source/version validation; verify estimate behavior against approved project inputs/rates |
+| S2 Native 3D / Extension | Supported viewport and preset slices; not closed | renderer-neutral representations, editable/atomic presets, synchronized plan/3D moves and acceptance tests; carport and kitchen presets create editable SOG and preliminary roof surfaces; kitchen proof checks floor GF and roof L2 datums; extension-engine passes 10 tests | Full-family direct editing and assembly completeness; representative project parity, shape/cutout and performance acceptance |
+| S3 Spatial QA / MEP / Rules | Foundational analysis delivered; not closed | packed R-tree candidate queries, exact geometry-aware findings for supported interactions, versioned rule provenance, and passing `verify:coordination` (47 checks) | Broader openings/MEP clearance coverage, domain rule coverage and explicit missing-input behavior |
+| S4 Sheets / Publication | Draft compiler delivered; publication gate open | deterministic A3 set, vector/PDF output, source/missing-data reporting, viewport persistence and phase proof | Native/visual review across representative projects/scales, schedule continuations and legal-engine publication gating; `issue_ready` alone is not legal approval |
+| S5 Adapters / MCP | Standalone model operations, caller-held history and interchange exports integrated; adapter acceptance remains open | MCP mutation, filtered query, takeoff, coordination, unified site/legal compliance, DXF, IFC 4.3, Revit transfer and undo/redo call standalone TypeScript packages; mutation uses actor `ai`, up to 100 commands and atomic rollback; history snapshots are UUID-bound and capped at 100 per direction; IFC/Revit transfer retain created, removed and displayed phases; 9 MCP runtime Node tests and 11 MCP server Python tests run in the standalone runner | Callers must persist and return the latest project/history state; SketchUp bridge still requires native roundtrip acceptance; interchange exporters still need broader parity/metadata acceptance and are not diff-based roundtrip sync |
+
+The standalone test runner prints its current aggregated Node test count after every suite
+and integration verifier succeeds; counts in older dated snapshots are historical evidence.
+
+**Overall:** S0–S5 are not fully closed against Master scope. The matrix is the current
+closeout record; any item marked open needs the listed evidence before its status changes.
 
 ## Ownership and execution
 
@@ -28,6 +51,14 @@ Every track additionally checks create/edit/rejected edit rollback, atomic undo/
 
 This document does not remove stair/railing, arbitrary concave roof, detailed hydraulic simulation, engineering design approval, full site/legal data or adapter requirements. Completion must be reported feature by feature against Master, never inferred from the existence of a package or 20 page names.
 
+The phases below are delivered implementation slices, not a statement that all six Master
+domains are complete. The current boundaries include: partial site/legal rule coverage and
+input-dependent findings; no engineering design approval; geometry/solver limits for unsupported
+polygons and families; selected rather than universal takeoff/rate coverage; conservative spatial
+overlap candidates rather than complete hard/soft clash analysis; and a 20-sheet draft compiler
+that reports missing sources but does not establish legal or permit readiness. For the active
+cross-cutting S0–S5 gates, see `../STANDALONE-ENGINE-REVIEW-2026-10.md`.
+
 ## Delivered native functions
 
 | Phase | Implemented behavior | Main source |
@@ -44,9 +75,9 @@ React only orchestrates typed commands and presents provider outputs. Canonical 
 
 ## Verification evidence
 
-- `npm run test:standalone`: production build plus 246 passing tests across 17 package suites (project-model, geometry-kernel, snapping-engine, constraint-engine, representation-engine, architecture-engine, roof-engine, drainage-engine, plumbing-engine, electrical-engine, interior-engine, clash-engine, sheet-engine, command-runtime, extension-engine, cad-adapter, bim-adapter); kitchen, file IO and Phase 1–6 integration verifiers pass.
+- Dated delivery evidence (recorded for this snapshot): `npm run test:standalone` reported a production build plus 246 passing tests across 17 package suites (project-model, geometry-kernel, snapping-engine, constraint-engine, representation-engine, architecture-engine, roof-engine, drainage-engine, plumbing-engine, electrical-engine, interior-engine, clash-engine, sheet-engine, command-runtime, extension-engine, cad-adapter, bim-adapter); kitchen, file IO and Phase 1–6 integration verifiers passed. This document update did not rerun them.
 - `npm run package:sketchup`: packages 486 extension files into `output/constructflow.rbz` (727.3 KB) cross-platform without native zip dependencies.
-- `npm run verify:phases`: 42 Smart Objects, 19 domain outputs, 46 quantity rows, 20 A3 PDF pages. Creates output/pdf/phase-1-6-proof.pdf, .cfproj, .html and -report.json. 9 review/missing-input warnings remain visible; A-01 lacks deed/legal/signatory data. Generated output is ignored by Git.
+- `npm run verify:phases`: current fixture includes 44 Smart Objects, 21 domain outputs, 60 takeoff rows, and 20 A3 PDF pages. Missing-input warnings remain visible; A-01 lacks deed/legal/signatory data. Generated output is ignored by Git.
 - PDF inspection: all 20 pages rendered with Poppler, A3 landscape 1190.55 × 841.89 pt, embedded Type0 Sarabun/ToUnicode, Thai mark placement applied through fontkit GPOS. Plans, bathroom section, BBS diagrams, ground baseline with 45° earth hatching, elevation datums, stair 2D linework, RCP grid, and SLD visually inspected.
 - Production browser acceptance at localhost: batch model creation, derived BOQ, changing A-09 scale 1:25 → 1:50 and Undo restoring 1:25, native PDF export, and 3D rendering. The local browser sample adds the proof domains to the editor's demonstration project; the reproducible CLI fixture is the separate kitchen project.
 - PDF libraries load only on export; the initial app bundle is about 555 kB uncompressed. Vite reports size warnings for app, Three.js and PDF chunks; the build succeeds. Large-project performance has not been benchmarked.

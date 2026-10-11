@@ -77,6 +77,23 @@ test('AC-STAND-003: callers cannot mutate session history via returned snapshots
   assert.equal(session.redo().objects[cmd.input.id].module_data.section_mm[0], 200)
 })
 
+test('AC-STAND-003: session history snapshot restores undo and redo across process boundaries', () => {
+  const original = document(), session = new ProjectCommandSession(original)
+  const cmd = column()
+  session.execute([cmd])
+  const savedProject = session.project
+  const restored = new ProjectCommandSession(savedProject, session.historySnapshot)
+  assert.deepEqual(restored.undo(), original)
+  assert.deepEqual(restored.redo(), savedProject)
+})
+
+test('AC-STAND-003: history snapshots cannot cross project identities', () => {
+  const session = new ProjectCommandSession(document())
+  session.execute([column()])
+  const differentProject = document()
+  assert.throws(() => new ProjectCommandSession(differentProject, session.historySnapshot), /different project/)
+})
+
 test('AC-STAND-004: input arrays and catalog defaults are isolated from command outputs', () => {
   const original = document()
   const cmd = column()

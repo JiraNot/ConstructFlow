@@ -13,7 +13,7 @@ test('AC-STAND-006: kitchen contains its requested hosted doors/windows and colu
   const result = applyExtensionPreset(original, options, 'ai')
   assert.equal(result.status, 'success', result.errors?.join('; '))
   const objects = Object.values(result.updatedProject.objects)
-  assert.equal(objects.length, 17)
+  assert.equal(objects.length, 19)
   assert.ok(objects.every(o => o.created_phase === 'new_construction'))
   assert.ok(objects.every(o => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(o.id)))
   for (const footing of objects.filter(o => o.object_type === 'structure.foundation')) {
@@ -29,6 +29,12 @@ test('AC-STAND-006: kitchen contains its requested hosted doors/windows and colu
   assert.equal(door.module_data.width_mm, 900)
   assert.equal(window.module_data.width_mm, 1200)
   assert.ok(objects.filter(o => o.object_type === 'architecture.wall').every(o => o.module_data.material === 'lightweight_block'))
+  const slab = objects.find(o => o.object_type === 'structure.slab')
+  const roof = objects.find(o => o.object_type === 'roof.system')
+  assert.equal(slab.module_data.slab_system, 'slab_on_ground')
+  assert.equal(slab.module_data.elevation_mm, 0)
+  assert.equal(roof.module_data.material, 'insulated_metal_sheet_pu_25')
+  assert.equal(roof.module_data.elevation_mm, 3000)
   assert.equal(Object.keys(original.objects).length, 0)
   assert.equal(serializeProject(deserializeProject(serializeProject(result.updatedProject))), serializeProject(result.updatedProject))
 })
@@ -39,15 +45,51 @@ test('AC-STAND-006: four-sided kitchen can exclude both openings', () => {
   const objects = Object.values(result.updatedProject.objects)
   assert.equal(objects.filter(o => o.object_type === 'architecture.wall').length, 4)
   assert.equal(objects.filter(o => o.object_type === 'architecture.room').length, 1, 'a fully enclosed four-sided kitchen should create its room automatically')
-  assert.equal(objects.length, 17)
+  assert.equal(objects.length, 19)
+  assert.ok(objects.some(o => o.object_type === 'structure.slab'))
+  assert.ok(objects.some(o => o.object_type === 'roof.system'))
 })
 
-test('AC-STAND-006: carport assigns steel and generates 13 individually editable objects', () => {
+test('AC-STAND-006: kitchen floor and roof follow non-zero active and upper-level datums', () => {
+  const project = document()
+  const active = project.levels.find(level => level.id === project.project.active_level_id)
+  active.elevation_mm = 1200
+  project.levels.push({ id: 'L2', name: 'Upper Floor', elevation_mm: 4200, storey_index: 2, height_mm: 3000 })
+  const result = applyExtensionPreset(project, options)
+  assert.equal(result.status, 'success', result.errors?.join('; '))
+  const objects = Object.values(result.updatedProject.objects)
+  assert.equal(objects.find(object => object.object_type === 'structure.slab').module_data.elevation_mm, 1200)
+  assert.equal(objects.find(object => object.object_type === 'roof.system').module_data.elevation_mm, 4200)
+})
+
+test('AC-STAND-006: carport assigns steel and generates individually editable slab and roof objects', () => {
   const result = applyExtensionPreset(document(), { ...options, preset: 'carport', width_m: 5, length_m: 5.5 })
   assert.equal(result.status, 'success')
   const objects = Object.values(result.updatedProject.objects)
-  assert.equal(objects.length, 13)
+  assert.equal(objects.length, 15)
   assert.ok(objects.filter(o => ['structure.column', 'structure.beam'].includes(o.object_type)).every(o => o.module_data.material === 'steel'))
+  const slab = objects.find(object => object.object_type === 'structure.slab')
+  const roof = objects.find(object => object.object_type === 'roof.system')
+  assert.equal(slab.module_data.slab_system, 'slab_on_ground')
+  assert.equal(slab.module_data.thickness_mm, 120)
+  assert.equal(slab.module_data.slope_ratio, 0.01)
+  assert.equal(roof.module_data.material, 'insulated_metal_sheet_pu_25')
+  assert.equal(roof.module_data.thickness_mm, 25.4)
+  assert.equal(roof.module_data.elevation_mm, 3400)
+})
+
+test('AC-STAND-006: carport slab, beams, columns and roof follow a non-zero active-level datum', () => {
+  const project = document()
+  const baseLevel = project.levels.find(level => level.id === project.project.active_level_id)
+  baseLevel.elevation_mm = 1200
+
+  const result = applyExtensionPreset(project, { ...options, preset: 'carport', width_m: 5, length_m: 5.5 })
+  assert.equal(result.status, 'success', result.errors?.join('; '))
+  const objects = Object.values(result.updatedProject.objects)
+  assert.ok(objects.filter(object => object.object_type === 'structure.column').every(column => column.module_data.location_mm[2] === 1200 && column.module_data.top_elevation_mm === 4200))
+  assert.ok(objects.filter(object => object.object_type === 'structure.beam').every(beam => beam.module_data.level_id === baseLevel.id && beam.module_data.base_offset_mm === 3000))
+  assert.equal(objects.find(object => object.object_type === 'structure.slab').module_data.elevation_mm, 1200)
+  assert.equal(objects.find(object => object.object_type === 'roof.system').module_data.elevation_mm, 4600)
 })
 
 test('AC-STAND-006: terrace framing elevation follows the meter input', () => {

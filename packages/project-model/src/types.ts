@@ -165,6 +165,8 @@ export interface WallInterfaceTreatment {
   id: string
   kind: WallInterfaceTreatmentKind
   target_object_ids: string[]
+  /** Optional explicit total treatment length in mm; used for partial flashing/joints. */
+  length_mm?: number
   material?: string
 }
 

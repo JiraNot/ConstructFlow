@@ -1,11 +1,31 @@
 # ConstructFlow: วิเคราะห์ Blueprint และแผนพัฒนา Standalone Engine
 
-วันที่: 7 ตุลาคม 2026 · ขอบเขต: ตรวจโค้ดและเอกสารใน working tree และพัฒนาฐานคำสั่ง TypeScript
+วันที่เริ่มตรวจ: 7 ตุลาคม 2026 · ปรับสถานะเอกสาร: 11 ตุลาคม 2026
+
+รายงานนี้เริ่มจาก baseline วันที่ 7 ตุลาคม ก่อนเพิ่ม standalone packages หลายส่วน ตาราง
+"ผลตรวจตามโค้ดจริง" และหัวข้อ "สิ่งที่พัฒนาแล้วในงานนี้" ด้านล่างเป็นบันทึกประวัติ ไม่ใช่
+สถานะปัจจุบันโดยลำพัง ให้ใช้ snapshot และ gates S0–S5 ที่ปรับปรุงด้านล่างร่วมกับ
+[`STATUS.md`](STATUS.md) และ delivery contract ล่าสุดใน
+[`implementation/STANDALONE-PHASES-1-6.md`](implementation/STANDALONE-PHASES-1-6.md).
+ตัวเลข test/build ในรายงานเป็นหลักฐาน ณ วันที่ระบุ ไม่ใช่การยืนยันว่ารันผ่านในวันนี้.
+
+**Snapshot ล่าสุด 11 ต.ค. 2026:** `npm run test:standalone` ผ่าน build targets 25 รายการ,
+Node tests 341 รายการ (package 332 + MCP runtime 9), Python MCP tests 11 รายการ และ integration
+verifiers ทั้ง 4 ชุด (`kitchen`, `file-io`, `phases`, `coordination`). MCP standalone ต่อ native
+mutation, query, takeoff, coordination, unified site/legal compliance, DXF/IFC/Revit-transfer
+interchange exports และ caller-held undo/redo แล้ว; ข้อจำกัดที่เหลือ
+ระบุไว้ใน gate S5 ด้านล่าง.
+
+สถานะปิดงาน S0–S5 ปัจจุบันและเกณฑ์ที่ยังค้างรวมไว้ใน
+[`implementation/STANDALONE-PHASES-1-6.md`](implementation/STANDALONE-PHASES-1-6.md).
+ภาพรวมที่ตรวจได้จาก working tree คือมี implementation slices ครบหลายแกน แต่ S0–S5
+ยังไม่ปิดครบ Master scope; อย่าใช้คำว่า complete โดยไม่มี acceptance ของ gate ที่ระบุ.
 
 อัปเดตหลังดำเนินงาน Phase 1–6: อ่าน [บันทึกการส่งมอบและหลักฐานทดสอบ](implementation/STANDALONE-PHASES-1-6.md)
-สำหรับสถานะปัจจุบัน ตารางด้านล่างเก็บผลตรวจและลำดับพัฒนาของ baseline เดิม
+สำหรับขอบเขตและ acceptance ปัจจุบัน ให้ยึดหัวข้อ S0–S5 ด้านล่าง; ตารางผลตรวจเดิมเก็บ
+ข้อค้นพบก่อนเริ่มงานเพื่ออธิบายเหตุผลของการเปลี่ยนสถาปัตยกรรม
 
-## ข้อสรุป
+## ข้อสรุปจาก baseline เดิม
 
 Blueprint วางทิศทางครบตั้งแต่โมเดลจนถึงแบบและปริมาณ แต่ฐานโค้ดเดิมมีสองเส้นทาง:
 Ruby สำหรับ SketchUp ที่มีโมดูลและการทดสอบจำนวนมาก และ TypeScript Plan Editor ที่ยังเป็น
@@ -16,7 +36,7 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
 และ drawing providers บนข้อมูลชุดเดียวกัน ทิศทางนี้บันทึกใน ADR-0006 และแก้ Master Blueprint
 ให้สอดคล้องกับ AGENTS.md แล้ว
 
-## ผลตรวจตามโค้ดจริง
+## ผลตรวจ baseline ก่อน standalone packages เพิ่มเติม
 
 | ส่วน | สิ่งที่พบก่อนแก้ | ผลต่อ Blueprint / สิ่งที่ต้องทำต่อ |
 |---|---|---|
@@ -32,7 +52,7 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
 | Clash / compliance | ไม่มี `packages/clash-engine` | เพิ่ม bounds/query contract และ versioned rule inputs; แยกตรวจ geometry จากวินิจฉัยข้อกฎหมาย |
 | Sheets | ไม่มี `packages/sheet-engine` | มี Ruby/LayOut contracts แต่ยังไม่มี standalone 20-sheet compiler |
 | Exporters | ไม่มี `packages/cad-adapter` / `packages/bim-adapter` | แยก semantic export จาก format encoding; ระบุระดับการรองรับตามไฟล์ที่ตรวจจริง |
-| AI | MCP/Python ยังผูก HTTP bridge เดิม | runtime รองรับ actor `ai`; ยังไม่ได้เปลี่ยน MCP ให้ใช้ standalone runtime |
+| AI | MCP/Python ยังผูก HTTP bridge เดิม (ผลตรวจ baseline ก่อน standalone MCP) | บันทึก baseline นี้เป็นประวัติ; สถานะปัจจุบันเพิ่ม native standalone tools ตาม snapshot และ gate S5 ด้านล่าง |
 | Evidence | CI เดิมเน้น Ruby | เพิ่ม workflow TypeScript; native SketchUp/LayOut gates เดิมยังเป็นงาน adapter |
 
 หลักฐานสถานะเดิมอ้างอิง `STATUS.md`, `architecture/COMMAND-MUTATION-BOUNDARY.md`,
@@ -59,8 +79,8 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
 
 | Preset | สิ่งที่สร้าง | ส่วนที่ยังไม่สร้าง |
 |---|---|---|
-| Carport 5 × 5.5 m | เสา 4, ฐานรากแผ่ 4, คาน 5 | slab, slope, roof assembly, PU, actual steel profile |
-| Kitchen 4 × 2.5 m | เสา 4, pile caps 4, ตำแหน่งหัว I-18 เบื้องต้น 16 จุด, คาน 4, ผนัง 3/4, ประตู/หน้าต่างตามเลือก | ความยาวเข็มและการออกแบบที่ยืนยันโดยวิศวกร, flashing, joint detail, settlement checks, floor/roof |
+| Carport 5 × 5.5 m | เสา 4, ฐานรากแผ่ 4, คาน 5, พื้น SOG 120 mm พร้อม slope metadata 1:100, roof object พร้อม PU material/thickness metadata; รองรับ active-level datum | solver/assembly โครงหลังคาและหน้าตัดเหล็กจริง; วัสดุและ slope ยังเป็น metadata ไม่ใช่ผลตรวจออกแบบทางวิศวกรรม |
+| Kitchen 4 × 2.5 m | เสา 4, pile caps 4, ตำแหน่งหัว I-18 เบื้องต้น 16 จุด, คาน 4, ผนัง 3/4, ประตู/หน้าต่างตามเลือก, SOG 120 mm และ roof surface object | ความยาวเข็มและการออกแบบที่ยืนยันโดยวิศวกร, flashing detail, settlement checks, solver/roof framing และการตรวจ slope |
 | Terrace | เสา 6, ฐานราก 6, คานเหล็ก 5 พร้อมระดับที่ป้อน | WPC boards, steps, pier height resolver, joist spacing solver |
 
 ทุกชิ้นที่สร้างได้รับ `created_phase: new_construction` แม้ working phase เป็น Existing
@@ -68,7 +88,7 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
 
 ## ปรับแผน Master Specification ให้ทำงานได้จริง
 
-### S0 — Schema / Catalog / History (กำลังดำเนินการ)
+### S0 — Schema / Catalog / History (มี implementation; acceptance บางส่วนยังเปิด)
 
 - เพิ่ม schema v2, deterministic UUID `type_id`, type parameters/instance overrides,
   migration v1 และ validation ตอน import/ก่อน commit; มี Kitchen Proof v1 fixture พร้อม
@@ -77,9 +97,10 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   ก่อน resolve; v2 import บังคับ Smart Object ID เป็น RFC-4122 UUID และปฏิเสธ ID ซ้ำที่ต่างกัน
   เพียงตัวพิมพ์; editor Open/edit/Save/Open ผ่าน UI จริงด้วย mocked File System Access handle แล้ว
   ส่วน native picker และการเขียนทับไฟล์จริงยังต้องทดสอบ
-- ต่อ Undo/Redo เข้ากับ editor, shortcut และเปิด/บันทึก `.cfproj`; supported browsers เก็บ file
-  handle เพื่อ Save กลับไฟล์เดิม, ส่วน fallback ใช้ file input/download; Undo/Redo ล้าง incremental
-  sync queue แล้ว จึงต้อง full sync ใหม่; adapter Undo/Redo replay ยังไม่ทำ
+- ต่อ Undo/Redo เข้ากับ editor, shortcut และเปิด/บันทึก `.cfproj`; File System Access handle
+  ที่ได้จาก Open/Save As ใช้ Save กลับไฟล์เดิมได้ใน editor session ปัจจุบัน ส่วน fallback ใช้
+  file input/download และ Save-to-browser snapshot; handle ยังไม่ persist/restore ข้าม reload.
+  Undo/Redo ล้าง incremental sync queue แล้ว จึงต้อง full sync ใหม่; adapter Undo/Redo replay ยังไม่ทำ
 - Plan Editor แสดงสถานะ unsaved โดยเทียบ serialized model กับไฟล์ที่เปิด/บันทึกผ่าน file handle;
   download fallback รายงานเพียงว่าเริ่มคำขอดาวน์โหลดและคงสถานะ unsaved ไว้
 - ย้าย Kitchen Proof factory เข้า `extension-engine`; Existing host wall และ preset 4.00 × 2.50 m
@@ -92,14 +113,15 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   ใช้ unknown-based types, catalog parameters มี field ที่ระบุชนิดสำหรับ families ปัจจุบัน,
   และ validator ปฏิเสธ known dimensional fields ที่อยู่ผิด family;
   ยังต้องขยาย validation เมื่อเพิ่ม domain อื่น
-- แยก geometric bounds/placement/representation ออกจาก React; ลด full-document clone ด้วย
-  copy-on-write หลังมี benchmark และจำกัด history memory
+- แยก geometric bounds/placement/representation ออกจาก React แล้วบางส่วน; ยังต้อง benchmark
+  large-project performance และติดตาม memory/history limits
 - Type rename now runs through the UI and `RenameCatalogType` command. Runtime acceptance checks
   family-scoped cascade, stable UUIDs, invalid-name rejection, serialization/reload and Undo/Redo;
   browser smoke confirmed schedule/BOQ propagation and Undo clearing the pending queue.
-- Gate ที่เหลือ: broader migration/domain fixtures and native picker/real file-handle acceptance
+- Gate ที่เหลือ: broader migration/domain fixtures, native picker/overwrite/reopen acceptance,
+  and file-handle permission/restore behavior across application restart
 
-### S1 — Takeoff แนวตั้งจากโมเดลเดียว (เริ่มต้นแล้ว)
+### S1 — Takeoff แนวตั้งจากโมเดลเดียว (มี engine และ phased BOQ สำหรับรายการที่รองรับ)
 
 - เพิ่ม `takeoff-engine` รุ่นเริ่มต้น: เสา/คาน/ฐานรากเป็น m³, ผนังเป็น net m²/m³
   หลังหักประตูหน้าต่างที่ host อยู่, ประตูหน้าต่างเป็นจำนวนชิ้น และส่ง CSV จาก editor ได้
@@ -117,11 +139,15 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
 - เหล็กรูปพรรณใช้ profile catalog/mass-per-length ไม่ใช้ bounding box เป็นปริมาณเหล็ก
 - แยก `created_phase` ออกจาก `cost_center`: งานรื้อถอน, งานสร้างใหม่, งานรอยต่อเดิม-ใหม่
   เป็นการจัดหมวดราคา ไม่ใช่ phase ชุดที่สี่; Existing-to-remain ไม่เกิดค่าใหม่อัตโนมัติ
-- Gate ที่เหลือ: เพิ่มเหล็กตาม profile/mass-per-length, rate libraries, labor/waste และ
-  acceptance fixture; focused runtime acceptance ยืนยันแล้วว่า resize B1 เปลี่ยนปริมาตร
-  takeoff และคงค่าเดิมหลัง serialize/deserialize
+- เพิ่ม waste factors, formwork reuse, preliminaries, Factor F/VAT และ BOQ สาม cost centers
+  แล้วใน `takeoff-engine`; gate ที่เหลือคือ domain/rate coverage และการยืนยันสูตร/ราคากับ
+  แหล่งข้อมูลที่มีรุ่นและขอบเขตชัดเจน ปริมาณที่ไม่มี provider หรือ inputs ครบยังไม่ถือว่าครบ BOQ
+- แก้ S1 interface treatment takeoff: roof flashing ใช้ความยาวแนวราบของผนังเป้าหมาย;
+  chemical dowel และ expansion joint ใช้ความสูงผนังตามแนวตั้ง เพิ่ม regression ที่
+  `packages/takeoff-engine/test/boq-costing.test.mjs`; flashing ใช้ความยาวเต็มแนวผนังเป็นค่าเริ่มต้น
+  หรือ `length_mm` เมื่อต้องการระบุช่วงบางส่วน; แพ็กเกจอยู่ใน runner `test:standalone`.
 
-### S2 — Standalone 3D และ Extension ที่ครบชุด (เริ่มต้นแล้ว)
+### S2 — Standalone 3D และ Extension (มี viewport/preset slices; ยังไม่ครบทุก geometry/workflow)
 
 - เพิ่ม Three.js/WebGL viewport ที่อ่าน ProjectDocument เดียวกับ Plan Canvas, แสดง phase,
   เปิดหมุน/ซูม, เลือกชิ้นงานและลาก gizmo ย้ายเสา; ผนังตัดช่องจาก host door/window
@@ -154,13 +180,14 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
 - Runtime acceptance ยืนยันว่าการย้ายเสาประสาน foundation/beam endpoints/span, Undo/Redo
   รักษา model และการย้ายที่ทำให้ span เป็นศูนย์ rollback ทั้งรายการ; gizmo คืน preview mesh เมื่อ
   command reject หรือ drag น้อยกว่า 1 mm
-- ยังไม่มี direct mesh editing ครบทุกชนิด, slab/roof types หรือ footprint solver
+- ยังไม่มี direct mesh editing ครบทุกชนิดและการแก้ไข geometry แบบอิสระครบทุก family;
+  roof/slab และ solver รองรับเฉพาะขอบเขตที่ระบุใน phase contract (เช่น convex boundary)
 - ให้ preset เป็น catalog/template data ที่ประกอบ public commands และมี provenance
 - เพิ่ม micropiles, steel profiles, roof, flashing, WPC และระดับเสาจริงทีละ preset
 - Gate: เปิดโปรเจกต์จาก JSON แล้วได้ 2D, 3D และ quantities ที่สอดคล้องกันโดยไม่เปิด CAD;
   ตรวจ shape/cutout/phase/selection/transform และ runtime performance ด้วย acceptance evidence
 
-### S3 — Spatial QA / MEP / Rule Inputs
+### S3 — Spatial QA / MEP / Rule Inputs (มีฐาน evaluator; coordination และ rule coverage ยังจำกัด)
 
 - เพิ่ม `packages/clash-engine` รุ่นฐาน: คำนวณ AABB จากโมเดลเดียวกันสำหรับคาน เสา ฐานราก
   และผนัง; ใช้ packed 3D R-tree ค้นหาคู่ bounds ที่ตัดกันเป็น broad-phase candidates
@@ -171,28 +198,46 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   ไม่มีประเภทใดอ้างว่าเป็น hard/soft clash verdict. AABB ของผนังเอียงยังอาจกว้างกว่ารูปร่างจริง
   และยังไม่รวม opening subtraction, MEP, clearance หรือกฎหมาย
 - แยก pipe topology และ invert/slope solver เป็น domain functions พร้อม test fixtures
-- ข้อกำหนดกฎหมายต้องมี jurisdiction, source, version/effective date, exception inputs
-  และสถานะ insufficient-data; ไม่ hard-code หมายเลขระยะร่นเป็นคำตัดสินทั่วไป
-- Gate: validate จาก input ที่ระบุครบ, ระบุ rule evidence และให้ผล unknown เมื่อข้อมูลไม่ครบ
+- `clash-engine` มี legal evaluators สำหรับกฎที่ระบุใน source รวม eaves, street height,
+  waterways, grading/FFL และ daylight/ventilation; ผลขึ้นกับ input ที่ให้และอาจเป็น
+  `insufficient_data` กฎที่ไม่มี evaluator/input ครบยังไม่ผ่านการตรวจ
+- Spatial index ใช้ AABB/R-tree เป็น broad phase; `overlap_candidate` ไม่ใช่ hard/soft clash
+  verdict. Opening subtraction, MEP clearance, door-swing checks และ full jurisdiction/source/
+  version/exception coverage ยังเป็น gates แยกต่างหาก.
 
-### S4 — A3 Sheet Engine ก่อน Exporter Breadth
+### S4 — A3 Sheet Engine (20-sheet draft compiler มีแล้ว; issue readiness ยังจำกัด)
 
 - `sheet-engine` เป็น renderer-neutral viewport/titleblock/vector representation
-- มี A-02, S-01 และ A-08 รุ่นแรกจาก semantic project เดียวกัน; A-02/S-01 จำกัดที่ ground level
-  และเตือนเมื่อ content เสี่ยงถูก crop, A-08 มี opening schedule กับ schematic elevations
+- มี 20-sheet index และ vector/PDF compilation จาก semantic project สำหรับ providers ที่รองรับ;
+  บาง sheet เป็น detail cards/schematic output และข้อมูลที่ไม่มีจะถูกรายงานเป็น missing data
 - A-02 opening cutout/symbols กับ A-08 schedule ใช้ precedence เดียวกัน:
   instance override → instance value → type catalog
 - Sheet title metadata ระบุ scope จากเนื้อหาจริง: A-02/S-01 ใช้ชั้นต่ำสุดที่แสดง, A-08 ระบุ ALL LEVELS;
   ไม่อ้าง `active_level_id` เมื่อ sheet renderer เลือก scope อื่น
 - ทดสอบ scale/crop, Thai text shaping/font embedding, dimensions และ PDF roundtrip/render
-- Gate: output ที่มี geometry/annotations จริงและไม่อ้างว่ารวม sheet content ที่ยังไม่มี provider
+- ยังเป็น draft compiler: full footing/column detailing, annotation/hatch coverage,
+  schedule continuation, real-project print-scale review และ legal-engine gating ไม่ครบ.
+  `issue_ready` เป็น metadata/sheet-completeness status เท่านั้น ไม่ใช่ legal/permit approval.
 
-### S5 — Downstream Adapters และ MCP
+### S5 — Downstream Adapters และ MCP (native model operations integrated; adapter acceptance ยังเปิด)
 
-- diff ด้วย UUID, preserve customizations และทดสอบ unchanged/update/delete policy
-- เริ่ม DXF และ IFC subset ที่มี roundtrip evidence; DWG, native tables และ certification
-  เป็น gates แยกจากการเขียนไฟล์หรือประกาศนามสกุล
-- MCP ใช้ command runtime และ validation ชุดเดียวกับ UI รวม actor/audit/rollback
+- `cad-adapter` สร้าง DXF/PaperSpace layouts; `bim-adapter` มี IFC 4.3 serializer และ Revit
+  transfer JSON ที่คง `cf_uuid`; SketchUp RBZ packaging มีอยู่. ยังไม่มีหลักฐาน adapter
+  UUID diff ที่ preserve customization พร้อม unchanged/update/delete policy ครบทุกปลายทาง.
+  สิ่งเหล่านี้ไม่เท่ากับ DWG writer, native Revit bridge, certification หรือ roundtrip
+  acceptance ในทุกปลายทาง.
+- `apps/mcp-server/server.py` มี native standalone tools สำหรับ mutation, filtered model query,
+  takeoff, geometry-aware coordination และ unified Thai site/legal compliance ผ่าน TypeScript
+  packages; mutation ใช้ `CommandBus` ร่วมกับ Plan Editor, actor `ai`, atomic rollback และจำกัด
+  100 commands. Runtime request/response เป็น stateless ผู้เรียกต้องเก็บ `project_json` และ
+  history snapshot ล่าสุดเอง; MCP รองรับ undo/redo โดยจำกัด 100 snapshots ต่อทิศทางและตรวจ
+  project UUID. IFC/Revit transfer exports retain the created phase, removal phase and resulting
+  display phase, preventing removed-existing elements from reverting to Existing in transfer.
+  DXF, IFC 4.3 STEP และ Revit transfer JSON export ผ่าน standalone adapter serializers แล้ว;
+  เป็น interchange exports ไม่ใช่ live sync หรือการรับรอง fidelity/roundtrip ของปลายทาง.
+- เครื่องมือ SketchUp-forwarding ยังใช้ WebSocket bridge และต้องทดสอบ roundtrip บน SketchUp จริง.
+  DXF/IFC/Revit ยังเป็น exporters/transfer serializer ไม่ใช่ diff-based synchronization ที่ยืนยัน
+  unchanged/update/delete policy และรักษา customization ครบทุกปลายทาง.
 - รักษา runbook และหลักฐาน native SketchUp/LayOut เดิมสำหรับความสามารถที่พึ่ง adapter
 
 ไม่จำเป็นต้องเริ่ม Rust/WASM ก่อนพิสูจน์ semantics และ benchmark ของ TypeScript

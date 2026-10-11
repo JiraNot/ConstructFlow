@@ -376,3 +376,50 @@ test('Pillar 5.4: Factor F and Phased BOQ report 3 cost centers, Factor F, and G
   assert.ok(boq.formwork)
   assert.ok(boq.preliminaries)
 })
+
+test('S1: roof flashing takeoff uses target wall span while vertical joints use wall height', () => {
+  const project = createEmptyProjectDocument('INTERFACE-TAKEOFF-TEST', 'Interface Takeoff Test')
+  project.objects['new-wall'] = {
+    id: 'new-wall',
+    object_type: 'architecture.wall',
+    owner_module: 'constructflow.architecture',
+    schema_version: 1,
+    created_phase: 'new_construction',
+    removed_phase: null,
+    level_refs: [],
+    host_refs: [],
+    connector_refs: [],
+    status: 'active',
+    module_data: {
+      mark: 'W1',
+      start_point_mm: [0, 0, 0],
+      end_point_mm: [4000, 0, 0],
+      thickness_mm: 100,
+      height_mm: 2800,
+      length_mm: 4000,
+      material: 'aac_block',
+      interface_treatments: [
+        { id: 'partial-flashing', kind: 'roof_flashing', target_object_ids: ['new-wall'], length_mm: 1250 },
+        { id: 'full-flashing', kind: 'roof_flashing', target_object_ids: ['new-wall'] },
+        { id: 'joint', kind: 'expansion_joint_sealant', target_object_ids: ['new-wall'] },
+      ],
+    },
+    created_at: 0,
+    updated_at: 0,
+  }
+
+  const report = calculateTakeoff(project)
+  const flashings = report.lines.filter(line => line.mark === 'roof_flashing')
+  const joint = report.lines.find(line => line.mark === 'expansion_joint_sealant')
+
+  assert.deepEqual(flashings.map(line => line.quantity), [1.25, 4])
+  assert.match(flashings[0].formula, /1250 mm explicit treatment length/)
+  assert.match(flashings[1].formula, /4000 mm target wall length/)
+  assert.equal(joint.quantity, 2.8)
+  assert.match(joint.formula, /2800 mm interface height/)
+
+  project.objects['new-wall'].module_data.interface_treatments[0].length_mm = 5000
+  const oversized = calculateTakeoff(project)
+  assert.equal(oversized.lines.some(line => line.mark === 'roof_flashing' && line.formula.includes('explicit treatment length')), false)
+  assert.ok(oversized.warnings.some(warning => warning.includes('exceeds its target wall span total 4000 mm')))
+})

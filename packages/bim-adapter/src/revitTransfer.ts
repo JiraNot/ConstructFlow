@@ -1,7 +1,9 @@
 // ConstructFlow Revit Direct Transfer Serializer (constructflow.revit_transfer.v1)
 // For consumption by PyRevit / Dynamo automated native Revit modeling bridges.
 
-import type { ProjectDocument, SmartObject } from "@constructflow/project-model";
+import { getDisplayPhase, type ProjectDocument, type SmartObject } from "@constructflow/project-model";
+
+type TransferPhase = "Existing" | "Demolition" | "New Construction";
 
 export interface RevitTransferDocument {
   schema_version: "constructflow.revit_transfer.v1";
@@ -28,7 +30,9 @@ export interface RevitTransferDocument {
 
 export interface RevitWall {
   cf_uuid: string;
-  phase: "Existing" | "Demolition" | "New Construction";
+  phase: TransferPhase;
+  created_phase: TransferPhase;
+  removed_phase?: TransferPhase;
   family_type: string;
   base_level_id: string;
   start_point_mm: [number, number, number];
@@ -40,7 +44,9 @@ export interface RevitWall {
 
 export interface RevitColumn {
   cf_uuid: string;
-  phase: "Existing" | "Demolition" | "New Construction";
+  phase: TransferPhase;
+  created_phase: TransferPhase;
+  removed_phase?: TransferPhase;
   family_type: string;
   base_level_id: string;
   location_mm: [number, number, number];
@@ -52,7 +58,9 @@ export interface RevitColumn {
 
 export interface RevitBeam {
   cf_uuid: string;
-  phase: "Existing" | "Demolition" | "New Construction";
+  phase: TransferPhase;
+  created_phase: TransferPhase;
+  removed_phase?: TransferPhase;
   family_type: string;
   level_id: string;
   start_point_mm: [number, number, number];
@@ -63,7 +71,9 @@ export interface RevitBeam {
 
 export interface RevitFloor {
   cf_uuid: string;
-  phase: "Existing" | "Demolition" | "New Construction";
+  phase: TransferPhase;
+  created_phase: TransferPhase;
+  removed_phase?: TransferPhase;
   family_type: string;
   level_id: string;
   boundary_loops_mm: Array<[number, number][]>;
@@ -72,6 +82,9 @@ export interface RevitFloor {
 
 export interface RevitOpening {
   cf_uuid: string;
+  phase: TransferPhase;
+  created_phase: TransferPhase;
+  removed_phase?: TransferPhase;
   host_wall_uuid: string;
   category: "Door" | "Window";
   family_type: string;
@@ -90,7 +103,7 @@ export function serializeRevitTransfer(project: ProjectDocument): RevitTransferD
 
   const defaultLevelId = project.levels[0]?.id ?? "level-ground";
 
-  const mapPhase = (phase: string): "Existing" | "Demolition" | "New Construction" => {
+  const mapPhase = (phase: string): TransferPhase => {
     if (phase === "demolition") return "Demolition";
     if (phase === "existing") return "Existing";
     return "New Construction";
@@ -98,13 +111,17 @@ export function serializeRevitTransfer(project: ProjectDocument): RevitTransferD
 
   for (const obj of Object.values(project.objects)) {
     const type = obj.object_type;
-    const phase = mapPhase(obj.created_phase);
+    const phase = mapPhase(getDisplayPhase(obj));
+    const createdPhase = mapPhase(obj.created_phase);
+    const removedPhase = obj.removed_phase ? mapPhase(obj.removed_phase) : undefined;
     const d = obj.module_data as Record<string, any>;
 
     if (type.startsWith("arch.wall") || type.startsWith("architecture.wall")) {
       walls.push({
         cf_uuid: obj.id,
         phase,
+        created_phase: createdPhase,
+        ...(removedPhase ? { removed_phase: removedPhase } : {}),
         family_type: d.mark ?? (d.thickness_mm === 75 ? "Basic Wall - AAC 7.5cm" : "Basic Wall - Brick 10cm"),
         base_level_id: d.level_id ?? d.base_level_id ?? defaultLevelId,
         start_point_mm: d.start_point_mm ?? [0, 0, 0],
@@ -117,6 +134,8 @@ export function serializeRevitTransfer(project: ProjectDocument): RevitTransferD
       columns.push({
         cf_uuid: obj.id,
         phase,
+        created_phase: createdPhase,
+        ...(removedPhase ? { removed_phase: removedPhase } : {}),
         family_type: d.mark ?? "M_Concrete-Rectangular-Column",
         base_level_id: d.base_level_id ?? d.level_id ?? defaultLevelId,
         location_mm: d.location_mm ?? [0, 0, 0],
@@ -129,6 +148,8 @@ export function serializeRevitTransfer(project: ProjectDocument): RevitTransferD
       beams.push({
         cf_uuid: obj.id,
         phase,
+        created_phase: createdPhase,
+        ...(removedPhase ? { removed_phase: removedPhase } : {}),
         family_type: d.mark ?? "M_Concrete-Rectangular Beam",
         level_id: d.level_id ?? defaultLevelId,
         start_point_mm: d.start_point_mm ?? [0, 0, 0],
@@ -140,6 +161,8 @@ export function serializeRevitTransfer(project: ProjectDocument): RevitTransferD
       floors.push({
         cf_uuid: obj.id,
         phase,
+        created_phase: createdPhase,
+        ...(removedPhase ? { removed_phase: removedPhase } : {}),
         family_type: d.slab_system ?? "Floor - 120mm Concrete",
         level_id: d.level_id ?? defaultLevelId,
         boundary_loops_mm: [
@@ -155,6 +178,9 @@ export function serializeRevitTransfer(project: ProjectDocument): RevitTransferD
     } else if (type.startsWith("arch.door") || type.startsWith("opening.door")) {
       openings.push({
         cf_uuid: obj.id,
+        phase,
+        created_phase: createdPhase,
+        ...(removedPhase ? { removed_phase: removedPhase } : {}),
         host_wall_uuid: d.host_wall_id ?? "",
         category: "Door",
         family_type: d.mark ?? "Single-Flush 0915 x 2134mm",
@@ -166,6 +192,9 @@ export function serializeRevitTransfer(project: ProjectDocument): RevitTransferD
     } else if (type.startsWith("arch.window") || type.startsWith("opening.window")) {
       openings.push({
         cf_uuid: obj.id,
+        phase,
+        created_phase: createdPhase,
+        ...(removedPhase ? { removed_phase: removedPhase } : {}),
         host_wall_uuid: d.host_wall_id ?? "",
         category: "Window",
         family_type: d.mark ?? "Sliding 2-Panel",

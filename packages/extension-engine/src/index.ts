@@ -21,6 +21,8 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
   const kitchenIncludeDoor = options.kitchenIncludeDoor ?? true
   const kitchenIncludeWindow = options.kitchenIncludeWindow ?? true
   const terraceElevation_m = options.terraceElevation_m ?? 0.45
+  const activeLevel = project.levels.find(level => level.id === project.project.active_level_id)
+  const activeElevation_mm = activeLevel?.elevation_mm ?? 0
   if (activePreset === 'kitchen') {
     if (!Number.isFinite(kitchenWallHeight_m) || kitchenWallHeight_m <= 0) throw new Error('Kitchen wall height must be positive')
     if (![3,4].includes(kitchenWallSides)) throw new Error('Kitchen must have 3 or 4 wall sides')
@@ -35,52 +37,79 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
     return id
   }
   if (activePreset === 'carport') {
+    const columnTop_mm = activeElevation_mm + 3000
+    const roofElevation_mm = activeElevation_mm + 3400
+    const baseLevel = project.project.active_level_id
     // 1. Four Columns at corners
     const c1Id = queueCreate('CreateColumn', {
       mark: carportColumnType,
       material: carportColumnType === 'SC1' ? 'steel' : 'reinforced_concrete',
-      location_mm: [X_mm, Y_mm, 0],
+      location_mm: [X_mm, Y_mm, activeElevation_mm],
       section_mm: carportColumnType === 'SC1' ? [150, 150] : [200, 200],
+      base_level_id: baseLevel,
+      top_elevation_mm: columnTop_mm,
       phase: 'new_construction',
     })
     const c2Id = queueCreate('CreateColumn', {
       mark: carportColumnType,
       material: carportColumnType === 'SC1' ? 'steel' : 'reinforced_concrete',
-      location_mm: [X_mm + W_mm, Y_mm, 0],
+      location_mm: [X_mm + W_mm, Y_mm, activeElevation_mm],
       section_mm: carportColumnType === 'SC1' ? [150, 150] : [200, 200],
+      base_level_id: baseLevel,
+      top_elevation_mm: columnTop_mm,
       phase: 'new_construction',
     })
     const c3Id = queueCreate('CreateColumn', {
       mark: carportColumnType,
       material: carportColumnType === 'SC1' ? 'steel' : 'reinforced_concrete',
-      location_mm: [X_mm + W_mm, Y_mm + L_mm, 0],
+      location_mm: [X_mm + W_mm, Y_mm + L_mm, activeElevation_mm],
       section_mm: carportColumnType === 'SC1' ? [150, 150] : [200, 200],
+      base_level_id: baseLevel,
+      top_elevation_mm: columnTop_mm,
       phase: 'new_construction',
     })
     const c4Id = queueCreate('CreateColumn', {
       mark: carportColumnType,
       material: carportColumnType === 'SC1' ? 'steel' : 'reinforced_concrete',
-      location_mm: [X_mm, Y_mm + L_mm, 0],
+      location_mm: [X_mm, Y_mm + L_mm, activeElevation_mm],
       section_mm: carportColumnType === 'SC1' ? [150, 150] : [200, 200],
+      base_level_id: baseLevel,
+      top_elevation_mm: columnTop_mm,
       phase: 'new_construction',
     })
 
     // 2. Four Footings
-    if (c1Id) queueCreate('CreateFoundation', { mark: 'F1', center_mm: [X_mm, Y_mm, 0], size_mm: [800, 800, 300], supported_column_id: c1Id, phase: 'new_construction' })
-    if (c2Id) queueCreate('CreateFoundation', { mark: 'F1', center_mm: [X_mm + W_mm, Y_mm, 0], size_mm: [800, 800, 300], supported_column_id: c2Id, phase: 'new_construction' })
-    if (c3Id) queueCreate('CreateFoundation', { mark: 'F1', center_mm: [X_mm + W_mm, Y_mm + L_mm, 0], size_mm: [800, 800, 300], supported_column_id: c3Id, phase: 'new_construction' })
-    if (c4Id) queueCreate('CreateFoundation', { mark: 'F1', center_mm: [X_mm, Y_mm + L_mm, 0], size_mm: [800, 800, 300], supported_column_id: c4Id, phase: 'new_construction' })
+    if (c1Id) queueCreate('CreateFoundation', { mark: 'F1', center_mm: [X_mm, Y_mm, activeElevation_mm], top_elevation_mm: activeElevation_mm, size_mm: [800, 800, 300], supported_column_id: c1Id, phase: 'new_construction' })
+    if (c2Id) queueCreate('CreateFoundation', { mark: 'F1', center_mm: [X_mm + W_mm, Y_mm, activeElevation_mm], top_elevation_mm: activeElevation_mm, size_mm: [800, 800, 300], supported_column_id: c2Id, phase: 'new_construction' })
+    if (c3Id) queueCreate('CreateFoundation', { mark: 'F1', center_mm: [X_mm + W_mm, Y_mm + L_mm, activeElevation_mm], top_elevation_mm: activeElevation_mm, size_mm: [800, 800, 300], supported_column_id: c3Id, phase: 'new_construction' })
+    if (c4Id) queueCreate('CreateFoundation', { mark: 'F1', center_mm: [X_mm, Y_mm + L_mm, activeElevation_mm], top_elevation_mm: activeElevation_mm, size_mm: [800, 800, 300], supported_column_id: c4Id, phase: 'new_construction' })
 
     // 3. Perimeter Framing Beams
-    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', start_point_mm: [X_mm, Y_mm, 3000], end_point_mm: [X_mm + W_mm, Y_mm, 3000], start_column_id: c1Id, end_column_id: c2Id, section_mm: [200, 400], phase: 'new_construction' })
-    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', start_point_mm: [X_mm + W_mm, Y_mm, 3000], end_point_mm: [X_mm + W_mm, Y_mm + L_mm, 3000], start_column_id: c2Id, end_column_id: c3Id, section_mm: [200, 400], phase: 'new_construction' })
-    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', start_point_mm: [X_mm + W_mm, Y_mm + L_mm, 3000], end_point_mm: [X_mm, Y_mm + L_mm, 3000], start_column_id: c3Id, end_column_id: c4Id, section_mm: [200, 400], phase: 'new_construction' })
-    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', start_point_mm: [X_mm, Y_mm + L_mm, 3000], end_point_mm: [X_mm, Y_mm, 3000], start_column_id: c4Id, end_column_id: c1Id, section_mm: [200, 400], phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', level_id: baseLevel, base_offset_mm: 3000, start_point_mm: [X_mm, Y_mm, columnTop_mm], end_point_mm: [X_mm + W_mm, Y_mm, columnTop_mm], start_column_id: c1Id, end_column_id: c2Id, section_mm: [200, 400], phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', level_id: baseLevel, base_offset_mm: 3000, start_point_mm: [X_mm + W_mm, Y_mm, columnTop_mm], end_point_mm: [X_mm + W_mm, Y_mm + L_mm, columnTop_mm], start_column_id: c2Id, end_column_id: c3Id, section_mm: [200, 400], phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', level_id: baseLevel, base_offset_mm: 3000, start_point_mm: [X_mm + W_mm, Y_mm + L_mm, columnTop_mm], end_point_mm: [X_mm, Y_mm + L_mm, columnTop_mm], start_column_id: c3Id, end_column_id: c4Id, section_mm: [200, 400], phase: 'new_construction' })
+    queueCreate('CreateBeam', { mark: 'B1', material: 'steel', level_id: baseLevel, base_offset_mm: 3000, start_point_mm: [X_mm, Y_mm + L_mm, columnTop_mm], end_point_mm: [X_mm, Y_mm, columnTop_mm], start_column_id: c4Id, end_column_id: c1Id, section_mm: [200, 400], phase: 'new_construction' })
 
     // Middle Rafter if wide
     if (W_mm >= 4500) {
-      queueCreate('CreateBeam', { mark: 'B2', material: 'steel', start_point_mm: [X_mm + Math.round(W_mm / 2), Y_mm, 3000], end_point_mm: [X_mm + Math.round(W_mm / 2), Y_mm + L_mm, 3000], section_mm: [150, 350], phase: 'new_construction' })
+      queueCreate('CreateBeam', { mark: 'B2', material: 'steel', level_id: baseLevel, base_offset_mm: 3000, start_point_mm: [X_mm + Math.round(W_mm / 2), Y_mm, columnTop_mm], end_point_mm: [X_mm + Math.round(W_mm / 2), Y_mm + L_mm, columnTop_mm], section_mm: [150, 350], phase: 'new_construction' })
     }
+
+    // 4. Sloped slab-on-ground and a preliminary insulated metal-sheet roof surface.
+    queueCreate('CreateSlab', {
+      mark: 'SOG-120', level_id: baseLevel,
+      boundary_mm: [[X_mm, Y_mm], [X_mm + W_mm, Y_mm], [X_mm + W_mm, Y_mm + L_mm], [X_mm, Y_mm + L_mm]],
+      elevation_mm: activeElevation_mm, elevation_offset_mm: 0,
+      thickness_mm: 120, topping_mm: 0, slab_system: 'slab_on_ground', material: 'concrete',
+      slope_ratio: 0.01, drain_direction_deg: 0, phase: 'new_construction',
+    })
+    queueCreate('GenerateRoof', {
+      mark: 'R1', level_id: baseLevel,
+      boundary_mm: [[X_mm, Y_mm], [X_mm + W_mm, Y_mm], [X_mm + W_mm, Y_mm + L_mm], [X_mm, Y_mm + L_mm]],
+      elevation_mm: roofElevation_mm,
+      edges: Array.from({ length: 4 }, () => ({ defines_slope: false, slope_deg: 0 })),
+      thickness_mm: 25.4, material: 'insulated_metal_sheet_pu_25', phase: 'new_construction',
+    })
   } else if (activePreset === 'kitchen') {
     const H_mm = Math.round(kitchenWallHeight_m * 1000)
     const baseLevel = project.levels.find(level => level.id === project.project.active_level_id)
@@ -198,6 +227,21 @@ export function planExtensionPreset(project: ProjectDocument, options: Extension
         phase: 'new_construction',
       })
     }
+
+    // 6. Independently editable kitchen floor and preliminary roof surface.
+    const footprint = [[X_mm, Y_mm], [X_mm + W_mm, Y_mm], [X_mm + W_mm, Y_mm + L_mm], [X_mm, Y_mm + L_mm]]
+    queueCreate('CreateSlab', {
+      mark: 'SOG-120', level_id: project.project.active_level_id,
+      boundary_mm: footprint, elevation_mm: baseElevation_mm, elevation_offset_mm: 0,
+      thickness_mm: 120, topping_mm: 0, slab_system: 'slab_on_ground', material: 'concrete',
+      slope_ratio: 0.01, drain_direction_deg: 180, phase: 'new_construction',
+    })
+    queueCreate('GenerateRoof', {
+      mark: 'R1', level_id: beamLevelId, boundary_mm: footprint,
+      elevation_mm: beamElevation_mm,
+      edges: Array.from({ length: 4 }, () => ({ defines_slope: false, slope_deg: 0 })),
+      thickness_mm: 25.4, material: 'insulated_metal_sheet_pu_25', phase: 'new_construction',
+    })
   } else if (activePreset === 'terrace') {
     // 1. Six Columns / Concrete Piers (4 corners + 2 center supports)
     const midY = Y_mm + Math.round(L_mm / 2)

@@ -1,7 +1,7 @@
 // ConstructFlow IFC 4.3 ADD2 Serializer (ISO 16739-1:2024 / ISO 10303-21 STEP)
 // Standalone pure TypeScript implementation
 
-import type { ProjectDocument, SmartObject, Phase } from "@constructflow/project-model";
+import { getDisplayPhase, type ProjectDocument, type SmartObject, type Phase } from "@constructflow/project-model";
 import { uuidToIfcGuid } from "./ifcGuid.js";
 
 export interface IfcExportOptions {
@@ -350,31 +350,35 @@ export class IfcSerializer {
     );
 
     // Renovation Phasing Property Set: Pset_ConstructionPhase
-    this.attachPhasePropertySet(lines, elemId, phase);
+    this.attachPhasePropertySet(lines, elemId, obj);
 
     return elemId;
   }
 
-  private attachPhasePropertySet(lines: string[], elemId: number, phase: Phase): void {
-    const phaseLabel =
-      phase === "demolition"
-        ? "Demolition"
-        : phase === "existing"
-          ? "Existing"
-          : "New_Construction";
+  private attachPhasePropertySet(lines: string[], elemId: number, object: SmartObject): void {
+    const label = (phase: Phase) => phase === "new_construction" ? "New_Construction" : phase === "demolition" ? "Demolition" : "Existing";
+    const createdLabel = label(object.created_phase);
+    const removedLabel = object.removed_phase ? label(object.removed_phase) : "None";
+    const displayLabel = label(getDisplayPhase(object));
     const jointLabel =
-      phase === "new_construction" ? "Chemical_Dowel_Epoxy" : "None";
+      object.created_phase === "new_construction" ? "Chemical_Dowel_Epoxy" : "None";
 
     const p1 = this.nextId();
-    lines.push(`#${p1}=IFCPROPERTYSINGLEVALUE('PhaseCreated',$,IFCLABEL('${phaseLabel}'),$);`);
+    lines.push(`#${p1}=IFCPROPERTYSINGLEVALUE('PhaseCreated',$,IFCLABEL('${createdLabel}'),$);`);
 
     const p2 = this.nextId();
-    lines.push(`#${p2}=IFCPROPERTYSINGLEVALUE('JointTreatment',$,IFCLABEL('${jointLabel}'),$);`);
+    lines.push(`#${p2}=IFCPROPERTYSINGLEVALUE('PhaseRemoved',$,IFCLABEL('${removedLabel}'),$);`);
+
+    const p3 = this.nextId();
+    lines.push(`#${p3}=IFCPROPERTYSINGLEVALUE('PhaseDisplay',$,IFCLABEL('${displayLabel}'),$);`);
+
+    const p4 = this.nextId();
+    lines.push(`#${p4}=IFCPROPERTYSINGLEVALUE('JointTreatment',$,IFCLABEL('${jointLabel}'),$);`);
 
     const psetId = this.nextId();
     const psetGuid = uuidToIfcGuid(`pset-${elemId}`);
     lines.push(
-      `#${psetId}=IFCPROPERTYSET('${psetGuid}',$,'Pset_ConstructionPhase',$,(#${p1},#${p2}));`,
+      `#${psetId}=IFCPROPERTYSET('${psetGuid}',$,'Pset_ConstructionPhase',$,(#${p1},#${p2},#${p3},#${p4}));`,
     );
 
     const relPropId = this.nextId();

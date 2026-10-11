@@ -14,6 +14,7 @@ import json
 import sys
 import types
 import unittest
+from unittest.mock import patch
 
 
 class _FakeMcpServer:
@@ -169,6 +170,13 @@ class McpBridgeServerTest(unittest.TestCase):
         tool_names = [t["name"] if isinstance(t, dict) else t.name for t in tools]
         self.assertIn("cf_query_model", tool_names)
         self.assertIn("cf_mutate_geometry", tool_names)
+        self.assertIn("cf_standalone_mutate_geometry", tool_names)
+        self.assertIn("cf_standalone_query_model", tool_names)
+        self.assertIn("cf_standalone_calculate_takeoff", tool_names)
+        self.assertIn("cf_standalone_run_coordination", tool_names)
+        self.assertIn("cf_standalone_validate_compliance", tool_names)
+        self.assertIn("cf_standalone_export_model", tool_names)
+        self.assertIn("cf_standalone_history", tool_names)
         self.assertIn("cf_validate_compliance", tool_names)
         self.assertIn("cf_run_clash", tool_names)
         self.assertIn("cf_export_sheets", tool_names)
@@ -179,9 +187,47 @@ class McpBridgeServerTest(unittest.TestCase):
     def test_standalone_tool_execution(self):
         result = asyncio.run(server.app.call_tool_handler("cf_export_dxf", {"version": "2018"}))
         payload = json.loads(result[0]["text"])
-        self.assertEqual(payload["status"], "success")
+        self.assertEqual(payload["status"], "unavailable")
         self.assertEqual(payload["tool"], "cf_export_dxf")
         self.assertFalse(payload["live_bridge"])
+
+    def test_standalone_mutation_calls_native_runtime_without_websocket(self):
+        expected = {"status": "success", "committed": True, "project_json": "{\"ok\":true}"}
+        with patch.object(server, "execute_standalone_runtime", return_value=expected) as runtime:
+            result = asyncio.run(server.app.call_tool_handler("cf_standalone_mutate_geometry", {
+                "project_json": "{}", "commands": [{"name": "NoOp", "input": {}}]
+            }))
+        runtime.assert_called_once()
+        self.assertEqual(json.loads(result[0]["text"]), expected)
+
+    def test_standalone_analysis_tools_dispatch_to_the_native_runtime(self):
+        with patch.object(server, "execute_standalone_runtime", return_value={"status": "success"}) as runtime:
+            for tool, operation in [
+                ("cf_standalone_query_model", "query"),
+                ("cf_standalone_calculate_takeoff", "takeoff"),
+                ("cf_standalone_run_coordination", "coordination"),
+                ("cf_standalone_validate_compliance", "legal_compliance"),
+            ]:
+                result = asyncio.run(server.app.call_tool_handler(tool, {"project_json": "{}"}))
+                self.assertEqual(json.loads(result[0]["text"])["status"], "success")
+                self.assertEqual(runtime.call_args.args[0]["operation"], operation)
+
+    def test_standalone_export_tool_dispatches_to_native_runtime(self):
+        expected = {"status": "success", "format": "ifc", "content": "ISO-10303-21;"}
+        with patch.object(server, "execute_standalone_runtime", return_value=expected) as runtime:
+            result = asyncio.run(server.app.call_tool_handler("cf_standalone_export_model", {
+                "project_json": "{}", "format": "ifc"
+            }))
+        runtime.assert_called_once_with({"project_json": "{}", "format": "ifc", "operation": "export"})
+        self.assertEqual(json.loads(result[0]["text"]), expected)
+
+    def test_standalone_history_tool_dispatches_action_to_native_runtime(self):
+        expected = {"status": "success", "operation": "undo", "can_redo": True}
+        arguments = {"project_json": "{}", "history": {"past": [], "future": []}, "action": "undo"}
+        with patch.object(server, "execute_standalone_runtime", return_value=expected) as runtime:
+            result = asyncio.run(server.app.call_tool_handler("cf_standalone_history", arguments))
+        runtime.assert_called_once_with({"project_json": "{}", "history": {"past": [], "future": []}, "action": "undo", "operation": "undo"})
+        self.assertEqual(json.loads(result[0]["text"]), expected)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

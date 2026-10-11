@@ -189,15 +189,30 @@ export class CommandBus {
 }
 
 /** One history entry per committed batch; redo restores the same IDs, not new creations. */
+export interface ProjectCommandHistorySnapshot {
+  past: ProjectDocument[]
+  future: ProjectDocument[]
+}
+
 export class ProjectCommandSession {
   private current: ProjectDocument
   private past: ProjectDocument[] = []
   private future: ProjectDocument[] = []
 
-  constructor(project: ProjectDocument) { this.current = structuredClone(project) }
+  constructor(project: ProjectDocument, history?: ProjectCommandHistorySnapshot) {
+    this.current = structuredClone(project)
+    this.past = structuredClone(history?.past ?? [])
+    this.future = structuredClone(history?.future ?? [])
+    for (const snapshot of [...this.past, ...this.future]) {
+      if (snapshot.project.id !== project.project.id) throw new Error('History snapshot belongs to a different project')
+    }
+  }
   get project(): ProjectDocument { return structuredClone(this.current) }
   get canUndo(): boolean { return this.past.length > 0 }
   get canRedo(): boolean { return this.future.length > 0 }
+  get historySnapshot(): ProjectCommandHistorySnapshot {
+    return { past: structuredClone(this.past), future: structuredClone(this.future) }
+  }
 
   /** Commit an already-executed model update as one editor history entry. */
   commit(project: ProjectDocument): void {

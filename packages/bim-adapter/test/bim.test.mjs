@@ -51,6 +51,7 @@ test("bim-adapter: generates valid OpenBIM IFC 4.3 ADD2 STEP file", () => {
     id: "wall-exst",
     object_type: "arch.wall",
     created_phase: "existing",
+    removed_phase: "demolition",
     level_refs: [],
     relationships: [],
     module_data: {
@@ -101,6 +102,8 @@ test("bim-adapter: generates valid OpenBIM IFC 4.3 ADD2 STEP file", () => {
   // Check Renovation Phasing Pset
   assert.ok(result.ifcContent.includes("Pset_ConstructionPhase"));
   assert.ok(result.ifcContent.includes("PhaseCreated"));
+  assert.ok(result.ifcContent.includes("PhaseRemoved"));
+  assert.ok(result.ifcContent.includes("PhaseDisplay"));
   assert.ok(result.ifcContent.includes("Existing"));
   assert.ok(result.ifcContent.includes("Demolition"));
   assert.ok(result.ifcContent.includes("New_Construction"));
@@ -144,4 +147,14 @@ test("bim-adapter: generates Revit direct transfer JSON format", () => {
   assert.equal(revitDoc.elements.walls.length, 1);
   assert.equal(revitDoc.elements.walls[0].cf_uuid, "wall-1");
   assert.equal(revitDoc.elements.walls[0].phase, "New Construction");
+  const removedWall = serializeRevitTransfer({
+    ...project,
+    objects: {
+      ...project.objects,
+      "wall-1": { ...project.objects["wall-1"], created_phase: "existing", removed_phase: "demolition" },
+    },
+  }).elements.walls[0];
+  assert.equal(removedWall.phase, "Demolition");
+  assert.equal(removedWall.created_phase, "Existing");
+  assert.equal(removedWall.removed_phase, "Demolition");
 });

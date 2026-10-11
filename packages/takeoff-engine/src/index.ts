@@ -338,16 +338,36 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
               warnings.push(`${object.id}: interface treatment ${String(kind)} has a demolished or missing target wall; quantity was omitted`)
               continue
             }
-            const lengths = targetWalls.map(target => {
-              const targetData = target!.module_data as Data
-              return valueFor(project, 'architecture.wall', targetData, 'height_mm')
-            })
-            if (!lengths.every(finitePositive)) {
-              warnings.push(`${object.id}: interface treatment ${String(kind)} target wall height is missing/invalid`)
+            const isRoofFlashing = kind === 'roof_flashing'
+            const explicitLength = treatment.length_mm
+            if (explicitLength !== undefined && !finitePositive(explicitLength)) {
+              warnings.push(`${object.id}: interface treatment ${String(kind)} explicit length is missing/invalid`)
               continue
             }
-            const treatmentLengthMm = lengths.reduce<number>((sum, value) => sum + value, 0)
-            add(object, 'm', mmToM(treatmentLengthMm), `${lengths.map(length => String(length)).join(' + ')} mm interface height from target wall UUIDs`,
+            const lengths: number[] = []
+            for (const target of targetWalls) {
+              const targetData = target!.module_data as Data
+              let length: unknown = valueFor(project, 'architecture.wall', targetData, isRoofFlashing ? 'length_mm' : 'height_mm')
+              if (isRoofFlashing && !finitePositive(length)) {
+                const start = finiteTuple(targetData.start_point_mm, 3)
+                const end = finiteTuple(targetData.end_point_mm, 3)
+                length = start && end ? Math.hypot(end[0] - start[0], end[1] - start[1]) : undefined
+              }
+              if (!finitePositive(length)) break
+              lengths.push(length)
+            }
+            if (lengths.length !== targetWalls.length) {
+              warnings.push(`${object.id}: interface treatment ${String(kind)} target wall ${isRoofFlashing ? 'length' : 'height'} is missing/invalid`)
+              continue
+            }
+            const maximumTreatmentLengthMm = lengths.reduce<number>((sum, value) => sum + value, 0)
+            if (explicitLength !== undefined && explicitLength > maximumTreatmentLengthMm) {
+              warnings.push(`${object.id}: interface treatment ${String(kind)} length ${explicitLength} mm exceeds its target ${isRoofFlashing ? 'wall span' : 'wall height'} total ${maximumTreatmentLengthMm} mm`)
+              continue
+            }
+            const treatmentLengthMm = explicitLength ?? maximumTreatmentLengthMm
+            const lengthBasis = explicitLength !== undefined ? 'explicit treatment length' : isRoofFlashing ? 'target wall length' : 'interface height'
+            add(object, 'm', mmToM(treatmentLengthMm), `${explicitLength !== undefined ? `${explicitLength} mm ${lengthBasis}` : `${lengths.map(length => String(length)).join(' + ')} mm ${lengthBasis} from target wall UUIDs`}`,
               typeof treatment.material === 'string' && treatment.material.trim() ? treatment.material : 'joint_sealant',
               { phase: 'new_construction', cost_center: 'remodeling_joint_treatment', object_type: 'architecture.joint_treatment', mark: String(kind) })
           }

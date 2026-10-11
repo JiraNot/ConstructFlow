@@ -1,7 +1,7 @@
 import { validateDoorFaceComponents } from './doorFace.js'
 import { validateOpeningPlanSymbolLines } from './openingPlanSymbol.js'
 import type { Phase } from './types.js'
-import type { ProjectDocument, TypeDefinition } from './project.js'
+import { DEFAULT_PHASES, type ProjectDocument, type TypeDefinition } from './project.js'
 import { validateConstructionPayloads } from './constructionValidation.js'
 import { validateDrawingSettings } from './sheetSettings.js'
 import { validateCoordinationSettings } from './coordinationSettings.js'
@@ -121,7 +121,9 @@ export function migrateProjectV1ToV2(source: ProjectDocumentV1): ProjectDocument
 
   project.schema_version = 2
   project.types = migratedTypes
-  project.phases = Array.isArray(source.phases) ? structuredClone(source.phases) as unknown as ProjectDocument['phases'] : []
+  project.phases = Array.isArray(source.phases) && source.phases.length
+    ? structuredClone(source.phases) as unknown as ProjectDocument['phases']
+    : structuredClone(DEFAULT_PHASES)
   project.relationships = Array.isArray(source.relationships) ? structuredClone(source.relationships) as unknown as ProjectDocument['relationships'] : []
   validateProjectV2(project)
   return project
@@ -130,10 +132,15 @@ export function migrateProjectV1ToV2(source: ProjectDocumentV1): ProjectDocument
 export function validateProjectV2(project: ProjectDocument): void {
   if (project.schema_version !== 2) throw new Error(`Unsupported schema_version: ${project.schema_version}`)
   if (!project.project || typeof project.project.id !== 'string' || !project.project.id) throw new Error('Invalid project format: missing project metadata')
+  if (typeof project.project.name !== 'string' || !project.project.name.trim()) throw new Error('Invalid project format: project name is required')
+  if (project.project.units !== 'mm') throw new Error('Invalid project format: canonical project units must be mm')
   if (!PHASES.has(project.project.active_phase)) throw new Error('Invalid project format: unknown active phase')
   if (project.project.display_unit !== undefined && !['m', 'cm', 'mm'].includes(project.project.display_unit)) throw new Error('Invalid project format: display_unit must be m, cm or mm')
   if (!Array.isArray(project.levels) || !Array.isArray(project.types) || !Array.isArray(project.phases) || !Array.isArray(project.relationships)) {
     throw new Error('Invalid project format: levels, types, phases and relationships arrays required')
+  }
+  if (project.constraints !== undefined && !Array.isArray(project.constraints)) {
+    throw new Error('Invalid project format: constraints must be an array when present')
   }
   if (!project.objects || typeof project.objects !== 'object' || Array.isArray(project.objects)) throw new Error('Invalid project format: objects map required')
   validateConstructionPayloads(project)
@@ -406,18 +413,33 @@ export function validateProjectV2(project: ProjectDocument): void {
   }
   const levelIds = new Set<string>()
   for (const level of project.levels) {
-    if (!level || typeof level.id !== 'string' || !level.id || levelIds.has(level.id)) throw new Error('Invalid project format: duplicate or missing level ID')
+    if (!level || typeof level !== 'object' || typeof level.id !== 'string' || !level.id || levelIds.has(level.id)) throw new Error('Invalid project format: duplicate or missing level ID')
+    if (typeof level.name !== 'string' || !level.name.trim()) throw new Error(`Invalid project format: level ${level.id} needs a name`)
     if (!Number.isFinite(level.elevation_mm) || !Number.isFinite(level.storey_index) || (level.height_mm !== undefined && (!Number.isFinite(level.height_mm) || level.height_mm <= 0))) throw new Error(`Invalid project format: level ${level.id} has invalid elevation, index or height`)
     levelIds.add(level.id)
   }
   if (!levelIds.has(project.project.active_level_id)) throw new Error(`Invalid project format: active level ${project.project.active_level_id} is missing`)
+  const phaseIds = new Set<string>()
+  const phaseOrders = new Set<number>()
+  for (const [index, phase] of project.phases.entries()) {
+    if (!phase || typeof phase !== 'object' || !PHASES.has(phase.id) || typeof phase.name !== 'string' || !phase.name.trim() || !Number.isInteger(phase.order)) {
+      throw new Error(`Invalid project format: phase ${index + 1} is malformed`)
+    }
+    if (phaseIds.has(phase.id) || phaseOrders.has(phase.order)) throw new Error(`Invalid project format: duplicate phase ID or order ${phase.id}`)
+    phaseIds.add(phase.id)
+    phaseOrders.add(phase.order)
+  }
+  if (phaseIds.size !== PHASES.size || [...PHASES].some(phase => !phaseIds.has(phase))) {
+    throw new Error('Invalid project format: all canonical phases must be present exactly once')
+  }
   const typeIds = new Set<string>()
   const typeNames = new Set<string>()
   for (const type of project.types) {
     if (!type || !UUID_RE.test(type.id) || !type.object_type || !type.name || !type.parameters || typeof type.parameters !== 'object') {
       throw new Error('Invalid project format: catalog types need a UUID, family, name and parameters')
     }
-    if (typeIds.has(type.id)) throw new Error(`Invalid project format: duplicate catalog type UUID ${type.id}`)
+    const normalizedTypeId = type.id.toLowerCase()
+    if (typeIds.has(normalizedTypeId)) throw new Error(`Invalid project format: duplicate catalog type UUID ${type.id}`)
     validateFamilyParameters(type.parameters, type.object_type, `catalog type ${type.name}`)
     if (type.object_type === 'structure.column' || type.object_type === 'structure.beam') {
       if (type.parameters.section_mm !== undefined) requireTuple(type.parameters.section_mm, 2, type.id, 'parameters.section_mm', true)
@@ -437,14 +459,15 @@ export function validateProjectV2(project: ProjectDocument): void {
     }
     const nameKey = `${type.object_type}\0${type.name.trim().toLowerCase()}`
     if (typeNames.has(nameKey)) throw new Error(`Invalid project format: duplicate type name ${type.name} in ${type.object_type}`)
-    typeIds.add(type.id); typeNames.add(nameKey)
+    typeIds.add(normalizedTypeId); typeNames.add(nameKey)
   }
   const interfaceTreatmentIds = new Set<string>()
   const smartObjectIds = new Set<string>()
   for (const [id, object] of Object.entries(project.objects)) {
-    if (!UUID_RE.test(id) || !object || object.id !== id || !object.object_type || !Array.isArray(object.level_refs) || !Array.isArray(object.host_refs) || !object.module_data || typeof object.module_data !== 'object') {
+    if (!UUID_RE.test(id) || !object || object.id !== id || typeof object.object_type !== 'string' || !object.object_type.trim() || typeof object.owner_module !== 'string' || !object.owner_module.trim() || !Number.isInteger(object.schema_version) || object.schema_version < 1 || !Array.isArray(object.level_refs) || !Array.isArray(object.host_refs) || !Array.isArray(object.connector_refs) || !object.module_data || typeof object.module_data !== 'object' || Array.isArray(object.module_data)) {
       throw new Error(`Invalid project format: malformed Smart Object ${id}`)
     }
+    if (!['active', 'warning', 'invalid', 'archived'].includes(object.status)) throw new Error(`Invalid project format: object ${id} has an invalid status`)
     const normalizedId = id.toLowerCase()
     if (smartObjectIds.has(normalizedId)) throw new Error(`Invalid project format: duplicate Smart Object UUID ${id}`)
     smartObjectIds.add(normalizedId)
@@ -453,8 +476,8 @@ export function validateProjectV2(project: ProjectDocument): void {
     const moduleData = object.module_data as Record<string, unknown>
     validateFamilyParameters(moduleData, object.object_type, `object ${id}`)
     const typeId = moduleData.type_id
-    if (typeId !== undefined && (typeof typeId !== 'string' || !typeIds.has(typeId))) throw new Error(`Invalid project format: object ${id} references missing type ${String(typeId)}`)
-    if (typeId !== undefined && project.types.find(type => type.id === typeId)?.object_type !== object.object_type) {
+    if (typeId !== undefined && (typeof typeId !== 'string' || !UUID_RE.test(typeId) || !typeIds.has(typeId.toLowerCase()))) throw new Error(`Invalid project format: object ${id} references missing type ${String(typeId)}`)
+    if (typeId !== undefined && project.types.find(type => type.id.toLowerCase() === (typeId as string).toLowerCase())?.object_type !== object.object_type) {
       throw new Error(`Invalid project format: object ${id} references a type from another domain`)
     }
     const overrides = moduleData.instance_overrides
@@ -479,7 +502,16 @@ export function validateProjectV2(project: ProjectDocument): void {
         if (values.sill_height_mm < 0) throw new Error(`Invalid project format: object ${id} has negative sill height override`)
       }
     }
-    for (const ref of object.level_refs) if (!levelIds.has(ref.level_id)) throw new Error(`Invalid project format: object ${id} references missing level ${ref.level_id}`)
+    const levelRefKeys = new Set<string>()
+    for (const ref of object.level_refs) {
+      if (!ref || typeof ref !== 'object' || typeof ref.role !== 'string' || !ref.role.trim() || typeof ref.level_id !== 'string' || (ref.offset_mm !== undefined && !Number.isFinite(ref.offset_mm))) throw new Error(`Invalid project format: object ${id} has a malformed level reference`)
+      const key = `${ref.role}\0${ref.level_id}`
+      if (levelRefKeys.has(key)) throw new Error(`Invalid project format: object ${id} has a duplicate level reference`)
+      levelRefKeys.add(key)
+      if (!levelIds.has(ref.level_id)) throw new Error(`Invalid project format: object ${id} references missing level ${ref.level_id}`)
+    }
+    if (new Set(object.host_refs).size !== object.host_refs.length || object.host_refs.some(hostId => typeof hostId !== 'string' || !hostId || hostId === id)) throw new Error(`Invalid project format: object ${id} has invalid or duplicate host references`)
+    if (object.connector_refs.some(connectorId => typeof connectorId !== 'string' || !connectorId) || new Set(object.connector_refs).size !== object.connector_refs.length) throw new Error(`Invalid project format: object ${id} has invalid or duplicate connector references`)
     for (const hostId of object.host_refs) if (!project.objects[hostId]) throw new Error(`Invalid project format: object ${id} references missing host ${hostId}`)
 
     switch (object.object_type) {
@@ -552,6 +584,7 @@ export function validateProjectV2(project: ProjectDocument): void {
             if (typeof treatment.id !== 'string' || !UUID_RE.test(treatment.id) || interfaceTreatmentIds.has(treatment.id)) throw new Error(`Invalid project format: wall ${id} interface treatment ${index + 1} has an invalid or duplicate UUID`)
             if (!['chemical_dowel_epoxy', 'expansion_joint_sealant', 'roof_flashing'].includes(String(treatment.kind))) throw new Error(`Invalid project format: wall ${id} interface treatment ${index + 1} has an unknown kind`)
             if (!Array.isArray(treatment.target_object_ids) || treatment.target_object_ids.length === 0 || treatment.target_object_ids.some(targetId => typeof targetId !== 'string' || !UUID_RE.test(targetId))) throw new Error(`Invalid project format: wall ${id} interface treatment ${index + 1} requires target wall UUIDs`)
+            if (treatment.length_mm !== undefined) requirePositive(treatment.length_mm, `wall ${id} interface treatment ${index + 1}`, 'length_mm')
             if (new Set(treatment.target_object_ids).size !== treatment.target_object_ids.length) throw new Error(`Invalid project format: wall ${id} interface treatment ${index + 1} has duplicate target walls`)
             for (const targetId of treatment.target_object_ids as string[]) {
               const target = project.objects[targetId]
@@ -643,7 +676,56 @@ export function validateProjectV2(project: ProjectDocument): void {
       }
     }
   }
-  for (const relationship of project.relationships) {
-    if (!project.objects[relationship.source_id] || !project.objects[relationship.target_id]) throw new Error('Invalid project format: relationship references a missing object')
+  const relationshipKeys = new Set<string>()
+  for (const [index, relationship] of project.relationships.entries()) {
+    if (!relationship || typeof relationship !== 'object' || Array.isArray(relationship)) {
+      throw new Error(`Invalid project format: relationship ${index + 1} is malformed`)
+    }
+    if (typeof relationship.kind !== 'string' || !relationship.kind.trim()) {
+      throw new Error(`Invalid project format: relationship ${index + 1} has no kind`)
+    }
+    if (typeof relationship.source_id !== 'string' || typeof relationship.target_id !== 'string' || !project.objects[relationship.source_id] || !project.objects[relationship.target_id]) {
+      throw new Error(`Invalid project format: relationship ${index + 1} references a missing object`)
+    }
+    if (relationship.role !== undefined && (typeof relationship.role !== 'string' || !relationship.role.trim())) {
+      throw new Error(`Invalid project format: relationship ${index + 1} has an invalid role`)
+    }
+    if (relationship.meta !== undefined && (!relationship.meta || typeof relationship.meta !== 'object' || Array.isArray(relationship.meta))) {
+      throw new Error(`Invalid project format: relationship ${index + 1} metadata must be an object`)
+    }
+    if (relationship.source_id === relationship.target_id) throw new Error(`Invalid project format: relationship ${index + 1} cannot reference the same object twice`)
+    const relationshipKey = `${relationship.kind}\0${relationship.source_id}\0${relationship.target_id}\0${relationship.role ?? ''}`
+    if (relationshipKeys.has(relationshipKey)) throw new Error(`Invalid project format: duplicate relationship ${relationship.kind} ${relationship.source_id} → ${relationship.target_id}`)
+    relationshipKeys.add(relationshipKey)
+  }
+  const constraintIds = new Set<string>()
+  for (const [index, constraint] of (project.constraints ?? []).entries()) {
+    const label = `constraint ${index + 1}`
+    if (!constraint || typeof constraint !== 'object' || Array.isArray(constraint)) {
+      throw new Error(`Invalid project format: ${label} is malformed`)
+    }
+    if (typeof constraint.id !== 'string' || !UUID_RE.test(constraint.id)) {
+      throw new Error(`Invalid project format: ${label} needs a persistent UUID`)
+    }
+    if (constraintIds.has(constraint.id.toLowerCase())) throw new Error(`Invalid project format: duplicate ${label} UUID ${constraint.id}`)
+    constraintIds.add(constraint.id.toLowerCase())
+    if (!['lock', 'parallel', 'perpendicular', 'equal_distance', 'offset', 'coincident'].includes(constraint.kind)) {
+      throw new Error(`Invalid project format: ${label} has an unsupported kind`)
+    }
+    const expectedEntityCount = constraint.kind === 'lock' ? 1 : 2
+    if (!Array.isArray(constraint.entities) || constraint.entities.length !== expectedEntityCount) {
+      throw new Error(`Invalid project format: ${label} ${constraint.kind} constraint requires ${expectedEntityCount} entity${expectedEntityCount === 1 ? '' : ' references'}`)
+    }
+    for (const [entityIndex, entity] of constraint.entities.entries()) {
+      if (!entity || typeof entity !== 'object' || Array.isArray(entity) || typeof entity.id !== 'string' || !project.objects[entity.id] || typeof entity.property !== 'string' || !entity.property.trim()) {
+        throw new Error(`Invalid project format: ${label} has an invalid entity reference at index ${entityIndex}`)
+      }
+    }
+    if (constraint.entities.length === 2 && constraint.entities[0].id === constraint.entities[1].id && constraint.entities[0].property === constraint.entities[1].property) {
+      throw new Error(`Invalid project format: ${label} cannot constrain an entity property to itself`)
+    }
+    if (constraint.value !== undefined && (typeof constraint.value !== 'number' || !Number.isFinite(constraint.value))) {
+      throw new Error(`Invalid project format: ${label} value must be finite`)
+    }
   }
 }

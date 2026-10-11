@@ -1,5 +1,80 @@
 import type { ProjectDocument } from "./project.js";
 
+type Point2 = [number, number];
+
+function ringArea(ring: Point2[]): number {
+  return ring.reduce((sum, point, index) => {
+    const next = ring[(index + 1) % ring.length];
+    return sum + point[0] * next[1] - next[0] * point[1];
+  }, 0) / 2;
+}
+
+function orientation(a: Point2, b: Point2, c: Point2): number {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function onSegment(a: Point2, b: Point2, p: Point2): boolean {
+  return Math.min(a[0], b[0]) <= p[0] && p[0] <= Math.max(a[0], b[0])
+    && Math.min(a[1], b[1]) <= p[1] && p[1] <= Math.max(a[1], b[1]);
+}
+
+function segmentsIntersect(a: Point2, b: Point2, c: Point2, d: Point2): boolean {
+  const o1 = orientation(a, b, c), o2 = orientation(a, b, d);
+  const o3 = orientation(c, d, a), o4 = orientation(c, d, b);
+  if (((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) && ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0))) return true;
+  return (o1 === 0 && onSegment(a, b, c)) || (o2 === 0 && onSegment(a, b, d))
+    || (o3 === 0 && onSegment(c, d, a)) || (o4 === 0 && onSegment(c, d, b));
+}
+
+function validRing(value: unknown): value is Point2[] {
+  if (!Array.isArray(value) || value.length < 3 || !value.every(point => Array.isArray(point) && point.length === 2 && point.every(coordinate => typeof coordinate === "number" && Number.isFinite(coordinate)))) return false;
+  const ring = value as Point2[];
+  if (new Set(ring.map(point => `${point[0]}\0${point[1]}`)).size !== ring.length || Math.abs(ringArea(ring)) <= 1e-7) return false;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    if (a[0] === b[0] && a[1] === b[1]) return false;
+    for (let j = i + 1; j < ring.length; j++) {
+      if (j === i || j === (i + 1) % ring.length || i === (j + 1) % ring.length) continue;
+      if (segmentsIntersect(a, b, ring[j], ring[(j + 1) % ring.length])) return false;
+    }
+  }
+  return true;
+}
+
+function pointInRing(point: Point2, ring: Point2[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i], b = ring[j];
+    if (orientation(a, b, point) === 0 && onSegment(a, b, point)) return false;
+    const crosses = (a[1] > point[1]) !== (b[1] > point[1])
+      && point[0] < ((b[0] - a[0]) * (point[1] - a[1])) / (b[1] - a[1]) + a[0];
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function validVoids(boundary: Point2[], value: unknown): boolean {
+  if (!Array.isArray(value) || !value.every(validRing)) return false;
+  const holes = value as Point2[][];
+  for (let i = 0; i < holes.length; i++) {
+    const hole = holes[i];
+    if (!hole.every(point => pointInRing(point, boundary))) return false;
+    for (let edge = 0; edge < hole.length; edge++) {
+      const a = hole[edge], b = hole[(edge + 1) % hole.length];
+      for (let outer = 0; outer < boundary.length; outer++) {
+        if (segmentsIntersect(a, b, boundary[outer], boundary[(outer + 1) % boundary.length])) return false;
+      }
+    }
+    for (let j = 0; j < i; j++) {
+      const other = holes[j];
+      if (hole.some((point, edge) => other.some((otherPoint, otherEdge) =>
+        segmentsIntersect(point, hole[(edge + 1) % hole.length], otherPoint, other[(otherEdge + 1) % other.length]))
+        || pointInRing(point, other)) || other.some(point => pointInRing(point, hole))) return false;
+    }
+  }
+  return true;
+}
+
 const schemas: Record<
   string,
   {
@@ -190,10 +265,20 @@ export function validateConstructionPayloads(project: ProjectDocument): void {
       )
         fail("edges");
       for (const e of d.edges as Record<string, unknown>[]) {
-        if (!e || typeof e.defines_slope !== "boolean") fail("defines_slope");
+        if (!e || typeof e !== "object" || Array.isArray(e) || typeof e.defines_slope !== "boolean") fail("defines_slope");
         number(e.slope_deg, "slope_deg", 0);
         if (Number(e.slope_deg) >= 89) fail("slope_deg");
       }
+      if (!validRing(d.boundary_mm)) fail("boundary_mm");
+      if (d.voids_mm !== undefined && !validVoids(d.boundary_mm as Point2[], d.voids_mm)) fail("voids_mm");
+    }
+    if (object.object_type === "structure.slab") {
+      if (!validRing(d.boundary_mm)) fail("boundary_mm");
+      if (!(["slab_on_ground", "suspended", "precast_plank", "hollow_core"] as unknown[]).includes(d.slab_system)) fail("slab_system");
+      if (d.elevation_offset_mm !== undefined) number(d.elevation_offset_mm, "elevation_offset_mm", -Infinity);
+      if (d.slope_ratio !== undefined) number(d.slope_ratio, "slope_ratio", 0);
+      if (d.drain_direction_deg !== undefined && (typeof d.drain_direction_deg !== "number" || !Number.isFinite(d.drain_direction_deg))) fail("drain_direction_deg");
+      if (d.voids_mm !== undefined && !validVoids(d.boundary_mm as Point2[], d.voids_mm)) fail("voids_mm");
     }
     if (object.object_type === "interior.cabinet_run") {
       if (!Array.isArray(d.modules_mm) || !d.modules_mm.length)

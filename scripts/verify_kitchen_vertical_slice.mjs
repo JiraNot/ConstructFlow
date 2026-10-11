@@ -20,7 +20,15 @@ assert.deepEqual(objectCounts, {
   'structure.beam': 4,
   'structure.column': 4,
   'structure.foundation': 4,
+  'structure.slab': 1,
+  'roof.system': 1,
 })
+const kitchenFloor = Object.values(project.objects).find(object => object.object_type === 'structure.slab')
+const kitchenRoof = Object.values(project.objects).find(object => object.object_type === 'roof.system')
+assert.equal(kitchenFloor.module_data.level_id, 'GF')
+assert.equal(kitchenFloor.module_data.elevation_mm, 0)
+assert.equal(kitchenRoof.module_data.level_id, 'L2')
+assert.equal(kitchenRoof.module_data.elevation_mm, 3000)
 
 const existingWall = Object.values(project.objects).find(object =>
   object.object_type === 'architecture.wall' && object.created_phase === 'existing')
