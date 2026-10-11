@@ -4,6 +4,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import type { ProjectDocument } from '@constructflow/project-model'
 import { resolveOpeningMuntinGrid, muntinGridPositions, type OpeningGridZone } from '@constructflow/architecture-engine'
 import { buildProjectRepresentations3D, getPlanVisibleObjects, doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement, type ObjectRepresentation3D, type RepresentationInteraction } from '@constructflow/representation-engine'
+import type { CoordinationFinding } from '@constructflow/clash-engine'
+import { buildCoordinationHighlightGroup, disposeCoordinationHighlightGroup } from '../rendering/coordinationHighlight3d.js'
 
 type ModelObject3D = THREE.Object3D & { userData: { objectId: string; objectType: string; moveable: boolean; interaction: RepresentationInteraction } }
 const mmToM = (value: number) => value / 1000
@@ -446,14 +448,17 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
 interface Model3DViewportProps {
   project: ProjectDocument
   onSelectObject: (id: string | null) => void
+  /** Coordination findings, drawn as impact volumes so clashes are visible in 3D too. */
+  coordination?: readonly CoordinationFinding[]
 }
 
-export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSelectObject }) => {
+export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSelectObject, coordination = [] }) => {
   const hostRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const meshByIdRef = useRef(new Map<string, ModelObject3D>())
   const orbitRef = useRef<OrbitControls | null>(null)
+  const highlightRef = useRef<THREE.Group | null>(null)
   const selectRef = useRef(onSelectObject)
   selectRef.current = onSelectObject
 
@@ -531,6 +536,11 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
       renderer.dispose()
       host.removeChild(renderer.domElement)
       meshByIdRef.current.clear()
+      if (highlightRef.current) {
+        scene.remove(highlightRef.current)
+        disposeCoordinationHighlightGroup(highlightRef.current)
+        highlightRef.current = null
+      }
       sceneRef.current = null
     }
   }, [])
@@ -567,6 +577,22 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
       orbitRef.current?.update()
     }
   }, [project])
+
+  // Keep highlight geometry separate from model meshes and replace it only when the project or
+  // coordination report changes.
+  useEffect(() => {
+    const scene = sceneRef.current
+    if (!scene) return
+    if (highlightRef.current) {
+      scene.remove(highlightRef.current)
+      disposeCoordinationHighlightGroup(highlightRef.current)
+      highlightRef.current = null
+    }
+    if (!coordination.length) return
+    const group = buildCoordinationHighlightGroup(coordination)
+    scene.add(group)
+    highlightRef.current = group
+  }, [coordination, project])
 
   return <div ref={hostRef} style={{ width: '100%', height: '100%', minHeight: 240, position: 'relative', background: '#080f1e' }}>
     <div style={{ position: 'absolute', left: 12, top: 10, zIndex: 1, color: '#94a3b8', background: 'rgba(8,15,30,0.76)', padding: '4px 6px', borderRadius: 2, fontSize: 11, pointerEvents: 'none' }}>
