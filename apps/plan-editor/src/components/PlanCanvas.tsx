@@ -588,8 +588,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [gridStartPoint, setGridStartPoint] = useState<[number, number] | null>(null)
   const [gridSequenceStyle, setGridSequenceStyle] = useState<'auto' | 'alpha' | 'numeric'>('auto')
   const [gridCopySourceId, setGridCopySourceId] = useState<string | null>(null)
-  const [gridXIntervals, setGridXIntervals] = useState(() => [4000, 4000, 4000].map(value => formatLengthMm(value, displayUnit)).join(', '))
-  const [gridYIntervals, setGridYIntervals] = useState(() => [3000, 3000].map(value => formatLengthMm(value, displayUnit)).join(', '))
+  const [gridXIntervals, setGridXIntervals] = useState(() => [3000, 3000, 3000].map(value => formatLengthMm(value, displayUnit)).join(', '))
+  const [gridYIntervals, setGridYIntervals] = useState(() => [2500, 2500].map(value => formatLengthMm(value, displayUnit)).join(', '))
   const [gridXFirstTag, setGridXFirstTag] = useState('A')
   const [gridYFirstTag, setGridYFirstTag] = useState('1')
   const [gridSystemError, setGridSystemError] = useState('')
@@ -2467,11 +2467,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         {activeTool === 'gridSystem' && <div className="cf-grid-orientation-control" role="group" aria-label="สร้างระบบ Grid Line">
           <strong>ระบบ Grid Line · ระยะเป็นช่วงจากเส้นก่อนหน้า ({displayUnit})</strong>
           <div className="cf-grid-system-axis">
-            <label>แนวตั้ง · ระยะ X<input aria-label={`ระยะช่วงแนวตั้งของระบบกริด (${displayUnit})`} value={gridXIntervals} onChange={event => { setGridXIntervals(event.target.value); setGridSystemError('') }} onKeyDown={handlePlacementInputKeyDown} placeholder={`4, 3.5, 5 ${displayUnit}`} /></label>
+            <label>แนวตั้ง · ระยะ X<input aria-label={`ระยะช่วงแนวตั้งของระบบกริด (${displayUnit})`} value={gridXIntervals} onChange={event => { setGridXIntervals(event.target.value); setGridSystemError('') }} onKeyDown={handlePlacementInputKeyDown} placeholder={`3, 2.5, 3 ${displayUnit}`} /></label>
             <label>ป้ายแรก<input aria-label="ป้ายเริ่มต้นแนวตั้ง" value={gridXFirstTag} onChange={event => setGridXFirstTag(event.target.value)} /></label>
           </div>
           <div className="cf-grid-system-axis">
-            <label>แนวนอน · ระยะ Y<input aria-label={`ระยะช่วงแนวนอนของระบบกริด (${displayUnit})`} value={gridYIntervals} onChange={event => { setGridYIntervals(event.target.value); setGridSystemError('') }} onKeyDown={handlePlacementInputKeyDown} placeholder={`3, 4.2 ${displayUnit}`} /></label>
+            <label>แนวนอน · ระยะ Y<input aria-label={`ระยะช่วงแนวนอนของระบบกริด (${displayUnit})`} value={gridYIntervals} onChange={event => { setGridYIntervals(event.target.value); setGridSystemError('') }} onKeyDown={handlePlacementInputKeyDown} placeholder={`2.5, 3 ${displayUnit}`} /></label>
             <label>ป้ายแรก<input aria-label="ป้ายเริ่มต้นแนวนอน" value={gridYFirstTag} onChange={event => setGridYFirstTag(event.target.value)} /></label>
           </div>
             <small>คั่นแต่ละช่วงด้วยจุลภาค · คลิกจุดกำเนิดหนึ่งครั้งเพื่อสร้างได้ทั้งสองแนว · ลบช่องระยะของแนวที่ไม่ใช้</small>
