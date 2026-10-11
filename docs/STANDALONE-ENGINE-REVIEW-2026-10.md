@@ -103,8 +103,12 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   acceptance เพิ่มเติมผ่าน browser OPFS `FileSystemFileHandle` จริงยืนยัน write/close/reopen และ
   UUID 21/21. เพิ่มการ persist browser-owned handle ใน IndexedDB; reload editor แล้ว restore handle,
   Save อีกครั้ง และตรวจไฟล์ OPFS ได้ phase `existing` กับ UUID 21/21. HTML file input เปิดไฟล์ local
-  จริง แล้ว Save As/download/reopen โดย UUID ตรงต้นฉบับ
-  18/18. ยังไม่ยืนยันการเลือกผ่าน native OS picker หรือเขียนทับไฟล์ user-selected ผ่าน handle จริง
+  จริง แล้ว Save As/download/reopen โดย UUID ตรงต้นฉบับ 18/18. ปิด native picker gate ด้วย Edge:
+  เปิดสำเนา `.cfproj` จริงจากดิสก์ผ่าน Open picker, อนุญาต read/write, เปลี่ยนเฟสเป็น Existing,
+  Save กลับ handle เดิม, reload editor, restore handle แล้ว Save ซ้ำ และเปิดไฟล์ผ่าน picker อีกครั้ง;
+  editor อ่านเฟส Existing กลับมาได้ และตรวจดิสก์ได้ project ID เดิม, phase `existing` กับ UUID
+  ตรง fixture 18/18. โฟลเดอร์ชั่วคราวถูก Edge ปฏิเสธว่าเป็น system files;
+  ย้ายสำเนาทดสอบไป Documents แล้วการเลือกและเขียนสำเร็จ.
 - ต่อ Undo/Redo เข้ากับ editor, shortcut และเปิด/บันทึก `.cfproj`; File System Access handle
   ที่ได้จาก Open/Save As ใช้ Save กลับไฟล์เดิมได้ และ browser-owned handle ที่ clone ได้ persist/
   restore ผ่าน IndexedDB หลัง reload โดย Save จะขอ read/write permission เมื่อจำเป็น. ส่วน fallback
@@ -117,7 +121,7 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   เป็น atomic batch เดียวกันทั้งใน editor และ generator ของ `examples/kitchen-extension-proof.cfproj`.
   Generator เขียนไฟล์แล้วอ่านกลับผ่าน serializer โดยได้ canonical JSON เท่าเดิม; disk-backed
   browser UI roundtrip ผ่าน injected mocked handle บน temporary `.cfproj` จริง โดย UUID คงเดิม
-  ครบ 21 ชิ้น; native picker และการใช้ browser handle จริงกับไฟล์ที่ผู้ใช้เลือกยังเป็น gate แยกต่างหาก
+  ครบ 18 ชิ้น; native picker และการเขียนกลับ browser handle ของไฟล์ที่ผู้ใช้เลือกผ่านแล้วตาม acceptance
 - เพิ่ม validation สำหรับ finite coordinates, positive dimensions, valid host, hosted
   opening bounds และการอ้างอิงเสา/ฐานราก/คานในโดเมนที่รองรับแล้ว; v1 migration contract
   เปลี่ยนจาก `any` เป็น `unknown` พร้อม narrowing; project/catalog และ CQRS public contracts
@@ -129,9 +133,8 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
 - Type rename now runs through the UI and `RenameCatalogType` command. Runtime acceptance checks
   family-scoped cascade, stable UUIDs, invalid-name rejection, serialization/reload and Undo/Redo;
   browser smoke confirmed schedule/BOQ propagation and Undo clearing the pending queue.
-- Gate ที่เหลือ: native OS picker selection และ browser-owned handle overwrite/reopen สำหรับไฟล์
-  ที่ผู้ใช้เลือก, broader migration/domain fixtures,
-  and file-handle permission/restore behavior across application restart
+- Gate ที่เหลือ: broader migration/domain fixtures, large-project history/performance, and
+  browser file-handle recovery across a full browser/application restart (page reload is verified)
 
 ### S1 — Takeoff แนวตั้งจากโมเดลเดียว (มี engine และ phased BOQ สำหรับรายการที่รองรับ)
 
