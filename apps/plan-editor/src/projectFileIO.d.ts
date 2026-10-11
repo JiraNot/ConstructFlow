@@ -14,6 +14,8 @@ export interface LocalProjectWritable {
 export interface LocalProjectFileHandle {
   getFile: () => Promise<File>
   createWritable: () => Promise<LocalProjectWritable>
+  queryPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>
+  requestPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>
 }
 
 export interface ReadProjectFileResult {

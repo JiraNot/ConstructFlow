@@ -101,15 +101,18 @@ vertical slice ของเสา ฐานราก คาน ผนัง ป�
   phase เป็น Existing → Save → Open; mocked handle เขียนและอ่านไฟล์ `.cfproj` ชั่วคราวบนดิสก์
   จริง. ยืนยัน project ID, phase `existing` และ UUID ของวัตถุครบ 21 ชิ้นตรงกันหลังเปิดซ้ำ.
   acceptance เพิ่มเติมผ่าน browser OPFS `FileSystemFileHandle` จริงยืนยัน write/close/reopen และ
-  UUID 21/21; HTML file input เปิดไฟล์ local จริง แล้ว Save As/download/reopen โดย UUID ตรงต้นฉบับ
+  UUID 21/21. เพิ่มการ persist browser-owned handle ใน IndexedDB; reload editor แล้ว restore handle,
+  Save อีกครั้ง และตรวจไฟล์ OPFS ได้ phase `existing` กับ UUID 21/21. HTML file input เปิดไฟล์ local
+  จริง แล้ว Save As/download/reopen โดย UUID ตรงต้นฉบับ
   18/18. ยังไม่ยืนยันการเลือกผ่าน native OS picker หรือเขียนทับไฟล์ user-selected ผ่าน handle จริง
 - ต่อ Undo/Redo เข้ากับ editor, shortcut และเปิด/บันทึก `.cfproj`; File System Access handle
-  ที่ได้จาก Open/Save As ใช้ Save กลับไฟล์เดิมได้ใน editor session ปัจจุบัน ส่วน fallback ใช้
-  file input/download และ Save-to-browser snapshot; handle ยังไม่ persist/restore ข้าม reload.
+  ที่ได้จาก Open/Save As ใช้ Save กลับไฟล์เดิมได้ และ browser-owned handle ที่ clone ได้ persist/
+  restore ผ่าน IndexedDB หลัง reload โดย Save จะขอ read/write permission เมื่อจำเป็น. ส่วน fallback
+  ใช้ file input/download และ Save-to-browser snapshot.
   Undo/Redo ล้าง incremental sync queue แล้ว จึงต้อง full sync ใหม่; adapter Undo/Redo replay ยังไม่ทำ
 - Confirmation ก่อนแทนที่โปรเจกต์เทียบ serialized model กับ replacement baseline; explicit
-  Save/Save As/Open จะเลื่อน baseline ส่วน background autosave ไม่ได้เลื่อน baseline. File handle
-  ใช้เฉพาะ editor session ปัจจุบันและยังไม่ persist/restore ข้าม reload.
+  Save/Save As/Open จะเลื่อน baseline ส่วน background autosave ไม่ได้เลื่อน baseline. Browser-owned
+  file handle ถูกเก็บร่วมกับ recovery snapshot และคืนกลับหลัง reload หาก browser รองรับ structured clone.
 - ย้าย Kitchen Proof factory เข้า `extension-engine`; Existing host wall และ preset 4.00 × 2.50 m
   เป็น atomic batch เดียวกันทั้งใน editor และ generator ของ `examples/kitchen-extension-proof.cfproj`.
   Generator เขียนไฟล์แล้วอ่านกลับผ่าน serializer โดยได้ canonical JSON เท่าเดิม; disk-backed

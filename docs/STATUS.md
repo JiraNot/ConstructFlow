@@ -8,7 +8,7 @@ must not be read as current verification or as proof that the full Master Bluepr
 
 | Area | Current status from the working tree | Boundary / remaining acceptance |
 |---|---|---|
-| Standalone model and commands | `.cfproj` v2, v1 migration, domain packages, command runtime, catalog, transactions, Undo/Redo, and a 2D/3D editor are implemented for supported object families. V2 import validates relationship records, persisted constraints, and slab/roof simple boundaries and void rings. Browser acceptance passed disk-backed mocked-handle Open/Save/reopen, real OPFS `FileSystemFileHandle` Open/Save/reopen (21/21 object UUIDs), and local-file-input Open → Save As download → reopen (18/18 source UUIDs). | Native OS picker selection and direct browser-handle overwrite/reopen of an actual user-selected file, broader migration/domain validation, file-handle restore after reload, and real-project performance/acceptance remain open. |
+| Standalone model and commands | `.cfproj` v2, v1 migration, domain packages, command runtime, catalog, transactions, Undo/Redo, and a 2D/3D editor are implemented for supported object families. V2 import validates relationship records, persisted constraints, and slab/roof simple boundaries and void rings. Browser acceptance passed disk-backed mocked-handle Open/Save/reopen, real OPFS `FileSystemFileHandle` Open/Save/reload/restored-handle Save (21/21 object UUIDs), and local-file-input Open → Save As download → reopen (18/18 source UUIDs). | Native OS picker selection and direct browser-handle overwrite/reopen of an actual user-selected file, broader migration/domain validation, and real-project performance/acceptance remain open. |
 | Renovation and extension | Existing/Demolition/New lifecycle, hosted openings, and atomic extension presets are implemented for the documented supported presets. | Presets are preliminary and are not full assemblies: see the preset scope table in `STANDALONE-ENGINE-REVIEW-2026-10.md`; engineering design and several roof/floor/joint components remain out of scope. |
 | Structure and architecture | Structural/rebar commands, selected BBS/details, architectural finish and bathroom outputs, and elevation selection/datum UI have implementations and regression coverage. | These are supported slices, not structural design approval or complete editable geometry for every family. |
 | Thai legal / site | `clash-engine` has site/legal evaluators, including eaves, road height, waterways, grading and room daylight/ventilation checks. | Results depend on supplied jurisdiction/design inputs; missing inputs can return `insufficient_data`. This is not a complete permit/legal audit, and sheet `issue_ready` is not legal approval. |
@@ -371,7 +371,7 @@ Opening catalog update (2026-10-08): type editor now supports opening dimensions
   exercised through the visible controls: the reopened project retained `active_phase: existing`,
   all 18 Smart Objects and their UUIDs, the 5.600 m joint-treatment BOQ line, and generated A-02,
   S-01 and A-08 views. This verifies editor-to-adapter wiring without invoking an OS picker;
-  native picker interaction and a real browser-owned file handle remain a separate UI gate.
+  native picker interaction and overwriting a user-selected disk file remain a separate UI gate.
   The harness also supports an opt-in disk-backed mode (`CONSTRUCTFLOW_FILE_ACCEPTANCE=1`,
   `?disk=1`) whose Vite dev middleware writes only a randomly named project under the OS temp
   directory. Browser UI acceptance opened, phase-edited, saved and reopened that file; disk
@@ -379,6 +379,14 @@ Opening catalog update (2026-10-08): type editor now supports opening dimensions
   file compiled 13 takeoff rows and A-02/S-01/A-08. This proves the UI-to-file-handle-to-disk path
   with a test handle, while native picker selection and a user-chosen real file overwrite remain
   unverified.
+  The editor now stores cloneable browser file handles alongside its IndexedDB recovery snapshot.
+  A real OPFS handle roundtrip opened and phase-edited Kitchen Proof, saved, reloaded the page,
+  restored the handle into the editor, saved again, then inspected the OPFS file: `active_phase`
+  remained `existing` and all 21 Smart Object UUIDs were present. Save requests read/write
+  permission when a restored handle no longer has a granted write permission; denial prevents the
+  write. Automated file-I/O verification covers granted, prompted, and denied permission paths.
+  This validates handle restoration and permission behavior with a browser-owned OPFS file; native
+  picker selection and a user-selected disk file overwrite remain unverified.
   A separate browser acceptance run opened the real `examples/kitchen-extension-proof.cfproj`
   through the HTML file-input fallback and confirmed its 18 Smart Objects, phase-separated BOQ and
   pile-length warnings in the UI. A later Save-fallback run on that local file produced

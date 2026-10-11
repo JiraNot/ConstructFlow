@@ -28,18 +28,33 @@
       const query = new URLSearchParams(window.location.search)
       const diskBacked = query.get('disk') === '1'
       const opfsBacked = query.get('opfs') === '1'
+      const opfsHandleBacked = query.get('opfs-handle') === '1'
+      const opfsInspect = query.get('opfs-inspect') === '1'
       const opfsCleanup = query.get('opfs-cleanup') === '1'
       const opfsFileName = 'CF-UI-ACCEPTANCE.opfs.cfproj'
       const diskEndpoint = '/__constructflow-acceptance-file'
       const output = document.getElementById('workflow-result')
       let opfsFileHandle = null
-      if (opfsBacked) {
+      if (opfsBacked || opfsHandleBacked || opfsInspect) {
         const storageRoot = await navigator.storage.getDirectory()
         if (opfsCleanup) {
           try { await storageRoot.removeEntry(opfsFileName) } catch (error) {
             if (error.name !== 'NotFoundError') throw error
           }
           output.textContent = 'opfs-cleaned'
+        } else if (opfsInspect) {
+          try {
+            const handle = await storageRoot.getFileHandle(opfsFileName)
+            const project = JSON.parse(await (await handle.getFile()).text())
+            output.textContent = JSON.stringify({
+              result: 'opfs-reopen-after-browser-reload', project_id: project.project.id,
+              active_phase: project.project.active_phase, object_count: Object.keys(project.objects).length,
+              UUIDs: Object.keys(project.objects).sort(),
+            })
+          } catch (error) {
+            if (error.name === 'NotFoundError') output.textContent = 'opfs-file-not-found'
+            else throw error
+          }
         } else {
           opfsFileHandle = await storageRoot.getFileHandle(opfsFileName, { create: true })
           if ((await opfsFileHandle.getFile()).size === 0) {
@@ -100,14 +115,22 @@
         },
       }
       const forceHtmlFileInput = query.get('fileInput') === '1'
-      const projectFileAccess = forceHtmlFileInput ? {} : {
+      const projectFileAccess = forceHtmlFileInput ? {} : opfsHandleBacked
+        ? {
+            // Use a genuine browser-owned OPFS handle so IndexedDB can persist it across reload.
+            showOpenFilePicker: async () => [opfsFileHandle],
+            showSaveFilePicker: async () => opfsFileHandle,
+          }
+        : {
         showOpenFilePicker: async () => { output.textContent = 'open-picker-called'; return [handle] },
         showSaveFilePicker: async () => { output.textContent = 'save-picker-called'; return handle },
       }
-      if (opfsCleanup) {
-        // Dedicated cleanup URL removes only the acceptance file created in this origin's OPFS.
+      if (opfsCleanup || opfsInspect) {
+        // Dedicated URLs clean up or inspect only the acceptance file in this origin's OPFS.
       } else if (opfsBacked) {
         output.textContent = 'Browser OPFS acceptance: Open → set phase Existing → Save → Open.'
+      } else if (opfsHandleBacked) {
+        output.textContent = 'Persisted browser handle acceptance: Open → set phase Existing → Save → reload → Save.'
       } else if (forceHtmlFileInput) {
         // Exercise the real local-file input route when the browser's native picker cannot be automated.
         output.textContent = 'HTML file input mode: choose a local .cfproj; Save uses the browser download fallback.'
@@ -116,7 +139,7 @@
           ? 'Disk-backed acceptance: Open → set phase Existing → Save → Open.'
           : 'In-memory acceptance: Open → set phase Existing → Save → Open.'
       }
-      if (!opfsCleanup) ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App, { projectFileAccess }))
+      if (!opfsCleanup && !opfsInspect) ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App, { projectFileAccess }))
     </script>
   </body>
 </html>

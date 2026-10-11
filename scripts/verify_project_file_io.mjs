@@ -62,6 +62,28 @@ await writeProjectFile({
 assert.equal(saved, opened.serialized, 'save must write the opened project snapshot')
 assert.deepEqual(events, ['write', 'close'], 'save must close only after the full snapshot is written')
 
+const permissionEvents = []
+await writeProjectFile({
+  queryPermission: async options => { permissionEvents.push(`query:${options.mode}`); return 'prompt' },
+  requestPermission: async options => { permissionEvents.push(`request:${options.mode}`); return 'granted' },
+  createWritable: async () => ({
+    write: async () => { permissionEvents.push('write') },
+    close: async () => { permissionEvents.push('close') },
+  }),
+}, opened.serialized)
+assert.deepEqual(permissionEvents, ['query:readwrite', 'request:readwrite', 'write', 'close'], 'save must request write permission after browser restores a prompted handle')
+
+let deniedPermissionOpenedWritable = false
+await assert.rejects(
+  writeProjectFile({
+    queryPermission: async () => 'prompt',
+    requestPermission: async () => 'denied',
+    createWritable: async () => { deniedPermissionOpenedWritable = true; throw new Error('must not create writable') },
+  }, opened.serialized),
+  /ยังไม่ได้อนุญาต/,
+)
+assert.equal(deniedPermissionOpenedWritable, false, 'a denied permission must not start a file write')
+
 let aborted = false
 await assert.rejects(
   writeProjectFile({
@@ -88,4 +110,4 @@ await assert.rejects(
 )
 assert.equal(closeAborted, true, 'a failed commit/close must also abort when supported')
 
-process.stdout.write('Project file IO acceptance passed: canonical open, invalid-file rejection, local disk roundtrip, complete write/close, and write/close failure abort.\n')
+process.stdout.write('Project file IO acceptance passed: canonical open, invalid-file rejection, local disk roundtrip, write/close ordering, permission restore/denial, and failure abort.\n')

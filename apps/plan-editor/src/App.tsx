@@ -111,12 +111,17 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [replacementBaselineJson, setReplacementBaselineJson] = useState<string | null>(projectJson)
   const [localAutosaveReady, setLocalAutosaveReady] = useState(false)
   const [localAutosaveState, setLocalAutosaveState] = useState<'restoring' | 'saving' | 'saved' | 'error'>('restoring')
+  const [activeProjectFileHandle, setActiveProjectFileHandle] = useState<LocalProjectFileHandle | null>(null)
   const [isProjectNameEditing, setIsProjectNameEditing] = useState(false)
   const [projectNameDraft, setProjectNameDraft] = useState(project.project.name)
   const [fileFeedback, setFileFeedback] = useState('')
   const supportsProjectFileOpen = typeof fileWindow.showOpenFilePicker === 'function'
   const projectSessionRef = useRef<ProjectCommandSession | null>(null)
   const activeProjectFileHandleRef = useRef<LocalProjectFileHandle | null>(null)
+  const updateActiveProjectFileHandle = (handle: LocalProjectFileHandle | null) => {
+    activeProjectFileHandleRef.current = handle
+    setActiveProjectFileHandle(handle)
+  }
   if (!projectSessionRef.current) projectSessionRef.current = new ProjectCommandSession(project)
   useEffect(() => {
     let active = true
@@ -131,6 +136,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         setProjectState(restored)
         setSavedProjectJson(snapshot.savedProjectJson)
         setReplacementBaselineJson(snapshot.replacementBaselineJson)
+        updateActiveProjectFileHandle(snapshot.fileHandle ?? null)
         setCommandQueue([])
         setSelectedId(null)
         setFileFeedback(`กู้คืนงานในเครื่องเมื่อ ${new Date(snapshot.savedAt).toLocaleString()}`)
@@ -154,7 +160,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     const persistSnapshot = () => {
       if (saving) return
       saving = true
-      void saveLocalProjectSnapshot({ projectJson, savedProjectJson, replacementBaselineJson })
+      void saveLocalProjectSnapshot({ projectJson, savedProjectJson, replacementBaselineJson, fileHandle: activeProjectFileHandle })
         .then(() => {
           setLocalAutosaveState('saved')
         })
@@ -169,7 +175,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       window.clearTimeout(timer)
       window.removeEventListener('pagehide', persistSnapshot)
     }
-  }, [localAutosaveReady, projectJson, savedProjectJson, replacementBaselineJson])
+  }, [localAutosaveReady, projectJson, savedProjectJson, replacementBaselineJson, activeProjectFileHandle])
   const setProject = (next: ProjectDocument | ((current: ProjectDocument) => ProjectDocument)) => {
     const updated = typeof next === 'function' ? next(project) : next
     projectSessionRef.current!.commit(updated)
@@ -1326,7 +1332,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     a.remove()
     setSavedProjectJson(json)
     setReplacementBaselineJson(json)
-    activeProjectFileHandleRef.current = null
+    updateActiveProjectFileHandle(null)
     setFileFeedback(`ส่งคำขอดาวน์โหลด ${filename} แล้ว`)
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
@@ -1364,7 +1370,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           types: [{ description: 'ConstructFlow Project', accept: { 'application/json': ['.cfproj'] } }],
         })
         await writeProjectFile(handle, json)
-        activeProjectFileHandleRef.current = handle
+        updateActiveProjectFileHandle(handle)
         setSavedProjectJson(json)
         setReplacementBaselineJson(json)
         setFileFeedback(`บันทึกไฟล์ ${filename} แล้ว`)
@@ -1374,7 +1380,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       }
       return
     }
-    activeProjectFileHandleRef.current = null
+    updateActiveProjectFileHandle(null)
     handleDownloadProjectCopy()
   }
 
@@ -1460,7 +1466,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       const { project: loaded, serialized: loadedJson } = await readProjectFile(file)
       if (!confirmReplaceUnsavedProject()) return
       projectSessionRef.current!.reset(loaded)
-      activeProjectFileHandleRef.current = fileHandle
+      updateActiveProjectFileHandle(fileHandle)
       setProjectState(loaded)
       setSavedProjectJson(loadedJson)
       setReplacementBaselineJson(loadedJson)
@@ -1495,7 +1501,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       return
     }
     projectSessionRef.current!.reset(generated.updatedProject)
-    activeProjectFileHandleRef.current = null
+    updateActiveProjectFileHandle(null)
     setProjectState(generated.updatedProject)
     setSavedProjectJson(null)
     setReplacementBaselineJson(serializeProject(generated.updatedProject))
@@ -1510,7 +1516,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     try {
       const restored = deserializeProject(houseDemoRaw)
       projectSessionRef.current!.reset(restored)
-      activeProjectFileHandleRef.current = null
+      updateActiveProjectFileHandle(null)
       setProjectState(restored)
       setSavedProjectJson(null)
       setReplacementBaselineJson(serializeProject(restored))
@@ -1658,7 +1664,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           ) : (
             <label htmlFor="cfproj-open" role="button" tabIndex={0} className="cf-button cf-button-quiet" onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); document.getElementById('cfproj-open')?.click() } }}><FolderOpen size={16} /><span>เปิด</span></label>
           )}
-          <button type="button" className="cf-button cf-button-primary" onClick={() => void handleSaveProject()} title={activeProjectFileHandleRef.current ? 'บันทึกกลับไปยังไฟล์โครงการที่เปิดอยู่' : 'บันทึกงานในเบราว์เซอร์เครื่องนี้'}><Save size={16} /><span>บันทึก</span></button>
+          <button type="button" className="cf-button cf-button-primary" onClick={() => void handleSaveProject()} title={activeProjectFileHandle ? 'บันทึกกลับไปยังไฟล์โครงการที่เปิดอยู่' : 'บันทึกงานในเบราว์เซอร์เครื่องนี้'}><Save size={16} /><span>บันทึก</span></button>
           <details className="cf-save-menu" onClick={(event) => {
             if ((event.target as HTMLElement).closest('button')) event.currentTarget.open = false
           }}>

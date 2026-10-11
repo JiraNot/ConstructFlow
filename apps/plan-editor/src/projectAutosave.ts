@@ -1,5 +1,6 @@
 import { deserializeProject, serializeProject } from '@constructflow/project-model'
 import { validateConstructionProject } from '@constructflow/domain-providers'
+import type { LocalProjectFileHandle } from './projectFileIO.js'
 
 const DATABASE_NAME = 'constructflow-local-projects'
 const DATABASE_VERSION = 1
@@ -10,6 +11,7 @@ export interface LocalProjectSnapshot {
   projectJson: string
   savedProjectJson: string | null
   replacementBaselineJson: string | null
+  fileHandle?: LocalProjectFileHandle | null
   savedAt: number
 }
 
@@ -49,6 +51,7 @@ export async function loadLocalProjectSnapshot(): Promise<LocalProjectSnapshot |
           projectJson: serializeProject(project),
           savedProjectJson: typeof value.savedProjectJson === 'string' ? value.savedProjectJson : null,
           replacementBaselineJson: typeof value.replacementBaselineJson === 'string' ? value.replacementBaselineJson : null,
+          fileHandle: isProjectFileHandle(value.fileHandle) ? value.fileHandle : null,
           savedAt: Number.isFinite(value.savedAt) ? value.savedAt : Date.now(),
         })
       } catch (error) {
@@ -61,13 +64,29 @@ export async function loadLocalProjectSnapshot(): Promise<LocalProjectSnapshot |
   })
 }
 
+function isProjectFileHandle(value: unknown): value is LocalProjectFileHandle {
+  if (!value || typeof value !== 'object') return false
+  const handle = value as Partial<LocalProjectFileHandle>
+  return typeof handle.getFile === 'function' && typeof handle.createWritable === 'function'
+}
+
 export async function saveLocalProjectSnapshot(snapshot: Omit<LocalProjectSnapshot, 'savedAt'>): Promise<void> {
   const database = await openDatabase()
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, 'readwrite')
-    transaction.objectStore(STORE_NAME).put({ ...snapshot, savedAt: Date.now() } satisfies LocalProjectSnapshot, ACTIVE_PROJECT_KEY)
+    const fileHandle = snapshot.fileHandle ? cloneFileHandle(snapshot.fileHandle) : null
+    transaction.objectStore(STORE_NAME).put({ ...snapshot, fileHandle, savedAt: Date.now() } satisfies LocalProjectSnapshot, ACTIVE_PROJECT_KEY)
     transaction.oncomplete = () => { database.close(); resolve() }
     transaction.onerror = () => { database.close(); reject(transaction.error ?? new Error('บันทึกงานในเครื่องไม่สำเร็จ')) }
     transaction.onabort = () => { database.close(); reject(transaction.error ?? new Error('บันทึกงานในเครื่องถูกยกเลิก')) }
   })
+}
+
+function cloneFileHandle(handle: LocalProjectFileHandle): LocalProjectFileHandle | null {
+  try {
+    return typeof structuredClone === 'function' ? structuredClone(handle) : null
+  } catch {
+    // Test adapters and browsers that cannot persist handles still keep the project snapshot.
+    return null
+  }
 }

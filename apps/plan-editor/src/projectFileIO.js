@@ -10,6 +10,11 @@ export async function readProjectFile(file) {
 
 /** Persist one complete project snapshot through the browser's local file handle. */
 export async function writeProjectFile(handle, serializedProject) {
+  const permission = await handle.queryPermission?.({ mode: 'readwrite' })
+  if (permission && permission !== 'granted') {
+    const requested = await handle.requestPermission?.({ mode: 'readwrite' })
+    if (requested !== 'granted') throw new Error('เบราว์เซอร์ยังไม่ได้อนุญาตให้เขียนไฟล์โครงการ')
+  }
   const writable = await handle.createWritable()
   try {
     await writable.write(serializedProject)
