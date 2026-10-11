@@ -193,10 +193,22 @@ test("bim-adapter: preserves hosted opening UUIDs and resolves offsets along ang
     level_refs: [], relationships: [],
     module_data: { wall_id: "wall-uuid", offset_along_wall_mm: 2500, width_mm: 1200, height_mm: 1100, sill_height_mm: 900 },
   };
+  project.objects.door = {
+    id: "door-uuid", object_type: "door_window.door", created_phase: "new_construction",
+    level_refs: [], relationships: [],
+    module_data: { wall_id: "wall-uuid", location_mm: [2000, 2750, 300], width_mm: 900, height_mm: 2100 },
+  };
 
-  const window = serializeRevitTransfer(project).elements.openings[0];
+  const openings = serializeRevitTransfer(project).elements.openings;
+  const window = openings.find(opening => opening.cf_uuid === "window-uuid");
+  const door = openings.find(opening => opening.cf_uuid === "door-uuid");
+  assert.equal(door.category, "Door");
+  assert.equal(door.host_wall_uuid, "wall-uuid");
   assert.equal(window.cf_uuid, "window-uuid");
   assert.equal(window.host_wall_uuid, "wall-uuid");
   assert.equal(window.category, "Window");
   assert.deepEqual(window.location_on_host_mm, [3000, 3500, 1200]);
+  const ifc = exportProjectToIfc(project).ifcContent;
+  assert.ok(ifc.includes("=IFCDOOR("), "canonical door family exports as IFC Door");
+  assert.ok(ifc.includes("=IFCWINDOW("), "canonical window family exports as IFC Window");
 });
