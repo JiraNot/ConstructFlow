@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'existing_conflict_scan'
 require_relative 'construction_output_settlement'
 require_relative 'construction_issue_history_store'
 
@@ -51,6 +52,7 @@ module JiraNot
               'status' => 'preview',
               'construction_intent' => intent_trace,
               'execution' => execution,
+              'conflict_scan' => nil,
               'quality_gate' => nil,
               'takeoff' => nil,
               'drawing_refresh' => [].freeze,
@@ -64,10 +66,12 @@ module JiraNot
           end
 
           takeoff = ConstructionTakeoff.new(runtime: @runtime).build(extension.id)
+          conflict_scan = ExistingConflictScan.new(runtime: @runtime).run(extension_id: extension.id)
           quality = ConstructionQualityGate.new(runtime: @runtime).run(
             extension_id: extension.id,
             execution: execution,
             takeoff: takeoff,
+            conflict_scan: conflict_scan,
             strict: strict == true
           )
 
@@ -137,6 +141,7 @@ module JiraNot
             'status' => status,
             'construction_intent' => intent_trace,
             'execution' => execution,
+            'conflict_scan' => conflict_scan,
             'quality_gate' => quality,
             'takeoff' => takeoff,
             'drawing_refresh' => drawing_refresh.freeze,

@@ -17,7 +17,7 @@ module JiraNot
           @structure_repository = Structure::Repository.new
         end
 
-        def run(extension_id:, execution:, takeoff: nil, strict: false)
+        def run(extension_id:, execution:, takeoff: nil, conflict_scan: nil, strict: false)
           source = @runtime.smart_objects.fetch_by_id(extension_id.to_s)
           raise ArgumentError, 'extension zone not found' unless source && source.type == 'extension.zone'
 
@@ -26,6 +26,7 @@ module JiraNot
           issues.concat(execution_issues(execution))
           issues.concat(source_state_issues(ids, strict: strict))
           issues.concat(structure_approval_issues(ids, strict: strict))
+          issues.concat(existing_conflict_issues(conflict_scan, strict: strict)) if conflict_scan
           issues.concat(rainwater_issues(ids, strict: strict))
           issues.concat(drainage_completeness_issues(ids, execution, strict: strict))
           issues.concat(drainage_issues(ids))
@@ -118,6 +119,25 @@ module JiraNot
             issue(
               'construction.structure.definition_review_failed', 'error', object,
               "structure approval check failed: #{error.message}"
+            )
+          end
+        end
+
+        # Existing construction that still overlaps the Extension footprint is
+        # unresolved by definition: the scan never demolishes or relocates, so the
+        # gate only reports it until a human resolves the intent.
+        def existing_conflict_issues(conflict_scan, strict:)
+          Array(conflict_scan && conflict_scan['conflicts']).map do |conflict|
+            object = @runtime.smart_objects.fetch_by_id(conflict['object_id'].to_s)
+            issue(
+              conflict['rule_id'] || 'extension.existing_conflict.unresolved',
+              strict ? 'error' : 'warning',
+              object,
+              conflict['message'] || 'existing construction conflicts with Extension footprint',
+              domain: conflict['domain'],
+              conflict_kind: conflict['conflict_kind'],
+              state: conflict['state'],
+              evidence: conflict['evidence']
             )
           end
         end

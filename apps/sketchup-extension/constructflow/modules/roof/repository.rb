@@ -7,6 +7,7 @@ module JiraNot
         DICTIONARY = 'constructflow.roof'
         ROOF_KEY = 'roof_definition'
         GUTTER_KEY = 'gutter_definition'
+        JUNCTION_KEY = 'roof_junction_definition'
 
         def read_roof(entity)
           payload = Core::AttributeStore.new(entity).read_json(ROOF_KEY, nil, dictionary: DICTIONARY)
@@ -29,6 +30,18 @@ module JiraNot
           raise ArgumentError, 'GutterDefinition required' unless definition.is_a?(GutterDefinition)
 
           Core::AttributeStore.new(entity).write_json(GUTTER_KEY, definition.to_h, dictionary: DICTIONARY)
+          definition
+        end
+
+        def read_junction(entity)
+          payload = Core::AttributeStore.new(entity).read_json(JUNCTION_KEY, nil, dictionary: DICTIONARY)
+          payload ? RoofJunctionDefinition.from_h(payload) : nil
+        end
+
+        def write_junction(entity, definition)
+          raise ArgumentError, 'RoofJunctionDefinition required' unless definition.is_a?(RoofJunctionDefinition)
+
+          Core::AttributeStore.new(entity).write_json(JUNCTION_KEY, definition.to_h, dictionary: DICTIONARY)
           definition
         end
       end
