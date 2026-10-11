@@ -184,12 +184,59 @@ export function renderPlanView(
     }
   }
 
-  // 3. Structural Grid Lines & Bubbles
-  for (const out of constructionOutputs(sourceProject).filter(out=>!!project.objects[out.object_id])) {
+  // 3. Structural/architectural domain linework for the active level
+  for (const out of constructionOutputs(sourceProject).filter(out => {
+    const object = project.objects[out.object_id]
+    if (!object) return false
+    const data = object.module_data as Record<string, unknown>
+    const objectLevelId = typeof data.level_id === 'string'
+      ? data.level_id
+      : object.level_refs.find(reference => ['host_level', 'base', 'base_level'].includes(reference.role))?.level_id
+    return !activeLevelId || !objectLevelId || objectLevelId === activeLevelId
+  })) {
     const phase=out.removed_phase==='demolition'?'demolition':out.phase
-    ctx.save();ctx.strokeStyle=isSelected(out.object_id)?'#fbbf24':phase==='demolition'?'#ef4444':phase==='existing'?'#94a3b8':'#38bdf8'
-    ctx.lineWidth=phase==='new_construction'?2:1;ctx.setLineDash(phase==='demolition'?[6,3]:[])
-    const lines=[...out.paths,...out.meshes.map(t=>[...t,t[0]])]
+    const outputObject = project.objects[out.object_id]
+    const family = outputObject?.object_type ?? ''
+    ctx.save();ctx.strokeStyle=isSelected(out.object_id)?'#fbbf24':phase==='demolition'?'#ef4444':phase==='existing'?'#94a3b8':family==='architecture.bathroom'?'#94a3b8':'#334155'
+    ctx.lineWidth=family==='architecture.bathroom'?0.8:phase==='new_construction'?1.4:1;ctx.setLineDash(phase==='demolition'?[6,3]:[])
+    if (family === 'structure.slab') {
+      const data = outputObject?.module_data as Record<string, unknown> | undefined
+      const boundary = data?.boundary_mm as [number, number][] | undefined
+      const voids = (data?.voids_mm as [number, number][][] | undefined) ?? []
+      if (boundary && boundary.length >= 3) {
+        ctx.beginPath()
+        for (const ring of [boundary, ...voids]) {
+          ring.forEach((point, index) => {
+            const [x, y] = worldToScreen(point, viewport)
+            if (index === 0) ctx.moveTo(x, y)
+            else ctx.lineTo(x, y)
+          })
+          ctx.closePath()
+        }
+        ctx.fillStyle = phase === 'demolition' ? 'rgba(239,68,68,.08)' : 'rgba(148,163,184,.12)'
+        ctx.fill('evenodd')
+      }
+    }
+    // Triangle meshes are for 3D/quantity calculations. Projecting every triangle
+    // edge into plan creates meaningless diagonals across slabs and stairs.
+    let lines = out.paths
+    if (outputObject?.object_type === 'structure.slab') {
+      lines = out.paths.map(path => path.length ? [...path, path[0]] : path)
+    }
+    if (outputObject?.object_type === 'architecture.bathroom') {
+      // The bathroom provider starts with one drain-to-edge slope ray per boundary
+      // edge. Those rays belong in slope/3D analysis, not as plan linework. Keep the
+      // actual room perimeter and tile joints in the plan.
+      const data = outputObject.module_data as Record<string, unknown>
+      const boundary = data.boundary_mm as [number, number][] | undefined
+      const drain = data.drain_mm as [number, number] | undefined
+      if (boundary?.length && drain?.length) {
+        const z = Number(data.elevation_mm ?? 0) - Number(data.drop_mm ?? 0)
+        const perimeter = [...boundary, boundary[0]].map(point => [point[0], point[1], z] as [number, number, number])
+        const tileLines = out.paths.slice(boundary.length)
+        lines = [perimeter, ...tileLines]
+      }
+    }
     const seen=new Set<string>()
     for(const points of lines){const key=points.map(v=>v.slice(0,2).join(',')).join('|');if(seen.has(key))continue;seen.add(key);ctx.beginPath();points.forEach((p,i)=>{const [x,y]=worldToScreen([p[0],p[1]],viewport);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y)});ctx.stroke()}
     const anchor=lines[0]?.[0];if(anchor && labelVisibility.structure){const [x,y]=worldToScreen([anchor[0],anchor[1]],viewport);ctx.font='11px sans-serif';const family=project.objects[out.object_id]?.object_type ?? '';const shape=family.endsWith('.ceiling')?'ellipse':'rect';queuePlanLabel(ctx,x+4,y-12,out.mark,String(ctx.strokeStyle),'#c7d3df',isSelected(out.object_id)?10:0,'#fbfdff',false,shape)}

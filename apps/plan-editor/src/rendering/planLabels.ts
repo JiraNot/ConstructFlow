@@ -6,12 +6,10 @@ interface PlanLabel {
 export type PlanLabelShape = PlanLabel['shape']
 
 export function planLabelScale(zoom: number) {
-  const safeZoom = Math.max(zoom, 0.0001)
-  // Keep the standard tag size at 100%; grow only gradually on closer views,
-  // with a readable floor when zoomed far out and a cap for detailed plans.
-  return safeZoom < 0.1
-    ? Math.max(0.85, safeZoom / 0.1)
-    : Math.min(1.35, 1 + (safeZoom - 0.1) * 1.25)
+  // Plan annotations are screen-space UI. Model zoom changes geometry, never
+  // the readable size of labels, grid bubbles, or opening tags.
+  void zoom
+  return 1
 }
 
 const frames = new WeakMap<CanvasRenderingContext2D, PlanLabel[]>()

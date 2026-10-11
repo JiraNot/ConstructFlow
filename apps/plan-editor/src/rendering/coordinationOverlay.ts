@@ -76,8 +76,9 @@ export function drawCoordinationPrimitives(
     ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
     primitive.lines.forEach((line, index) => {
-      ctx.font = index === 0 ? 'bold 10px sans-serif' : '10px sans-serif'
-      ctx.fillText(line, primitive.x + 12, primitive.y - primitive.height + 6 + index * 13)
+      ctx.font = index === 0 ? 'bold 11px sans-serif' : '11px sans-serif'
+      const maxWidth = Math.max(0, primitive.width - 14)
+      ctx.fillText(line, primitive.x + 12, primitive.y - primitive.height + 7 + index * 14, maxWidth)
     })
   }
   ctx.restore()

@@ -42,7 +42,8 @@ function selectFindings(findings, options) {
   const allowedSeverities = options.severities ? new Set(options.severities) : null
   const wanted = options.objectIds?.length ? new Set(options.objectIds) : null
   const filtered = findings.filter(finding =>
-    (!allowedSeverities || allowedSeverities.has(finding.severity))
+    (options.includeGenericSweep === true || finding.rule_id !== 'CF-CL-GEN-999')
+    && (!allowedSeverities || allowedSeverities.has(finding.severity))
     && (!wanted || finding.objects.some(object => wanted.has(object.object_id))))
   const ordered = [...filtered].sort((left, right) =>
     SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity] || String(left.id).localeCompare(String(right.id)))

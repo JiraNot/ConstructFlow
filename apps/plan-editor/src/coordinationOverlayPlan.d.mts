@@ -17,6 +17,8 @@ export interface CoordinationOverlayOptions {
   severities?: readonly ClashSeverity[]
   /** Restrict to findings that touch at least one of these object UUIDs. */
   objectIds?: readonly string[]
+  /** Include the broad catch-all sweep on canvas; hidden by default to reduce false-positive noise. */
+  includeGenericSweep?: boolean
   /** Hide on-canvas badges (the inspector panel still lists everything). */
   showLabels?: boolean
   /** Upper bound on rendered findings, worst severity first. */
