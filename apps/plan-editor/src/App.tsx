@@ -22,6 +22,7 @@ import {
   resolveSlabElevation,
   type DisplayLengthUnit,
   type StairModuleData,
+  type RoofModuleData,
 } from '@constructflow/project-model'
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
 import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
@@ -209,11 +210,12 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
-  const [viewMode, setViewMode] = useState<'plan' | 'framing' | ElevationDirection | 'model3d'>('plan')
+  const [viewMode, setViewMode] = useState<'plan' | 'framing' | 'roofplan' | ElevationDirection | 'model3d'>('plan')
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
     if (['beam', 'foundation'].includes(activeTool)) setViewMode('framing')
-    else if (['stair', 'wall', 'door', 'window', 'archFloor', 'slab', 'ceiling', 'roomSeparator'].includes(activeTool)) setViewMode('plan')
+    else if (activeTool === 'roof') setViewMode('roofplan')
+    else if (['stair', 'wall', 'door', 'window', 'archFloor', 'slab', 'ceiling', 'roomSeparator', 'pipe', 'fixture', 'cabinet', 'moulding'].includes(activeTool)) setViewMode('plan')
   }, [activeTool])
   const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
   const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
@@ -405,6 +407,16 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         if (canCalibrateUnderlayRef.current) setActiveTool('calibrate')
       } else if (e.key === 't' || e.key === 'T') {
         setActiveTool('stair')
+      } else if (e.key === 'q' || e.key === 'Q') {
+        setActiveTool('roof')
+      } else if (e.key === 'u' || e.key === 'U') {
+        setActiveTool('pipe')
+      } else if (e.key === 'l' || e.key === 'L') {
+        setActiveTool('fixture')
+      } else if (e.key === 'k' || e.key === 'K') {
+        setActiveTool('cabinet')
+      } else if (e.key === 'j' || e.key === 'J') {
+        setActiveTool('moulding')
       } else if (e.key === 'p' || e.key === 'P') {
         setActiveTool('slab')
       }
@@ -647,6 +659,93 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       if (created) setSelectedId(created)
       if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
     } else setFileFeedback(result.result.errors?.join(' · ') ?? 'คำสั่งไม่สำเร็จ')
+  }
+  const handleCommitRoof = (boundary_mm: [number, number][], options: { shape: 'hip' | 'gable' | 'flat'; slope_deg: number; thickness_mm: number; elevation_offset_mm: number; material: string } = { shape: 'hip', slope_deg: 25, thickness_mm: 30, elevation_offset_mm: 2800, material: 'metal_sheet' }) => {
+    const level = project.levels.find(item => item.id === project.project.active_level_id)
+    if (!level || boundary_mm.length < 3) return
+    if (options.shape === 'gable' && boundary_mm.length !== 4) {
+      setFileFeedback('หลังคาจั่วต้องวาดขอบเขต 4 จุด · เปลี่ยนเป็นปั้นหยา/ดาดฟ้าสำหรับรูปหลายด้าน')
+      return
+    }
+    runArchitectureCommand('GenerateRoof', {
+      id: crypto.randomUUID(), mark: 'R1', level_id: level.id,
+      created_phase: 'new_construction', boundary_mm, voids_mm: [],
+      elevation_mm: level.elevation_mm + Number(options.elevation_offset_mm),
+      edges: boundary_mm.map((_, index) => {
+        const defines_slope = options.shape === 'flat' ? false : options.shape === 'gable' ? index % 2 === 0 : true
+        return { defines_slope, slope_deg: defines_slope ? options.slope_deg : 0 }
+      }),
+      material: options.material, thickness_mm: options.thickness_mm,
+    })
+  }
+  const handleUpdateRoof = (objectId: string, changes: Partial<RoofModuleData>) => {
+    const object = project.objects[objectId]
+    if (!object || object.object_type !== 'roof.system') return
+    const result = CommandBus.execute(project, 'UpdateRoof', { ...object.module_data, ...changes, id: objectId })
+    if (result.result.status === 'success') {
+      setProject(result.updatedProject)
+      if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
+    } else if (result.result.errors?.length) setFileFeedback(result.result.errors.join(' · '))
+  }
+  const handleUpdateDomainObject = (objectId: string, commandName: string, changes: object) => {
+    const object = project.objects[objectId]
+    if (!object) return
+    const result = CommandBus.execute(project, commandName, { ...(object.module_data as Record<string, unknown>), ...changes, id: objectId })
+    if (result.result.status === 'success') {
+      setProject(result.updatedProject)
+      if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
+    } else if (result.result.errors?.length) setFileFeedback(result.result.errors.join(' · '))
+  }
+  const handleCommitPipeRoute = (start: [number, number], end: [number, number], system: 'waste' | 'soil' | 'rainwater' | 'vent' | 'cold_water' | 'hot_water') => {
+    const level = project.levels.find(item => item.id === project.project.active_level_id)
+    const runMm = Math.hypot(end[0] - start[0], end[1] - start[1])
+    if (!level || runMm < 50) return
+    const gravity = ['waste', 'soil', 'rainwater'].includes(system)
+    const startZ = system === 'rainwater' || system === 'vent'
+      ? level.elevation_mm + Number(level.height_mm ?? 2800)
+      : gravity ? level.elevation_mm - 300 : level.elevation_mm + 2200
+    const endZ = gravity ? startZ - runMm * 0.01 : startZ
+    runArchitectureCommand('CreatePipeRoute', {
+      id: crypto.randomUUID(), mark: ({ waste: 'WST1', soil: 'ST1', rainwater: 'RW1', vent: 'V1', cold_water: 'CW1', hot_water: 'HW1' } as const)[system],
+      level_id: level.id, created_phase: 'new_construction', system,
+      nodes_mm: [[start[0], start[1], startZ], [end[0], end[1], endZ]],
+      diameter_mm: ({ waste: 50, soil: 100, rainwater: 75, vent: 50, cold_water: 20, hot_water: 20 } as const)[system],
+      start_node_id: '', end_node_id: '', start_invert_mm: gravity ? startZ : null,
+      end_invert_mm: gravity ? endZ : null, minimum_slope_ratio: gravity ? 0.01 : 0,
+      material: system === 'cold_water' || system === 'hot_water' ? 'PPR' : 'PVC',
+    })
+  }
+  const handleCommitFixture = (point: [number, number], kind: 'light' | 'switch' | 'outlet' | 'panel') => {
+    const level = project.levels.find(item => item.id === project.project.active_level_id)
+    if (!level) return
+    const zOffset = kind === 'light' ? Number(level.height_mm ?? 2800) - 100 : kind === 'panel' ? 1500 : kind === 'outlet' ? 300 : 1100
+    runArchitectureCommand('PlaceElectricalFixture', {
+      id: crypto.randomUUID(), mark: ({ light: 'L1', switch: 'S1', outlet: 'O1', panel: 'DB1' } as const)[kind],
+      level_id: level.id, created_phase: 'new_construction', location_mm: [point[0], point[1], level.elevation_mm + zOffset],
+      kind, watts: kind === 'light' ? 12 : 0, controlled_ids: [], switch_ways: 1, grounded: kind === 'outlet' || kind === 'panel',
+    })
+  }
+  const handleCommitCabinet = (start: [number, number], end: [number, number]) => {
+    const level = project.levels.find(item => item.id === project.project.active_level_id)
+    const width = Math.hypot(end[0] - start[0], end[1] - start[1])
+    if (!level || width < 100) return
+    runArchitectureCommand('CreateCabinetRun', {
+      id: crypto.randomUUID(), mark: 'CB1', level_id: level.id, created_phase: 'new_construction',
+      location_mm: [start[0], start[1], level.elevation_mm], width_mm: width, height_mm: 850, depth_mm: 600,
+      board_mm: 18, back_mm: 6, plinth_mm: 100, rotation_deg: Math.atan2(end[1] - start[1], end[0] - start[0]) * 180 / Math.PI,
+      modules_mm: [width], shelves: 2, drawers: 0, front: 'solid', carcass_material: 'plywood', front_material: 'laminate',
+      back_material: 'plywood', countertop_material: 'quartz', countertop_mm: 30,
+    })
+  }
+  const handleCommitMoulding = (start: [number, number], end: [number, number]) => {
+    const level = project.levels.find(item => item.id === project.project.active_level_id)
+    if (!level || Math.hypot(end[0] - start[0], end[1] - start[1]) < 50) return
+    const z = level.elevation_mm + Number(level.height_mm ?? 2800) - 100
+    runArchitectureCommand('CreateMouldingRun', {
+      id: crypto.randomUUID(), mark: 'SK1', level_id: level.id, created_phase: 'new_construction',
+      path_mm: [[start[0], start[1], z], [end[0], end[1], z]],
+      profile_mm: [[0, 0], [15, 0], [15, 80], [0, 80]], closed: false, miter_limit: 4, material: 'painted_wood',
+    })
   }
   const handleCommitArchitecturalFloor = (boundary_mm: [number, number][]) => {
     const level=project.levels.find(item=>item.id===project.project.active_level_id);if(!level)return
@@ -982,9 +1081,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     const data = object.module_data as Record<string, unknown>
     const command = object.object_type === 'structure.slab' ? 'UpdateSlab'
       : object.object_type === 'architecture.floor' ? 'UpdateArchitecturalFloor'
-        : object.object_type === 'architecture.ceiling' ? 'UpdateCeiling' : null
+      : object.object_type === 'architecture.ceiling' ? 'UpdateCeiling'
+        : object.object_type === 'roof.system' ? 'UpdateRoof' : null
     if (!command) return
-    const input = object.object_type === 'structure.slab'
+    const input = object.object_type === 'structure.slab' || object.object_type === 'roof.system'
       ? { ...data, id: objectId, boundary_mm }
       : { ...data, id: objectId, boundary_mm, follows_room_boundary: false }
     const res = CommandBus.execute(project, command, input)
@@ -1887,13 +1987,13 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         <main className="cf-canvas-shell">
           <div className="cf-view-switch">
             {([
-              ['plan', 'แปลนพื้น'], ['framing', 'แปลนคาน'], ['north', 'รูปด้านเหนือ'], ['south', 'รูปด้านใต้'],
+              ['plan', 'แปลนพื้น'], ['framing', 'แปลนคาน'], ['roofplan', 'แปลนหลังคา'], ['north', 'รูปด้านเหนือ'], ['south', 'รูปด้านใต้'],
               ['east', 'รูปด้านตะวันออก'], ['west', 'รูปด้านตะวันตก'], ['rcp', 'แปลนฝ้า RCP'], ['model3d', '3D ดูตัวอย่าง'],
             ] as const).map(([mode, label]) => (
               <button key={mode} type="button" onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>{label}</button>
             ))}
             {viewMode === 'plan' && <button type="button" onClick={handleDetectRooms} title="ค้นหาห้องจากวงผนังปิด">ตรวจจับห้อง</button>}
-            {(viewMode === 'plan' || viewMode === 'framing') && <details className="cf-label-menu" onClick={event => {
+            {(viewMode === 'plan' || viewMode === 'framing' || viewMode === 'roofplan') && <details className="cf-label-menu" onClick={event => {
               if ((event.target as HTMLElement).closest('input')) event.stopPropagation()
             }}>
               <summary title="การแสดงป้ายและระยะ" aria-label="การแสดงป้ายและระยะ"><Tag size={15} aria-hidden="true" /></summary>
@@ -1921,9 +2021,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
           {/* Interactive Plan Canvas */}
           <div className="cf-viewport-stage">
-            {viewMode === 'plan' || viewMode === 'framing' ? <PlanCanvas
+            {viewMode === 'plan' || viewMode === 'framing' || viewMode === 'roofplan' ? <PlanCanvas
               project={project}
-              planDiscipline={viewMode === 'framing' ? 'framing' : 'architecture'}
+              planDiscipline={viewMode === 'framing' ? 'framing' : viewMode === 'roofplan' ? 'roof' : 'architecture'}
               displayUnit={displayUnit}
               activeTool={activeTool}
               activeColumnTypeMark={activeColumnType}
@@ -1964,6 +2064,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               onCommitSlab={handleCommitSlab}
               onCommitArchitecturalFloor={handleCommitArchitecturalFloor}
               onCommitCeiling={handleCommitCeiling}
+              onCommitRoof={handleCommitRoof}
+              onCommitPipeRoute={handleCommitPipeRoute}
+              onCommitFixture={handleCommitFixture}
+              onCommitCabinet={handleCommitCabinet}
+              onCommitMoulding={handleCommitMoulding}
               onCommitRoomSeparator={handleCommitRoomSeparator}
               onCommitSurfaceVoid={handleCommitSurfaceVoid}
               onCommitGrid={handleCommitGrid}
@@ -2069,6 +2174,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             onUpdateBeamVerticalReference={handleUpdateBeamVerticalReference}
             onUpdateArchitectureSurface={handleUpdateArchitectureSurface}
             onUpdateSlab={handleUpdateSlab}
+            onUpdateRoof={handleUpdateRoof}
+            onUpdatePipeRoute={(id, changes) => handleUpdateDomainObject(id, 'EditPipeRoute', changes)}
+            onUpdateElectricalFixture={(id, changes) => handleUpdateDomainObject(id, 'UpdateElectricalFixture', changes)}
+            onUpdateCabinet={(id, changes) => handleUpdateDomainObject(id, 'UpdateCabinetRun', changes)}
+            onUpdateMoulding={(id, changes) => handleUpdateDomainObject(id, 'UpdateMouldingRun', changes)}
             onUpdateStair={handleUpdateStair}
             onUpdateFoundationMark={handleUpdateFoundationMark}
             onUpdateGridTag={handleUpdateGridTag}

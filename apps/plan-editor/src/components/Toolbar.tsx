@@ -16,6 +16,7 @@ import {
   Trash2,
   Eraser,
   Layers,
+  House,
 } from 'lucide-react'
 
 const panelLayoutLabel = (layout?: string[]) => layout && layout.length > 1
@@ -37,6 +38,11 @@ export type ToolType =
   | 'slabVoid'
   | 'archFloor'
   | 'ceiling'
+  | 'roof'
+  | 'pipe'
+  | 'fixture'
+  | 'cabinet'
+  | 'moulding'
   | 'roomSeparator'
   | 'stair'
   | 'grid'
@@ -123,6 +129,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     { id: 'slab', label: 'พื้น (P)', icon: <Layers size={16} />, shortcut: 'P' },
     { id: 'archFloor', label: 'พื้นสถาปัตย์ (Shift+P)', icon: <Layers size={16} />, shortcut: 'Shift+P' },
     { id: 'ceiling', label: 'ฝ้าเพดาน (Shift+C)', icon: <Layers size={16} />, shortcut: 'Shift+C' },
+    { id: 'roof', label: 'หลังคา (Q)', icon: <House size={16} />, shortcut: 'Q' },
+    { id: 'pipe', label: 'แนวท่อ (U)', icon: <Minus size={16} />, shortcut: 'U' },
+    { id: 'fixture', label: 'อุปกรณ์ไฟฟ้า (L)', icon: <Layers size={16} />, shortcut: 'L' },
+    { id: 'cabinet', label: 'บิลท์อิน (K)', icon: <Square size={16} />, shortcut: 'K' },
+    { id: 'moulding', label: 'แนวบัว (J)', icon: <Minus size={16} />, shortcut: 'J' },
     { id: 'roomSeparator', label: 'เส้นแบ่งห้อง (Shift+R)', icon: <Minus size={16} />, shortcut: 'Shift+R' },
     {
       id: 'stair',

@@ -280,6 +280,24 @@ test('plan visibility filters objects by active level while showing spanning col
   assert.equal(firstFloor.filter(object => object.object_type.startsWith('door_window.')).length, 0)
 })
 
+test('roof footprints are selectable on roof plans and stay out of floor and framing plans', () => {
+  const project = structuredClone(fixture)
+  project.project.active_level_id = 'L2'
+  const template = Object.values(project.objects).find(object => object.object_type === 'architecture.wall')
+  project.objects['roof-plan'] = {
+    ...structuredClone(template), id: 'roof-plan', object_type: 'roof.system', owner_module: 'constructflow.roof',
+    module_data: {
+      mark: 'R1', level_id: 'L2', elevation_mm: 6000, thickness_mm: 30, material: 'metal_sheet',
+      boundary_mm: [[0, 0], [4000, 0], [4000, 3000], [0, 3000]],
+      edges: Array.from({ length: 4 }, () => ({ defines_slope: true, slope_deg: 25 })),
+    },
+  }
+  assert.ok(!getPlanVisibleObjects(project, 'architecture').some(object => object.id === 'roof-plan'))
+  assert.ok(getPlanVisibleObjects(project, 'roof').some(object => object.id === 'roof-plan'))
+  assert.ok(getPlanViewProject(project, getPlanVisibleObjects(project, 'roof')).objects['roof-plan'])
+  assert.ok(!getPlanVisibleObjects(project, 'framing').some(object => object.id === 'roof-plan'))
+})
+
 test('plan visibility keeps room and ceiling representations on their own active storey', () => {
   const project = structuredClone(fixture)
   const template = Object.values(project.objects).find(object => object.object_type === 'architecture.wall')

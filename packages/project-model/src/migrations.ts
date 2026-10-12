@@ -196,7 +196,7 @@ export function validateProjectV2(project: ProjectDocument): void {
       head_level_id: ['door_window.door', 'door_window.window'],
       head_offset_mm: ['door_window.door', 'door_window.window'],
       elevation_offset_mm: ['structure.slab', 'architecture.floor', 'architecture.ceiling'],
-      voids_mm: ['structure.slab', 'architecture.floor', 'architecture.ceiling'],
+      voids_mm: ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'],
       finish_layers: ['architecture.floor', 'structure.slab'],
       finish_pattern_mm: ['architecture.floor', 'structure.slab'],
       finish_pattern_origin_mm: ['architecture.floor', 'structure.slab'],

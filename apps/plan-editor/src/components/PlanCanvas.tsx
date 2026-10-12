@@ -38,11 +38,11 @@ import { constrainPointToReference, DEFAULT_SNAP_MODES, findNearestLinearReferen
 import { renderPlanView, PlacementGhost, UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import { Maximize2, Pencil, Trash2, ZoomIn, ZoomOut, PlusCircle, Copy } from 'lucide-react'
 
-const PLACEMENT_DIMENSION_TOOLS = new Set<ToolType>(['column', 'foundation', 'beam', 'wall', 'door', 'window', 'grid', 'gridSystem', 'gridCopy', 'stair', 'slab', 'slabVoid', 'archFloor', 'ceiling', 'roomSeparator'])
+const PLACEMENT_DIMENSION_TOOLS = new Set<ToolType>(['column', 'foundation', 'beam', 'wall', 'door', 'window', 'grid', 'gridSystem', 'gridCopy', 'stair', 'slab', 'slabVoid', 'archFloor', 'ceiling', 'roof', 'roomSeparator', 'pipe', 'fixture', 'cabinet', 'moulding'])
 
 interface PlanCanvasProps {
   project: ProjectDocument
-  planDiscipline?: 'architecture' | 'framing'
+  planDiscipline?: 'architecture' | 'framing' | 'roof'
   displayUnit: DisplayLengthUnit
   activeTool: ToolType
   activeColumnTypeMark: string
@@ -73,6 +73,11 @@ interface PlanCanvasProps {
   onCommitSlab: (boundary_mm: [number, number][]) => void
   onCommitArchitecturalFloor?: (boundary_mm: [number, number][]) => void
   onCommitCeiling?: (boundary_mm: [number, number][]) => void
+  onCommitRoof?: (boundary_mm: [number, number][], options?: { shape: 'hip' | 'gable' | 'flat'; slope_deg: number; thickness_mm: number; elevation_offset_mm: number; material: string }) => void
+  onCommitPipeRoute?: (start: [number, number], end: [number, number], system: 'waste' | 'soil' | 'rainwater' | 'vent' | 'cold_water' | 'hot_water') => void
+  onCommitFixture?: (point: [number, number], kind: 'light' | 'switch' | 'outlet' | 'panel') => void
+  onCommitCabinet?: (start: [number, number], end: [number, number]) => void
+  onCommitMoulding?: (start: [number, number], end: [number, number]) => void
   onCommitRoomSeparator?: (start: [number, number], end: [number, number]) => void
   onCommitSurfaceVoid: (hostId: string, boundary_mm: [number, number][]) => void
   onCommitGrid: (tag: string, start_mm: [number, number], end_mm: [number, number], sequenceStyle?: 'auto' | 'alpha' | 'numeric') => void
@@ -549,6 +554,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onCommitSlab,
   onCommitArchitecturalFloor,
   onCommitCeiling,
+  onCommitRoof,
+  onCommitPipeRoute,
+  onCommitFixture,
+  onCommitCabinet,
+  onCommitMoulding,
   onCommitRoomSeparator,
   onCommitSurfaceVoid,
   onCommitGrid,
@@ -907,6 +917,13 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   // 2-click wall placement state (start node -> end node)
   const [wallStartNode, setWallStartNode] = useState<{ point_mm: [number, number]; reference?: LinearReference; hostWallId?: string } | null>(null)
   const [roomSeparatorStart, setRoomSeparatorStart] = useState<[number,number] | null>(null)
+  const [roofShape, setRoofShape] = useState<'hip' | 'gable' | 'flat'>('hip')
+  const [roofSlopeDeg, setRoofSlopeDeg] = useState(25)
+  const [roofThicknessMm, setRoofThicknessMm] = useState(30)
+  const [roofElevationOffsetMm, setRoofElevationOffsetMm] = useState(2800)
+  const [roofMaterial, setRoofMaterial] = useState('metal_sheet')
+  const [pipeSystem, setPipeSystem] = useState<'waste' | 'soil' | 'rainwater' | 'vent' | 'cold_water' | 'hot_water'>('waste')
+  const [fixtureKind, setFixtureKind] = useState<'light' | 'switch' | 'outlet' | 'panel'>('light')
   const [slabBoundary, setSlabBoundary] = useState<[number, number][]>([])
 
   // Calibration state (P1 -> mouse move -> P2 -> modal)
@@ -929,8 +946,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
   useEffect(() => {
     if (!activeSnap) return
-    const isPolygonTool = ['slab', 'slabVoid', 'archFloor', 'ceiling'].includes(activeTool)
-    const start = activeTool === 'wall' ? wallStartNode : activeTool === 'beam' ? beamStartNode : activeTool === 'stair' && stairStartPoint ? { point_mm: stairStartPoint } : activeTool === 'grid' && gridStartPoint ? { point_mm: gridStartPoint } : activeTool === 'roomSeparator' && roomSeparatorStart ? { point_mm: roomSeparatorStart } : isPolygonTool && slabBoundary.length ? { point_mm: slabBoundary[slabBoundary.length - 1] } : null
+    const isPolygonTool = ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool)
+    const isTwoPointTool = ['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool)
+    const start = activeTool === 'wall' ? wallStartNode : activeTool === 'beam' ? beamStartNode : activeTool === 'stair' && stairStartPoint ? { point_mm: stairStartPoint } : activeTool === 'grid' && gridStartPoint ? { point_mm: gridStartPoint } : isTwoPointTool && roomSeparatorStart ? { point_mm: roomSeparatorStart } : isPolygonTool && slabBoundary.length ? { point_mm: slabBoundary[slabBoundary.length - 1] } : null
     if (!start) return
     const constrained = constrainLineSnap(activeSnap, activeSnap.point_mm, start.point_mm, false, 'reference' in start ? start.reference : undefined)
     if (constrained.point_mm[0] !== activeSnap.point_mm[0] || constrained.point_mm[1] !== activeSnap.point_mm[1]) setActiveSnap(constrained)
@@ -943,11 +961,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     if (activeTool !== 'wall') {
       setWallStartNode(null)
     }
-    if (activeTool !== 'roomSeparator') setRoomSeparatorStart(null)
+    if (!['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool)) setRoomSeparatorStart(null)
     if (activeTool !== 'grid') setGridStartPoint(null)
     if (activeTool !== 'stair') { setStairStartPoint(null); setStairError('') }
     if (activeTool !== 'gridCopy') setGridCopySourceId(null)
-    if (!['slab','slabVoid','archFloor','ceiling'].includes(activeTool)) setSlabBoundary([])
+    if (!['slab','slabVoid','archFloor','ceiling','roof'].includes(activeTool)) setSlabBoundary([])
     if (activeTool !== 'calibrate') {
       setCalibrationP1(null)
       setCalibrationMousePoint(null)
@@ -1088,7 +1106,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             openingWidthMm: object.module_data.width_mm, openingCenterOffsetMm: object.module_data.offset_along_wall_mm,
           }
         }
-      } else if (['structure.slab', 'architecture.floor', 'architecture.ceiling'].includes(object.object_type)) {
+      } else if (['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(object.object_type)) {
         const boundary = data.boundary_mm as [number, number][] | undefined
         if (!boundary) continue
         for (const [vertexIndex, point] of boundary.entries()) {
@@ -1289,7 +1307,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
               }
             }
           }
-        } else if (['structure.slab', 'architecture.floor', 'architecture.ceiling'].includes(object.object_type)) {
+        } else if (['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(object.object_type)) {
           const boundary = data.boundary_mm as [number, number][] | undefined
           boundary?.forEach(point => points.push([point[0], point[1], 'linear']))
         }
@@ -1350,10 +1368,22 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       ctx.fillRect(left, top, Math.abs(selectionBox.end[0] - selectionBox.start[0]), Math.abs(selectionBox.end[1] - selectionBox.start[1]))
       ctx.strokeRect(left, top, Math.abs(selectionBox.end[0] - selectionBox.start[0]), Math.abs(selectionBox.end[1] - selectionBox.start[1])); ctx.restore()
     }
-    if ((activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling') && slabBoundary.length > 0) {
+    if (['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool) && roomSeparatorStart && activeSnap) {
+      const start = worldToScreen(roomSeparatorStart, viewport), end = worldToScreen(activeSnap.point_mm, viewport)
+      const color = activeTool === 'pipe' ? (['cold_water', 'hot_water'].includes(pipeSystem) ? '#0284c7' : pipeSystem === 'rainwater' ? '#0891b2' : '#7c3aed') : activeTool === 'cabinet' ? '#92400e' : activeTool === 'moulding' ? '#a21caf' : '#d97706'
+      ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = activeTool === 'cabinet' ? 2 : 1.8; ctx.setLineDash(activeTool === 'roomSeparator' ? [5, 3] : [7, 3]); ctx.beginPath(); ctx.moveTo(...start); ctx.lineTo(...end); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = '#fff'; ctx.strokeStyle = color; ctx.beginPath(); ctx.arc(...start, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore()
+    }
+    if (activeTool === 'fixture' && activeSnap) {
+      const [x, y] = worldToScreen(activeSnap.point_mm, viewport)
+      ctx.save(); ctx.strokeStyle = '#7c3aed'; ctx.fillStyle = 'rgba(124, 58, 237, .12)'; ctx.lineWidth = 1.5; ctx.beginPath()
+      if (fixtureKind === 'panel') ctx.rect(x - 7, y - 9, 14, 18)
+      else { ctx.arc(x, y, fixtureKind === 'light' ? 7 : 6, 0, Math.PI * 2); if (fixtureKind === 'switch') { ctx.moveTo(x - 4, y + 4); ctx.lineTo(x + 4, y - 4) } else if (fixtureKind === 'outlet') { ctx.moveTo(x - 2, y - 2); ctx.lineTo(x - 2, y + 2); ctx.moveTo(x + 2, y - 2); ctx.lineTo(x + 2, y + 2) } }
+      ctx.fill(); ctx.stroke(); ctx.restore()
+    }
+    if ((activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling' || activeTool === 'roof') && slabBoundary.length > 0) {
       ctx.save()
-      ctx.strokeStyle = activeTool === 'slabVoid' ? '#dc2626' : activeTool === 'ceiling' ? '#7c3aed' : activeTool === 'archFloor' ? '#059669' : '#0284c7'
-      ctx.fillStyle = activeTool === 'slabVoid' ? 'rgba(239, 68, 68, 0.12)' : activeTool === 'ceiling' ? 'rgba(124, 58, 237, 0.12)' : 'rgba(14, 165, 233, 0.12)'
+      ctx.strokeStyle = activeTool === 'slabVoid' ? '#dc2626' : activeTool === 'ceiling' ? '#7c3aed' : activeTool === 'archFloor' ? '#059669' : activeTool === 'roof' ? '#d97706' : '#0284c7'
+      ctx.fillStyle = activeTool === 'slabVoid' ? 'rgba(239, 68, 68, 0.12)' : activeTool === 'ceiling' ? 'rgba(124, 58, 237, 0.12)' : activeTool === 'archFloor' ? 'rgba(5, 150, 105, 0.12)' : activeTool === 'roof' ? 'rgba(217, 119, 6, 0.12)' : 'rgba(14, 165, 233, 0.12)'
       ctx.lineWidth = 1.5
       ctx.setLineDash([6, 4])
       ctx.beginPath()
@@ -1402,6 +1432,14 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     activeWindowTypeMark,
     activeSlabTypeMark,
     slabBoundary,
+    roomSeparatorStart,
+    roofShape,
+    roofSlopeDeg,
+    roofThicknessMm,
+    roofElevationOffsetMm,
+    roofMaterial,
+    pipeSystem,
+    fixtureKind,
     beamStartNode,
     wallStartNode,
     resolveReferencePath,
@@ -1717,8 +1755,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       if (activeTool === 'wall' && wallStartNode) snap = constrainLineSnap(snap, rawWorld, wallStartNode.point_mm, e.shiftKey, wallStartNode.reference)
       if (activeTool === 'stair' && stairStartPoint) snap = constrainLineSnap(snap, rawWorld, stairStartPoint, e.shiftKey)
       if (activeTool === 'grid' && gridStartPoint) snap = constrainLineSnap(snap, rawWorld, gridStartPoint, e.shiftKey)
-      if (activeTool === 'roomSeparator' && roomSeparatorStart) snap = constrainLineSnap(snap, rawWorld, roomSeparatorStart, e.shiftKey)
-      if (['slab', 'slabVoid', 'archFloor', 'ceiling'].includes(activeTool) && slabBoundary.length) snap = constrainLineSnap(snap, rawWorld, slabBoundary[slabBoundary.length - 1], e.shiftKey)
+      if (['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool) && roomSeparatorStart) snap = constrainLineSnap(snap, rawWorld, roomSeparatorStart, e.shiftKey)
+      if (['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool) && slabBoundary.length) snap = constrainLineSnap(snap, rawWorld, slabBoundary[slabBoundary.length - 1], e.shiftKey)
       const copySource = activeTool === 'gridCopy' && gridCopySourceId ? planProject.objects[gridCopySourceId] : undefined
       const point_mm = activeTool === 'gridCopy' && copySource && isGridObject(copySource)
         ? (() => {
@@ -1828,8 +1866,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       if (activeTool === 'wall' && wallStartNode) snap = constrainLineSnap(snap, rawWorld, wallStartNode.point_mm, e.shiftKey, wallStartNode.reference)
       if (activeTool === 'stair' && stairStartPoint) snap = constrainLineSnap(snap, rawWorld, stairStartPoint, e.shiftKey)
       if (activeTool === 'grid' && gridStartPoint) snap = constrainLineSnap(snap, rawWorld, gridStartPoint, e.shiftKey)
-      if (activeTool === 'roomSeparator' && roomSeparatorStart) snap = constrainLineSnap(snap, rawWorld, roomSeparatorStart, e.shiftKey)
-      if (['slab', 'slabVoid', 'archFloor', 'ceiling'].includes(activeTool) && slabBoundary.length) snap = constrainLineSnap(snap, rawWorld, slabBoundary[slabBoundary.length - 1], e.shiftKey)
+      if (['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool) && roomSeparatorStart) snap = constrainLineSnap(snap, rawWorld, roomSeparatorStart, e.shiftKey)
+      if (['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool) && slabBoundary.length) snap = constrainLineSnap(snap, rawWorld, slabBoundary[slabBoundary.length - 1], e.shiftKey)
 
       if (activeTool === 'gridCopy' && gridCopySourceId) {
         const source = planProject.objects[gridCopySourceId]
@@ -2020,17 +2058,27 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           )
           clearDimensionOverrides()
         }
-      } else if (activeTool === 'roomSeparator') {
+      } else if (['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool)) {
         if (!roomSeparatorStart) { setRoomSeparatorStart(snap.point_mm); setDrawLengthMeters(''); setDrawAngleDegrees('') }
-        else { onCommitRoomSeparator?.(roomSeparatorStart, snap.point_mm); setRoomSeparatorStart(null); setDrawLengthMeters(''); setDrawAngleDegrees('') }
+        else {
+          if (activeTool === 'roomSeparator') onCommitRoomSeparator?.(roomSeparatorStart, snap.point_mm)
+          else if (activeTool === 'pipe') onCommitPipeRoute?.(roomSeparatorStart, snap.point_mm, pipeSystem)
+          else if (activeTool === 'cabinet') onCommitCabinet?.(roomSeparatorStart, snap.point_mm)
+          else if (activeTool === 'moulding') onCommitMoulding?.(roomSeparatorStart, snap.point_mm)
+          setRoomSeparatorStart(null); setDrawLengthMeters(''); setDrawAngleDegrees('')
+        }
         clearDimensionOverrides()
-      } else if (activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling') {
+      } else if (activeTool === 'fixture') {
+        onCommitFixture?.(snap.point_mm, fixtureKind)
+        clearDimensionOverrides()
+      } else if (activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling' || activeTool === 'roof') {
         const closeDistance = Math.max(150, 18 / viewport.zoom)
         const closesAtStart = slabBoundary.length >= 3 && Math.hypot(snap.point_mm[0] - slabBoundary[0][0], snap.point_mm[1] - slabBoundary[0][1]) <= closeDistance
         if ((e.detail >= 2 || closesAtStart) && slabBoundary.length >= 3) {
           if (activeTool === 'slab') onCommitSlab(slabBoundary)
           else if (activeTool === 'archFloor') onCommitArchitecturalFloor?.(slabBoundary)
           else if (activeTool === 'ceiling') onCommitCeiling?.(slabBoundary)
+          else if (activeTool === 'roof') onCommitRoof?.(slabBoundary, { shape: roofShape, slope_deg: roofSlopeDeg, thickness_mm: roofThicknessMm, elevation_offset_mm: roofElevationOffsetMm, material: roofMaterial })
           else if (selectedId && ['structure.slab', 'architecture.floor', 'architecture.ceiling'].includes(planProject.objects[selectedId]?.object_type ?? '')) onCommitSurfaceVoid(selectedId, slabBoundary)
           setSlabBoundary([])
           setDrawLengthMeters(''); setDrawAngleDegrees('')
@@ -2267,7 +2315,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const yDimensionDisplay = dimensionInputY || (dimensionPoint && yDimensionAnchor !== undefined ? formatLengthMm(Math.abs(dimensionPoint[1] - yDimensionAnchor), displayUnit) : '')
   const dimensionOverlayPosition = activeSnap ? worldToScreen(activeSnap.point_mm, viewport) : null
   const supportsPlacementDimensions = PLACEMENT_DIMENSION_TOOLS.has(activeTool)
-  const hasPolygonSegment = ['slab', 'slabVoid', 'archFloor', 'ceiling'].includes(activeTool) && slabBoundary.length > 0
+  const hasPolygonSegment = ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool) && slabBoundary.length > 0
   const hasLineGeometryInput = !!stairStartPoint || !!wallStartNode || !!beamStartNode || !!roomSeparatorStart || hasPolygonSegment || (activeTool === 'grid' && !!gridStartPoint)
 
   const commitPlacementAtCursor = () => {
@@ -2295,6 +2343,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     if (activeTool === 'slab') onCommitSlab(slabBoundary)
     else if (activeTool === 'archFloor') onCommitArchitecturalFloor?.(slabBoundary)
     else if (activeTool === 'ceiling') onCommitCeiling?.(slabBoundary)
+    else if (activeTool === 'roof') onCommitRoof?.(slabBoundary, { shape: roofShape, slope_deg: roofSlopeDeg, thickness_mm: roofThicknessMm, elevation_offset_mm: roofElevationOffsetMm, material: roofMaterial })
     else if (activeTool === 'slabVoid' && selectedId && ['structure.slab', 'architecture.floor', 'architecture.ceiling'].includes(planProject.objects[selectedId]?.object_type ?? '')) onCommitSurfaceVoid(selectedId, slabBoundary)
     else return false
     setSlabBoundary([])
@@ -2303,7 +2352,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   }
 
   const commitActivePlacement = (fromInput = false) => {
-    const polygonTool = ['slab', 'slabVoid', 'archFloor', 'ceiling'].includes(activeTool)
+    const polygonTool = ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool)
     if (polygonTool && !fromInput && finishPolygonPlacement()) return
     commitPlacementAtCursor()
   }
@@ -2387,15 +2436,19 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     activeTool === 'grid' ? `เส้นกริด · ${gridStartPoint ? 'เลือกจุดปลาย · กำหนดระยะ/องศาได้' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด` :
     activeTool === 'gridCopy' ? 'สำเนาเส้นกริด · Shift ล็อกแนวขนาน · Enter วางสำเนา' :
     activeTool === 'gridSystem' ? 'ระบบกริด · กรอกช่วงระยะ แล้วเลือกจุดกำเนิดหรือ Enter วางตรงเคอร์เซอร์' :
-    activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling' ? `${activeTool === 'slab' ? 'พื้นโครงสร้าง' : activeTool === 'slabVoid' ? 'ช่องเจาะพื้น' : activeTool === 'archFloor' ? 'พื้นสถาปัตย์' : 'ฝ้าเพดาน'} · ${slabBoundary.length ? 'กรอกระยะ/องศาแล้ว Enter เพิ่มจุด' : 'คลิกหรือ Enter จุดแรก'} · Enter บนแปลนปิดรูปเมื่อครบ 3 จุด` :
+    activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling' || activeTool === 'roof' ? `${activeTool === 'slab' ? 'พื้นโครงสร้าง' : activeTool === 'slabVoid' ? 'ช่องเจาะพื้น' : activeTool === 'archFloor' ? 'พื้นสถาปัตย์' : activeTool === 'ceiling' ? 'ฝ้าเพดาน' : 'หลังคา'} · ${slabBoundary.length ? 'กรอกระยะ/องศาแล้ว Enter เพิ่มจุด' : 'คลิกหรือ Enter จุดแรก'} · Enter บนแปลนปิดรูปเมื่อครบ 3 จุด` :
     activeTool === 'roomSeparator' ? `เส้นแบ่งห้อง · ${roomSeparatorStart ? 'กำหนดระยะ/องศาแล้วเลือกจุดปลาย' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด` :
+    activeTool === 'pipe' ? `แนวท่อ ${({ waste: 'น้ำทิ้ง', soil: 'โสโครก', rainwater: 'น้ำฝน', vent: 'อากาศ', cold_water: 'น้ำดีเย็น', hot_water: 'น้ำร้อน' } as const)[pipeSystem]} · ${roomSeparatorStart ? 'เลือกจุดปลายเพื่อสร้างช่วงท่อ' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด` :
+    activeTool === 'cabinet' ? `บิลท์อิน · ${roomSeparatorStart ? 'เลือกปลายแนวหน้าตู้เพื่อกำหนดความกว้างและทิศ' : 'เลือกมุมเริ่มแนวหน้าตู้'} · Enter ยืนยันจุด` :
+    activeTool === 'moulding' ? `แนวบัว · ${roomSeparatorStart ? 'เลือกจุดปลายแนวบัว' : 'เลือกจุดเริ่มแนวบัว'} · Enter ยืนยันจุด` :
+    activeTool === 'fixture' ? `อุปกรณ์ไฟฟ้า ${fixtureKind} · เลื่อนแล้ว Enter วาง` :
     activeTool === 'stair' ? `บันได · ${stairStartPoint ? 'เลือกปลายเที่ยวแรก · ระยะ/องศากำหนดเอง · Shift ล็อกแกน · Enter วาง' : 'เลือกจุดเริ่มริมเที่ยวแรก · เลือกระดับจบและรูปแบบก่อนวาง'} · Esc ยกเลิก` :
     activeTool === 'measure' ? 'ตลับเมตร · เลือกจุดเริ่มและจุดปลาย · Enter ยืนยันจุด · Esc ยกเลิก/ออก' :
     activeTool === 'calibrate' ? 'ปรับสเกลภาพ · เลือกจุดอ้างอิงสองจุด · Enter ยืนยันจุด' : null
   const authoringToolName: Partial<Record<ToolType, string>> = {
     select: 'เลือกวัตถุ', column: 'เสา', foundation: 'ฐานราก', beam: 'คาน', wall: 'ผนัง', door: 'ประตู', window: 'หน้าต่าง',
-    slab: 'พื้นโครงสร้าง', slabVoid: 'ช่องเจาะพื้น', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้าเพดาน', roomSeparator: 'เส้นแบ่งห้อง',
-    stair: 'บันได', grid: 'เส้นกริด', gridSystem: 'ระบบกริด', gridCopy: 'คัดลอกกริด', measure: 'ตลับเมตร', calibrate: 'ปรับสเกลภาพ', erase: 'ลบวัตถุ',
+    slab: 'พื้นโครงสร้าง', slabVoid: 'ช่องเจาะพื้น', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้าเพดาน', roof: 'หลังคา', roomSeparator: 'เส้นแบ่งห้อง',
+    stair: 'บันได', grid: 'เส้นกริด', gridSystem: 'ระบบกริด', gridCopy: 'คัดลอกกริด', pipe: 'แนวท่อ', fixture: 'อุปกรณ์ไฟฟ้า', cabinet: 'บิลท์อิน', moulding: 'แนวบัว', measure: 'ตลับเมตร', calibrate: 'ปรับสเกลภาพ', erase: 'ลบวัตถุ',
   }
 
   return (
@@ -2461,7 +2514,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       </div>}
       {activeTool === 'select' && editableSelectionIds.some(id => {
         const object = planProject.objects[id]
-        return object && (isColumnObject(object) || isFoundationObject(object) || isWallObject(object) || isBeamObject(object) || isGridObject(object) || isDoorObject(object) || isWindowObject(object) || ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'architecture.room_separator'].includes(object.object_type))
+        return object && (isColumnObject(object) || isFoundationObject(object) || isWallObject(object) || isBeamObject(object) || isGridObject(object) || isDoorObject(object) || isWindowObject(object) || ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system', 'architecture.room_separator'].includes(object.object_type))
       }) && <div className="cf-tape-measure-hint" aria-live="polite">จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด · จุดสีส้ม: ลากขอบปรับความกว้าง หรือลากจุดกึ่งกลางปรับตำแหน่ง (BIM Snap ขอบเสา 100 มม.) · ปุ่ม ⇄: สลับด้านบานประตู</div>}
       {placementHint && <div className="cf-tape-measure-hint" aria-live="polite">{placementHint} · Esc ยกเลิกขั้นตอน หรือออกเมื่อว่าง</div>}
       {supportsPlacementDimensions && dimensionOverlayPosition && (showXDimension || showYDimension || hasLineGeometryInput) && <div className="cf-dynamic-dimensions" role="group" aria-label="ระยะและแนวระหว่างวางวัตถุ" onPointerDown={event => event.stopPropagation()} style={{
@@ -2498,6 +2551,26 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           <span aria-hidden="true">{authoringControlsOpen ? 'ยุบ' : 'แสดง'}</span>
         </button>
         {authoringControlsOpen && <div className="cf-authoring-controls-content">
+        {activeTool === 'pipe' && <label className="cf-reference-control">ระบบท่อ
+          <select aria-label="ระบบของแนวท่อ" value={pipeSystem} onChange={event => setPipeSystem(event.target.value as typeof pipeSystem)}>
+            <option value="waste">น้ำทิ้ง</option><option value="soil">โสโครก</option><option value="rainwater">น้ำฝน</option>
+            <option value="vent">อากาศ</option><option value="cold_water">น้ำดีเย็น</option><option value="hot_water">น้ำร้อน</option>
+          </select>
+          <small>น้ำทิ้ง/โสโครก/น้ำฝนสร้างระดับปลายให้ลาดลง 1:100 · ปรับขนาดและระดับต่อได้ในคุณสมบัติ</small>
+        </label>}
+        {activeTool === 'fixture' && <label className="cf-reference-control">อุปกรณ์ไฟฟ้า
+          <select aria-label="ชนิดอุปกรณ์ไฟฟ้าที่จะวาง" value={fixtureKind} onChange={event => setFixtureKind(event.target.value as typeof fixtureKind)}>
+            <option value="light">ดวงโคม</option><option value="switch">สวิตช์</option><option value="outlet">เต้ารับ</option><option value="panel">ตู้ไฟ</option>
+          </select>
+        </label>}
+        {activeTool === 'roof' && <div className="cf-grid-orientation-control" role="group" aria-label="ตั้งค่าหลังคาก่อนวาด">
+          <label>ทรงหลังคา <select aria-label="ทรงหลังคาก่อนวาด" value={roofShape} onChange={event => setRoofShape(event.target.value as typeof roofShape)}><option value="hip">ปั้นหยา</option><option value="gable">จั่ว · รูป 4 ด้าน</option><option value="flat">ดาดฟ้า</option></select></label>
+          {roofShape !== 'flat' && <label>ความลาด (องศา)<input aria-label="ความลาดหลังคาก่อนวาด (องศา)" type="number" min="0.5" max="88" step="0.5" value={roofSlopeDeg} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) setRoofSlopeDeg(Math.max(0.5, Math.min(88, value))) }} /></label>}
+          <label>ยกจากระดับชั้น ({displayUnit}) <WorkbenchNumberInput ariaLabel={`ระยะยกหลังคาจากระดับชั้น (${displayUnit})`} value={roofElevationOffsetMm} unit={displayUnit} onChange={setRoofElevationOffsetMm} style={{ width: 72 }} /></label>
+          <label>หนา (มม.) <WorkbenchNumberInput ariaLabel="ความหนาหลังคาก่อนวาด (มม.)" value={roofThicknessMm} onChange={value => setRoofThicknessMm(Math.max(1, value))} style={{ width: 58 }} /></label>
+          <label>วัสดุมุง <select aria-label="วัสดุมุงหลังคาก่อนวาด" value={roofMaterial} onChange={event => setRoofMaterial(event.target.value)}><option value="metal_sheet">เมทัลชีท</option><option value="pu_metal_sheet">เมทัลชีท PU</option><option value="concrete_tile">กระเบื้องคอนกรีต</option><option value="clay_tile">กระเบื้องดินเผา</option><option value="reinforced_concrete">คอนกรีตเสริมเหล็ก</option><option value="polycarbonate">โพลีคาร์บอเนต</option></select></label>
+          <small>{roofShape === 'gable' ? 'กำหนดความลาดสลับด้านที่ 1 และ 3 · ต้องวาดขอบเขต 4 จุด' : roofShape === 'flat' ? 'สร้างผืนราบตามขอบเขต · ตั้งความหนาและวัสดุก่อนวาด' : 'สร้างความลาดเข้าหาสันปั้นหยา · ปรับความลาดรายด้านได้หลังวาง'}</small>
+        </div>}
         {activeTool === 'stair' && <div role="group" aria-label="ตั้งค่าบันไดก่อนวาด" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxWidth: 650, alignItems: 'center' }}>
           <label>รูปแบบ <select aria-label="รูปแบบบันไดก่อนวาด" value={stairOptions.stair_type} onChange={e => setStairOptions(o => ({ ...o, stair_type: e.target.value as StairModuleData['stair_type'] }))}><option value="straight">ตรง</option><option value="l_shape">L</option><option value="u_shape">U</option></select></label>
           <label>จบที่ <select aria-label="ระดับจบบันไดก่อนวาด" value={stairOptions.top_level_id} onChange={e => {

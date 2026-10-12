@@ -587,7 +587,7 @@ export function getElevationVisibleOpeningIds(
 }
 
 /** Return the Smart Objects that belong on the project's active plan level. */
-export type PlanDiscipline = 'architecture' | 'framing' | 'all'
+export type PlanDiscipline = 'architecture' | 'framing' | 'roof' | 'all'
 
 export function getPlanVisibleObjects(project: ProjectDocument, discipline: PlanDiscipline = 'all'): SmartObject[] {
   const activeLevel = project.levels.find(level => level.id === project.project.active_level_id)
@@ -608,7 +608,8 @@ export function getPlanVisibleObjects(project: ProjectDocument, discipline: Plan
     object.level_refs.find(reference => reference.role === role)?.level_id
 
   return Object.values(project.objects).filter(object => {
-    if (discipline === 'architecture' && ['structure.beam', 'structure.foundation', 'roof.system', 'structure.rebar_set'].includes(object.object_type)) return false
+    if (discipline === 'architecture' && ['structure.beam', 'structure.foundation', 'structure.rebar_set', 'roof.system'].includes(object.object_type)) return false
+    if (discipline === 'roof' && ['structure.beam', 'structure.foundation', 'structure.rebar_set'].includes(object.object_type)) return false
     if (discipline === 'framing' && !['structure.beam', 'structure.column', 'structure.foundation', 'structure.grid'].includes(object.object_type)) return false
     const data = moduleData(object)
     if (!data) return true

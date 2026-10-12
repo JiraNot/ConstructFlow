@@ -161,6 +161,60 @@ test("Phase 3: flat, shed, gable and hip analytic areas; unsupported polygons re
   assert.equal(bad.result.status, "failed");
   assert.match(bad.result.errors[0], /convex/i);
 });
+test("Plan authoring commands create editable roof, MEP, cabinet and moulding objects", () => {
+  let p = empty();
+  const boundary_mm = [[0, 0], [4000, 0], [4000, 2500], [0, 2500]];
+  const roofId = crypto.randomUUID();
+  p = execute(p, "GenerateRoof", {
+    id: roofId, mark: "R1", created_phase: "new_construction", elevation_mm: 2800,
+    thickness_mm: 30, material: "metal_sheet", boundary_mm, voids_mm: [],
+    edges: boundary_mm.map(() => ({ defines_slope: true, slope_deg: 25 })),
+  });
+  assert.equal(p.objects[roofId].object_type, "roof.system");
+  assert.equal(p.objects[roofId].created_phase, "new_construction");
+  p = execute(p, "UpdateRoof", { ...p.objects[roofId].module_data, id: roofId, thickness_mm: 40 });
+  assert.equal(p.objects[roofId].module_data.thickness_mm, 40);
+
+  const pipeId = crypto.randomUUID();
+  p = execute(p, "CreatePipeRoute", {
+    id: pipeId, mark: "WST1", system: "waste", nodes_mm: [[0, 0, -300], [4000, 0, -340]],
+    diameter_mm: 100, start_invert_mm: -300, end_invert_mm: -340, minimum_slope_ratio: 0.01, material: "PVC",
+  });
+  assert.equal(p.objects[pipeId].object_type, "drainage.pipe_route");
+  p = execute(p, "EditPipeRoute", { ...p.objects[pipeId].module_data, id: pipeId, diameter_mm: 125 });
+  assert.equal(p.objects[pipeId].module_data.diameter_mm, 125);
+
+  const fixtureId = crypto.randomUUID();
+  p = execute(p, "PlaceElectricalFixture", {
+    id: fixtureId, mark: "L1", location_mm: [1000, 1000, 2700], kind: "light", watts: 12,
+    controlled_ids: [], switch_ways: 1, grounded: false,
+  });
+  assert.equal(p.objects[fixtureId].object_type, "electrical.fixture");
+  p = execute(p, "UpdateElectricalFixture", { ...p.objects[fixtureId].module_data, id: fixtureId, watts: 18 });
+  assert.equal(p.objects[fixtureId].module_data.watts, 18);
+
+  const cabinetId = crypto.randomUUID();
+  p = execute(p, "CreateCabinetRun", {
+    id: cabinetId, mark: "CB1", location_mm: [0, 0, 0], width_mm: 1800, height_mm: 850, depth_mm: 600,
+    board_mm: 18, back_mm: 6, plinth_mm: 100, rotation_deg: 0, modules_mm: [1800], shelves: 2,
+    drawers: 0, front: "solid", carcass_material: "plywood", front_material: "laminate",
+    back_material: "plywood", countertop_material: "quartz", countertop_mm: 30,
+  });
+  p = execute(p, "UpdateCabinetRun", { ...p.objects[cabinetId].module_data, id: cabinetId, width_mm: 2400, modules_mm: [2400] });
+  assert.equal(p.objects[cabinetId].module_data.width_mm, 2400);
+
+  const mouldingId = crypto.randomUUID();
+  p = execute(p, "CreateMouldingRun", {
+    id: mouldingId, mark: "SK1", path_mm: [[0, 0, 2700], [4000, 0, 2700]],
+    profile_mm: [[0, 0], [15, 0], [15, 80], [0, 80]], closed: false, miter_limit: 4, material: "painted_wood",
+  });
+  assert.equal(p.objects[mouldingId].object_type, "decorative.moulding_run");
+  p = execute(p, "UpdateMouldingRun", { ...p.objects[mouldingId].module_data, id: mouldingId, material: "MDF" });
+  assert.equal(p.objects[mouldingId].module_data.material, "MDF");
+
+  const outputs = constructionOutputs(p);
+  for (const id of [roofId, pipeId, fixtureId, cabinetId, mouldingId]) assert.ok(outputs.some(output => output.object_id === id));
+});
 test("Phase 4: manhole IL propagation, unknown state and invalid network rollback", () => {
   let p = empty(),
     a = crypto.randomUUID(),

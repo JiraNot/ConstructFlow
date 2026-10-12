@@ -28,6 +28,11 @@ import {
   parseLengthMm,
   type DisplayLengthUnit,
   type StairModuleData,
+  type RoofModuleData,
+  type PipeRouteModuleData,
+  type ElectricalFixtureModuleData,
+  type CabinetModuleData,
+  type MouldingModuleData,
 } from '@constructflow/project-model'
 import { Trash2, PlusCircle, RefreshCw, SlidersHorizontal, MousePointer2 } from 'lucide-react'
 import { OpeningElevationThumbnail } from './OpeningElevationThumbnail.js'
@@ -67,6 +72,11 @@ interface PropertiesPanelProps {
   onUpdateBeamVerticalReference: (objectId: string, changes: { level_id?: string; base_offset_mm?: number }) => void
   onUpdateArchitectureSurface?: (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; material?: string; finish_layers?: Array<{ material: string; thickness_mm: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number; grid_mm?: [number, number] }) => void
   onUpdateSlab?: (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; slab_system?: string; material?: string; slope_ratio?: number; drain_direction_deg?: number; finish_layers?: Array<{ material: string; thickness_mm: number; offset_mm?: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number }) => void
+  onUpdateRoof?: (objectId: string, changes: Partial<RoofModuleData>) => void
+  onUpdatePipeRoute?: (objectId: string, changes: Partial<PipeRouteModuleData>) => void
+  onUpdateElectricalFixture?: (objectId: string, changes: Partial<ElectricalFixtureModuleData>) => void
+  onUpdateCabinet?: (objectId: string, changes: Partial<CabinetModuleData>) => void
+  onUpdateMoulding?: (objectId: string, changes: Partial<MouldingModuleData>) => void
   onUpdateStair?: (objectId: string, changes: Partial<StairModuleData>) => void
   onUpdateFoundationMark: (objectId: string, newMark: string) => void
   onUpdateGridTag: (objectId: string, newTag: string) => void
@@ -101,6 +111,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateBeamVerticalReference,
   onUpdateArchitectureSurface,
   onUpdateSlab,
+  onUpdateRoof,
+  onUpdatePipeRoute,
+  onUpdateElectricalFixture,
+  onUpdateCabinet,
+  onUpdateMoulding,
   onUpdateStair,
   onUpdateFoundationMark,
   onUpdateGridTag,
@@ -177,6 +192,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const roomLastKnownAreaLabel = roomBoundaryOpen ? formatRoomAreaM2(roomData?.area_mm2, 'closed') : roomAreaLabel
   const grdObj = selectedObj && isGridObject(selectedObj) ? selectedObj : null
   const roofObj = selectedObj && selectedObj.object_type.startsWith('roof.') ? selectedObj : null
+  const pipeObj = selectedObj && ['plumbing.pipe_route', 'drainage.pipe_route'].includes(selectedObj.object_type) ? selectedObj : null
+  const fixtureObj = selectedObj?.object_type === 'electrical.fixture' ? selectedObj : null
+  const cabinetObj = selectedObj?.object_type === 'interior.cabinet_run' ? selectedObj : null
+  const mouldingObj = selectedObj?.object_type === 'decorative.moulding_run' ? selectedObj : null
 
   const currentMark = colObj
     ? colObj.module_data.mark
@@ -817,9 +836,21 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       {/* Roof Properties */}
       {roofObj && (() => {
         const rData = (roofObj.module_data ?? {}) as Record<string, unknown>
-        const overhangMm = Number(rData.eaves_overhang_mm ?? 1000)
-        const hasGutter = rData.has_gutter !== false
-        const slopeDeg = Number(rData.slope_deg ?? 25)
+        const boundary = Array.isArray(rData.boundary_mm) ? rData.boundary_mm as [number, number][] : []
+        const edges = Array.isArray(rData.edges) ? rData.edges as RoofModuleData['edges'] : []
+        const definedSlopes = edges.filter(edge => edge.defines_slope)
+        const slopeDeg = definedSlopes.length ? definedSlopes.reduce((total, edge) => total + edge.slope_deg, 0) / definedSlopes.length : 0
+        const footprintArea = boundary.length >= 3 ? Math.abs(boundary.reduce((area, point, index) => {
+          const next = boundary[(index + 1) % boundary.length]
+          return area + point[0] * next[1] - next[0] * point[1]
+        }, 0)) / 2_000_000 : 0
+        const update = (changes: Partial<RoofModuleData>) => onUpdateRoof?.(roofObj.id, changes)
+        const updateEdge = (index: number, changes: Partial<RoofModuleData['edges'][number]>) => {
+          const next = edges.map((edge, edgeIndex) => edgeIndex === index ? { ...edge, ...changes } : edge)
+          update({ edges: next })
+        }
+        const material = String(rData.material ?? 'metal_sheet')
+        const knownMaterials = ['metal_sheet', 'pu_metal_sheet', 'concrete_tile', 'clay_tile', 'reinforced_concrete', 'polycarbonate']
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -833,45 +864,135 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                 <span style={{ color: '#475569' }}>ความลาดชัน (Slope):</span>
-                <strong style={{ color: '#0f172a' }}>{slopeDeg}&deg;</strong>
+                <strong style={{ color: '#0f172a' }}>{slopeDeg.toFixed(1)}&deg;</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                <span style={{ color: '#475569' }}>ระยะยื่นชายคา (Eaves Overhang):</span>
-                <strong style={{ color: '#0873c4' }}>{formatLengthMm(overhangMm, displayUnit)} {displayUnit}</strong>
+                <span style={{ color: '#475569' }}>พื้นที่ฉายในแปลน:</span>
+                <strong style={{ color: '#0873c4' }}>{footprintArea.toFixed(2)} ตร.ม.</strong>
               </div>
             </div>
-
-            {/* Thai Building Code Rule 50 Eaves Setback Card */}
-            <div style={{
-              background: '#ffffff',
-              padding: 6,
-              borderRadius: 3,
-              border: '1px solid #e2e8f0',
-              display: 'grid',
-              gap: 3,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>
-                  ระยะร่นแนวชายคา (กฎกระทรวง 55 ข้อ 50)
-                </span>
-                <span style={{
-                  fontSize: 10,
-                  padding: '1px 4px',
-                  borderRadius: 2,
-                  fontWeight: 600,
-                  background: '#dcfce7',
-                  color: '#15803d',
-                }}>
-                  เกณฑ์ &ge; 0.50 ม.
-                </span>
+            <label className="cf-property-row">ระดับอ้างอิงหลังคา ({displayUnit})
+              <LengthInput value={Number(rData.elevation_mm ?? 0)} unit={displayUnit} onChange={value => update({ elevation_mm: value })} aria-label={`ระดับอ้างอิงหลังคา (${displayUnit})`} />
+            </label>
+            <label className="cf-property-row">ความหนาหลังคา ({displayUnit})
+              <LengthInput value={Number(rData.thickness_mm ?? 30)} unit={displayUnit} onChange={value => update({ thickness_mm: Math.max(1, value) })} aria-label={`ความหนาหลังคา (${displayUnit})`} />
+            </label>
+            <label className="cf-property-row">วัสดุมุง
+              <select aria-label="วัสดุมุงหลังคา" value={material} onChange={event => update({ material: event.target.value })}>
+                {!knownMaterials.includes(material) && <option value={material}>{material} (ค่าปัจจุบัน)</option>}
+                <option value="metal_sheet">เมทัลชีท</option><option value="pu_metal_sheet">เมทัลชีท PU</option>
+                <option value="concrete_tile">กระเบื้องคอนกรีต</option><option value="clay_tile">กระเบื้องดินเผา</option>
+                <option value="reinforced_concrete">คอนกรีตเสริมเหล็ก</option><option value="polycarbonate">โพลีคาร์บอเนต</option>
+              </select>
+            </label>
+            <details className="cf-inspector-section" open>
+              <summary>ความลาดชันรายด้าน</summary>
+              <div style={{ display: 'grid', gap: 4, paddingTop: 5 }}>
+                {edges.map((edge, index) => <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr auto 64px', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, color: '#475569' }}>ด้าน {index + 1}</span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10 }}>
+                    <input type="checkbox" aria-label={`กำหนดความลาดชันด้าน ${index + 1}`} checked={edge.defines_slope} onChange={event => updateEdge(index, event.target.checked ? { defines_slope: true, slope_deg: edge.slope_deg || 25 } : { defines_slope: false, slope_deg: 0 })} /> ลาด
+                  </label>
+                  <input aria-label={`องศาความลาดชันด้าน ${index + 1}`} type="number" min="0.5" max="88" step="0.5" disabled={!edge.defines_slope} value={edge.slope_deg} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) updateEdge(index, { slope_deg: Math.max(0.5, Math.min(88, value)) }) }} />
+                </div>)}
+                <small style={{ color: '#64748b' }}>เปิดความลาดชันเฉพาะด้านที่กำหนด · ด้านที่ปิดจะใช้เป็นแนวสัน/หน้าจั่ว</small>
               </div>
-              <div style={{ fontSize: 10, color: '#64748b', lineHeight: 1.4 }}>
-                • ชายคาหรือส่วนที่ยื่นมากที่สุด ต้องร่นห่างแนวเขตที่ดิน &ge; 0.50 ม.<br />
-                • ต้องจัดให้มีรางระบายน้ำฝน ({hasGutter ? '✅ มีรางน้ำฝน' : '⚠️ ไม่มีรางน้ำฝน'}) เพื่อไม่ให้น้ำฝนตกลงในที่ดินข้างเคียง
-              </div>
-            </div>
+            </details>
+            <small style={{ color: '#64748b', lineHeight: 1.4 }}>ระยะร่นชายคาต้องตรวจเทียบแนวเขตที่ดินและระยะยื่นจริงของแบบหลังคา</small>
           </div>
         )
+      })()}
+
+      {pipeObj && (() => {
+        const data = pipeObj.module_data as unknown as PipeRouteModuleData
+        const nodes = data.nodes_mm ?? []
+        const gravity = ['waste', 'soil', 'rainwater'].includes(data.system)
+        const update = (changes: Partial<PipeRouteModuleData>) => onUpdatePipeRoute?.(pipeObj.id, changes)
+        const updateNodeElevation = (index: number, elevation: number) => {
+          const next = nodes.map((node, nodeIndex) => nodeIndex === index ? [node[0], node[1], elevation] as [number, number, number] : [...node] as [number, number, number])
+          update({ nodes_mm: next, ...(gravity ? index === 0 ? { start_invert_mm: elevation } : index === nodes.length - 1 ? { end_invert_mm: elevation } : {} : {}) })
+        }
+        const material = String(data.material ?? 'PVC')
+        return <div style={{ display: 'grid', gap: 7 }}>
+          <strong style={{ fontSize: 12, color: '#334155' }}>แนวท่อ · {data.system}</strong>
+          <label className="cf-property-row">เส้นผ่านศูนย์กลาง (มม.)
+            <input aria-label="เส้นผ่านศูนย์กลางท่อ (มม.)" type="number" min="1" step="1" value={data.diameter_mm} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value) && value > 0) update({ diameter_mm: value }) }} />
+          </label>
+          {nodes.length > 1 && <>
+            <label className="cf-property-row">ระดับต้นทาง ({displayUnit})
+              <LengthInput value={nodes[0][2]} unit={displayUnit} onChange={value => updateNodeElevation(0, value)} aria-label={`ระดับต้นทางท่อ (${displayUnit})`} />
+            </label>
+            <label className="cf-property-row">ระดับปลายทาง ({displayUnit})
+              <LengthInput value={nodes[nodes.length - 1][2]} unit={displayUnit} onChange={value => updateNodeElevation(nodes.length - 1, value)} aria-label={`ระดับปลายทางท่อ (${displayUnit})`} />
+            </label>
+          </>}
+          {gravity && <label className="cf-property-row">อัตราความลาดขั้นต่ำ (0.01 = 1:100)
+            <input aria-label="อัตราความลาดขั้นต่ำของท่อแบบแรงโน้มถ่วง" type="number" min="0" max="1" step="0.001" value={data.minimum_slope_ratio} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value) && value >= 0) update({ minimum_slope_ratio: value }) }} />
+          </label>}
+          <label className="cf-property-row">วัสดุท่อ
+            <select aria-label="วัสดุท่อ" value={material} onChange={event => update({ material: event.target.value })}>
+              {!['PVC', 'PPR', 'HDPE', 'PE', 'Copper'].includes(material) && <option value={material}>{material} (ค่าปัจจุบัน)</option>}
+              <option value="PVC">PVC</option><option value="PPR">PPR</option><option value="HDPE">HDPE</option><option value="PE">PE</option><option value="Copper">ทองแดง</option>
+            </select>
+          </label>
+        </div>
+      })()}
+
+      {fixtureObj && (() => {
+        const data = fixtureObj.module_data as unknown as ElectricalFixtureModuleData
+        const update = (changes: Partial<ElectricalFixtureModuleData>) => onUpdateElectricalFixture?.(fixtureObj.id, changes)
+        return <div style={{ display: 'grid', gap: 7 }}>
+          <strong style={{ fontSize: 12, color: '#334155' }}>อุปกรณ์ไฟฟ้า · {data.mark}</strong>
+          <label className="cf-property-row">ประเภท
+            <select aria-label="ประเภทอุปกรณ์ไฟฟ้า" value={data.kind} onChange={event => update({ kind: event.target.value as ElectricalFixtureModuleData['kind'] })}>
+              <option value="light">ดวงโคม</option><option value="switch">สวิตช์</option><option value="outlet">เต้ารับ</option><option value="panel">ตู้ไฟ</option>
+            </select>
+          </label>
+          <label className="cf-property-row">กำลังไฟฟ้า (W)
+            <input aria-label="กำลังไฟฟ้าของอุปกรณ์ (วัตต์)" type="number" min="0" step="1" value={data.watts} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value) && value >= 0) update({ watts: value }) }} />
+          </label>
+          <label className="cf-property-row">ระดับติดตั้ง ({displayUnit})
+            <LengthInput value={data.location_mm[2]} unit={displayUnit} onChange={value => update({ location_mm: [data.location_mm[0], data.location_mm[1], value] })} aria-label={`ระดับติดตั้งอุปกรณ์ไฟฟ้า (${displayUnit})`} />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}><input type="checkbox" checked={data.grounded} onChange={event => update({ grounded: event.target.checked })} /> ต่อสายดิน</label>
+        </div>
+      })()}
+
+      {cabinetObj && (() => {
+        const data = cabinetObj.module_data as unknown as CabinetModuleData
+        const update = (changes: Partial<CabinetModuleData>) => onUpdateCabinet?.(cabinetObj.id, changes)
+        const resizeWidth = (width: number) => {
+          if (!Number.isFinite(width) || width <= 0) return
+          const previous = data.width_mm
+          const source = data.modules_mm.length ? data.modules_mm : [previous]
+          const scaled = source.map(value => value * width / previous)
+          scaled[scaled.length - 1] += width - scaled.reduce((sum, value) => sum + value, 0)
+          update({ width_mm: width, modules_mm: scaled })
+        }
+        return <div style={{ display: 'grid', gap: 7 }}>
+          <strong style={{ fontSize: 12, color: '#334155' }}>บิลท์อิน · {data.mark}</strong>
+          <label className="cf-property-row">กว้าง ({displayUnit})<LengthInput value={data.width_mm} unit={displayUnit} onChange={resizeWidth} aria-label={`ความกว้างบิลท์อิน (${displayUnit})`} /></label>
+          <label className="cf-property-row">สูง ({displayUnit})<LengthInput value={data.height_mm} unit={displayUnit} onChange={value => update({ height_mm: Math.max(value, data.plinth_mm + data.board_mm * 5) })} aria-label={`ความสูงบิลท์อิน (${displayUnit})`} /></label>
+          <label className="cf-property-row">ลึก ({displayUnit})<LengthInput value={data.depth_mm} unit={displayUnit} onChange={value => update({ depth_mm: Math.max(value, 2 * data.board_mm + data.back_mm + 1) })} aria-label={`ความลึกบิลท์อิน (${displayUnit})`} /></label>
+          <label className="cf-property-row">หมุน (องศา)<input aria-label="องศาหมุนบิลท์อิน" type="number" step="1" value={data.rotation_deg} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) update({ rotation_deg: value }) }} /></label>
+          <label className="cf-property-row">หน้าบาน<select aria-label="รูปแบบหน้าบานบิลท์อิน" value={data.front} onChange={event => update({ front: event.target.value as CabinetModuleData['front'] })}><option value="solid">ทึบ</option><option value="glass">กระจก</option><option value="open">เปิดโล่ง</option></select></label>
+        </div>
+      })()}
+
+      {mouldingObj && (() => {
+        const data = mouldingObj.module_data as unknown as MouldingModuleData
+        const update = (changes: Partial<MouldingModuleData>) => onUpdateMoulding?.(mouldingObj.id, changes)
+        const material = String(data.material ?? 'painted_wood')
+        return <div style={{ display: 'grid', gap: 7 }}>
+          <strong style={{ fontSize: 12, color: '#334155' }}>แนวบัว · {data.mark}</strong>
+          <label className="cf-property-row">ระดับติดตั้ง ({displayUnit})
+            <LengthInput value={data.path_mm[0]?.[2] ?? 0} unit={displayUnit} onChange={value => update({ path_mm: data.path_mm.map(point => [point[0], point[1], value]) })} aria-label={`ระดับติดตั้งแนวบัว (${displayUnit})`} />
+          </label>
+          <label className="cf-property-row">วัสดุ<select aria-label="วัสดุแนวบัว" value={material} onChange={event => update({ material: event.target.value })}>
+            {!['painted_wood', 'MDF', 'gypsum', 'PU'].includes(material) && <option value={material}>{material} (ค่าปัจจุบัน)</option>}
+            <option value="painted_wood">ไม้ทำสี</option><option value="MDF">MDF</option><option value="gypsum">ยิปซัม</option><option value="PU">โพลียูรีเทน</option>
+          </select></label>
+        </div>
       })()}
 
       {/* Door Properties */}
