@@ -20,6 +20,17 @@ selected command-runtime, architecture, geometry, clash, snapping and sheet suit
 `npm run verify:coordination` passed 47 checks. The production build still reports large Vite chunks.
 This verifies the changed slices, not every object inspector, authoring tool, sheet or export workflow.
 
+Continuation on 2026-10-12: vertical datum controls for columns, beams, doors and windows, plus slab
+finish layers, architectural floor finish/pattern settings, and room daylight/ventilation gauges now
+use concise collapsible inspector sections. Select and erase show direct canvas guidance. Project
+takeoff/BOQ calculations are memoized; DXF/IFC exporters and proof/preset modules load on demand, with
+export errors exposed in the status line. Production entry size fell from 1.553 MB to 1.518 MB. The
+live editor smoke check confirmed selection guidance in its accessibility tree without changing the
+model. `npm run test:standalone` passed all 403 Node tests across 25 build targets and five integration
+verifiers. Vite still warns about the 1.518 MB app entry, 1.151 MB PDF chunk and 581 kB Three.js chunk;
+full keyboard/screen-reader/touch/contrast audit, every MEP/structural authoring path, visual sheet/export
+acceptance and native CAD plotting remain unverified.
+
 ## Reference house demo and renderer correction (2026-10-12)
 
 The editor's two-storey demo menu now loads `examples/constructflow-reference-house-2storey.cfproj`,

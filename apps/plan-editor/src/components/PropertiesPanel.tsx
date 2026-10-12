@@ -459,8 +459,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               ({formatLengthMm(colObj.module_data.location_mm[0], displayUnit)} {displayUnit}, {formatLengthMm(colObj.module_data.location_mm[1], displayUnit)} {displayUnit})
             </span>
           </div>
-          <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
-            <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับและความสูงเสา</strong>
+          <details className="cf-inspector-section">
+            <summary>ระดับเสา · สูง {formatLengthMm(columnVertical?.height_mm ?? 0, displayUnit)} {displayUnit}</summary>
+            <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
               <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ระดับฐาน
                 <select aria-label="ระดับฐานเสา" value={colObj.module_data.base_level_id} onChange={event => {
@@ -486,8 +487,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>เยื้องฐาน ({displayUnit})<LengthInput aria-label="ระยะเยื้องฐานเสา" value={colObj.module_data.base_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateColumnVerticalReference(colObj.id, { base_offset_mm: value })} style={verticalSelectStyle} /></label>
               <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>เยื้องยอด ({displayUnit})<LengthInput aria-label="ระยะเยื้องยอดเสา" value={colObj.module_data.top_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateColumnVerticalReference(colObj.id, { top_offset_mm: value })} style={verticalSelectStyle} /></label>
             </div>
-            <span style={{ fontSize: 10, color: '#52677d' }}>สูง {formatLengthMm(columnVertical?.height_mm ?? 0, displayUnit)} {displayUnit} · +{formatLengthMm(columnVertical?.base_elevation_mm ?? 0, displayUnit)} ถึง +{formatLengthMm(columnVertical?.top_elevation_mm ?? 0, displayUnit)} {displayUnit}</span>
-          </section>
+              <span style={{ fontSize: 10, color: '#52677d' }}>สูง {formatLengthMm(columnVertical?.height_mm ?? 0, displayUnit)} {displayUnit} · +{formatLengthMm(columnVertical?.base_elevation_mm ?? 0, displayUnit)} ถึง +{formatLengthMm(columnVertical?.top_elevation_mm ?? 0, displayUnit)} {displayUnit}</span>
+            </section>
+          </details>
         </div>
       )}
 
@@ -573,8 +575,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </div>
           </div>
 
-          <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
-            <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับวางคาน</strong>
+          <details className="cf-inspector-section">
+            <summary>ระดับคาน · ท้อง +{formatLengthMm((beamBaseElevation ?? 0) - Number(beamObj.module_data.drop_mm ?? 0), displayUnit)} / หลัง +{formatLengthMm((beamBaseElevation ?? 0) + beamObj.module_data.section_mm[1] - Number(beamObj.module_data.drop_mm ?? 0), displayUnit)} {displayUnit}</summary>
+            <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
             <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>อ้างอิงระดับ
               <select aria-label="ระดับอ้างอิงคาน" value={beamObj.module_data.level_id} onChange={event => onUpdateBeamVerticalReference(beamObj.id, { level_id: event.target.value })} style={verticalSelectStyle}>
                 {project.levels.map(level => <option key={level.id} value={level.id}>{level.name} · {level.elevation_mm === 0 ? '±0' : `${level.elevation_mm > 0 ? '+' : ''}${formatLengthMm(level.elevation_mm, displayUnit)}`} {displayUnit}</option>)}
@@ -583,8 +586,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ระยะวางคานจากระดับ ({displayUnit})
               <LengthInput aria-label="ระยะเยื้องคานจากระดับ" value={beamObj.module_data.base_offset_mm ?? 0} unit={displayUnit} onChange={value => onUpdateBeamVerticalReference(beamObj.id, { base_offset_mm: value })} style={verticalSelectStyle} />
             </label>
-            <span style={{ fontSize: 10, color: '#52677d' }}>ท้องคาน +{formatLengthMm((beamBaseElevation ?? 0) - Number(beamObj.module_data.drop_mm ?? 0), displayUnit)} {displayUnit} · หลังคาน +{formatLengthMm((beamBaseElevation ?? 0) + beamObj.module_data.section_mm[1] - Number(beamObj.module_data.drop_mm ?? 0), displayUnit)} {displayUnit}</span>
-          </section>
+              <span style={{ fontSize: 10, color: '#52677d' }}>ท้องคาน +{formatLengthMm((beamBaseElevation ?? 0) - Number(beamObj.module_data.drop_mm ?? 0), displayUnit)} {displayUnit} · หลังคาน +{formatLengthMm((beamBaseElevation ?? 0) + beamObj.module_data.section_mm[1] - Number(beamObj.module_data.drop_mm ?? 0), displayUnit)} {displayUnit}</span>
+            </section>
+          </details>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>
@@ -911,7 +915,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           {openingInstanceEditor}
           {doorShape && <OpeningElevationThumbnail shape={doorShape} />}
 
-          <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
+          <details className="cf-inspector-section">
+            <summary>ระดับประตู · ธรณี {formatLengthMm(doorObj.module_data.sill_height_mm ?? 0, displayUnit)} · สูง {formatLengthMm(doorVertical?.height_mm ?? doorObj.module_data.height_mm, displayUnit)} {displayUnit}</summary>
+            <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับประตู</strong>
             <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ธรณี/ยกจากพื้น ({displayUnit})<LengthInput aria-label="ระดับธรณีประตู" value={doorObj.module_data.sill_height_mm ?? 0} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { sill_height_mm: value })} style={verticalSelectStyle} /></label>
             <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>หัวประตูจบที่ระดับ
@@ -933,7 +939,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 <LengthInput aria-label="ความสูงประตู" value={doorObj.module_data.height_mm} unit={displayUnit} onChange={value => onUpdateOpeningVertical(doorObj.id, { vertical_constraint: 'fixed_height', height_mm: value })} style={verticalSelectStyle} />
               </label>
             )}
-          </section>
+            </section>
+          </details>
 
           {/* Door Handing with Flip button */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -1021,7 +1028,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           {openingInstanceEditor}
           {winShape && <OpeningElevationThumbnail shape={winShape} />}
 
-          <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
+          <details className="cf-inspector-section">
+            <summary>ระดับหน้าต่าง · ธรณี {formatLengthMm(winObj.module_data.sill_height_mm, displayUnit)} · สูง {formatLengthMm(windowVertical?.height_mm ?? winObj.module_data.height_mm, displayUnit)} {displayUnit}</summary>
+            <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับหน้าต่าง</strong>
             <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ธรณีหน้าต่างจากพื้น ({displayUnit})<LengthInput aria-label="ระดับธรณีหน้าต่าง" value={winObj.module_data.sill_height_mm} unit={displayUnit} onChange={value => onUpdateOpeningVertical(winObj.id, { sill_height_mm: value })} style={verticalSelectStyle} /></label>
             <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>หัวหน้าต่างจบที่ระดับ
@@ -1043,7 +1052,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 <LengthInput aria-label="ความสูงหน้าต่าง" value={winObj.module_data.height_mm} unit={displayUnit} onChange={value => onUpdateOpeningVertical(winObj.id, { vertical_constraint: 'fixed_height', height_mm: value })} style={verticalSelectStyle} />
               </label>
             )}
-          </section>
+            </section>
+          </details>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#52677d' }}>
             <span>Sill Height:</span>
@@ -1185,6 +1195,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 </label>
               </div>
               <small style={{ fontSize: 10, color: '#64748b' }}>น้ำไหลลงตามทิศนี้ · 0° = ตะวันออก, 90° = เหนือ · เช่น 1.0% = ลาด 1:100</small>
+              <details className="cf-inspector-section">
+                <summary>ชั้นปิดผิว · {finishLayers.length} ชั้น{finishLayers.length ? ` · ผิวสำเร็จ +${formatLengthMm((resolvedElevation ?? 0) + Number(slabData.topping_mm ?? 0) + finishLayers.reduce((sum, layer) => sum + Number(layer.offset_mm ?? 0) + Number(layer.thickness_mm ?? 0), 0), displayUnit)} ${displayUnit}` : ''}</summary>
               <strong style={{ fontSize: 11, marginTop: 3 }}>ชั้นปิดผิวในพื้นชิ้นนี้</strong>
               {finishLayers.length > 0 && <small style={{ fontSize: 9, color: '#64748b' }}>วัสดุ · ความหนา · Offset จากชั้นก่อน · หน่วยปริมาณ</small>}
               {finishLayers.map((layer, index) => <div key={`${slabObj.id}:finish:${index}`} style={{ display: 'grid', gridTemplateColumns: '1fr 0.7fr 0.7fr 0.6fr auto', gap: 4, alignItems: 'center' }}>
@@ -1200,6 +1212,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 <span>ท้องพื้น: +{formatLengthMm((resolvedElevation ?? 0) - thickness, displayUnit)} {displayUnit}</span>
               </div>
               {finishLayers.length > 0 && <small style={{ fontSize: 10, color: '#64748b' }}>ผิวสำเร็จ: +{formatLengthMm((resolvedElevation ?? 0) + Number(slabData.topping_mm ?? 0) + finishLayers.reduce((sum, layer) => sum + Number(layer.offset_mm ?? 0) + Number(layer.thickness_mm ?? 0), 0), displayUnit)} {displayUnit}</small>}
+              </details>
               <button type="button" onClick={() => onDrawSurfaceVoid(slabObj.id)} style={verticalSelectStyle}>วาดช่องเจาะพื้น</button>
             </section>
           )
@@ -1244,6 +1257,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </div>
           </>}
           {isFloor && <>
+            <details className="cf-inspector-section">
+            <summary>รายละเอียดผิวพื้น · {layers.length} ชั้น · ลาย {Number((data.finish_pattern_mm as number[] | undefined)?.[0] ?? 600)} × {Number((data.finish_pattern_mm as number[] | undefined)?.[1] ?? 600)} มม.</summary>
             <strong style={{ fontSize: 11, marginTop: 3 }}>ชั้นวัสดุปูพื้น</strong>
             {layers.map((layer, index) => <div key={`${architectureSurfaceObj.id}:layer:${index}`} style={{ display: 'grid', gridTemplateColumns: '1fr 0.65fr 0.55fr auto', gap: 4, alignItems: 'center' }}>
               <input aria-label={`วัสดุชั้นพื้น ${index + 1}`} defaultValue={String(layer.material ?? '')} key={`${architectureSurfaceObj.id}:layer-material:${index}:${String(layer.material ?? '')}`} onBlur={event => {
@@ -1279,6 +1294,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>หมุนแนวลาย (องศา)
               <input aria-label="หมุนแนวลายพื้น องศา" type="number" step="1" value={Number(data.finish_pattern_rotation_deg ?? 0)} onChange={event => update({ finish_pattern_rotation_deg: Number(event.target.value) })} style={verticalSelectStyle} />
             </label>
+            </details>
           </>}
           <small style={{ fontSize: 10, color: '#64748b' }}>ระดับจริง {resolvedElevation === undefined ? 'ไม่ถูกต้อง' : `${formatLengthMm(resolvedElevation, displayUnit)} ${displayUnit}`} · ช่องเจาะ {Array.isArray(data.voids_mm) ? data.voids_mm.length : 0}</small>
         </section>
@@ -1302,6 +1318,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
             {/* Thai Building Code MR55 Natural Light & Ventilation Gauge */}
             {roomVent && (
+              <details className="cf-inspector-section">
+                <summary>แสง {roomVent.daylight_ratio_percent.toFixed(1)}% · ระบายอากาศ {roomVent.ventilation_ratio_percent.toFixed(1)}% · {roomVent.overall_status === 'pass' ? 'ผ่านเกณฑ์' : 'ตรวจเกณฑ์'}</summary>
               <div style={{ display: 'grid', gap: 6, background: '#ffffff', padding: 6, borderRadius: 3, border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>
                   การระบายอากาศและแสงสว่าง (กฎกระทรวง ฉบับที่ 55)
@@ -1372,6 +1390,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   </div>
                 )}
               </div>
+              </details>
             )}
 
             <button type="button" disabled={roomBoundaryOpen} title={roomBoundaryOpen ? 'ปิดวงผนังและตรวจพื้นที่ก่อนสร้างพื้นตามห้อง' : undefined} onClick={() => onCreateRoomFinish?.('floor', roomObj.id)} style={verticalSelectStyle}>สร้างพื้นสถาปัตย์ตามห้อง</button>

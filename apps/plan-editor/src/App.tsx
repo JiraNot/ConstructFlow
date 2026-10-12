@@ -33,21 +33,19 @@ import { SettingsModal } from './components/SettingsModal.js'
 import { TOOL_FAMILIES } from './components/catalogPresentation.js'
 import { TypeManagerModal } from './components/TypeManagerModal.js'
 import { UnderlayCalibrationModal } from './components/UnderlayCalibrationModal.js'
-import { ExtensionPresetsModal } from './components/ExtensionPresetsModal.js'
 import { ProjectLegalModal } from './components/ProjectLegalModal.js'
 import { CoordinationPanel } from './components/CoordinationPanel.js'
 import { useCoordinationReport } from './features/coordination/useCoordinationReport.js'
-import { exportProjectToDxf } from '@constructflow/cad-adapter'
-import { exportProjectToIfc } from '@constructflow/bim-adapter'
 import type { ProjectLegalMetadata } from '@constructflow/project-model'
 import { UnderlayConfig, PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
 import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home } from 'lucide-react'
 import { calculateTakeoff, calculatePhasedBOQ } from '@constructflow/takeoff-engine'
-import { createKitchenProofProject } from '@constructflow/extension-engine'
 import { renderPermitDrawingSetHtml } from '@constructflow/sheet-engine'
 import { readProjectFile, writeProjectFile, type LocalProjectFileHandle } from './projectFileIO.js'
 import { loadLocalProjectSnapshot, saveLocalProjectSnapshot } from './projectAutosave.js'
 import houseDemoRaw from '../../../examples/constructflow-reference-house-2storey.cfproj?raw'
+
+const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
 const headerActionStyle: React.CSSProperties = {
   display: 'inline-flex',
@@ -1573,22 +1571,59 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     }
   }
 
-  const handleStartKitchenProof = () => {
+  const handleStartKitchenProof = async () => {
     if (!confirmReplaceUnsavedProject()) return
-    const generated = createKitchenProofProject()
-    if (generated.status !== 'success') {
-      window.alert(`สร้างโมเดลครัวพิสูจน์ไม่สำเร็จ: ${generated.errors?.join('; ') ?? 'unknown error'}`)
-      return
+    try {
+      const { createKitchenProofProject } = await import('@constructflow/extension-engine')
+      const generated = createKitchenProofProject()
+      if (generated.status !== 'success') {
+        window.alert(`สร้างโมเดลครัวพิสูจน์ไม่สำเร็จ: ${generated.errors?.join('; ') ?? 'unknown error'}`)
+        return
+      }
+      projectSessionRef.current!.reset(generated.updatedProject)
+      updateActiveProjectFileHandle(null)
+      setProjectState(generated.updatedProject)
+      setSavedProjectJson(null)
+      setReplacementBaselineJson(serializeProject(generated.updatedProject))
+      setFileFeedback('สร้างโมเดลครัวพิสูจน์แล้ว')
+      setSelectedId(null)
+      setCommandQueue(generated.emittedEnvelopes)
+      setViewMode('plan')
+    } catch (error) {
+      window.alert(`โหลดโครงการตัวอย่างครัวไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
     }
-    projectSessionRef.current!.reset(generated.updatedProject)
-    updateActiveProjectFileHandle(null)
-    setProjectState(generated.updatedProject)
-    setSavedProjectJson(null)
-    setReplacementBaselineJson(serializeProject(generated.updatedProject))
-    setFileFeedback('สร้างโมเดลครัวพิสูจน์แล้ว')
-    setSelectedId(null)
-    setCommandQueue(generated.emittedEnvelopes)
-    setViewMode('plan')
+  }
+
+  const handleExportDxf = async () => {
+    try {
+      const { exportProjectToDxf } = await import('@constructflow/cad-adapter')
+      const result = exportProjectToDxf(project, { projectName: project.project.name, architectName: project.legal_metadata?.signatories?.architect_name, engineerLicense: project.legal_metadata?.signatories?.structural_engineer_license_no })
+      const url = URL.createObjectURL(new Blob([result.dxfContent], { type: 'application/dxf' }))
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${project.project.id || 'ConstructFlow'}_20Layouts.dxf`
+      anchor.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setFileFeedback('ส่งออก DXF 20 แผ่นแล้ว')
+    } catch (error) {
+      setFileFeedback(`ส่งออก DXF ไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  const handleExportIfc = async () => {
+    try {
+      const { exportProjectToIfc } = await import('@constructflow/bim-adapter')
+      const result = exportProjectToIfc(project, { projectName: project.project.name, authorName: project.legal_metadata?.signatories?.architect_name })
+      const url = URL.createObjectURL(new Blob([result.ifcContent], { type: 'application/x-step' }))
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${project.project.id || 'ConstructFlow'}.ifc`
+      anchor.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setFileFeedback('ส่งออก IFC 4.3 แล้ว')
+    } catch (error) {
+      setFileFeedback(`ส่งออก IFC ไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   const handleStartHouseDemo = () => {
@@ -1636,8 +1671,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const doorCount = Object.values(project.objects).filter((o) => o.object_type === 'door_window.door').length
   const windowCount = Object.values(project.objects).filter((o) => o.object_type === 'door_window.window').length
   const gridCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.grid').length
-  const takeoff = calculateTakeoff(project)
-  const boq = calculatePhasedBOQ(project)
+  const takeoff = useMemo(() => calculateTakeoff(project), [project])
+  const boq = useMemo(() => calculatePhasedBOQ(project), [project])
 
   const columnTypeCounts = Object.values(project.objects)
     .filter(isColumnObject)
@@ -1788,8 +1823,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               <button type="button" onClick={()=>openCatalog()}>คลังชนิด</button>
               <div className="cf-menu-label">แบบและส่งออก</div>
               <button type="button" onClick={()=>{setWorkbenchTab('sheets');setIsConstructionOpen(true)}}>ชุดแบบและตาราง</button>
-              <button type="button" aria-label="ส่งออก DXF 20 แผ่น" onClick={() => { const res = exportProjectToDxf(project, { projectName: project.project.name, architectName: project.legal_metadata?.signatories?.architect_name, engineerLicense: project.legal_metadata?.signatories?.structural_engineer_license_no }); const blob = new Blob([res.dxfContent], { type: 'application/dxf' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${project.project.id || 'ConstructFlow'}_20Layouts.dxf`; a.click(); URL.revokeObjectURL(url) }}>DXF · 20 แผ่น</button>
-              <button type="button" aria-label="ส่งออก IFC 4.3" onClick={() => { const res = exportProjectToIfc(project, { projectName: project.project.name, authorName: project.legal_metadata?.signatories?.architect_name }); const blob = new Blob([res.ifcContent], { type: 'application/x-step' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${project.project.id || 'ConstructFlow'}.ifc`; a.click(); URL.revokeObjectURL(url) }}>IFC 4.3</button>
+              <button type="button" aria-label="ส่งออก DXF 20 แผ่น" onClick={() => void handleExportDxf()}>DXF · 20 แผ่น</button>
+              <button type="button" aria-label="ส่งออก IFC 4.3" onClick={() => void handleExportIfc()}>IFC 4.3</button>
               <div className="cf-menu-label">ตั้งค่าและช่วยเหลือ</div>
               <button type="button" onClick={()=>setIsSettingsOpen(true)}>ตั้งค่า · ชั้น/ระดับ/พื้นที่ทำงาน</button>
               <button type="button" onClick={()=>setInspectorOpen(value=>!value)}>{inspectorOpen?'ยุบ':'แสดง'}แผงข้อมูล</button>
@@ -2160,12 +2195,12 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       />
 
       {/* 1-Click Parametric Extension Presets Modal */}
-      <ExtensionPresetsModal
+      <Suspense fallback={null}><ExtensionPresetsModal
         isOpen={isPresetsModalOpen}
         onClose={() => setIsPresetsModalOpen(false)}
         project={project}
         onApplyPreset={handleApplyExtensionPreset}
-      />
+      /></Suspense>
 
       {/* Title Deed & Legal Signatories Modal (Permit Issue Set) */}
       <ProjectLegalModal

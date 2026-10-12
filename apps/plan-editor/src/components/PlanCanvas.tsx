@@ -2377,7 +2377,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
   }
 
-  const placementHint = activeTool === 'column' ? 'เสา · Snap ศูนย์กลาง/จุดตัดกริด · เลื่อนแล้ว Enter วาง' :
+  const placementHint = activeTool === 'select' ? 'เลือก · คลิกเลือกหรือ ลากครอบวัตถุ · Tab สลับวัตถุซ้อน · Esc ล้างการเลือก' :
+    activeTool === 'erase' ? 'ยางลบ · คลิกหรือลากผ่านวัตถุเพื่อลบ · Esc ออกจากเครื่องมือ' :
+    activeTool === 'column' ? 'เสา · Snap ศูนย์กลาง/จุดตัดกริด · เลื่อนแล้ว Enter วาง' :
     activeTool === 'foundation' ? 'ฐานราก · Snap เสาหรือจุดกริด · เลื่อนแล้ว Enter วาง' :
     activeTool === 'door' || activeTool === 'window' ? `${activeTool === 'door' ? 'ประตู' : 'หน้าต่าง'} · วางบนผนัง · Tab ขอบ/กึ่งกลาง · Enter วาง` :
     activeTool === 'wall' ? `${wallStartNode ? 'ผนัง: เลื่อนหาจุดปลาย · กำหนดระยะ/องศาได้' : 'ผนัง: เลือกจุดเริ่ม'} · Enter ${wallStartNode ? 'วาดช่วงและต่อแนว' : 'กำหนดจุดเริ่ม'}` :
