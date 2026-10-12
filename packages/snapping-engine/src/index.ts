@@ -186,14 +186,14 @@ export function snapPoint(
       const [cx, cy] = object.module_data.location_mm
       const [width, depth] = object.module_data.section_mm
       const corners = rectangleCorners([cx, cy], width, depth, object.module_data.rotation_deg || 0)
-      // A precise center point must win over the nearby projected faces, even
-      // at typical plan zoom where half a column is only a few screen pixels.
+      // Rank column centers and faces by pointer distance: a face must remain
+      // selectable even when its center is within the same screen tolerance.
       offer([cx, cy], 'column_center', object.id, `เสากึ่งกลาง ${object.module_data.mark || ''}`.trim(), 0)
       corners.forEach((corner, index) => offer(corner, 'column_corner', object.id, `มุมเสา ${object.module_data.mark || ''} ${index + 1}`.trim(), 0))
       for (let index = 0; index < 4; index++) {
         const start = corners[index], end = corners[(index + 1) % 4]
         const projected = projectToSegment(rawWorldPoint_mm, start, end)
-        offer(projected.point, 'column_face', object.id, `ขอบเสา ${object.module_data.mark || ''}`.trim(), 1)
+        offer(projected.point, 'column_face', object.id, `ขอบเสา ${object.module_data.mark || ''}`.trim(), 0)
       }
     } else if (isBeamObject(object)) {
       const [sx, sy] = object.module_data.start_point_mm
@@ -456,4 +456,35 @@ export function snapOpeningWidthBimAware(
   // 2. Quantize to step increment
   const quantized = Math.round(rawWidth_mm / step) * step
   return Math.max(100, Math.min(validMax, quantized))
+}
+
+/** Stretch one jamb in wall-local coordinates, keeping the opposite jamb fixed. */
+export function resizeOpeningFromEdge(
+  draggedOffset_mm: number,
+  edgeIndex: 0 | 1,
+  centerOffset_mm: number,
+  width_mm: number,
+  wallLength_mm: number,
+  options: { snap?: boolean; endClearance_mm?: number } = {},
+): { width_mm: number; offset_along_wall_mm: number } | undefined {
+  const clearance = options.endClearance_mm ?? 100
+  if (![draggedOffset_mm, centerOffset_mm, width_mm, wallLength_mm, clearance].every(Number.isFinite)
+    || width_mm <= 0 || wallLength_mm <= 0 || clearance < 0) return undefined
+  const fixedJamb = centerOffset_mm + (edgeIndex === 0 ? width_mm / 2 : -width_mm / 2)
+  if (fixedJamb < 0 || fixedJamb > wallLength_mm) return undefined
+  const maxWidth = Math.floor(edgeIndex === 0 ? fixedJamb - clearance : wallLength_mm - clearance - fixedJamb)
+  if (maxWidth < 100) return undefined
+  const originalJamb = centerOffset_mm + (edgeIndex === 0 ? -width_mm / 2 : width_mm / 2)
+  if (Math.abs(draggedOffset_mm - originalJamb) < 1) {
+    return { width_mm, offset_along_wall_mm: centerOffset_mm }
+  }
+  const rawWidth = edgeIndex === 0 ? fixedJamb - draggedOffset_mm : draggedOffset_mm - fixedJamb
+  const clampedWidth = Math.max(100, Math.min(maxWidth, rawWidth))
+  const nextWidth = options.snap === false
+    ? Math.round(clampedWidth)
+    : snapOpeningWidthBimAware(clampedWidth, maxWidth)
+  return {
+    width_mm: nextWidth,
+    offset_along_wall_mm: fixedJamb + (edgeIndex === 0 ? -nextWidth / 2 : nextWidth / 2),
+  }
 }

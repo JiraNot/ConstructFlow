@@ -1,8 +1,32 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { constrainPointToReference, findNearestLinearReference, inferLinearConstraint, snapPoint, snapToWallHost, snapOpeningOffsetBimAware, snapOpeningWidthBimAware } from '../dist/index.js'
+import { constrainPointToReference, findNearestLinearReference, inferLinearConstraint, snapPoint, snapToWallHost, snapOpeningOffsetBimAware, snapOpeningWidthBimAware, resizeOpeningFromEdge } from '../dist/index.js'
 
 const view = (zoom = 1) => ({ zoom })
+
+test('opening edge stretch grows and shrinks each jamb without moving the opposite jamb', () => {
+  for (const [edge, pointer, width, center] of [
+    [0, 1350, 1100, 1900], [0, 1750, 700, 2100],
+    [1, 2650, 1100, 2100], [1, 2250, 700, 1900],
+  ]) {
+    const resized = resizeOpeningFromEdge(pointer, edge, 2000, 900, 6000)
+    assert.deepEqual(resized, { width_mm: width, offset_along_wall_mm: center })
+    assert.equal(center + (edge === 0 ? width / 2 : -width / 2), edge === 0 ? 2450 : 1550)
+  }
+  // Standard-size snapping adjusts only the dragged jamb; Ctrl permits a millimeter width.
+  assert.deepEqual(resizeOpeningFromEdge(2643, 1, 2000, 900, 6000), { width_mm: 1100, offset_along_wall_mm: 2100 })
+  assert.deepEqual(resizeOpeningFromEdge(2643, 1, 2000, 900, 6000, { snap: false }), { width_mm: 1093, offset_along_wall_mm: 2096.5 })
+  assert.deepEqual(resizeOpeningFromEdge(1575, 0, 2025, 900, 6000), { width_mm: 900, offset_along_wall_mm: 2025 }, 'clicking a grip does not snap an unchanged opening')
+})
+
+test('opening stretch clamps the moving jamb to host ends and prevents crossing the fixed jamb', () => {
+  assert.deepEqual(resizeOpeningFromEdge(-500, 0, 2000, 900, 6000), { width_mm: 2350, offset_along_wall_mm: 1275 })
+  assert.deepEqual(resizeOpeningFromEdge(7000, 1, 2000, 900, 6000), { width_mm: 4350, offset_along_wall_mm: 3725 })
+  assert.deepEqual(resizeOpeningFromEdge(3000, 0, 2000, 900, 6000), { width_mm: 100, offset_along_wall_mm: 2400 })
+  assert.deepEqual(resizeOpeningFromEdge(0, 1, 2000, 900, 6000), { width_mm: 100, offset_along_wall_mm: 1600 })
+  assert.equal(resizeOpeningFromEdge(100, 0, 70, 100, 6000), undefined, 'insufficient room cannot manufacture a valid width')
+  assert.equal(resizeOpeningFromEdge(NaN, 0, 2000, 900, 6000), undefined)
+})
 const project = (...objects) => ({ objects: Object.fromEntries(objects.map(object => [object.id, object])) })
 const column = (id, location_mm = [1000, 1000], section_mm = [200, 300], rotation_deg = 0) => ({
   id, object_type: 'structure.column', module_data: { mark: id, location_mm, section_mm, rotation_deg },
@@ -75,6 +99,20 @@ test('keeps the column center snap stronger than its faces at normal plan zoom',
   assert.equal(result.kind, 'column_center')
   assert.equal(result.target_id, 'lower-storey-column')
   assert.deepEqual(result.point_mm, [4000, 3000])
+})
+
+test('the nearest column face stays selectable with center, grid and endpoint snaps enabled at low zoom', () => {
+  const target = column('C1', [4000, 3000], [200, 200])
+  const doc = project(target, grid('grid-x', 'A', 'vertical', 4000), grid('grid-y', '1', 'horizontal', 3000))
+  for (const zoom of [.04, .08, .2]) {
+    const result = snapPoint([4000, 3100], doc, view(zoom))
+    assert.equal(result.kind, 'column_face')
+    assert.deepEqual(result.point_mm, [4000, 3100])
+    assert.equal(snapPoint([4000, 3000], doc, view(zoom)).kind, 'column_center')
+  }
+  const rotated = snapPoint([1000, 1150], project(column('rotated', [1000, 1000], [300, 200], 90)), view(.04))
+  assert.equal(rotated.kind, 'column_face')
+  assert.deepEqual(rotated.point_mm, [1000, 1150])
 })
 
 test('classifies deterministic midpoint, endpoint, and duplicate-target ties', () => {

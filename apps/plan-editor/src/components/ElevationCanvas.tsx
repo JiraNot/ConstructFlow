@@ -1,6 +1,7 @@
+import { resolveWallTopSegments } from '@constructflow/architecture-engine'
 import React, { useEffect, useRef, useState } from 'react'
 import { getDisplayPhase, resolveBeamBaseElevation, resolveColumnVerticalExtent, resolveOpeningVerticalExtent, resolveSlabElevation, resolveWallVerticalExtent, type ProjectDocument } from '@constructflow/project-model'
-import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getPlanVisibleObjects, getVisibleElevationMeshEdges, resolveCeilingGridStyle, resolvePlanPhaseStyle } from '@constructflow/representation-engine'
+import { clipElevationEdgeBySurfaces, getElevationFinishSurfaces, buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getPlanVisibleObjects, getVisibleElevationMeshEdges, resolveCeilingGridStyle, resolvePlanPhaseStyle } from '@constructflow/representation-engine'
 import { clippedGridSegments, polygonDiagonalHatchSegments, polygonInteriorPoint } from '@constructflow/geometry-kernel'
 import { getElevationBeamHorizontalBounds, getElevationWallStyle, getVisibleElevationLevelRows, layoutElevationTags, packElevationLevelLabelCenters, panElevationView, resolveElevationWallFaceMark, sortElevationObjectsForDrawing, zoomElevationViewAtPoint, zoomElevationViewFromCenter } from '../elevationLabelLayout.mjs'
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
@@ -30,17 +31,32 @@ interface Props {
   coordination?: readonly CoordinationFinding[]
 }
 
-function drawTag(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, text: string, shape: 'hexagon' | 'circle' | 'triangle', selected: boolean) {
+type TagShape = 'hexagon' | 'circle' | 'triangle'
+
+function measureTag(ctx: CanvasRenderingContext2D, text: string, shape: TagShape) {
+  ctx.save()
+  ctx.font = 'bold 10px sans-serif'
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'
+  const metrics = ctx.measureText(text)
+  ctx.restore()
+  if (shape !== 'triangle') return { width: Math.max(26, metrics.width + 12), height: 18, baselineOffset: .5 }
+  const ascent = metrics.actualBoundingBoxAscent || 8, descent = metrics.actualBoundingBoxDescent || 2
+  // Fit the complete text box in the wider lower half, clear of the sloped sides.
+  const textWidth = Math.max(metrics.width, metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight)
+  return { width: Math.max(36, 2 * (textWidth + 8)), height: Math.max(28, 2 * (ascent + descent + 6)), baselineOffset: ascent + 1 }
+}
+
+function drawTag(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, text: string, shape: TagShape, selected: boolean) {
   if (!text) return
   ctx.save()
   ctx.font = 'bold 10px sans-serif'
-  const width = Math.max(26, ctx.measureText(text).width + 12), height = 18
+  const { width, height, baselineOffset } = measureTag(ctx, text, shape)
   ctx.beginPath()
   if (shape === 'circle') ctx.ellipse(centerX, centerY, width / 2, height / 2, 0, 0, Math.PI * 2)
   else if (shape === 'triangle') {
-    ctx.moveTo(centerX - width / 2, centerY - height / 2)
-    ctx.lineTo(centerX + width / 2, centerY - height / 2)
-    ctx.lineTo(centerX, centerY + height / 2)
+    ctx.moveTo(centerX - width / 2, centerY + height / 2)
+    ctx.lineTo(centerX + width / 2, centerY + height / 2)
+    ctx.lineTo(centerX, centerY - height / 2)
     ctx.closePath()
   } else {
     const chamfer = Math.min(7, width * .22)
@@ -53,7 +69,7 @@ function drawTag(ctx: CanvasRenderingContext2D, centerX: number, centerY: number
     ctx.closePath()
   }
   ctx.fillStyle = '#fbfdff'; ctx.strokeStyle = selected ? '#0284c7' : '#8da2b8'; ctx.lineWidth = selected ? 1.5 : 1
-  ctx.fill(); ctx.stroke(); ctx.fillStyle = selected ? '#0369a1' : '#334155'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, centerX, centerY + .5)
+  ctx.fill(); ctx.stroke(); ctx.fillStyle = selected ? '#0369a1' : '#334155'; ctx.textAlign = 'center'; ctx.textBaseline = shape === 'triangle' ? 'alphabetic' : 'middle'; ctx.fillText(text, centerX, centerY + baselineOffset)
   ctx.restore()
 }
 
@@ -252,17 +268,35 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
         label?: string
       } | null = null
 
+      drawGroundHatch(); groundDrawn = true
+      const finishSurfaces = getElevationFinishSurfaces(project, direction, new Set(items.map(o => o.id)))
+      const finishIds = new Set(finishSurfaces.map(s => s.object_id))
+      const cameraSign = direction === 'north' || direction === 'east' ? 1 : -1
+      for (const surface of [...finishSurfaces].sort((a, b) => cameraSign * (a.depth_mm - b.depth_mm))) {
+        const style = getElevationWallStyle(surface.phase, false)
+        ctx.fillStyle = style.fill
+        ctx.strokeStyle = style.stroke; ctx.lineWidth = style.lineWidth; ctx.setLineDash(style.dash)
+        ctx.beginPath()
+        for (const ring of surface.polygons_mm) {
+          ring.forEach(([x, z], i) => i ? ctx.lineTo(sx(x * (reversed ? -1 : 1)), sy(z)) : ctx.moveTo(sx(x * (reversed ? -1 : 1)), sy(z))); ctx.closePath()
+        }
+        ctx.fill(); ctx.beginPath()
+        for (const [a, b] of surface.edges_mm) { ctx.moveTo(sx(a[0] * (reversed ? -1 : 1)), sy(a[1])); ctx.lineTo(sx(b[0] * (reversed ? -1 : 1)), sy(b[1])) }
+        ctx.stroke(); ctx.setLineDash([])
+      }
       for(const o of orderedItems){
         if(!groundDrawn&&o.object_type!=='structure.column'&&o.object_type!=='structure.beam'&&o.object_type!=='structure.slab'){drawGroundHatch();groundDrawn=true}
         const d=o.module_data as Record<string,unknown>; let left=0,right=0,bottom=0,top=0; let fill='#d8e1ea',stroke='#475569'
         if(o.object_type==='architecture.wall'){
           if(!groundDrawn){drawGroundHatch();groundDrawn=true}
           const a=d.start_point_mm as number[],b=d.end_point_mm as number[];if(!a||!b)continue
-          const extent=resolveWallVerticalExtent(project,o);if(!extent)continue
+          const originalExtent=resolveWallVerticalExtent(project,o);if(!originalExtent)continue
+          const actualHeight=d.fit_to_stair ? Math.max(0,...resolveWallTopSegments(project,o).flatMap(s=>[s.start_height_mm,s.end_height_mm])) : originalExtent.height_mm
+          const extent={...originalExtent,height_mm:actualHeight,top_elevation_mm:originalExtent.base_elevation_mm+actualHeight}
           left=sx(Math.min(horizontalCoordinate(a),horizontalCoordinate(b)));right=sx(Math.max(horizontalCoordinate(a),horizontalCoordinate(b)))
           bottom=sy(extent.base_elevation_mm);top=sy(extent.top_elevation_mm)
           const wallStyle=getElevationWallStyle(getDisplayPhase(o),isSelected(o.id))
-          fill=wallStyle.fill;ctx.fillStyle=wallStyle.fill;ctx.strokeStyle=wallStyle.stroke;ctx.lineWidth=wallStyle.lineWidth;ctx.setLineDash(wallStyle.dash);ctx.fillRect(left,top,right-left,bottom-top);ctx.strokeRect(left,top,right-left,bottom-top);ctx.setLineDash([])
+          fill=wallStyle.fill;ctx.fillStyle=wallStyle.fill;ctx.strokeStyle=wallStyle.stroke;ctx.lineWidth=wallStyle.lineWidth;ctx.setLineDash(wallStyle.dash);if (!finishIds.has(o.id)) { ctx.fillRect(left,top,right-left,bottom-top);ctx.strokeRect(left,top,right-left,bottom-top) };ctx.setLineDash([])
           if(isSelected(o.id)){
             selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:extent.top_elevation_mm,baseElev:extent.base_elevation_mm,height:extent.height_mm,label:String(d.mark||'Wall')}
           }
@@ -270,21 +304,33 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           // Place the wall-face mark in the longest uninterrupted facade span,
           // so hosted doors/windows do not cover it and it stays on the wall.
           const markText=String(faceMark??'')
-          ctx.font='bold 10px sans-serif'
-          const markWidth=Math.max(26,ctx.measureText(markText).width+12)
+          const { width: markWidth, height: markHeight } = measureTag(ctx, markText, 'triangle')
           const openings=items.filter(item=>(item.object_type==='door_window.door'||item.object_type==='door_window.window')&&(item.module_data as Record<string,unknown>).wall_id===o.id)
             .map(item=>{const opening=item.module_data as Record<string,unknown>,center=sx(horizontalCoordinate(opening.location_mm as number[])),half=Number(opening.width_mm??900)*scale/2;return [Math.max(left,center-half-5),Math.min(right,center+half+5)] as [number,number]})
             .filter(([a0,a1])=>a1>a0).sort((a0,b0)=>a0[0]-b0[0])
           let cursor=left,best:[number,number]=[left,left]
           for(const [a0,a1] of openings){if(a0-cursor>best[1]-best[0])best=[cursor,a0];cursor=Math.max(cursor,a1)}
           if(right-cursor>best[1]-best[0])best=[cursor,right]
-          if(best[1]-best[0]>=markWidth+8)elevationTags.push({x:(best[0]+best[1])/2,y:(top+bottom)/2,width:markWidth,height:18,text:markText,shape:'triangle',selected:isSelected(o.id)})
+          if(best[1]-best[0]>=markWidth+8) {
+            const x=(best[0]+best[1])/2
+            const ratio=(x-sx(horizontalCoordinate(a)))/(sx(horizontalCoordinate(b))-sx(horizontalCoordinate(a)))
+            const length=Math.hypot(b[0]-a[0],b[1]-a[1]),offset=Math.max(0,Math.min(length,ratio*length))
+            const segment=resolveWallTopSegments(project,o).find(s=>offset>=s.start_mm-1e-6&&offset<=s.end_mm+1e-6)
+            const localTop=segment?segment.start_height_mm+(segment.end_height_mm-segment.start_height_mm)*(offset-segment.start_mm)/(segment.end_mm-segment.start_mm):actualHeight
+            const world:[number,number,number]=[a[0]+ratio*(b[0]-a[0]),a[1]+ratio*(b[1]-a[1]),extent.base_elevation_mm+localTop/2]
+            const surface=finishSurfaces.find(s=>s.object_id===o.id)
+            if(surface)world[isEastWest?0:1]=surface.depth_mm
+            const tiny:[number,number,number]=[world[0]+(b[0]-a[0])/length,world[1]+(b[1]-a[1])/length,world[2]]
+            // A label uses the same opaque-finish test as the linework it describes.
+            if(localTop*scale>18&&clipElevationEdgeBySurfaces([world,tiny],direction,finishSurfaces.filter(s=>s.object_id!==o.id)).length)
+              elevationTags.push({x,y:sy(world[2]),width:markWidth,height:markHeight,text:markText,shape:'triangle',selected:isSelected(o.id)})
+          }
         }else if(o.object_type==='structure.column'){
           const p=d.location_mm as number[];if(!p)continue;const extent=resolveColumnVerticalExtent(project,o);if(!extent)continue;const half=Number((d.section_mm as number[]|undefined)?.[isEastWest?0:1]??200)/2,base=extent.base_elevation_mm,topElevation=extent.top_elevation_mm
           left=sx(horizontalCoordinate(p)-half);right=sx(horizontalCoordinate(p)+half);bottom=sy(topElevation);top=sy(base)
           fill=isSelected(o.id)?'#a2cbe5':'#b9d6e8';stroke=isSelected(o.id)?'#0284c7':'#475569'
           ctx.lineWidth=isSelected(o.id)?2:1
-          ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.fillRect(left,bottom,right-left,top-bottom);ctx.strokeRect(left,bottom,right-left,top-bottom)
+          ctx.fillStyle=fill;ctx.strokeStyle=stroke;if (!finishIds.has(o.id)) { ctx.fillRect(left,bottom,right-left,top-bottom);ctx.strokeRect(left,bottom,right-left,top-bottom) }
           if(isSelected(o.id)){
             selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:extent.top_elevation_mm,baseElev:extent.base_elevation_mm,height:extent.height_mm,label:String(d.mark||'Column')}
           }
@@ -293,7 +339,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           const z=resolveBeamBaseElevation(project,o);if(z===undefined)continue;const section=d.section_mm as number[]|undefined,width=Number(section?.[0]??200),dep=Number(section?.[1]??400),drop=Number(d.drop_mm??0),beamBounds=getElevationBeamHorizontalBounds(a,b,width,direction);if(!beamBounds)continue;left=sx(beamBounds[0]);right=sx(beamBounds[1]);top=sy(z+dep-drop);bottom=sy(z-drop)
           fill=isSelected(o.id)?'#8ea7bf':'#9ca3af';stroke=isSelected(o.id)?'#0284c7':'#475569'
           ctx.lineWidth=isSelected(o.id)?2:1
-          ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.fillRect(left,top,right-left,bottom-top);ctx.strokeRect(left,top,right-left,bottom-top)
+          ctx.fillStyle=fill;ctx.strokeStyle=stroke;if (!finishIds.has(o.id)) { ctx.fillRect(left,top,right-left,bottom-top);ctx.strokeRect(left,top,right-left,bottom-top) }
           if(isSelected(o.id)){
             selectedVisual={id:o.id,x:left,y:Math.min(top,bottom),w:right-left,h:Math.abs(bottom-top),topElev:z+dep-drop,baseElev:z-drop,height:dep,label:String(d.mark||'Beam')}
           }
@@ -329,12 +375,12 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           ctx.font='bold 10px sans-serif'
           const tagText=String(d.mark??'')
           elevationTags.push({x,y:top-17,width:Math.max(26,ctx.measureText(tagText).width+12),height:18,text:tagText,shape:o.object_type==='door_window.window'?'hexagon':'circle',selected:isSelected(o.id)})
-        }else if(o.object_type==='roof.system'){
+        }else if(o.object_type==='roof.system'||o.object_type==='architecture.stair'){
           const shape=representations.get(o.id)?.shape
           if(shape?.kind!=='triangle_mesh')continue
           const style=getElevationWallStyle(getDisplayPhase(o),isSelected(o.id))
           const visibleEdges=new Map<string,[[number,number],[number,number]]>()
-          for(const [a,b] of getVisibleElevationMeshEdges(shape.triangles_mm,direction as Exclude<ElevationDirection,'rcp'>,scale)){
+          for(const [a,b] of getVisibleElevationMeshEdges(shape.triangles_mm,direction as Exclude<ElevationDirection,'rcp'>,scale).flatMap(edge => clipElevationEdgeBySurfaces(edge,direction,finishSurfaces))){
             const start:[number,number]=[sx(horizontalCoordinate(a)),sy(a[2])]
             const end:[number,number]=[sx(horizontalCoordinate(b)),sy(b[2])]
             if(Math.hypot(end[0]-start[0],end[1]-start[1])<.5)continue

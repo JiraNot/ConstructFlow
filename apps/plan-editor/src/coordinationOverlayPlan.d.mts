@@ -33,6 +33,7 @@ export type CoordinationPrimitive =
 export declare const COORDINATION_SEVERITY_STYLE: Record<ClashSeverity, CoordinationSeverityStyle>
 
 export declare function coordinationMeasureText(finding: CoordinationFinding): string
+export declare function coordinationObjectText(object: CoordinationFinding['objects'][number]): string
 export declare function coordinationFixText(finding: CoordinationFinding): string
 export declare function coordinationFindingsForObject(findings: readonly CoordinationFinding[], objectId: string): CoordinationFinding[]
 export declare function planCoordinationOverlay(

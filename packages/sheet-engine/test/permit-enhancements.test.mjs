@@ -782,7 +782,7 @@ test("F04: Hidden-line solver and depth occlusion on elevations and section cuts
     object_type: "structure.column",
     created_phase: "new_construction",
     level_refs: [],
-    module_data: { mark: "C-FACADE", location_mm: [3000, 0, 0], section_mm: [200, 200], base_elevation_mm: 0, top_elevation_mm: 3000 },
+    module_data: { mark: "C-FACADE", location_mm: [3000, 0, 0], section_mm: [100, 100], base_elevation_mm: 0, top_elevation_mm: 3000 },
   };
   const withFacade = compilePermitDrawingSet(withFacadeColumn).sheets.find((sheet) => sheet.id === "A-05");
   const throughFacadeColumnEdges = withFacade.primitives.filter((primitive) =>
@@ -791,6 +791,14 @@ test("F04: Hidden-line solver and depth occlusion on elevations and section cuts
     Math.abs(primitive.points[1][1] - primitive.points[0][1]) > 20,
   );
   assert.equal(throughFacadeColumnEdges.length, 0, "a column covered by the exterior wall finish must not draw through the facade");
+
+  const withProudColumn = structuredClone(withFacadeColumn);
+  withProudColumn.objects['col-facade'].module_data.section_mm = [200, 200];
+  withProudColumn.objects['col-facade'].module_data.plaster_thickness_mm = 15;
+  const proud = compilePermitDrawingSet(withProudColumn).sheets.find(sheet => sheet.id === 'A-05');
+  assert.ok(proud.primitives.some(primitive => primitive.kind === 'path' && !primitive.fill && primitive.points.length === 2 &&
+    primitive.points.every(([x]) => x >= 104 && x <= 112) && Math.abs(primitive.points[1][1] - primitive.points[0][1]) > 20),
+    'a column finish projecting beyond the thin wall keeps its real facade returns');
 
   // Check section sheet A-07
   const a07 = set.sheets.find((s) => s.id === "A-07");

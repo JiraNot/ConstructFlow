@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { extrude } from '@constructflow/geometry-kernel'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import type { ProjectDocument } from '@constructflow/project-model'
@@ -380,6 +381,13 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
   } else if (representation.shape.kind === 'wall_extrusion') {
     const { length_mm, height_mm, thickness_mm, cutouts } = representation.shape
     const length = mmToM(length_mm), height = mmToM(height_mm), thickness = mmToM(thickness_mm)
+    const makeProfileGeometry = (depthMm: number, offsetMm = 0) => {
+      const geometry = new THREE.BufferGeometry()
+      const triangles = representation.shape.kind === 'wall_extrusion' ? (representation.shape.profiles_mm ?? []).flatMap(profile => extrude(profile, -offsetMm - depthMm / 2, -offsetMm + depthMm / 2)) : []
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(triangles.flat(2).map(mmToM), 3))
+      geometry.computeVertexNormals()
+      return geometry
+    }
     const shape = new THREE.Shape()
     shape.moveTo(0, 0); shape.lineTo(length, 0); shape.lineTo(length, height); shape.lineTo(0, height); shape.lineTo(0, 0)
     for (const cutout of cutouts) {
@@ -392,8 +400,8 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
     if (representation.shape.layers?.length) {
       for (const layer of representation.shape.layers) {
         const layerThickness = mmToM(layer.thickness_mm)
-        const layerGeometry = new THREE.ExtrudeGeometry(shape, { depth: layerThickness, bevelEnabled: false, steps: 1, curveSegments: 1 })
-        layerGeometry.translate(0, 0, mmToM(layer.offset_mm) - layerThickness / 2)
+        const layerGeometry = representation.shape.profiles_mm ? makeProfileGeometry(layer.thickness_mm, layer.offset_mm) : new THREE.ExtrudeGeometry(shape, { depth: layerThickness, bevelEnabled: false, steps: 1, curveSegments: 1 })
+        if (!representation.shape.profiles_mm) layerGeometry.translate(0, 0, -mmToM(layer.offset_mm) - layerThickness / 2)
         const finishColor: Record<string, string> = {
           cement_plaster: '#d4d0c8', wall_paint: '#f1eee6', interior_paint: '#f1eee6', exterior_paint: '#f1eee6',
           ceramic_tile: '#a8d4dc', stone_cladding: '#a99f91', timber_cladding: '#a8754b',
@@ -418,8 +426,8 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
       }
       return root
     }
-    geometry = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false, steps: 1, curveSegments: 1 })
-    geometry.translate(0, 0, -thickness / 2)
+    geometry = representation.shape.profiles_mm ? makeProfileGeometry(thickness_mm) : new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false, steps: 1, curveSegments: 1 })
+    if (!representation.shape.profiles_mm) geometry.translate(0, 0, -thickness / 2)
   } else {
     const [width, depth, height] = representation.shape.size_mm.map(mmToM)
     geometry = new THREE.BoxGeometry(Math.max(width, 0.01), Math.max(depth, 0.01), Math.max(height, 0.01))
@@ -442,18 +450,23 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
 interface Model3DViewportProps {
   project: ProjectDocument
   onSelectObject: (id: string | null) => void
+  selectedId?: string | null
+  selectedIds?: readonly string[]
   /** Coordination findings, drawn as impact volumes so clashes are visible in 3D too. */
   coordination?: readonly CoordinationFinding[]
 }
 
-export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSelectObject, coordination = [] }) => {
+export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSelectObject, selectedId = null, selectedIds = [], coordination = [] }) => {
   const hostRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const meshByIdRef = useRef(new Map<string, ModelObject3D>())
   const orbitRef = useRef<OrbitControls | null>(null)
   const highlightRef = useRef<THREE.Group | null>(null)
+  const selectionHighlightRef = useRef<THREE.Group | null>(null)
   const selectRef = useRef(onSelectObject)
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [hasModel, setHasModel] = useState(false)
   selectRef.current = onSelectObject
 
   useEffect(() => {
@@ -518,7 +531,18 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
       while (hitObject && typeof hitObject.userData.objectId !== 'string') hitObject = hitObject.parent
       selectRef.current(hitObject?.userData.objectId ?? null)
     }
+    const onPointerMove = (event: PointerEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect()
+      pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
+      raycaster.setFromCamera(pointer, camera)
+      const hits = raycaster.intersectObjects([...meshByIdRef.current.values()], true)
+      let hitObject: THREE.Object3D | null = hits[0]?.object ?? null
+      while (hitObject && typeof hitObject.userData.objectId !== 'string') hitObject = hitObject.parent
+      setHoveredId(hitObject?.userData.objectId ?? null)
+      renderer.domElement.style.cursor = hitObject ? 'pointer' : 'default'
+    }
     renderer.domElement.addEventListener('pointerup', onPointerUp)
+    renderer.domElement.addEventListener('pointermove', onPointerMove)
     let frame = 0
     const render = () => { frame = requestAnimationFrame(render); orbit.update(); renderer.render(scene, camera) }
     render()
@@ -526,6 +550,7 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
       cancelAnimationFrame(frame)
       observer.disconnect()
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
+      renderer.domElement.removeEventListener('pointermove', onPointerMove)
       orbit.dispose()
       renderer.dispose()
       host.removeChild(renderer.domElement)
@@ -534,6 +559,17 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
         scene.remove(highlightRef.current)
         disposeCoordinationHighlightGroup(highlightRef.current)
         highlightRef.current = null
+      }
+      if (selectionHighlightRef.current) {
+        scene.remove(selectionHighlightRef.current)
+        selectionHighlightRef.current.traverse(child => {
+          if (child instanceof THREE.LineSegments) {
+            child.geometry.dispose()
+            const materials = Array.isArray(child.material) ? child.material : [child.material]
+            materials.forEach(material => material.dispose())
+          }
+        })
+        selectionHighlightRef.current = null
       }
       sceneRef.current = null
     }
@@ -558,6 +594,7 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
       scene.add(mesh)
       meshByIdRef.current.set(representation.object_id, mesh)
     }
+    setHasModel(meshByIdRef.current.size > 0)
     const box = new THREE.Box3()
     for (const mesh of meshByIdRef.current.values()) box.expandByObject(mesh)
     if (!box.isEmpty()) {
@@ -570,6 +607,65 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
       orbitRef.current?.update()
     }
   }, [project])
+
+  const frameObjects = (ids?: readonly string[]) => {
+    const camera = cameraRef.current
+    const orbit = orbitRef.current
+    if (!camera || !orbit || meshByIdRef.current.size === 0) return false
+    const box = new THREE.Box3()
+    const targets = ids?.length ? ids.map(id => meshByIdRef.current.get(id)).filter((mesh): mesh is ModelObject3D => Boolean(mesh)) : [...meshByIdRef.current.values()]
+    for (const mesh of targets) box.expandByObject(mesh)
+    if (box.isEmpty()) return false
+    const center = box.getCenter(new THREE.Vector3())
+    const size = box.getSize(new THREE.Vector3())
+    const radius = Math.max(size.length() / 2, 0.8)
+    const direction = camera.position.clone().sub(orbit.target).normalize()
+    const verticalFov = THREE.MathUtils.degToRad(camera.fov)
+    const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * Math.max(camera.aspect, 0.1))
+    const distance = radius / Math.sin(Math.min(verticalFov, horizontalFov) / 2) * 1.18
+    orbit.target.copy(center)
+    camera.position.copy(center).add(direction.multiplyScalar(distance))
+    camera.near = Math.max(0.01, distance / 1000)
+    camera.far = Math.max(5000, distance * 20)
+    camera.updateProjectionMatrix()
+    orbit.update()
+    return true
+  }
+
+  useEffect(() => {
+    const scene = sceneRef.current
+    if (!scene) return
+    if (selectionHighlightRef.current) {
+      scene.remove(selectionHighlightRef.current)
+      selectionHighlightRef.current.traverse(child => {
+        if (child instanceof THREE.LineSegments) {
+          child.geometry.dispose()
+          const materials = Array.isArray(child.material) ? child.material : [child.material]
+          materials.forEach(material => material.dispose())
+        }
+      })
+      selectionHighlightRef.current = null
+    }
+    const ids = selectedIds.length ? selectedIds : selectedId ? [selectedId] : hoveredId ? [hoveredId] : []
+    const box = new THREE.Box3()
+    for (const id of ids) {
+      const mesh = meshByIdRef.current.get(id)
+      if (mesh) box.expandByObject(mesh)
+    }
+    if (box.isEmpty()) return
+    const group = new THREE.Group()
+    const selected = Boolean(selectedId || selectedIds.length)
+    const helper = new THREE.Box3Helper(box, new THREE.Color(selected ? '#38bdf8' : '#fbbf24'))
+    const material = (helper as THREE.LineSegments).material as THREE.LineBasicMaterial
+    material.depthTest = false
+    material.transparent = true
+    material.opacity = 0.96
+    material.toneMapped = false
+    helper.renderOrder = 20
+    group.add(helper)
+    scene.add(group)
+    selectionHighlightRef.current = group
+  }, [selectedId, selectedIds, hoveredId, project])
 
   // Keep highlight geometry separate from model meshes and replace it only when the project or
   // coordination report changes.
@@ -591,5 +687,14 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
     <div style={{ position: 'absolute', left: 12, top: 10, zIndex: 1, color: '#94a3b8', background: 'rgba(8,15,30,0.76)', padding: '4px 6px', borderRadius: 2, fontSize: 11, pointerEvents: 'none' }}>
       ภาพตัวอย่าง 3D · ลากเพื่อหมุน · เลื่อนเพื่อซูม · เลือกวัตถุเพื่อดูคุณสมบัติ
     </div>
+    <div role="group" aria-label="คำสั่งมุมมอง 3D" style={{ position: 'absolute', top: 10, right: 12, zIndex: 2, display: 'flex', gap: 6 }}>
+      <button type="button" title="จัดกรอบโมเดลทั้งหมด" onClick={() => frameObjects()} disabled={!hasModel} style={viewButtonStyle}>จัดกรอบโมเดล</button>
+      <button type="button" title="จัดกรอบวัตถุที่เลือก" onClick={() => frameObjects(selectedIds.length ? selectedIds : selectedId ? [selectedId] : [])} disabled={!hasModel || (!selectedId && !selectedIds.length)} style={viewButtonStyle}>กรอบที่เลือก</button>
+    </div>
   </div>
+}
+
+const viewButtonStyle: React.CSSProperties = {
+  minHeight: 30, padding: '4px 9px', border: '1px solid #475569', borderRadius: 4,
+  color: '#e2e8f0', background: 'rgba(15,23,42,0.92)', fontSize: 11, fontWeight: 650, cursor: 'pointer',
 }

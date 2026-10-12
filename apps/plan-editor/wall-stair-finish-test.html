@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="th">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Wall stair / plaster proof</title><style>* { box-sizing: border-box; margin: 0; padding: 0; } body, html, #root { width: 100%; height: 100%; overflow: hidden; }</style></head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      // Development-only visual harness. Preserve the previous autosave as a structured clone.
+      import React from 'react'
+      import './src/app.css'
+      import { createRoot } from 'react-dom/client'
+      import { App } from './src/App.tsx'
+      import { saveLocalProjectSnapshot } from './src/projectAutosave.ts'
+      import proof from '../../examples/wall-stair-finish-proof.cfproj?raw'
+      const db = await new Promise((resolve, reject) => {
+        const request = indexedDB.open('constructflow-local-projects', 1)
+        request.onupgradeneeded = () => request.result.createObjectStore('snapshots')
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+      const restore = new URLSearchParams(location.search).has('restore')
+      await new Promise((resolve, reject) => {
+        const transaction = db.transaction('snapshots', 'readwrite'), store = transaction.objectStore('snapshots')
+        const backup = store.get('wall-stair-proof-backup')
+        backup.onsuccess = () => {
+          if (restore) {
+            if (backup.result) {
+              if (backup.result.previous) store.put(backup.result.previous, 'active-project')
+              else store.delete('active-project')
+              store.delete('wall-stair-proof-backup')
+            }
+          } else if (!backup.result) {
+            const active = store.get('active-project')
+            active.onsuccess = () => store.put({ previous: active.result ?? null }, 'wall-stair-proof-backup')
+          }
+        }
+        transaction.oncomplete = resolve; transaction.onerror = () => reject(transaction.error)
+      })
+      db.close()
+      if (restore) location.replace('/')
+      else {
+        await saveLocalProjectSnapshot({ projectJson: proof, savedProjectJson: proof, replacementBaselineJson: proof })
+        createRoot(document.getElementById('root')).render(React.createElement(App))
+      }
+    </script>
+  </body>
+</html>

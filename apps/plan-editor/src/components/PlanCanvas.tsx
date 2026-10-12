@@ -34,7 +34,7 @@ import {
   worldToScreen,
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
-import { constrainPointToReference, DEFAULT_SNAP_MODES, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware, snapOpeningWidthBimAware } from '@constructflow/snapping-engine'
+import { constrainPointToReference, DEFAULT_SNAP_MODES, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware, resizeOpeningFromEdge } from '@constructflow/snapping-engine'
 import { renderPlanView, PlacementGhost, UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import { Maximize2, Pencil, Trash2, ZoomIn, ZoomOut, PlusCircle, Copy } from 'lucide-react'
 
@@ -86,7 +86,7 @@ interface PlanCanvasProps {
   onMoveOpening: (id: string, offset_along_wall_mm: number) => void
   onUpdateWallEndpoints?: (id: string, start: [number, number], end: [number, number]) => void
   onUpdateBeamEndpoints?: (id: string, start: [number, number], end: [number, number], startColumnId?: string | null, endColumnId?: string | null) => void
-  onResizeOpening?: (id: string, width_mm: number) => void
+  onResizeOpening?: (id: string, width_mm: number, offset_along_wall_mm: number) => void
   onUpdateBoundaryVertex?: (id: string, boundary_mm: [number, number][]) => void
   onUpdateRoomSeparator?: (id: string, start: [number, number], end: [number, number]) => void
   onResizeColumn?: (id: string, section_mm: [number, number]) => void
@@ -593,6 +593,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [stairStartPoint, setStairStartPoint] = useState<[number, number] | null>(null)
   const [stairOptions, setStairOptions] = useState<StairPlacementOptions>({ stair_type: 'u_shape', width_mm: 900, landing_depth_mm: 900, turn_direction: 'right', num_risers: 18, flight_gap_mm: 100, top_level_id: '' })
   const [stairError, setStairError] = useState('')
+  const [authoringControlsOpen, setAuthoringControlsOpen] = useState(true)
   useEffect(() => {
     const base = project.levels.find(l => l.id === project.project.active_level_id)
     const top = project.levels.filter(l => l.elevation_mm > (base?.elevation_mm ?? 0)).sort((a, b) => a.elevation_mm - b.elevation_mm)[0]
@@ -2178,15 +2179,13 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
             if (draggingObject.endpointIndex === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
             onUpdateRoomSeparator?.(draggingObject.id, start, end)
-          } else if (draggingObject.kind === 'opening-edge' && draggingObject.endpointIndex !== undefined && draggingObject.hostStartMm && draggingObject.hostEndMm && draggingObject.openingCenterOffsetMm !== undefined) {
+          } else if (draggingObject.kind === 'opening-edge' && draggingObject.endpointIndex !== undefined && draggingObject.hostStartMm && draggingObject.hostEndMm && draggingObject.openingCenterOffsetMm !== undefined && draggingObject.openingWidthMm !== undefined) {
             const offset = projectPointToWallOffsetMm(rawWorld, draggingObject.hostStartMm, draggingObject.hostEndMm, 1)
             if (offset !== undefined) {
-              const halfWidth = draggingObject.endpointIndex === 0 ? draggingObject.openingCenterOffsetMm - offset : offset - draggingObject.openingCenterOffsetMm
               const hostLength = Math.hypot(draggingObject.hostEndMm[0] - draggingObject.hostStartMm[0], draggingObject.hostEndMm[1] - draggingObject.hostStartMm[1])
-              const maxWidth = 2 * Math.min(draggingObject.openingCenterOffsetMm - 100, hostLength - 100 - draggingObject.openingCenterOffsetMm)
-              const rawWidth = Math.round(halfWidth * 2)
-              const snappedWidth = e.ctrlKey ? Math.max(100, Math.min(rawWidth, Math.floor(maxWidth))) : snapOpeningWidthBimAware(rawWidth, Math.floor(maxWidth))
-              onResizeOpening?.(draggingObject.id, snappedWidth)
+              const resized = resizeOpeningFromEdge(offset, draggingObject.endpointIndex === 0 ? 0 : 1,
+                draggingObject.openingCenterOffsetMm, draggingObject.openingWidthMm, hostLength, { snap: !e.ctrlKey })
+              if (resized) onResizeOpening?.(draggingObject.id, resized.width_mm, resized.offset_along_wall_mm)
             }
           } else if (draggingObject.kind === 'column') {
             const snap = e.ctrlKey
@@ -2386,11 +2385,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     activeTool === 'grid' ? `เส้นกริด · ${gridStartPoint ? 'เลือกจุดปลาย · กำหนดระยะ/องศาได้' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด` :
     activeTool === 'gridCopy' ? 'สำเนาเส้นกริด · Shift ล็อกแนวขนาน · Enter วางสำเนา' :
     activeTool === 'gridSystem' ? 'ระบบกริด · กรอกช่วงระยะ แล้วเลือกจุดกำเนิดหรือ Enter วางตรงเคอร์เซอร์' :
-    activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling' ? `ขอบเขต · ${slabBoundary.length ? 'กรอกระยะ/องศาแล้ว Enter เพิ่มจุด' : 'คลิกหรือ Enter จุดแรก'} · Enter บนแปลนปิดรูปเมื่อครบ 3 จุด` :
+    activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling' ? `${activeTool === 'slab' ? 'พื้นโครงสร้าง' : activeTool === 'slabVoid' ? 'ช่องเจาะพื้น' : activeTool === 'archFloor' ? 'พื้นสถาปัตย์' : 'ฝ้าเพดาน'} · ${slabBoundary.length ? 'กรอกระยะ/องศาแล้ว Enter เพิ่มจุด' : 'คลิกหรือ Enter จุดแรก'} · Enter บนแปลนปิดรูปเมื่อครบ 3 จุด` :
     activeTool === 'roomSeparator' ? `เส้นแบ่งห้อง · ${roomSeparatorStart ? 'กำหนดระยะ/องศาแล้วเลือกจุดปลาย' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด` :
     activeTool === 'stair' ? `บันได · ${stairStartPoint ? 'เลือกปลายเที่ยวแรก · ระยะ/องศากำหนดเอง · Shift ล็อกแกน · Enter วาง' : 'เลือกจุดเริ่มริมเที่ยวแรก · เลือกระดับจบและรูปแบบก่อนวาง'} · Esc ยกเลิก` :
     activeTool === 'measure' ? 'ตลับเมตร · เลือกจุดเริ่มและจุดปลาย · Enter ยืนยันจุด · Esc ยกเลิก/ออก' :
     activeTool === 'calibrate' ? 'ปรับสเกลภาพ · เลือกจุดอ้างอิงสองจุด · Enter ยืนยันจุด' : null
+  const authoringToolName: Partial<Record<ToolType, string>> = {
+    select: 'เลือกวัตถุ', column: 'เสา', foundation: 'ฐานราก', beam: 'คาน', wall: 'ผนัง', door: 'ประตู', window: 'หน้าต่าง',
+    slab: 'พื้นโครงสร้าง', slabVoid: 'ช่องเจาะพื้น', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้าเพดาน', roomSeparator: 'เส้นแบ่งห้อง',
+    stair: 'บันได', grid: 'เส้นกริด', gridSystem: 'ระบบกริด', gridCopy: 'คัดลอกกริด', measure: 'ตลับเมตร', calibrate: 'ปรับสเกลภาพ', erase: 'ลบวัตถุ',
+  }
 
   return (
     <div
@@ -2459,8 +2463,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       }) && <div className="cf-tape-measure-hint" aria-live="polite">จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด · จุดสีส้ม: ลากขอบปรับความกว้าง หรือลากจุดกึ่งกลางปรับตำแหน่ง (BIM Snap ขอบเสา 100 มม.) · ปุ่ม ⇄: สลับด้านบานประตู</div>}
       {placementHint && <div className="cf-tape-measure-hint" aria-live="polite">{placementHint} · Esc ยกเลิกขั้นตอน หรือออกเมื่อว่าง</div>}
       {supportsPlacementDimensions && dimensionOverlayPosition && (showXDimension || showYDimension || hasLineGeometryInput) && <div className="cf-dynamic-dimensions" role="group" aria-label="ระยะและแนวระหว่างวางวัตถุ" onPointerDown={event => event.stopPropagation()} style={{
-        left: Math.max(8, Math.min(dimensionOverlayPosition[0] + 14, (containerRef.current?.clientWidth ?? 800) - 300)),
-        top: Math.max(8, Math.min(dimensionOverlayPosition[1] + 20, (containerRef.current?.clientHeight ?? 600) - 70)),
+        left: Math.max(8, Math.min(dimensionOverlayPosition[0] > (containerRef.current?.clientWidth ?? 800) / 2 ? dimensionOverlayPosition[0] - 318 : dimensionOverlayPosition[0] + 18, (containerRef.current?.clientWidth ?? 800) - 318)),
+        top: Math.max(8, Math.min(dimensionOverlayPosition[1] > (containerRef.current?.clientHeight ?? 600) / 2 ? dimensionOverlayPosition[1] - 94 : dimensionOverlayPosition[1] + 22, (containerRef.current?.clientHeight ?? 600) - 86)),
       }}>
         {showXDimension && <label><span>X · {displayUnit}</span><input ref={dimensionInputXRef} aria-label={`ระยะจากแนวอ้างอิง X (${displayUnit})`} type="text" inputMode="decimal" value={xDimensionDisplay} onFocus={event => { if (dimensionReferences.refX !== undefined) setDimensionAnchorX(dimensionAnchorX ?? dimensionReferences.refX); setDimensionKeyboardAxis('x'); event.currentTarget.select() }} onChange={event => { setDimensionAnchorX(dimensionAnchorX ?? dimensionReferences.refX ?? null); setDimensionInputX(event.target.value) }} onKeyDown={handleDimensionInputKeyDown} /></label>}
         {showYDimension && <label><span>Y · {displayUnit}</span><input ref={dimensionInputYRef} aria-label={`ระยะจากแนวอ้างอิง Y (${displayUnit})`} type="text" inputMode="decimal" value={yDimensionDisplay} onFocus={event => { if (dimensionReferences.refY !== undefined) setDimensionAnchorY(dimensionAnchorY ?? dimensionReferences.refY); setDimensionKeyboardAxis('y'); event.currentTarget.select() }} onChange={event => { setDimensionAnchorY(dimensionAnchorY ?? dimensionReferences.refY ?? null); setDimensionInputY(event.target.value) }} onKeyDown={handleDimensionInputKeyDown} /></label>}
@@ -2487,6 +2491,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         <small>Tab / Shift+Tab · iPad แตะลูกศรหรือเลือกจากรายการ</small>
       </div>}
       <div className="cf-authoring-controls" onPointerDown={(event) => event.stopPropagation()}>
+        <button type="button" className="cf-authoring-controls-toggle" aria-expanded={authoringControlsOpen} onClick={() => setAuthoringControlsOpen(open => !open)}>
+          <span>ตัวเลือกการวาด · {authoringToolName[activeTool] ?? activeTool}</span>
+          <span aria-hidden="true">{authoringControlsOpen ? 'ยุบ' : 'แสดง'}</span>
+        </button>
+        {authoringControlsOpen && <div className="cf-authoring-controls-content">
         {activeTool === 'stair' && <div role="group" aria-label="ตั้งค่าบันไดก่อนวาด" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxWidth: 650, alignItems: 'center' }}>
           <label>รูปแบบ <select aria-label="รูปแบบบันไดก่อนวาด" value={stairOptions.stair_type} onChange={e => setStairOptions(o => ({ ...o, stair_type: e.target.value as StairModuleData['stair_type'] }))}><option value="straight">ตรง</option><option value="l_shape">L</option><option value="u_shape">U</option></select></label>
           <label>จบที่ <select aria-label="ระดับจบบันไดก่อนวาด" value={stairOptions.top_level_id} onChange={e => {
@@ -2579,6 +2588,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           >{label}</button>)}
           <span className="cf-snap-hint">Ctrl วางอิสระ · {activeTool === 'wall' || activeTool === 'beam' ? `Space เปลี่ยนแนวอ้างอิง (ขณะนี้: ${placementReference === 'centerline' ? 'กึ่งกลาง' : placementReference === 'left_face' ? 'ชิดซ้าย' : 'ชิดขวา'})` : 'เลื่อนเมาส์ให้เห็นสัญลักษณ์ก่อนคลิก'}</span>
         </div></details>
+        </div>}
       </div>
       <div className="cf-canvas-zoom" aria-label="ควบคุมมุมมองแปลน">
         <button type="button" aria-label="ซูมออก" title="ซูมออก" onPointerDown={(event) => event.stopPropagation()} onClick={() => {

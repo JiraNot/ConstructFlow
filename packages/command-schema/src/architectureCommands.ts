@@ -16,6 +16,7 @@ export interface ArchitectureRoomCommands {
 }
 
 export interface CreateWallInput {
+  fit_to_stair?: boolean
   /** Immutable unique identity (UUID) */
   id: string
   type_id?: string
@@ -55,6 +56,7 @@ export interface UpdateWallMarkInput {
 }
 
 export interface UpdateWallDimensionsInput {
+  fit_to_stair?: boolean
   object_id: string
   thickness_mm: number
   height_mm?: number
@@ -134,6 +136,8 @@ export interface UpdateDoorMarkInput {
 export interface UpdateDoorDimensionsInput {
   object_id: string
   width_mm: number
+  /** Optional center offset for an atomic one-jamb stretch. */
+  offset_along_wall_mm?: number
   height_mm?: number
   sill_height_mm?: number
   head_level_id?: string
@@ -188,6 +192,8 @@ export interface UpdateWindowMarkInput {
 export interface UpdateWindowDimensionsInput {
   object_id: string
   width_mm: number
+  /** Optional center offset for an atomic one-jamb stretch. */
+  offset_along_wall_mm?: number
   height_mm?: number
   sill_height_mm?: number
   head_level_id?: string

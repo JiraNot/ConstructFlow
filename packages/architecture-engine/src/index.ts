@@ -9,6 +9,29 @@ import { validateStairThaiBuildingCode } from './stairs.js'
 
 const polygonAreaMm2 = (ring: number[][]) => Math.abs(ring.reduce((sum, p, i) => { const q = ring[(i + 1) % ring.length]; return sum + p[0] * q[1] - q[0] * p[1] }, 0) / 2)
 
+function resolveOpeningResizePlacement(
+  project: ProjectDocument,
+  data: DoorModuleData | WindowModuleData,
+  width_mm: number,
+  offset_along_wall_mm?: number,
+): Partial<Pick<DoorModuleData, 'offset_along_wall_mm' | 'location_mm'>> {
+  if (offset_along_wall_mm === undefined) return {}
+  const wall = project.objects[data.wall_id]
+  if (!wall || !isWallObject(wall)) throw new Error('Opening host wall not found')
+  const start = wall.module_data.start_point_mm, end = wall.module_data.end_point_mm
+  const dx = end[0] - start[0], dy = end[1] - start[1]
+  const length = Math.hypot(dx, dy)
+  if (![width_mm, offset_along_wall_mm, length].every(Number.isFinite) || width_mm <= 0 || length <= 0
+    || offset_along_wall_mm - width_mm / 2 < -1 || offset_along_wall_mm + width_mm / 2 > length + 1) {
+    throw new Error('Resized opening does not fit within its host wall')
+  }
+  const ratio = offset_along_wall_mm / length
+  return {
+    offset_along_wall_mm,
+    location_mm: [start[0] + dx * ratio, start[1] + dy * ratio, data.location_mm[2] ?? start[2] ?? 0],
+  }
+}
+
 export type ArchitecturalFloorPatternKind = 'tile_grid' | 'staggered_plank' | 'carpet' | 'terrazzo' | 'concrete_block' | 'glass_block'
 
 /** Resolve plan hatch from the floor finish assembly's exposed finish material. */
@@ -645,6 +668,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
     }
 
     case 'CreateWall': {
+      if (input.fit_to_stair !== undefined && typeof input.fit_to_stair !== 'boolean') throw new Error('fit_to_stair must be boolean')
       const wallInput = input as unknown as CreateWallInput
       const id = wallInput.id || crypto.randomUUID()
       const mark = wallInput.mark || 'W1'
@@ -752,6 +776,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           type_id: typeDef?.id,
           instance_overrides,
           start_point_mm,
+          fit_to_stair: wallInput.fit_to_stair,
           end_point_mm,
           thickness_mm,
           ...(hasLayerAssembly ? {
@@ -841,6 +866,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
     }
 
     case 'UpdateWallDimensions': {
+      if (input.fit_to_stair !== undefined && typeof input.fit_to_stair !== 'boolean') throw new Error('fit_to_stair must be boolean')
       const wDimInput = input as unknown as UpdateWallDimensionsInput
       const target = updated.objects[wDimInput.object_id]
       if (!target || !isWallObject(target)) {
@@ -863,7 +889,11 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         || wDimInput.plaster_outside_thickness_mm !== undefined
       const plasterInside = nonNegativeCatalogNumber(wDimInput.plaster_inside_thickness_mm ?? target.module_data.plaster_inside_thickness_mm)
       const plasterOutside = nonNegativeCatalogNumber(wDimInput.plaster_outside_thickness_mm ?? target.module_data.plaster_outside_thickness_mm)
-      const masonryThickness = hasLayerAssembly ? wDimInput.thickness_mm - plasterInside - plasterOutside : undefined
+      const editingFinish = wDimInput.plaster_inside_thickness_mm !== undefined || wDimInput.plaster_outside_thickness_mm !== undefined
+      if ([wDimInput.plaster_inside_thickness_mm, wDimInput.plaster_outside_thickness_mm].some(v => v !== undefined && (!Number.isFinite(v) || v < 0))) throw new Error('Finish thickness must be finite and non-negative')
+      const preservedCore = target.module_data.masonry_thickness_mm ?? target.module_data.thickness_mm - (target.module_data.plaster_inside_thickness_mm ?? 0) - (target.module_data.plaster_outside_thickness_mm ?? 0)
+      const masonryThickness = hasLayerAssembly ? editingFinish ? preservedCore : wDimInput.thickness_mm - plasterInside - plasterOutside : undefined
+      const overallThickness = editingFinish ? preservedCore + plasterInside + plasterOutside : wDimInput.thickness_mm
       if (hasLayerAssembly && (!Number.isFinite(masonryThickness) || masonryThickness! <= 0)) {
         return {
           result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Overall wall thickness must remain greater than the combined plaster layers'] },
@@ -876,7 +906,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         target.module_data.end_point_mm,
         target.module_data.placement_reference,
         target.module_data.thickness_mm,
-        wDimInput.thickness_mm,
+        overallThickness,
       )
       const shiftedOpeningIds = shiftHostedOpenings(updated, wDimInput.object_id, adjustedSegment.shift_mm, now)
 
@@ -898,7 +928,8 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           ...target.module_data,
           start_point_mm: adjustedSegment.start,
           end_point_mm: adjustedSegment.end,
-          thickness_mm: wDimInput.thickness_mm,
+          thickness_mm: overallThickness,
+          ...(wDimInput.fit_to_stair !== undefined ? { fit_to_stair: wDimInput.fit_to_stair } : {}),
           ...(hasLayerAssembly ? { masonry_thickness_mm: masonryThickness } : {}),
           ...(wDimInput.plaster_inside_thickness_mm !== undefined ? { plaster_inside_thickness_mm: plasterInside } : {}),
           ...(wDimInput.plaster_outside_thickness_mm !== undefined ? { plaster_outside_thickness_mm: plasterOutside } : {}),
@@ -915,7 +946,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           top_offset_mm: topOffset,
           instance_overrides: {
             ...target.module_data.instance_overrides,
-            thickness_mm: wDimInput.thickness_mm,
+            thickness_mm: overallThickness,
             ...(hasLayerAssembly ? {
               masonry_thickness_mm: masonryThickness,
               plaster_inside_thickness_mm: plasterInside,
@@ -1110,6 +1141,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const nextDoorData = {
         ...target.module_data,
         width_mm: dDimInput.width_mm,
+        ...resolveOpeningResizePlacement(updated, target.module_data, dDimInput.width_mm, dDimInput.offset_along_wall_mm),
         height_mm: dDimInput.height_mm ?? target.module_data.height_mm,
         sill_height_mm: dDimInput.sill_height_mm ?? target.module_data.sill_height_mm ?? 0,
         ...(dDimInput.head_level_id && !isFixedHeight ? { head_level_id: dDimInput.head_level_id, head_offset_mm: Number(dDimInput.head_offset_mm ?? 0), vertical_constraint: 'head_level' as const } : {}),
@@ -1350,6 +1382,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const nextWindowData = {
         ...target.module_data,
         width_mm: wDimInput.width_mm,
+        ...resolveOpeningResizePlacement(updated, target.module_data, wDimInput.width_mm, wDimInput.offset_along_wall_mm),
         height_mm: wDimInput.height_mm ?? target.module_data.height_mm,
         sill_height_mm: wDimInput.sill_height_mm ?? target.module_data.sill_height_mm,
         ...(wDimInput.head_level_id && !isFixedHeight ? { head_level_id: wDimInput.head_level_id, head_offset_mm: Number(wDimInput.head_offset_mm ?? 0), vertical_constraint: 'head_level' as const } : {}),
@@ -1573,5 +1606,6 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
 }
 export * from './bathroom.js'
 export * from './stairs.js'
+export * from './wallProfile.js'
 export * from './railings.js'
 export * from './openingMuntins.js'

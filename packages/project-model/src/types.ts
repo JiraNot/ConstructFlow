@@ -100,6 +100,7 @@ export type BeamSystem = 'simple' | 'continuous' | 'cantilever'
 export type BeamContinuityType = 'simple_span' | 'end_span' | 'interior_span' | 'cantilever'
 
 export interface BeamModuleData {
+  plaster_thickness_mm?: number
   placement_reference?: PlacementReference
   drop_mm?: number
   rebar_type?: Record<string, unknown>
@@ -129,6 +130,8 @@ export interface BeamModuleData {
 // -------------------------------------------------------------
 
 export interface WallModuleData {
+  /** Recompute the top from intersecting stair soffits and landings. */
+  fit_to_stair?: boolean
   placement_reference?: PlacementReference
   type_id?: string
   instance_overrides?: Record<string, unknown>

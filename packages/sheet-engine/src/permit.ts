@@ -14,7 +14,7 @@ import {
 } from "@constructflow/project-model";
 import { constructionOutputs } from "@constructflow/domain-providers";
 import { resolveArchitecturalFloorPatternKind, computeStairGeometry, decodeStair } from "@constructflow/architecture-engine";
-import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getOpeningElevationLinework, getRepresentationTriangles, getVisibleElevationMeshEdges, isWallFacadeForElevation, resolveCeilingGridStyle, resolveElevationWallPhaseStyle, resolvePlanPhaseStyle } from "@constructflow/representation-engine";
+import { getElevationFinishSurfaces, getPlanWallLayerBoundaries, getPlanFinishBoundaries, buildProjectRepresentations3D, getElevationVisibleOpeningIds, getOpeningElevationLinework, getRepresentationTriangles, getVisibleElevationMeshEdges, isWallFacadeForElevation, resolveCeilingGridStyle, resolveElevationWallPhaseStyle, resolvePlanPhaseStyle } from "@constructflow/representation-engine";
 import {
   type Vec2,
   type Vec3,
@@ -2299,6 +2299,25 @@ function compilePermitDrawingSetBase(
               sourceIds.add(surface.id);
             }
           }
+          // Permit viewDir points from the camera into the model; surface directions point toward the camera.
+          const surfaceDirection = facadeDirection === "north" ? "south" : facadeDirection === "south" ? "north" : facadeDirection === "east" ? "west" : "east";
+          const architecturalSurfaces = isBuildingElevation ? getElevationFinishSurfaces(project, surfaceDirection, new Set(viewObjects.map(({ object }) => object.id))) : [];
+          const architecturalSurfaceIds = new Set(architecturalSurfaces.map(surface => surface.object_id));
+          const worldSurfacePoint = (point: Vec2, depth: number): Vec3 => mode === "xz" ? [point[0], depth, point[1]] : [depth, point[0], point[1]];
+          const facadeCameraSign = surfaceDirection === "north" || surfaceDirection === "east" ? 1 : -1;
+          for (const surface of [...architecturalSurfaces].sort((a, b) => facadeCameraSign * (a.depth_mm - b.depth_mm))) {
+            const style = resolveElevationWallPhaseStyle(surface.phase);
+            for (const polygon of surface.polygons_mm) path(polygon.map(point => mapped(projectPoint(worldSurfacePoint(point, surface.depth_mm)))), style.fill, 0, undefined, true, style.fill);
+            for (const [a, b] of surface.edges_mm) drawSegment(projectPoint(worldSurfacePoint(a, surface.depth_mm)), projectPoint(worldSurfacePoint(b, surface.depth_mm)), style.stroke, 0.35, style.dash.length ? [2, 1] : undefined);
+          }
+          const architecturalPlan = (id === "A-02" || id === "A-03") && mode === "xy";
+          if (architecturalPlan) for (const boundary of getPlanFinishBoundaries(project, new Set(viewObjects.map(({ object }) => object.id)))) {
+            const style = resolvePlanPhaseStyle(boundary.phase);
+            for (const [a, b] of boundary.segments_mm) drawSegment(a, b, style.stroke, 0.35, style.dash.length ? [2, 1] : undefined);
+          }
+          if (architecturalPlan) for (const boundary of getPlanWallLayerBoundaries(project, new Set(viewObjects.map(({ object }) => object.id)))) {
+            for (const [a, b] of boundary.segments_mm) drawSegment(a, b, boundary.phase === 'demolition' ? '#fca5a5' : '#a3adb8', 0.15);
+          }
           for (const { object: o, mesh, out } of viewObjects) {
             const openingOverride = viewport.opening_overrides?.[o.id];
             const phase = getDisplayPhase(o),
@@ -2308,6 +2327,7 @@ function compilePermitDrawingSetBase(
               dash = elevationWallStyle ? (elevationWallStyle.dash.length ? [2, 1] : undefined) : phase === "demolition" ? [2, 1] : undefined,
               seen = new Set<string>();
             const edge = (a: Vec3, b: Vec3, isSectionCut = false) => {
+              if (architecturalSurfaceIds.has(o.id) || (architecturalPlan && o.object_type === "architecture.wall")) return;
               const p = projectPoint(a),
                 q = projectPoint(b),
                 key = [p.join(","), q.join(",")].sort().join("|");

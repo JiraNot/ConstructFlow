@@ -347,6 +347,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         (target instanceof HTMLElement && target.isContentEditable)
       const isUndoRedo = (e.ctrlKey || e.metaKey) && ['z', 'y'].includes(e.key.toLowerCase())
       if (isTextEditing && !isUndoRedo) return
+      // Let native selects use letter keys for option type-ahead and Escape to close.
+      // Global tool shortcuts should not steal those keys while a select has focus.
+      if (target instanceof HTMLSelectElement && !isUndoRedo && !e.ctrlKey && !e.metaKey) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
         void handleSaveProject()
@@ -374,6 +377,12 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       } else if (e.key === 'Escape') {
         setActiveTool('select')
         setSelectedId(null)
+      } else if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'p') {
+        setActiveTool('archFloor')
+      } else if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'c') {
+        setActiveTool('ceiling')
+      } else if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'r') {
+        setActiveTool('roomSeparator')
       } else if (e.key === 's' || e.key === 'S') {
         setActiveTool('select')
       } else if (e.key === 'e' || e.key === 'E') {
@@ -548,15 +557,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
 
   // Commit Beam creation with active type
-  const snapEndpointToColumnCenter = (point: [number, number]): [number, number] => {
-    const column = Object.values(project.objects).find(object => {
-      if (!isColumnObject(object)) return false
-      const [cx, cy] = object.module_data.location_mm, [width, depth] = object.module_data.section_mm
-      return Math.abs(point[0] - cx) <= width / 2 + 120 && Math.abs(point[1] - cy) <= depth / 2 + 120
-    })
-    return column && isColumnObject(column) ? [column.module_data.location_mm[0], column.module_data.location_mm[1]] : point
-  }
-
   const handleCommitBeam = (
     start_point_mm: [number, number],
     end_point_mm: [number, number],
@@ -588,8 +588,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
   // Commit Wall creation with active type
   const handleCommitWall = (start_point_mm: [number, number], end_point_mm: [number, number], placementReference: PlacementReference = 'centerline', verticalReference?: { level_id: string; top_level_id?: string; height_mm?: number; base_offset_mm?: number; top_offset_mm?: number }) => {
-    start_point_mm = snapEndpointToColumnCenter(start_point_mm)
-    end_point_mm = snapEndpointToColumnCenter(end_point_mm)
     const wallId = crypto.randomUUID()
     const levelId = verticalReference?.level_id ?? project.project.active_level_id
     const res = CommandBus.execute(project, 'CreateWall', {
@@ -943,8 +941,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
 
   const handleUpdateWallEndpoints = (objectId: string, start_point_mm: [number, number], end_point_mm: [number, number]) => {
-    start_point_mm = snapEndpointToColumnCenter(start_point_mm)
-    end_point_mm = snapEndpointToColumnCenter(end_point_mm)
     const res = CommandBus.execute(project, 'UpdateWallEndpoints', { object_id: objectId, start_point_mm, end_point_mm })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
@@ -962,12 +958,12 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     } else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
   }
 
-  const handleResizeOpening = (objectId: string, width_mm: number) => {
+  const handleResizeOpening = (objectId: string, width_mm: number, offset_along_wall_mm: number) => {
     const opening = project.objects[objectId]
     if (!opening || (!isDoorObject(opening) && !isWindowObject(opening))) return
     const data = opening.module_data
     const name = isDoorObject(opening) ? 'UpdateDoorDimensions' : 'UpdateWindowDimensions'
-    const input = { object_id: objectId, width_mm, height_mm: data.height_mm,
+    const input = { object_id: objectId, width_mm, offset_along_wall_mm, height_mm: data.height_mm,
       ...(isDoorObject(opening) ? { sill_height_mm: Number(data.sill_height_mm ?? 0) } : { sill_height_mm: Number(data.sill_height_mm ?? 900) }),
       ...(data.vertical_constraint === 'head_level' ? { head_level_id: data.head_level_id, head_offset_mm: data.head_offset_mm, vertical_constraint: 'head_level' } : { vertical_constraint: 'fixed_height' }),
     }
@@ -1228,6 +1224,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
 
   const handleUpdateWallFace = (objectId: string, changes: {
+    fit_to_stair?: boolean
     plaster_inside_thickness_mm?: number
     plaster_outside_thickness_mm?: number
     plaster_inside_material?: string
@@ -1961,7 +1958,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 setSnapKind(kind)
               }}
             /> : viewMode !== 'model3d' ? <ElevationCanvas project={project} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
-              <Model3DViewport project={project} onSelectObject={setSelectedId} coordination={coordinationFindings} />
+              <Model3DViewport project={project} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} coordination={coordinationFindings} />
             </Suspense>}
           </div>
 

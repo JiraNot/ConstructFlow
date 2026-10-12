@@ -15,6 +15,16 @@ const SEVERITY_ORDER = { hard: 0, clearance: 1, soft: 2 }
 
 const mm = value => `${Math.round(value)} mm`
 
+/** Name the actual BIM family; a beam projected over a wall is still a beam. */
+export function coordinationObjectText(object) {
+  const family = {
+    'door_window.door': 'ประตู', 'door_window.window': 'หน้าต่าง',
+    'architecture.wall': 'ผนัง', 'structure.column': 'เสา', 'structure.beam': 'คาน',
+    'structure.slab': 'พื้นโครงสร้าง', 'architecture.floor': 'พื้นสถาปัตย์',
+  }[object.object_type] ?? object.label_th ?? object.object_type
+  return object.mark && object.mark !== object.object_type ? `${family} ${object.mark}` : family
+}
+
 /** One short Thai line describing what was measured, for the on-canvas dimension tag. */
 export function coordinationMeasureText(finding) {
   const interaction = finding.interaction
@@ -87,7 +97,8 @@ export function planCoordinationOverlay(findings, options) {
     }
     if (!showLabels) continue
     const anchor = badgeAnchor ?? fallbackAnchor ?? { x: 0, y: 0 }
-    const lines = [`${COORDINATION_SEVERITY_STYLE[finding.severity].label_th} · ${finding.rule_id}`, coordinationFixText(finding)]
+    const pair = (finding.objects ?? []).map(coordinationObjectText).join(' ↔ ')
+    const lines = [`${COORDINATION_SEVERITY_STYLE[finding.severity].label_th} · ${finding.rule_id}`, ...(pair ? [pair] : []), coordinationFixText(finding)]
     const width = Math.max(...lines.map(line => Math.min(46, line.length))) * 6.4 + 14
     primitives.push({ kind: 'badge', severity: finding.severity, x: anchor.x, y: anchor.y, width, height: 12 + lines.length * 13, lines })
   }

@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import type { CoordinationFinding, CoordinationReport } from '@constructflow/clash-engine'
 import type { CoordinationSettings, ProjectDocument } from '@constructflow/project-model'
-import { COORDINATION_SEVERITY_STYLE, coordinationFixText, coordinationMeasureText } from '../rendering/coordinationOverlay.js'
+import { COORDINATION_SEVERITY_STYLE, coordinationFixText, coordinationMeasureText, coordinationObjectText } from '../rendering/coordinationOverlay.js'
 
 interface Props {
   project: ProjectDocument
@@ -120,7 +120,7 @@ export function CoordinationPanel({ project, report, error, selectedIds, onSelec
                     <button key={object.object_id} type="button" onClick={() => onSelectObjects([object.object_id])}
                       title={`${object.label_th} (${object.object_type}) · ${object.created_phase}`}
                       style={{ background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', borderRadius: 2, fontSize: 9, padding: '1px 4px', cursor: 'pointer' }}>
-                      {object.subject === 'a' ? 'A' : 'B'}: {object.mark}{object.role ? ` · ${object.role}` : ''}
+                      {object.subject === 'a' ? 'A' : 'B'}: {coordinationObjectText(object)}
                     </button>
                   ))}
                 </div>

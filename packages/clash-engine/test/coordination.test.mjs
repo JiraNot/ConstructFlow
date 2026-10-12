@@ -271,6 +271,28 @@ test('hosted and connected pairs are never reported as clashes', () => {
   assert.ok(report.summary.suppressed_intentional >= 2)
 })
 
+test('a hosted door only reports a genuinely overlapping beam, never its host wall or distant columns', () => {
+  const project = emptyProject()
+  wallAlongX(project, 'wall-1', { thickness: 150 })
+  opening(project, 'D3', 'door_window.door', 'wall-1', { offset: 1400, width: 900, extra: { host_refs: [] } })
+  // A floor beam rising into the door opening reproduces the 150 mm warning in plan.
+  beamAlongX(project, 'B1', { section: [150, 400] })
+  add(project, 'C1', 'structure.column', {
+    mark: 'C1', level_id: 'GF', location_mm: [4000, 0, 0], section_mm: [200, 200],
+    base_level_id: 'GF', height_mm: 3000, rotation_deg: 0,
+  })
+  let report = runCoordination(project)
+  const alerts = findingsFor(report, 'CF-CL-OPEN-STR-005')
+  assert.equal(alerts.length, 1)
+  assert.deepEqual(alerts[0].objects.map(o => o.object_id), ['D3', 'B1'])
+  close(alerts[0].interaction.penetration_mm, 150, 1, 'real beam overlap')
+  assert.ok(!report.findings.some(f => f.objects.some(o => o.object_id === 'D3') && f.objects.some(o => o.object_id === 'wall-1')))
+  // Move the beam above the head, leaving 400 mm clear; the door is then valid.
+  project.objects.B1.module_data.base_offset_mm = 2400
+  report = runCoordination(project)
+  assert.ok(!report.findings.some(f => f.objects.some(o => o.object_id === 'D3')))
+})
+
 test('sequential renovation work does not clash with what is already demolished', () => {
   const project = emptyProject()
   beamAlongX(project, 'beam-1', { extra: { created_phase: 'existing', removed_phase: 'demolition' } })

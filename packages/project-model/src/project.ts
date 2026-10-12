@@ -469,7 +469,7 @@ export const CATALOG_PARAMETER_FIELDS: Record<string, string[]> = {
   'architecture.wall_finish': ['material', 'thickness_mm', 'description_th'],
   'structure.column': ['section_mm', 'plaster_thickness_mm', 'material'],
   'structure.foundation': ['size_mm', 'foundation_type', 'pile_type', 'pile_offsets_mm', 'pile_length_mm', 'material'],
-  'structure.beam': ['section_mm', 'material', 'drop_mm', 'rebar_type', 'mass_per_m_kg'],
+  'structure.beam': ['plaster_thickness_mm', 'section_mm', 'material', 'drop_mm', 'rebar_type', 'mass_per_m_kg'],
   'structure.slab': ['thickness_mm', 'topping_mm', 'slab_system', 'material', 'slope_ratio', 'drain_direction_deg', 'finish_layers', 'finish_pattern_mm', 'finish_pattern_origin_mm', 'finish_pattern_rotation_deg'],
   'architecture.floor': ['thickness_mm', 'material', 'finish_layers', 'finish_pattern_mm', 'finish_pattern_origin_mm', 'finish_pattern_rotation_deg'],
   'architecture.ceiling': ['thickness_mm', 'material', 'grid_mm'],

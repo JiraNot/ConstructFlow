@@ -12,6 +12,8 @@ import {
   type ProjectDocument,
   type SmartObject,
 } from '@constructflow/project-model'
+import { getWallSolidProfiles, wallProfileAreaMm2 } from '@constructflow/architecture-engine'
+import { extrude, clipHalfPlane, type Vec2 } from '@constructflow/geometry-kernel'
 import { constructionOutputs } from '@constructflow/domain-providers'
 import { box, tube, type Triangle, type Vec3 } from '@constructflow/geometry-kernel'
 import { evaluateParametricSymbol } from '@constructflow/constraint-engine'
@@ -21,6 +23,7 @@ import {
   createDoorPlanSymbol,
   createWindowPlanSymbol,
 } from '@constructflow/project-model'
+export * from './finishSurfaces.js'
 export { doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement } from './openingDetails.js'
 
 export type Vec3Mm = [number, number, number]
@@ -74,7 +77,7 @@ export interface WallExtrusionLayer {
 export type RepresentationShape =
   | { kind: 'triangle_mesh'; triangles_mm: Triangle[] }
   | { kind: 'box'; size_mm: Vec3Mm }
-  | { kind: 'wall_extrusion'; length_mm: number; thickness_mm: number; height_mm: number; cutouts: OpeningCutout[]; layers?: WallExtrusionLayer[] }
+  | { kind: 'wall_extrusion'; length_mm: number; thickness_mm: number; height_mm: number; cutouts: OpeningCutout[]; profiles_mm?: Vec2[][]; layers?: WallExtrusionLayer[] }
   | {
       kind: 'opening'
       opening_type: 'door' | 'window'
@@ -329,6 +332,8 @@ export function getRepresentationTriangles(representation: ObjectRepresentation3
   if (shape.kind === 'opening') return []
   if (shape.kind === 'wall_extrusion') {
     const { length_mm: length, thickness_mm: thickness, height_mm: height, cutouts } = shape
+    if (shape.profiles_mm) return shape.profiles_mm.flatMap(profile => extrude(profile, -thickness / 2, thickness / 2)
+      .map(triangle => triangle.map(([x, z, y]) => transformRepresentationPoint(representation, [x, y, z])).reverse() as Triangle))
     const xs = [0, length, ...cutouts.flatMap(cutout => [cutout.min_x_mm, cutout.max_x_mm])].sort((a, b) => a - b)
     const zs = [0, height, ...cutouts.flatMap(cutout => [cutout.min_z_mm, cutout.max_z_mm])].sort((a, b) => a - b)
     const local: Triangle[] = []
@@ -481,6 +486,9 @@ export function getElevationVisibleWallIds(
     const fullyMasked = [...bounds].some(([otherId, other]) => {
       if (otherId === id || cameraSign * other.depth <= cameraSign * candidate.depth + 1) return false
       if (other.minX > candidate.minX || other.maxX < candidate.maxX || other.base > candidate.base || other.top < candidate.top) return false
+      // Its nominal rectangle includes the void above the stair soffit. Keep
+      // rear faces available for the exact surface clipping pass.
+      if (moduleData(project.objects[otherId])?.fit_to_stair) return false
       return true
     })
     if (!fullyMasked) visible.add(id)
@@ -553,6 +561,20 @@ export function getElevationVisibleOpeningIds(
     const masked = [...wallBounds].some(([wallId, wall]) => {
       if (wallId === opening.hostId || cameraSign * wall.depth <= cameraSign * opening.depth + 1) return false
       if (wall.maxX <= opening.minX || wall.minX >= opening.maxX || wall.top <= opening.base || wall.base >= opening.top) return false
+      const object = project.objects[wallId], data = moduleData(object)
+      if (data?.fit_to_stair && tuple3(data.start_point_mm) && tuple3(data.end_point_mm)) {
+        const a = data.start_point_mm, b = data.end_point_mm, span = b[horizontalAxis] - a[horizontalAxis]
+        if (Math.abs(span) < 1e-8) return false
+        const length = Math.hypot(b[0] - a[0], b[1] - a[1])
+        const xs = [opening.minX, opening.maxX].map(x => (x - a[horizontalAxis]) * length / span)
+        const profiles = getWallSolidProfiles(project, object, false).map(profile => {
+          let p = clipHalfPlane(profile, -1, 0, Math.min(...xs))
+          p = clipHalfPlane(p, 1, 0, -Math.max(...xs))
+          p = clipHalfPlane(p, 0, -1, opening.base - wall.base)
+          return clipHalfPlane(p, 0, 1, -(opening.top - wall.base))
+        })
+        if (wallProfileAreaMm2(profiles) < 1e-6) return false
+      }
       const hasClearOpening = openings.some(candidate => {
         const aperture = openingBounds.get(candidate.id)
         return aperture?.hostId === wallId && aperture.minX <= opening.minX && aperture.maxX >= opening.maxX && aperture.base <= opening.base && aperture.top >= opening.top
@@ -914,7 +936,7 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
           ]
         : undefined
       return baseObject(object, data, [start[0], start[1], vertical?.base_elevation_mm ?? start[2]], Math.atan2(dy, dx),
-        { kind: 'wall_extrusion', length_mm: length, thickness_mm: thickness, height_mm: height, cutouts, ...(layers ? { layers } : {}) }, { kind: 'wall' })
+        { kind: 'wall_extrusion', length_mm: length, thickness_mm: thickness, height_mm: height, cutouts, ...(data.fit_to_stair ? { profiles_mm: getWallSolidProfiles(project, object) } : {}), ...(layers ? { layers } : {}) }, { kind: 'wall' })
     }
     case 'door_window.door':
     case 'door_window.window': {

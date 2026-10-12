@@ -172,7 +172,7 @@ export function validateProjectV2(project: ProjectDocument): void {
   function validateFamilyParameters(values: Record<string, unknown>, objectType: string, owner: string): void {
     const allowedFamilies: Record<string, string[]> = {
       section_mm: ['structure.column', 'structure.beam'],
-      plaster_thickness_mm: ['structure.column'],
+      plaster_thickness_mm: ['structure.column', 'structure.beam'],
       size_mm: ['structure.foundation', 'drainage.manhole'],
       foundation_type: ['structure.foundation'],
       thickness_mm: ['architecture.wall', 'structure.slab', 'roof.system', 'architecture.floor', 'architecture.ceiling', 'architecture.wall_finish'],
@@ -589,6 +589,7 @@ export function validateProjectV2(project: ProjectDocument): void {
         break
       }
       case 'architecture.wall': {
+        if (moduleData.fit_to_stair !== undefined && typeof moduleData.fit_to_stair !== 'boolean') throw new Error(`Invalid project format: wall ${id} fit_to_stair must be boolean`)
         requirePoint(moduleData.start_point_mm, id, 'start_point_mm')
         requirePoint(moduleData.end_point_mm, id, 'end_point_mm')
         requirePositive(moduleData.thickness_mm, id, 'thickness_mm')

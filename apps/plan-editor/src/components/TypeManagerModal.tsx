@@ -73,7 +73,7 @@ function loadPreferences(): Preferences {
 }
 const basic: Record<string, string[]> = {
   "structure.column": ["section_mm", "plaster_thickness_mm"],
-  "structure.beam": ["section_mm", "drop_mm"],
+  "structure.beam": ["section_mm", "plaster_thickness_mm", "drop_mm"],
   "structure.foundation": ["size_mm", "foundation_type"],
   "structure.slab": ["thickness_mm", "topping_mm", "slab_system", "slope_ratio", "drain_direction_deg", "finish_layers", "finish_pattern_mm"],
   "architecture.floor": ["thickness_mm", "finish_layers", "finish_pattern_mm", "finish_pattern_origin_mm", "finish_pattern_rotation_deg"],
@@ -92,7 +92,7 @@ const basic: Record<string, string[]> = {
 };
 const defaults: Record<string, TypeParameters> = {
   "structure.column": { section_mm: [200, 200], plaster_thickness_mm: 15 },
-  "structure.beam": { section_mm: [200, 400], drop_mm: 0 },
+  "structure.beam": { section_mm: [200, 400], plaster_thickness_mm: 15, drop_mm: 0 },
   "structure.foundation": {
     size_mm: [800, 800, 300],
     foundation_type: "spread_footing",

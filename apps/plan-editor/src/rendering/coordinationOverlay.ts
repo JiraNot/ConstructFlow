@@ -9,6 +9,7 @@ import {
   coordinationFindingsForObject,
   coordinationFixText,
   coordinationMeasureText,
+  coordinationObjectText,
   planCoordinationOverlay,
   type CoordinationOverlayOptions,
   type CoordinationPrimitive,
@@ -19,6 +20,7 @@ export {
   coordinationFindingsForObject,
   coordinationFixText,
   coordinationMeasureText,
+  coordinationObjectText,
   planCoordinationOverlay,
 }
 export type { CoordinationOverlayOptions, CoordinationPrimitive }

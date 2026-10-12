@@ -59,10 +59,14 @@ export function flushPlanLabels(ctx: CanvasRenderingContext2D, width: number, he
     const boxHeight = Math.abs(Math.sin(label.angle)) * labelWidth + Math.abs(Math.cos(label.angle)) * labelHeight
     let position: { x: number; y: number; width: number; height: number } | null = null
     const gap = labelHeight + 5
-    const offsets: Array<[number, number]> = [
-      [0, 0], [0, -1], [0, 1], [-1, 0], [1, 0],
-      [-1, -1], [1, -1], [-1, 1], [1, 1], [0, -2], [0, 2], [-2, 0], [2, 0],
-    ]
+    const offsets: Array<[number, number]> = [[0, 0]]
+    // Tags clustered around columns or openings need more than one local nudge.
+    // Search outward in screen space and let the existing leader connect the
+    // displaced label to its model anchor.
+    for (let ring = 1; ring <= 5; ring++) {
+      offsets.push([0, -ring], [0, ring], [-ring, 0], [ring, 0])
+      offsets.push([-ring, -ring], [ring, -ring], [-ring, ring], [ring, ring])
+    }
     for (const [dx, dy] of offsets) {
       const candidate = {
         x: Math.max(boxWidth / 2 + 4, Math.min(width - boxWidth / 2 - 4, label.x + dx * gap)),

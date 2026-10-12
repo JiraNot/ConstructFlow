@@ -10,6 +10,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
+    "@constructflow/architecture-engine": "file:../architecture-engine",
     "@constructflow/project-model": "file:../project-model",
     "@constructflow/domain-providers": "file:../domain-providers"
   },

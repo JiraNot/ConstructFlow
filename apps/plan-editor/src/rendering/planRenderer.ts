@@ -21,7 +21,7 @@ import { SnapResult } from '@constructflow/snapping-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
 import { clippedGridSegments, clippedStaggeredPlankSegments, polygonDiagonalHatchSegments, polygonInteriorPoint, wallMasonryHatchSegments , clippedCarpetSegments, clippedTerrazzoSegments} from "@constructflow/geometry-kernel"
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
-import { getPlanVisibleObjects, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '@constructflow/representation-engine'
+import { getPlanWallLayerBoundaries, getPlanFinishBoundaries, structuralPlasterThickness, getPlanVisibleObjects, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '@constructflow/representation-engine'
 import { beginPlanLabels, queuePlanLabel, flushPlanLabels, planLabelScale } from './planLabels.js'
 
 function openingValue(project: ProjectDocument, object: SmartObject, field: string, fallback: unknown) {
@@ -341,10 +341,21 @@ export function renderPlanView(
   // 8. Columns (rendered with cross hatch and human-readable mark)
   for (const obj of Object.values(project.objects)) {
     if (isColumnObject(obj)) {
-      drawColumn(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.structure)
+      drawColumn(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.structure)
     }
   }
 
+  for (const boundary of getPlanFinishBoundaries(project)) {
+    const style = resolvePlanPhaseStyle(boundary.phase)
+    ctx.save(); ctx.strokeStyle = style.stroke; ctx.lineWidth = boundary.phase === 'new_construction' ? 2 : 1.5; ctx.setLineDash(style.dash); ctx.beginPath()
+    for (const [a, b] of boundary.segments_mm) { const [ax, ay] = worldToScreen(a, viewport), [bx, by] = worldToScreen(b, viewport); ctx.moveTo(ax, ay); ctx.lineTo(bx, by) }
+    ctx.stroke(); ctx.restore()
+  }
+  for (const boundary of getPlanWallLayerBoundaries(project)) {
+    ctx.save(); ctx.strokeStyle = boundary.phase === 'demolition' ? '#fca5a5' : '#a3adb8'; ctx.lineWidth = 1; ctx.beginPath()
+    for (const [a, b] of boundary.segments_mm) { const [ax, ay] = worldToScreen(a, viewport), [bx, by] = worldToScreen(b, viewport); ctx.moveTo(ax, ay); ctx.lineTo(bx, by) }
+    ctx.stroke(); ctx.restore()
+  }
   // 9. Placement Ghost Preview
   if (ghostObject) {
     drawPlacementGhost(ctx, ghostObject, viewport, project)
@@ -614,6 +625,7 @@ function drawFoundation(
 function drawColumn(
   ctx: CanvasRenderingContext2D,
   obj: ReturnType<typeof isColumnObject> extends true ? any : SmartObject<any>,
+  project: ProjectDocument,
   viewport: ViewportState,
   isSelected: boolean,
   isHovered: boolean,
@@ -636,6 +648,12 @@ function drawColumn(
   const displayPhase = getDisplayPhase(obj)
   const phaseStyle = resolvePlanPhaseStyle(displayPhase)
 
+  const plaster = structuralPlasterThickness(project, obj)
+  if (plaster > 0) {
+    const [px, py] = worldToScreen([cx - half_w - plaster, cy - half_d - plaster], viewport)
+    const [qx, qy] = worldToScreen([cx + half_w + plaster, cy + half_d + plaster], viewport)
+    ctx.fillStyle = phaseStyle.fill; ctx.fillRect(px, py, qx - px, qy - py)
+  }
   // Column solid fill
   ctx.fillStyle = displayPhase === 'existing' ? 'rgba(148, 163, 184, 0.4)' : phaseStyle.fill
   ctx.fillRect(minX, minY, screenW, screenH)
@@ -878,10 +896,6 @@ function drawWall(
   }
 
   const half_thick = thickness_mm / 2
-  const masonryThickness = wall.module_data.masonry_thickness_mm ?? thickness_mm
-  const plasterInside = wall.module_data.plaster_inside_thickness_mm ?? 0
-  const plasterOutside = wall.module_data.plaster_outside_thickness_mm ?? 0
-  const hasFinishLayers = plasterInside + plasterOutside > 0
   const isDemolition = wall.created_phase === 'demolition' || wall.removed_phase === 'demolition'
   const isExisting = wall.created_phase === 'existing'
   const phaseStyle = resolvePlanWallPhaseStyle(getDisplayPhase(wall))
@@ -923,23 +937,8 @@ function drawWall(
       : phaseStyle.stroke
     ctx.lineWidth = isSelected ? 2.5 : isHovered ? 2 : isDemolition ? 1.5 : isExisting ? 1 : 2
     ctx.setLineDash(phaseStyle.dash)
-    ctx.stroke()
+    if (isSelected || isHovered) ctx.stroke()
     ctx.setLineDash([])
-    if (hasFinishLayers) {
-      const insideSign = wall.module_data.interior_side === 'right' ? -1 : 1
-      const insideFace = insideSign * (half_thick - plasterInside)
-      const outsideFace = -insideSign * (half_thick - plasterOutside)
-      const [si1x, si1y] = worldToScreen([p1_mm[0] + nx * insideFace, p1_mm[1] + ny * insideFace], viewport)
-      const [si2x, si2y] = worldToScreen([p2_mm[0] + nx * insideFace, p2_mm[1] + ny * insideFace], viewport)
-      const [so1x, so1y] = worldToScreen([p1_mm[0] + nx * outsideFace, p1_mm[1] + ny * outsideFace], viewport)
-      const [so2x, so2y] = worldToScreen([p2_mm[0] + nx * outsideFace, p2_mm[1] + ny * outsideFace], viewport)
-      ctx.beginPath()
-      ctx.moveTo(si1x, si1y); ctx.lineTo(si2x, si2y)
-      ctx.moveTo(so1x, so1y); ctx.lineTo(so2x, so2y)
-      ctx.strokeStyle = isSelected ? '#7dd3fc' : isDemolition ? '#fca5a5' : '#a3adb8'
-      ctx.lineWidth = 1
-      ctx.stroke()
-    }
     ctx.restore()
   }
 

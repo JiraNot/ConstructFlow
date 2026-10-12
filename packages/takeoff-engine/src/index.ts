@@ -1,4 +1,5 @@
 import { resolveCatalogType, type ProjectDocument, type Phase } from '@constructflow/project-model'
+import { getWallSolidProfiles, wallProfileAreaMm2 } from '@constructflow/architecture-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
 
 export type TakeoffCostCenter = 'demolition_site_prep' | 'new_construction' | 'remodeling_joint_treatment'
@@ -306,10 +307,10 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
           else warnings.push(`${opening.id}: opening dimensions are missing/invalid`)
         }
         if (openingArea > netArea) warnings.push(`${object.id}: hosted opening area exceeds gross wall area`)
-        netArea = Math.max(0, netArea - openingArea)
+        netArea = data.fit_to_stair ? mm2ToM2(wallProfileAreaMm2(getWallSolidProfiles(project, object))) : Math.max(0, netArea - openingArea)
         const material = typeof data.material === 'string' ? data.material : undefined
         const coreThickness = finitePositive(masonryThickness) ? masonryThickness : thickness
-        add(object, 'm2', netArea, `net masonry area: ${length}×${height} − hosted openings`, material)
+        add(object, 'm2', netArea, data.fit_to_stair ? `stair soffit profile − clipped hosted openings` : `net masonry area: ${length}×${height} − hosted openings`, material)
         add(object, 'm3', mm3ToM3(netArea * coreThickness * 1_000_000), `net masonry area × ${coreThickness} mm`, material)
         if (finitePositive(insidePlasterThickness)) {
           const insideMaterial = valueFor(project, object.object_type, data, 'plaster_inside_material')
