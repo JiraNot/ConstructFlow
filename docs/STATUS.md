@@ -1,5 +1,25 @@
 # ConstructFlow Specification Status
 
+## Drawing workflow and BIM authoring UX (2026-10-12)
+
+The wall/stair constraint and finish workflow now derives the wall's top profile from the stair soffit,
+keeps masonry core and finish thicknesses distinct, and merges continuous coplanar plaster faces in
+elevations. Hosted openings remain subtracted from the fitted wall profile. Door and window edge grips
+resize from the dragged jamb while keeping the opposite jamb fixed; the update remains one undoable
+CommandBus transaction. See `WALL-STAIR-FINISH.md` and `OPENING-EDGE-STRETCH.md` for behavior and limits.
+
+The plan editor adds 3D Fit Model/Frame Selection controls and selection feedback, less obstructive
+drawing overlays, more collision-aware wall labels, and a pinned wall-inspector header with collapsible
+finish/opening/setback details. Tool hints and shortcuts cover the newer architectural floor, ceiling,
+room-separator and grid-system tools. Global drawing shortcuts yield to a focused level selector so
+native type-ahead and Escape continue to work. The interaction audit and untested areas are recorded in
+`DRAWING-EXPERIENCE-AUDIT-2026-10-12.md`.
+
+Verification on 2026-10-12: `apps/plan-editor` production build passed and its 24 tests passed. The
+selected command-runtime, architecture, geometry, clash, snapping and sheet suites passed 188 tests;
+`npm run verify:coordination` passed 47 checks. The production build still reports large Vite chunks.
+This verifies the changed slices, not every object inspector, authoring tool, sheet or export workflow.
+
 ## Reference house demo and renderer correction (2026-10-12)
 
 The editor's two-storey demo menu now loads `examples/constructflow-reference-house-2storey.cfproj`,
