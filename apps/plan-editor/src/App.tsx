@@ -2086,6 +2086,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               onUpdateBoundaryVertex={handleUpdateBoundaryVertex}
               onUpdateRoomSeparator={handleUpdateRoomSeparator}
               onUpdatePipeRoute={(id, changes) => handleUpdateDomainObject(id, 'EditPipeRoute', changes)}
+              onUpdateCabinet={(id, changes) => handleUpdateDomainObject(id, 'UpdateCabinetRun', changes)}
               onUpdateMoulding={(id, changes) => handleUpdateDomainObject(id, 'UpdateMouldingRun', changes)}
               onResizeColumn={handleResizeColumn}
               onResizeFoundation={handleResizeFoundation}

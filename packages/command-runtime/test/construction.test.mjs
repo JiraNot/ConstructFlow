@@ -202,6 +202,16 @@ test("Plan authoring commands create editable roof, MEP, cabinet and moulding ob
   });
   p = execute(p, "UpdateCabinetRun", { ...p.objects[cabinetId].module_data, id: cabinetId, width_mm: 2400, modules_mm: [2400] });
   assert.equal(p.objects[cabinetId].module_data.width_mm, 2400);
+  const cabinetAnchor = [...p.objects[cabinetId].module_data.location_mm];
+  p = execute(p, "UpdateCabinetRun", { ...p.objects[cabinetId].module_data, id: cabinetId, rotation_deg: 90 });
+  assert.equal(p.objects[cabinetId].id, cabinetId);
+  assert.deepEqual(p.objects[cabinetId].module_data.location_mm, cabinetAnchor);
+  assert.equal(p.objects[cabinetId].module_data.width_mm, 2400);
+  const cabinetPlan = constructionOutputs(p).find(output => output.object_id === cabinetId);
+  assert.ok(cabinetPlan.paths.length >= 3);
+  assert.ok(Math.abs(cabinetPlan.paths[0][0][0] - (cabinetAnchor[0] + 18)) < 1e-8);
+  assert.ok(Math.abs(cabinetPlan.paths[0][1][0] - (cabinetAnchor[0] + 18)) < 1e-8);
+  assert.ok(Math.abs(cabinetPlan.paths[0][1][1] - (cabinetAnchor[1] + 2400)) < 1e-8);
 
   const mouldingId = crypto.randomUUID();
   p = execute(p, "CreateMouldingRun", {

@@ -15,6 +15,14 @@ room-separator and grid-system tools. Global drawing shortcuts yield to a focuse
 native type-ahead and Escape continue to work. The interaction audit and untested areas are recorded in
 `DRAWING-EXPERIENCE-AUDIT-2026-10-12.md`.
 
+Continuation on 2026-10-13: cabinet runs now render a selectable plan envelope, front edge and module
+separators. A purple rotation grip snaps to plan references (Ctrl disables snapping) and rotates about
+the original placement point while preserving the cabinet dimensions and UUID. Fit-to-view and window
+selection include the rotated cabinet footprint. `DRAWING-UX-CAPABILITY-MATRIX-2026-10-13.md` tracks
+the remaining roof-ridge, slab-edge and cross-domain editing work. `npm run test:standalone` passed all
+406 Node tests across 25 build targets and five integration verifiers; the production build still warns
+about oversized app, PDF and Three.js chunks.
+
 Verification on 2026-10-12: `apps/plan-editor` production build passed and its 24 tests passed. The
 selected command-runtime, architecture, geometry, clash, snapping and sheet suites passed 188 tests;
 `npm run verify:coordination` passed 47 checks. The production build still reports large Vite chunks.

@@ -5,6 +5,7 @@ import {
   DoorModuleData,
   WindowModuleData,
   WallModuleData,
+  CabinetModuleData,
   StairModuleData,
   PipeRouteModuleData,
   MouldingModuleData,
@@ -99,6 +100,7 @@ interface PlanCanvasProps {
   onUpdateRoomSeparator?: (id: string, start: [number, number], end: [number, number]) => void
   onUpdatePipeRoute?: (id: string, changes: Partial<PipeRouteModuleData>) => void
   onUpdateMoulding?: (id: string, changes: Partial<MouldingModuleData>) => void
+  onUpdateCabinet?: (id: string, changes: Partial<CabinetModuleData>) => void
   onResizeColumn?: (id: string, section_mm: [number, number]) => void
   onResizeFoundation?: (id: string, size_mm: [number, number]) => void
   onFlipDoorHanding?: (doorId: string) => void
@@ -154,6 +156,11 @@ function getPlanObjectBounds(object: ProjectDocument['objects'][string]): [numbe
       ? [object.module_data.position_mm - 1, Math.min(a, b), object.module_data.position_mm + 1, Math.max(a, b)]
       : [Math.min(a, b), object.module_data.position_mm - 1, Math.max(a, b), object.module_data.position_mm + 1]
   }
+  if (object.object_type === 'interior.cabinet_run') {
+    const corners = cabinetFootprintPoints(object.module_data as unknown as CabinetModuleData)
+    return [Math.min(...corners.map(point => point[0])), Math.min(...corners.map(point => point[1])),
+      Math.max(...corners.map(point => point[0])), Math.max(...corners.map(point => point[1]))]
+  }
   const data = object.module_data as unknown as Record<string, unknown>
   const points: [number, number][] = []
   for (const key of ['location_mm', 'center_mm', 'start_point_mm', 'end_point_mm', 'origin_mm']) {
@@ -176,6 +183,36 @@ function getPlanObjectBounds(object: ProjectDocument['objects'][string]): [numbe
   const radius = Math.max(Number(data.thickness_mm ?? 0), Array.isArray(data.section_mm) ? Number(data.section_mm[0] ?? 0) : 0, 100) / 2
   return [Math.min(...points.map(point => point[0])) - radius, Math.min(...points.map(point => point[1])) - radius,
     Math.max(...points.map(point => point[0])) + radius, Math.max(...points.map(point => point[1])) + radius]
+}
+
+function cabinetFootprintPoints(data: CabinetModuleData): [number, number][] {
+  const angle = data.rotation_deg * Math.PI / 180
+  const frontY = data.countertop_mm > 0 ? -20 : -data.board_mm
+  return [[0, frontY], [data.width_mm, frontY], [data.width_mm, data.depth_mm], [0, data.depth_mm]].map(([localX, localY]) => [
+    data.location_mm[0] + localX * Math.cos(angle) - localY * Math.sin(angle),
+    data.location_mm[1] + localX * Math.sin(angle) + localY * Math.cos(angle),
+  ])
+}
+
+function cabinetRotationGripPoint(data: CabinetModuleData, zoom: number): [number, number] {
+  const angle = data.rotation_deg * Math.PI / 180
+  const localX = data.width_mm / 2
+  const localY = -data.board_mm - 18 / Math.max(zoom, 0.001)
+  return [
+    data.location_mm[0] + localX * Math.cos(angle) - localY * Math.sin(angle),
+    data.location_mm[1] + localX * Math.sin(angle) + localY * Math.cos(angle),
+  ]
+}
+
+function cabinetRotationFromGrip(data: CabinetModuleData, point: [number, number], zoom: number): number | null {
+  const dx = point[0] - data.location_mm[0]
+  const dy = point[1] - data.location_mm[1]
+  if (Math.hypot(dx, dy) < 1) return null
+  const localX = data.width_mm / 2
+  const localY = -data.board_mm - 18 / Math.max(zoom, 0.001)
+  const nextAngle = Math.atan2(dy, dx) - Math.atan2(localY, localX)
+  const degrees = ((nextAngle * 180 / Math.PI + 180) % 360 + 360) % 360 - 180
+  return Math.round(degrees * 10) / 10
 }
 
 function gridLineEndpoints(grid: { module_data: { orientation: 'vertical' | 'horizontal'; position_mm: number; extent_mm: [number, number]; start_point_mm?: [number, number]; end_point_mm?: [number, number] } }): [[number, number], [number, number]] {
@@ -582,6 +619,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onUpdateRoomSeparator,
   onUpdatePipeRoute,
   onUpdateMoulding,
+  onUpdateCabinet,
   onResizeColumn,
   onResizeFoundation,
   onFlipDoorHanding,
@@ -794,6 +832,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     for (const object of planVisibleObjects) {
       if (isGridObject(object)) continue
       const data = object.module_data as Record<string, unknown>
+      if (object.object_type === 'interior.cabinet_run') {
+        points.push(...cabinetFootprintPoints(object.module_data as unknown as CabinetModuleData))
+      }
       for (const key of pointKeys) {
         const value = data[key]
         if (Array.isArray(value) && Number.isFinite(value[0]) && Number.isFinite(value[1])) {
@@ -901,7 +942,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   // Direct-manipulation state for objects whose geometry can move in plan.
   const [draggingObject, setDraggingObject] = useState<{
     id: string
-    kind: 'column' | 'wall' | 'opening' | 'opening-center' | 'grid' | 'column-corner' | 'foundation-corner' | 'wall-endpoint' | 'beam-endpoint' | 'grid-endpoint' | 'separator-endpoint' | 'pipe-endpoint' | 'moulding-endpoint' | 'opening-edge' | 'polygon-vertex'
+    kind: 'column' | 'wall' | 'opening' | 'opening-center' | 'grid' | 'column-corner' | 'foundation-corner' | 'wall-endpoint' | 'beam-endpoint' | 'grid-endpoint' | 'separator-endpoint' | 'pipe-endpoint' | 'moulding-endpoint' | 'cabinet-rotation' | 'opening-edge' | 'polygon-vertex'
     startWorldMm: [number, number]
     startScreenPx: [number, number]
     endpointIndex?: number
@@ -918,6 +959,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     gridEndMm?: [number, number]
     pipeRouteData?: PipeRouteModuleData
     mouldingData?: MouldingModuleData
+    cabinetData?: CabinetModuleData
   } | null>(null)
 
   // 2-click beam placement state (start node -> end node)
@@ -1093,6 +1135,13 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             id, kind: 'moulding-endpoint' as const, endpointIndex,
             mouldingData: structuredClone(moulding),
           }
+        }
+      } else if (object.object_type === 'interior.cabinet_run') {
+        const cabinet = object.module_data as unknown as CabinetModuleData
+        const [x, y] = worldToScreen(cabinetRotationGripPoint(cabinet, viewport.zoom), viewport)
+        if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
+          id, kind: 'cabinet-rotation' as const,
+          cabinetData: structuredClone(cabinet),
         }
       } else if (isDoorObject(object) || isWindowObject(object)) {
         const host = planProject.objects[object.module_data.wall_id]
@@ -1283,7 +1332,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         const object = planProject.objects[id]
         if (!object) continue
         const data = object.module_data as unknown as Record<string, unknown>
-        const points: Array<[number, number, 'linear' | 'opening' | 'opening-center']> = []
+        const points: Array<[number, number, 'linear' | 'opening' | 'opening-center' | 'cabinet-rotation']> = []
         if (isColumnObject(object)) {
           const [cx, cy] = object.module_data.location_mm, [w, d] = object.module_data.section_mm
           points.push([cx - w / 2, cy - d / 2, 'linear'], [cx + w / 2, cy - d / 2, 'linear'], [cx + w / 2, cy + d / 2, 'linear'], [cx - w / 2, cy + d / 2, 'linear'])
@@ -1312,6 +1361,23 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             const first = moulding.path_mm[0], last = moulding.path_mm[moulding.path_mm.length - 1]
             points.push([first[0], first[1], 'linear'], [last[0], last[1], 'linear'])
           }
+        } else if (object.object_type === 'interior.cabinet_run') {
+          const cabinet = object.module_data as unknown as CabinetModuleData
+          const angle = cabinet.rotation_deg * Math.PI / 180
+          const frontCenter: [number, number] = [
+            cabinet.location_mm[0] + cabinet.width_mm / 2 * Math.cos(angle) + cabinet.board_mm * Math.sin(angle),
+            cabinet.location_mm[1] + cabinet.width_mm / 2 * Math.sin(angle) - cabinet.board_mm * Math.cos(angle),
+          ]
+          const grip = cabinetRotationGripPoint(cabinet, viewport.zoom)
+          const [fx, fy] = worldToScreen(frontCenter, viewport)
+          const [gx, gy] = worldToScreen(grip, viewport)
+          ctx.save()
+          ctx.strokeStyle = '#8b5cf6'
+          ctx.lineWidth = 1.25
+          ctx.setLineDash([3, 2])
+          ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(gx, gy); ctx.stroke()
+          ctx.restore()
+          points.push([grip[0], grip[1], 'cabinet-rotation'])
         } else if (isDoorObject(object) || isWindowObject(object)) {
           const host = planProject.objects[object.module_data.wall_id]
           if (host && isWallObject(host)) {
@@ -1365,6 +1431,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
             ctx.fillStyle = '#ffffff'
             ctx.beginPath(); ctx.arc(sx, sy, 2.5, 0, Math.PI * 2); ctx.fill()
+          } else if (kind === 'cabinet-rotation') {
+            ctx.fillStyle = '#7c3aed'
+            ctx.strokeStyle = '#ffffff'
+            ctx.lineWidth = 2
+            ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+            ctx.fillStyle = '#ffffff'
+            ctx.font = 'bold 12px sans-serif'
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.fillText('↻', sx, sy)
           } else {
             ctx.fillStyle = kind === 'opening' ? '#fff7ed' : '#ffffff'
             ctx.strokeStyle = kind === 'opening' ? '#f97316' : '#087cf0'
@@ -1937,6 +2013,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             startPointMm: editHandle.startPointMm, endPointMm: editHandle.endPointMm,
             boundaryPointsMm: editHandle.boundaryPointsMm,
             pipeRouteData: editHandle.pipeRouteData, mouldingData: editHandle.mouldingData,
+            cabinetData: editHandle.cabinetData,
             centerMm: editHandle.centerMm, sectionMm: editHandle.sectionMm,
             hostStartMm: editHandle.hostStartMm, hostEndMm: editHandle.hostEndMm,
             openingWidthMm: editHandle.openingWidthMm, openingCenterOffsetMm: editHandle.openingCenterOffsetMm,
@@ -2293,6 +2370,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
               path_mm[draggingObject.endpointIndex] = [point[0], point[1], current[2]]
               onUpdateMoulding?.(draggingObject.id, { path_mm })
             }
+          } else if (draggingObject.kind === 'cabinet-rotation' && draggingObject.cabinetData) {
+            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            const rotation_deg = cabinetRotationFromGrip(draggingObject.cabinetData, point, viewport.zoom)
+            if (rotation_deg !== null) onUpdateCabinet?.(draggingObject.id, { rotation_deg })
           } else if (draggingObject.kind === 'opening-edge' && draggingObject.endpointIndex !== undefined && draggingObject.hostStartMm && draggingObject.hostEndMm && draggingObject.openingCenterOffsetMm !== undefined && draggingObject.openingWidthMm !== undefined) {
             const offset = projectPointToWallOffsetMm(rawWorld, draggingObject.hostStartMm, draggingObject.hostEndMm, 1)
             if (offset !== undefined) {
@@ -2492,7 +2573,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
   }
 
-  const placementHint = activeTool === 'select' ? 'เลือก · คลิกเลือกหรือ ลากครอบวัตถุ · Tab สลับวัตถุซ้อน · Esc ล้างการเลือก' :
+  const selectionHint = editableSelectionIds.some(id => planProject.objects[id]?.object_type === 'interior.cabinet_run')
+    ? 'เลือกบิลท์อิน · ลากด้ามสีม่วงเพื่อหมุน โดยคงตำแหน่งและขนาด · Esc ล้างการเลือก'
+    : 'เลือก · คลิกเลือกหรือ ลากครอบวัตถุ · Tab สลับวัตถุซ้อน · Esc ล้างการเลือก'
+  const placementHint = activeTool === 'select' ? selectionHint :
     activeTool === 'erase' ? 'ยางลบ · คลิกหรือลากผ่านวัตถุเพื่อลบ · Esc ออกจากเครื่องมือ' :
     activeTool === 'column' ? 'เสา · Snap ศูนย์กลาง/จุดตัดกริด · เลื่อนแล้ว Enter วาง' :
     activeTool === 'foundation' ? 'ฐานราก · Snap เสาหรือจุดกริด · เลื่อนแล้ว Enter วาง' :
@@ -2580,8 +2664,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       </div>}
       {activeTool === 'select' && editableSelectionIds.some(id => {
         const object = planProject.objects[id]
-        return object && (isColumnObject(object) || isFoundationObject(object) || isWallObject(object) || isBeamObject(object) || isGridObject(object) || isDoorObject(object) || isWindowObject(object) || ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system', 'architecture.room_separator', 'drainage.pipe_route', 'plumbing.pipe_route', 'decorative.moulding_run'].includes(object.object_type))
-      }) && <div className="cf-tape-measure-hint" aria-live="polite">จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด ท่อ และแนวบัว · จุดสีส้ม: ลากขอบปรับความกว้าง หรือลากจุดกึ่งกลางปรับตำแหน่ง (BIM Snap ขอบเสา 100 มม.) · ปุ่ม ⇄: สลับด้านบานประตู</div>}
+        return object && (isColumnObject(object) || isFoundationObject(object) || isWallObject(object) || isBeamObject(object) || isGridObject(object) || isDoorObject(object) || isWindowObject(object) || ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system', 'architecture.room_separator', 'drainage.pipe_route', 'plumbing.pipe_route', 'decorative.moulding_run', 'interior.cabinet_run'].includes(object.object_type))
+      }) && <div className="cf-tape-measure-hint" aria-live="polite">จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด ท่อ และแนวบัว · จุดสีม่วง: หมุนบิลท์อินรอบจุดวาง · จุดสีส้ม: ลากขอบปรับความกว้าง หรือลากจุดกึ่งกลางปรับตำแหน่ง (BIM Snap ขอบเสา 100 มม.) · ปุ่ม ⇄: สลับด้านบานประตู</div>}
       {placementHint && <div className="cf-tape-measure-hint" aria-live="polite">{placementHint} · Esc ยกเลิกขั้นตอน หรือออกเมื่อว่าง</div>}
       {supportsPlacementDimensions && dimensionOverlayPosition && (showXDimension || showYDimension || hasLineGeometryInput) && <div className="cf-dynamic-dimensions" role="group" aria-label="ระยะและแนวระหว่างวางวัตถุ" onPointerDown={event => event.stopPropagation()} style={{
         left: Math.max(8, Math.min(dimensionOverlayPosition[0] > (containerRef.current?.clientWidth ?? 800) / 2 ? dimensionOverlayPosition[0] - 318 : dimensionOverlayPosition[0] + 18, (containerRef.current?.clientWidth ?? 800) - 318)),

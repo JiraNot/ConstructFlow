@@ -321,6 +321,46 @@ export function interiorOutputs(p: ProjectDocument): DomainOutput[] {
           angle,
         );
       });
+      const planPoint = (localX: number, localY: number): Vec3 => [
+        x + localX * Math.cos(angle) - localY * Math.sin(angle),
+        y + localX * Math.sin(angle) + localY * Math.cos(angle),
+        z,
+      ];
+      const planPath = (points: [number, number][]) =>
+        points.map(([localX, localY]) => planPoint(localX, localY));
+      // Keep a readable plan symbol alongside the fabrication meshes: the
+      // outer line represents the cabinet/counter envelope, while the inner
+      // front line and module joints make the usable face clear at plan scale.
+      const frontY = -d.board_mm;
+      out.paths.push(
+        planPath([
+          [0, frontY],
+          [d.width_mm, frontY],
+          [d.width_mm, d.depth_mm],
+          [0, d.depth_mm],
+          [0, frontY],
+        ]),
+        planPath([
+          [0, 0],
+          [d.width_mm, 0],
+        ]),
+      );
+      let moduleX = 0;
+      for (const moduleWidth of d.modules_mm.slice(0, -1)) {
+        moduleX += moduleWidth;
+        out.paths.push(planPath([[moduleX, frontY], [moduleX, 0]]));
+      }
+      if (d.countertop_mm > 0) {
+        out.paths.push(
+          planPath([
+            [0, -20],
+            [d.width_mm, -20],
+            [d.width_mm, d.depth_mm],
+            [0, d.depth_mm],
+            [0, -20],
+          ]),
+        );
+      }
       const groups = new Map<string, number>();
       for (const part of parts)
         groups.set(
