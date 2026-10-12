@@ -1,7 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createEmptyProjectDocument } from "@constructflow/project-model";
-import { solveGravityInverts, drainageOutputs } from "../dist/index.js";
+import { movePipeRouteEndpoint, solveGravityInverts, drainageOutputs } from "../dist/index.js";
+
+test("drainage: moving a free route endpoint preserves gravity fall and connected nodes", () => {
+  const route = {
+    system: "waste",
+    nodes_mm: [[0, 0, -300], [2000, 0, -320], [4000, 0, -340]],
+    diameter_mm: 100,
+    start_node_id: undefined,
+    end_node_id: undefined,
+    start_invert_mm: -300,
+    end_invert_mm: -340,
+    minimum_slope_ratio: 0.01,
+    material: "PVC",
+  };
+  const endMoved = movePipeRouteEndpoint(route, "end", [6000, 0]);
+  assert.deepEqual(endMoved.nodes_mm, [[0, 0, -300], [2000, 0, -320], [6000, 0, -360]]);
+  assert.equal(endMoved.start_invert_mm, -300);
+  assert.equal(endMoved.end_invert_mm, -360);
+
+  const startMoved = movePipeRouteEndpoint(route, "start", [-1000, 0]);
+  assert.deepEqual(startMoved.nodes_mm, [[-1000, 0, -290], [2000, 0, -320], [4000, 0, -340]]);
+  assert.equal(startMoved.end_invert_mm, -340);
+
+  assert.throws(() => movePipeRouteEndpoint({ ...route, start_node_id: "manhole-1" }, "start", [0, 500]), /connected pipe start/i);
+  const water = movePipeRouteEndpoint({ ...route, system: "cold_water" }, "end", [6000, 0]);
+  assert.deepEqual(water.nodes_mm, [[0, 0, -300], [2000, 0, -320], [6000, 0, -340]]);
+});
 
 test("drainage: solveGravityInverts automatically calculates 1:100 slope and cascades to manhole", () => {
   const p = createEmptyProjectDocument("TEST-DRAINAGE");

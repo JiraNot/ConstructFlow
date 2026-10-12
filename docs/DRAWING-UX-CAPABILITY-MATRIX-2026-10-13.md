@@ -14,10 +14,10 @@ This matrix maps the main model families to their current canvas workflow, edit 
 | Architectural floors and ceilings | Polygon draw or room-derived creation | Boundary vertex grips, level, offset, thickness and finish settings | Add linked-room boundary refresh preview and direct ceiling-grid editing |
 | Stairs | Directional run placement with rise, width, flight and landing controls | Parametric stair properties | Add grip-based run/width editing and a clear landing/flight preview before commit |
 | Roofs | **New:** polygon footprint draw in a dedicated roof plan with architectural context; choose hip, gable (four-point footprint) or flat; set slope, datum offset, thickness and material before placement | Boundary vertex grips; editable reference elevation, thickness, material, and per-edge slope intent | Add ridge/valley controls, eaves overhang geometry, roof openings and a site-boundary setback test. The initial settings default to a hip roof with 25° slopes on every edge |
-| Plumbing and drainage routes | **New:** two-point route drawing; choose waste, soil, rainwater, vent, cold-water, or hot-water system before drawing | Edit diameter, material, endpoint elevations and gravity minimum slope | Add route-node grips, connected node placement, multi-segment bends, and system-specific elevation presets. Gravity routes currently default to 1:100 |
+| Plumbing and drainage routes | **New:** two-point route drawing; choose waste, soil, rainwater, vent, cold-water, or hot-water system before drawing | Edit diameter, material, endpoint elevations and gravity minimum slope; **new:** drag either unconnected plan endpoint while preserving the minimum fall and connected nodes | Add intermediate route-node grips, connected node placement, multi-segment bends, and system-specific elevation presets. Gravity routes currently default to 1:100 |
 | Electrical fixtures | **New:** point placement for lights, switches, outlets, and panels | Edit device kind, watts, installation elevation, and grounding | Add circuit assignment, cable/conduit routing, switch-to-load linking, and circuit validation directly from plan |
 | Built-ins | **New:** two-point front baseline sets cabinet width and rotation | Edit width, height, depth, rotation and front style | Add chained cabinet modules, worktop geometry/finish preview, host alignment, and family types |
-| Decorative mouldings | **New:** two-point run at the active level's upper datum | Edit installation elevation and material | Add connected polyline/closed-loop drawing, profile catalog selection, mitre preview, and wall-host alignment |
+| Decorative mouldings | **New:** two-point run at the active level's upper datum | Edit installation elevation and material; **new:** drag either endpoint of an open run with BIM snaps while holding its vertical datum | Add intermediate path-point grips, connected polyline/closed-loop drawing, profile catalog selection, mitre preview, and wall-host alignment |
 | Grids and room boundaries | Single/grid-system placement, snapping and room detection | Grid endpoints/tags and room-boundary edits | Add stronger room-boundary diagnostics and batch room naming/numbering |
 
 ## Implemented interaction contract
@@ -31,14 +31,14 @@ This matrix maps the main model families to their current canvas workflow, edit 
 ## Cross-view acceptance
 
 1. Draw and edit a roof; confirm it is visible/selectable in the roof plan, stays hidden from floor/framing plans, has per-edge slopes in the inspector, renders in 3D/elevation, and contributes roof covering/gutter/downpipe quantities.
-2. Draw a gravity route and a cold-water route; confirm the gravity route has a valid fall, both routes are selectable, endpoint elevations edit successfully, and each appears in coordination/takeoff outputs.
+2. Draw a gravity route and a cold-water route; drag each free plan endpoint and confirm connected endpoints stay fixed, the gravity route keeps its minimum fall, elevation edits succeed, and each route appears in coordination/takeoff outputs.
 3. Place each electrical fixture kind; update elevation and watts; verify the same UUID survives save/load and that a switch can only control valid light objects.
-4. Draw a cabinet and moulding run; edit their instance dimensions/materials; confirm geometry, cut list or quantity output changes with the same UUID.
+4. Draw a cabinet and moulding run; drag the moulding endpoints and edit instance dimensions/materials; confirm geometry, cut list or quantity output changes with the same UUID.
 5. Repeat roof, route, fixture, cabinet and moulding create/edit/delete through undo/redo and project save/load; inspect plan, framing, elevation and 3D for view-specific visibility and stale geometry.
 
 ## Next implementation priorities
 
-1. Extend direct-manipulation grips from walls/openings/floors to pipe endpoints, moulding endpoints, cabinet placement orientation, roof ridge lines and slab edges.
+1. Add a cabinet orientation grip, followed by direct roof-ridge and slab-edge grips. Open mouldings and unconnected pipe routes now have selectable, draggable endpoint grips.
 2. Add route-aware MEP connection editing and direct electrical circuit assignment, then verify clash checks against walls, beams and ceiling zones.
 3. Add family/type catalogs for roofs, MEP fixtures/routes, cabinetry and moulding profiles, including type-cascade behavior.
 4. Complete cross-view selection feedback, vertical datum badges and focused automated acceptance tests across plan, framing, elevation, 3D, takeoff and saved-project round trips.

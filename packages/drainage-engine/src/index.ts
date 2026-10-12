@@ -135,6 +135,73 @@ export function decodePipe(
     material: text(d.material, "material"),
   };
 }
+
+/** Move an unconnected route end in plan while retaining a valid gravity fall. */
+export function movePipeRouteEndpoint(
+  route: PipeRouteModuleData,
+  endpoint: "start" | "end",
+  point_mm: [number, number],
+): PipeRouteModuleData {
+  if (route.nodes_mm.length < 2)
+    throw new Error("A pipe route needs at least two nodes");
+  if (endpoint === "start" && route.start_node_id)
+    throw new Error("A connected pipe start cannot be moved independently");
+  if (endpoint === "end" && route.end_node_id)
+    throw new Error("A connected pipe end cannot be moved independently");
+
+  const nodes_mm = route.nodes_mm.map((node) => [...node] as [number, number, number]);
+  const endpointIndex = endpoint === "start" ? 0 : nodes_mm.length - 1;
+  nodes_mm[endpointIndex][0] = point_mm[0];
+  nodes_mm[endpointIndex][1] = point_mm[1];
+
+  if (!["waste", "soil", "rainwater"].includes(route.system))
+    return { ...route, nodes_mm };
+
+  let horizontalRun = 0;
+  for (let index = 1; index < nodes_mm.length; index++)
+    horizontalRun += Math.hypot(
+      nodes_mm[index][0] - nodes_mm[index - 1][0],
+      nodes_mm[index][1] - nodes_mm[index - 1][1],
+    );
+  if (horizontalRun < 1e-7)
+    throw new Error("Gravity route requires horizontal run");
+
+  const slope = Math.max(0, route.minimum_slope_ratio ?? 0);
+  if (endpoint === "start") {
+    const fixedEndElevation = nodes_mm[nodes_mm.length - 1][2];
+    let remainingRun = 0;
+    for (let index = nodes_mm.length - 1; index >= 0; index--) {
+      nodes_mm[index][2] = fixedEndElevation + remainingRun * slope;
+      if (index > 0)
+        remainingRun += Math.hypot(
+          nodes_mm[index][0] - nodes_mm[index - 1][0],
+          nodes_mm[index][1] - nodes_mm[index - 1][1],
+        );
+    }
+    return {
+      ...route,
+      nodes_mm,
+      start_invert_mm: nodes_mm[0][2],
+    };
+  }
+
+  const fixedStartElevation = nodes_mm[0][2];
+  let accumulatedRun = 0;
+  for (let index = 0; index < nodes_mm.length; index++) {
+    nodes_mm[index][2] = fixedStartElevation - accumulatedRun * slope;
+    if (index < nodes_mm.length - 1)
+      accumulatedRun += Math.hypot(
+        nodes_mm[index + 1][0] - nodes_mm[index][0],
+        nodes_mm[index + 1][1] - nodes_mm[index][1],
+      );
+  }
+  return {
+    ...route,
+    nodes_mm,
+    end_invert_mm: nodes_mm[nodes_mm.length - 1][2],
+  };
+}
+
 export function decodeSeptic(
   d: Record<string, unknown>,
   p: ProjectDocument,

@@ -6,6 +6,8 @@ import {
   WindowModuleData,
   WallModuleData,
   StairModuleData,
+  PipeRouteModuleData,
+  MouldingModuleData,
   isColumnObject,
   isFoundationObject,
   isGridObject,
@@ -20,6 +22,7 @@ import {
   DisplayLengthUnit,
 } from '@constructflow/project-model'
 import { projectPointToWallOffsetMm, stairFromRun, type StairPlacementOptions } from '@constructflow/architecture-engine'
+import { movePipeRouteEndpoint } from '@constructflow/drainage-engine'
 import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
@@ -94,6 +97,8 @@ interface PlanCanvasProps {
   onResizeOpening?: (id: string, width_mm: number, offset_along_wall_mm: number) => void
   onUpdateBoundaryVertex?: (id: string, boundary_mm: [number, number][]) => void
   onUpdateRoomSeparator?: (id: string, start: [number, number], end: [number, number]) => void
+  onUpdatePipeRoute?: (id: string, changes: Partial<PipeRouteModuleData>) => void
+  onUpdateMoulding?: (id: string, changes: Partial<MouldingModuleData>) => void
   onResizeColumn?: (id: string, section_mm: [number, number]) => void
   onResizeFoundation?: (id: string, size_mm: [number, number]) => void
   onFlipDoorHanding?: (doorId: string) => void
@@ -575,6 +580,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onResizeOpening,
   onUpdateBoundaryVertex,
   onUpdateRoomSeparator,
+  onUpdatePipeRoute,
+  onUpdateMoulding,
   onResizeColumn,
   onResizeFoundation,
   onFlipDoorHanding,
@@ -894,7 +901,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   // Direct-manipulation state for objects whose geometry can move in plan.
   const [draggingObject, setDraggingObject] = useState<{
     id: string
-    kind: 'column' | 'wall' | 'opening' | 'opening-center' | 'grid' | 'column-corner' | 'foundation-corner' | 'wall-endpoint' | 'beam-endpoint' | 'grid-endpoint' | 'separator-endpoint' | 'opening-edge' | 'polygon-vertex'
+    kind: 'column' | 'wall' | 'opening' | 'opening-center' | 'grid' | 'column-corner' | 'foundation-corner' | 'wall-endpoint' | 'beam-endpoint' | 'grid-endpoint' | 'separator-endpoint' | 'pipe-endpoint' | 'moulding-endpoint' | 'opening-edge' | 'polygon-vertex'
     startWorldMm: [number, number]
     startScreenPx: [number, number]
     endpointIndex?: number
@@ -909,6 +916,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     openingWidthMm?: number
     gridStartMm?: [number, number]
     gridEndMm?: [number, number]
+    pipeRouteData?: PipeRouteModuleData
+    mouldingData?: MouldingModuleData
   } | null>(null)
 
   // 2-click beam placement state (start node -> end node)
@@ -1060,6 +1069,29 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
             id, kind: 'separator-endpoint' as const, endpointIndex: endpointIndex as 0 | 1,
             startPointMm: [...start] as [number, number], endPointMm: [...end] as [number, number],
+          }
+        }
+      } else if (object.object_type === 'drainage.pipe_route' || object.object_type === 'plumbing.pipe_route') {
+        const route = object.module_data as unknown as PipeRouteModuleData
+        if (route.nodes_mm.length < 2) continue
+        for (const endpointIndex of [0, route.nodes_mm.length - 1]) {
+          if ((endpointIndex === 0 && route.start_node_id) || (endpointIndex > 0 && route.end_node_id)) continue
+          const point = route.nodes_mm[endpointIndex]
+          const [x, y] = worldToScreen([point[0], point[1]], viewport)
+          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
+            id, kind: 'pipe-endpoint' as const, endpointIndex,
+            pipeRouteData: structuredClone(route),
+          }
+        }
+      } else if (object.object_type === 'decorative.moulding_run') {
+        const moulding = object.module_data as unknown as MouldingModuleData
+        if (moulding.closed || moulding.path_mm.length < 2) continue
+        for (const endpointIndex of [0, moulding.path_mm.length - 1]) {
+          const point = moulding.path_mm[endpointIndex]
+          const [x, y] = worldToScreen([point[0], point[1]], viewport)
+          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
+            id, kind: 'moulding-endpoint' as const, endpointIndex,
+            mouldingData: structuredClone(moulding),
           }
         }
       } else if (isDoorObject(object) || isWindowObject(object)) {
@@ -1267,6 +1299,19 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         } else if (object.object_type === 'architecture.room_separator') {
           const start = data.start_point_mm as [number, number], end = data.end_point_mm as [number, number]
           points.push([start[0], start[1], 'linear'], [end[0], end[1], 'linear'])
+        } else if (object.object_type === 'drainage.pipe_route' || object.object_type === 'plumbing.pipe_route') {
+          const route = object.module_data as unknown as PipeRouteModuleData
+          if (route.nodes_mm.length >= 2) {
+            if (!route.start_node_id) points.push([route.nodes_mm[0][0], route.nodes_mm[0][1], 'linear'])
+            const last = route.nodes_mm.length - 1
+            if (!route.end_node_id) points.push([route.nodes_mm[last][0], route.nodes_mm[last][1], 'linear'])
+          }
+        } else if (object.object_type === 'decorative.moulding_run') {
+          const moulding = object.module_data as unknown as MouldingModuleData
+          if (!moulding.closed && moulding.path_mm.length >= 2) {
+            const first = moulding.path_mm[0], last = moulding.path_mm[moulding.path_mm.length - 1]
+            points.push([first[0], first[1], 'linear'], [last[0], last[1], 'linear'])
+          }
         } else if (isDoorObject(object) || isWindowObject(object)) {
           const host = planProject.objects[object.module_data.wall_id]
           if (host && isWallObject(host)) {
@@ -1891,6 +1936,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           setDraggingObject({ id: editHandle.id, kind: editHandle.kind, endpointIndex: editHandle.endpointIndex,
             startPointMm: editHandle.startPointMm, endPointMm: editHandle.endPointMm,
             boundaryPointsMm: editHandle.boundaryPointsMm,
+            pipeRouteData: editHandle.pipeRouteData, mouldingData: editHandle.mouldingData,
             centerMm: editHandle.centerMm, sectionMm: editHandle.sectionMm,
             hostStartMm: editHandle.hostStartMm, hostEndMm: editHandle.hostEndMm,
             openingWidthMm: editHandle.openingWidthMm, openingCenterOffsetMm: editHandle.openingCenterOffsetMm,
@@ -2227,6 +2273,26 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
             if (draggingObject.endpointIndex === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
             onUpdateRoomSeparator?.(draggingObject.id, start, end)
+          } else if (draggingObject.kind === 'pipe-endpoint' && draggingObject.pipeRouteData && draggingObject.endpointIndex !== undefined) {
+            const route = draggingObject.pipeRouteData
+            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            const adjacentIndex = draggingObject.endpointIndex === 0 ? 1 : route.nodes_mm.length - 2
+            const adjacent = route.nodes_mm[adjacentIndex]
+            if (Math.hypot(point[0] - adjacent[0], point[1] - adjacent[1]) >= 1) {
+              const endpoint = draggingObject.endpointIndex === 0 ? 'start' : 'end'
+              onUpdatePipeRoute?.(draggingObject.id, movePipeRouteEndpoint(route, endpoint, point))
+            }
+          } else if (draggingObject.kind === 'moulding-endpoint' && draggingObject.mouldingData && draggingObject.endpointIndex !== undefined) {
+            const moulding = draggingObject.mouldingData
+            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            const path_mm = structuredClone(moulding.path_mm) as [number, number, number][]
+            const current = path_mm[draggingObject.endpointIndex]
+            const adjacentIndex = draggingObject.endpointIndex === 0 ? 1 : path_mm.length - 2
+            const adjacent = path_mm[adjacentIndex]
+            if (Math.hypot(point[0] - adjacent[0], point[1] - adjacent[1], current[2] - adjacent[2]) >= 1) {
+              path_mm[draggingObject.endpointIndex] = [point[0], point[1], current[2]]
+              onUpdateMoulding?.(draggingObject.id, { path_mm })
+            }
           } else if (draggingObject.kind === 'opening-edge' && draggingObject.endpointIndex !== undefined && draggingObject.hostStartMm && draggingObject.hostEndMm && draggingObject.openingCenterOffsetMm !== undefined && draggingObject.openingWidthMm !== undefined) {
             const offset = projectPointToWallOffsetMm(rawWorld, draggingObject.hostStartMm, draggingObject.hostEndMm, 1)
             if (offset !== undefined) {
@@ -2514,8 +2580,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       </div>}
       {activeTool === 'select' && editableSelectionIds.some(id => {
         const object = planProject.objects[id]
-        return object && (isColumnObject(object) || isFoundationObject(object) || isWallObject(object) || isBeamObject(object) || isGridObject(object) || isDoorObject(object) || isWindowObject(object) || ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system', 'architecture.room_separator'].includes(object.object_type))
-      }) && <div className="cf-tape-measure-hint" aria-live="polite">จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด · จุดสีส้ม: ลากขอบปรับความกว้าง หรือลากจุดกึ่งกลางปรับตำแหน่ง (BIM Snap ขอบเสา 100 มม.) · ปุ่ม ⇄: สลับด้านบานประตู</div>}
+        return object && (isColumnObject(object) || isFoundationObject(object) || isWallObject(object) || isBeamObject(object) || isGridObject(object) || isDoorObject(object) || isWindowObject(object) || ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system', 'architecture.room_separator', 'drainage.pipe_route', 'plumbing.pipe_route', 'decorative.moulding_run'].includes(object.object_type))
+      }) && <div className="cf-tape-measure-hint" aria-live="polite">จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด ท่อ และแนวบัว · จุดสีส้ม: ลากขอบปรับความกว้าง หรือลากจุดกึ่งกลางปรับตำแหน่ง (BIM Snap ขอบเสา 100 มม.) · ปุ่ม ⇄: สลับด้านบานประตู</div>}
       {placementHint && <div className="cf-tape-measure-hint" aria-live="polite">{placementHint} · Esc ยกเลิกขั้นตอน หรือออกเมื่อว่าง</div>}
       {supportsPlacementDimensions && dimensionOverlayPosition && (showXDimension || showYDimension || hasLineGeometryInput) && <div className="cf-dynamic-dimensions" role="group" aria-label="ระยะและแนวระหว่างวางวัตถุ" onPointerDown={event => event.stopPropagation()} style={{
         left: Math.max(8, Math.min(dimensionOverlayPosition[0] > (containerRef.current?.clientWidth ?? 800) / 2 ? dimensionOverlayPosition[0] - 318 : dimensionOverlayPosition[0] + 18, (containerRef.current?.clientWidth ?? 800) - 318)),
