@@ -83,6 +83,74 @@ function updateInstances(context: CommandHandlerContext, type: TypeDefinition, u
   return affected
 }
 
+function updateWallFinishInstances(context: CommandHandlerContext, type: TypeDefinition, updates: Record<string, unknown>): string[] {
+  const affected: string[] = []
+  const { updated, now } = context
+  const sides = [
+    { id: 'inside_finish_type_id', mark: 'inside_finish_mark', material: 'plaster_inside_material', thickness: 'plaster_inside_thickness_mm' },
+    { id: 'outside_finish_type_id', mark: 'outside_finish_mark', material: 'plaster_outside_material', thickness: 'plaster_outside_thickness_mm' },
+  ] as const
+  for (const [id, object] of Object.entries(updated.objects)) {
+    if (object.object_type !== 'architecture.wall') continue
+    const data = object.module_data as Record<string, unknown>
+    const overrides = data.instance_overrides && typeof data.instance_overrides === 'object' && !Array.isArray(data.instance_overrides)
+      ? data.instance_overrides as Record<string, unknown>
+      : {}
+    const nextData = { ...data }
+    const nextOverrides = { ...overrides }
+    let changed = false
+    for (const side of sides) {
+      if (data[side.id] !== type.id && overrides[side.id] !== type.id) continue
+      const values: Array<[string, unknown]> = [
+        [side.mark, type.name],
+        [side.material, updates.material ?? type.parameters.material],
+        [side.thickness, updates.thickness_mm ?? type.parameters.thickness_mm],
+      ]
+      for (const [field, value] of values) {
+        if (value === undefined) continue
+        nextData[field] = structuredClone(value)
+        if (overrides[side.id] === type.id) nextOverrides[field] = structuredClone(value)
+        changed = true
+      }
+    }
+    if (!changed) continue
+    const masonry = Number(nextData.masonry_thickness_mm)
+    const inside = Number(nextData.plaster_inside_thickness_mm)
+    const outside = Number(nextData.plaster_outside_thickness_mm)
+    if ([masonry, inside, outside].every(Number.isFinite) && masonry > 0 && inside >= 0 && outside >= 0) {
+      const nextThickness = masonry + inside + outside
+      const oldThickness = Number(data.thickness_mm)
+      if (Number.isFinite(oldThickness) && Math.abs(nextThickness - oldThickness) > 1e-8
+        && Array.isArray(data.start_point_mm) && Array.isArray(data.end_point_mm)) {
+        const adjusted = preserveSegmentPlacementReference(
+          data.start_point_mm as [number, number, number],
+          data.end_point_mm as [number, number, number],
+          data.placement_reference as 'centerline' | 'left_face' | 'right_face' | undefined,
+          oldThickness,
+          nextThickness,
+        )
+        nextData.start_point_mm = adjusted.start
+        nextData.end_point_mm = adjusted.end
+        for (const [field, value] of [['start_point_mm', adjusted.start], ['end_point_mm', adjusted.end]] as const) {
+          if (overrides[field] !== undefined) nextOverrides[field] = value
+        }
+        shiftHostedOpenings(context, id, adjusted.shift_mm)
+      }
+      nextData.thickness_mm = nextThickness
+      if (overrides.thickness_mm !== undefined) nextOverrides.thickness_mm = nextThickness
+    }
+    nextData.instance_overrides = nextOverrides
+    updated.objects[id] = {
+      ...object,
+      module_data: nextData,
+      updated_at: now,
+      revision_meta: { ...object.revision_meta, dirty_quantity: true, dirty_drawing: true },
+    }
+    affected.push(id)
+  }
+  return affected
+}
+
 export function executeCatalogCommand(context: CommandHandlerContext): CommandBusResult | undefined {
   const { project, updated, commandName, input, command_id, now, envelope } = context
   switch (commandName) {
@@ -131,7 +199,9 @@ export function executeCatalogCommand(context: CommandHandlerContext): CommandBu
       if (Object.keys(updates).length === 0) return reject(context, `No supported parameters provided for ${unambiguous.name}`)
       const previousType=structuredClone(unambiguous)
       Object.assign(unambiguous.parameters, updates)
-      const affected = updateInstances(context, unambiguous, updates,previousType)
+      const affected = unambiguous.object_type === 'architecture.wall_finish'
+        ? updateWallFinishInstances(context, unambiguous, updates)
+        : updateInstances(context, unambiguous, updates, previousType)
       return {
         result: { status: 'success', command_id, command_name: commandName, affected_object_ids: affected, updated_object_ids: affected },
         updatedProject: updated,

@@ -175,7 +175,7 @@ export function validateProjectV2(project: ProjectDocument): void {
       plaster_thickness_mm: ['structure.column'],
       size_mm: ['structure.foundation', 'drainage.manhole'],
       foundation_type: ['structure.foundation'],
-      thickness_mm: ['architecture.wall', 'structure.slab', 'roof.system', 'architecture.floor', 'architecture.ceiling'],
+      thickness_mm: ['architecture.wall', 'structure.slab', 'roof.system', 'architecture.floor', 'architecture.ceiling', 'architecture.wall_finish'],
       masonry_thickness_mm: ['architecture.wall'],
       plaster_inside_thickness_mm: ['architecture.wall'],
       plaster_outside_thickness_mm: ['architecture.wall'],
@@ -184,9 +184,11 @@ export function validateProjectV2(project: ProjectDocument): void {
       wall_system: ['architecture.wall'],
       inside_finish_mark: ['architecture.wall'],
       outside_finish_mark: ['architecture.wall'],
-      top_level_id: ['architecture.wall', 'structure.column'],
-      base_offset_mm: ['architecture.wall', 'structure.column', 'structure.beam'],
-      top_offset_mm: ['architecture.wall', 'structure.column'],
+      inside_finish_type_id: ['architecture.wall'],
+      outside_finish_type_id: ['architecture.wall'],
+      top_level_id: ['architecture.wall', 'structure.column', 'architecture.stair'],
+      base_offset_mm: ['architecture.wall', 'structure.column', 'structure.beam', 'architecture.stair'],
+      top_offset_mm: ['architecture.wall', 'structure.column', 'architecture.stair'],
       vertical_constraint: ['architecture.wall', 'structure.column', 'door_window.door', 'door_window.window'],
       width_mm: ['door_window.door', 'door_window.window', 'interior.cabinet_run', 'architecture.stair'],
       height_mm: ['architecture.wall', 'door_window.door', 'door_window.window', 'interior.cabinet_run'],
@@ -483,6 +485,17 @@ export function validateProjectV2(project: ProjectDocument): void {
     if (object.removed_phase !== null && object.removed_phase !== 'demolition') throw new Error(`Invalid project format: object ${id} has an unsupported removed phase`)
     const moduleData = object.module_data as Record<string, unknown>
     validateFamilyParameters(moduleData, object.object_type, `object ${id}`)
+    const validateWallFinishRefs = (values: Record<string, unknown>, owner: string) => {
+      for (const field of ['inside_finish_type_id', 'outside_finish_type_id'] as const) {
+        const finishId = values[field]
+        if (finishId === undefined) continue
+        if (object.object_type !== 'architecture.wall' || typeof finishId !== 'string' || !UUID_RE.test(finishId)
+          || !project.types.some(type => type.id.toLowerCase() === finishId.toLowerCase() && type.object_type === 'architecture.wall_finish')) {
+          throw new Error(`Invalid project format: ${owner} references a missing wall finish type ${String(finishId)}`)
+        }
+      }
+    }
+    validateWallFinishRefs(moduleData, `object ${id}`)
     const typeId = moduleData.type_id
     if (typeId !== undefined && (typeof typeId !== 'string' || !UUID_RE.test(typeId) || !typeIds.has(typeId.toLowerCase()))) throw new Error(`Invalid project format: object ${id} references missing type ${String(typeId)}`)
     if (typeId !== undefined && project.types.find(type => type.id.toLowerCase() === (typeId as string).toLowerCase())?.object_type !== object.object_type) {
@@ -493,6 +506,7 @@ export function validateProjectV2(project: ProjectDocument): void {
     if (overrides && typeof overrides === 'object') {
       const values = overrides as Record<string, unknown>
       validateFamilyParameters(values, object.object_type, `object ${id} instance overrides`)
+      validateWallFinishRefs(values, `object ${id} instance overrides`)
       if ((object.object_type === 'structure.column' || object.object_type === 'structure.beam') && values.section_mm !== undefined) requireTuple(values.section_mm, 2, id, 'instance_overrides.section_mm', true)
       if (object.object_type === 'structure.foundation' && values.size_mm !== undefined) requireTuple(values.size_mm, 3, id, 'instance_overrides.size_mm', true)
       if (object.object_type === 'structure.foundation' && values.pile_offsets_mm && values.size_mm) {

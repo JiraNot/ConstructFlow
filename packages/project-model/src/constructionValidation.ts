@@ -217,6 +217,18 @@ export function validateConstructionPayloads(project: ProjectDocument): void {
       number(d[k], k, 0);
     for (const k of (schema.finite ?? "").split(" ").filter(Boolean))
       number(d[k], k, -Infinity);
+    if (object.object_type === 'architecture.stair' && d.rotation_deg !== undefined)
+      number(d.rotation_deg, 'rotation_deg', -Infinity);
+    if (object.object_type === 'architecture.stair') {
+      if (!Number.isInteger(d.num_risers) || Number(d.num_risers) < (d.stair_type === 'straight' ? 2 : 4)) fail('num_risers');
+      if (!['straight', 'l_shape', 'u_shape'].includes(String(d.stair_type))) fail('stair_type');
+      if (d.turn_direction !== undefined && !['left', 'right'].includes(String(d.turn_direction))) fail('turn_direction');
+      for (const key of ['base_offset_mm', 'top_offset_mm']) if (d[key] !== undefined) number(d[key], key, -Infinity);
+      if (d.top_level_id !== undefined && !project.levels.some(l => l.id === d.top_level_id)) fail('top_level_id');
+      if (d.first_flight_risers !== undefined && (!Number.isInteger(d.first_flight_risers) || Number(d.first_flight_risers) < 2 || (d.stair_type !== 'straight' && Number(d.num_risers) - Number(d.first_flight_risers) < 2))) fail('first_flight_risers');
+      if (d.second_tread_depth_mm !== undefined) number(d.second_tread_depth_mm, 'second_tread_depth_mm', 0, false);
+      if (d.flight_gap_mm !== undefined) number(d.flight_gap_mm, 'flight_gap_mm', 0);
+    }
     for (const k of (schema.points ?? "").split(" ").filter(Boolean))
       tuple(d[k], 3, k);
     for (const k of (schema.text ?? "").split(" ").filter(Boolean))

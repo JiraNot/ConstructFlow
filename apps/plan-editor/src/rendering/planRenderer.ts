@@ -16,12 +16,12 @@ import {
   getDisplayPhase,
 } from '@constructflow/project-model'
 import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
-import { resolveArchitecturalFloorPatternKind } from '@constructflow/architecture-engine'
+import { resolveArchitecturalFloorPatternKind, decodeStair, getStairPlanDrawing } from '@constructflow/architecture-engine'
 import { SnapResult } from '@constructflow/snapping-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
 import { clippedGridSegments, clippedStaggeredPlankSegments, polygonDiagonalHatchSegments, polygonInteriorPoint, wallMasonryHatchSegments , clippedCarpetSegments, clippedTerrazzoSegments} from "@constructflow/geometry-kernel"
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
-import { resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '@constructflow/representation-engine'
+import { getPlanVisibleObjects, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '@constructflow/representation-engine'
 import { beginPlanLabels, queuePlanLabel, flushPlanLabels, planLabelScale } from './planLabels.js'
 
 function openingValue(project: ProjectDocument, object: SmartObject, field: string, fallback: unknown) {
@@ -185,15 +185,8 @@ export function renderPlanView(
   }
 
   // 3. Structural/architectural domain linework for the active level
-  for (const out of constructionOutputs(sourceProject).filter(out => {
-    const object = project.objects[out.object_id]
-    if (!object) return false
-    const data = object.module_data as Record<string, unknown>
-    const objectLevelId = typeof data.level_id === 'string'
-      ? data.level_id
-      : object.level_refs.find(reference => ['host_level', 'base', 'base_level'].includes(reference.role))?.level_id
-    return !activeLevelId || !objectLevelId || objectLevelId === activeLevelId
-  })) {
+  const visibleDomainIds = new Set(getPlanVisibleObjects(sourceProject).map(object => object.id))
+  for (const out of constructionOutputs(sourceProject).filter(out => project.objects[out.object_id] && visibleDomainIds.has(out.object_id))) {
     const phase=out.removed_phase==='demolition'?'demolition':out.phase
     const outputObject = project.objects[out.object_id]
     const family = outputObject?.object_type ?? ''
@@ -269,7 +262,15 @@ export function renderPlanView(
         ctx.stroke()
       }
     }
-    if (family === 'architecture.bathroom' && lines.length > 0) {
+    if (family === 'architecture.stair' && outputObject) {
+      const stair = decodeStair(outputObject.module_data as Record<string, unknown>, sourceProject)
+      const drawing = getStairPlanDrawing(stair, sourceProject.levels.find(l => l.id === activeLevelId)?.elevation_mm ?? stair.start_point_mm[2])
+      const toPaths = (paths: [number, number][][]) => paths.map(path => path.map(([x, y]) => [x, y, stair.start_point_mm[2]] as [number, number, number]))
+      ctx.setLineDash([5, 4])
+      drawPaths(toPaths(drawing.overhead_paths_mm), '#94a3b8', 0.8)
+      ctx.setLineDash([])
+      drawPaths(toPaths(drawing.solid_paths_mm), isSelected(out.object_id) ? '#f59e0b' : '#334155', 1.2)
+    } else if (family === 'architecture.bathroom' && lines.length > 0) {
       // Keep the tile layout subdued even when selected; selection belongs to the
       // room boundary, while the tile joints remain ordinary construction detail.
       drawPaths(lines.slice(0, 1), isSelected(out.object_id) ? '#f59e0b' : '#64748b', isSelected(out.object_id) ? 1.8 : 1)
@@ -277,7 +278,7 @@ export function renderPlanView(
     } else {
       drawPaths(lines, String(ctx.strokeStyle), ctx.lineWidth)
     }
-    const anchor=lines[0]?.[0];if(anchor && labelVisibility.structure){const [x,y]=worldToScreen([anchor[0],anchor[1]],viewport);ctx.font='11px sans-serif';const shape=family.endsWith('.ceiling')?'ellipse':'rect';queuePlanLabel(ctx,x+4,y-12,out.mark,isSelected(out.object_id)?'#f59e0b':String(ctx.strokeStyle),'#c7d3df',isSelected(out.object_id)?10:0,'#fbfdff',false,shape)}
+    const anchor=lines[0]?.[0];if(anchor && labelVisibility.structure){const [x,y]=worldToScreen([anchor[0],anchor[1]],viewport);ctx.font='11px sans-serif';const shape=family.endsWith('.ceiling')?'ellipse':'rect';const data=outputObject?.module_data as Record<string,unknown>|undefined;const mark=family==='architecture.stair'?`${out.mark} · ${data?.level_id===activeLevelId?'ขึ้น':'ลง'}`:out.mark;queuePlanLabel(ctx,x+4,y-12,mark,isSelected(out.object_id)?'#f59e0b':String(ctx.strokeStyle),'#c7d3df',isSelected(out.object_id)?10:0,'#fbfdff',false,shape)}
     ctx.restore()
   }
   const standaloneGrids = Object.values(project.objects).filter(isGridObject).filter(object => !object.module_data.system_id)
@@ -1841,6 +1842,7 @@ export interface PlacementGhost {
   glazing_material?: string
   wall_id?: string
   offset_along_wall_mm?: number
+  stair?: import('@constructflow/project-model').StairModuleData
 }
 
 function drawPlacementGhost(
@@ -2145,39 +2147,20 @@ function drawPlacementGhost(
   const [x, y] = worldToScreen(ghost.location_mm, viewport)
 
   if (ghost.type === 'stair') {
-    const w_mm = ghost.size_mm?.[0] || 1000
-    const l_mm = ghost.size_mm?.[1] || 4000
-    const w_px = w_mm * viewport.zoom
-    const l_px = l_mm * viewport.zoom
-
-    ctx.fillStyle = 'rgba(168, 85, 247, 0.25)'
+    if (!ghost.stair) { ctx.restore(); return }
+    const drawing = getStairPlanDrawing(ghost.stair, ghost.stair.start_point_mm[2])
     ctx.strokeStyle = '#a855f7'
     ctx.lineWidth = 1.5
-    ctx.setLineDash([4, 4])
-    ctx.fillRect(x, y, w_px, l_px)
-    ctx.strokeRect(x, y, w_px, l_px)
-    const numSteps = 16
-    const stepH = l_px / numSteps
-    ctx.setLineDash([])
-    for (let i = 1; i < numSteps; i++) {
+    for (const [paths, dash] of [[drawing.solid_paths_mm, []], [drawing.overhead_paths_mm, [5, 4]]] as const) for (const path of paths) {
+      ctx.setLineDash([...dash])
       ctx.beginPath()
-      ctx.moveTo(x, y + i * stepH)
-      ctx.lineTo(x + w_px, y + i * stepH)
+      path.forEach((p, i) => { const [px, py] = worldToScreen(p, viewport); if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py) })
       ctx.stroke()
     }
-    ctx.beginPath()
-    ctx.moveTo(x + w_px / 2, y + l_px - 8)
-    ctx.lineTo(x + w_px / 2, y + 8)
-    ctx.lineTo(x + w_px / 2 - 5, y + 16)
-    ctx.moveTo(x + w_px / 2, y + 8)
-    ctx.lineTo(x + w_px / 2 + 5, y + 16)
-    ctx.stroke()
-
-    ctx.fillStyle = '#c084fc'
+    ctx.fillStyle = '#7e22ce'
     ctx.font = 'bold 11px monospace'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(`${ghost.mark || 'ST1'} UP (17 Risers)`, x + w_px / 2, y + l_px / 2)
+    ctx.textAlign = 'left'
+    ctx.fillText(`${ghost.stair.num_risers} ขั้น · ลูกนอน ${(ghost.stair.tread_depth_mm / 1000).toFixed(3)} m`, x + 8, y - 12)
     ctx.restore()
     return
   }

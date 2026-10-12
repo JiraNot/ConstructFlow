@@ -3,9 +3,10 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import type { ProjectDocument } from '@constructflow/project-model'
 import { resolveOpeningMuntinGrid, muntinGridPositions, type OpeningGridZone } from '@constructflow/architecture-engine'
-import { buildProjectRepresentations3D, getPlanVisibleObjects, doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement, type ObjectRepresentation3D, type RepresentationInteraction } from '@constructflow/representation-engine'
+import { buildProjectRepresentations3D, doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement, type ObjectRepresentation3D, type RepresentationInteraction } from '@constructflow/representation-engine'
 import type { CoordinationFinding } from '@constructflow/clash-engine'
 import { buildCoordinationHighlightGroup, disposeCoordinationHighlightGroup } from '../rendering/coordinationHighlight3d.mjs'
+import { applyRepresentationTransform3D } from '../rendering/modelTransform3d.mjs'
 
 type ModelObject3D = THREE.Object3D & { userData: { objectId: string; objectType: string; moveable: boolean; interaction: RepresentationInteraction } }
 const mmToM = (value: number) => value / 1000
@@ -47,9 +48,7 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
     parent.add(mesh)
     return mesh
   }
-  const rootPosition = representation.position_mm.map(mmToM) as [number, number, number]
-  root.position.set(...rootPosition)
-  root.rotation.z = representation.rotation_rad
+  applyRepresentationTransform3D(root, representation)
 
   if (representation.shape.kind === 'opening') {
     const shape = representation.shape
@@ -391,8 +390,6 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
       shape.holes.push(hole)
     }
     if (representation.shape.layers?.length) {
-      root.position.set(...representation.position_mm.map(mmToM) as [number, number, number])
-      root.rotation.set(Math.PI / 2, 0, representation.rotation_rad)
       for (const layer of representation.shape.layers) {
         const layerThickness = mmToM(layer.thickness_mm)
         const layerGeometry = new THREE.ExtrudeGeometry(shape, { depth: layerThickness, bevelEnabled: false, steps: 1, curveSegments: 1 })
@@ -429,10 +426,7 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
   }
   const material = standardMaterial(objectColor(representation), { metalness: representation.object_type === 'structure.beam' && representation.material === 'steel' ? 0.12 : 0.01 })
   const mesh = new THREE.Mesh(geometry, material)
-  root.position.set(...representation.position_mm.map(mmToM) as [number, number, number])
   mesh.position.set(0, 0, 0)
-  if (representation.shape.kind === 'wall_extrusion') root.rotation.set(Math.PI / 2, 0, representation.rotation_rad)
-  else root.rotation.z = representation.rotation_rad
   root.add(mesh)
   root.userData = {
     objectId: representation.object_id,
@@ -558,8 +552,7 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
       })
     }
     meshByIdRef.current.clear()
-    const visibleObjectIds = new Set(getPlanVisibleObjects(project).map(object => object.id))
-    const representationResult = buildProjectRepresentations3D(project, { visibleObjectIds })
+    const representationResult = buildProjectRepresentations3D(project)
     for (const representation of representationResult.objects) {
       const mesh = makeObjectMesh(representation)
       scene.add(mesh)
@@ -589,7 +582,7 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
       highlightRef.current = null
     }
     if (!coordination.length) return
-    const group = buildCoordinationHighlightGroup(coordination)
+    const group = buildCoordinationHighlightGroup(coordination, { severities: ['hard', 'clearance'] })
     scene.add(group)
     highlightRef.current = group
   }, [coordination, project])

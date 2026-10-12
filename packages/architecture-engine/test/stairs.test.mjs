@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   validateStairThaiBuildingCode,
   computeStairGeometry,
+  stairFromRun,
 } from "../dist/index.js";
 
 test("Track 3: Stair Thai Building Code validation enforces minimum standards", () => {
@@ -56,7 +57,7 @@ test("Track 3: computeStairGeometry produces valid linework for Straight, L-Shap
     handrail_height_mm: 900,
   });
   assert.equal(straight.geometry2d.step_lines_mm.length, 16);
-  assert.equal(straight.mesh3d.vertices.length, 16 * 4);
+  assert.ok(straight.mesh3d.vertices.length > 16 * 4, 'solid risers, soffit and rails are generated');
   assert.ok(straight.code_check.passed);
 
   // 2. L-Shape Stair
@@ -135,4 +136,83 @@ test("Track 3 / F05: computeRailingGeometry builds compliant handrails, posts, a
   assert.equal(nonCompliant.passed, false);
   assert.equal(nonCompliant.height_ok, false);
   assert.equal(nonCompliant.spacing_ok, false);
+});
+
+const solidStair = {
+  mark: 'ST1', level_id: 'GF', stair_type: 'u_shape', structure_type: 'rc_monolithic',
+  start_point_mm: [4450, 3625, 400], total_rise_mm: 3400, width_mm: 900,
+  num_risers: 18, riser_height_mm: 188.9, tread_depth_mm: 250,
+  landing_depth_mm: 900, turn_direction: 'right', has_handrail: false, handrail_height_mm: 900,
+};
+
+test('two-point stair drawing uses picked direction and first-flight run without fixed tread sizes', () => {
+  const project = { project: { active_level_id: 'GF' }, levels: [{ id: 'GF', elevation_mm: 400 }, { id: 'L1', elevation_mm: 3800 }] };
+  for (const stair_type of ['straight', 'l_shape', 'u_shape']) for (const end of [[2800, 200], [100, 2900], [-2600, 200], [2000, 2100]]) {
+    const s = stairFromRun(project, [100, 200], end, { stair_type, width_mm: 900, landing_depth_mm: 1100, num_risers: 18, first_flight_risers: 8, flight_gap_mm: 300, turn_direction: 'left', top_level_id: 'L1' });
+    const steps = stair_type === 'straight' ? 17 : 7;
+    assert.ok(Math.abs(s.tread_depth_mm * steps - Math.hypot(end[0] - 100, end[1] - 200)) < 1e-8);
+    const g = computeStairGeometry({ ...s, has_handrail: false });
+    assert.ok(g.geometry2d.step_lines_mm[steps].some(p => Math.hypot(p[0] - end[0], p[1] - end[1]) < 1e-7));
+    assert.equal(Math.max(...g.mesh3d.vertices.map(p => p[2])), 3800);
+  }
+  assert.throws(() => stairFromRun(project, [0, 0], [0, 0], { stair_type: 'u_shape', num_risers: 18, width_mm: 900, landing_depth_mm: 900, turn_direction: 'right', top_level_id: 'L1' }));
+});
+
+test('unequal flights and a configurable U-stair gap alter steps, landing and solids together', () => {
+  const s = { ...solidStair, first_flight_risers: 8, second_tread_depth_mm: 300, flight_gap_mm: 400 };
+  const g = computeStairGeometry(s), lines = g.geometry2d.step_lines_mm;
+  assert.equal(lines.length, 18);
+  assert.equal(lines[7][0][0] - 4450, 7 * 250);
+  assert.equal(lines[8][0][1] - 3625, 2 * 900 + 400);
+  assert.equal(lines[8][0][0] - lines.at(-1)[0][0], 9 * 300);
+  assert.equal(Math.max(...g.mesh3d.vertices.map(p => p[2])), 3800);
+});
+
+test('solid stair uses eight treads per nine-riser flight and reaches exact floor datums', () => {
+  const g = computeStairGeometry(solidStair), vertices = g.mesh3d.vertices;
+  assert.equal(g.geometry2d.step_lines_mm.length, 18);
+  assert.equal(Math.max(...vertices.map(p => p[0])), 7350);
+  assert.equal(Math.max(...vertices.map(p => p[2])), 3800);
+  assert.ok(vertices.some(p => p[0] === 4450 && Math.abs(p[2] - (400 + 3400 / 18)) < 1e-8));
+  assert.ok(vertices.some(p => p[0] === 6450 && p[2] === 2100));
+  const vertical = g.mesh3d.indices.some((_, i, ix) => i % 3 === 0 &&
+    vertices[ix[i]][0] === vertices[ix[i + 1]][0] && vertices[ix[i]][0] === vertices[ix[i + 2]][0] &&
+    new Set([vertices[ix[i]][2], vertices[ix[i + 1]][2], vertices[ix[i + 2]][2]]).size > 1);
+  assert.ok(vertical, 'risers and solid end faces must exist');
+  const firstHeight = 400 + 3400 / 18;
+  const firstTread = g.mesh3d.indices.flatMap((_, i, ix) => i % 3 === 0
+    ? [[vertices[ix[i]], vertices[ix[i + 1]], vertices[ix[i + 2]]]] : [])
+    .find(triangle => triangle.every(p => Math.abs(p[2] - firstHeight) < 1e-8));
+  assert.ok(firstTread);
+  const [a, b, c] = firstTread;
+  assert.ok((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) > 0,
+    'tread face winding points upward after the profile axis swap');
+  assert.ok(g.mesh3d.concrete_volume_m3 > 0);
+});
+
+test('stair guards are generated only when enabled and follow both flights', () => {
+  const plain = computeStairGeometry(solidStair), guarded = computeStairGeometry({ ...solidStair, has_handrail: true });
+  assert.equal(plain.mesh3d.handrail_length_m, 0);
+  assert.ok(guarded.mesh3d.handrail_length_m > 8);
+  assert.equal(Math.max(...guarded.mesh3d.vertices.map(p => p[2])), 4700);
+  assert.equal(plain.mesh3d.concrete_volume_m3, guarded.mesh3d.concrete_volume_m3);
+});
+
+test('left turns mirror stair treads, landing, solid faces and guards together', () => {
+  const right = computeStairGeometry(solidStair), left = computeStairGeometry({ ...solidStair, turn_direction: 'left' });
+  const mirrored = right.mesh3d.vertices.map(([x, y, z]) => [x, 2 * 3625 + 900 - y, z]);
+  assert.deepEqual(left.mesh3d.vertices, mirrored);
+  assert.deepEqual(left.geometry2d.landing_bounds_mm, right.geometry2d.landing_bounds_mm.map(([x, y]) => [x, 8150 - y]));
+});
+
+test('plan rotation transforms stair mesh, landing, treads and guards about the same start point', () => {
+  const original = computeStairGeometry({ ...solidStair, has_handrail: true });
+  const rotated = computeStairGeometry({ ...solidStair, has_handrail: true, rotation_deg: 180 });
+  for (let i = 0; i < original.mesh3d.vertices.length; i++) {
+    const [x, y, z] = original.mesh3d.vertices[i], p = rotated.mesh3d.vertices[i];
+    assert.ok(Math.abs(p[0] - (8900 - x)) < 1e-7);
+    assert.ok(Math.abs(p[1] - (7250 - y)) < 1e-7);
+    assert.equal(p[2], z);
+  }
+  assert.equal(rotated.mesh3d.concrete_volume_m3, original.mesh3d.concrete_volume_m3);
 });

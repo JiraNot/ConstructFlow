@@ -561,10 +561,11 @@ test("elevation wall and opening tags avoid horizontal level datums", () => {
 test("elevation datum labels sit below their lines clear of ground hatch", () => {
   const project = deserializeProject(readFileSync(new URL("../../../examples/constructflow-house-demo.cfproj", import.meta.url), "utf8"));
   const set = compilePermitDrawingSet(project);
+  const levelLabels = new Set(project.levels.map(level => `${level.elevation_mm >= 0 ? '+' : ''}${(level.elevation_mm / 1000).toFixed(2)} ${level.name}`));
   for (const sheetId of ["A-05", "A-06"]) {
     const sheet = set.sheets.find((item) => item.id === sheetId);
     const datums = sheet.primitives.filter((item) => item.kind === "path" && item.color === "#94a3b8" && item.width === 0.18 && item.dash?.length && item.points.length === 2 && Math.abs(item.points[0][1] - item.points[1][1]) < 1e-6);
-    const labels = sheet.primitives.filter((item) => item.kind === "text" && /^\+?\d+\.\d{2} (Ground Floor|First Floor|Roof Eaves)$/.test(item.text));
+    const labels = sheet.primitives.filter((item) => item.kind === "text" && levelLabels.has(item.text));
     assert.equal(labels.length, datums.length, `${sheetId} has one named label for every storey datum`);
     for (const label of labels) {
       const datum = datums.find((item) => label.at[0] >= item.points[0][0] && label.at[0] <= item.points[1][0] && Math.abs(label.at[1] - item.points[0][1]) < 10);

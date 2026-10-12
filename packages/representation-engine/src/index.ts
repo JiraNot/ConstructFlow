@@ -7,6 +7,7 @@ import {
   resolveOpeningVerticalExtent,
   resolveColumnVerticalExtent,
   resolveBeamBaseElevation,
+  resolveStairVerticalExtent,
   type Phase,
   type ProjectDocument,
   type SmartObject,
@@ -564,17 +565,39 @@ export function getElevationVisibleOpeningIds(
 }
 
 /** Return the Smart Objects that belong on the project's active plan level. */
-export function getPlanVisibleObjects(project: ProjectDocument): SmartObject[] {
+export type PlanDiscipline = 'architecture' | 'framing' | 'all'
+
+export function getPlanVisibleObjects(project: ProjectDocument, discipline: PlanDiscipline = 'all'): SmartObject[] {
   const activeLevel = project.levels.find(level => level.id === project.project.active_level_id)
   if (!activeLevel) return Object.values(project.objects)
   const activeIndex = activeLevel.storey_index
+  // A raised ground floor can reference grade beams at the ground datum.
+  // Prefer beams hosted on the selected floor, otherwise use the closest lower
+  // datum with framing. This does not rehost or duplicate any model objects.
+  const beamLevels = new Set(Object.values(project.objects)
+    .filter(o => o.object_type === 'structure.beam')
+    .map(o => moduleData(o)?.level_id))
+  const framingLevel = discipline === 'framing' && !beamLevels.has(activeLevel.id)
+    ? project.levels.filter(l => l.elevation_mm < activeLevel.elevation_mm && beamLevels.has(l.id))
+      .sort((a, b) => b.elevation_mm - a.elevation_mm)[0] ?? activeLevel
+    : activeLevel
 
   const levelRef = (object: SmartObject, role: string): string | undefined =>
     object.level_refs.find(reference => reference.role === role)?.level_id
 
   return Object.values(project.objects).filter(object => {
+    if (discipline === 'architecture' && ['structure.beam', 'structure.foundation', 'roof.system', 'structure.rebar_set'].includes(object.object_type)) return false
+    if (discipline === 'framing' && !['structure.beam', 'structure.column', 'structure.foundation', 'structure.grid'].includes(object.object_type)) return false
     const data = moduleData(object)
     if (!data) return true
+
+    if (object.object_type === 'architecture.stair') {
+      const vertical = resolveStairVerticalExtent(project, object)
+      const start = vertical?.base_elevation_mm ?? NaN
+      const top = vertical?.top_elevation_mm ?? NaN
+      if (Number.isFinite(start) && Number.isFinite(top))
+        return activeLevel.elevation_mm >= Math.min(start, top) - 1 && activeLevel.elevation_mm <= Math.max(start, top) + 1
+    }
 
     if (isColumnObject(object)) {
       const baseId = typeof data.base_level_id === 'string' ? data.base_level_id : levelRef(object, 'base_level')
@@ -596,12 +619,12 @@ export function getPlanVisibleObjects(project: ProjectDocument): SmartObject[] {
               return typeof supportData?.base_level_id === 'string' ? supportData.base_level_id : levelRef(support, 'base_level')
             })()
           : undefined)
-      return baseId ? baseId === activeLevel.id : true
+      return baseId ? baseId === framingLevel.id : true
     }
 
     const directLevelId = typeof data.level_id === 'string' ? data.level_id
       : levelRef(object, 'base_level') ?? levelRef(object, 'host_level')
-    return directLevelId ? directLevelId === activeLevel.id : true
+    return directLevelId ? directLevelId === (object.object_type === 'structure.beam' ? framingLevel.id : activeLevel.id) : true
   })
 }
 

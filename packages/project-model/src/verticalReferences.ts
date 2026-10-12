@@ -10,6 +10,22 @@ export interface VerticalExtent {
   top_offset_mm: number
 }
 
+/** Stairs may bind their ends to floor datums or retain a legacy fixed rise. */
+export function resolveStairVerticalExtent(project: ProjectDocument, object: SmartObject | Data): VerticalExtent | undefined {
+  const d = dataOf(object)
+  const point = Array.isArray(d.start_point_mm) ? d.start_point_mm : [0, 0, 0]
+  const level = getLevelElevation(project, d.level_id)
+  if (typeof d.level_id === 'string' && level === undefined) return undefined
+  const baseOffset = Number(d.base_offset_mm ?? (Number(point[2]) - (level ?? 0)))
+  const base = (level ?? 0) + baseOffset
+  const topOffset = Number(d.top_offset_mm ?? 0)
+  const topLevel = getLevelElevation(project, d.top_level_id)
+  if (d.top_level_id && topLevel === undefined) return undefined
+  const top = topLevel === undefined ? base + Number(d.total_rise_mm) : topLevel + topOffset
+  if (![base, top, baseOffset, topOffset].every(Number.isFinite) || top <= base) return undefined
+  return { base_elevation_mm: base, top_elevation_mm: top, height_mm: top - base, base_offset_mm: baseOffset, top_offset_mm: topOffset }
+}
+
 const dataOf = (object: SmartObject | Data): Data =>
   'module_data' in object
     ? (object.module_data as Data)

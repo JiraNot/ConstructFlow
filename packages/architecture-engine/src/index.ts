@@ -1,4 +1,4 @@
-import { SmartObject, WallModuleData, DoorModuleData, WindowModuleData, DoorHanding, CATALOG_PARAMETER_FIELDS, resolveCatalogType, catalogInstanceOverrides, isWallObject, isDoorObject, isWindowObject, getLevelElevation, resolveOpeningVerticalExtent, resolveWallVerticalExtent, validateDoorFaceComponents, validateOpeningPlanSymbolLines } from '@constructflow/project-model'
+import { SmartObject, WallModuleData, DoorModuleData, WindowModuleData, DoorHanding, CATALOG_PARAMETER_FIELDS, resolveCatalogType, catalogInstanceOverrides, isWallObject, isDoorObject, isWindowObject, getLevelElevation, resolveOpeningVerticalExtent, resolveWallVerticalExtent, resolveStairVerticalExtent, validateDoorFaceComponents, validateOpeningPlanSymbolLines } from '@constructflow/project-model'
 import { CreateWallInput, MoveWallInput, UpdateWallEndpointsInput, MoveOpeningInput, UpdateWallMarkInput, UpdateWallDimensionsInput, CreateDoorInput, UpdateDoorMarkInput, UpdateDoorDimensionsInput, FlipDoorHandingInput, CreateWindowInput, UpdateWindowMarkInput, UpdateWindowDimensionsInput, UpdateOpeningInstanceParametersInput } from '@constructflow/command-schema'
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
@@ -906,6 +906,8 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           ...(wDimInput.plaster_outside_material !== undefined ? { plaster_outside_material: wDimInput.plaster_outside_material } : {}),
           ...(wDimInput.inside_finish_mark !== undefined ? { inside_finish_mark: wDimInput.inside_finish_mark } : {}),
           ...(wDimInput.outside_finish_mark !== undefined ? { outside_finish_mark: wDimInput.outside_finish_mark } : {}),
+          ...(wDimInput.inside_finish_type_id !== undefined ? { inside_finish_type_id: wDimInput.inside_finish_type_id } : {}),
+          ...(wDimInput.outside_finish_type_id !== undefined ? { outside_finish_type_id: wDimInput.outside_finish_type_id } : {}),
           ...(wDimInput.interior_side !== undefined ? { interior_side: wDimInput.interior_side } : {}),
           height_mm: wallHeight,
           ...(topLevelId ? { top_level_id: topLevelId, vertical_constraint: 'top_level' as const } : { top_level_id: undefined, vertical_constraint: 'fixed_height' as const }),
@@ -922,6 +924,8 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
               plaster_outside_material: wDimInput.plaster_outside_material ?? target.module_data.plaster_outside_material ?? 'cement_plaster',
               ...(wDimInput.inside_finish_mark !== undefined ? { inside_finish_mark: wDimInput.inside_finish_mark } : {}),
               ...(wDimInput.outside_finish_mark !== undefined ? { outside_finish_mark: wDimInput.outside_finish_mark } : {}),
+              ...(wDimInput.inside_finish_type_id !== undefined ? { inside_finish_type_id: wDimInput.inside_finish_type_id } : {}),
+              ...(wDimInput.outside_finish_type_id !== undefined ? { outside_finish_type_id: wDimInput.outside_finish_type_id } : {}),
               ...(wDimInput.interior_side !== undefined ? { interior_side: wDimInput.interior_side } : {}),
             } : {}),
             ...(wDimInput.height_mm !== undefined ? { height_mm: wDimInput.height_mm } : {}),
@@ -1460,7 +1464,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const sInput = input as Record<string, unknown>
       const isUpdate = commandName === 'UpdateStair'
       const stairId = isUpdate ? (sInput.id as string) : ((sInput.id as string) || crypto.randomUUID())
-      if (isUpdate && !updated.objects[stairId]) {
+      if (isUpdate && updated.objects[stairId]?.object_type !== 'architecture.stair') {
         return {
           result: {
             status: 'rejected',
@@ -1478,16 +1482,28 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const mark = (sInput.mark as string) || (oldData.mark as string) || 'ST1'
       const stair_type = (sInput.stair_type as any) || (oldData.stair_type as any) || 'straight'
       const width_mm = Number(sInput.width_mm ?? oldData.width_mm ?? 1000)
-      const total_rise_mm = Number(sInput.total_rise_mm ?? oldData.total_rise_mm ?? 3000)
-      const riser_height_mm = Number(sInput.riser_height_mm ?? oldData.riser_height_mm ?? 176.5)
+      let total_rise_mm = Number(sInput.total_rise_mm ?? oldData.total_rise_mm ?? 3000)
+      let riser_height_mm = Number(sInput.riser_height_mm ?? oldData.riser_height_mm ?? 176.5)
       const tread_depth_mm = Number(sInput.tread_depth_mm ?? oldData.tread_depth_mm ?? 250)
       const num_risers = Number(sInput.num_risers ?? oldData.num_risers ?? Math.round(total_rise_mm / riser_height_mm))
-      const start_point_mm = (sInput.start_point_mm as [number, number, number]) || (oldData.start_point_mm as [number, number, number]) || [0, 0, 0]
+      const start_point_mm: [number, number, number] = [...((sInput.start_point_mm as [number, number, number]) || (oldData.start_point_mm as [number, number, number]) || [0, 0, 0])]
+      const level_id = String(sInput.level_id ?? oldData.level_id ?? updated.project.active_level_id)
+      const oldLevel = getLevelElevation(updated, oldData.level_id ?? level_id) ?? 0
+      const base_offset_mm = Number(sInput.base_offset_mm ?? oldData.base_offset_mm ?? (start_point_mm[2] - oldLevel))
+      const top_level_id = String(sInput.top_level_id ?? oldData.top_level_id ?? '') || undefined
+      const top_offset_mm = Number(sInput.top_offset_mm ?? oldData.top_offset_mm ?? 0)
+      const vertical = resolveStairVerticalExtent(updated, { level_id, base_offset_mm, top_level_id, top_offset_mm, start_point_mm, total_rise_mm })
+      if (!vertical) throw new Error('Stair top must be above its base, with valid level references')
+      start_point_mm[2] = vertical.base_elevation_mm
+      total_rise_mm = vertical.height_mm
+      if (!Number.isInteger(num_risers) || num_risers < (stair_type === 'straight' ? 2 : 4)) throw new Error('Stair riser count must be an integer, at least 2 per flight')
+      riser_height_mm = total_rise_mm / num_risers
       const landing_depth_mm = sInput.landing_depth_mm !== undefined ? Number(sInput.landing_depth_mm) : (oldData.landing_depth_mm !== undefined ? Number(oldData.landing_depth_mm) : (total_rise_mm >= 3000 ? width_mm : undefined))
       const handrail_height_mm = Number(sInput.handrail_height_mm ?? oldData.handrail_height_mm ?? 900)
       const has_handrail = sInput.has_handrail !== undefined ? Boolean(sInput.has_handrail) : (oldData.has_handrail !== undefined ? Boolean(oldData.has_handrail) : true)
       const structure_type = (sInput.structure_type as any) || (oldData.structure_type as any) || 'rc_monolithic'
       const turn_direction = (sInput.turn_direction as any) || (oldData.turn_direction as any)
+      const rotation_deg = Number(sInput.rotation_deg ?? oldData.rotation_deg ?? 0)
 
       const code_check = validateStairThaiBuildingCode({
         width_mm,
@@ -1500,14 +1516,21 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
 
       const stairData = {
         mark,
-        level_id: (sInput.level_id as string) || (oldData.level_id as string) || updated.project.active_level_id,
+        level_id,
+        base_offset_mm,
+        ...(top_level_id ? { top_level_id } : {}),
+        top_offset_mm,
         stair_type,
         structure_type,
         start_point_mm,
+        rotation_deg,
         total_rise_mm,
         width_mm,
         num_risers,
         riser_height_mm,
+        ...((sInput.first_flight_risers ?? oldData.first_flight_risers) !== undefined ? { first_flight_risers: Number(sInput.first_flight_risers ?? oldData.first_flight_risers) } : {}),
+        ...((sInput.second_tread_depth_mm ?? oldData.second_tread_depth_mm) !== undefined ? { second_tread_depth_mm: Number(sInput.second_tread_depth_mm ?? oldData.second_tread_depth_mm) } : {}),
+        ...((sInput.flight_gap_mm ?? oldData.flight_gap_mm) !== undefined ? { flight_gap_mm: Number(sInput.flight_gap_mm ?? oldData.flight_gap_mm) } : {}),
         tread_depth_mm,
         landing_depth_mm,
         turn_direction,
@@ -1523,7 +1546,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         schema_version: 1,
         created_phase: (sInput.created_phase as any) || existing?.created_phase || updated.project.active_phase || 'new_construction',
         removed_phase: existing?.removed_phase ?? null,
-        level_refs: existing?.level_refs || [{ level_id: updated.project.active_level_id, role: 'base' }],
+        level_refs: [{ level_id, role: 'base_level' }, ...(top_level_id ? [{ level_id: top_level_id, role: 'top_level' }] : [])],
         host_refs: existing?.host_refs || [],
         connector_refs: existing?.connector_refs || [],
         status: 'active',

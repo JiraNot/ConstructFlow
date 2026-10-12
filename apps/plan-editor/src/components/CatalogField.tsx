@@ -5,7 +5,7 @@ const labels: Record<string, string> = {
   finish_layers: "ชั้นวัสดุปูพื้น",
   finish_pattern_mm: "ขนาดลายปู",
   slope_ratio: "ความลาดพื้น (อัตราส่วน)",
-  drain_direction_deg: "ทิศด้านสูง (องศา)",
+  drain_direction_deg: "ทิศระบายน้ำ (องศา)",
   finish_pattern_origin_mm: "จุดเริ่มแนวลาย",
   finish_pattern_rotation_deg: "มุมหมุนแนวลาย (องศา)",
   grid_mm: "ระยะกริดฝ้า",

@@ -5,6 +5,7 @@ import {
   DoorModuleData,
   WindowModuleData,
   WallModuleData,
+  StairModuleData,
   isColumnObject,
   isFoundationObject,
   isGridObject,
@@ -18,7 +19,8 @@ import {
   parseLengthMm,
   DisplayLengthUnit,
 } from '@constructflow/project-model'
-import { projectPointToWallOffsetMm } from '@constructflow/architecture-engine'
+import { projectPointToWallOffsetMm, stairFromRun, type StairPlacementOptions } from '@constructflow/architecture-engine'
+import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import { drawCoordinationPrimitives, planCoordinationOverlay } from '../rendering/coordinationOverlay.js'
@@ -40,6 +42,7 @@ const PLACEMENT_DIMENSION_TOOLS = new Set<ToolType>(['column', 'foundation', 'be
 
 interface PlanCanvasProps {
   project: ProjectDocument
+  planDiscipline?: 'architecture' | 'framing'
   displayUnit: DisplayLengthUnit
   activeTool: ToolType
   activeColumnTypeMark: string
@@ -77,7 +80,7 @@ interface PlanCanvasProps {
   onModifyGrid?: (id: string, changes: { start_point_mm?: [number, number]; end_point_mm?: [number, number] }) => void
   onCopyGrid?: (sourceId: string, start: [number, number], end: [number, number]) => void
   onActivateTool?: (tool: ToolType) => void
-  onCommitStair?: (location_mm: [number, number]) => void
+  onCommitStair?: (stair: StairModuleData) => boolean
   onMoveColumn: (id: string, newLocation_mm: [number, number]) => void
   onMoveWall: (id: string, delta_mm: [number, number]) => void
   onMoveOpening: (id: string, offset_along_wall_mm: number) => void
@@ -515,6 +518,7 @@ function drawTapeMeasure(ctx: CanvasRenderingContext2D, start: [number, number],
 
 export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   project,
+  planDiscipline = 'architecture',
   displayUnit,
   activeTool,
   activeColumnTypeMark,
@@ -573,7 +577,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hasInitialFitRef = useRef(false)
-  const planVisibleObjects = useMemo(() => getPlanVisibleObjects(project), [project])
+  const planVisibleObjects = useMemo(() => getPlanVisibleObjects(project, planDiscipline), [project, planDiscipline])
   const planProject = useMemo(() => getPlanViewProject(project, planVisibleObjects), [project, planVisibleObjects])
 
 
@@ -586,6 +590,15 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   })
   const [placementReference, setPlacementReference] = useState<'centerline' | 'left_face' | 'right_face'>('centerline')
   const [gridStartPoint, setGridStartPoint] = useState<[number, number] | null>(null)
+  const [stairStartPoint, setStairStartPoint] = useState<[number, number] | null>(null)
+  const [stairOptions, setStairOptions] = useState<StairPlacementOptions>({ stair_type: 'u_shape', width_mm: 900, landing_depth_mm: 900, turn_direction: 'right', num_risers: 18, flight_gap_mm: 100, top_level_id: '' })
+  const [stairError, setStairError] = useState('')
+  useEffect(() => {
+    const base = project.levels.find(l => l.id === project.project.active_level_id)
+    const top = project.levels.filter(l => l.elevation_mm > (base?.elevation_mm ?? 0)).sort((a, b) => a.elevation_mm - b.elevation_mm)[0]
+    setStairOptions(o => ({ ...o, top_level_id: top?.id ?? '', num_risers: top && base ? Math.ceil((top.elevation_mm - base.elevation_mm) / 190) : 18, first_flight_risers: undefined }))
+    setStairStartPoint(null)
+  }, [project.project.active_level_id, project.levels])
   const [gridSequenceStyle, setGridSequenceStyle] = useState<'auto' | 'alpha' | 'numeric'>('auto')
   const [gridCopySourceId, setGridCopySourceId] = useState<string | null>(null)
   const [gridXIntervals, setGridXIntervals] = useState(() => [3000, 3000, 3000].map(value => formatLengthMm(value, displayUnit)).join(', '))
@@ -846,6 +859,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   }, [cyclePick, activeTool])
   useEffect(() => { setCandidates([]) }, [activeTool, planProject])
   const [activeSnap, setActiveSnap] = useState<SnapResult | null>(null)
+  const stairPreview = useMemo(() => {
+    if (activeTool !== 'stair' || !stairStartPoint || !activeSnap) return null
+    try { return stairFromRun(project, stairStartPoint, activeSnap.point_mm, stairOptions) } catch { return null }
+  }, [activeTool, stairStartPoint, activeSnap, stairOptions, project])
   const [activeWallSnap, setActiveWallSnap] = useState<WallHostSnapResult | null>(null)
   const [isPanning, setIsPanning] = useState(false)
   const [objectContextMenu, setObjectContextMenu] = useState<{ id: string; x: number; y: number } | null>(null)
@@ -900,10 +917,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [doorHanding, setDoorHanding] = useState<DoorHanding>('left_in')
 
   const cancelCurrentPlacement = () => {
-    const hasPendingStep = !!objectContextMenu || !!gridStartPoint || !!beamStartNode || !!wallStartNode || !!roomSeparatorStart || slabBoundary.length > 0 || !!calibrationP1 || !!tapeMeasure || !!dimensionInputX.trim() || !!dimensionInputY.trim() || !!drawLengthMeters.trim() || !!drawAngleDegrees.trim() || !!gridSystemError
+    const hasPendingStep = !!objectContextMenu || !!stairStartPoint || !!gridStartPoint || !!beamStartNode || !!wallStartNode || !!roomSeparatorStart || slabBoundary.length > 0 || !!calibrationP1 || !!tapeMeasure || !!dimensionInputX.trim() || !!dimensionInputY.trim() || !!drawLengthMeters.trim() || !!drawAngleDegrees.trim() || !!gridSystemError
     setObjectContextMenu(null)
     setDimensionInputX(''); setDimensionInputY(''); setDimensionAnchorX(null); setDimensionAnchorY(null)
-    setGridStartPoint(null); setBeamStartNode(null); setWallStartNode(null); setRoomSeparatorStart(null)
+    setGridStartPoint(null); setBeamStartNode(null); setWallStartNode(null); setRoomSeparatorStart(null); setStairStartPoint(null); setStairError('')
     setSlabBoundary([]); setCalibrationP1(null); setCalibrationMousePoint(null); setTapeMeasure(null)
     setDrawLengthMeters(''); setDrawAngleDegrees(''); setGridSystemError('')
     if (!hasPendingStep && activeTool !== 'select') onActivateTool?.('select')
@@ -912,11 +929,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   useEffect(() => {
     if (!activeSnap) return
     const isPolygonTool = ['slab', 'slabVoid', 'archFloor', 'ceiling'].includes(activeTool)
-    const start = activeTool === 'wall' ? wallStartNode : activeTool === 'beam' ? beamStartNode : activeTool === 'grid' && gridStartPoint ? { point_mm: gridStartPoint } : activeTool === 'roomSeparator' && roomSeparatorStart ? { point_mm: roomSeparatorStart } : isPolygonTool && slabBoundary.length ? { point_mm: slabBoundary[slabBoundary.length - 1] } : null
+    const start = activeTool === 'wall' ? wallStartNode : activeTool === 'beam' ? beamStartNode : activeTool === 'stair' && stairStartPoint ? { point_mm: stairStartPoint } : activeTool === 'grid' && gridStartPoint ? { point_mm: gridStartPoint } : activeTool === 'roomSeparator' && roomSeparatorStart ? { point_mm: roomSeparatorStart } : isPolygonTool && slabBoundary.length ? { point_mm: slabBoundary[slabBoundary.length - 1] } : null
     if (!start) return
     const constrained = constrainLineSnap(activeSnap, activeSnap.point_mm, start.point_mm, false, 'reference' in start ? start.reference : undefined)
     if (constrained.point_mm[0] !== activeSnap.point_mm[0] || constrained.point_mm[1] !== activeSnap.point_mm[1]) setActiveSnap(constrained)
-  }, [activeTool, activeSnap, wallStartNode, beamStartNode, gridStartPoint, roomSeparatorStart, slabBoundary, drawLengthMeters, drawAngleDegrees, constrainLineSnap])
+  }, [activeTool, activeSnap, wallStartNode, beamStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary, drawLengthMeters, drawAngleDegrees, constrainLineSnap])
 
   useEffect(() => {
     if (activeTool !== 'beam') {
@@ -927,6 +944,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
     if (activeTool !== 'roomSeparator') setRoomSeparatorStart(null)
     if (activeTool !== 'grid') setGridStartPoint(null)
+    if (activeTool !== 'stair') { setStairStartPoint(null); setStairError('') }
     if (activeTool !== 'gridCopy') setGridCopySourceId(null)
     if (!['slab','slabVoid','archFloor','ceiling'].includes(activeTool)) setSlabBoundary([])
     if (activeTool !== 'calibrate') {
@@ -974,7 +992,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTool, selectedId, project.objects, onFlipDoorHanding, onActivateTool, objectContextMenu, gridStartPoint, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError])
+  }, [activeTool, selectedId, project.objects, onFlipDoorHanding, onActivateTool, objectContextMenu, stairStartPoint, gridStartPoint, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError])
 
   const editableSelectionIds = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
   const findEditHandle = (screenPoint: [number, number]) => {
@@ -1169,12 +1187,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         glazing_material: typeDef?.parameters?.glazing_material,
       }
     } else if (activeTool === 'stair' && activeSnap) {
-      ghost = {
-        type: 'stair',
-        location_mm: activeSnap.point_mm,
-        size_mm: [1000, 4000],
-        mark: 'ST1',
-      }
+      if (stairPreview) ghost = { type: 'stair', location_mm: stairStartPoint!, stair: stairPreview }
     }
 
     const calibrationOverlay =
@@ -1373,6 +1386,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     activeWallSnap,
     activeTool,
     gridStartPoint,
+    stairStartPoint,
+    stairPreview,
     gridCopySourceId,
     dimensionInputX,
     dimensionInputY,
@@ -1595,9 +1610,22 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       excluded.add(id)
     }
     const ids = [...excluded]
-    // Walls are drawn over beams; match that visible order when picking.
+    // Pick the small structural/architectural object under the pointer before
+    // its enclosing slab or room face. The former default rank placed slabs
+    // above walls, so clicks on visible wall edges selected floor objects.
     return ids.sort((a, b) => {
-      const rank = (id: string) => isWallObject(planProject.objects[id]) ? 2 : isBeamObject(planProject.objects[id]) ? 3 : isFoundationObject(planProject.objects[id]) ? 4 : isGridObject(planProject.objects[id]) ? 5 : 1
+      const rank = (id: string) => {
+        const object = planProject.objects[id]
+        if (isDoorObject(object)) return 0
+        if (isWindowObject(object)) return 1
+        if (isColumnObject(object)) return 2
+        if (isWallObject(object)) return 3
+        if (isBeamObject(object)) return 4
+        if (object.object_type === 'architecture.stair') return 5
+        if (isFoundationObject(object)) return 6
+        if (isGridObject(object)) return 7
+        return object.object_type === 'architecture.room' ? 9 : 8
+      }
       return rank(a) - rank(b)
     })
   }
@@ -1686,6 +1714,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject?.id)
       if (activeTool === 'beam' && beamStartNode) snap = constrainLineSnap(snap, rawWorld, beamStartNode.point_mm, e.shiftKey, beamStartNode.reference)
       if (activeTool === 'wall' && wallStartNode) snap = constrainLineSnap(snap, rawWorld, wallStartNode.point_mm, e.shiftKey, wallStartNode.reference)
+      if (activeTool === 'stair' && stairStartPoint) snap = constrainLineSnap(snap, rawWorld, stairStartPoint, e.shiftKey)
       if (activeTool === 'grid' && gridStartPoint) snap = constrainLineSnap(snap, rawWorld, gridStartPoint, e.shiftKey)
       if (activeTool === 'roomSeparator' && roomSeparatorStart) snap = constrainLineSnap(snap, rawWorld, roomSeparatorStart, e.shiftKey)
       if (['slab', 'slabVoid', 'archFloor', 'ceiling'].includes(activeTool) && slabBoundary.length) snap = constrainLineSnap(snap, rawWorld, slabBoundary[slabBoundary.length - 1], e.shiftKey)
@@ -1796,6 +1825,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes)
       if (activeTool === 'beam' && beamStartNode) snap = constrainLineSnap(snap, rawWorld, beamStartNode.point_mm, e.shiftKey, beamStartNode.reference)
       if (activeTool === 'wall' && wallStartNode) snap = constrainLineSnap(snap, rawWorld, wallStartNode.point_mm, e.shiftKey, wallStartNode.reference)
+      if (activeTool === 'stair' && stairStartPoint) snap = constrainLineSnap(snap, rawWorld, stairStartPoint, e.shiftKey)
       if (activeTool === 'grid' && gridStartPoint) snap = constrainLineSnap(snap, rawWorld, gridStartPoint, e.shiftKey)
       if (activeTool === 'roomSeparator' && roomSeparatorStart) snap = constrainLineSnap(snap, rawWorld, roomSeparatorStart, e.shiftKey)
       if (['slab', 'slabVoid', 'archFloor', 'ceiling'].includes(activeTool) && slabBoundary.length) snap = constrainLineSnap(snap, rawWorld, slabBoundary[slabBoundary.length - 1], e.shiftKey)
@@ -2042,9 +2072,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           setCalibrationMousePoint(null)
         }
       } else if (activeTool === 'stair') {
-        if (onCommitStair) {
-          onCommitStair(snap.point_mm)
-        }
+        if (!stairStartPoint) { setStairStartPoint(snap.point_mm); setStairError('') }
+        else try {
+          const stair = stairFromRun(project, stairStartPoint, snap.point_mm, stairOptions)
+          if (onCommitStair?.(stair)) { setStairStartPoint(null); setStairError(''); onActivateTool?.('select') }
+        } catch (error) { setStairError(error instanceof Error ? error.message : 'ไม่สามารถสร้างบันไดได้') }
         clearDimensionOverrides()
       }
     }
@@ -2237,7 +2269,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const dimensionOverlayPosition = activeSnap ? worldToScreen(activeSnap.point_mm, viewport) : null
   const supportsPlacementDimensions = PLACEMENT_DIMENSION_TOOLS.has(activeTool)
   const hasPolygonSegment = ['slab', 'slabVoid', 'archFloor', 'ceiling'].includes(activeTool) && slabBoundary.length > 0
-  const hasLineGeometryInput = !!wallStartNode || !!beamStartNode || !!roomSeparatorStart || hasPolygonSegment || (activeTool === 'grid' && !!gridStartPoint)
+  const hasLineGeometryInput = !!stairStartPoint || !!wallStartNode || !!beamStartNode || !!roomSeparatorStart || hasPolygonSegment || (activeTool === 'grid' && !!gridStartPoint)
 
   const commitPlacementAtCursor = () => {
     const canvas = canvasRef.current
@@ -2356,7 +2388,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     activeTool === 'gridSystem' ? 'ระบบกริด · กรอกช่วงระยะ แล้วเลือกจุดกำเนิดหรือ Enter วางตรงเคอร์เซอร์' :
     activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling' ? `ขอบเขต · ${slabBoundary.length ? 'กรอกระยะ/องศาแล้ว Enter เพิ่มจุด' : 'คลิกหรือ Enter จุดแรก'} · Enter บนแปลนปิดรูปเมื่อครบ 3 จุด` :
     activeTool === 'roomSeparator' ? `เส้นแบ่งห้อง · ${roomSeparatorStart ? 'กำหนดระยะ/องศาแล้วเลือกจุดปลาย' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด` :
-    activeTool === 'stair' ? 'บันได · เลือกตำแหน่งเริ่ม · Enter วาง' :
+    activeTool === 'stair' ? `บันได · ${stairStartPoint ? 'เลือกปลายเที่ยวแรก · ระยะ/องศากำหนดเอง · Shift ล็อกแกน · Enter วาง' : 'เลือกจุดเริ่มริมเที่ยวแรก · เลือกระดับจบและรูปแบบก่อนวาง'} · Esc ยกเลิก` :
     activeTool === 'measure' ? 'ตลับเมตร · เลือกจุดเริ่มและจุดปลาย · Enter ยืนยันจุด · Esc ยกเลิก/ออก' :
     activeTool === 'calibrate' ? 'ปรับสเกลภาพ · เลือกจุดอ้างอิงสองจุด · Enter ยืนยันจุด' : null
 
@@ -2455,6 +2487,23 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         <small>Tab / Shift+Tab · iPad แตะลูกศรหรือเลือกจากรายการ</small>
       </div>}
       <div className="cf-authoring-controls" onPointerDown={(event) => event.stopPropagation()}>
+        {activeTool === 'stair' && <div role="group" aria-label="ตั้งค่าบันไดก่อนวาด" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxWidth: 650, alignItems: 'center' }}>
+          <label>รูปแบบ <select aria-label="รูปแบบบันไดก่อนวาด" value={stairOptions.stair_type} onChange={e => setStairOptions(o => ({ ...o, stair_type: e.target.value as StairModuleData['stair_type'] }))}><option value="straight">ตรง</option><option value="l_shape">L</option><option value="u_shape">U</option></select></label>
+          <label>จบที่ <select aria-label="ระดับจบบันไดก่อนวาด" value={stairOptions.top_level_id} onChange={e => {
+            const top = project.levels.find(l => l.id === e.target.value), base = project.levels.find(l => l.id === project.project.active_level_id)
+            setStairOptions(o => ({ ...o, top_level_id: e.target.value, num_risers: top && base ? Math.ceil((top.elevation_mm - base.elevation_mm) / 190) : o.num_risers, first_flight_risers: undefined }))
+          }}><option value="">เลือกระดับจบ</option>{project.levels.filter(l => l.elevation_mm > (project.levels.find(b => b.id === project.project.active_level_id)?.elevation_mm ?? 0)).map(l => <option key={l.id} value={l.id}>{l.name} +{(l.elevation_mm / 1000).toFixed(2)}</option>)}</select></label>
+          <label>กว้าง ({displayUnit}) <WorkbenchNumberInput ariaLabel="ความกว้างบันไดก่อนวาด" value={stairOptions.width_mm} unit={displayUnit} onChange={v => setStairOptions(o => ({ ...o, width_mm: v }))} style={{ width: 65 }} /></label>
+          <label>ขั้นรวม <WorkbenchNumberInput ariaLabel="จำนวนลูกตั้งก่อนวาด" value={stairOptions.num_risers} onChange={v => setStairOptions(o => ({ ...o, num_risers: v }))} style={{ width: 48 }} /></label>
+          {stairOptions.stair_type !== 'straight' && <>
+            <label>เที่ยวแรก <WorkbenchNumberInput ariaLabel="ลูกตั้งเที่ยวแรกก่อนวาด" value={stairOptions.first_flight_risers ?? Math.floor(stairOptions.num_risers / 2)} onChange={v => setStairOptions(o => ({ ...o, first_flight_risers: v }))} style={{ width: 48 }} /></label>
+            <label>ชานพัก ({displayUnit}) <WorkbenchNumberInput ariaLabel="ความลึกชานพักก่อนวาด" value={stairOptions.landing_depth_mm} unit={displayUnit} onChange={v => setStairOptions(o => ({ ...o, landing_depth_mm: v }))} style={{ width: 65 }} /></label>
+            <label>เลี้ยว <select aria-label="ทิศเลี้ยวบันไดก่อนวาด" value={stairOptions.turn_direction} onChange={e => setStairOptions(o => ({ ...o, turn_direction: e.target.value as 'left' | 'right' }))}><option value="right">ขวา</option><option value="left">ซ้าย</option></select></label>
+            {stairOptions.stair_type === 'u_shape' && <label>ช่องกลาง ({displayUnit}) <WorkbenchNumberInput ariaLabel="ช่องกลางบันไดก่อนวาด" value={stairOptions.flight_gap_mm ?? 100} unit={displayUnit} onChange={v => setStairOptions(o => ({ ...o, flight_gap_mm: v }))} style={{ width: 65 }} /></label>}
+          </>}
+          <small>จุดเริ่ม → ปลายเที่ยวแรกกำหนดระยะวิ่งและทิศ · ลูกนอนคำนวณตามระยะจริง</small>
+          {stairError && <span role="alert" style={{ color: '#b91c1c' }}>{stairError}</span>}
+        </div>}
         {activeTool === 'grid' && <div className="cf-grid-orientation-control" role="group" aria-label="วาดเส้นกริดอ้างอิง">
           <strong>เส้นกริดอ้างอิง · เส้นเดี่ยว</strong>
           <label>ลำดับป้าย

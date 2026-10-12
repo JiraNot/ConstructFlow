@@ -18,7 +18,13 @@ function run(directory, args, capture = false) {
     },
   );
   if (response.error) throw response.error;
-  if (response.status !== 0) process.exit(response.status ?? 1);
+  if (response.status !== 0) {
+    if (capture) {
+      process.stdout.write(response.stdout?.toString() ?? '');
+      process.stderr.write(response.stderr?.toString() ?? '');
+    }
+    process.exit(response.status ?? 1);
+  }
   return capture
     ? { stdout: response.stdout.toString(), stderr: response.stderr.toString() }
     : undefined
@@ -76,6 +82,7 @@ const mcpSummary = `${mcpNodeTests.stdout}\n${mcpNodeTests.stderr}`.match(/ℹ t
 if (!mcpSummary) throw new Error("Could not read Node test count for apps/mcp-server standalone runtime");
 totalTests += Number(mcpSummary[1]);
 runDirect("apps/mcp-server Python tests", process.platform === "win32" ? "python" : "python3", ["test_server.py"], resolve(root, "apps/mcp-server"));
-for (const verifier of ["verify:kitchen", "verify:file-io", "verify:phases", "verify:coordination"])
+const integrationVerifiers = ["verify:kitchen", "verify:file-io", "verify:phases", "verify:coordination", "verify:house-demo"];
+for (const verifier of integrationVerifiers)
   run(".", ["run", verifier]);
-console.log(`\nStandalone verification passed: ${totalTests} Node tests across ${packages.length} build targets and ${4} integration verifiers.`)
+console.log(`\nStandalone verification passed: ${totalTests} Node tests across ${packages.length} build targets and ${integrationVerifiers.length} integration verifiers.`)

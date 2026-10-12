@@ -1,8 +1,46 @@
 # ConstructFlow Specification Status
 
-## Current implementation snapshot (2026-10-11)
+## Reference house demo and renderer correction (2026-10-12)
 
-This section is the current summary. Entries below it are a dated implementation history;
+The editor's two-storey demo menu now loads `examples/constructflow-reference-house-2storey.cfproj`,
+a newly generated 239-object model based on the user's two plan images (13.80 × 8.80 m grid envelope).
+Datums are Ground 0.00, occupied floor 1 +0.40, floor 2 +3.80, and eaves +7.20 m.
+Ground beams and hosted footings belong to the Ground plan. Exterior wall finished faces align
+with the outer faces of 200 mm columns (wall centerline moves 25 mm outward); D1 doors are 900 × 2000 mm.
+Nineteen compound slabs carry independently editable core/finish layers; wet rooms drop 100 mm,
+and exterior floors drain at 1:100. One U stair connects both occupied floors with a clear upper
+opening, solid stepped flights/soffit, intermediate landing and generated guards.
+
+The wall-finish project catalog includes W1 paint, W2 ceramic tile and W3 plaster. Each wall face
+can reference a finish type by UUID; catalog edits cascade only to walls using that finish and
+recompute total wall thickness while preserving the reference face and hosted openings. Plan hit
+ranking selects walls/columns above enclosing slabs; overlapping candidates remain available via
+the overlap chooser/Tab. The stair placement tool now previews a two-point free-angle stair and
+exposes flight split, second-flight tread, landing and U-flight gap controls.
+
+The 3D wall transform now tips extrusion upright before rotation about world Z, fixing vertical
+walls for perpendicular plan directions. 3D shows the complete multi-storey model, while plan
+visibility remains level-specific. The header displays stored level names without guessing floor
+numbers from legacy IDs or English names. Stair plan and sheet annotations use named geometry;
+sheet datum regression checks use the actual project level names, including Second Floor.
+
+The original house fixture remains an archival regression input. See
+`examples/REFERENCE-HOUSE-2STOREY.md` for generation, dimensions, scope and opening instructions.
+The roof shape is an interpretation because the user supplied floor plans without a roof plan.
+This model acceptance does not close the engineering/legal/permit gates below.
+
+Verification on 2026-10-12: `npm run test:standalone` passes 25 build targets, 379 Node tests,
+11 Python MCP tests, and all five integration verifiers. `verify:house-demo` passes 14 saved-model
+checks; `verify:coordination` passes 47 checks. The phase proof now produces 22 A3 PDF pages:
+the 20 standard sheets plus two sheets for the additional level datum. Vite still reports large chunks.
+Browser inspection covers Ground/floor 1/floor 2 plans, four elevations and the full-house 3D view;
+screenshots are in `examples/reference-house-preview/`. The Documents copy matches the checked-in
+demo bytes. The Kitchen Proof fixture currently shares the four standard datums and places its
+slab at +0.40 m and roof at +3.80 m; the earlier +3.00 m kitchen note below is historical.
+
+## Prior implementation snapshot (2026-10-11)
+
+This section retains the prior summary. Entries below it are a dated implementation history;
 their test counts and completion wording describe the state at the time of each entry and
 must not be read as current verification or as proof that the full Master Blueprint is done.
 

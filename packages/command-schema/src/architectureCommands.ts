@@ -68,6 +68,8 @@ export interface UpdateWallDimensionsInput {
   plaster_outside_material?: string
   inside_finish_mark?: string
   outside_finish_mark?: string
+  inside_finish_type_id?: string
+  outside_finish_type_id?: string
   /** Which side of the start→end centerline is the room/interior face. */
   interior_side?: 'left' | 'right'
 }

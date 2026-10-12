@@ -143,6 +143,8 @@ export interface WallModuleData {
   plaster_outside_material?: string
   inside_finish_mark?: string
   outside_finish_mark?: string
+  inside_finish_type_id?: string
+  outside_finish_type_id?: string
   /** Interior face side relative to the wall's start→end direction. */
   interior_side?: 'left' | 'right'
   height_mm: number // e.g. 2800 mm
@@ -506,9 +508,18 @@ export interface StairModuleData extends CatalogPlacement {
   stair_type: StairType
   structure_type: StairStructureType
   start_point_mm: Point3Mm
+  /** Plan rotation about the stair start point, in degrees. */
+  rotation_deg?: number
+  base_offset_mm?: number
+  top_level_id?: string
+  top_offset_mm?: number
   total_rise_mm: number
   width_mm: number
   num_risers: number
+  /** Independently sized flights; omitted values preserve the symmetric legacy stair. */
+  first_flight_risers?: number
+  second_tread_depth_mm?: number
+  flight_gap_mm?: number
   riser_height_mm: number
   tread_depth_mm: number
   landing_depth_mm?: number

@@ -21,6 +21,7 @@ import {
   resolveColumnVerticalExtent,
   resolveSlabElevation,
   type DisplayLengthUnit,
+  type StairModuleData,
 } from '@constructflow/project-model'
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
 import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
@@ -46,7 +47,7 @@ import { createKitchenProofProject } from '@constructflow/extension-engine'
 import { renderPermitDrawingSetHtml } from '@constructflow/sheet-engine'
 import { readProjectFile, writeProjectFile, type LocalProjectFileHandle } from './projectFileIO.js'
 import { loadLocalProjectSnapshot, saveLocalProjectSnapshot } from './projectAutosave.js'
-import houseDemoRaw from '../../../examples/constructflow-house-demo.cfproj?raw'
+import houseDemoRaw from '../../../examples/constructflow-reference-house-2storey.cfproj?raw'
 
 const headerActionStyle: React.CSSProperties = {
   display: 'inline-flex',
@@ -210,7 +211,12 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
 
   const [activeTool, setActiveTool] = useState<ToolType>('select')
-  const [viewMode, setViewMode] = useState<'plan' | ElevationDirection | 'model3d'>('plan')
+  const [viewMode, setViewMode] = useState<'plan' | 'framing' | ElevationDirection | 'model3d'>('plan')
+  // Drawing a structural member opens the matching plan so the new object is visible.
+  useEffect(() => {
+    if (['beam', 'foundation'].includes(activeTool)) setViewMode('framing')
+    else if (['stair', 'wall', 'door', 'window', 'archFloor', 'slab', 'ceiling', 'roomSeparator'].includes(activeTool)) setViewMode('plan')
+  }, [activeTool])
   const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
   const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
   const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination'>('properties')
@@ -753,30 +759,22 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
 
   // Commit Stair creation
-  const handleCommitStair = (location_mm: [number, number]) => {
+  const handleCommitStair = (stair: StairModuleData): boolean => {
     const stairId = crypto.randomUUID()
     const res = CommandBus.execute(project, 'CreateStair', {
+      ...stair,
       id: stairId,
-      mark: 'ST1',
-      stair_type: 'straight',
-      structure_type: 'rc_monolithic',
-      start_point_mm: [location_mm[0], location_mm[1], 0],
-      total_rise_mm: 3000,
-      width_mm: 1000,
-      num_risers: 17,
-      riser_height_mm: 176.5,
-      tread_depth_mm: 250,
-      landing_depth_mm: 1000,
-      has_handrail: true,
-      handrail_height_mm: 900,
-      level_id: project.project.active_level_id || 'GF',
       created_phase: project.project.active_phase || 'new_construction',
     })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)
       setSelectedId(stairId)
+      setSelectedIds([stairId])
       if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
+      return true
     }
+    if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
+    return false
   }
 
   // Flip Door Handing
@@ -1177,6 +1175,14 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     }
   }
 
+  const handleUpdateStair = (objectId: string, changes: Partial<StairModuleData>) => {
+    const res = CommandBus.execute(project, 'UpdateStair', { ...changes, id: objectId })
+    if (res.result.status === 'success') {
+      setProject(res.updatedProject)
+      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
+    } else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
+  }
+
   // Rename Foundation Mark handler
   const handleUpdateFoundationMark = (objectId: string, newMark: string) => {
     const res = CommandBus.execute(project, 'UpdateFoundationMark', {
@@ -1226,6 +1232,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     plaster_outside_thickness_mm?: number
     plaster_inside_material?: string
     plaster_outside_material?: string
+    inside_finish_mark?: string
+    outside_finish_mark?: string
+    inside_finish_type_id?: string
+    outside_finish_type_id?: string
     interior_side?: 'left' | 'right'
     top_level_id?: string
     base_offset_mm?: number
@@ -1243,6 +1253,21 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       setProject(res.updatedProject)
       if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
     }
+  }
+
+  const handleDefineWallFinish = (name: string, parameters: Record<string, unknown>) => {
+    const result = dispatchCommandBatch([{ name: 'DefineStructuralType', input: { id: crypto.randomUUID(), name, object_type: 'architecture.wall_finish', parameters } }])
+    if (result.status !== 'success') setFileFeedback(result.errors?.join(' · ') ?? 'เพิ่มชนิดผิวไม่สำเร็จ')
+  }
+
+  const handleUpdateWallFinish = (typeId: string, name: string, parameters: Record<string, unknown>) => {
+    const finish = project.types.find(type => type.id === typeId && type.object_type === 'architecture.wall_finish')
+    if (!finish) return
+    const commands: CommandRequest[] = []
+    if (name.trim() && name.trim() !== finish.name) commands.push({ name: 'RenameCatalogType', input: { type_id: typeId, name: name.trim() } })
+    commands.push({ name: 'UpdateStructuralTypeDimensions', input: { type_id_or_name: typeId, object_type: 'architecture.wall_finish', parameters } })
+    const result = dispatchCommandBatch(commands)
+    if (result.status !== 'success') setFileFeedback(result.errors?.join(' · ') ?? 'แก้ชนิดผิวไม่สำเร็จ')
   }
 
   const handleUpdateOpeningVertical = (objectId: string, changes: {
@@ -1707,10 +1732,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           <label className="cf-header-field">
             <span>ชั้น</span>
             <select value={project.project.active_level_id} onChange={(e) => handleSetWorkingLevel(e.target.value)} aria-label="ชั้นอาคาร">
-              {project.levels.map((lvl) => {
-                const thaiPrefix = lvl.name.includes('ชั้น') ? '' : lvl.id === 'GF' || lvl.name.toLowerCase().includes('ground') ? 'ชั้น 1 · ' : lvl.id === 'L1' || lvl.name.toLowerCase().includes('first') ? 'ชั้น 2 · ' : lvl.name.toLowerCase().includes('roof') ? 'ระดับหลังคา · ' : ''
-                return <option key={lvl.id} value={lvl.id}>{thaiPrefix}{lvl.name} ({lvl.elevation_mm >= 0 ? '+' : ''}{formatLengthMm(lvl.elevation_mm, displayUnit)} {displayUnit})</option>
-              })}
+              {project.levels.map(lvl => <option key={lvl.id} value={lvl.id}>{lvl.name} ({lvl.elevation_mm >= 0 ? '+' : ''}{formatLengthMm(lvl.elevation_mm, displayUnit)} {displayUnit})</option>)}
             </select>
           </label>
           {activeTool === 'column' && <label className="cf-header-field">
@@ -1833,13 +1855,13 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         <main className="cf-canvas-shell">
           <div className="cf-view-switch">
             {([
-              ['plan', 'แปลน'], ['north', 'รูปด้านเหนือ'], ['south', 'รูปด้านใต้'],
+              ['plan', 'แปลนพื้น'], ['framing', 'แปลนคาน'], ['north', 'รูปด้านเหนือ'], ['south', 'รูปด้านใต้'],
               ['east', 'รูปด้านตะวันออก'], ['west', 'รูปด้านตะวันตก'], ['rcp', 'แปลนฝ้า RCP'], ['model3d', '3D ดูตัวอย่าง'],
             ] as const).map(([mode, label]) => (
               <button key={mode} type="button" onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>{label}</button>
             ))}
             {viewMode === 'plan' && <button type="button" onClick={handleDetectRooms} title="ค้นหาห้องจากวงผนังปิด">ตรวจจับห้อง</button>}
-            {viewMode === 'plan' && <details className="cf-label-menu" onClick={event => {
+            {(viewMode === 'plan' || viewMode === 'framing') && <details className="cf-label-menu" onClick={event => {
               if ((event.target as HTMLElement).closest('input')) event.stopPropagation()
             }}>
               <summary title="การแสดงป้ายและระยะ" aria-label="การแสดงป้ายและระยะ"><Tag size={15} aria-hidden="true" /></summary>
@@ -1867,8 +1889,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
           {/* Interactive Plan Canvas */}
           <div className="cf-viewport-stage">
-            {viewMode === 'plan' ? <PlanCanvas
+            {viewMode === 'plan' || viewMode === 'framing' ? <PlanCanvas
               project={project}
+              planDiscipline={viewMode === 'framing' ? 'framing' : 'architecture'}
               displayUnit={displayUnit}
               activeTool={activeTool}
               activeColumnTypeMark={activeColumnType}
@@ -2014,11 +2037,14 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             onUpdateBeamVerticalReference={handleUpdateBeamVerticalReference}
             onUpdateArchitectureSurface={handleUpdateArchitectureSurface}
             onUpdateSlab={handleUpdateSlab}
+            onUpdateStair={handleUpdateStair}
             onUpdateFoundationMark={handleUpdateFoundationMark}
             onUpdateGridTag={handleUpdateGridTag}
             onModifyGrid={handleModifyGrid}
             onUpdateGridSystem={handleUpdateGridSystem}
             onUpdateWallFace={handleUpdateWallFace}
+            onDefineWallFinish={handleDefineWallFinish}
+            onUpdateWallFinish={handleUpdateWallFinish}
             onUpdateOpeningVertical={handleUpdateOpeningVertical}
             onUpdateOpeningInstanceParameters={handleUpdateOpeningInstanceParameters}
             onUpdatePhase={handleUpdateObjectPhase}

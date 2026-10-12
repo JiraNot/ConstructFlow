@@ -458,11 +458,15 @@ export const DEFAULT_STRUCTURAL_TYPES: TypeDefinition[] = [
 
 export const DEFAULT_TYPES = DEFAULT_STRUCTURAL_TYPES
 DEFAULT_TYPES.push(
+  { id: 'd661d25e-2c7b-41c1-b4d0-d153a50f8711', object_type: 'architecture.wall_finish', name: 'W1', parameters: { material: 'wall_paint', thickness_mm: 2, description_th: 'สีทาผนังภายใน' } },
+  { id: 'c95cbb8e-70d6-4903-9d3b-c452e4170faa', object_type: 'architecture.wall_finish', name: 'W2', parameters: { material: 'ceramic_tile', thickness_mm: 10, description_th: 'ผนังกรุกระเบื้อง' } },
+  { id: 'c3c38a2b-a732-423e-b827-7192c24c67ce', object_type: 'architecture.wall_finish', name: 'W3', parameters: { material: 'cement_plaster', thickness_mm: 15, description_th: 'ฉาบปูนและทาสี' } },
   { id: 'aed33941-9ba8-5e5c-977a-b35a81d2b903', object_type: 'structure.slab', name: 'GS', parameters: { thickness_mm: 120, topping_mm: 0, slab_system: 'slab_on_ground', material: 'reinforced_concrete', finish_layers: [], finish_pattern_mm: [600, 600], slope_ratio: 0, drain_direction_deg: 0 } },
   { id: '1a6d1781-cf3a-5c29-9f43-4b1efa2577cf', object_type: 'structure.slab', name: 'S1', parameters: { thickness_mm: 150, topping_mm: 50, slab_system: 'precast_plank', material: 'precast_concrete', finish_layers: [{ mark: 'Tile', material: 'porcelain_tile', thickness_mm: 10, quantity_unit: 'm2' }], finish_pattern_mm: [600, 600], slope_ratio: 0, drain_direction_deg: 0 } }
 )
 
 export const CATALOG_PARAMETER_FIELDS: Record<string, string[]> = {
+  'architecture.wall_finish': ['material', 'thickness_mm', 'description_th'],
   'structure.column': ['section_mm', 'plaster_thickness_mm', 'material'],
   'structure.foundation': ['size_mm', 'foundation_type', 'pile_type', 'pile_offsets_mm', 'pile_length_mm', 'material'],
   'structure.beam': ['section_mm', 'material', 'drop_mm', 'rebar_type', 'mass_per_m_kg'],

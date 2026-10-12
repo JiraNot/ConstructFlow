@@ -7,6 +7,7 @@ import {
   normalizeCoordinationSettings,
   validateCoordinationSettings,
   validateDrawingSettings,
+  resolveStairVerticalExtent,
 } from '@constructflow/project-model'
 import type { UpdateCoordinationSettingsInput, UpdateSheetViewportInput } from '@constructflow/command-schema'
 
@@ -108,6 +109,17 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
         return object.level_refs.some(reference => reference.level_id === levelInput.id)
           || ['level_id', 'base_level_id', 'top_level_id', 'head_level_id'].some(key => data[key] === levelInput.id)
       }).map(object => object.id)
+      for (const id of dependentIds) {
+        const object = updated.objects[id]
+        if (object.object_type !== 'architecture.stair') continue
+        const d = object.module_data as Record<string, unknown>
+        const vertical = resolveStairVerticalExtent(updated, object)
+        if (!vertical) throw new Error('Updated level would place a stair top below its base')
+        const point = d.start_point_mm as [number, number, number]
+        updated.objects[id] = { ...object, updated_at: now, module_data: { ...d,
+          start_point_mm: [point[0], point[1], vertical.base_elevation_mm], total_rise_mm: vertical.height_mm,
+          riser_height_mm: vertical.height_mm / Number(d.num_risers) } }
+      }
       return {
         result: { status: 'success', command_id, command_name: commandName, affected_object_ids: dependentIds, updated_object_ids: dependentIds },
         updatedProject: updated,

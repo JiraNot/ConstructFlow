@@ -1,8 +1,35 @@
 # Standalone Phases 1–6 Delivery Contract
 
-Date: 2026-10-07 · Status snapshot updated: 2026-10-11
+Date: 2026-10-07 · Status snapshot updated: 2026-10-12
 
-Status: Native implementation slices and acceptance evidence exist for the supported inputs below. Latest `npm run test:standalone` verification on 2026-10-11 passed all 25 configured build targets, 369 Node tests, 11 Python MCP tests, and `verify:kitchen`, `verify:file-io`, `verify:phases`, and `verify:coordination`; the `project-model` package passes 57 tests including v1 extension-data preservation, family-scoped legacy mark resolution for 56 typed objects in a 115-object multi-storey house model, and deterministic migration output. The regenerated Kitchen Proof passes saved-file verification with 21 objects; 3D representation tests pass 26/26 and Plan Editor tests pass 21/21, including end-on beam projection across all four elevations. Live-editor visual review remains open. Older test totals and PDF/browser observations below are dated delivery evidence, not current-run results. Permit issue readiness remains blocked by missing project/design inputs and because `issue_ready` is not gated by legal-engine results.
+### Reference-house acceptance slice (2026-10-12)
+
+The two-storey demo menu uses a new 239-object command-generated project based on the user's
+dimensioned floor plans: `examples/constructflow-reference-house-2storey.cfproj`.
+It uses Ground 0.00, floor 1 +0.40, floor 2 +3.80 and eaves +7.20 m; lower beams/footings
+are on Ground. 200 × 200 mm columns and 150 mm exterior walls align at their outer faces
+(wall centerline offset 25 mm); D1 is 900 × 2000 mm.
+Compound slabs replace separate finish/bathroom placeholder objects, with editable layers,
+100 mm wet-area drops, exterior slopes and a real opening around the two-flight U stair.
+The stair provider now generates solid treads/risers/soffit, landing and guards, with two-point
+free-angle placement and editable flight splits, tread depth and landing parameters. The project
+catalog contains W1 paint, W2 ceramic tile and W3 plaster finish types; wall faces retain UUID
+references and receive catalog edits by cascade. Plan hit ranking prefers walls/columns over
+enclosing slabs while retaining the overlap chooser. The 3D editor
+corrects wall rotation order and displays every storey. The header preserves actual level names.
+See `../../examples/REFERENCE-HOUSE-2STOREY.md` for geometry assumptions and opening instructions;
+roof shape is interpreted, since no roof plan was supplied. This is demo/model acceptance within
+the supported slices, not closure of permit, legal or structural-design gates.
+
+Fresh verification on 2026-10-12: `npm run test:standalone` passes 25 build targets,
+379 Node tests, 11 Python MCP tests and five integration verifiers, including fourteen house-demo
+checks. Architecture tests pass 13/13, representation 26/26, editor 23/23 and coordination
+verification 47 checks. Ground/floor 1/floor 2 plans, all four elevations and the full-house
+3D view were inspected in the editor. Vite large-chunk warnings remain. Phase proof generates
+22 A3 pages: 20 standard sheets and two dynamic level sheets. Current Kitchen Proof uses
+the four standard datums, with slab +0.40 and roof +3.80 m; older +3.00 m notes are historical.
+
+Prior verification (2026-10-11): Native implementation slices and acceptance evidence exist for the supported inputs below. `npm run test:standalone` then passed all 25 configured build targets, 369 Node tests, 11 Python MCP tests, and `verify:kitchen`, `verify:file-io`, `verify:phases`, and `verify:coordination`; the `project-model` package passed 57 tests including v1 extension-data preservation, family-scoped legacy mark resolution for 56 typed objects in a 115-object multi-storey house model, and deterministic migration output. The regenerated Kitchen Proof passed saved-file verification with 21 objects; 3D representation tests passed 26/26 and Plan Editor tests passed 21/21, including end-on beam projection across all four elevations. Kitchen Proof live-editor visual review remains open. Older test totals and PDF/browser observations below are dated delivery evidence, not current-run results. Permit issue readiness remains blocked by missing project/design inputs and because `issue_ready` is not gated by legal-engine results.
 
 The Master scope remains AGENTS.md. This contract specifies native domain slices and their supported geometry/rule inputs. Unsupported inputs must reject or report insufficient data; they must never produce a passing or production-complete claim.
 

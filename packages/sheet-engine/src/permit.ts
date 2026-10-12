@@ -13,7 +13,7 @@ import {
   type DimensionViewOverride,
 } from "@constructflow/project-model";
 import { constructionOutputs } from "@constructflow/domain-providers";
-import { resolveArchitecturalFloorPatternKind } from "@constructflow/architecture-engine";
+import { resolveArchitecturalFloorPatternKind, computeStairGeometry, decodeStair } from "@constructflow/architecture-engine";
 import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getOpeningElevationLinework, getRepresentationTriangles, getVisibleElevationMeshEdges, isWallFacadeForElevation, resolveCeilingGridStyle, resolveElevationWallPhaseStyle, resolvePlanPhaseStyle } from "@constructflow/representation-engine";
 import {
   type Vec2,
@@ -2926,10 +2926,14 @@ function compilePermitDrawingSetBase(
           if (mode === "xy" && (id === "A-02" || id === "A-03")) {
             for (const { object: o } of viewObjects.filter(({ object }) => object.object_type === "architecture.stair")) {
               const sd = data(o);
-              const routes = stairPlanPaths(o.id);
-              if (routes.length < 2) continue;
-              const stepRoutes = routes.slice(0, -1);
-              const walkline = routes[routes.length - 1];
+              // Paths also contain outline and arrow strokes. Obtain the named
+              // stair geometry instead of interpreting the last path as a walkline.
+              const stairGeom = computeStairGeometry(decodeStair(sd, project)).geometry2d;
+              const z = Number((sd.start_point_mm as number[])?.[2] ?? 0);
+              const asPath = (points: Vec2[]): Vec3[] => points.map(p => [p[0], p[1], z]);
+              const stepRoutes = stairGeom.step_lines_mm.map(asPath);
+              const walkline = asPath(stairGeom.walkline_path_mm);
+              const routes = [asPath(stairGeom.outline_polygon_mm), ...stepRoutes, walkline];
               if (!walkline.length) continue;
               const sn = Number(sd.num_risers ?? 17);
               const wStart = mapped(projectPoint(walkline[0]));

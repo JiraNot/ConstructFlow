@@ -25,11 +25,12 @@ const result = CommandBus.executeBatch(
 assert.equal(result.status, "success", JSON.stringify(result.errors));
 const p = result.updatedProject,
   set = compilePermitDrawingSet(p);
-assert.equal(set.sheets.length, 20);
+assert.equal(set.sheets.length, 22);
 assert.deepEqual(
-  set.sheets.map((s) => s.id),
+  set.sheets.slice(0, PERMIT_INDEX.length).map((s) => s.id),
   PERMIT_INDEX.map((s) => s[0]),
 );
+assert.deepEqual(set.sheets.slice(PERMIT_INDEX.length).map(s => s.id), ['A-02-L3', 'S-02-L3']);
 const outputs = constructionOutputs(p);
 for (const out of outputs) {
   for (const q of out.quantities)
@@ -42,7 +43,7 @@ assert.ok(report.lines.some((l) => l.unit === "kg"));
 const font = readFileSync("packages/sheet-engine/assets/Sarabun-Regular.ttf"),
   bytes = await compilePermitPdf(set, font),
   pdf = await PDFDocument.load(bytes);
-assert.equal(pdf.getPageCount(), 20);
+assert.equal(pdf.getPageCount(), set.sheets.length);
 for (const page of pdf.getPages()) {
   const { width, height } = page.getSize();
   assert.ok(Math.abs(width - (420 * 72) / 25.4) < 1e-8);
@@ -75,5 +76,5 @@ writeFileSync(
   ),
 );
 console.log(
-  `Phase proof: ${Object.keys(p.objects).length} Smart Objects, ${outputs.length} domain outputs, 20 A3 PDF pages, ${report.lines.length} takeoff rows. Missing-data warnings: ${set.warnings.length}.`,
+  `Phase proof: ${Object.keys(p.objects).length} Smart Objects, ${outputs.length} domain outputs, ${set.sheets.length} A3 PDF pages, ${report.lines.length} takeoff rows. Missing-data warnings: ${set.warnings.length}.`,
 );

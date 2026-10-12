@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "demo:house": "node scripts/create_reference_house_demo.mjs",
+    "verify:house-demo": "node --test scripts/verify_reference_house_demo.mjs",
     "test:standalone": "node scripts/test_standalone.mjs",
     "verify:phases": "node scripts/verify_phase_proof.mjs",
     "build:standalone": "node scripts/build_standalone.mjs",
