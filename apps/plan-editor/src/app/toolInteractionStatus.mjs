@@ -20,7 +20,7 @@ const getStep = (tool, state) => {
   if (tool === 'calibrate') return state.calibrationP1 ? 'second-reference' : 'first-reference'
   if (tool === 'gridSystem') return state.gridSystemError ? 'fix-intervals' : 'origin'
   if (tool === 'gridCopy') return state.gridCopySourceId ? 'place-copy' : 'select-source'
-  if (tool === 'door' || tool === 'window') return 'host-and-position'
+  if (tool === 'door' || tool === 'window') return state.activeWallSnap ? 'position-on-host' : 'find-host-wall'
   return 'position'
 }
 
@@ -29,7 +29,7 @@ const stepText = {
   'first-vertex': 'กำหนดจุดแรก', 'add-vertex': 'เพิ่มจุดหรือปิดรูป', complete: 'เสร็จแล้ว',
   'second-reference': 'กำหนดจุดอ้างอิงที่สอง', 'first-reference': 'กำหนดจุดอ้างอิงแรก',
   'fix-intervals': 'แก้ช่วงระยะกริด', origin: 'กำหนดจุดกำเนิด', 'place-copy': 'กำหนดตำแหน่งสำเนา',
-  'select-source': 'เลือกกริดต้นทาง', 'host-and-position': 'เลือกผนังและตำแหน่ง', position: 'กำหนดตำแหน่ง',
+  'select-source': 'เลือกกริดต้นทาง', 'find-host-wall': 'เล็งหาผนัง', 'position-on-host': 'กำหนดตำแหน่งบนผนัง', position: 'กำหนดตำแหน่ง',
 }
 
 export function resolveToolInteractionStatus(tool, state = {}) {
@@ -43,7 +43,7 @@ export function resolveToolInteractionStatus(tool, state = {}) {
     case 'beam': instruction = `คาน · ${step === 'end-point' ? 'เลื่อนหาจุดปลาย' : 'เลือกจุดเริ่ม'} · Enter ${step === 'end-point' ? 'วาดช่วงและต่อแนว' : 'กำหนดจุดเริ่ม'}`; break
     case 'column': instruction = 'เสา · Snap ศูนย์กลาง/จุดตัดกริด · เลื่อนแล้ว Enter วาง'; break
     case 'foundation': instruction = 'ฐานราก · Snap เสาหรือจุดกริด · เลื่อนแล้ว Enter วาง'; break
-    case 'door': case 'window': instruction = `${labels[tool]} · วางบนผนัง · Tab ขอบ/กึ่งกลาง · Enter วาง`; break
+    case 'door': case 'window': instruction = `${labels[tool]} · ${state.activeWallSnap ? 'เลื่อนกำหนดตำแหน่งบนผนัง · Tab ขอบ/กึ่งกลาง · Enter วาง' : 'เลื่อนหาแนวผนังที่เป็น host · Tab ขอบ/กึ่งกลาง'}`; break
     case 'grid': instruction = `เส้นกริด · ${step === 'end-point' ? 'เลือกจุดปลาย' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด`; break
     case 'gridCopy': instruction = 'สำเนาเส้นกริด · Shift ล็อกแนวขนาน · Enter วางสำเนา'; break
     case 'gridSystem': instruction = 'ระบบกริด · กรอกช่วงระยะ แล้วเลือกจุดกำเนิดหรือ Enter วางตรงเคอร์เซอร์'; break

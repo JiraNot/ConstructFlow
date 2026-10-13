@@ -38,6 +38,7 @@ test('placement status reports the current authoring step, constraints, and keyb
   const wallEnd = resolveToolInteractionStatus('wall', { wallStartNode: { point_mm: [0, 0] }, lineConstraintLabel: 'ขนาน', placementReferenceLabel: 'ชิดซ้าย', snapCount: 4 })
   const beamEnd = resolveToolInteractionStatus('beam', { beamStartNode: { point_mm: [100, 200] }, lineConstraintLabel: 'อิสระ', placementReferenceLabel: 'กึ่งกลาง' })
   const door = resolveToolInteractionStatus('door')
+  const doorOnWall = resolveToolInteractionStatus('door', { activeWallSnap: { wall_id: 'wall-1', offset_mm: 200 } })
   const point = resolveToolInteractionStatus('column', { snapCount: 2 })
   const snappedPoint = resolveToolInteractionStatus('column', {
     snapCount: 2,
@@ -51,8 +52,10 @@ test('placement status reports the current authoring step, constraints, and keyb
   assert.equal(wallEnd.constraint, 'ขนาน · แนวอ้างอิงชิดซ้าย')
   assert.equal(beamEnd.step, 'end-point')
   assert.equal(beamEnd.constraint, 'อิสระ · แนวอ้างอิงกึ่งกลาง')
-  assert.equal(door.step, 'host-and-position')
-  assert.match(door.instruction, /วางบนผนัง/)
+  assert.equal(door.step, 'find-host-wall')
+  assert.match(door.instruction, /เลื่อนหาแนวผนัง/)
+  assert.equal(doorOnWall.step, 'position-on-host')
+  assert.match(doorOnWall.instruction, /กำหนดตำแหน่งบนผนัง/)
   assert.equal(point.step, 'position')
   assert.equal(point.constraint, 'Snap เปิด 2 ประเภท')
   assert.equal(point.snapFeedback, null)
