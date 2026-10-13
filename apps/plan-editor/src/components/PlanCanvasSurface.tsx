@@ -1,6 +1,7 @@
 import React, { type ComponentProps, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { SmartObject } from '@constructflow/project-model'
+import type { SiteSurveyPoint } from '@constructflow/project-model'
 import type { ViewportState } from '../viewport/viewportTransform.js'
 import { zoomAtScreenPoint } from '../viewport/viewportTransform.js'
 import { PlanCanvasInteractionOverlays } from './PlanCanvasInteractionOverlays.js'
@@ -23,6 +24,8 @@ interface PlanCanvasSurfaceProps {
   viewport: ViewportState
   setViewport: Dispatch<SetStateAction<ViewportState>>
   fitView: () => void
+  selectedSurveyPoint?: SiteSurveyPoint | null
+  onDismissSurveyPoint?: () => void
 }
 
 export function PlanCanvasSurface({
@@ -37,6 +40,8 @@ export function PlanCanvasSurface({
   viewport,
   setViewport,
   fitView,
+  selectedSurveyPoint = null,
+  onDismissSurveyPoint,
 }: PlanCanvasSurfaceProps) {
   return <div
     ref={containerRef}
@@ -64,6 +69,17 @@ export function PlanCanvasSurface({
     />
     {contextMenu && <PlanCanvasObjectContextMenu {...contextMenu} containerSize={containerSize} />}
     <PlanCanvasInteractionOverlays {...overlays} />
+    {selectedSurveyPoint && <aside aria-label="จุดสำรวจที่เลือก" role="region" style={{ position: 'absolute', zIndex: 20, right: 12, top: 12, width: 270, maxWidth: 'calc(100% - 24px)', padding: 12, background: 'rgba(255,255,255,.97)', border: `1px solid ${selectedSurveyPoint.source_status === 'measured' ? '#0284c7' : '#d97706'}`, borderRadius: 6, boxShadow: '0 6px 20px rgba(15,23,42,.16)', color: '#0f172a', fontSize: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'start' }}>
+        <strong>{selectedSurveyPoint.name} · {selectedSurveyPoint.source_status === 'measured' ? 'วัดจริง' : 'สมมติ'}</strong>
+        <button type="button" aria-label="ปิดรายละเอียดจุดสำรวจ" onPointerDown={event => event.stopPropagation()} onClick={onDismissSurveyPoint}>×</button>
+      </div>
+      <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '3px 8px', margin: '8px 0 0' }}>
+        <dt>พิกัด</dt><dd style={{ margin: 0 }}>{(selectedSurveyPoint.x_mm / 1000).toFixed(3)}, {(selectedSurveyPoint.y_mm / 1000).toFixed(3)} m</dd>
+        <dt>ระดับ</dt><dd style={{ margin: 0 }}>{selectedSurveyPoint.elevation_mm === undefined ? 'ไม่มีข้อมูล' : `${(selectedSurveyPoint.elevation_mm / 1000).toFixed(3)} m`}</dd>
+        <dt>แหล่งที่มา</dt><dd style={{ margin: 0, overflowWrap: 'anywhere' }}>{selectedSurveyPoint.source_reference}</dd>
+      </dl>
+    </aside>}
     <div className="cf-canvas-zoom" aria-label="ควบคุมมุมมองแปลน">
       <button type="button" aria-label="ซูมออก" title="ซูมออก" onPointerDown={event => event.stopPropagation()} onClick={() => {
         const box = containerRef.current

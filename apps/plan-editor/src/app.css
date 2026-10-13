@@ -228,7 +228,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-manipulation-dimensions input:focus { outline: 2px solid #7dd3fc; outline-offset: 1px; }
 .cf-tape-measure-hint { position:absolute; top:58px; left:50%; z-index:10; transform:translateX(-50%); max-width:calc(100% - 24px); padding: 4px 7px; border:1px solid #c4b5fd; border-radius: 4px; background:rgb(255 255 255 / 96%); box-shadow: none; color:#5b21b6; font-size:11px; white-space:nowrap; pointer-events:none; }
 .cf-canvas-zoom {
-  position: absolute; top: 12px; left: 12px; z-index: 11; display: inline-flex; align-items: center; gap: 3px;
+  position: absolute; top: 56px; left: 12px; z-index: 11; display: inline-flex; align-items: center; gap: 3px;
   height: 36px; padding: 2px; border: 1px solid #dce5ef; border-radius: 4px; background: #fff;
   box-shadow: none; color: #536980;
 }

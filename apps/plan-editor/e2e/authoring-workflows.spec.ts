@@ -14,6 +14,16 @@ async function moveToCanvasFraction(page: Page, x: number, y: number) {
   await page.mouse.move(bounds.x + bounds.width * x, bounds.y + bounds.height * y)
 }
 
+async function clickSurveyPoint(page: Page, xMm: number, yMm: number) {
+  const viewport = page.locator('.cf-plan-canvas').first()
+  const bounds = await viewport.boundingBox()
+  if (!bounds) throw new Error('Plan canvas is not visible')
+  const panX = Number(await viewport.getAttribute('data-viewport-pan-x'))
+  const panY = Number(await viewport.getAttribute('data-viewport-pan-y'))
+  const zoom = Number(await viewport.getAttribute('data-viewport-zoom'))
+  await canvas(page).click({ position: { x: panX + xMm * zoom, y: panY + yMm * zoom } })
+}
+
 async function findGripPoints(page: Page, color: 'blue' | 'orange') {
   const bounds = await canvas(page).boundingBox()
   if (!bounds) throw new Error('Plan canvas is not visible')
@@ -464,7 +474,20 @@ test('site survey CSV preserves measured and assumed points through project relo
   await expect(page.locator('.cf-save-status')).toContainText('นำเข้าข้อมูลสำรวจ 3 จุด · วัดจริง 2 · สมมติ 1')
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
 
+  await page.getByRole('button', { name: 'จัดแปลนให้อยู่ในหน้าจอ' }).click()
+  await clickSurveyPoint(page, 0, 0)
+  const selectedSurveyPoint = page.getByRole('region', { name: 'จุดสำรวจที่เลือก' })
+  await expect(selectedSurveyPoint).toContainText('North west · วัดจริง', { timeout: 2000 })
+  await expect(selectedSurveyPoint).toContainText('Field book 12 station A')
+  await clickSurveyPoint(page, 10000, 8000)
+  await expect(selectedSurveyPoint).toContainText('South east · สมมติ')
+  await expect(selectedSurveyPoint).toContainText('Deed sketch estimate')
+
   await page.reload()
+  await page.getByRole('button', { name: 'จัดแปลนให้อยู่ในหน้าจอ' }).click()
+  await clickSurveyPoint(page, 10000, 8000)
+  await expect(selectedSurveyPoint).toContainText('South east · สมมติ')
+  await expect(selectedSurveyPoint).toContainText('Deed sketch estimate')
   await page.locator('.cf-more-menu summary').click()
   await expect(page.getByRole('status').filter({ hasText: 'Survey · client-site-survey · 2 วัดจริง / 1 สมมติ' })).toBeVisible()
 })

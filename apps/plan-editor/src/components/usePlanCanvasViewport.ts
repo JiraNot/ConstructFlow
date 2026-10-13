@@ -7,6 +7,7 @@ import { zoomAtScreenPoint, type ViewportState } from '../viewport/viewportTrans
 export const usePlanCanvasViewport = (
   containerRef: { current: HTMLDivElement | null },
   planVisibleObjects: readonly SmartObject[],
+  referencePoints: readonly [number, number][] = [],
   sharedViewport?: ViewportState | null,
   onSharedViewportChange?: (viewport: ViewportState) => void,
 ) => {
@@ -33,7 +34,7 @@ export const usePlanCanvasViewport = (
   const fitView = useCallback(() => {
     const container = containerRef.current
     if (!container) return
-    const points: [number, number][] = []
+    const points: [number, number][] = [...referencePoints]
     const pointKeys = ['location_mm', 'center_mm', 'start_point_mm', 'end_point_mm', 'origin_mm']
     const polygonKeys = ['boundary_mm', 'vertices_mm', 'outline_mm', 'points_mm', 'path_mm']
     for (const object of planVisibleObjects) {
@@ -83,7 +84,7 @@ export const usePlanCanvasViewport = (
       panX: container.clientWidth / 2 - ((minX + maxX) / 2) * zoom,
       panY: container.clientHeight / 2 - ((minY + maxY) / 2) * zoom,
     })
-  }, [planVisibleObjects])
+  }, [planVisibleObjects, referencePoints])
 
   useEffect(() => {
     if (sharedViewport) {
