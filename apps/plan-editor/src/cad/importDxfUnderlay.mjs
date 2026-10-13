@@ -14,32 +14,66 @@ function readPairs(source) {
   return pairs
 }
 
-function readEntities(pairs) {
-  const entities = []
+function readSectionPairs(pairs, targetName) {
   let section = ''
-  let entity = null
+  let target = null
   for (let index = 0; index < pairs.length; index += 1) {
     const pair = pairs[index]
     if (pair.code === 0 && pair.value === 'SECTION') {
       section = pairs[index + 1]?.code === 2 ? pairs[index + 1].value : ''
       index += 1
-      entity = null
+      target = section === targetName ? [] : null
       continue
     }
     if (pair.code === 0 && pair.value === 'ENDSEC') {
-      if (section === 'ENTITIES' && entity) entities.push(entity)
       section = ''
-      entity = null
+      if (target) return target
+      target = null
       continue
     }
-    if (section !== 'ENTITIES') continue
+    if (section === targetName && target) target.push(pair)
+  }
+  return target ?? []
+}
+
+function parseEntities(pairs) {
+  const entities = []
+  let entity = null
+  for (const pair of pairs) {
     if (pair.code === 0) {
       if (entity) entities.push(entity)
       entity = { type: pair.value, pairs: [] }
     } else if (entity) entity.pairs.push(pair)
   }
-  if (section === 'ENTITIES' && entity) entities.push(entity)
+  if (entity) entities.push(entity)
   return entities
+}
+
+function readBlocks(pairs) {
+  const blocks = new Map()
+  let block = null
+  let entity = null
+  const finishEntity = () => {
+    if (entity && block) block.entities.push(entity)
+    entity = null
+  }
+  for (const pair of pairs) {
+    if (pair.code === 0) {
+      finishEntity()
+      if (pair.value === 'BLOCK') block = { headerPairs: [], entities: [] }
+      else if (pair.value === 'ENDBLK') {
+        if (block) {
+          const name = valueOf({ pairs: block.headerPairs }, 2) ?? valueOf({ pairs: block.headerPairs }, 3)
+          if (name) blocks.set(name.toUpperCase(), { base: [numberOf({ pairs: block.headerPairs }, 10) ?? 0, numberOf({ pairs: block.headerPairs }, 20) ?? 0], entities: block.entities })
+        }
+        block = null
+      } else if (block) entity = { type: pair.value, pairs: [] }
+    } else if (!block) continue
+    else if (entity) entity.pairs.push(pair)
+    else block.headerPairs.push(pair)
+  }
+  finishEntity()
+  return blocks
 }
 
 function valueOf(entity, code) {
@@ -77,45 +111,103 @@ function resolveDrawingUnits(pairs) {
   return UNIT_TO_MM.get(0)
 }
 
+const IDENTITY = { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }
+function multiplyTransforms(parent, child) {
+  return {
+    a: parent.a * child.a + parent.c * child.b,
+    b: parent.b * child.a + parent.d * child.b,
+    c: parent.a * child.c + parent.c * child.d,
+    d: parent.b * child.c + parent.d * child.d,
+    tx: parent.a * child.tx + parent.c * child.ty + parent.tx,
+    ty: parent.b * child.tx + parent.d * child.ty + parent.ty,
+  }
+}
+
+function transformPoint([x, y], transform) {
+  return [transform.a * x + transform.c * y + transform.tx, transform.b * x + transform.d * y + transform.ty]
+}
+
+function shapesForEntity(entity) {
+  if (entity.type === 'LINE') {
+    const x1 = numberOf(entity, 10), y1 = numberOf(entity, 20), x2 = numberOf(entity, 11), y2 = numberOf(entity, 21)
+    return [x1, y1, x2, y2].every(Number.isFinite) ? [{ kind: 'polyline', points: [[x1, y1], [x2, y2]], closed: false }] : null
+  }
+  if (entity.type === 'LWPOLYLINE') {
+    const points = polylinePoints(entity)
+    return points.length >= 2 ? [{ kind: 'polyline', points, closed: (Number(valueOf(entity, 70) ?? 0) & 1) === 1 }] : null
+  }
+  if (entity.type === 'CIRCLE' || entity.type === 'ARC') {
+    const x = numberOf(entity, 10), y = numberOf(entity, 20), radius = numberOf(entity, 40)
+    if (![x, y, radius].every(Number.isFinite) || radius <= 0) return null
+    const start = entity.type === 'ARC' ? numberOf(entity, 50) ?? 0 : 0
+    const end = entity.type === 'ARC' ? numberOf(entity, 51) ?? 360 : 360
+    let sweep = (end - start + 360) % 360
+    if (entity.type === 'CIRCLE') sweep = 360
+    const segments = entity.type === 'CIRCLE' ? 64 : Math.max(8, Math.ceil(sweep / 6))
+    const points = Array.from({ length: segments + 1 }, (_, index) => {
+      const angle = (start + sweep * index / segments) * Math.PI / 180
+      return [x + Math.cos(angle) * radius, y + Math.sin(angle) * radius]
+    })
+    return [{ kind: 'polyline', points, closed: entity.type === 'CIRCLE' }]
+  }
+  return null
+}
+
+function insertTransform(entity, block, column = 0, row = 0) {
+  const x = numberOf(entity, 10) ?? 0, y = numberOf(entity, 20) ?? 0
+  const scaleX = numberOf(entity, 41) ?? 1, scaleY = numberOf(entity, 42) ?? 1
+  const radians = (numberOf(entity, 50) ?? 0) * Math.PI / 180
+  const cos = Math.cos(radians), sin = Math.sin(radians)
+  const a = cos * scaleX, b = sin * scaleX, c = -sin * scaleY, d = cos * scaleY
+  const baseX = block.base[0], baseY = block.base[1]
+  const countX = Math.max(1, Math.floor(numberOf(entity, 70) ?? 1))
+  const countY = Math.max(1, Math.floor(numberOf(entity, 71) ?? 1))
+  const spacedX = (numberOf(entity, 44) ?? 0) * column
+  const spacedY = (numberOf(entity, 45) ?? 0) * row
+  return {
+    a, b, c, d,
+    tx: x + a * spacedX + c * spacedY - a * baseX - c * baseY,
+    ty: y + b * spacedX + d * spacedY - b * baseX - d * baseY,
+    countX, countY,
+  }
+}
+
+function expandEntities(entities, blocks, transform, geometry, onUnsupported, stack = new Set(), depth = 0) {
+  for (const entity of entities) {
+    if (entity.type === 'INSERT') {
+      const name = valueOf(entity, 2)?.toUpperCase()
+      const block = name ? blocks.get(name) : null
+      if (!block || stack.has(name) || depth >= 16) { onUnsupported(); continue }
+      const base = insertTransform(entity, block)
+      const count = base.countX * base.countY
+      if (count > 1000) { onUnsupported(); continue }
+      const nextStack = new Set(stack)
+      nextStack.add(name)
+      for (let row = 0; row < base.countY; row += 1) for (let column = 0; column < base.countX; column += 1) {
+        const local = insertTransform(entity, block, column, row)
+        expandEntities(block.entities, blocks, multiplyTransforms(transform, local), geometry, onUnsupported, nextStack, depth + 1)
+      }
+      continue
+    }
+    const shapes = shapesForEntity(entity)
+    if (shapes) {
+      for (const shape of shapes) geometry.push({ ...shape, points: shape.points.map(point => transformPoint(point, transform)) })
+    } else if (!['ATTRIB', 'SEQEND', 'ENDBLK', 'BLOCK', 'ENDSEC', 'EOF'].includes(entity.type)) onUnsupported()
+  }
+}
+
 /** Parses common model-space vector entities into a lightweight, calibrated SVG underlay. */
 export function importDxfUnderlay(source, { maxImageDimension = 4096 } = {}) {
   const pairs = readPairs(source)
   if (!pairs.length) throw new Error('ไฟล์ DXF ไม่มีข้อมูล group code ที่อ่านได้')
   const [unitName, millimetersPerUnit] = resolveDrawingUnits(pairs)
-  const entities = readEntities(pairs)
+  const entities = parseEntities(readSectionPairs(pairs, 'ENTITIES'))
+  const blocks = readBlocks(readSectionPairs(pairs, 'BLOCKS'))
   const geometry = []
   let unsupportedEntities = 0
-  const addPolyline = (points, closed = false) => {
-    if (points.length < 2) return false
-    geometry.push({ kind: 'polyline', points, closed })
-    return true
-  }
+  expandEntities(entities, blocks, IDENTITY, geometry, () => { unsupportedEntities += 1 })
 
-  for (const entity of entities) {
-    if (entity.type === 'LINE') {
-      const x1 = numberOf(entity, 10), y1 = numberOf(entity, 20), x2 = numberOf(entity, 11), y2 = numberOf(entity, 21)
-      if ([x1, y1, x2, y2].every(Number.isFinite)) addPolyline([[x1, y1], [x2, y2]])
-      else unsupportedEntities += 1
-    } else if (entity.type === 'LWPOLYLINE') {
-      const closed = (Number(valueOf(entity, 70) ?? 0) & 1) === 1
-      if (!addPolyline(polylinePoints(entity), closed)) unsupportedEntities += 1
-    } else if (entity.type === 'CIRCLE' || entity.type === 'ARC') {
-      const x = numberOf(entity, 10), y = numberOf(entity, 20), radius = numberOf(entity, 40)
-      if (![x, y, radius].every(Number.isFinite) || radius <= 0) { unsupportedEntities += 1; continue }
-      const start = entity.type === 'ARC' ? numberOf(entity, 50) ?? 0 : 0
-      const end = entity.type === 'ARC' ? numberOf(entity, 51) ?? 360 : 360
-      let sweep = (end - start + 360) % 360
-      if (entity.type === 'CIRCLE') sweep = 360
-      const segments = entity.type === 'CIRCLE' ? 64 : Math.max(8, Math.ceil(sweep / 6))
-      const points = Array.from({ length: segments + 1 }, (_, index) => {
-        const angle = (start + sweep * index / segments) * Math.PI / 180
-        return [x + Math.cos(angle) * radius, y + Math.sin(angle) * radius]
-      })
-      addPolyline(points, entity.type === 'CIRCLE')
-    } else if (!['ENDSEC', 'EOF'].includes(entity.type)) unsupportedEntities += 1
-  }
-
-  if (!geometry.length) throw new Error('ไม่พบ LINE, LWPOLYLINE, CIRCLE หรือ ARC ที่ใช้เป็น underlay ได้')
+  if (!geometry.length) throw new Error('ไม่พบ LINE, LWPOLYLINE, CIRCLE, ARC หรือ INSERT ที่ใช้เป็น underlay ได้')
   const points = geometry.flatMap(shape => shape.points)
   const minX = Math.min(...points.map(point => point[0]))
   const maxX = Math.max(...points.map(point => point[0]))

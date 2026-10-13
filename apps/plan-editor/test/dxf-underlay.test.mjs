@@ -38,6 +38,27 @@ test('DXF underlay import converts declared feet to millimeter scale and assumes
   assert.equal(unitless.drawing_units, 'unitless')
 })
 
+test('DXF underlay expands block inserts with base point, nonuniform scale, and rotation', () => {
+  const source = [
+    '0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC',
+    '0', 'SECTION', '2', 'BLOCKS',
+    '0', 'BLOCK', '2', 'L_CORNER', '70', '0', '10', '1', '20', '2',
+    '0', 'LINE', '10', '1', '20', '2', '11', '2', '21', '2',
+    '0', 'LINE', '10', '1', '20', '2', '11', '1', '21', '3',
+    '0', 'ENDBLK', '0', 'ENDSEC',
+    '0', 'SECTION', '2', 'ENTITIES',
+    '0', 'INSERT', '2', 'L_CORNER', '10', '10', '20', '20', '41', '2', '42', '1', '50', '90',
+    '0', 'ENDSEC', '0', 'EOF',
+  ].join('\n')
+  const result = importDxfUnderlay(source)
+
+  assert.equal(result.imported_entities, 2)
+  assert.equal(result.skipped_entities, 0)
+  assert.equal(result.width_px, 2)
+  assert.equal(result.height_px, 3)
+  assert.deepEqual(result.origin_mm.map(Math.round), [9, 22])
+})
+
 test('DXF underlay import rejects documents without supported model-space geometry', () => {
   assert.throws(() => importDxfUnderlay(dxf(4, ['0', 'TEXT', '10', '0', '20', '0', '1', 'note'].join('\n'))), /ไม่พบ LINE/)
 })
