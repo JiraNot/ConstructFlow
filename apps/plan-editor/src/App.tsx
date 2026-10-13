@@ -60,6 +60,7 @@ import { importSiteSurveyCsv } from './cad/importSiteSurveyCsv.mjs'
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
 type EditorViewMode = 'plan' | 'framing' | 'roofplan' | ElevationDirection | 'model3d'
+type SplitViewLayout = 'columns' | 'rows' | 'focus'
 const EDITOR_VIEW_OPTIONS: readonly [EditorViewMode, string][] = [
   ['plan', 'แปลนพื้น'], ['framing', 'แปลนคาน'], ['roofplan', 'แปลนหลังคา'], ['north', 'รูปด้านเหนือ'],
   ['south', 'รูปด้านใต้'], ['east', 'รูปด้านตะวันออก'], ['west', 'รูปด้านตะวันตก'], ['rcp', 'แปลนฝ้า RCP'], ['model3d', '3D ดูตัวอย่าง'],
@@ -227,8 +228,25 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [viewMode, setViewMode] = useState<EditorViewMode>('plan')
   const [splitViewEnabled, setSplitViewEnabled] = useState(false)
   const [splitViewPaneCount, setSplitViewPaneCount] = useState<2 | 3>(2)
+  const [splitViewLayout, setSplitViewLayout] = useState<SplitViewLayout>('columns')
   const [secondaryViewMode, setSecondaryViewMode] = useState<EditorViewMode>('model3d')
   const [tertiaryViewMode, setTertiaryViewMode] = useState<EditorViewMode>('north')
+  const splitViewGridStyle = splitViewEnabled ? {
+    display: 'grid',
+    gridTemplateColumns: splitViewLayout === 'rows'
+      ? 'minmax(0, 1fr)'
+      : splitViewLayout === 'focus' && splitViewPaneCount === 3
+        ? 'minmax(0, 2fr) minmax(0, 1fr)'
+        : `repeat(${splitViewPaneCount}, minmax(0, 1fr))`,
+    gridTemplateRows: splitViewLayout === 'rows'
+      ? `repeat(${splitViewPaneCount}, minmax(0, 1fr))`
+      : splitViewLayout === 'focus' && splitViewPaneCount === 3
+        ? 'repeat(2, minmax(0, 1fr))'
+        : 'minmax(0, 1fr)',
+    gap: 1,
+    background: '#cbd5e1',
+  } : undefined
+  const primaryPaneGridStyle = splitViewLayout === 'focus' && splitViewPaneCount === 3 ? { gridRow: 'span 2' } : undefined
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
     if (['beam', 'foundation'].includes(activeTool)) setViewMode('framing')
@@ -2099,9 +2117,20 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                   </select>
                 </label>}
                 {splitViewEnabled && <label>จำนวนมุมมอง
-                  <select aria-label="จำนวนมุมมอง" value={splitViewPaneCount} onChange={event => setSplitViewPaneCount(Number(event.target.value) as 2 | 3)}>
+                  <select aria-label="จำนวนมุมมอง" value={splitViewPaneCount} onChange={event => {
+                    const count = Number(event.target.value) as 2 | 3
+                    setSplitViewPaneCount(count)
+                    if (count === 2 && splitViewLayout === 'focus') setSplitViewLayout('columns')
+                  }}>
                     <option value={2}>2 มุมมอง</option>
                     <option value={3}>3 มุมมอง</option>
+                  </select>
+                </label>}
+                {splitViewEnabled && <label>การจัดวาง
+                  <select aria-label="การจัดวางมุมมอง" value={splitViewLayout} onChange={event => setSplitViewLayout(event.target.value as SplitViewLayout)}>
+                    <option value="columns">เรียงซ้ายไปขวา</option>
+                    <option value="rows">เรียงบนลงล่าง</option>
+                    {splitViewPaneCount === 3 && <option value="focus">1 + 2 · pane หลักใหญ่</option>}
                   </select>
                 </label>}
                 {splitViewEnabled && splitViewPaneCount === 3 && <label>มุมมองที่สาม
@@ -2141,8 +2170,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           </div>
 
           {/* Interactive Plan Canvas */}
-          <div className="cf-viewport-stage" style={splitViewEnabled ? { display: 'grid', gridTemplateColumns: `repeat(${splitViewPaneCount}, minmax(0, 1fr))`, gap: 1, background: '#cbd5e1' } : undefined}>
-            <div className="cf-multiview-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
+          <div className="cf-viewport-stage" style={splitViewGridStyle}>
+            <div className="cf-multiview-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', ...primaryPaneGridStyle }}>
             {viewMode === 'plan' || viewMode === 'framing' || viewMode === 'roofplan' ? <PlanCanvas
               project={viewProject}
               navigationViewport={planNavigationViewport}
