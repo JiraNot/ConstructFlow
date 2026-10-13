@@ -25,7 +25,6 @@ import { getEditableRoofRidge } from '@constructflow/roof-engine'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import { PlanCanvasAuthoringControls } from './PlanCanvasAuthoringControls.js'
-import { handlePlanCanvasAuthoringPointerMove } from './handlePlanCanvasAuthoringPointerMove.js'
 import { usePlanCanvasPlacementKeyboard } from './usePlanCanvasPlacementKeyboard.js'
 import { TOOL_FAMILIES } from './catalogPresentation.js'
 import { ToolType } from './Toolbar.js'
@@ -45,7 +44,7 @@ import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { usePlanCanvasPointerCancel } from './usePlanCanvasPointerCancel.js'
 import { PlanCanvasObjectContextMenu } from './PlanCanvasObjectContextMenu.js'
 import { resolvePlanCanvasPointerSnap } from './resolvePlanCanvasPointerSnap.js'
-import { handlePlanCanvasNavigationPointerMove } from './handlePlanCanvasNavigationPointerMove.js'
+import { handlePlanCanvasPointerMove } from './handlePlanCanvasPointerMove.js'
 import { PlanCanvasDragDimensions, type DragDimensionField, type DragDimensionMode } from './PlanCanvasDragDimensions.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
@@ -609,43 +608,26 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   // Pointer move handler
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
-    if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    if (!rect) return
-    const screenX = e.clientX - rect.left
-    const screenY = e.clientY - rect.top
-    if (handlePlanCanvasNavigationPointerMove({
-      pointerPositionsRef, pinchRef, longPressStartRef, longPressTimerRef, selectionStartRef,
-      setSelectionBox, eraseActiveRef, erasedIdsRef, isPanning, panStartRef, viewport, setViewport,
-      findCandidates,
-    }, e.pointerId, e.pointerType, [screenX, screenY])) return
-
-    handlePlanCanvasAuthoringPointerMove({
+    handlePlanCanvasPointerMove({
       event: e,
-      screenPoint: [screenX, screenY],
       canvas,
-      activeTool,
-      viewport,
-      draggingObject,
-      hoveredId,
-      resolveSnap: (rawWorld, ctrlKey, shiftKey) => resolvePlanCanvasPointerSnap({
-        activeTool, rawWorld, ctrlKey, shiftKey, project, planProject,
-        activeDoorTypeMark, activeWindowTypeMark, draggingObjectId: draggingObject?.id, gridCopySourceId,
-        dimensionReferenceMode,
-        lineState: { beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary },
-        snapPlanPoint, snapPlanWallHost, applyOpeningDistance, resolveLineSnap: constrainLineSnap,
-        applyPlacementDimensions, constrainGridCopyToParallelOffset,
-      }),
-      findCandidates,
-      setActiveWallSnap,
-      setActiveSnap,
-      setTapeMeasure,
-      setCalibrationMousePoint,
-      setCandidates,
-      setHoveredId,
-      setManipulationPreview,
-      onCursorChange,
-      previewDragAt,
+      navigation: {
+        pointerPositionsRef, pinchRef, longPressStartRef, longPressTimerRef, selectionStartRef,
+        setSelectionBox, eraseActiveRef, erasedIdsRef, isPanning, panStartRef, viewport, setViewport, findCandidates,
+      },
+      authoring: {
+        activeTool, viewport, draggingObject, hoveredId,
+        resolveSnap: (rawWorld, ctrlKey, shiftKey) => resolvePlanCanvasPointerSnap({
+          activeTool, rawWorld, ctrlKey, shiftKey, project, planProject,
+          activeDoorTypeMark, activeWindowTypeMark, draggingObjectId: draggingObject?.id, gridCopySourceId,
+          dimensionReferenceMode,
+          lineState: { beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary },
+          snapPlanPoint, snapPlanWallHost, applyOpeningDistance, resolveLineSnap: constrainLineSnap,
+          applyPlacementDimensions, constrainGridCopyToParallelOffset,
+        }),
+        findCandidates, setActiveWallSnap, setActiveSnap, setTapeMeasure, setCalibrationMousePoint,
+        setCandidates, setHoveredId, setManipulationPreview, onCursorChange, previewDragAt,
+      },
     })
   }
 
