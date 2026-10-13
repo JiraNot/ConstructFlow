@@ -6,13 +6,7 @@ import {
   WindowModuleData,
   WallModuleData,
   StairModuleData,
-  isColumnObject,
-  isFoundationObject,
-  isGridObject,
-  isBeamObject,
-  isWallObject,
   isDoorObject,
-  isWindowObject,
   DoorHanding,
   PlacementReference,
   DisplayLengthUnit,
@@ -50,6 +44,7 @@ import { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
 import { usePlanCanvasPointerInteractions } from './usePlanCanvasPointerInteractions.js'
 import { PlanCanvasSurface } from './PlanCanvasSurface.js'
 import { buildPlanCanvasContextMenu } from './buildPlanCanvasContextMenu.js'
+import { hasPlanCanvasSelectionGrip } from '../planCanvasSelectionHint.mjs'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -492,10 +487,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     hints: {
       activeTool,
       tapeMeasure,
-      showSelectionHandleHint: editableSelectionIds.some(id => {
-        const object = planProject.objects[id]
-        return object && (isColumnObject(object) || isFoundationObject(object) || isWallObject(object) || isBeamObject(object) || isGridObject(object) || isDoorObject(object) || isWindowObject(object) || ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system', 'architecture.room_separator', 'drainage.pipe_route', 'plumbing.pipe_route', 'decorative.moulding_run', 'interior.cabinet_run'].includes(object.object_type))
-      }),
+      showSelectionHandleHint: hasPlanCanvasSelectionGrip(planProject, editableSelectionIds),
       placementStatus, placementHint, escapeLabel, pickCandidates, hoveredId, project: planProject,
       onCyclePick: cyclePick, onHoverChange: setHoveredId, onSelectionChange, onSelectObject,
     },
