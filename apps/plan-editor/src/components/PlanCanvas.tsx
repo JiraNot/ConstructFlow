@@ -68,6 +68,7 @@ import { resolvePlanCanvasPickCandidates } from './resolvePlanCanvasPickCandidat
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
 import { handlePlanCanvasPlacementPointerDown } from './handlePlanCanvasPlacementPointerDown.js'
 import { usePlanCanvasManipulationPreview } from './usePlanCanvasManipulationPreview.js'
+import { createPlanCanvasPlacementCommitHandlers } from './createPlanCanvasPlacementCommitHandlers.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -774,50 +775,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const hasPolygonSegment = ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool) && slabBoundary.length > 0
   const hasLineGeometryInput = !!stairStartPoint || !!wallStartNode || !!beamStartNode || !!roomSeparatorStart || hasPolygonSegment || (activeTool === 'grid' && !!gridStartPoint)
 
-  const commitPlacementAtCursor = () => {
-    const canvas = canvasRef.current
-    if (!canvas || !activeSnap || (!supportsPlacementDimensions && activeTool !== 'measure' && activeTool !== 'calibrate')) return
-    const rect = canvas.getBoundingClientRect()
-    const [x, y] = worldToScreen(activeSnap.point_mm, viewport)
-    canvas.focus({ preventScroll: true })
-    canvas.dispatchEvent(new PointerEvent('pointerdown', {
-      bubbles: true,
-      cancelable: true,
-      pointerId: 1,
-      pointerType: 'mouse',
-      isPrimary: true,
-      button: 0,
-      buttons: 1,
-      detail: 1,
-      clientX: rect.left + x,
-      clientY: rect.top + y,
-    }))
-  }
-
-  const finishPolygonPlacement = () => {
-    if (slabBoundary.length < 3) return false
-    if (activeTool === 'slab') onCommitSlab(slabBoundary)
-    else if (activeTool === 'archFloor') onCommitArchitecturalFloor?.(slabBoundary)
-    else if (activeTool === 'ceiling') onCommitCeiling?.(slabBoundary)
-    else if (activeTool === 'roof') onCommitRoof?.(slabBoundary, { shape: roofShape, slope_deg: roofSlopeDeg, thickness_mm: roofThicknessMm, elevation_offset_mm: roofElevationOffsetMm, material: roofMaterial })
-    else if (activeTool === 'slabVoid' && selectedId && ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(planProject.objects[selectedId]?.object_type ?? '')) onCommitSurfaceVoid(selectedId, slabBoundary)
-    else return false
-    setSlabBoundary([])
-    clearDimensionOverrides()
-    return true
-  }
-
-  const handleCanvasDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool)) return
-    event.preventDefault()
-    finishPolygonPlacement()
-  }
-
-  const commitActivePlacement = (fromInput = false) => {
-    const polygonTool = ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool)
-    if (polygonTool && !fromInput && finishPolygonPlacement()) return
-    commitPlacementAtCursor()
-  }
+  const { commitActivePlacement, handleCanvasDoubleClick } = createPlanCanvasPlacementCommitHandlers({
+    canvasRef, activeSnap, activeTool, supportsPlacementDimensions, viewport,
+    selectedId, project: planProject, slabBoundary, setSlabBoundary, roofShape,
+    roofSlopeDeg, roofThicknessMm, roofElevationOffsetMm, roofMaterial, clearDimensionOverrides,
+    onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling, onCommitRoof, onCommitSurfaceVoid,
+  })
 
   const { handlePlacementInputKeyDown, handleCanvasDimensionKeyDown, handleDimensionInputKeyDown } = usePlanCanvasPlacementKeyboard({
     activeTool, supportsPlacementDimensions, dimensionHostAxis, dimensionKeyboardAxis, dimensionAnchorX, dimensionAnchorY,
