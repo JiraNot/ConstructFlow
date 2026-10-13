@@ -108,6 +108,28 @@ export interface PermitSheet {
   status: "draft" | "missing_data" | "issued";
   viewport: SheetViewport;
 }
+export interface PermitViewportPaperFrame {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A3 paper-space frame shared by the sheet compiler and interactive composer. */
+export function getPermitViewportPaperFrame(
+  sheetId: PermitSheetId,
+  viewIndex: number,
+  viewCount: number,
+): PermitViewportPaperFrame {
+  const paired = viewCount === 2 || sheetId === "E-02";
+  return {
+    x: 18 + viewIndex * 195,
+    y: 40,
+    width: paired ? 180 : 375,
+    height: 138,
+  };
+}
+
 export interface PermitDrawingSet {
   project_id: string;
   sheets: PermitSheet[];
@@ -1652,11 +1674,12 @@ function compilePermitDrawingSetBase(
               }
               return !visibleOpeningIds || !object.object_type.startsWith("door_window.") || visibleOpeningIds.has(object.id);
             });
+          const paperFrame = getPermitViewportPaperFrame(id, viewIndex, views.length);
           const view = {
-            x: 18 + viewIndex * 195,
-            y: 40,
-            w: views.length === 2 || id === "E-02" ? 180 : 375,
-            h: 138,
+            x: paperFrame.x,
+            y: paperFrame.y,
+            w: paperFrame.width,
+            h: paperFrame.height,
           };
           const projectPoint = (v: Vec3): Vec2 =>
             mode === "xz" || mode === "section_x"

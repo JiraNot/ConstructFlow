@@ -1084,8 +1084,46 @@ test('sheet composer stores independent framing for a secondary view on a paired
   const preview = page.getByTestId('sheet-composer-preview')
   await expect(preview.locator('svg text').filter({ hasText: /^1:25$/ })).toBeVisible()
   await expect(preview.locator('svg text').filter({ hasText: /^1:100$/ })).toBeVisible()
+  await preview.scrollIntoViewIfNeeded()
+  const previewBounds = await preview.boundingBox()
+  if (!previewBounds) throw new Error('Sheet preview is not visible')
+  const paperPixelsPerMm = previewBounds.width / 420
+  const secondaryFrame = { x: 213, y: 40, width: 180, height: 138 }
+  const secondaryFrameCenter = {
+    x: previewBounds.x + ((secondaryFrame.x + secondaryFrame.width / 2) * paperPixelsPerMm),
+    y: previewBounds.y + ((secondaryFrame.y + secondaryFrame.height / 2) * paperPixelsPerMm),
+  }
+  await page.mouse.move(secondaryFrameCenter.x, secondaryFrameCenter.y)
+  await page.mouse.down()
+  await expect(preview).toHaveAttribute('data-dragging', 'true')
+  await page.mouse.move(secondaryFrameCenter.x + 36, secondaryFrameCenter.y + 20)
+  await expect(preview.getByRole('status')).toContainText('Viewport 2')
+  await page.mouse.up()
+  const draggedCenter = [await secondCenter.nth(0).inputValue(), await secondCenter.nth(1).inputValue()]
+  expect(draggedCenter).not.toEqual(['1.2', '0.8'])
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
 
+  await page.getByRole('button', { name: 'ปิดแบบและตาราง' }).click()
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await page.locator('.cf-more-menu summary').click()
+  await page.getByRole('button', { name: 'ชุดแบบและตาราง' }).click()
+  const undoDialog = page.getByRole('dialog')
+  await undoDialog.locator('select').first().selectOption('A-05')
+  const undoCenter = undoDialog.locator('fieldset').filter({ hasText: 'center' }).last().locator('input')
+  await expect(undoCenter.nth(0)).toHaveValue('1.2')
+  await expect(undoCenter.nth(1)).toHaveValue('0.8')
+  await page.getByRole('button', { name: 'ปิดแบบและตาราง' }).click()
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await page.locator('.cf-more-menu summary').click()
+  await page.getByRole('button', { name: 'ชุดแบบและตาราง' }).click()
+  const redoDialog = page.getByRole('dialog')
+  await redoDialog.locator('select').first().selectOption('A-05')
+  const redoCenter = redoDialog.locator('fieldset').filter({ hasText: 'center' }).last().locator('input')
+  await expect(redoCenter.nth(0)).toHaveValue(draggedCenter[0])
+  await expect(redoCenter.nth(1)).toHaveValue(draggedCenter[1])
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
+
+  await page.getByRole('button', { name: 'ปิดแบบและตาราง' }).click()
   await page.reload()
   await page.locator('.cf-more-menu summary').click()
   await page.getByRole('button', { name: 'ชุดแบบและตาราง' }).click()
@@ -1094,8 +1132,8 @@ test('sheet composer stores independent framing for a secondary view on a paired
   await expect(reloadedDialog.getByLabel('กำหนดกรอบมุมมองที่สอง')).toBeChecked()
   await expect(reloadedDialog.getByLabel('มาตราส่วน viewport ที่สอง')).toHaveValue('25')
   const restoredCenter = reloadedDialog.locator('fieldset').filter({ hasText: 'center' }).last().locator('input')
-  await expect(restoredCenter.nth(0)).toHaveValue('1.2')
-  await expect(restoredCenter.nth(1)).toHaveValue('0.8')
+  await expect(restoredCenter.nth(0)).toHaveValue(draggedCenter[0])
+  await expect(restoredCenter.nth(1)).toHaveValue(draggedCenter[1])
 })
 
 test('split workbench keeps selection identity and plan navigation coordinated', async ({ page }) => {

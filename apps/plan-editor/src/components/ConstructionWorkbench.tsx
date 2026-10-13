@@ -19,6 +19,7 @@ import { planPhaseProof } from "@constructflow/extension-engine";
 import {
   compilePermitDrawingSet,
   compilePermitPdf,
+  getPermitViewportPaperFrame,
   renderPermitDrawingSetHtml,
   type PermitSheetId,
   type PermitOptions,
@@ -922,6 +923,22 @@ export function ConstructionWorkbench({
     setSheetPreview(compilePermitDrawingSet(project, options).sheets.find(sheet => sheet.id === sheetId)!.svg);
     return true;
   };
+  const commitSheetSubviewportCenter = (center_mm: [number, number]) => {
+    const saved = project.drawing_settings?.viewports[sheetId] ?? { scale_denominator: scale };
+    const subviews = [...(saved.subviews ?? [])];
+    const current = subviews[0] ?? { scale_denominator: subviewScale };
+    const viewport = {
+      ...saved,
+      subviews: [{ ...current, scale_denominator: subviewScale, center_mm }, ...subviews.slice(1)],
+    };
+    if (!execute([{ name: "UpdateSheetViewport", input: { sheet_id: sheetId, viewport } }])) return false;
+    setUseSubviewCenter(true);
+    setSubviewCenter([center_mm[0] / 1000, center_mm[1] / 1000]);
+    const options = { ...viewportOptions, viewports: { ...viewportOptions.viewports, [sheetId]: viewport } };
+    const preview = compilePermitDrawingSet(project, options).sheets.find(sheet => sheet.id === sheetId);
+    if (preview) setSheetPreview(preview.svg);
+    return true;
+  };
   const buildSelectedSheetViewport = () => ({
     scale_denominator: scale,
     ...((/^(A-02|A-03|S-02|S-03)$/.test(sheetId) || /^(A-02|S-02)-L\d+$/.test(sheetId)) ? { level_id: planLevelId } : {}),
@@ -1324,7 +1341,7 @@ export function ConstructionWorkbench({
               {['A-05', 'A-06', 'A-07', 'A-09', 'A-10'].includes(sheetId) && <section aria-label="การจัดกรอบ viewport ที่สอง" style={{ marginTop: 14, borderTop: "1px solid #dbe3ed", paddingTop: 10 }}>
                 <h3>Viewport มุมมองที่สอง</h3>
                 <p>ตั้งมาตราส่วนและศูนย์กลางแยกสำหรับรูปด้าน/รูปตัดอีกฝั่งหรือ RCP ที่อยู่บนชีตเดียวกัน</p>
-                <label style={fieldStyle}><input type="checkbox" checked={useSubviewViewport} onChange={event => setUseSubviewViewport(event.target.checked)} /> กำหนดกรอบมุมมองที่สอง</label>
+                <label style={fieldStyle}><input type="checkbox" checked={useSubviewViewport} onChange={event => { setUseSubviewViewport(event.target.checked); if (!event.target.checked) setUseSubviewCenter(false); }} /> กำหนดกรอบมุมมองที่สอง</label>
                 {useSubviewViewport && <>
                   <label style={fieldStyle}>มาตราส่วนมุมมองที่สอง
                     <select aria-label="มาตราส่วน viewport ที่สอง" value={subviewScale} onChange={event => setSubviewScale(Number(event.target.value))}>
@@ -1475,6 +1492,11 @@ export function ConstructionWorkbench({
                 centerMm={[center[0] * 1000, center[1] * 1000]}
                 scaleDenominator={scale}
                 onCommitCenter={commitSheetViewportCenter}
+                secondaryFrame={['A-05', 'A-06', 'A-07', 'A-09', 'A-10'].includes(sheetId) ? getPermitViewportPaperFrame(sheetId, 1, 2) : undefined}
+                secondaryManualCenter={useSubviewViewport && useSubviewCenter}
+                secondaryCenterMm={[subviewCenter[0] * 1000, subviewCenter[1] * 1000]}
+                secondaryScaleDenominator={subviewScale}
+                onCommitSecondaryCenter={commitSheetSubviewportCenter}
               />
             </>
           )}
