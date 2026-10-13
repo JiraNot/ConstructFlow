@@ -8,9 +8,10 @@ import {
   validateCoordinationSettings,
   validateDrawingSettings,
   validateRainwaterDesignSettings,
+  validateSiteSurvey,
   resolveStairVerticalExtent,
 } from '@constructflow/project-model'
-import type { DeleteSheetLayoutTemplateInput, DeleteViewTemplateInput, SaveSheetLayoutTemplateInput, SaveViewTemplateInput, SetViewVisibilityInput, UpdateCoordinationSettingsInput, UpdateRainwaterDesignInput, UpdateSheetViewportInput } from '@constructflow/command-schema'
+import type { DeleteSheetLayoutTemplateInput, DeleteViewTemplateInput, SaveSheetLayoutTemplateInput, SaveViewTemplateInput, SetViewVisibilityInput, UpdateCoordinationSettingsInput, UpdateRainwaterDesignInput, UpdateSheetViewportInput, UpdateSiteSurveyInput } from '@constructflow/command-schema'
 
 import {
   CommandHandlerContext,
@@ -62,6 +63,12 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
         updatedProject: updated,
         emittedEnvelope: envelope,
       }
+    }
+    case 'UpdateSiteSurvey': {
+      const { survey } = input as unknown as UpdateSiteSurveyInput
+      validateSiteSurvey(survey)
+      updated.site_survey = structuredClone(survey)
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] }, updatedProject: updated, emittedEnvelope: envelope }
     }
     case 'UpdateSheetViewport': {
       const {sheet_id,viewport}=input as unknown as UpdateSheetViewportInput

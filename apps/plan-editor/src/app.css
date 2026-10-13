@@ -91,6 +91,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-more-popover button { display: flex; align-items: center; gap: 9px; min-height: 36px; padding: 4px 6px; border: 0; border-radius: 3px; background: transparent; color: #40566e; text-align: left; font-size: 12px; cursor: pointer; }
 .cf-more-popover button:hover { background: #f0f7ff; color: #126dc0; }
 .cf-menu-label { padding: 4px 6px 4px; color: #91a0b2; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.cf-menu-note { padding: 6px; color: #52677d; font-size: 10px; line-height: 1.4; white-space: normal; }
 .cf-story-height { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; color: #50657c; font-size: 11px; }
 .cf-story-height input { width: 76px; height: 29px; padding: 0 7px; border: 1px solid #dce4ed; border-radius: 3px; color: #33465b; background: white; }
 

@@ -5,6 +5,7 @@ import { DEFAULT_PHASES, DEFAULT_TYPES, validateRainwaterDesignSettings, type Pr
 import { validateConstructionPayloads } from './constructionValidation.js'
 import { validateDrawingSettings } from './sheetSettings.js'
 import { validateCoordinationSettings } from './coordinationSettings.js'
+import { validateSiteSurvey } from './siteSurvey.js'
 
 export interface ProjectDocumentV1 {
   schema_version: 1
@@ -166,6 +167,7 @@ export function migrateProjectV1ToV2(source: ProjectDocumentV1): ProjectDocument
 export function validateProjectV2(project: ProjectDocument): void {
   if (project.schema_version !== 2) throw new Error(`Unsupported schema_version: ${project.schema_version}`)
   if (project.rainwater_design !== undefined) validateRainwaterDesignSettings(project.rainwater_design)
+  if (project.site_survey !== undefined) validateSiteSurvey(project.site_survey)
   if (!project.project || typeof project.project.id !== 'string' || !project.project.id) throw new Error('Invalid project format: missing project metadata')
   if (typeof project.project.name !== 'string' || !project.project.name.trim()) throw new Error('Invalid project format: project name is required')
   if (project.project.units !== 'mm') throw new Error('Invalid project format: canonical project units must be mm')

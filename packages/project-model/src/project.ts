@@ -6,6 +6,7 @@ import type { DrawingSettings } from './sheetSettings.js'
 import type { CoordinationSettings } from './coordinationSettings.js'
 import type { DoorFaceComponent } from './doorFace.js'
 import type { OpeningPlanSymbolLine } from './openingPlanSymbol.js'
+import type { SiteSurvey } from './siteSurvey.js'
 
 export interface ProjectMetadata {
   id: string
@@ -167,6 +168,8 @@ export interface ProjectDocument {
   coordination_settings?: CoordinationSettings
   /** Shared local rainfall and outlet design inputs used by all roof catchments. */
   rainwater_design?: RainwaterDesignSettings
+  /** Imported site control and boundary points with measured/assumed provenance. */
+  site_survey?: SiteSurvey
   legal_metadata?: ProjectLegalMetadata
   /** Embedded reference drawings, keyed by view and level so they travel with .cfproj. */
   underlays?: Record<string, ProjectUnderlay>

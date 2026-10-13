@@ -528,6 +528,29 @@ test("sheet layout templates persist reusable viewport settings and batch-apply 
   assert.equal(session.undo().drawing_settings.layout_templates[0].id, template.id);
 });
 
+test('site survey observations retain measured versus assumed provenance through save and undo', () => {
+  const session = new ProjectCommandSession(empty());
+  const survey = {
+    id: 'survey-lot-9', name: 'Lot 9', source_file: 'lot9.csv', coordinate_system: 'local-grid-01', imported_at: '2026-10-14T00:00:00.000Z',
+    points: [
+      { id: 'P1', name: 'North west', x_mm: 0, y_mm: 0, elevation_mm: 1200, source_status: 'measured', source_reference: 'Station A · field book 12' },
+      { id: 'P2', name: 'North east', x_mm: 10000, y_mm: 0, elevation_mm: 1220, source_status: 'measured', source_reference: 'Station B · field book 12' },
+      { id: 'P3', name: 'South east', x_mm: 10000, y_mm: 8000, source_status: 'assumed', source_reference: 'Deed sketch estimate' },
+    ],
+    boundaries: [{ id: 'LOT-9', name: 'Parcel', point_ids: ['P1', 'P2', 'P3'] }],
+  };
+  const saved = session.execute([{ name: 'UpdateSiteSurvey', input: { survey } }]);
+  assert.equal(saved.status, 'success');
+  assert.deepEqual(deserializeProject(serializeProject(saved.updatedProject)).site_survey, survey);
+  assert.equal(saved.updatedProject.site_survey.points.filter(point => point.source_status === 'measured').length, 2);
+  assert.equal(saved.updatedProject.site_survey.points.filter(point => point.source_status === 'assumed').length, 1);
+  assert.equal(session.undo().site_survey, undefined);
+  assert.deepEqual(session.redo().site_survey, survey);
+  const invalid = { ...survey, points: survey.points.map(point => point.id === 'P3' ? { ...point, source_reference: '' } : point) };
+  assert.equal(session.execute([{ name: 'UpdateSiteSurvey', input: { survey: invalid } }]).status, 'failed');
+  assert.deepEqual(session.project.site_survey, survey);
+});
+
 test("Phase 4: cyclic unknown-IL gravity network rejects atomically", () => {
   let p = empty();
   const ids = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];

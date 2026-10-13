@@ -438,6 +438,23 @@ test('DXF underlay imports unit-scaled vector art and survives project reload', 
   await expect(page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]')).toBeVisible()
 })
 
+test('site survey CSV preserves measured and assumed points through project reload', async ({ page }) => {
+  await page.goto('/')
+  const csv = [
+    'id,name,x,y,elevation,source_status,source_reference,boundary_id,boundary_name,units,coordinate_system',
+    'P1,North west,0,0,1.20,measured,Field book 12 station A,LOT-9,Parcel,m,local-grid-01',
+    'P2,North east,10,0,1.22,measured,Field book 12 station B,LOT-9,Parcel,m,local-grid-01',
+    'P3,South east,10,8,,assumed,Deed sketch estimate,LOT-9,Parcel,m,local-grid-01',
+  ].join('\n')
+  await page.locator('#cf-survey-open').setInputFiles({ name: 'client-site-survey.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) })
+  await expect(page.locator('.cf-save-status')).toContainText('นำเข้าข้อมูลสำรวจ 3 จุด · วัดจริง 2 · สมมติ 1')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
+
+  await page.reload()
+  await page.locator('.cf-more-menu summary').click()
+  await expect(page.getByRole('status').filter({ hasText: 'Survey · client-site-survey · 2 วัดจริง / 1 สมมติ' })).toBeVisible()
+})
+
 test('Project Browser numeric group move commits once and preserves UUIDs through Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')

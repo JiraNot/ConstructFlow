@@ -55,6 +55,7 @@ import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
 import { getRoofEaveBoundary } from '@constructflow/roof-engine'
 import type { ViewportState } from './viewport/viewportTransform.js'
 import { importDxfUnderlay } from './cad/importDxfUnderlay.mjs'
+import { importSiteSurveyCsv } from './cad/importSiteSurveyCsv.mjs'
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
@@ -544,6 +545,19 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       openUnderlayImage(dataUrl, [0, 0], 10)
     }
     reader.readAsDataURL(file)
+  }
+  const handleImportSiteSurvey = (file: File) => {
+    void file.text().then(source => {
+      try {
+        const survey = importSiteSurveyCsv(source, { fileName: file.name })
+        const result = dispatchCommandBatch([{ name: 'UpdateSiteSurvey', input: { survey } }])
+        setFileFeedback(result.status === 'success'
+          ? `นำเข้าข้อมูลสำรวจ ${survey.points.length} จุด · วัดจริง ${survey.points.filter(point => point.source_status === 'measured').length} · สมมติ ${survey.points.filter(point => point.source_status === 'assumed').length}`
+          : (result.errors ?? []).join('\n'))
+      } catch (error) {
+        setFileFeedback(error instanceof Error ? error.message : 'อ่านข้อมูลสำรวจ CSV ไม่สำเร็จ')
+      }
+    }).catch(() => setFileFeedback('อ่านข้อมูลสำรวจ CSV ไม่สำเร็จ'))
   }
   const handleClearUnderlay = () => {
     setUnderlay(current => ({ ...current, image: null }))
@@ -1959,6 +1973,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
         <div className="cf-header-actions">
           <input id="cfproj-open" type="file" accept=".cfproj,application/json" aria-hidden="true" tabIndex={-1} className="cf-visually-hidden" onChange={(e) => { void handleOpenProject(e.currentTarget.files?.[0] ?? undefined); e.currentTarget.value = '' }} />
+          <input id="cf-survey-open" type="file" accept=".csv,text/csv" aria-hidden="true" tabIndex={-1} className="cf-visually-hidden" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) handleImportSiteSurvey(file); event.currentTarget.value = '' }} />
           {supportsProjectFileOpen ? (
             <button type="button" className="cf-button cf-button-quiet" onClick={() => void handleChooseProject()} title="เปิดไฟล์โครงการ .cfproj"><FolderOpen size={16} /><span>เปิด</span></button>
           ) : (
@@ -1987,6 +2002,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               <div className="cf-menu-label">โครงการ</div>
               <button type="button" onClick={handleNewBlankProject}>สร้างโครงการใหม่ (ว่าง)</button>
               <button type="button" aria-label="โฉนดและผู้เซ็นแบบ" onClick={() => setIsLegalModalOpen(true)}><FileCheck size={15} /> โฉนดและผู้เซ็นแบบ</button>
+              <button type="button" onClick={() => document.getElementById('cf-survey-open')?.click()}>นำเข้าข้อมูลสำรวจ CSV</button>
+              {project.site_survey && <div className="cf-menu-note" role="status">
+                Survey · {project.site_survey.name} · {project.site_survey.points.filter(point => point.source_status === 'measured').length} วัดจริง / {project.site_survey.points.filter(point => point.source_status === 'assumed').length} สมมติ
+              </div>}
               <div className="cf-menu-label">สร้าง</div>
               <button type="button" onClick={()=>{setWorkbenchTab('model');setIsConstructionOpen(true)}}><Layers2 size={15}/> เครื่องมืองานอาคาร</button>
               <button type="button" onClick={()=>setIsPresetsModalOpen(true)}><Sparkles size={15}/> ส่วนต่อเติมสำเร็จรูป</button>
