@@ -185,6 +185,29 @@ test('repeat last tool resets an active wall session and starts another wall', a
   await expect(page.locator('li[data-object-type="architecture.wall"]')).toHaveCount(2)
 })
 
+test('window placement identifies its wall host and commits with the keyboard', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'ผนัง' }).click()
+  await clickCanvasFraction(page, 0.25, 0.45)
+  await clickCanvasFraction(page, 0.75, 0.45)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+
+  const canvasElement = canvas(page)
+  await page.locator('.cf-tool-button[title^="หน้าต่าง"]').click()
+  await moveToCanvasFraction(page, 0.50, 0.45)
+  await expect(page.getByTestId('snap-feedback')).toContainText(/Snap:\s*On Wall/i)
+  await expect(page.locator('[data-tool-step]')).toContainText('วางบนผนัง')
+  await canvasElement.focus()
+  await page.keyboard.press('Enter')
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await expect(page.locator('.cf-browser-tree [data-object-type="door_window.window"]')).toHaveCount(1)
+  await expect(page.locator('[data-tool-step]')).toContainText('วางบนผนัง')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.cf-tool-button.is-active')).toHaveAttribute('title', /เลือก/)
+})
+
 test('polygon placement commits a slab boundary through the shared placement session', async ({ page }) => {
   await page.goto('/')
   const canvasElement = canvas(page)
