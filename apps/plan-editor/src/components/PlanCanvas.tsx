@@ -54,6 +54,7 @@ import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
 import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
 import { commitPlanCanvasDragPreview } from './commitPlanCanvasDragPreview.mjs'
+import { handlePlanCanvasPointerDownNavigation } from './handlePlanCanvasPointerDownNavigation.js'
 import { findPlanHitObject } from './planHitTesting.mjs'
 import { resolvePlanCanvasBoxSelection } from './resolvePlanCanvasBoxSelection.mjs'
 import { drawPlanCanvasSelectionHandles } from './drawPlanCanvasSelectionHandles.js'
@@ -867,65 +868,27 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     if (!rect) return
     const screenX = e.clientX - rect.left
     const screenY = e.clientY - rect.top
-
-    // Right-clicking an object opens the same quick actions available to touch.
-    // Suppress the browser menu over the drawing canvas.
-    if (e.button === 2) {
-      e.preventDefault()
-      const point = screenToWorld([screenX, screenY], viewport)
-      const hitId = findHitObject(point, e.shiftKey)
-      if (hitId) {
-        onSelectionChange?.([hitId], hitId)
-        onSelectObject(hitId)
-        setObjectContextMenu({ id: hitId, x: screenX, y: screenY })
-      } else {
-        setObjectContextMenu(null)
-      }
-      return
-    }
-
-    if (e.pointerType === 'touch') {
-      pointerPositionsRef.current.set(e.pointerId, [screenX, screenY])
-      try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
-      if (pointerPositionsRef.current.size >= 2) {
-        if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current)
-        longPressTimerRef.current = null
-        selectionStartRef.current = null; setSelectionBox(null)
-        setDraggingObject(null); setIsPanning(false)
-        const points = [...pointerPositionsRef.current.values()]
-        pinchRef.current = { distance: Math.max(1, Math.hypot(points[0][0] - points[1][0], points[0][1] - points[1][1])), center: [(points[0][0] + points[1][0]) / 2, (points[0][1] + points[1][1]) / 2] }
-        pinchActiveRef.current = true
-        return
-      }
-      if (activeTool === 'select') {
-        longPressStartRef.current = { pointerId: e.pointerId, point: [screenX, screenY] }
-        longPressTimerRef.current = window.setTimeout(() => {
-          const point = longPressStartRef.current?.point
-          if (!point) return
-          longPressTimerRef.current = null
-          const world = screenToWorld(point, viewport)
-          const hitId = findHitObject(world, false)
-          setDraggingObject(null); selectionStartRef.current = null; setSelectionBox(null)
-          if (hitId) {
-            onSelectionChange?.([hitId], hitId)
-            onSelectObject(hitId)
-            setObjectContextMenu({ id: hitId, x: point[0], y: point[1] })
-          } else {
-            setObjectContextMenu(null)
-            panStartRef.current = point
-            setIsPanning(true)
-          }
-        }, 500)
-      }
-    }
-
-    // Middle mouse button is the desktop pan gesture.
-    if (e.button === 1) {
-      setIsPanning(true)
-      panStartRef.current = [screenX, screenY]
-      e.currentTarget.setPointerCapture(e.pointerId)
-      return
-    }
+    if (handlePlanCanvasPointerDownNavigation({
+      event: e,
+      screenPoint: [screenX, screenY],
+      activeTool,
+      viewport,
+      pointerPositionsRef,
+      pinchRef,
+      pinchActiveRef,
+      longPressStartRef,
+      longPressTimerRef,
+      selectionStartRef,
+      panStartRef,
+      setSelectionBox,
+      setDraggingObject,
+      setIsPanning,
+      setObjectContextMenu,
+      findHitObject,
+      onSelectionChange,
+      onSelectObject,
+      setPointerCapture: pointerId => canvasRef.current?.setPointerCapture(pointerId),
+    })) return
 
     if (e.button === 0) {
       setObjectContextMenu(null)
