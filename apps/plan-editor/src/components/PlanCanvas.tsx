@@ -15,7 +15,6 @@ import {
   isWindowObject,
   DoorHanding,
   PlacementReference,
-  formatLengthMm,
   parseLengthMm,
   DisplayLengthUnit,
 } from '@constructflow/project-model'
@@ -62,6 +61,7 @@ import { usePlanCanvasDrawing } from './usePlanCanvasDrawing.js'
 import { usePlanCanvasPicking } from './usePlanCanvasPicking.js'
 import { usePlanCanvasPointerState } from './usePlanCanvasPointerState.js'
 import { usePlanCanvasPlacementDimensions } from './usePlanCanvasPlacementDimensions.js'
+import { usePlanCanvasManipulationDimensions } from './usePlanCanvasManipulationDimensions.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -128,7 +128,6 @@ export interface PlanCanvasProps {
 }
 
 import {
-  getPlanObjectBounds,
   cabinetFootprintPoints,
   gridLineEndpoints, findTemporaryDimensionRefs, openingDimensionRefs,
   drawTemporaryDimensions, drawTapeMeasure,
@@ -308,11 +307,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     if (activeTool !== 'stair' || !stairStartPoint || !activeSnap) return null
     try { return stairFromRun(project, stairStartPoint, activeSnap.point_mm, stairOptions) } catch { return null }
   }, [activeTool, stairStartPoint, activeSnap, stairOptions, project])
-  const dragDimensionX = dragDimensionInput.moveX
-  const dragDimensionY = dragDimensionInput.moveY
-  const resizeDimensionWidth = dragDimensionInput.width
-  const resizeDimensionHeight = dragDimensionInput.height
-  const resizeDimensionLength = dragDimensionInput.length
   const setResizeDimensionWidth = dragDimensionInput.setWidth
   const setResizeDimensionHeight = dragDimensionInput.setHeight
   const setResizeDimensionLength = dragDimensionInput.setLength
@@ -386,6 +380,21 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     onPreviewManipulation,
   })
 
+  const {
+    dimensions: manipulationDimensions,
+    mode: manipulationDimensionMode,
+    values: manipulationDimensionValues,
+    readout: manipulationDimensionReadout,
+    style: manipulationDimensionStyle,
+    updateMoveDimension,
+    updateResizeDimension,
+    commitDragDimensions,
+  } = usePlanCanvasManipulationDimensions({
+    containerRef, canvasRef, planProject, viewport, displayUnit, dragDimensions: dragDimensionInput,
+    draggingObject, dragPreviewPoint, manipulationPreview, setDraggingObject, setDragPreviewPoint,
+    setManipulationPreview, previewDragAt, onCommitManipulation, onManipulationRejected,
+  })
+
   usePlanCanvasDrawing({
     containerRef,
     canvasRef,
@@ -432,20 +441,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     fixtureKind,
     slabBoundary,
   })
-
-  const updateDragDimension = (axis: 'x' | 'y', value: string) => dragDimensionInput.updateMove(draggingObject, axis, value, previewDragAt)
-  const updateResizeDimension = (axis: 'width' | 'height' | 'length', value: string) => dragDimensionInput.updateResize(draggingObject, axis, value, previewDragAt)
-
-  const commitDragDimensions = () => {
-    if (!draggingObject || !manualDragPointRef.current) return
-    const { commands, valid } = previewDragAt(draggingObject, manualDragPointRef.current, true, true)
-    if (commands.length && valid) onCommitManipulation?.(commands)
-    else if (commands.length) onManipulationRejected?.(['ไม่สามารถใช้มิติที่ระบุได้'])
-    manualDragPointRef.current = null
-    setDraggingObject(null); setDragPreviewPoint(null); setManipulationPreview(null)
-    dragDimensionInput.clearResizeValues()
-    canvasRef.current?.focus({ preventScroll: true })
-  }
 
   // Pointer move handler
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -585,24 +580,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const pendingPlacementStep = hasPendingToolStep({ draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, gridCopySourceId, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError })
   const escapeAction = resolveEscapeAction(activeTool, pendingPlacementStep, Boolean(selectedId || selectedIds.length))
   const escapeLabel = escapeAction === 'cancel-step' ? 'Esc ยกเลิกขั้นตอนนี้' : escapeAction === 'clear-selection' ? 'Esc ล้างการเลือก' : escapeAction === 'exit-tool' ? 'Esc ออกจากเครื่องมือ' : ''
-  const manipulationDimensions = draggingObject && dragPreviewPoint
-    ? (() => {
-        const original = planProject.objects[draggingObject.id]
-        const preview = manipulationPreview?.project.objects[draggingObject.id] ?? original
-        if (!original || !preview) return null
-        const dx = dragPreviewPoint[0] - draggingObject.startWorldMm[0]
-        const dy = dragPreviewPoint[1] - draggingObject.startWorldMm[1]
-        const bounds = getPlanObjectBounds(preview)
-        const data = preview.module_data as unknown as Record<string, unknown>
-        const start = data.start_point_mm as [number, number] | undefined
-        const end = data.end_point_mm as [number, number] | undefined
-        const length = start && end ? Math.hypot(end[0] - start[0], end[1] - start[1]) : null
-        return { dx, dy, width: bounds ? bounds[2] - bounds[0] : null, height: bounds ? bounds[3] - bounds[1] : null, length }
-      })()
-    : null
-  const targetRectangleDimensions = draggingObject?.kind === 'column-corner' || draggingObject?.kind === 'foundation-corner'
-  const targetOpeningWidth = draggingObject?.kind === 'opening-edge'
-  const targetLineLength = draggingObject?.kind === 'wall-endpoint' || draggingObject?.kind === 'beam-endpoint'
   return (
     <div
       className="cf-plan-canvas"
@@ -679,21 +656,14 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         onSelectObject={onSelectObject}
       />
       {manipulationDimensions && dragPreviewPoint && draggingObject && <PlanCanvasDragDimensions
-        mode={(targetRectangleDimensions ? 'rectangle' : targetOpeningWidth ? 'opening-width' : targetLineLength ? 'line-length' : 'move') as DragDimensionMode}
+        mode={manipulationDimensionMode as DragDimensionMode}
         displayUnit={displayUnit}
-        values={{ x: dragDimensionX, y: dragDimensionY, width: resizeDimensionWidth, height: resizeDimensionHeight, length: resizeDimensionLength }}
-        onChange={(field: DragDimensionField, value) => field === 'x' || field === 'y' ? updateDragDimension(field, value) : updateResizeDimension(field, value)}
+        values={manipulationDimensionValues}
+        onChange={(field: DragDimensionField, value) => field === 'x' || field === 'y' ? updateMoveDimension(field, value) : updateResizeDimension(field, value)}
         onCommit={commitDragDimensions}
         onCancel={() => { cancelCurrentPlacement(); canvasRef.current?.focus({ preventScroll: true }) }}
-        readout={manipulationDimensions.length !== null
-          ? `L ${formatLengthMm(manipulationDimensions.length, displayUnit)} ${displayUnit}`
-          : manipulationDimensions.width !== null && manipulationDimensions.height !== null
-            ? `W×H ${formatLengthMm(manipulationDimensions.width, displayUnit)} × ${formatLengthMm(manipulationDimensions.height, displayUnit)} ${displayUnit}`
-            : null}
-        style={{
-          left: Math.max(8, Math.min(worldToScreen(dragPreviewPoint, viewport)[0] + 16, (containerRef.current?.clientWidth ?? 800) - 220)),
-          top: Math.max(8, Math.min(worldToScreen(dragPreviewPoint, viewport)[1] + 16, (containerRef.current?.clientHeight ?? 600) - 92)),
-        }}
+        readout={manipulationDimensionReadout}
+        style={manipulationDimensionStyle ?? {}}
       />}
       <PlanCanvasPlacementDimensions
         position={supportsPlacementDimensions ? dimensionOverlayPosition : null}
