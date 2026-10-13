@@ -11,6 +11,7 @@ import {
   type SmartObject,
   type OpeningViewOverride,
   type DimensionViewOverride,
+  type SavedSheetSubviewport,
 } from "@constructflow/project-model";
 import { constructionOutputs } from "@constructflow/domain-providers";
 import { resolveArchitecturalFloorPatternKind, computeStairGeometry, decodeStair } from "@constructflow/architecture-engine";
@@ -89,6 +90,7 @@ export interface SheetViewport {
   section_cut_mm?: number;
   opening_overrides?: Record<string, OpeningViewOverride>;
   dimension_overrides?: Record<string, DimensionViewOverride>;
+  subviews?: SavedSheetSubviewport[];
 }
 export interface PermitOptions {
   viewports?: Partial<Record<PermitSheetId, SheetViewport>>;
@@ -1625,7 +1627,11 @@ function compilePermitDrawingSetBase(
                 : id === "M-01"
                   ? ["iso"]
                   : ["xy"];
+        const sheetViewport = viewport;
         for (const [viewIndex, mode] of views.entries()) {
+          const viewport: SheetViewport = viewIndex === 0
+            ? sheetViewport
+            : { ...sheetViewport, ...(sheetViewport.subviews?.[viewIndex - 1] ?? {}) };
           const elevationDirection: "north" | "south" | "east" | "west" | undefined =
             id === "A-05" ? (mode === "xz" ? "north" : "east") :
             id === "A-06" ? (mode === "xz" ? "south" : "west") : undefined;
@@ -3234,9 +3240,10 @@ function compilePermitDrawingSetBase(
                     ? "SECTION A"
                     : mode === "section_y"
                       ? "SECTION B"
-                      : mode.toUpperCase(),
+                    : mode.toUpperCase(),
             2.7,
           );
+          text([view.x + view.w - 24, 35], `1:${viewport.scale_denominator}`, 2.3, '#475569');
         }
         const schedules = selected.flatMap((o) => {
           const out = outputs.find((v) => v.object_id === o.id);

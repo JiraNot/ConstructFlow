@@ -815,6 +815,10 @@ export function ConstructionWorkbench({
     ]),
     [useCrop, setUseCrop] = useState(false),
     [sheetPreview, setSheetPreview] = useState("");
+  const [useSubviewViewport, setUseSubviewViewport] = useState(false);
+  const [subviewScale, setSubviewScale] = useState(100);
+  const [subviewCenter, setSubviewCenter] = useState<[number, number]>([0, 0]);
+  const [useSubviewCenter, setUseSubviewCenter] = useState(false);
   const [sheetLayoutTemplateName, setSheetLayoutTemplateName] = useState("");
   const [selectedSheetLayoutTemplateId, setSelectedSheetLayoutTemplateId] = useState("");
   const [selectedDimensionId, setSelectedDimensionId] = useState(""),
@@ -877,6 +881,11 @@ export function ConstructionWorkbench({
           number,
         ]) ?? [-5, -5, 5, 5],
       );
+      const subview = saved?.subviews?.[0];
+      setUseSubviewViewport(!!subview);
+      setSubviewScale(subview?.scale_denominator ?? Number(selectedSheet?.scale.split(":")[1] ?? 100));
+      setUseSubviewCenter(!!subview?.center_mm);
+      setSubviewCenter((subview?.center_mm?.map(value => value / 1000) as [number, number]) ?? [0, 0]);
       setSheetPreview(
         selectedSheet?.svg ?? "",
       );
@@ -920,6 +929,12 @@ export function ConstructionWorkbench({
     ...(project.drawing_settings?.viewports[sheetId]?.dimension_overrides ? { dimension_overrides: project.drawing_settings.viewports[sheetId].dimension_overrides } : {}),
     ...(useCenter ? { center_mm: center.map(value => value * 1000) as [number, number] } : {}),
     ...(useCrop ? { crop_bounds_mm: crop.map(value => value * 1000) as [number, number, number, number] } : {}),
+    ...((['A-05', 'A-06', 'A-07', 'A-09', 'A-10'].includes(sheetId) && useSubviewViewport) ? {
+      subviews: [{
+        scale_denominator: subviewScale,
+        ...(useSubviewCenter ? { center_mm: subviewCenter.map(value => value * 1000) as [number, number] } : {}),
+      }],
+    } : {}),
   });
   const sheetLayoutTemplates = project.drawing_settings?.layout_templates ?? [];
   const saveSheetLayoutTemplate = () => {
@@ -1306,6 +1321,20 @@ export function ConstructionWorkbench({
                 project={project}
                 onChange={(v) => setCrop(v as [number, number, number, number])}
               />
+              {['A-05', 'A-06', 'A-07', 'A-09', 'A-10'].includes(sheetId) && <section aria-label="การจัดกรอบ viewport ที่สอง" style={{ marginTop: 14, borderTop: "1px solid #dbe3ed", paddingTop: 10 }}>
+                <h3>Viewport มุมมองที่สอง</h3>
+                <p>ตั้งมาตราส่วนและศูนย์กลางแยกสำหรับรูปด้าน/รูปตัดอีกฝั่งหรือ RCP ที่อยู่บนชีตเดียวกัน</p>
+                <label style={fieldStyle}><input type="checkbox" checked={useSubviewViewport} onChange={event => setUseSubviewViewport(event.target.checked)} /> กำหนดกรอบมุมมองที่สอง</label>
+                {useSubviewViewport && <>
+                  <label style={fieldStyle}>มาตราส่วนมุมมองที่สอง
+                    <select aria-label="มาตราส่วน viewport ที่สอง" value={subviewScale} onChange={event => setSubviewScale(Number(event.target.value))}>
+                      {[20, 25, 50, 100, 200, 500].map(value => <option key={value} value={value}>1:{value}</option>)}
+                    </select>
+                  </label>
+                  <label style={fieldStyle}><input type="checkbox" checked={useSubviewCenter} onChange={event => setUseSubviewCenter(event.target.checked)} /> กำหนดจุดกึ่งกลางมุมมองที่สอง (m)</label>
+                  {useSubviewCenter && <Field name="center" value={subviewCenter} project={project} onChange={value => setSubviewCenter(value as [number, number])} />}
+                </>}
+              </section>}
               {(/^A-(02|03)(-L\d+)?$/.test(sheetId)) && <section style={{ marginTop: 18, borderTop: "1px solid #dbe3ed", paddingTop: 12 }}>
                 <h3>ตำแหน่งมิติอัตโนมัติ</h3>
                 <p>เลื่อนตำแหน่งเส้นและข้อความเป็นมม. ค่าระยะยังคำนวณจากโมเดลเสมอ</p>

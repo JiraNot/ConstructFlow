@@ -19,6 +19,12 @@ export interface DimensionViewOverride {
   /** True once the user has explicitly positioned the dimension. */
   locked: true
 }
+/** Independent framing for a secondary view already composed on the same sheet. */
+export interface SavedSheetSubviewport {
+  scale_denominator: number
+  center_mm?: [number, number]
+  crop_bounds_mm?: [number, number, number, number]
+}
 export interface SavedSheetViewport {
   scale_denominator: number;
   /** Selects the story shown by a level plan sheet. */
@@ -26,6 +32,8 @@ export interface SavedSheetViewport {
   center_mm?: [number, number];
   crop_bounds_mm?: [number, number, number, number];
   section_cut_mm?: number;
+  /** Per-subview framing for multi-view sheets (for example elevations and RCP). */
+  subviews?: SavedSheetSubviewport[]
   /** 2D drafting overrides keyed by persistent opening object UUID. */
   opening_overrides?: Record<string, OpeningViewOverride>;
   /** Locked auto-dimension placements keyed by stable source-object references. */
@@ -80,6 +88,21 @@ export function validateDrawingSettings(
       throw new Error("Invalid sheet crop");
     if (v.section_cut_mm !== undefined && !Number.isFinite(v.section_cut_mm))
       throw new Error("Invalid section cut");
+    if (v.subviews !== undefined) {
+      if (!Array.isArray(v.subviews) || v.subviews.length < 1 || v.subviews.length > 3)
+        throw new Error('Sheet subviews must contain 1 to 3 viewport settings')
+      for (const subview of v.subviews) {
+        if (!subview || ![20, 25, 50, 100, 200, 500].includes(subview.scale_denominator))
+          throw new Error('Invalid sheet subview scale')
+        for (const [key, count] of [['center_mm', 2], ['crop_bounds_mm', 4]] as const) {
+          const values = subview[key]
+          if (values !== undefined && (!Array.isArray(values) || values.length !== count || values.some(value => typeof value !== 'number' || !Number.isFinite(value))))
+            throw new Error(`Invalid sheet subview ${key}`)
+        }
+        const crop = subview.crop_bounds_mm
+        if (crop && (crop[2] <= crop[0] || crop[3] <= crop[1])) throw new Error('Invalid sheet subview crop')
+      }
+    }
     if (v.opening_overrides !== undefined) {
       if (!v.opening_overrides || typeof v.opening_overrides !== 'object' || Array.isArray(v.opening_overrides)) throw new Error('Invalid opening view overrides')
       for (const [objectId, override] of Object.entries(v.opening_overrides)) {

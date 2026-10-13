@@ -10,7 +10,9 @@ export function WorkbenchNumberInput({ value, onChange, unit, disabled, style, a
   style?: CSSProperties;
   ariaLabel?: string;
 }) {
-  const format = (v: number | null) => v === null || !Number.isFinite(v) ? "" : formatLengthMm(v, unit ?? "mm");
+  const format = (v: number | null) => v === null || !Number.isFinite(v)
+    ? ""
+    : unit ? formatLengthMm(v, unit) : String(v);
   const [draft, setDraft] = useState(() => format(value));
   const focused = useRef(false);
   useEffect(() => { if (!focused.current) setDraft(format(value)); }, [value, unit]);

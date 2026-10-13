@@ -17,6 +17,12 @@ test('drawing settings accept locked associative dimension placements and reject
   assert.throws(() => validateDrawingSettings({ viewports: { 'A-02': { scale_denominator: 100, dimension_overrides: { x: { offset_mm: [0, 0], locked: false } } } } }), /Invalid locked dimension placement/)
 })
 
+test('drawing settings preserve independent secondary viewport framing and reject invalid subviews', () => {
+  validateDrawingSettings({ viewports: { 'A-05': { scale_denominator: 100, subviews: [{ scale_denominator: 25, center_mm: [1200, 800], crop_bounds_mm: [0, 0, 5000, 4000] }] } } })
+  assert.throws(() => validateDrawingSettings({ viewports: { 'A-05': { scale_denominator: 100, subviews: [{ scale_denominator: 30 }] } } }), /subview scale/)
+  assert.throws(() => validateDrawingSettings({ viewports: { 'A-05': { scale_denominator: 100, subviews: [{ scale_denominator: 25, crop_bounds_mm: [0, 0, -1, 1] }] } } }), /subview crop/)
+})
+
 test('door and window defaults include distinct opening styles for the 3D model', () => {
   const doors = DEFAULT_TYPES.filter(type => type.object_type === 'door_window.door')
   const windows = DEFAULT_TYPES.filter(type => type.object_type === 'door_window.window')

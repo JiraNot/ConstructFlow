@@ -478,6 +478,7 @@ test("Phase 6: saved viewport scale/crop persist and participate in atomic undo/
       scale_denominator: 25,
       center_mm: [2000, 1000],
       crop_bounds_mm: [0, 0, 4000, 2000],
+      subviews: [{ scale_denominator: 50, center_mm: [1200, 800] }],
     };
   const r = session.execute([
     { name: "UpdateSheetViewport", input: { sheet_id: "A-09", viewport } },

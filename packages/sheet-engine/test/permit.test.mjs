@@ -59,6 +59,17 @@ test("Phase 6: crop and scale inputs reject malformed ranges", () => {
   );
 });
 
+test('paired sheet views use and expose independent saved scale and center settings', () => {
+  const project = createEmptyProjectDocument('SUBVIEW-PROOF')
+  const sheet = compilePermitDrawingSet(project, { viewports: {
+    'A-05': { scale_denominator: 100, center_mm: [0, 0], subviews: [{ scale_denominator: 25, center_mm: [1200, 800] }] },
+  } }).sheets.find(item => item.id === 'A-05')
+  const labels = sheet.primitives.filter(primitive => primitive.kind === 'text').map(primitive => primitive.text)
+  assert.ok(labels.includes('1:100'))
+  assert.ok(labels.includes('1:25'))
+  assert.deepEqual(sheet.viewport.subviews, [{ scale_denominator: 25, center_mm: [1200, 800] }])
+})
+
 test("Phase 6: saved sheet settings control the compiler and invalid coordinate lengths reject", () => {
   const p = createEmptyProjectDocument("PDF-PROOF");
   p.drawing_settings = {
