@@ -39,8 +39,6 @@ interface HandlePlanCanvasPlacementPointerDownOptions {
   > & { placementReference: PlacementReference; doorHanding: PlanCanvasProps['preferences']['doorHanding'] }
   callbacks: PlacementCallbacks
   operations: {
-    applyPlacementDimensions: (point: Point, refs: { refX?: number; refY?: number }, rawPoint?: Point) => Point
-    constrainGridCopyToParallelOffset: (point: Point, source: Parameters<typeof gridLineEndpoints>[0]) => Point
     snapPlanWallHost: (point: Point, openingWidthMm: number) => WallHostSnapResult | null
     applyOpeningDistance: (wallSnap: WallHostSnapResult, rawPoint: Point, openingWidthMm: number) => WallHostSnapResult
     resolveReferencePath: (start: Point, end: Point, widthMm: number) => [Point, Point]
@@ -73,9 +71,7 @@ export function handlePlanCanvasPlacementPointerDown({
     const source = planProject.objects[gridCopySourceId]
     if (source && isGridObject(source)) {
       const [start, end] = gridLineEndpoints(source)
-      const positioned = operations.applyPlacementDimensions(snap.point_mm, { refX: start[0], refY: start[1] }, rawWorld)
-      const destination = event.shiftKey ? operations.constrainGridCopyToParallelOffset(positioned, source) : positioned
-      onCopyGrid?.(source.id, destination, [end[0] + destination[0] - start[0], end[1] + destination[1] - start[1]])
+      onCopyGrid?.(source.id, snap.point_mm, [end[0] + snap.point_mm[0] - start[0], end[1] + snap.point_mm[1] - start[1]])
       clearDimensionOverrides()
     }
   } else if (activeTool === 'erase') {
