@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { extrude } from '@constructflow/geometry-kernel'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import type { CoordinatedPlanViewport } from '../viewport/viewportTransform.js'
 import type { ProjectDocument } from '@constructflow/project-model'
 import { resolveOpeningMuntinGrid, muntinGridPositions, type OpeningGridZone } from '@constructflow/architecture-engine'
 import { buildProjectRepresentations3D, doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement, type ObjectRepresentation3D, type RepresentationInteraction } from '@constructflow/representation-engine'
@@ -454,11 +455,14 @@ interface Model3DViewportProps {
   selectedIds?: readonly string[]
   /** Reframe the camera when the canonical selection changes in another pane. */
   autoFrameSelection?: boolean
+  /** Shared plan center/scale used to coordinate camera navigation across panes. */
+  planNavigation?: CoordinatedPlanViewport | null
+  onPlanNavigationChange?: (navigation: CoordinatedPlanViewport) => void
   /** Coordination findings, drawn as impact volumes so clashes are visible in 3D too. */
   coordination?: readonly CoordinationFinding[]
 }
 
-export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSelectObject, selectedId = null, selectedIds = [], autoFrameSelection = false, coordination = [] }) => {
+export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSelectObject, selectedId = null, selectedIds = [], autoFrameSelection = false, planNavigation = null, onPlanNavigationChange, coordination = [] }) => {
   const hostRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
@@ -471,8 +475,47 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
   const [hasModel, setHasModel] = useState(false)
   const [roofFramingOnly, setRoofFramingOnly] = useState(false)
   const [autoFramedSelection, setAutoFramedSelection] = useState('')
+  const [cameraPose, setCameraPose] = useState({ targetX: '', targetY: '', distance: '' })
   const lastAutoFrameKey = useRef('')
+  const planNavigationRef = useRef(planNavigation)
+  const onPlanNavigationChangeRef = useRef(onPlanNavigationChange)
+  planNavigationRef.current = planNavigation
+  onPlanNavigationChangeRef.current = onPlanNavigationChange
   selectRef.current = onSelectObject
+
+  const recordCameraPose = (camera: THREE.PerspectiveCamera, orbit: OrbitControls) => {
+    const next = {
+      targetX: orbit.target.x.toFixed(3),
+      targetY: orbit.target.y.toFixed(3),
+      distance: camera.position.distanceTo(orbit.target).toFixed(3),
+    }
+    setCameraPose(current => current.targetX === next.targetX && current.targetY === next.targetY && current.distance === next.distance ? current : next)
+  }
+  const syncPlanNavigationFromCamera = () => {
+    const host = hostRef.current
+    const camera = cameraRef.current
+    const orbit = orbitRef.current
+    const navigation = planNavigationRef.current
+    const callback = onPlanNavigationChangeRef.current
+    if (!host || !camera || !orbit) return
+    if (navigation && callback) {
+      const width = Math.max(host.clientWidth, 1)
+      const horizontalFov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * Math.max(camera.aspect, 0.1))
+      const distance = Math.max(camera.position.distanceTo(orbit.target), 0.01)
+      const zoom = Math.max(0.005, Math.min(0.16, width / (2 * distance * Math.tan(horizontalFov / 2) * 1000)))
+      const next = { center_mm: [orbit.target.x * 1000, orbit.target.y * 1000] as [number, number], zoom }
+      if (Math.abs(next.center_mm[0] - navigation.center_mm[0]) > 0.5 || Math.abs(next.center_mm[1] - navigation.center_mm[1]) > 0.5 || Math.abs(next.zoom - navigation.zoom) > 0.00001) callback(next)
+    }
+    recordCameraPose(camera, orbit)
+  }
+  const zoomCamera = (factor: number) => {
+    const camera = cameraRef.current
+    const orbit = orbitRef.current
+    if (!camera || !orbit) return
+    camera.position.copy(orbit.target).add(camera.position.clone().sub(orbit.target).multiplyScalar(factor))
+    orbit.update()
+    syncPlanNavigationFromCamera()
+  }
 
   useEffect(() => {
     const host = hostRef.current
@@ -499,6 +542,9 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
     orbit.enableDamping = true
     orbit.dampingFactor = 0.08
     orbitRef.current = orbit
+
+    const syncPlanNavigation = () => syncPlanNavigationFromCamera()
+    orbit.addEventListener('change', syncPlanNavigation)
 
     scene.add(new THREE.HemisphereLight('#f1f5f9', '#64748b', 1.7))
     scene.add(new THREE.AmbientLight('#ffffff', 0.22))
@@ -557,6 +603,7 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
       renderer.domElement.removeEventListener('pointerup', onPointerUp)
       renderer.domElement.removeEventListener('pointermove', onPointerMove)
       orbit.dispose()
+      orbit.removeEventListener('change', syncPlanNavigation)
       renderer.dispose()
       host.removeChild(renderer.domElement)
       meshByIdRef.current.clear()
@@ -606,10 +653,13 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
       const center = box.getCenter(new THREE.Vector3())
       const size = box.getSize(new THREE.Vector3())
       const radius = Math.max(size.x, size.y, size.z, 2)
-      orbitRef.current?.target.copy(center)
-      cameraRef.current?.position.set(center.x + radius * 1.55, center.y + radius * 1.8, center.z + radius * 1.35)
-      cameraRef.current?.updateProjectionMatrix()
-      orbitRef.current?.update()
+      if (!planNavigationRef.current) {
+        orbitRef.current?.target.copy(center)
+        cameraRef.current?.position.set(center.x + radius * 1.55, center.y + radius * 1.8, center.z + radius * 1.35)
+        cameraRef.current?.updateProjectionMatrix()
+        orbitRef.current?.update()
+      }
+      if (cameraRef.current && orbitRef.current) recordCameraPose(cameraRef.current, orbitRef.current)
     }
   }, [project, roofFramingOnly])
 
@@ -636,6 +686,28 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
     orbit.update()
     return true
   }
+
+  useEffect(() => {
+    if (!planNavigation) return
+    const host = hostRef.current
+    const camera = cameraRef.current
+    const orbit = orbitRef.current
+    if (!host || !camera || !orbit) return
+    const width = Math.max(host.clientWidth, 1)
+    const horizontalFov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * Math.max(camera.aspect, 0.1))
+    const widthMm = width / planNavigation.zoom
+    const distance = Math.max(0.8, Math.min(1000, widthMm / 1000 / (2 * Math.tan(horizontalFov / 2))))
+    const target = new THREE.Vector3(planNavigation.center_mm[0] / 1000, planNavigation.center_mm[1] / 1000, orbit.target.z)
+    const direction = camera.position.clone().sub(orbit.target).normalize()
+    if (direction.lengthSq() < 0.001) direction.set(1, 1, 0.8).normalize()
+    orbit.target.copy(target)
+    camera.position.copy(target).addScaledVector(direction, distance)
+    camera.near = Math.max(0.01, distance / 1000)
+    camera.far = Math.max(5000, distance * 20)
+    camera.updateProjectionMatrix()
+    orbit.update()
+    recordCameraPose(camera, orbit)
+  }, [planNavigation, hasModel])
 
   useEffect(() => {
     if (!autoFrameSelection || !hasModel) return
@@ -698,11 +770,13 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
     highlightRef.current = group
   }, [coordination, project])
 
-  return <div ref={hostRef} data-testid="model3d-viewport" data-auto-framed-selection={autoFramedSelection} style={{ width: '100%', height: '100%', minHeight: 240, position: 'relative', background: '#080f1e' }}>
+  return <div ref={hostRef} data-testid="model3d-viewport" data-auto-framed-selection={autoFramedSelection} data-camera-target-x={cameraPose.targetX} data-camera-target-y={cameraPose.targetY} data-camera-distance={cameraPose.distance} style={{ width: '100%', height: '100%', minHeight: 240, position: 'relative', background: '#080f1e' }}>
     <div style={{ position: 'absolute', left: 12, top: 10, zIndex: 1, color: '#94a3b8', background: 'rgba(8,15,30,0.76)', padding: '4px 6px', borderRadius: 2, fontSize: 11, pointerEvents: 'none' }}>
       ภาพตัวอย่าง 3D · ลากเพื่อหมุน · เลื่อนเพื่อซูม · เลือกวัตถุเพื่อดูคุณสมบัติ
     </div>
     <div role="group" aria-label="คำสั่งมุมมอง 3D" style={{ position: 'absolute', top: 46, right: 12, zIndex: 2, display: 'flex', gap: 6 }}>
+      <button type="button" aria-label="ซูมเข้า 3D" title="ซูมเข้าและประสานกับแปลน" onClick={() => zoomCamera(0.85)} disabled={!hasModel} style={viewButtonStyle}>ซูม +</button>
+      <button type="button" aria-label="ซูมออก 3D" title="ซูมออกและประสานกับแปลน" onClick={() => zoomCamera(1.18)} disabled={!hasModel} style={viewButtonStyle}>ซูม −</button>
       <button
         type="button"
         aria-pressed={roofFramingOnly}

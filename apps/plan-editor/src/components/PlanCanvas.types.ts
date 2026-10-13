@@ -3,7 +3,7 @@ import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-en
 import type { ToolType } from './Toolbar.js'
 import type { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import type { CommandRequest } from '@constructflow/command-schema'
-import type { ViewportState } from '../viewport/viewportTransform.js'
+import type { CoordinatedPlanViewport } from '../viewport/viewportTransform.js'
 import type { DirectManipulationPreviewResult } from '../directManipulation.mjs'
 import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import type { WallVerticalReference } from './PlanCanvasGeometry.js'
@@ -70,6 +70,6 @@ export interface PlanCanvasProps {
   coordinationSeverities?: readonly ClashSeverity[]
   /** Highlight coordinate findings that involve the current selection. */
   coordinationFocusSelection?: boolean
-  navigationViewport?: ViewportState | null
-  onNavigationViewportChange?: (viewport: ViewportState) => void
+  navigationViewport?: CoordinatedPlanViewport | null
+  onNavigationViewportChange?: (viewport: CoordinatedPlanViewport) => void
 }

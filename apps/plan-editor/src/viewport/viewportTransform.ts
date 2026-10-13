@@ -7,6 +7,36 @@ export interface ViewportState {
   zoom: number // Screen pixels per millimeter (e.g. 0.08 = 1000mm -> 80px)
 }
 
+/** Screen-independent plan navigation shared by panes with different sizes and projections. */
+export interface CoordinatedPlanViewport {
+  center_mm: [number, number]
+  zoom: number
+}
+
+export function coordinatedPlanViewportFromScreen(
+  viewport: ViewportState,
+  size: { width: number; height: number },
+): CoordinatedPlanViewport {
+  return {
+    center_mm: [
+      (size.width / 2 - viewport.panX) / viewport.zoom,
+      (size.height / 2 - viewport.panY) / viewport.zoom,
+    ],
+    zoom: viewport.zoom,
+  }
+}
+
+export function screenViewportFromCoordinatedPlan(
+  navigation: CoordinatedPlanViewport,
+  size: { width: number; height: number },
+): ViewportState {
+  return {
+    panX: size.width / 2 - navigation.center_mm[0] * navigation.zoom,
+    panY: size.height / 2 - navigation.center_mm[1] * navigation.zoom,
+    zoom: navigation.zoom,
+  }
+}
+
 export function worldToScreen(
   worldPoint_mm: [number, number] | [number, number, number],
   viewport: ViewportState

@@ -53,7 +53,7 @@ import { buildElevationManipulationCommands as buildElevationManipulationCommand
 import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
 import { getRoofEaveBoundary } from '@constructflow/roof-engine'
-import type { ViewportState } from './viewport/viewportTransform.js'
+import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
 import { importDxfUnderlay } from './cad/importDxfUnderlay.mjs'
 import { importSiteSurveyCsv } from './cad/importSiteSurveyCsv.mjs'
 
@@ -223,7 +223,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
   const { activeTool, activation: toolActivation, lastPlacementTool, activate: setActiveTool, repeat: repeatLastTool } = useToolSession()
   const [planCanvasPreferences, setPlanCanvasPreferences] = useState<PlanCanvasPreferences>(DEFAULT_PLAN_CANVAS_PREFERENCES)
-  const [planNavigationViewport, setPlanNavigationViewport] = useState<ViewportState | null>(null)
+  const [planNavigationViewport, setPlanNavigationViewport] = useState<CoordinatedPlanViewport | null>(null)
   const [elevationNavigation, setElevationNavigation] = useState<CoordinatedElevationNavigation>({ zoom: 1, panY: 0, panXNorthSouth: 0, panXEastWest: 0 })
   const [viewMode, setViewMode] = useState<EditorViewMode>('plan')
   const [splitViewEnabled, setSplitViewEnabled] = useState(false)
@@ -253,6 +253,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     else if (activeTool === 'roof') setViewMode('roofplan')
     else if (['stair', 'wall', 'door', 'window', 'archFloor', 'slab', 'ceiling', 'roomSeparator', 'pipe', 'fixture', 'cabinet', 'moulding'].includes(activeTool)) setViewMode('plan')
   }, [activeTool])
+  const paneModes = splitViewEnabled
+    ? [viewMode, secondaryViewMode, ...(splitViewPaneCount === 3 ? [tertiaryViewMode] : [])]
+    : []
+  const planAnd3DNavigationLinked = paneModes.some(mode => mode === 'plan' || mode === 'framing' || mode === 'roofplan')
+    && paneModes.includes('model3d')
   const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
   const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
   const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination'>('properties')
@@ -1920,7 +1925,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       planDiscipline={mode === 'framing' ? 'framing' : mode === 'roofplan' ? 'roof' : 'architecture'}
     />
     if (mode === 'model3d') return <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
-      <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} autoFrameSelection={splitViewEnabled} coordination={coordinationFindings} />
+      <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} autoFrameSelection={splitViewEnabled} planNavigation={planAnd3DNavigationLinked ? planNavigationViewport : null} onPlanNavigationChange={planAnd3DNavigationLinked ? setPlanNavigationViewport : undefined} coordination={coordinationFindings} />
     </Suspense>
     return <ElevationCanvas project={viewProject} direction={mode} selectedId={selectedId} selectedIds={selectedIds}
       onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }}
@@ -2139,8 +2144,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                     {EDITOR_VIEW_OPTIONS.map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
                   </select>
                 </label>}
-                {splitViewEnabled && secondaryViewMode === 'model3d' && <span>3D จะจัดกรอบตามวัตถุที่เลือกในอีกมุมมอง</span>}
-                {splitViewEnabled && splitViewPaneCount === 3 && tertiaryViewMode === 'model3d' && <span>3D จะจัดกรอบตามวัตถุที่เลือกในอีกมุมมอง</span>}
+                {splitViewEnabled && paneModes.includes('model3d') && <span>3D จัดกรอบตามวัตถุที่เลือก · เมื่อต่อกับแปลน การเลื่อนและซูมจะประสานกันสองทาง</span>}
               </div>
             </details>
             {viewMode === 'plan' && <button type="button" onClick={handleDetectRooms} title="ค้นหาห้องจากวงผนังปิด">ตรวจจับห้อง</button>}
@@ -2250,7 +2254,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 setSnapKind(kind)
               }}
             /> : viewMode !== 'model3d' ? <ElevationCanvas project={viewProject} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} navigation={elevationNavigation} onNavigationChange={setElevationNavigation} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} onBuildManipulation={viewMode === 'rcp' ? undefined : buildElevationManipulationCommands} onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation} onManipulationRejected={handleManipulationRejected} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
-              <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} autoFrameSelection={splitViewEnabled} coordination={coordinationFindings} />
+              <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} autoFrameSelection={splitViewEnabled} planNavigation={planAnd3DNavigationLinked ? planNavigationViewport : null} onPlanNavigationChange={planAnd3DNavigationLinked ? setPlanNavigationViewport : undefined} coordination={coordinationFindings} />
             </Suspense>}
             </div>
             {splitViewEnabled && <div className="cf-multiview-pane" data-testid="secondary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1' }}>

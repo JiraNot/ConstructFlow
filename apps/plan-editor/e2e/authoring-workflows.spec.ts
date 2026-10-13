@@ -1166,8 +1166,15 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   await page.mouse.down({ button: 'middle' })
   await page.mouse.move(box.x + box.width / 2 + 40, box.y + box.height / 2 + 25, { steps: 3 })
   await page.mouse.up({ button: 'middle' })
-  await expect(canvases.nth(1)).toHaveAttribute('data-viewport-pan-x', await canvases.first().getAttribute('data-viewport-pan-x') ?? '')
-  await expect(canvases.nth(1)).toHaveAttribute('data-viewport-pan-y', await canvases.first().getAttribute('data-viewport-pan-y') ?? '')
+  await expect.poll(async () => {
+    const [primaryBox, secondaryBox] = await Promise.all([canvases.nth(0).boundingBox(), canvases.nth(1).boundingBox()])
+    if (!primaryBox || !secondaryBox) return Infinity
+    const [primaryPanX, primaryPanY, primaryZoom] = await Promise.all(['data-viewport-pan-x', 'data-viewport-pan-y', 'data-viewport-zoom'].map(async name => Number(await canvases.nth(0).getAttribute(name))))
+    const [secondaryPanX, secondaryPanY, secondaryZoom] = await Promise.all(['data-viewport-pan-x', 'data-viewport-pan-y', 'data-viewport-zoom'].map(async name => Number(await canvases.nth(1).getAttribute(name))))
+    const primaryCenter = [(primaryBox.width / 2 - primaryPanX) / primaryZoom, (primaryBox.height / 2 - primaryPanY) / primaryZoom]
+    const secondaryCenter = [(secondaryBox.width / 2 - secondaryPanX) / secondaryZoom, (secondaryBox.height / 2 - secondaryPanY) / secondaryZoom]
+    return Math.max(Math.abs(primaryCenter[0] - secondaryCenter[0]), Math.abs(primaryCenter[1] - secondaryCenter[1]), Math.abs(primaryZoom - secondaryZoom) * 1000)
+  }).toBeLessThan(5)
 
   await page.getByLabel('จำนวนมุมมอง').selectOption('3')
   const thirdView = page.getByLabel('มุมมองที่สาม')
@@ -1185,7 +1192,47 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   expect(await panes.first().evaluate(element => getComputedStyle(element).gridRowStart)).toBe('span 2')
 
   await secondView.selectOption('model3d')
-  await expect(page.getByTestId('secondary-view-pane').getByTestId('model3d-viewport')).toHaveAttribute('data-auto-framed-selection', objectId!)
+  await page.getByLabel('แบ่งมุมมอง').click()
+  const model3d = page.getByTestId('secondary-view-pane').getByTestId('model3d-viewport')
+  await expect(model3d).toHaveAttribute('data-auto-framed-selection', objectId!)
+  const planCanvas = canvases.first()
+  const expectPlanAnd3DCenterToMatch = async () => {
+    const size = await planCanvas.evaluate(element => ({ width: element.clientWidth, height: element.clientHeight }))
+    const panX = Number(await planCanvas.getAttribute('data-viewport-pan-x'))
+    const panY = Number(await planCanvas.getAttribute('data-viewport-pan-y'))
+    const zoom = Number(await planCanvas.getAttribute('data-viewport-zoom'))
+    const centerXmm = (size.width / 2 - panX) / zoom
+    const centerYmm = (size.height / 2 - panY) / zoom
+    const cameraXmm = Number(await model3d.getAttribute('data-camera-target-x')) * 1000
+    const cameraYmm = Number(await model3d.getAttribute('data-camera-target-y')) * 1000
+    expect(Math.abs(cameraXmm - centerXmm)).toBeLessThan(25)
+    expect(Math.abs(cameraYmm - centerYmm)).toBeLessThan(25)
+  }
+  await expect.poll(expectPlanAnd3DCenterToMatch).toBeUndefined()
+
+  const planBox = await planCanvas.boundingBox()
+  if (!planBox) throw new Error('Primary plan viewport is not visible')
+  await page.mouse.move(planBox.x + planBox.width / 2, planBox.y + planBox.height / 2)
+  await page.mouse.down({ button: 'middle' })
+  await page.mouse.move(planBox.x + planBox.width / 2 + 34, planBox.y + planBox.height / 2 + 22, { steps: 3 })
+  await page.mouse.up({ button: 'middle' })
+  await expect.poll(expectPlanAnd3DCenterToMatch).toBeUndefined()
+
+  const modelBox = await model3d.boundingBox()
+  if (!modelBox) throw new Error('3D viewport is not visible')
+  const cameraDistanceBeforeZoom = await model3d.getAttribute('data-camera-distance')
+  await page.mouse.move(modelBox.x + modelBox.width / 2, modelBox.y + modelBox.height / 2)
+  await page.mouse.wheel(0, -120)
+  await expect.poll(() => model3d.getAttribute('data-camera-distance')).not.toBe(cameraDistanceBeforeZoom)
+  await expect.poll(expectPlanAnd3DCenterToMatch).toBeUndefined()
+
+  const cameraTargetBeforeOrbitPan = await model3d.getAttribute('data-camera-target-x')
+  await page.mouse.move(modelBox.x + modelBox.width / 2, modelBox.y + modelBox.height / 2)
+  await page.mouse.down({ button: 'right' })
+  await page.mouse.move(modelBox.x + modelBox.width / 2 + 28, modelBox.y + modelBox.height / 2 + 16, { steps: 3 })
+  await page.mouse.up({ button: 'right' })
+  await expect.poll(() => model3d.getAttribute('data-camera-target-x')).not.toBe(cameraTargetBeforeOrbitPan)
+  await expect.poll(expectPlanAnd3DCenterToMatch).toBeUndefined()
 })
 
 test('two-storey residential demo supports browser review and autosave reload at 239 objects', async ({ page }) => {

@@ -2,26 +2,42 @@ import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateA
 import type { SmartObject, CabinetModuleData } from '@constructflow/project-model'
 import { isGridObject } from '@constructflow/project-model'
 import { cabinetFootprintPoints } from './PlanCanvasGeometry.js'
-import { zoomAtScreenPoint, type ViewportState } from '../viewport/viewportTransform.js'
+import { coordinatedPlanViewportFromScreen, screenViewportFromCoordinatedPlan, zoomAtScreenPoint, type CoordinatedPlanViewport, type ViewportState } from '../viewport/viewportTransform.js'
 
 export const usePlanCanvasViewport = (
   containerRef: { current: HTMLDivElement | null },
   planVisibleObjects: readonly SmartObject[],
   referencePoints: readonly [number, number][] = [],
-  sharedViewport?: ViewportState | null,
-  onSharedViewportChange?: (viewport: ViewportState) => void,
+  sharedViewport?: CoordinatedPlanViewport | null,
+  onSharedViewportChange?: (viewport: CoordinatedPlanViewport) => void,
 ) => {
   const hasInitialFitRef = useRef(false)
   const [localViewport, setLocalViewport] = useState<ViewportState>({ panX: 400, panY: 300, zoom: 0.08 })
-  const viewport = sharedViewport ?? localViewport
+  const [containerSize, setContainerSize] = useState({ width: 1, height: 1 })
+  const viewport = sharedViewport
+    ? screenViewportFromCoordinatedPlan(sharedViewport, containerSize)
+    : localViewport
   const viewportRef = useRef(viewport)
   viewportRef.current = viewport
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const updateSize = () => setContainerSize({ width: Math.max(container.clientWidth, 1), height: Math.max(container.clientHeight, 1) })
+    updateSize()
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [containerRef])
   const setViewport = useCallback<Dispatch<SetStateAction<ViewportState>>>(nextOrUpdater => {
     const next = typeof nextOrUpdater === 'function' ? nextOrUpdater(viewportRef.current) : nextOrUpdater
     viewportRef.current = next
     setLocalViewport(next)
-    onSharedViewportChange?.(next)
-  }, [onSharedViewportChange])
+    const container = containerRef.current
+    const size = container
+      ? { width: Math.max(container.clientWidth, 1), height: Math.max(container.clientHeight, 1) }
+      : containerSize
+    onSharedViewportChange?.(coordinatedPlanViewportFromScreen(next, size))
+  }, [containerRef, containerSize, onSharedViewportChange])
 
   const handleWheel = useCallback((event: WheelEvent<HTMLCanvasElement>) => {
     event.preventDefault()
