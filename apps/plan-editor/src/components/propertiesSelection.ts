@@ -55,7 +55,10 @@ export function resolvePropertiesSelection(project: ProjectDocument, selectedId:
   const fixture = selectedObject.object_type === 'electrical.fixture' ? selectedObject : null
   const cabinet = selectedObject.object_type === 'interior.cabinet_run' ? selectedObject : null
   const moulding = selectedObject.object_type === 'decorative.moulding_run' ? selectedObject : null
-  const currentMark = column?.module_data.mark ?? foundation?.module_data.mark ?? beam?.module_data.mark ?? wall?.module_data.mark
+  const selectedData = selectedObject.module_data as Record<string, unknown>
+  const selectedType = project.types.find(type => type.object_type === selectedObject.object_type && type.id === selectedData.type_id)
+    ?? project.types.find(type => type.object_type === selectedObject.object_type && type.name === selectedData.mark)
+  const currentMark = selectedType?.name ?? column?.module_data.mark ?? foundation?.module_data.mark ?? beam?.module_data.mark ?? wall?.module_data.mark
     ?? door?.module_data.mark ?? window?.module_data.mark ?? grid?.module_data.tag
     ?? (slab?.module_data as Record<string, unknown> | undefined)?.mark as string | undefined
     ?? (roof?.module_data as Record<string, unknown> | undefined)?.mark as string | undefined ?? ''

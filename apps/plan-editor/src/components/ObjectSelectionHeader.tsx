@@ -11,10 +11,10 @@ interface ObjectSelectionHeaderProps {
 }
 
 export const ObjectSelectionHeader: React.FC<ObjectSelectionHeaderProps> = ({ project, object, title, currentMark, onAssignType, onOpenTypeManager }) => {
-  const supportsTypePicker = isColumnObject(object) || isFoundationObject(object) || isBeamObject(object) || isWallObject(object) || isDoorObject(object) || isWindowObject(object)
-    || object.object_type === 'structure.slab' || object.object_type === 'roof.system'
   const data = object.module_data as Record<string, unknown>
   const typeId = typeof data.type_id === 'string' ? data.type_id : null
+  const objectTypes = project.types.filter(type => type.object_type === object.object_type)
+  const supportsTypePicker = objectTypes.length > 0
   const assignedInstances = Object.values(project.objects).filter(candidate => {
     if (candidate.object_type !== object.object_type) return false
     const candidateData = candidate.module_data as Record<string, unknown>
@@ -46,7 +46,7 @@ export const ObjectSelectionHeader: React.FC<ObjectSelectionHeaderProps> = ({ pr
     {supportsTypePicker && <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>เปลี่ยนชนิดของชิ้นนี้</label>
       <select aria-label="ชนิดของชิ้นที่เลือก" value={currentMark} onChange={event => onAssignType(object.id, event.target.value)} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', padding: 6, color: '#24364b' }}>
-        {project.types.filter(type => type.object_type === object.object_type).map(type => <option key={type.id} value={type.name}>{type.name}</option>)}
+        {objectTypes.map(type => <option key={type.id} value={type.name}>{type.name}</option>)}
       </select>
       <small style={{ color: '#64748b', fontSize: 10 }}>เปลี่ยนค่าเฉพาะ instance นี้</small>
       <button className="cf-button cf-button-quiet" onClick={onOpenTypeManager}>แก้ไข Type ในแค็ตตาล็อก · ใช้กับ {assignedInstances} ชิ้น</button>
