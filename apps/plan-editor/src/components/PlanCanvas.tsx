@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useMemo } from 'react'
+import React, { useRef, useState, useMemo } from 'react'
 import {
   ProjectDocument,
   SmartObject,
@@ -6,32 +6,24 @@ import {
   WindowModuleData,
   WallModuleData,
   StairModuleData,
-  DoorHanding,
 } from '@constructflow/project-model'
 import { stairFromRun } from '@constructflow/architecture-engine'
 import { polygonInteriorPoint } from '@constructflow/geometry-kernel'
 import { getEditableRoofRidge } from '@constructflow/roof-engine'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
-import { usePlanCanvasPlacementKeyboard } from './usePlanCanvasPlacementKeyboard.js'
 import { TOOL_FAMILIES } from './catalogPresentation.js'
 import { ToolType } from './Toolbar.js'
-import { type LinearReference, type SnapResult } from '@constructflow/snapping-engine'
 import type { ViewportState } from '../viewport/viewportTransform.js'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
-import { updatePlanCanvasPreference, type PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
-import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParallelOffset, constrainPlanCanvasLineSnap, resolvePlanCanvasReferencePath } from './planCanvasPlacementConstraints.mjs'
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
 import { usePlanCanvasManipulationInteractions } from './usePlanCanvasManipulationInteractions.js'
-import { createPlanCanvasPlacementCommitHandlers } from './createPlanCanvasPlacementCommitHandlers.js'
 import { usePlanCanvasDrawing } from './usePlanCanvasDrawing.js'
 import { usePlanCanvasPicking } from './usePlanCanvasPicking.js'
 import { usePlanCanvasPointerState } from './usePlanCanvasPointerState.js'
-import { usePlanCanvasPlacementDimensions } from './usePlanCanvasPlacementDimensions.js'
 import { usePlanCanvasToolController } from './usePlanCanvasToolController.js'
-import { usePlanCanvasLineConstraint } from './usePlanCanvasLineConstraint.js'
-import { usePlanCanvasOpeningPlacementDimensions } from './usePlanCanvasOpeningPlacementDimensions.js'
+import { usePlanCanvasPlacementController } from './usePlanCanvasPlacementController.js'
 import { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
 import { usePlanCanvasPointerInteractions } from './usePlanCanvasPointerInteractions.js'
 import { PlanCanvasSurface } from './PlanCanvasSurface.js'
@@ -42,9 +34,7 @@ export type { PlanCanvasProps } from './PlanCanvas.types.js'
 
 import {
   cabinetFootprintPoints,
-  gridLineEndpoints,
   drawTemporaryDimensions, drawTapeMeasure,
-  type WallVerticalReference,
 } from './PlanCanvasGeometry.js'
 
 export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
@@ -117,11 +107,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
   const planVisibleObjects = useMemo(() => getPlanVisibleObjects(project, planDiscipline), [project, planDiscipline])
   const planProject = useMemo(() => getPlanViewProject(project, planVisibleObjects), [project, planVisibleObjects])
 
-  const { placementReference, lineConstraintMode, dimensionReferenceMode, doorHanding, snapModes } = preferences
-  const setPreference = <K extends keyof PlanCanvasPreferences>(
-    key: K,
-    value: PlanCanvasPreferences[K] | ((current: PlanCanvasPreferences[K]) => PlanCanvasPreferences[K]),
-  ) => onPreferencesChange(current => updatePlanCanvasPreference(current, key, value))
+  const { placementReference, dimensionReferenceMode, doorHanding, snapModes } = preferences
 
   // Viewport state: 0.08 zoom = 1000mm -> 80px on screen.
   const { viewport, setViewport, fitView, handleWheel } = usePlanCanvasViewport(
@@ -146,49 +132,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
   } = placement
   const [authoringControlsOpen, setAuthoringControlsOpen] = useState(true)
   const { snapPlanPoint, snapPlanWallHost } = usePlanCanvasSnapping({ planProject, viewport, snapModes })
-
-  const applyPlacementDimensions = (point: [number, number], refs: { refX?: number; refY?: number }, rawPoint: [number, number] = point): [number, number] =>
-    applyPlanCanvasPlacementDimensions(point, refs, rawPoint, { dimensionInputX, dimensionInputY, dimensionAnchorX, dimensionAnchorY, displayUnit })
-
-  const { applyOpeningDistance } = usePlanCanvasOpeningPlacementDimensions({
-    project,
-    planProject,
-    activeTool,
-    activeDoorTypeMark,
-    activeWindowTypeMark,
-    activeSnap,
-    setActiveSnap,
-    activeWallSnap,
-    setActiveWallSnap,
-    dimensionReferenceMode,
-    dimensionInputX,
-    dimensionInputY,
-    dimensionAnchorX,
-    dimensionAnchorY,
-    displayUnit,
-    applyPlacementDimensions,
-  })
-
-  const constrainGridCopyToParallelOffset = (point: [number, number], source: Parameters<typeof gridLineEndpoints>[0]): [number, number] => {
-    return constrainPlanCanvasGridCopyToParallelOffset(point, source, gridLineEndpoints)
-  }
-
-  const toggleDimensionReferenceMode = () => {
-    setPreference('dimensionReferenceMode', mode => mode === 'center' ? 'edge' : 'center')
-    // Keep the entered distance and re-anchor it to the chosen center/edge reference.
-    setDimensionAnchorX(null); setDimensionAnchorY(null)
-  }
-
-  const resolveReferencePath = useCallback((start: [number, number], end: [number, number], widthMm: number): [[number, number], [number, number]] => {
-    return resolvePlanCanvasReferencePath(start, end, widthMm, placementReference)
-  }, [placementReference])
-
-  const constrainLineSnap = useCallback((snap: SnapResult, pointerPoint: [number, number], start: [number, number], lockAxis: boolean, reference?: LinearReference): SnapResult => {
-    return constrainPlanCanvasLineSnap(snap, pointerPoint, start, lockAxis, reference, {
-      lineConstraintMode, viewportZoom: viewport.zoom, drawLength: drawLengthMeters,
-      drawAngle: drawAngleDegrees, displayUnit,
-    })
-  }, [drawLengthMeters, drawAngleDegrees, lineConstraintMode, viewport.zoom, displayUnit])
 
   const picking = usePlanCanvasPicking({
     project, planProject, viewport, activeTool, selectedId, onSelectObject, onSelectionChange,
@@ -235,7 +178,21 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
   })
   const { placementStatus, placementHint, escapeLabel, cancelCurrentPlacement } = interactionStatus
 
-  usePlanCanvasLineConstraint({ activeTool, placement, constrainLineSnap })
+  const placementController = usePlanCanvasPlacementController({
+    props, planProject, viewport, canvasRef, placement, cancelCurrentPlacement,
+  })
+  const {
+    applyPlacementDimensions,
+    applyOpeningDistance,
+    constrainGridCopyToParallelOffset,
+    toggleDimensionReferenceMode,
+    resolveReferencePath,
+    constrainLineSnap,
+    placementDimensions,
+    placementKeyboard,
+    handleCanvasDoubleClick,
+  } = placementController
+  const { handleCanvasDimensionKeyDown } = placementKeyboard
 
   const findEditHandle = (screenPoint: [number, number]) => findPlanCanvasEditHandle({ planProject, editableSelectionIds, viewport, screenPoint, onFlipDoorHanding })
 
@@ -327,33 +284,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
       onManipulationRejected, onCursorChange,
     },
   })
-  const placementDimensions = usePlanCanvasPlacementDimensions({
-    project, planProject, activeTool, activeDoorTypeMark, activeWindowTypeMark, activeSnap,
-    activeWallSnap, gridCopySourceId, dimensionReferenceMode, dimensionAnchorX, dimensionAnchorY,
-    dimensionInputX, dimensionInputY, displayUnit, viewport, stairStartPoint, wallStartNode,
-    beamStartNode, roomSeparatorStart, slabBoundary, gridStartPoint,
-  })
-  const {
-    dimensionHostAxis, isHostedOpeningPlacement, dimensionReferences, showXDimension, showYDimension,
-    xDimensionAnchor, yDimensionAnchor, xDimensionDisplay, yDimensionDisplay,
-    dimensionOverlayPosition, supportsPlacementDimensions, hasLineGeometryInput,
-  } = placementDimensions
-
-  const { commitActivePlacement, handleCanvasDoubleClick } = createPlanCanvasPlacementCommitHandlers({
-    canvasRef, activeSnap, activeTool, supportsPlacementDimensions, viewport,
-    selectedId, project: planProject, slabBoundary, setSlabBoundary, roofShape,
-    roofSlopeDeg, roofThicknessMm, roofElevationOffsetMm, roofMaterial, clearDimensionOverrides,
-    onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling, onCommitRoof, onCommitSurfaceVoid,
-  })
-
-  const placementKeyboard = usePlanCanvasPlacementKeyboard({
-    activeTool, supportsPlacementDimensions, dimensionHostAxis, dimensionKeyboardAxis, dimensionAnchorX, dimensionAnchorY,
-    dimensionReferences, dimensionInputX, dimensionInputY, showXDimension, showYDimension,
-    dimensionInputXRef, dimensionInputYRef, canvasRef, setDimensionKeyboardAxis, setDimensionAnchorX,
-    setDimensionAnchorY, setDimensionInputX, setDimensionInputY, commitActivePlacement, cancelCurrentPlacement,
-    toggleDimensionReferenceMode,
-  })
-  const { handlePlacementInputKeyDown, handleCanvasDimensionKeyDown, handleDimensionInputKeyDown } = placementKeyboard
   const containerSize = {
     width: containerRef.current?.clientWidth ?? 800,
     height: containerRef.current?.clientHeight ?? 600,
