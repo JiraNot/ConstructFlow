@@ -47,7 +47,6 @@ import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
 import { handlePlanCanvasPointerDown } from './handlePlanCanvasPointerDown.js'
 import { handlePlanCanvasPointerUp } from './handlePlanCanvasPointerUp.js'
 import { updatePlanCanvasPreference, type PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
-import { hasPendingToolStep, resolveEscapeAction, resolveToolInteractionStatus } from '../app/toolInteractionStatus.mjs'
 import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParallelOffset, constrainPlanCanvasLineSnap, resolvePlanCanvasReferencePath } from './planCanvasPlacementConstraints.mjs'
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
 import { usePlanCanvasManipulationPreview } from './usePlanCanvasManipulationPreview.js'
@@ -59,6 +58,7 @@ import { usePlanCanvasPointerState } from './usePlanCanvasPointerState.js'
 import { usePlanCanvasPlacementDimensions } from './usePlanCanvasPlacementDimensions.js'
 import { usePlanCanvasManipulationDimensions } from './usePlanCanvasManipulationDimensions.js'
 import { PlanCanvasInteractionOverlays } from './PlanCanvasInteractionOverlays.js'
+import { usePlanCanvasToolInteraction } from './usePlanCanvasToolInteraction.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -324,19 +324,45 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
   // Door handing state (can cycle with Spacebar)
   const setDoorHanding = (value: DoorHanding | ((current: DoorHanding) => DoorHanding)) => setPreference('doorHanding', value)
-
-  const cancelCurrentPlacement = () => {
-    const pendingState = hasPendingToolStep({ draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, gridCopySourceId, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError })
-    const escapeAction = resolveEscapeAction(activeTool, pendingState, Boolean(selectedId || selectedIds.length))
-    setObjectContextMenu(null)
-    clearPointerDrag()
-    placement.resetPlacementDrafts()
-    if (escapeAction === 'exit-tool') onActivateTool?.('select')
-    else if (escapeAction === 'clear-selection') {
-      if (onSelectionChange) onSelectionChange([], null)
-      else onSelectObject(null)
-    }
+  const editableSelectionIds = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
+  const selectionHint = editableSelectionIds.some(id => planProject.objects[id]?.object_type === 'interior.cabinet_run')
+    ? 'เลือกบิลท์อิน · ลากด้ามสีม่วงเพื่อหมุน โดยคงตำแหน่งและขนาด · Esc ล้างการเลือก'
+    : 'เลือก · คลิกเลือกหรือ ลากครอบวัตถุ · Tab สลับวัตถุซ้อน · Esc ล้างการเลือก'
+  const interactionState = {
+    draggingObject,
+    objectContextMenu,
+    stairStartPoint,
+    gridStartPoint,
+    gridCopySourceId,
+    beamStartNode,
+    wallStartNode,
+    roomSeparatorStart,
+    slabBoundary,
+    tapeMeasure,
+    calibrationP1,
+    dimensionInputX,
+    dimensionInputY,
+    drawLengthMeters,
+    drawAngleDegrees,
+    gridSystemError,
+    pipeSystem,
+    fixtureKind,
+    lineConstraintLabel: ({ auto: 'อัตโนมัติ: ขนาน/ตั้งฉาก', none: 'อิสระ', parallel: 'ขนาน', perpendicular: 'ตั้งฉาก' } as const)[lineConstraintMode],
+    placementReferenceLabel: ({ centerline: 'กึ่งกลาง', left_face: 'ชิดซ้าย', right_face: 'ชิดขวา' } as const)[placementReference],
+    snapCount: snapModes.length,
   }
+  const { placementStatus, placementHint, escapeLabel, cancelCurrentPlacement } = usePlanCanvasToolInteraction({
+    activeTool,
+    selectionHint,
+    interactionState,
+    hasSelection: Boolean(selectedId || selectedIds.length),
+    onActivateTool,
+    onSelectionChange,
+    onSelectObject,
+    closeObjectContextMenu: () => setObjectContextMenu(null),
+    clearPointerDrag,
+    resetPlacementDrafts: placement.resetPlacementDrafts,
+  })
 
   const selectedDoorId = selectedId && project.objects[selectedId] && isDoorObject(project.objects[selectedId]) ? selectedId : null
   usePlanCanvasGlobalShortcuts({
@@ -362,7 +388,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     if (constrained.point_mm[0] !== activeSnap.point_mm[0] || constrained.point_mm[1] !== activeSnap.point_mm[1]) setActiveSnap(constrained)
   }, [activeTool, activeSnap, wallStartNode, beamStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary, drawLengthMeters, drawAngleDegrees, constrainLineSnap])
 
-  const editableSelectionIds = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
   const findEditHandle = (screenPoint: [number, number]) => findPlanCanvasEditHandle({ planProject, editableSelectionIds, viewport, screenPoint, onFlipDoorHanding })
 
   const buildDragCommands = (drag: PlanDragGesture, rawWorld: [number, number], ctrlKey: boolean): CommandRequest[] => buildPlanCanvasDragCommands({ planProject, drag, rawWorld, ctrlKey, viewport, snapPlanPoint })
@@ -563,20 +588,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     setDimensionAnchorY, setDimensionInputX, setDimensionInputY, commitActivePlacement, cancelCurrentPlacement,
     toggleDimensionReferenceMode,
   })
-  const selectionHint = editableSelectionIds.some(id => planProject.objects[id]?.object_type === 'interior.cabinet_run')
-    ? 'เลือกบิลท์อิน · ลากด้ามสีม่วงเพื่อหมุน โดยคงตำแหน่งและขนาด · Esc ล้างการเลือก'
-    : 'เลือก · คลิกเลือกหรือ ลากครอบวัตถุ · Tab สลับวัตถุซ้อน · Esc ล้างการเลือก'
-  const placementStatus = resolveToolInteractionStatus(activeTool, {
-    selectionHint, wallStartNode, beamStartNode, gridStartPoint, gridCopySourceId, stairStartPoint, roomSeparatorStart,
-    slabBoundary, tapeMeasure, calibrationP1, gridSystemError, pipeSystem, fixtureKind,
-    lineConstraintLabel: ({ auto: 'อัตโนมัติ: ขนาน/ตั้งฉาก', none: 'อิสระ', parallel: 'ขนาน', perpendicular: 'ตั้งฉาก' } as const)[lineConstraintMode],
-    placementReferenceLabel: ({ centerline: 'กึ่งกลาง', left_face: 'ชิดซ้าย', right_face: 'ชิดขวา' } as const)[placementReference],
-    snapCount: snapModes.length,
-  })
-  const placementHint = placementStatus?.instruction ?? null
-  const pendingPlacementStep = hasPendingToolStep({ draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, gridCopySourceId, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError })
-  const escapeAction = resolveEscapeAction(activeTool, pendingPlacementStep, Boolean(selectedId || selectedIds.length))
-  const escapeLabel = escapeAction === 'cancel-step' ? 'Esc ยกเลิกขั้นตอนนี้' : escapeAction === 'clear-selection' ? 'Esc ล้างการเลือก' : escapeAction === 'exit-tool' ? 'Esc ออกจากเครื่องมือ' : ''
   return (
     <div
       className="cf-plan-canvas"
