@@ -475,6 +475,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
 
   const handleSetWorkingLevel = (levelId: string) => {
+    if (project.project.active_level_id === levelId) return
     const res = CommandBus.execute(project, 'SetWorkingLevel', { level_id: levelId })
     if (res.result.status === 'success') {
       setProject(res.updatedProject)

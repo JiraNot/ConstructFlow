@@ -221,6 +221,55 @@ test('Project Browser selection and type edits preserve one object identity acro
   await expect(sameRow.locator('.cf-browser-object')).toContainText('C2')
 })
 
+test('Project Browser numeric group move commits once and preserves UUIDs through Undo/Redo', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickCanvasFraction(page, 0.30, 0.45)
+  await clickCanvasFraction(page, 0.70, 0.45)
+  await page.keyboard.press('Escape')
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const rows = page.locator('li[data-object-type="structure.column"]')
+  await expect(rows).toHaveCount(2)
+  const ids = await rows.evaluateAll(elements => elements.map(element => element.getAttribute('data-object-id')))
+  expect(ids[0]).toBeTruthy()
+  expect(ids[1]).toBeTruthy()
+
+  const readPosition = async (id: string) => {
+    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await page.locator('li[data-object-id="' + id + '"] .cf-browser-object').click()
+    const text = await page.getByTestId('properties-selection').innerText()
+    const position = text.match(/ตำแหน่ง:\s*\n?([^\n]+)/)?.[1]
+    expect(position, `column ${id} should expose its current coordinates`).toBeTruthy()
+    return position
+  }
+  const before = [await readPosition(ids[0]!), await readPosition(ids[1]!)]
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.locator('li[data-object-id="' + ids[0] + '"] .cf-browser-object').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.locator('li[data-object-id="' + ids[1] + '"] .cf-browser-object').click({ modifiers: ['Control'] })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
+  await page.getByRole('spinbutton', { name: 'ระยะย้ายแกน X เมตร' }).fill('1')
+  await page.getByRole('spinbutton', { name: 'ระยะย้ายแกน Y เมตร' }).fill('0.5')
+  await page.getByRole('button', { name: 'ย้ายตามระยะ · Undo ได้' }).click()
+  await expect(page.getByRole('status')).toContainText('ย้าย 2 ชิ้น · ΔX 1.000 · ΔY 0.500')
+
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(page.getByRole('button', { name: 'ทำซ้ำ' })).toBeEnabled()
+  expect([await readPosition(ids[0]!), await readPosition(ids[1]!)]).toEqual(before)
+  await expect(page.getByRole('button', { name: 'ทำซ้ำ' })).toBeEnabled()
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(page.getByRole('button', { name: 'ย้อนกลับ' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'ทำซ้ำ' })).toBeDisabled()
+  const after = [await readPosition(ids[0]!), await readPosition(ids[1]!)]
+  expect(after).not.toEqual(before)
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  for (const id of ids) await expect(page.locator(`li[data-object-id="${id}"]`)).toBeVisible()
+})
+
 test('Project Browser visibility persists per view and level after autosave and reload', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
