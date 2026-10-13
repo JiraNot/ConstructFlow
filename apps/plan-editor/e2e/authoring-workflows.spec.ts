@@ -786,6 +786,54 @@ test('column corner grips accept target W/H dimensions and commit through previe
   await expect(page.locator('body')).toContainText('0.500 × 0.350 m')
 })
 
+test('move drag dimensions preview, cancel with Escape, and commit numeric deltas with Enter', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickCanvasFraction(page, 0.50, 0.50)
+  await page.locator('.cf-tool-button[title^="เลือก"]').click()
+  await clickCanvasFraction(page, 0.50, 0.50)
+
+  const properties = page.getByTestId('properties-selection')
+  const objectId = await properties.getAttribute('data-object-id')
+  const initialText = await properties.innerText()
+  const initialPosition = initialText.match(/\(([-\d.]+ m, [-\d.]+ m)\)/)?.[0]
+  expect(objectId).toBeTruthy()
+  expect(initialPosition).toBeTruthy()
+  const initialCoordinates = initialPosition!.match(/\(([-\d.]+) m, ([-\d.]+) m\)/)
+  expect(initialCoordinates).toBeTruthy()
+
+  const bounds = await canvas(page).boundingBox()
+  if (!bounds) throw new Error('Plan canvas is not visible')
+  const origin = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+  const dx = page.getByRole('textbox', { name: 'ระยะย้ายแกน X (m)' })
+  const dy = page.getByRole('textbox', { name: 'ระยะย้ายแกน Y (m)' })
+
+  const beginMove = async () => {
+    await page.mouse.move(origin.x, origin.y)
+    await page.mouse.down()
+    await page.mouse.move(origin.x + 8, origin.y + 8)
+    await expect(dx).toBeVisible()
+  }
+
+  await beginMove()
+  await dx.fill('1.0')
+  await dy.fill('0.5')
+  await dy.press('Escape')
+  await page.mouse.up()
+  await expect(properties).toHaveAttribute('data-object-id', objectId!)
+  await expect(properties).toContainText(initialPosition!)
+
+  await beginMove()
+  await dx.fill('1.0')
+  await dy.fill('0.5')
+  await dy.press('Enter')
+  await page.mouse.up()
+  await expect(properties).toHaveAttribute('data-object-id', objectId!)
+  const expectedPosition = `(${(Number(initialCoordinates![1]) + 1).toFixed(3)} m, ${(Number(initialCoordinates![2]) + 0.5).toFixed(3)} m)`
+  await expect(properties).toContainText(expectedPosition)
+})
+
 test('foundation corner grips accept target W/H dimensions and support Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
