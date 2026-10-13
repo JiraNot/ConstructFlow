@@ -41,7 +41,6 @@ import type { CommandRequest } from '@constructflow/command-schema'
 import type { DirectManipulationPreviewResult, PlanDragGesture } from '../directManipulation.mjs'
 import { isPolygonInteraction, isTwoPointInteraction, usesPlacementDimensions } from '../app/toolInteractionRegistry.mjs'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
-import { usePlanCanvasPointerCancel } from './usePlanCanvasPointerCancel.js'
 import { PlanCanvasObjectContextMenu } from './PlanCanvasObjectContextMenu.js'
 import { resolvePlanCanvasPointerSnap } from './resolvePlanCanvasPointerSnap.js'
 import { handlePlanCanvasPointerMove } from './handlePlanCanvasPointerMove.js'
@@ -55,7 +54,6 @@ import { resolvePlanCanvasLineSnap } from '../app/placementLineSnap.mjs'
 import { updatePlanCanvasPreference, type PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import { hasPendingToolStep, resolveEscapeAction, resolveToolInteractionStatus } from '../app/toolInteractionStatus.mjs'
 import { handlePlanCanvasSelectionPointerDown } from './handlePlanCanvasSelectionPointerDown.js'
-import type { PlanCanvasDraggingObject } from './planCanvasInteractionTypes.js'
 import { PlanCanvasInteractionHints } from './PlanCanvasInteractionHints.js'
 import { PlanCanvasPlacementDimensions } from './PlanCanvasPlacementDimensions.js'
 import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParallelOffset, constrainPlanCanvasLineSnap, resolvePlanCanvasReferencePath } from './planCanvasPlacementConstraints.mjs'
@@ -66,6 +64,7 @@ import { createPlanCanvasPlacementCommitHandlers } from './createPlanCanvasPlace
 import { nextDoorHanding, usePlanCanvasGlobalShortcuts } from './usePlanCanvasGlobalShortcuts.js'
 import { usePlanCanvasDrawing } from './usePlanCanvasDrawing.js'
 import { usePlanCanvasPicking } from './usePlanCanvasPicking.js'
+import { usePlanCanvasPointerState } from './usePlanCanvasPointerState.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -312,11 +311,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     if (activeTool !== 'stair' || !stairStartPoint || !activeSnap) return null
     try { return stairFromRun(project, stairStartPoint, activeSnap.point_mm, stairOptions) } catch { return null }
   }, [activeTool, stairStartPoint, activeSnap, stairOptions, project])
-  const [isPanning, setIsPanning] = useState(false)
-  const [objectContextMenu, setObjectContextMenu] = useState<{ id: string; x: number; y: number } | null>(null)
-  const [selectionBox, setSelectionBox] = useState<{ start: [number, number]; end: [number, number] } | null>(null)
-  const [manipulationPreview, setManipulationPreview] = useState<{ project: ProjectDocument; ids: string[]; valid: boolean } | null>(null)
-  const [dragPreviewPoint, setDragPreviewPoint] = useState<[number, number] | null>(null)
   const dragDimensionX = dragDimensionInput.moveX
   const dragDimensionY = dragDimensionInput.moveY
   const resizeDimensionWidth = dragDimensionInput.width
@@ -326,37 +320,19 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const setResizeDimensionHeight = dragDimensionInput.setHeight
   const setResizeDimensionLength = dragDimensionInput.setLength
   const manualDragPointRef = dragDimensionInput.manualPointRef
-  const panStartRef = useRef<[number, number]>([0, 0])
-  const selectionStartRef = useRef<[number, number] | null>(null)
-  const pointerPositionsRef = useRef(new Map<number, [number, number]>())
-  const pinchRef = useRef<{ distance: number; center: [number, number] } | null>(null)
-  const pinchActiveRef = useRef(false)
-  const longPressTimerRef = useRef<number | null>(null)
-  const longPressStartRef = useRef<{ pointerId: number; point: [number, number] } | null>(null)
-  const eraseActiveRef = useRef(false)
-  const erasedIdsRef = useRef(new Set<string>())
-  const selectionAdditiveRef = useRef(false)
-  const currentViewportRef = useRef(viewport)
-  currentViewportRef.current = viewport
-
-  // Direct-manipulation state for objects whose geometry can move in plan.
-  const [draggingObject, setDraggingObject] = useState<PlanCanvasDraggingObject | null>(null)
-
-  const clearPointerDrag = useCallback(() => {
-    manualDragPointRef.current = null
-    setDraggingObject(null)
-    setDragPreviewPoint(null)
-    setManipulationPreview(null)
-    setIsPanning(false)
-    setResizeDimensionWidth('')
-    setResizeDimensionHeight('')
-    setResizeDimensionLength('')
-  }, [setResizeDimensionWidth, setResizeDimensionHeight, setResizeDimensionLength])
-
-  const handlePointerCancel = usePlanCanvasPointerCancel({
-    longPressTimerRef, longPressStartRef, pointerPositionsRef, pinchRef, pinchActiveRef,
-    selectionStartRef, setSelectionBox, eraseActiveRef, erasedIdsRef, cancelDragGesture: clearPointerDrag,
+  const pointerState = usePlanCanvasPointerState({
+    manualDragPointRef,
+    setResizeDimensionWidth,
+    setResizeDimensionHeight,
+    setResizeDimensionLength,
   })
+  const {
+    isPanning, setIsPanning, objectContextMenu, setObjectContextMenu, selectionBox, setSelectionBox,
+    manipulationPreview, setManipulationPreview, dragPreviewPoint, setDragPreviewPoint,
+    draggingObject, setDraggingObject, panStartRef, selectionStartRef, pointerPositionsRef, pinchRef,
+    pinchActiveRef, longPressTimerRef, longPressStartRef, eraseActiveRef, erasedIdsRef,
+    selectionAdditiveRef, clearPointerDrag, handlePointerCancel,
+  } = pointerState
 
   // Door handing state (can cycle with Spacebar)
   const setDoorHanding = (value: DoorHanding | ((current: DoorHanding) => DoorHanding)) => setPreference('doorHanding', value)
