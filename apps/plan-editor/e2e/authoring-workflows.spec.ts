@@ -160,6 +160,24 @@ test('mouse and keyboard authoring creates wall, beam, hosted opening, and point
   expect(pageErrors).toEqual([])
 })
 
+test('repeat last tool resets an active wall session and starts another wall', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickCanvasFraction(page, 0.22, 0.28)
+  await clickCanvasFraction(page, 0.42, 0.28)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
+
+  await page.getByRole('button', { name: /ใช้เครื่องมือล่าสุดซ้ำ/ }).click()
+  await expect(page.locator('.cf-tool-button.is-active')).toHaveAttribute('title', /ผนัง/)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
+  await clickCanvasFraction(page, 0.22, 0.62)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
+  await clickCanvasFraction(page, 0.42, 0.62)
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await expect(page.locator('li[data-object-type="architecture.wall"]')).toHaveCount(2)
+})
+
 test('polygon placement commits a slab boundary through the shared placement session', async ({ page }) => {
   await page.goto('/')
   const canvasElement = canvas(page)

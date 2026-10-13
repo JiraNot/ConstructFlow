@@ -247,6 +247,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [dimensionAnchorY, setDimensionAnchorY] = useState<number | null>(null)
   const [dimensionKeyboardAxis, setDimensionKeyboardAxis] = useState<'x' | 'y'>('x')
   const previousDisplayUnit = useRef(displayUnit)
+  const previousToolSession = useRef({ activeTool, activation: toolActivation })
   const enabledSnapModes = useMemo(() => new Set(snapModes), [snapModes])
   const snapPlanPoint = (point: [number, number], distancePx = 16, excludedObjectId?: string) => {
     const radiusMm = distancePx / Math.max(viewport.zoom, 0.0001)
@@ -472,6 +473,29 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const constrained = constrainLineSnap(activeSnap, activeSnap.point_mm, start.point_mm, false, 'reference' in start ? start.reference : undefined)
     if (constrained.point_mm[0] !== activeSnap.point_mm[0] || constrained.point_mm[1] !== activeSnap.point_mm[1]) setActiveSnap(constrained)
   }, [activeTool, activeSnap, wallStartNode, beamStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary, drawLengthMeters, drawAngleDegrees, constrainLineSnap])
+
+  useEffect(() => {
+    const previous = previousToolSession.current
+    previousToolSession.current = { activeTool, activation: toolActivation }
+    if (previous.activeTool !== activeTool || previous.activation === toolActivation) return
+
+    // Repeating the already-active tool is a new placement session too.
+    // Clear that tool's pending step so its next input starts from step one.
+    if (activeTool === 'beam') setBeamStartNode(null)
+    if (activeTool === 'wall') setWallStartNode(null)
+    if (['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool)) setRoomSeparatorStart(null)
+    if (activeTool === 'grid') setGridStartPoint(null)
+    if (activeTool === 'stair') { setStairStartPoint(null); setStairError('') }
+    if (activeTool === 'gridCopy') setGridCopySourceId(null)
+    if (['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool)) setSlabBoundary([])
+    if (activeTool === 'calibrate') { setCalibrationP1(null); setCalibrationMousePoint(null) }
+    if (activeTool === 'measure') setTapeMeasure(null)
+    setActiveSnap(null)
+    setActiveWallSnap(null)
+    clearDimensionOverrides()
+    setDrawLengthMeters('')
+    setDrawAngleDegrees('')
+  }, [activeTool, toolActivation])
 
   useEffect(() => {
     if (activeTool !== 'beam') {
