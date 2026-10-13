@@ -7,7 +7,8 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "bench:snap": "node scripts/benchmark_snap.mjs"
   },
   "dependencies": {
     "@constructflow/project-model": "file:../project-model"

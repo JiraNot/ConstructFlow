@@ -26,6 +26,8 @@ import {
   type RainwaterDesignSettings,
 } from '@constructflow/project-model'
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
+import { useProjectSession } from './app/useProjectSession.js'
+import { countProjectObjects } from './app/projectStatistics.mjs'
 import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
 import { Toolbar, ToolType } from './components/Toolbar.js'
 import { PlanCanvas } from './components/PlanCanvas.js'
@@ -42,13 +44,11 @@ import type { ProjectLegalMetadata } from '@constructflow/project-model'
 import { UnderlayConfig, PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
 import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home } from 'lucide-react'
 import { calculateTakeoff, calculatePhasedBOQ } from '@constructflow/takeoff-engine'
-import { renderPermitDrawingSetHtml } from '@constructflow/sheet-engine'
 import { readProjectFile, writeProjectFile, type LocalProjectFileHandle } from './projectFileIO.js'
 import { loadLocalProjectSnapshot, saveLocalProjectSnapshot } from './projectAutosave.js'
 import { buildDirectManipulationCommands } from './directManipulation.mjs'
 import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
 import { getRoofEaveBoundary } from '@constructflow/roof-engine'
-import houseDemoRaw from '../../../examples/constructflow-reference-house-2storey.cfproj?raw'
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
@@ -108,9 +108,16 @@ const projectFileName = (project: ProjectDocument) => {
 
 export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const fileWindow = projectFileAccess ?? (window as ProjectSaveWindow)
-  const [project, setProjectState] = useState<ProjectDocument>(() =>
-    createDefaultResidentialProjectDocument('CF-UNTITLED', 'Untitled Project')
-  )
+  const {
+    project,
+    setProjectState,
+    setProject,
+    commandQueue,
+    setCommandQueue,
+    sessionRef: projectSessionRef,
+    dispatchCommandBatch,
+    previewCommands: previewDirectManipulation,
+  } = useProjectSession(() => createDefaultResidentialProjectDocument('CF-UNTITLED', 'Untitled Project'))
   const displayUnit: DisplayLengthUnit = project.project.display_unit ?? 'm'
   const projectJson = useMemo(() => serializeProject(project), [project])
   const [savedProjectJson, setSavedProjectJson] = useState<string | null>(projectJson)
@@ -122,13 +129,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [projectNameDraft, setProjectNameDraft] = useState(project.project.name)
   const [fileFeedback, setFileFeedback] = useState('')
   const supportsProjectFileOpen = typeof fileWindow.showOpenFilePicker === 'function'
-  const projectSessionRef = useRef<ProjectCommandSession | null>(null)
   const activeProjectFileHandleRef = useRef<LocalProjectFileHandle | null>(null)
   const updateActiveProjectFileHandle = (handle: LocalProjectFileHandle | null) => {
     activeProjectFileHandleRef.current = handle
     setActiveProjectFileHandle(handle)
   }
-  if (!projectSessionRef.current) projectSessionRef.current = new ProjectCommandSession(project)
   useEffect(() => {
     let active = true
     void loadLocalProjectSnapshot()
@@ -182,31 +187,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       window.removeEventListener('pagehide', persistSnapshot)
     }
   }, [localAutosaveReady, projectJson, savedProjectJson, replacementBaselineJson, activeProjectFileHandle])
-  const setProject = (next: ProjectDocument | ((current: ProjectDocument) => ProjectDocument)) => {
-    const updated = typeof next === 'function' ? next(project) : next
-    projectSessionRef.current!.commit(updated)
-    setProjectState(updated)
-  }
-  const dispatchCommandBatch = (commands: CommandRequest[]) => {
-    const result = projectSessionRef.current!.execute(commands)
-    if (result.status === 'success') {
-      setProjectState(result.updatedProject)
-      if (result.emittedEnvelopes.length > 0) {
-        setCommandQueue((queue) => [...queue, ...result.emittedEnvelopes])
-      }
-    }
-    return result
-  }
-  const previewDirectManipulation = (commands: CommandRequest[]) => {
-    const result = CommandBus.executeBatch(project, commands)
-    return {
-      valid: result.status === 'success',
-      project: result.updatedProject,
-      affected_object_ids: [...new Set(result.results.flatMap(item => item.affected_object_ids))],
-      errors: result.errors ?? [],
-    }
-  }
-  const commitDirectManipulation = (commands: CommandRequest[]) => dispatchCommandBatch(commands)
+  const commitDirectManipulation = dispatchCommandBatch
   const handleManipulationRejected = (errors: string[]) => {
     if (errors.length) setFileFeedback(errors[0])
   }
@@ -286,7 +267,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }, [selectedId])
   const [cursorCoords_mm, setCursorCoords_mm] = useState<[number, number]>([0, 0])
   const [snapKind, setSnapKind] = useState<string>('Free')
-  const [commandQueue, setCommandQueue] = useState<CommandEnvelope[]>([])
 
   // Underlay & Calibration State
   const [underlay, setUnderlay] = useState<UnderlayConfig>({
@@ -1775,17 +1755,22 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     URL.revokeObjectURL(url)
   }
 
-  const handleExportDrawingSet = () => {
-    const html = renderPermitDrawingSetHtml(project)
-    const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
-    const preview = window.open(url, '_blank')
-    if (!preview) {
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = `${project.project.id || 'project'}-A02-S01-A08.html`
-      anchor.click()
+  const handleExportDrawingSet = async () => {
+    try {
+      const { renderPermitDrawingSetHtml } = await import('@constructflow/sheet-engine')
+      const html = renderPermitDrawingSetHtml(project)
+      const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
+      const preview = window.open(url, '_blank')
+      if (!preview) {
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = `${project.project.id || 'project'}-A02-S01-A08.html`
+        anchor.click()
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (error) {
+      setFileFeedback(`ส่งออกชุดแบบไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
     }
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
   const handleOpenProject = async (file?: File, fileHandle: LocalProjectFileHandle | null = null) => {
@@ -1876,9 +1861,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     }
   }
 
-  const handleStartHouseDemo = () => {
+  const handleStartHouseDemo = async () => {
     if (!confirmReplaceUnsavedProject()) return
     try {
+      const { default: houseDemoRaw } = await import('../../../examples/constructflow-reference-house-2storey.cfproj?raw')
       const restored = deserializeProject(houseDemoRaw)
       projectSessionRef.current!.reset(restored)
       updateActiveProjectFileHandle(null)
@@ -1914,63 +1900,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
 
   // Counts & Schedule breakdown
-  const columnCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.column').length
-  const foundationCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.foundation').length
-  const beamCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.beam').length
-  const wallCount = Object.values(project.objects).filter((o) => o.object_type === 'architecture.wall').length
-  const doorCount = Object.values(project.objects).filter((o) => o.object_type === 'door_window.door').length
-  const windowCount = Object.values(project.objects).filter((o) => o.object_type === 'door_window.window').length
-  const gridCount = Object.values(project.objects).filter((o) => o.object_type === 'structure.grid').length
+  const objectCounts = useMemo(() => countProjectObjects(project), [project])
   const takeoff = useMemo(() => calculateTakeoff(project), [project])
   const boq = useMemo(() => calculatePhasedBOQ(project), [project])
-
-  const columnTypeCounts = Object.values(project.objects)
-    .filter(isColumnObject)
-    .reduce<Record<string, number>>((acc, col) => {
-      const mark = col.module_data.mark || 'C1'
-      acc[mark] = (acc[mark] || 0) + 1
-      return acc
-    }, {})
-
-  const foundationTypeCounts = Object.values(project.objects)
-    .filter(isFoundationObject)
-    .reduce<Record<string, number>>((acc, fnd) => {
-      const mark = fnd.module_data.mark || 'F1'
-      acc[mark] = (acc[mark] || 0) + 1
-      return acc
-    }, {})
-
-  const beamTypeCounts = Object.values(project.objects)
-    .filter(isBeamObject)
-    .reduce<Record<string, number>>((acc, beam) => {
-      const mark = beam.module_data.mark || 'B1'
-      acc[mark] = (acc[mark] || 0) + 1
-      return acc
-    }, {})
-
-  const wallTypeCounts = Object.values(project.objects)
-    .filter(isWallObject)
-    .reduce<Record<string, number>>((acc, wall) => {
-      const mark = wall.module_data.mark || 'W1'
-      acc[mark] = (acc[mark] || 0) + 1
-      return acc
-    }, {})
-
-  const doorTypeCounts = Object.values(project.objects)
-    .filter(isDoorObject)
-    .reduce<Record<string, number>>((acc, door) => {
-      const mark = door.module_data.mark || 'D1'
-      acc[mark] = (acc[mark] || 0) + 1
-      return acc
-    }, {})
-
-  const windowTypeCounts = Object.values(project.objects)
-    .filter(isWindowObject)
-    .reduce<Record<string, number>>((acc, win) => {
-      const mark = win.module_data.mark || 'W1'
-      acc[mark] = (acc[mark] || 0) + 1
-      return acc
-    }, {})
 
   if (!localAutosaveReady) return (
     <div role="status" aria-live="polite" style={{ display: 'grid', placeItems: 'center', width: '100vw', height: '100vh', color: '#475569', fontFamily: 'sans-serif' }}>
@@ -2429,7 +2361,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           />}
 
           {rightPanelTab === 'objects' && <div className="cf-object-summary">
-            {[['แกนเสา', gridCount, 'เส้น'], ['เสา', columnCount, 'ต้น'], ['ฐานราก', foundationCount, 'ฐาน'], ['คาน', beamCount, 'ช่วง'], ['ผนัง', wallCount, 'แผง'], ['ประตู', doorCount, 'บาน'], ['หน้าต่าง', windowCount, 'บาน']].map(([label, count, unit]) => <div className="cf-object-row" key={String(label)}><span>{label}</span><strong>{count} {unit}</strong></div>)}
+            {[['แกนเสา', objectCounts['structure.grid'] ?? 0, 'เส้น'], ['เสา', objectCounts['structure.column'] ?? 0, 'ต้น'], ['ฐานราก', objectCounts['structure.foundation'] ?? 0, 'ฐาน'], ['คาน', objectCounts['structure.beam'] ?? 0, 'ช่วง'], ['ผนัง', objectCounts['architecture.wall'] ?? 0, 'แผง'], ['ประตู', objectCounts['door_window.door'] ?? 0, 'บาน'], ['หน้าต่าง', objectCounts['door_window.window'] ?? 0, 'บาน']].map(([label, count, unit]) => <div className="cf-object-row" key={String(label)}><span>{label}</span><strong>{count} {unit}</strong></div>)}
           </div>}
 
 

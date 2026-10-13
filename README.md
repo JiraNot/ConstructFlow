@@ -91,11 +91,15 @@ temporary disk file and checks UUID preservation, as well as write/close orderin
 abort behavior. `verify:kitchen-file` validates an actual saved Kitchen Proof file through the
 same takeoff and drawing engines. Browser-native picker reopen still needs browser-level acceptance.
 
-Run the standalone regression suite (80 unit tests across monorepo packages + 3 end-to-end verifiers) and Plan Editor production build:
+Run the standalone regression suite and Plan Editor production build:
 
 ```bash
 node scripts/test_standalone.mjs --install
 ```
+
+The runner writes the latest completed verification to [docs/generated/BUILD-STATUS.md](docs/generated/BUILD-STATUS.md), including the source commit, build targets, test suites, integration verifiers, and Plan Editor chunk warnings. Test totals in dated implementation notes are historical evidence for those runs, not the current count.
+
+The deterministic snapping benchmark is available with `npm --prefix packages/snapping-engine run bench:snap`; its measured scope and remaining performance work are recorded in [docs/performance/PERFORMANCE-BASELINE-2026-10.md](docs/performance/PERFORMANCE-BASELINE-2026-10.md).
 
 The implementation has achieved major milestones across the **Plan-Driven Modeling Engine**, **Permit Sheet Engine**, and **Downstream Adapters**:
 

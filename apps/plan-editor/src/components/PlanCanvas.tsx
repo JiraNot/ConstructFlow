@@ -40,7 +40,7 @@ import {
   worldToScreen,
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
-import { constrainPointToReference, DEFAULT_SNAP_MODES, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware, resizeOpeningFromEdge } from '@constructflow/snapping-engine'
+import { constrainPointToReference, DEFAULT_SNAP_MODES, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, SnapSpatialIndex, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware, resizeOpeningFromEdge } from '@constructflow/snapping-engine'
 import { renderPlanView, drawDirectManipulationGhost, PlacementGhost, UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import { Maximize2, Pencil, Trash2, ZoomIn, ZoomOut, PlusCircle, Copy } from 'lucide-react'
 import type { CommandRequest } from '@constructflow/command-schema'
@@ -681,6 +681,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const hasInitialFitRef = useRef(false)
   const planVisibleObjects = useMemo(() => getPlanVisibleObjects(project, planDiscipline), [project, planDiscipline])
   const planProject = useMemo(() => getPlanViewProject(project, planVisibleObjects), [project, planVisibleObjects])
+  const snapSpatialIndex = useMemo(() => new SnapSpatialIndex(planProject), [planProject])
 
 
 
@@ -723,6 +724,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [dimensionReferenceMode, setDimensionReferenceMode] = useState<'center' | 'edge'>('center')
   const previousDisplayUnit = useRef(displayUnit)
   const enabledSnapModes = useMemo(() => new Set(snapModes), [snapModes])
+  const snapPlanPoint = (point: [number, number], distancePx = 16, excludedObjectId?: string) => {
+    const radiusMm = distancePx / Math.max(viewport.zoom, 0.0001)
+    const candidates = snapSpatialIndex.candidateObjectIds(point, radiusMm)
+    return snapPoint(point, planProject, viewport, distancePx, enabledSnapModes, excludedObjectId, candidates)
+  }
+  const snapPlanWallHost = (point: [number, number], openingWidthMm: number) => {
+    const radiusMm = 36 / Math.max(viewport.zoom, 0.0001)
+    const candidates = snapSpatialIndex.candidateObjectIds(point, radiusMm)
+    return snapToWallHost(point, planProject, viewport, openingWidthMm, 36, candidates)
+  }
 
   useEffect(() => {
     const previousUnit = previousDisplayUnit.current
@@ -1309,7 +1320,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const buildDragCommands = (drag: PlanDragGesture, rawWorld: [number, number], ctrlKey: boolean): CommandRequest[] => {
     const snap = ctrlKey
       ? { point_mm: rawWorld, target_id: undefined }
-      : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, drag.id)
+      : snapPlanPoint(rawWorld, 16, drag.id)
     let point = ['slab-edge', 'slab-slope', 'roof-ridge', 'roof-seam'].includes(drag.kind) ? rawWorld : snap.point_mm
     const options: Record<string, unknown> = {}
 
@@ -2129,7 +2140,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           t.name.toLowerCase() === (activeTool === 'door' ? activeDoorTypeMark : activeWindowTypeMark).toLowerCase()
       )
       const openingW = typeDef?.parameters?.width_mm || (activeTool === 'door' ? 800 : 1200)
-      const hostSnap = snapToWallHost(rawWorld, planProject, viewport, openingW)
+      const hostSnap = snapPlanWallHost(rawWorld, openingW)
       const wallSnap = hostSnap ? applyOpeningDistance(hostSnap, rawWorld, openingW) : null
       setActiveWallSnap(wallSnap)
       if (wallSnap) {
@@ -2142,7 +2153,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       } else {
         const snap = e.ctrlKey
           ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
-          : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes)
+          : snapPlanPoint(rawWorld)
         setActiveSnap(snap)
         onCursorChange(snap.point_mm, snap.description)
       }
@@ -2150,7 +2161,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       setActiveWallSnap(null)
       let snap = e.ctrlKey
         ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
-        : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject?.id)
+        : snapPlanPoint(rawWorld, 16, draggingObject?.id)
       if (activeTool === 'beam' && beamStartNode) snap = constrainLineSnap(snap, rawWorld, beamStartNode.point_mm, e.shiftKey, beamStartNode.reference)
       if (activeTool === 'wall' && wallStartNode) snap = constrainLineSnap(snap, rawWorld, wallStartNode.point_mm, e.shiftKey, wallStartNode.reference)
       if (activeTool === 'stair' && stairStartPoint) snap = constrainLineSnap(snap, rawWorld, stairStartPoint, e.shiftKey)
@@ -2263,7 +2274,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       const rawWorld = screenToWorld([screenX, screenY], viewport)
       let snap = e.ctrlKey
         ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
-        : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes)
+        : snapPlanPoint(rawWorld)
       if (activeTool === 'beam' && beamStartNode) snap = constrainLineSnap(snap, rawWorld, beamStartNode.point_mm, e.shiftKey, beamStartNode.reference)
       if (activeTool === 'wall' && wallStartNode) snap = constrainLineSnap(snap, rawWorld, wallStartNode.point_mm, e.shiftKey, wallStartNode.reference)
       if (activeTool === 'stair' && stairStartPoint) snap = constrainLineSnap(snap, rawWorld, stairStartPoint, e.shiftKey)
@@ -2463,7 +2474,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           (t) => t.object_type === 'door_window.door' && t.name.toLowerCase() === activeDoorTypeMark.toLowerCase()
         )
         const openingW = typeDef?.parameters?.width_mm || 800
-        const hostSnap = snapToWallHost(rawWorld, planProject, viewport, openingW) || activeWallSnap
+        const hostSnap = snapPlanWallHost(rawWorld, openingW) || activeWallSnap
         const wallSnap = hostSnap ? applyOpeningDistance(hostSnap, rawWorld, openingW) : null
         if (wallSnap) {
           onCommitDoor(
@@ -2479,7 +2490,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           (t) => t.object_type === 'door_window.window' && t.name.toLowerCase() === activeWindowTypeMark.toLowerCase()
         )
         const openingW = typeDef?.parameters?.width_mm || 1200
-        const hostSnap = snapToWallHost(rawWorld, planProject, viewport, openingW) || activeWallSnap
+        const hostSnap = snapPlanWallHost(rawWorld, openingW) || activeWallSnap
         const wallSnap = hostSnap ? applyOpeningDistance(hostSnap, rawWorld, openingW) : null
         if (wallSnap) {
           onCommitWindow(
@@ -2638,22 +2649,22 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         const movedPixels = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
         if (movedPixels >= 3) {
           if ((draggingObject.kind === 'column-corner' || draggingObject.kind === 'foundation-corner') && draggingObject.centerMm) {
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
             const size: [number, number] = [Math.max(100, Math.round(2 * Math.abs(point[0] - draggingObject.centerMm[0]))), Math.max(100, Math.round(2 * Math.abs(point[1] - draggingObject.centerMm[1])))]
             if (draggingObject.kind === 'column-corner') onResizeColumn?.(draggingObject.id, size)
             else onResizeFoundation?.(draggingObject.id, size)
           } else if (draggingObject.kind === 'polygon-vertex' && draggingObject.boundaryPointsMm && draggingObject.endpointIndex !== undefined) {
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
             const boundary: [number, number][] = structuredClone(draggingObject.boundaryPointsMm)
             boundary[draggingObject.endpointIndex] = point
             onUpdateBoundaryVertex?.(draggingObject.id, boundary)
           } else if (draggingObject.kind === 'wall-endpoint' && draggingObject.startPointMm && draggingObject.endPointMm && draggingObject.endpointIndex !== undefined) {
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
             const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
             if (draggingObject.endpointIndex === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
             onUpdateWallEndpoints?.(draggingObject.id, start, end)
           } else if (draggingObject.kind === 'beam-endpoint' && draggingObject.startPointMm && draggingObject.endPointMm && draggingObject.endpointIndex !== undefined) {
-            const snap = e.ctrlKey ? { point_mm: rawWorld, target_id: undefined } : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id)
+            const snap = e.ctrlKey ? { point_mm: rawWorld, target_id: undefined } : snapPlanPoint(rawWorld, 16, draggingObject.id)
             let point: [number, number] = snap.point_mm
             const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
             const targetColumn = snap.target_id ? planProject.objects[snap.target_id] : undefined
@@ -2665,18 +2676,18 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             const oldEndColumn = beam && isBeamObject(beam) ? beam.module_data.end_column_id ?? null : null
             onUpdateBeamEndpoints?.(draggingObject.id, start, end, draggingObject.endpointIndex === 0 ? columnId : oldStartColumn, draggingObject.endpointIndex === 1 ? columnId : oldEndColumn)
           } else if (draggingObject.kind === 'grid-endpoint' && draggingObject.startPointMm && draggingObject.endPointMm && draggingObject.endpointIndex !== undefined) {
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
             const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
             if (draggingObject.endpointIndex === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
             onModifyGrid?.(draggingObject.id, { start_point_mm: start, end_point_mm: end })
           } else if (draggingObject.kind === 'separator-endpoint' && draggingObject.startPointMm && draggingObject.endPointMm && draggingObject.endpointIndex !== undefined) {
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
             const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
             if (draggingObject.endpointIndex === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
             onUpdateRoomSeparator?.(draggingObject.id, start, end)
           } else if (draggingObject.kind === 'pipe-endpoint' && draggingObject.pipeRouteData && draggingObject.endpointIndex !== undefined) {
             const route = draggingObject.pipeRouteData
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
             const adjacentIndex = draggingObject.endpointIndex === 0 ? 1 : route.nodes_mm.length - 2
             const adjacent = route.nodes_mm[adjacentIndex]
             if (Math.hypot(point[0] - adjacent[0], point[1] - adjacent[1]) >= 1) {
@@ -2685,12 +2696,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             }
           } else if (draggingObject.kind === 'pipe-node' && draggingObject.pipeRouteData && draggingObject.endpointIndex !== undefined) {
             const route = draggingObject.pipeRouteData
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
             try { onUpdatePipeRoute?.(draggingObject.id, movePipeRouteNode(route, draggingObject.endpointIndex, point)) }
             catch (error) { onManipulationRejected?.([error instanceof Error ? error.message : String(error)]) }
           } else if (draggingObject.kind === 'moulding-endpoint' && draggingObject.mouldingData && draggingObject.endpointIndex !== undefined) {
             const moulding = draggingObject.mouldingData
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
             const path_mm = structuredClone(moulding.path_mm) as [number, number, number][]
             const current = path_mm[draggingObject.endpointIndex]
             const adjacentIndex = draggingObject.endpointIndex === 0 ? 1 : path_mm.length - 2
@@ -2700,7 +2711,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
               onUpdateMoulding?.(draggingObject.id, { path_mm })
             }
           } else if (draggingObject.kind === 'cabinet-rotation' && draggingObject.cabinetData) {
-            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
             const rotation_deg = cabinetRotationFromGrip(draggingObject.cabinetData, point, viewport.zoom)
             if (rotation_deg !== null) onUpdateCabinet?.(draggingObject.id, { rotation_deg })
           } else if (draggingObject.kind === 'opening-edge' && draggingObject.endpointIndex !== undefined && draggingObject.hostStartMm && draggingObject.hostEndMm && draggingObject.openingCenterOffsetMm !== undefined && draggingObject.openingWidthMm !== undefined) {
@@ -2714,7 +2725,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           } else if (draggingObject.kind === 'column') {
             const snap = e.ctrlKey
               ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
-              : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id)
+              : snapPlanPoint(rawWorld, 16, draggingObject.id)
             onMoveColumn(draggingObject.id, snap.point_mm)
           } else if (draggingObject.kind === 'wall') {
             const delta: [number, number] = [

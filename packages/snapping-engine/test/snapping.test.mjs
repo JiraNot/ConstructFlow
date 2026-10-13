@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { constrainPointToReference, findNearestLinearReference, inferLinearConstraint, snapPoint, snapToWallHost, snapOpeningOffsetBimAware, snapOpeningWidthBimAware, resizeOpeningFromEdge } from '../dist/index.js'
+import { constrainPointToReference, findNearestLinearReference, inferLinearConstraint, SnapSpatialIndex, snapPoint, snapToWallHost, snapOpeningOffsetBimAware, snapOpeningWidthBimAware, resizeOpeningFromEdge } from '../dist/index.js'
 
 const view = (zoom = 1) => ({ zoom })
 
@@ -76,6 +76,35 @@ test('editing handles ignore their own snap points but retain other-wall centerl
   assert.equal(crossing.kind, 'intersection', 'excluding direct self-snaps must retain live cross-object junctions')
   assert.equal(crossing.target_id, 'wall-moving:wall-stationary')
   assert.deepEqual(crossing.point_mm, [500, 0])
+})
+
+test('snap spatial broad phase preserves exact candidates while excluding distant objects', () => {
+  const nearby = [
+    wall('wall-horizontal', [0, 0], [1000, 0]),
+    wall('wall-vertical', [500, -1000], [500, 1000]),
+    beam('beam-near', [0, 500], [1000, 500]),
+    column('column-near', [1000, 1000]),
+    grid('grid-x', 'A', 'vertical', 500),
+    grid('grid-y', '1', 'horizontal', 0),
+  ]
+  const distant = Array.from({ length: 1000 }, (_, index) =>
+    wall(`wall-far-${index}`, [100_000 + index * 3000, 100_000], [101_000 + index * 3000, 100_000]),
+  )
+  const projectDoc = project(...nearby, ...distant)
+  const index = new SnapSpatialIndex(projectDoc)
+  const candidates = index.candidateObjectIds([500, 0], 20)
+
+  assert.ok(candidates.length < 10, `expected a local candidate set, received ${candidates.length}`)
+  assert.deepEqual(
+    snapToWallHost([500, 8], projectDoc, view(), 800),
+    snapToWallHost([500, 8], projectDoc, view(), 800, 36, index.candidateObjectIds([500, 8], 36)),
+  )
+  for (const point of [[500, 2], [1000, 1000], [20_000, 20_000]]) {
+    const fullScan = snapPoint(point, projectDoc, view(), 16)
+    const indexed = snapPoint(point, projectDoc, view(), 16, undefined, undefined,
+      index.candidateObjectIds(point, 16))
+    assert.deepEqual(indexed, fullScan)
+  }
 })
 
 test('projects onto a column face and onto beam edges and axes', () => {

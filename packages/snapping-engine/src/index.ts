@@ -147,6 +147,107 @@ function snapModeFor(kind: SnapKind): SnapMode | null {
   return null
 }
 
+type Bounds2d = { minX: number; minY: number; maxX: number; maxY: number }
+
+const SNAP_INDEX_CELL_MM = 2000
+const MAX_SNAP_INDEX_CELLS_PER_OBJECT = 4096
+
+function snapBounds(object: ProjectDocument['objects'][string]): Bounds2d | null {
+  if (isGridObject(object)) return null
+  if (isColumnObject(object)) {
+    const [cx, cy] = object.module_data.location_mm
+    const corners = rectangleCorners([cx, cy], object.module_data.section_mm[0], object.module_data.section_mm[1], object.module_data.rotation_deg || 0)
+    return {
+      minX: Math.min(...corners.map(point => point[0])),
+      minY: Math.min(...corners.map(point => point[1])),
+      maxX: Math.max(...corners.map(point => point[0])),
+      maxY: Math.max(...corners.map(point => point[1])),
+    }
+  }
+  if (isBeamObject(object) || isWallObject(object)) {
+    const [sx, sy] = object.module_data.start_point_mm
+    const [ex, ey] = object.module_data.end_point_mm
+    const halfWidth = isBeamObject(object) ? object.module_data.section_mm[0] / 2 : object.module_data.thickness_mm / 2
+    return {
+      minX: Math.min(sx, ex) - halfWidth,
+      minY: Math.min(sy, ey) - halfWidth,
+      maxX: Math.max(sx, ex) + halfWidth,
+      maxY: Math.max(sy, ey) + halfWidth,
+    }
+  }
+  return null
+}
+
+/**
+ * Reusable plan-snap broad phase. Build once per visible project snapshot and
+ * query it at pointer frequency; snapPoint still performs all exact geometric
+ * projection, tolerance and ranking checks on the returned candidates.
+ */
+export class SnapSpatialIndex {
+  private readonly buckets = new Map<string, Set<string>>()
+  private readonly globalIds = new Set<string>()
+  private readonly boundsById = new Map<string, Bounds2d>()
+
+  constructor(project: ProjectDocument) {
+    for (const object of Object.values(project.objects)) {
+      if (isGridObject(object)) {
+        // Standard grid axes are treated as unbounded by the current snap contract.
+        this.globalIds.add(object.id)
+        continue
+      }
+      const bounds = snapBounds(object)
+      if (!bounds) continue
+      this.boundsById.set(object.id, bounds)
+      const minCellX = Math.floor(bounds.minX / SNAP_INDEX_CELL_MM)
+      const minCellY = Math.floor(bounds.minY / SNAP_INDEX_CELL_MM)
+      const maxCellX = Math.floor(bounds.maxX / SNAP_INDEX_CELL_MM)
+      const maxCellY = Math.floor(bounds.maxY / SNAP_INDEX_CELL_MM)
+      const cellCount = (maxCellX - minCellX + 1) * (maxCellY - minCellY + 1)
+      if (cellCount > MAX_SNAP_INDEX_CELLS_PER_OBJECT) {
+        this.globalIds.add(object.id)
+        continue
+      }
+      for (let x = minCellX; x <= maxCellX; x++) {
+        for (let y = minCellY; y <= maxCellY; y++) {
+          const key = `${x}:${y}`
+          let bucket = this.buckets.get(key)
+          if (!bucket) this.buckets.set(key, bucket = new Set())
+          bucket.add(object.id)
+        }
+      }
+    }
+  }
+
+  candidateObjectIds(point_mm: Point, radius_mm: number): string[] {
+    const minX = point_mm[0] - Math.max(0, radius_mm)
+    const minY = point_mm[1] - Math.max(0, radius_mm)
+    const maxX = point_mm[0] + Math.max(0, radius_mm)
+    const maxY = point_mm[1] + Math.max(0, radius_mm)
+    const minCellX = Math.floor(minX / SNAP_INDEX_CELL_MM)
+    const minCellY = Math.floor(minY / SNAP_INDEX_CELL_MM)
+    const maxCellX = Math.floor(maxX / SNAP_INDEX_CELL_MM)
+    const maxCellY = Math.floor(maxY / SNAP_INDEX_CELL_MM)
+    const ids = new Set(this.globalIds)
+    const queryCellCount = (maxCellX - minCellX + 1) * (maxCellY - minCellY + 1)
+    if (queryCellCount > MAX_SNAP_INDEX_CELLS_PER_OBJECT) {
+      for (const id of this.boundsById.keys()) ids.add(id)
+      return [...ids].filter(id => {
+        const bounds = this.boundsById.get(id)
+        return !bounds || (bounds.minX <= maxX && bounds.maxX >= minX && bounds.minY <= maxY && bounds.maxY >= minY)
+      }).sort((a, b) => a.localeCompare(b))
+    }
+    for (let x = minCellX; x <= maxCellX; x++) {
+      for (let y = minCellY; y <= maxCellY; y++) {
+        for (const id of this.buckets.get(`${x}:${y}`) ?? []) ids.add(id)
+      }
+    }
+    return [...ids].filter(id => {
+      const bounds = this.boundsById.get(id)
+      return !bounds || (bounds.minX <= maxX && bounds.maxX >= minX && bounds.minY <= maxY && bounds.maxY >= minY)
+    }).sort((a, b) => a.localeCompare(b))
+  }
+}
+
 export function snapPoint(
   rawWorldPoint_mm: Point,
   project: ProjectDocument,
@@ -154,6 +255,7 @@ export function snapPoint(
   snapDistanceScreenPx = 16,
   enabledModes: ReadonlySet<SnapMode> = new Set(DEFAULT_SNAP_MODES),
   excludedObjectId?: string,
+  candidateObjectIds?: readonly string[],
 ): SnapResult {
   const toleranceMm = snapDistanceScreenPx / Math.max(viewport.zoom, 0.0001)
   const toleranceSq = toleranceMm * toleranceMm
@@ -171,7 +273,10 @@ export function snapPoint(
     candidates.push({ point_mm: [Math.round(point[0]), Math.round(point[1])], kind, target_id: targetId, description, distance_sq, priority })
   }
 
-  for (const object of Object.values(project.objects)) {
+  const objects = candidateObjectIds
+    ? candidateObjectIds.flatMap(id => project.objects[id] ? [project.objects[id]] : [])
+    : Object.values(project.objects)
+  for (const object of objects) {
     if (isGridObject(object)) {
       const { tag, orientation, position_mm } = object.module_data
       if (object.module_data.start_point_mm && object.module_data.end_point_mm) {
@@ -294,13 +399,17 @@ export function snapToWallHost(
   viewport: SnapViewport,
   openingWidth_mm = 800,
   snapDistanceScreenPx = 36,
+  candidateObjectIds?: readonly string[],
 ): WallHostSnapResult | null {
   if (!Number.isFinite(openingWidth_mm) || openingWidth_mm <= 0) return null
   const tolerance_mm = snapDistanceScreenPx / Math.max(viewport.zoom, 0.0001)
   let closest: WallHostSnapResult | null = null
   let minPerpDist = Infinity
 
-  for (const obj of Object.values(project.objects)) {
+  const objects = candidateObjectIds
+    ? candidateObjectIds.flatMap(id => project.objects[id] ? [project.objects[id]] : [])
+    : Object.values(project.objects)
+  for (const obj of objects) {
     if (!isWallObject(obj)) continue
     const [sx, sy] = obj.module_data.start_point_mm
     const [ex, ey] = obj.module_data.end_point_mm
