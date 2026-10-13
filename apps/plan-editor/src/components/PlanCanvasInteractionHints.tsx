@@ -42,7 +42,9 @@ export const PlanCanvasInteractionHints: React.FC<PlanCanvasInteractionHintsProp
       จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด ท่อ และแนวบัว · จุดสีม่วง: หมุนบิลท์อินรอบจุดวาง · จุดสีส้ม: ลากขอบปรับความกว้าง หรือลากจุดกึ่งกลางปรับตำแหน่ง (BIM Snap ขอบเสา 100 มม.) · ปุ่ม ⇄: สลับด้านบานประตู
     </div>}
     {placementHint && <div className="cf-tape-measure-hint" aria-live="polite" data-tool-step={placementStatus?.step}>
-      <strong>{placementStatus?.stepLabel}</strong> · {placementHint} · {placementStatus?.constraint} {escapeLabel && `· ${escapeLabel}`}
+      <strong>{placementStatus?.stepLabel}</strong> · {placementHint} · {placementStatus?.constraint}
+      {placementStatus?.snapFeedback && <> · Snap: {placementStatus.snapFeedback}</>}
+      {escapeLabel && ` · ${escapeLabel}`}
     </div>}
     {activeTool === 'select' && pickCandidates.length > 1 && <div className="cf-pick-stack" role="group" aria-label="วัตถุซ้อนกัน" onPointerDown={event => event.stopPropagation()}>
       <span>วัตถุซ้อนกัน {pickCandidates.length} ชิ้น</span>

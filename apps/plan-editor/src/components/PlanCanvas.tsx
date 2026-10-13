@@ -313,6 +313,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
     gridSystemError,
     pipeSystem,
     fixtureKind,
+    activeSnap,
     lineConstraintLabel: ({ auto: 'อัตโนมัติ: ขนาน/ตั้งฉาก', none: 'อิสระ', parallel: 'ขนาน', perpendicular: 'ตั้งฉาก' } as const)[lineConstraintMode],
     placementReferenceLabel: ({ centerline: 'กึ่งกลาง', left_face: 'ชิดซ้าย', right_face: 'ชิดขวา' } as const)[placementReference],
     snapCount: snapModes.length,

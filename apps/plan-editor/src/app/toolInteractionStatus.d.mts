@@ -6,6 +6,7 @@ export interface ToolInteractionStatus {
   stepLabel: string
   instruction: string
   constraint: string
+  snapFeedback: string | null
 }
 export function resolveToolInteractionStatus(tool: ToolType, state?: Record<string, unknown>): ToolInteractionStatus | null
 export function resolveEscapeAction(tool: ToolType, hasPendingStep: boolean, hasSelection?: boolean): 'cancel-step' | 'clear-selection' | 'exit-tool' | 'noop'

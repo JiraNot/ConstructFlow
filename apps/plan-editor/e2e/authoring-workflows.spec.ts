@@ -120,6 +120,7 @@ test('mouse and keyboard authoring creates wall, beam, hosted opening, and point
   await page.locator('.cf-tool-button[title^="ประตู"]').click()
   await moveToCanvasFraction(page, 0.50, 0.45)
   await expect(page.getByTestId('snap-feedback')).toContainText(/Snap:\s*(?:On Wall|Wall|ผนัง|Host)/i)
+  await expect(page.locator('[data-tool-step]')).toContainText(/Snap:\s*(?:On Wall|Wall|ผนัง|Host)/i)
   await clickCanvasFraction(page, 0.50, 0.45)
   await expect(page.locator('[data-tool-step]')).toContainText('วางบนผนัง')
   await expect(page.locator('body')).toContainText('Door D1')

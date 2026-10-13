@@ -39,6 +39,10 @@ test('placement status reports the current authoring step, constraints, and keyb
   const beamEnd = resolveToolInteractionStatus('beam', { beamStartNode: { point_mm: [100, 200] }, lineConstraintLabel: 'อิสระ', placementReferenceLabel: 'กึ่งกลาง' })
   const door = resolveToolInteractionStatus('door')
   const point = resolveToolInteractionStatus('column', { snapCount: 2 })
+  const snappedPoint = resolveToolInteractionStatus('column', {
+    snapCount: 2,
+    activeSnap: { kind: 'wall_endpoint', description: 'ปลายผนัง W1' },
+  })
   const polygon = resolveToolInteractionStatus('slab', { slabBoundary: [[0, 0], [4000, 0]] })
 
   assert.equal(wallStart.step, 'start-point')
@@ -51,6 +55,8 @@ test('placement status reports the current authoring step, constraints, and keyb
   assert.match(door.instruction, /วางบนผนัง/)
   assert.equal(point.step, 'position')
   assert.equal(point.constraint, 'Snap เปิด 2 ประเภท')
+  assert.equal(point.snapFeedback, null)
+  assert.equal(snappedPoint.snapFeedback, 'ปลายผนัง W1')
   assert.equal(polygon.step, 'add-vertex')
 })
 

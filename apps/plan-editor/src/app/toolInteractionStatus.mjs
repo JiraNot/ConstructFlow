@@ -64,7 +64,8 @@ export function resolveToolInteractionStatus(tool, state = {}) {
   const constraint = ['wall', 'beam'].includes(tool)
     ? `${state.lineConstraintLabel ?? 'อัตโนมัติ: ขนาน/ตั้งฉาก'} · แนวอ้างอิง${state.placementReferenceLabel ?? 'กึ่งกลาง'}`
     : state.snapCount === 0 ? 'วางอิสระ' : `Snap เปิด ${state.snapCount ?? 0} ประเภท`
-  return { tool, step, stepLabel: stepText[step] ?? step, instruction, constraint }
+  const snapFeedback = state.activeSnap?.description ?? null
+  return { tool, step, stepLabel: stepText[step] ?? step, instruction, constraint, snapFeedback }
 }
 
 export function resolveEscapeAction(tool, hasPendingStep, hasSelection = false) {
