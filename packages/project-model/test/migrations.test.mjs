@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { DEFAULT_TYPES, createEmptyProjectDocument, deserializeProject, serializeProject, validateDrawingSettings } from '../dist/index.js'
+import { DEFAULT_TYPES, createEmptyProjectDocument, deserializeProject, serializeProject, validateDrawingSettings, validateProjectV2 } from '../dist/index.js'
 
 const fixtureUrl = new URL('../../../examples/kitchen-extension-proof-v1.cfproj', import.meta.url)
 const fixtureText = await readFile(fixtureUrl, 'utf8')
@@ -130,8 +130,9 @@ test('S0: legacy mark-based migration resolves every typed object in the represe
 
   const sourceIds = Object.keys(legacyProject.objects).sort()
   const resolvableLegacyMarks = Object.values(legacyProject.objects).filter(object =>
-    typeof object.module_data.mark === 'string' && legacyProject.types.some(type =>
-      type.object_type === object.object_type && type.name.trim().toLowerCase() === object.module_data.mark.trim().toLowerCase()
+    typeof object.module_data.mark === 'string' && (
+      legacyProject.types.some(type => type.object_type === object.object_type && type.name.trim().toLowerCase() === object.module_data.mark.trim().toLowerCase())
+      || DEFAULT_TYPES.some(type => type.object_type === 'roof.system' && object.object_type === 'roof.system' && type.name.trim().toLowerCase() === object.module_data.mark.trim().toLowerCase())
     )
   ).length
   const migrated = deserializeProject(JSON.stringify(legacyProject))
@@ -350,4 +351,41 @@ test('S0: persisted slab and roof geometry reject invalid systems, offsets and d
     [[500, 500], [1500, 500], [1500, 1500], [500, 1500]],
     [[1000, 1000], [2000, 1000], [2000, 2000], [1000, 2000]],
   ] })]), /voids_mm/)
+})
+
+test('roof framing catalog and project rainwater design survive save/load and reject invalid settings', () => {
+  const project = createEmptyProjectDocument('ROOF-CATALOG', 'Roof catalog')
+  const roofTypes = project.types.filter(type => type.object_type === 'roof.system')
+  assert.ok(roofTypes.some(type => type.name === 'RF1' && type.parameters.rafter_section_mm?.[1] === 100))
+  assert.ok(roofTypes.some(type => type.parameters.framing_system === 'truss_purlin'))
+  assert.equal(project.rainwater_design.design_rainfall_mm_per_hr, 120)
+  assert.equal(project.rainwater_design.location, '')
+  const restored = deserializeProject(serializeProject(project))
+  assert.deepEqual(restored.rainwater_design, project.rainwater_design)
+  assert.deepEqual(restored.types.filter(type => type.object_type === 'roof.system'), roofTypes)
+
+  const legacy = structuredClone(project)
+  legacy.types = legacy.types.filter(type => type.object_type !== 'roof.system')
+  const legacyRoofId = crypto.randomUUID()
+  legacy.objects[legacyRoofId] = {
+    id: legacyRoofId, object_type: 'roof.system', owner_module: 'constructflow.roof', schema_version: 1,
+    created_phase: 'new_construction', removed_phase: null, level_refs: [], host_refs: [], connector_refs: [],
+    status: 'active', created_at: 0, updated_at: 0,
+    module_data: {
+      mark: 'RF1', level_id: 'L1', boundary_mm: [[0, 0], [4000, 0], [4000, 2500], [0, 2500]],
+      elevation_mm: 3000, edges: Array(4).fill({ defines_slope: true, slope_deg: 25 }),
+      thickness_mm: 30, material: 'metal_sheet', framing_system: 'none',
+    },
+  }
+  const hydrated = deserializeProject(JSON.stringify(legacy))
+  assert.deepEqual(hydrated.types.filter(type => type.object_type === 'roof.system').map(type => type.name).sort(), ['RF-TIMBER', 'RF1', 'RT1'])
+  assert.equal(hydrated.objects[legacyRoofId].module_data.type_id, roofTypes.find(type => type.name === 'RF1').id)
+  assert.equal(hydrated.objects[legacyRoofId].module_data.instance_overrides.framing_system, 'none')
+
+  const invalidSettings = structuredClone(project)
+  invalidSettings.rainwater_design.design_rainfall_mm_per_hr = 0
+  assert.throws(() => validateProjectV2(invalidSettings), /design_rainfall_mm_per_hr/)
+  const invalidType = structuredClone(project)
+  invalidType.types.find(type => type.object_type === 'roof.system').parameters.truss_spacing_mm = -1
+  assert.throws(() => validateProjectV2(invalidType), /truss_spacing_mm/)
 })

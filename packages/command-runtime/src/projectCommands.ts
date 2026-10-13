@@ -7,9 +7,10 @@ import {
   normalizeCoordinationSettings,
   validateCoordinationSettings,
   validateDrawingSettings,
+  validateRainwaterDesignSettings,
   resolveStairVerticalExtent,
 } from '@constructflow/project-model'
-import type { UpdateCoordinationSettingsInput, UpdateSheetViewportInput } from '@constructflow/command-schema'
+import type { UpdateCoordinationSettingsInput, UpdateRainwaterDesignInput, UpdateSheetViewportInput } from '@constructflow/command-schema'
 
 import {
   CommandHandlerContext,
@@ -48,6 +49,16 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       // owns the persisted deviation so undo/redo restores the previous rule set atomically.
       return {
         result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] },
+        updatedProject: updated,
+        emittedEnvelope: envelope,
+      }
+    }
+    case 'UpdateRainwaterDesign': {
+      const { settings } = input as unknown as UpdateRainwaterDesignInput
+      validateRainwaterDesignSettings(settings)
+      updated.rainwater_design = structuredClone(settings)
+      return {
+        result: { status: 'success', command_id, command_name: commandName, affected_object_ids: Object.values(updated.objects).filter(object => object.object_type === 'roof.system').map(object => object.id) },
         updatedProject: updated,
         emittedEnvelope: envelope,
       }

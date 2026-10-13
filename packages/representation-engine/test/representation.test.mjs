@@ -37,7 +37,8 @@ test('3D representations are deterministic and keep phase and supported interact
   assert.deepEqual(first.objects.map(object => object.object_id), [...first.objects.map(object => object.object_id)].sort())
   assert.equal(Object.keys(fixture.objects).length, 21)
   assert.equal(first.objects.length, 20)
-  assert.deepEqual(first.warnings, [])
+  assert.equal(first.warnings.length, 1)
+  assert.match(first.warnings[0], /ยืนยันตำแหน่งพื้นที่และข้อมูลความเข้มฝน/)
 
   const column = first.objects.find(object => object.object_type === 'structure.column')
   assert.equal(column.display_phase, 'new_construction')
@@ -53,6 +54,23 @@ test('3D representations are deterministic and keep phase and supported interact
   const roof = first.objects.find(object => object.object_type === 'roof.system')
   assert.equal(slab.shape.kind, 'triangle_mesh')
   assert.equal(roof.shape.kind, 'triangle_mesh')
+  const framingProject = structuredClone(fixture)
+  const roofType = framingProject.types.find(type => type.object_type === 'roof.system' && type.name === 'RF1')
+  const template = Object.values(framingProject.objects).find(object => object.object_type === 'architecture.wall')
+  framingProject.objects['roof-framing-only-test'] = {
+    ...structuredClone(template), id: 'roof-framing-only-test', object_type: 'roof.system', owner_module: 'constructflow.roof',
+    module_data: {
+      mark: 'RF1', type_id: roofType.id, level_id: framingProject.levels[0].id, elevation_mm: 4000, thickness_mm: 30, material: 'metal_sheet',
+      boundary_mm: [[10000, 10000], [14000, 10000], [14000, 13000], [10000, 13000]],
+      edges: Array(4).fill({ defines_slope: true, slope_deg: 25 }),
+    },
+  }
+  const framingOnly = buildProjectRepresentations3D(framingProject, { roofFramingOnly: true })
+  const roofStructure = framingOnly.objects.find(object => object.object_id === 'roof-framing-only-test')
+  const fullFramingProject = buildProjectRepresentations3D(framingProject).objects.find(object => object.object_id === 'roof-framing-only-test')
+  assert.equal(roofStructure.shape.kind, 'triangle_mesh')
+  assert.ok(roofStructure.shape.triangles_mm.length > 0)
+  assert.ok(roofStructure.shape.triangles_mm.length < fullFramingProject.shape.triangles_mm.length, 'roof covering is omitted while structural members remain visible')
   const verticalExtents = representation => {
     const elevations = getRepresentationTriangles(representation).flatMap(triangle => triangle.map(vertex => vertex[2]))
     return [Math.min(...elevations), Math.max(...elevations)]
@@ -280,7 +298,7 @@ test('plan visibility filters objects by active level while showing spanning col
   assert.equal(firstFloor.filter(object => object.object_type.startsWith('door_window.')).length, 0)
 })
 
-test('roof footprints are selectable on roof plans and stay out of floor and framing plans', () => {
+test('roof footprints stay out of floor plans and are selectable on roof and framing plans', () => {
   const project = structuredClone(fixture)
   project.project.active_level_id = 'L2'
   const template = Object.values(project.objects).find(object => object.object_type === 'architecture.wall')
@@ -295,7 +313,7 @@ test('roof footprints are selectable on roof plans and stay out of floor and fra
   assert.ok(!getPlanVisibleObjects(project, 'architecture').some(object => object.id === 'roof-plan'))
   assert.ok(getPlanVisibleObjects(project, 'roof').some(object => object.id === 'roof-plan'))
   assert.ok(getPlanViewProject(project, getPlanVisibleObjects(project, 'roof')).objects['roof-plan'])
-  assert.ok(!getPlanVisibleObjects(project, 'framing').some(object => object.id === 'roof-plan'))
+  assert.ok(getPlanVisibleObjects(project, 'framing').some(object => object.id === 'roof-plan'))
 })
 
 test('plan visibility keeps room and ceiling representations on their own active storey', () => {

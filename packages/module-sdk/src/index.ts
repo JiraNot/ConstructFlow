@@ -24,6 +24,8 @@ export interface DomainOutput {
   removed_phase: "demolition" | null;
   mark: string;
   meshes: Triangle[];
+  /** Optional semantic mesh groups let viewports isolate parts without changing takeoff geometry. */
+  mesh_groups?: Record<string, Triangle[]>;
   paths: Vec3[][];
   quantities: DomainQuantity[];
   schedule: Record<string, string | number>;

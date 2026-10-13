@@ -10,6 +10,7 @@ import {
   moveRoofSeam,
   calculateRoofCatchment,
   solveEaveGuttersAndDownpipes,
+  solveRoofFraming,
   roofOutputs,
 } from "../dist/index.js";
 
@@ -250,6 +251,77 @@ test("concave hipped roofs generate valley gutter mesh and takeoff", () => {
   assert.ok(valley && valley.quantity > 0);
   assert.ok(output.schedule.ValleyGutter_m > 0);
   assert.ok(output.meshes.length > solveRoof(project.objects["roof-concave"].module_data).reduce((sum, facet) => sum + facet.triangles.length, 0), "valley channel mesh should be generated along with the roof facets");
+});
+
+test("roof framing type generates rafters, purlins, repeatable trusses and 3D member takeoff", () => {
+  const roof = {
+    mark: "RF-FRAME", elevation_mm: 3500, thickness_mm: 30, material: "metal_sheet",
+    boundary_mm: [[0, 0], [10000, 0], [10000, 8000], [0, 8000]],
+    edges: [
+      { defines_slope: true, slope_deg: 25 }, { defines_slope: false, slope_deg: 0 },
+      { defines_slope: true, slope_deg: 25 }, { defines_slope: false, slope_deg: 0 },
+    ],
+    framing_system: "rafter_truss_purlin", rafter_spacing_mm: 2000, purlin_spacing_mm: 2000,
+    truss_spacing_mm: 2500, rafter_section_mm: [50, 100], purlin_section_mm: [45, 75],
+    truss_chord_section_mm: [50, 100], truss_web_section_mm: [40, 40], truss_depth_mm: 500,
+    framing_material: "steel",
+  };
+  const framing = solveRoofFraming(roof);
+  assert.equal(framing.truss_count, 5);
+  assert.ok(framing.members.some(member => member.role === "rafter"));
+  assert.ok(framing.members.some(member => member.role === "purlin"));
+  assert.ok(framing.members.some(member => member.role === "truss_top_chord"));
+  assert.ok(framing.members.some(member => member.role === "truss_bottom_chord"));
+  assert.ok(framing.members.some(member => member.role === "truss_web"));
+  assert.ok(framing.members.every(member => member.length_m > 0 && member.section_mm.every(size => size > 0)));
+
+  const project = {
+    project: { active_level_id: "L2" }, types: [], rainwater_design: {
+      design_rainfall_mm_per_hr: 200, design_return_period_years: 10, location: "Bangkok", source: "Project station IDF table",
+      runoff_coefficient: 0.9, outlet_capacity_lps: 2, downpipe_diameter_mm: 100,
+    },
+    objects: { roof: { id: "roof", object_type: "roof.system", created_phase: "new_construction", status: "active", module_data: roof } },
+  };
+  const output = roofOutputs(project)[0];
+  assert.equal(output.schedule.Rainfall_mm_h, 200);
+  assert.equal(output.schedule.Rainfall_return_period_years, 10);
+  assert.equal(output.schedule.Rainfall_location, "Bangkok");
+  assert.equal(output.schedule.Trusses_pcs, 5);
+  assert.ok(output.quantities.some(quantity => quantity.classification === "roof.rafter" && quantity.quantity > 0));
+  assert.ok(output.quantities.some(quantity => quantity.classification === "roof.purlin" && quantity.quantity > 0));
+  assert.ok(output.quantities.some(quantity => quantity.classification === "roof.truss_web" && quantity.quantity > 0));
+  assert.equal(output.schedule.Downpipes_pcs, 2);
+  assert.ok(!output.warnings.some(warning => warning.includes("ค่าเริ่มต้นชั่วคราว")));
+  assert.ok(output.meshes.length > solveRoof(roof).reduce((sum, facet) => sum + facet.triangles.length, 0));
+
+  const catalogProject = structuredClone(project);
+  catalogProject.types = [{
+    id: "roof-framing-type", object_type: "roof.system", name: "RT1",
+    parameters: { framing_system: "truss_purlin", truss_spacing_mm: 2500 },
+  }];
+  catalogProject.objects.roof.module_data.type_id = "roof-framing-type";
+  catalogProject.objects.roof.module_data.instance_overrides = {};
+  assert.equal(roofOutputs(catalogProject)[0].schedule.Trusses_pcs, 5);
+  catalogProject.types[0].parameters.truss_spacing_mm = 5000;
+  assert.equal(roofOutputs(catalogProject)[0].schedule.Trusses_pcs, 3, "catalog spacing edits cascade into the roof framing schedule");
+});
+
+test("rainwater sizing uses saved project intensity, runoff, outlet capacity and pipe diameter", () => {
+  const roof = {
+    boundary_mm: [[0, 0], [10000, 0], [10000, 8000], [0, 8000]],
+    elevation_mm: 0, thickness_mm: 30, material: "metal_sheet",
+    edges: Array(4).fill({ defines_slope: true, slope_deg: 25 }),
+  };
+  const settings = {
+    design_rainfall_mm_per_hr: 180, design_return_period_years: 10, location: "Bangkok", source: "Municipal rainfall study 2025",
+    runoff_coefficient: 0.95, outlet_capacity_lps: 1.9, downpipe_diameter_mm: 100,
+  };
+  const result = solveEaveGuttersAndDownpipes(roof, settings);
+  assert.equal(result.catchment.peak_flow_lps, 3.8);
+  assert.equal(result.downpipes.length, 2);
+  assert.ok(result.downpipes.every(pipe => pipe.diameter_mm === 100));
+  assert.equal(result.catchment.design_source, "Municipal rainfall study 2025");
+  assert.equal(result.catchment.design_location, "Bangkok");
 });
 
 test("F09: roofOutputs integrates roof covering, box gutters and downpipes takeoff", () => {

@@ -321,6 +321,16 @@ export interface RoofModuleData extends CatalogPlacement {
   edges:RoofEdgeSlope[]
   material:string
   thickness_mm:number
+  framing_system?:'none'|'rafter_purlin'|'truss_purlin'|'rafter_truss_purlin'
+  rafter_spacing_mm?:number
+  purlin_spacing_mm?:number
+  truss_spacing_mm?:number
+  rafter_section_mm?:[number,number]
+  purlin_section_mm?:[number,number]
+  truss_chord_section_mm?:[number,number]
+  truss_web_section_mm?:[number,number]
+  truss_depth_mm?:number
+  framing_material?:string
 }
 export interface MouldingModuleData extends CatalogPlacement {
   path_mm:Point3Mm[]

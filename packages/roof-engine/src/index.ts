@@ -1,8 +1,10 @@
 import type {
   ProjectDocument,
+  RainwaterDesignSettings,
   RoofEdgeSlope,
   RoofModuleData,
 } from "@constructflow/project-model";
+import { DEFAULT_RAINWATER_DESIGN } from "@constructflow/project-model";
 import type {
   CommandHandlerContext,
   CommandBusResult,
@@ -84,6 +86,14 @@ export function decodeRoof(
     throw new Error("Eaves overhang produces an invalid or self-intersecting roof outline");
   const voidValidation = validatePolygonWithVoids(eavesBoundary, voids_mm ?? []);
   if (!voidValidation.valid) throw new Error(voidValidation.reason);
+  const framing_system = d.framing_system;
+  if (framing_system !== undefined && !["none", "rafter_purlin", "truss_purlin", "rafter_truss_purlin"].includes(String(framing_system)))
+    throw new Error("framing_system must be none, rafter_purlin, truss_purlin or rafter_truss_purlin");
+  const section = (value: unknown, label: string): [number, number] | undefined => {
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value) || value.length !== 2) throw new Error(`${label} must have width and depth`);
+    return [positive(value[0], `${label}[0]`), positive(value[1], `${label}[1]`)];
+  };
   return {
     ...placement(d, p),
     boundary_mm,
@@ -93,6 +103,16 @@ export function decodeRoof(
     edges: mapped,
     material: text(d.material, "material"),
     thickness_mm: positive(d.thickness_mm, "thickness"),
+    ...(framing_system !== undefined ? { framing_system: framing_system as RoofModuleData["framing_system"] } : {}),
+    ...(d.rafter_spacing_mm !== undefined ? { rafter_spacing_mm: positive(d.rafter_spacing_mm, "rafter_spacing_mm") } : {}),
+    ...(d.purlin_spacing_mm !== undefined ? { purlin_spacing_mm: positive(d.purlin_spacing_mm, "purlin_spacing_mm") } : {}),
+    ...(d.truss_spacing_mm !== undefined ? { truss_spacing_mm: positive(d.truss_spacing_mm, "truss_spacing_mm") } : {}),
+    ...(section(d.rafter_section_mm, "rafter_section_mm") ? { rafter_section_mm: section(d.rafter_section_mm, "rafter_section_mm") } : {}),
+    ...(section(d.purlin_section_mm, "purlin_section_mm") ? { purlin_section_mm: section(d.purlin_section_mm, "purlin_section_mm") } : {}),
+    ...(section(d.truss_chord_section_mm, "truss_chord_section_mm") ? { truss_chord_section_mm: section(d.truss_chord_section_mm, "truss_chord_section_mm") } : {}),
+    ...(section(d.truss_web_section_mm, "truss_web_section_mm") ? { truss_web_section_mm: section(d.truss_web_section_mm, "truss_web_section_mm") } : {}),
+    ...(d.truss_depth_mm !== undefined ? { truss_depth_mm: positive(d.truss_depth_mm, "truss_depth_mm") } : {}),
+    ...(d.framing_material !== undefined ? { framing_material: text(d.framing_material, "framing_material") } : {}),
   };
 }
 
@@ -464,6 +484,252 @@ export function moveRoofSeam(roof: RoofModuleData, edgeIndices: [number, number]
 }
 
 // -------------------------------------------------------------
+// Parametric Roof Framing (Rafters, Purlins and Trusses)
+// -------------------------------------------------------------
+
+export type RoofFramingRole = "rafter" | "purlin" | "truss_top_chord" | "truss_bottom_chord" | "truss_web";
+
+export interface RoofFramingMember {
+  role: RoofFramingRole;
+  start_point_mm: Vec3;
+  end_point_mm: Vec3;
+  section_mm: [number, number];
+  material: string;
+  length_m: number;
+}
+
+export interface RoofFramingResult {
+  members: RoofFramingMember[];
+  truss_count: number;
+  warnings: string[];
+}
+
+const DEFAULT_ROOF_FRAMING = {
+  framing_system: "rafter_purlin" as const,
+  rafter_spacing_mm: 1000,
+  purlin_spacing_mm: 1000,
+  truss_spacing_mm: 1200,
+  rafter_section_mm: [50, 100] as [number, number],
+  purlin_section_mm: [45, 75] as [number, number],
+  truss_chord_section_mm: [50, 100] as [number, number],
+  truss_web_section_mm: [40, 40] as [number, number],
+  truss_depth_mm: 500,
+  framing_material: "steel",
+};
+
+function roofFrameParams(roof: RoofModuleData) {
+  return {
+    framing_system: roof.framing_system ?? DEFAULT_ROOF_FRAMING.framing_system,
+    rafter_spacing_mm: roof.rafter_spacing_mm ?? DEFAULT_ROOF_FRAMING.rafter_spacing_mm,
+    purlin_spacing_mm: roof.purlin_spacing_mm ?? DEFAULT_ROOF_FRAMING.purlin_spacing_mm,
+    truss_spacing_mm: roof.truss_spacing_mm ?? DEFAULT_ROOF_FRAMING.truss_spacing_mm,
+    rafter_section_mm: roof.rafter_section_mm ?? DEFAULT_ROOF_FRAMING.rafter_section_mm,
+    purlin_section_mm: roof.purlin_section_mm ?? DEFAULT_ROOF_FRAMING.purlin_section_mm,
+    truss_chord_section_mm: roof.truss_chord_section_mm ?? DEFAULT_ROOF_FRAMING.truss_chord_section_mm,
+    truss_web_section_mm: roof.truss_web_section_mm ?? DEFAULT_ROOF_FRAMING.truss_web_section_mm,
+    truss_depth_mm: roof.truss_depth_mm ?? DEFAULT_ROOF_FRAMING.truss_depth_mm,
+    framing_material: roof.framing_material ?? DEFAULT_ROOF_FRAMING.framing_material,
+  };
+}
+
+function mergeIntervals(intervals: Array<[number, number]>, tolerance = 2): Array<[number, number]> {
+  const sorted = intervals.filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && b - a > 1)
+    .map(([a, b]) => [Math.min(a, b), Math.max(a, b)] as [number, number])
+    .sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const interval of sorted) {
+    const previous = merged.at(-1);
+    if (previous && interval[0] <= previous[1] + tolerance) previous[1] = Math.max(previous[1], interval[1]);
+    else merged.push([...interval]);
+  }
+  return merged;
+}
+
+/** Intersect a line at one local coordinate with a convex projected roof facet. */
+function polygonIntervalsAt(vertices: Vec3[], origin: Vec2, tangent: Vec2, normal: Vec2, fixedAxis: "u" | "n", fixed: number): Array<[number, number]> {
+  const local = vertices.map(([x, y]) => {
+    const dx = x - origin[0], dy = y - origin[1];
+    return [dx * tangent[0] + dy * tangent[1], dx * normal[0] + dy * normal[1]] as Vec2;
+  });
+  const fixedIndex = fixedAxis === "u" ? 0 : 1, varyingIndex = 1 - fixedIndex;
+  const hits: number[] = [];
+  for (let index = 0; index < local.length; index++) {
+    const a = local[index], b = local[(index + 1) % local.length];
+    const qa = a[fixedIndex], qb = b[fixedIndex], va = a[varyingIndex], vb = b[varyingIndex];
+    if (Math.abs(qa - fixed) < 0.5) hits.push(va);
+    if ((qa < fixed && qb > fixed) || (qb < fixed && qa > fixed))
+      hits.push(va + (vb - va) * (fixed - qa) / (qb - qa));
+  }
+  hits.sort((a, b) => a - b);
+  const unique = hits.filter((value, index) => index === 0 || Math.abs(value - hits[index - 1]) > 0.5);
+  const intervals: Array<[number, number]> = [];
+  for (let index = 0; index + 1 < unique.length; index += 2) {
+    if (unique[index + 1] - unique[index] > 1) intervals.push([unique[index], unique[index + 1]]);
+  }
+  return intervals;
+}
+
+function stations(length: number, spacing: number): number[] {
+  const result = [0];
+  for (let at = spacing; at < length - 1; at += spacing) result.push(at);
+  if (length > 1 && Math.abs(result.at(-1)! - length) > 1) result.push(length);
+  return result;
+}
+
+function makeFramingMember(role: RoofFramingRole, start: Vec3, end: Vec3, section: [number, number], material: string): RoofFramingMember | null {
+  const length_m = Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]) / 1000;
+  if (length_m < 0.05) return null;
+  const halfDepth = section[1] / 2;
+  return {
+    role,
+    start_point_mm: [start[0], start[1], start[2] - halfDepth],
+    end_point_mm: [end[0], end[1], end[2] - halfDepth],
+    section_mm: [...section],
+    material,
+    length_m,
+  };
+}
+
+function findOpposingEavePair(roof: RoofModuleData): [number, number] | null {
+  const boundary = getRoofEaveBoundary(roof), candidates: Array<{ indices: [number, number]; score: number }> = [];
+  for (let first = 0; first < boundary.length; first++) {
+    if (!roof.edges[first]?.defines_slope) continue;
+    const a = boundary[first], b = boundary[(first + 1) % boundary.length], dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+    if (length < 1000) continue;
+    const u: Vec2 = [dx / length, dy / length], midpoint: Vec2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    for (let second = first + 1; second < boundary.length; second++) {
+      if (!roof.edges[second]?.defines_slope) continue;
+      const c = boundary[second], d = boundary[(second + 1) % boundary.length], ex = d[0] - c[0], ey = d[1] - c[1], otherLength = Math.hypot(ex, ey);
+      if (otherLength < 1000 || Math.abs((dx * ex + dy * ey) / (length * otherLength)) < 0.995) continue;
+      const separation = Math.abs((c[0] - midpoint[0]) * (-u[1]) + (c[1] - midpoint[1]) * u[0]);
+      if (separation < 1000) continue;
+      candidates.push({ indices: [first, second], score: Math.min(length, otherLength) * separation });
+    }
+  }
+  return candidates.sort((a, b) => b.score - a.score || a.indices[0] - b.indices[0])[0]?.indices ?? null;
+}
+
+function segmentSeamParameters(start: Vec2, end: Vec2, seams: RoofSeam[]): number[] {
+  const rx = end[0] - start[0], ry = end[1] - start[1], values = [0, 1];
+  for (const seam of seams) {
+    const sx = seam.end_mm[0] - seam.start_mm[0], sy = seam.end_mm[1] - seam.start_mm[1];
+    const denominator = rx * sy - ry * sx;
+    if (Math.abs(denominator) < 1e-8) continue;
+    const qx = seam.start_mm[0] - start[0], qy = seam.start_mm[1] - start[1];
+    const t = (qx * sy - qy * sx) / denominator, u = (qx * ry - qy * rx) / denominator;
+    if (t > 1e-5 && t < 1 - 1e-5 && u >= -1e-5 && u <= 1 + 1e-5) values.push(t);
+  }
+  return [...new Set(values.map(value => Math.round(value * 1e7) / 1e7))].sort((a, b) => a - b);
+}
+
+/** Generate framing geometry from roof facets and the selected roof type's spacing/sections. */
+export function solveRoofFraming(roof: RoofModuleData): RoofFramingResult {
+  const settings = roofFrameParams(roof), members: RoofFramingMember[] = [], warnings: string[] = [];
+  if (settings.framing_system === "none") return { members, truss_count: 0, warnings };
+  const boundary = getRoofEaveBoundary(roof), winding = signedArea(roof.boundary_mm) >= 0 ? 1 : -1;
+  const facets = solveRoof(roof).filter(facet => facet.edge_index >= 0 && facet.vertices_mm.length >= 3);
+  if (settings.framing_system === "rafter_purlin" || settings.framing_system === "rafter_truss_purlin") {
+    for (let edgeIndex = 0; edgeIndex < boundary.length; edgeIndex++) {
+      if (!roof.edges[edgeIndex]?.defines_slope) continue;
+      const a = boundary[edgeIndex], b = boundary[(edgeIndex + 1) % boundary.length], length = length2(a, b);
+      if (length < 1) continue;
+      const tangent: Vec2 = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+      const normal: Vec2 = [-tangent[1] * winding, tangent[0] * winding];
+      const edgeFacets = facets.filter(facet => facet.edge_index === edgeIndex);
+      const project = (point: Vec3): Vec2 => {
+        const dx = point[0] - a[0], dy = point[1] - a[1];
+        return [dx * tangent[0] + dy * tangent[1], dx * normal[0] + dy * normal[1]];
+      };
+      for (const u of stations(length, settings.rafter_spacing_mm)) {
+        const intervals = mergeIntervals(edgeFacets.flatMap(facet => polygonIntervalsAt(facet.vertices_mm, a, tangent, normal, "u", u)));
+        for (const [fromN, toN] of intervals) {
+          const xy0: Vec2 = [a[0] + tangent[0] * u + normal[0] * fromN, a[1] + tangent[1] * u + normal[1] * fromN];
+          const xy1: Vec2 = [a[0] + tangent[0] * u + normal[0] * toN, a[1] + tangent[1] * u + normal[1] * toN];
+          const member = makeFramingMember("rafter", [...xy0, roofSurfaceHeightAt(roof, xy0)], [...xy1, roofSurfaceHeightAt(roof, xy1)], settings.rafter_section_mm, settings.framing_material);
+          if (member) members.push(member);
+        }
+      }
+      const maxN = Math.max(0, ...edgeFacets.flatMap(facet => facet.vertices_mm.map(point => project(point)[1])));
+      for (let n = settings.purlin_spacing_mm; n < maxN - 1; n += settings.purlin_spacing_mm) {
+        const intervals = mergeIntervals(edgeFacets.flatMap(facet => polygonIntervalsAt(facet.vertices_mm, a, tangent, normal, "n", n)));
+        for (const [fromU, toU] of intervals) {
+          const xy0: Vec2 = [a[0] + tangent[0] * fromU + normal[0] * n, a[1] + tangent[1] * fromU + normal[1] * n];
+          const xy1: Vec2 = [a[0] + tangent[0] * toU + normal[0] * n, a[1] + tangent[1] * toU + normal[1] * n];
+          const member = makeFramingMember("purlin", [...xy0, roofSurfaceHeightAt(roof, xy0)], [...xy1, roofSurfaceHeightAt(roof, xy1)], settings.purlin_section_mm, settings.framing_material);
+          if (member) members.push(member);
+        }
+      }
+    }
+  }
+  let truss_count = 0;
+  if (settings.framing_system === "truss_purlin" || settings.framing_system === "rafter_truss_purlin") {
+    const pair = findOpposingEavePair(roof);
+    if (!pair) warnings.push("ไม่พบแนวชายคาคู่ขนานตรงข้าม จึงยังจัดวางทรัสอัตโนมัติไม่ได้");
+    else {
+      const [edgeA, edgeB] = pair, a0 = boundary[edgeA], a1 = boundary[(edgeA + 1) % boundary.length];
+      const b0 = boundary[edgeB], b1 = boundary[(edgeB + 1) % boundary.length];
+      const aLength = length2(a0, a1), u: Vec2 = [(a1[0] - a0[0]) / aLength, (a1[1] - a0[1]) / aLength];
+      const projection = (point: Vec2) => (point[0] - a0[0]) * u[0] + (point[1] - a0[1]) * u[1];
+      const bRange: [number, number] = [projection(b0), projection(b1)].sort((x, y) => x - y) as [number, number];
+      const from = Math.max(0, bRange[0]), to = Math.min(aLength, bRange[1]);
+      const bottomElevation = Math.min(roofSurfaceHeightAt(roof, a0), roofSurfaceHeightAt(roof, a1), roofSurfaceHeightAt(roof, b0), roofSurfaceHeightAt(roof, b1)) - settings.truss_depth_mm;
+      const seams = getRoofSeams(roof);
+      const pointOnB = (target: number): Vec2 => {
+        const t = (target - projection(b0)) / (projection(b1) - projection(b0));
+        return [b0[0] + (b1[0] - b0[0]) * t, b0[1] + (b1[1] - b0[1]) * t];
+      };
+      for (const station of stations(to - from, settings.truss_spacing_mm)) {
+        const s = from + station, pointA: Vec2 = [a0[0] + u[0] * s, a0[1] + u[1] * s], pointB = pointOnB(s);
+        const breaks = segmentSeamParameters(pointA, pointB, seams);
+        const topAt = (t: number): Vec3 => {
+          const xy: Vec2 = [pointA[0] + (pointB[0] - pointA[0]) * t, pointA[1] + (pointB[1] - pointA[1]) * t];
+          return [xy[0], xy[1], roofSurfaceHeightAt(roof, xy)];
+        };
+        for (let index = 0; index + 1 < breaks.length; index++) {
+          const member = makeFramingMember("truss_top_chord", topAt(breaks[index]), topAt(breaks[index + 1]), settings.truss_chord_section_mm, settings.framing_material);
+          if (member) members.push(member);
+        }
+        const bottomAt = (t: number): Vec3 => [pointA[0] + (pointB[0] - pointA[0]) * t, pointA[1] + (pointB[1] - pointA[1]) * t, bottomElevation];
+        const bottom = makeFramingMember("truss_bottom_chord", bottomAt(0), bottomAt(1), settings.truss_chord_section_mm, settings.framing_material);
+        if (bottom) members.push(bottom);
+        for (const [topT, bottomT] of [[0, 0], [1, 1], [0.5, 0.5], [0.5, 0.25], [0.5, 0.75]] as const) {
+          const web = makeFramingMember("truss_web", bottomAt(bottomT), topAt(topT), settings.truss_web_section_mm, settings.framing_material);
+          if (web) members.push(web);
+        }
+        truss_count++;
+      }
+    }
+  }
+  return { members, truss_count, warnings };
+}
+
+function framingMemberTriangles(member: RoofFramingMember): Triangle[] {
+  const start = member.start_point_mm, end = member.end_point_mm;
+  const axisLength = Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]);
+  if (axisLength < 1e-6) return [];
+  const axis: Vec3 = [(end[0] - start[0]) / axisLength, (end[1] - start[1]) / axisLength, (end[2] - start[2]) / axisLength];
+  const reference: Vec3 = Math.abs(axis[2]) > 0.9 ? [0, 1, 0] : [0, 0, 1];
+  const cross3 = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const normalize = (v: Vec3): Vec3 => { const n = Math.hypot(...v); return n ? [v[0] / n, v[1] / n, v[2] / n] : [1, 0, 0]; };
+  const side = normalize(cross3(axis, reference)), up = normalize(cross3(axis, side));
+  const corners = (center: Vec3): Vec3[] => {
+    const halfSide = member.section_mm[0] / 2, halfUp = member.section_mm[1] / 2;
+    return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([s, v]) => [
+      center[0] + side[0] * halfSide * s + up[0] * halfUp * v,
+      center[1] + side[1] * halfSide * s + up[1] * halfUp * v,
+      center[2] + side[2] * halfSide * s + up[2] * halfUp * v,
+    ] as Vec3);
+  };
+  const a = corners(start), b = corners(end), triangles: Triangle[] = [];
+  triangles.push([a[0], a[2], a[1]], [a[0], a[3], a[2]], [b[0], b[1], b[2]], [b[0], b[2], b[3]]);
+  for (let index = 0; index < 4; index++) {
+    const next = (index + 1) % 4;
+    triangles.push([a[index], b[index], b[next]], [a[index], b[next], a[next]]);
+  }
+  return triangles;
+}
+
+// -------------------------------------------------------------
 // Automated Rainwater Catchment, Gutters and Downpipes (F09)
 // -------------------------------------------------------------
 
@@ -472,15 +738,26 @@ export interface RoofCatchmentResult {
   peak_flow_lps: number;
   recommended_downpipes: number;
   design_rainfall_mm_per_hr: number;
+  design_return_period_years: number;
+  design_source: string;
+  design_location: string;
   runoff_coefficient: number;
+  outlet_capacity_lps: number;
 }
 
 export function calculateRoofCatchment(
   roof: RoofModuleData,
-  design_rainfall_mm_per_hr = 120, // Standard Thai design rainfall
-  runoff_coefficient = 0.9, // Metal sheet / concrete tile standard
-  outlet_capacity_lps = 3.0, // Typical 3-inch downpipe capacity
+  design: RainwaterDesignSettings | number = DEFAULT_RAINWATER_DESIGN,
+  runoff_coefficient?: number,
+  outlet_capacity_lps?: number,
 ): RoofCatchmentResult {
+  // Numeric arguments remain supported for older callers; production project output always passes
+  // the saved project settings so no location-independent value silently drives roof sizing.
+  const settings: RainwaterDesignSettings = typeof design === "number"
+    ? { ...DEFAULT_RAINWATER_DESIGN, design_rainfall_mm_per_hr: design,
+        ...(runoff_coefficient !== undefined ? { runoff_coefficient } : {}),
+        ...(outlet_capacity_lps !== undefined ? { outlet_capacity_lps } : {}) }
+    : { ...DEFAULT_RAINWATER_DESIGN, ...design };
   const p = getRoofEaveBoundary(roof);
   let plan_area_m2 = Math.abs(signedArea(p)) / 1e6;
   if (roof.voids_mm) {
@@ -492,15 +769,19 @@ export function calculateRoofCatchment(
 
   // peak_flow_lps = rainfall_mm_per_hr * catchment_area_m2 * runoff_coefficient / 3600
   const peak_flow_lps =
-    Math.round(((design_rainfall_mm_per_hr * plan_area_m2 * runoff_coefficient) / 3600) * 100) / 100;
-  const recommended_downpipes = Math.max(1, Math.ceil(peak_flow_lps / outlet_capacity_lps));
+    Math.round(((settings.design_rainfall_mm_per_hr * plan_area_m2 * settings.runoff_coefficient) / 3600) * 100) / 100;
+  const recommended_downpipes = Math.max(1, Math.ceil(peak_flow_lps / settings.outlet_capacity_lps));
 
   return {
     catchment_area_m2: Math.round(plan_area_m2 * 100) / 100,
     peak_flow_lps,
     recommended_downpipes,
-    design_rainfall_mm_per_hr,
-    runoff_coefficient,
+    design_rainfall_mm_per_hr: settings.design_rainfall_mm_per_hr,
+    design_return_period_years: settings.design_return_period_years,
+    design_source: settings.source,
+    design_location: settings.location ?? '',
+    runoff_coefficient: settings.runoff_coefficient,
+    outlet_capacity_lps: settings.outlet_capacity_lps,
   };
 }
 
@@ -517,12 +798,12 @@ export interface DownpipeLocation {
   diameter_mm: number;
 }
 
-export function solveEaveGuttersAndDownpipes(roof: RoofModuleData): {
+export function solveEaveGuttersAndDownpipes(roof: RoofModuleData, settings: RainwaterDesignSettings = DEFAULT_RAINWATER_DESIGN): {
   gutters: GutterRun[];
   downpipes: DownpipeLocation[];
   catchment: RoofCatchmentResult;
 } {
-  const catchment = calculateRoofCatchment(roof);
+  const catchment = calculateRoofCatchment(roof, settings);
   const p = getRoofEaveBoundary(roof);
   const gutters: GutterRun[] = [];
   const hasSlopedEaves = roof.edges.some((edge) => edge.defines_slope);
@@ -565,7 +846,7 @@ export function solveEaveGuttersAndDownpipes(roof: RoofModuleData): {
       downpipes.push({
         location_mm: [locX, locY, roofSurfaceHeightAt(roof, [locX, locY])],
         edge_index: gutter.edge_index,
-        diameter_mm: 75, // 3-inch PVC downpipe
+        diameter_mm: settings.downpipe_diameter_mm,
       });
     }
   }
@@ -593,7 +874,9 @@ export function roofOutputs(p: ProjectDocument): DomainOutput[] {
     .map((o) => {
       const d = decodeRoof(resolvedData(p, o), p),
         f = solveRoof(d),
-        rw = solveEaveGuttersAndDownpipes(d),
+        rainDesign = p.rainwater_design ?? DEFAULT_RAINWATER_DESIGN,
+        rw = solveEaveGuttersAndDownpipes(d, rainDesign),
+        framing = solveRoofFraming(d),
         out = output(o, d);
       const valleyRuns = getRoofSeams(d).filter((seam) => seam.kind === "valley");
       const valleyGutterMesh = valleyRuns.flatMap((seam) => {
@@ -611,7 +894,14 @@ export function roofOutputs(p: ProjectDocument): DomainOutput[] {
           triangles.push([start[index], end[index], end[index + 1]], [start[index], end[index + 1], start[index + 1]]);
         return triangles;
       });
-      out.meshes = [...f.flatMap((v) => v.triangles), ...valleyGutterMesh];
+      const coveringMesh = f.flatMap((facet) => facet.triangles);
+      const framingMesh = framing.members.flatMap(framingMemberTriangles);
+      out.mesh_groups = {
+        roof_covering: coveringMesh,
+        valley_gutters: valleyGutterMesh,
+        roof_framing: framingMesh,
+      };
+      out.meshes = [...coveringMesh, ...valleyGutterMesh, ...framingMesh];
       const eaves = getRoofEaveBoundary(d);
       out.paths = [[
         ...eaves.map((point) => [point[0], point[1], roofSurfaceHeightAt(d, point)] as Vec3),
@@ -649,6 +939,26 @@ export function roofOutputs(p: ProjectDocument): DomainOutput[] {
           material: d.material,
         },
       ];
+
+      const framingQuantities: Array<{ role: RoofFramingRole; classification: string; description: string }> = [
+        { role: "rafter", classification: "roof.rafter", description: "Roof rafters" },
+        { role: "purlin", classification: "roof.purlin", description: "Roof purlins" },
+        { role: "truss_top_chord", classification: "roof.truss_chord", description: "Roof truss top chords" },
+        { role: "truss_bottom_chord", classification: "roof.truss_chord", description: "Roof truss bottom chords" },
+        { role: "truss_web", classification: "roof.truss_web", description: "Roof truss webs" },
+      ];
+      for (const item of framingQuantities) {
+        const members = framing.members.filter(member => member.role === item.role);
+        const quantity = members.reduce((sum, member) => sum + member.length_m, 0);
+        if (quantity > 0) out.quantities.push({
+          classification: item.classification,
+          description: `${d.mark} ${item.description} (${d.framing_material ?? DEFAULT_ROOF_FRAMING.framing_material})`,
+          quantity: Math.round(quantity * 100) / 100,
+          unit: "m",
+          formula: `sum ${item.role} member centerline lengths from roof type spacing`,
+          material: d.framing_material ?? DEFAULT_ROOF_FRAMING.framing_material,
+        });
+      }
 
       if (totalGutterM > 0) {
         out.quantities.push({
@@ -692,7 +1002,17 @@ export function roofOutputs(p: ProjectDocument): DomainOutput[] {
         ValleyGutter_m: Math.round(valleyFlashingM * 100) / 100,
         Downpipes_pcs: rw.downpipes.length,
         Catchment_lps: rw.catchment.peak_flow_lps,
+        Rainfall_mm_h: rw.catchment.design_rainfall_mm_per_hr,
+        Rainfall_return_period_years: rw.catchment.design_return_period_years,
+        Rainfall_source: rw.catchment.design_source,
+        Rainfall_location: rw.catchment.design_location,
+        Runoff_coefficient: rw.catchment.runoff_coefficient,
+        Rafters_pcs: framing.members.filter(member => member.role === "rafter").length,
+        Purlins_pcs: framing.members.filter(member => member.role === "purlin").length,
+        Trusses_pcs: framing.truss_count,
       };
+      out.warnings.push(...framing.warnings);
+      if (rainDesign.source.includes("ชั่วคราว") || !rainDesign.location?.trim()) out.warnings.push("ต้องยืนยันตำแหน่งพื้นที่และข้อมูลความเข้มฝนจากแหล่งอ้างอิงของโครงการก่อนใช้คำนวณขั้นสุดท้าย");
       return out;
     });
 }

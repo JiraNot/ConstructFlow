@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import {
   ProjectDocument,
+  DEFAULT_RAINWATER_DESIGN,
+  RainwaterDesignSettings,
   SmartObject,
   FoundationModuleData,
   BeamModuleData,
@@ -35,7 +37,7 @@ import {
   type CabinetModuleData,
   type MouldingModuleData,
 } from '@constructflow/project-model'
-import { getRoofEaveBoundary, getRoofSeams } from '@constructflow/roof-engine'
+import { getRoofEaveBoundary, getRoofSeams, solveEaveGuttersAndDownpipes, solveRoofFraming } from '@constructflow/roof-engine'
 import { Trash2, PlusCircle, RefreshCw, SlidersHorizontal, MousePointer2 } from 'lucide-react'
 import { OpeningElevationThumbnail } from './OpeningElevationThumbnail.js'
 import { buildOpeningRepresentationShapeFromObject } from '@constructflow/representation-engine'
@@ -75,6 +77,7 @@ interface PropertiesPanelProps {
   onUpdateArchitectureSurface?: (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; material?: string; finish_layers?: Array<{ material: string; thickness_mm: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number; grid_mm?: [number, number] }) => void
   onUpdateSlab?: (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; slab_system?: string; material?: string; slope_ratio?: number; drain_direction_deg?: number; finish_layers?: Array<{ material: string; thickness_mm: number; offset_mm?: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number }) => void
   onUpdateRoof?: (objectId: string, changes: Partial<RoofModuleData>) => void
+  onUpdateRainwaterDesign?: (settings: RainwaterDesignSettings) => void
   onUpdatePipeRoute?: (objectId: string, changes: Partial<PipeRouteModuleData>) => void
   onUpdateElectricalFixture?: (objectId: string, changes: Partial<ElectricalFixtureModuleData>) => void
   onAssignElectricalFixtureToCircuit?: (fixtureId: string, circuitId: string | null) => void
@@ -115,6 +118,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateArchitectureSurface,
   onUpdateSlab,
   onUpdateRoof,
+  onUpdateRainwaterDesign,
   onUpdatePipeRoute,
   onUpdateElectricalFixture,
   onAssignElectricalFixtureToCircuit,
@@ -143,6 +147,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [newWallFinishDescription, setNewWallFinishDescription] = useState('')
   const [newWallFinishMaterial, setNewWallFinishMaterial] = useState('wall_paint')
   const [newWallFinishThickness, setNewWallFinishThickness] = useState(2)
+  const [rainwaterDraft, setRainwaterDraft] = useState<Record<keyof RainwaterDesignSettings, string>>(() => {
+    const settings = project.rainwater_design ?? DEFAULT_RAINWATER_DESIGN
+    return Object.fromEntries(Object.entries(settings).map(([key, value]) => [key, String(value)])) as Record<keyof RainwaterDesignSettings, string>
+  })
   const selectedObj = selectedId ? project.objects[selectedId] : null
   const selectedObjects = [...new Set(selectedIds)].map(id => project.objects[id]).filter((object): object is SmartObject => Boolean(object))
   const selectedObjectFamily = selectedObjects.length > 1 && selectedObjects.every(object => object.object_type === selectedObjects[0].object_type)
@@ -220,6 +228,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   useEffect(() => {
     setEditingMark(currentMark)
   }, [selectedId, currentMark])
+
+  useEffect(() => {
+    const settings = project.rainwater_design ?? DEFAULT_RAINWATER_DESIGN
+    setRainwaterDraft(Object.fromEntries(Object.entries(settings).map(([key, value]) => [key, String(value)])) as Record<keyof RainwaterDesignSettings, string>)
+  }, [project.rainwater_design])
 
   const openingInstanceEditor = openingObj && openingType ? (
     <details style={{ border: '1px solid #e5edf5', borderRadius: 3, padding: '6px 6px', background: '#fbfdff' }}>
@@ -840,12 +853,15 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       {/* Roof Properties */}
       {roofObj && (() => {
         const rData = (roofObj.module_data ?? {}) as Record<string, unknown>
+        const roofType = resolveCatalogType(project, 'roof.system', typeof rData.type_id === 'string' ? rData.type_id : String(rData.mark ?? ''))
+        const instanceOverrides = rData.instance_overrides && typeof rData.instance_overrides === 'object' ? rData.instance_overrides as Record<string, unknown> : {}
+        const resolvedRoof = { ...rData, ...roofType?.parameters, ...instanceOverrides } as unknown as RoofModuleData
         const boundary = Array.isArray(rData.boundary_mm) ? rData.boundary_mm as [number, number][] : []
         const edges = Array.isArray(rData.edges) ? rData.edges as RoofModuleData['edges'] : []
         let eavesBoundary = boundary
-        try { eavesBoundary = getRoofEaveBoundary(rData as unknown as RoofModuleData) } catch { /* Keep malformed legacy roof data inspectable. */ }
+        try { eavesBoundary = getRoofEaveBoundary(resolvedRoof) } catch { /* Keep malformed legacy roof data inspectable. */ }
         const definedSlopes = edges.filter(edge => edge.defines_slope)
-        const roofSeams = getRoofSeams(rData as unknown as RoofModuleData)
+        const roofSeams = getRoofSeams(resolvedRoof)
         const seamCounts = {
           ridge: roofSeams.filter(seam => seam.kind === 'ridge').length,
           hip: roofSeams.filter(seam => seam.kind === 'hip').length,
@@ -856,6 +872,30 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           const next = eavesBoundary[(index + 1) % eavesBoundary.length]
           return area + point[0] * next[1] - next[0] * point[1]
         }, 0)) / 2_000_000 : 0
+        const rainSettings = project.rainwater_design ?? DEFAULT_RAINWATER_DESIGN
+        const rainwater = solveEaveGuttersAndDownpipes(resolvedRoof, rainSettings)
+        const framing = solveRoofFraming(resolvedRoof)
+        const rainwaterNumbers = ['design_rainfall_mm_per_hr', 'design_return_period_years', 'runoff_coefficient', 'outlet_capacity_lps', 'downpipe_diameter_mm'] as const
+        const validRainwaterDraft = rainwaterNumbers.every(key => Number.isFinite(Number(rainwaterDraft[key])) && Number(rainwaterDraft[key]) > 0)
+          && Number(rainwaterDraft.runoff_coefficient) <= 1
+          && Number(rainwaterDraft.design_rainfall_mm_per_hr) <= 1000
+          && Number(rainwaterDraft.design_return_period_years) <= 1000
+          && Number(rainwaterDraft.outlet_capacity_lps) <= 10000
+          && Number(rainwaterDraft.downpipe_diameter_mm) <= 1000
+          && String(rainwaterDraft.location ?? '').trim().length >= 2
+          && rainwaterDraft.source.trim().length >= 3
+        const saveRainwaterDesign = () => {
+          if (!validRainwaterDraft) return
+          onUpdateRainwaterDesign?.({
+            design_rainfall_mm_per_hr: Number(rainwaterDraft.design_rainfall_mm_per_hr),
+            design_return_period_years: Number(rainwaterDraft.design_return_period_years),
+            location: String(rainwaterDraft.location ?? '').trim(),
+            source: rainwaterDraft.source.trim(),
+            runoff_coefficient: Number(rainwaterDraft.runoff_coefficient),
+            outlet_capacity_lps: Number(rainwaterDraft.outlet_capacity_lps),
+            downpipe_diameter_mm: Number(rainwaterDraft.downpipe_diameter_mm),
+          })
+        }
         const update = (changes: Partial<RoofModuleData>) => onUpdateRoof?.(roofObj.id, changes)
         const updateEdge = (index: number, changes: Partial<RoofModuleData['edges'][number]>) => {
           const next = edges.map((edge, edgeIndex) => edgeIndex === index ? { ...edge, ...changes } : edge)
@@ -893,6 +933,49 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             {roofSeams.length > 0 && <small style={{ fontSize: 10, color: '#64748b' }}>
               เส้นหลังคา: สัน {seamCounts.ridge} · ตะเข้สัน {seamCounts.hip} · ร่อง {seamCounts.valley} — ลากจุดกึ่งกลางเส้นในแปลนเพื่อปรับแนว
             </small>}
+            <details className="cf-inspector-section" open>
+              <summary>โครงจันทัน / แป / ทรัส · Type {roofType?.name ?? 'ค่าเริ่มต้น'}</summary>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, fontSize: 10, color: '#475569', paddingTop: 5 }}>
+                <span>จันทัน {framing.members.filter(member => member.role === 'rafter').length} ชิ้น</span>
+                <span>แป {framing.members.filter(member => member.role === 'purlin').length} ชิ้น</span>
+                <span>ทรัส {framing.truss_count} ชุด</span>
+                <span>วัสดุ {String(resolvedRoof.framing_material ?? 'steel')}</span>
+              </div>
+              {framing.warnings.map(warning => <small key={warning} role="status" style={{ color: '#a16207' }}>{warning}</small>)}
+              <small style={{ color: '#64748b' }}>แก้หน้าตัดและระยะจัดวางผ่านปุ่ม Type Catalog ของหลังคา · ตรวจตำแหน่งจริงในมุม “แปลนคาน” และ 3D</small>
+            </details>
+            <details className="cf-inspector-section" open>
+              <summary>น้ำฝนโครงการ · {rainSettings.location || [project.legal_metadata?.district, project.legal_metadata?.province].filter(Boolean).join(' ') || 'ยังไม่ระบุพื้นที่'}</summary>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, paddingTop: 6 }}>
+                <label style={{ display: 'grid', gap: 2, fontSize: 10, color: '#52677d', gridColumn: '1 / -1' }}>ตำแหน่งพื้นที่โครงการ
+                  <input aria-label="ตำแหน่งพื้นที่โครงการสำหรับข้อมูลฝน" value={rainwaterDraft.location ?? ''} onChange={event => setRainwaterDraft(current => ({ ...current, location: event.target.value }))} placeholder="เขต / อำเภอ / จังหวัด" />
+                </label>
+                <label style={{ display: 'grid', gap: 2, fontSize: 10, color: '#52677d' }}>ความเข้มฝน (มม./ชม.)
+                  <input aria-label="ความเข้มฝนออกแบบของโครงการ" type="number" min="0.1" max="1000" step="any" value={rainwaterDraft.design_rainfall_mm_per_hr} onChange={event => setRainwaterDraft(current => ({ ...current, design_rainfall_mm_per_hr: event.target.value }))} />
+                </label>
+                <label style={{ display: 'grid', gap: 2, fontSize: 10, color: '#52677d' }}>รอบอุบัติ (ปี)
+                  <input aria-label="รอบอุบัติฝนออกแบบของโครงการ" type="number" min="0.1" max="1000" step="any" value={rainwaterDraft.design_return_period_years} onChange={event => setRainwaterDraft(current => ({ ...current, design_return_period_years: event.target.value }))} />
+                </label>
+                <label style={{ display: 'grid', gap: 2, fontSize: 10, color: '#52677d' }}>Runoff coefficient
+                  <input aria-label="สัมประสิทธิ์น้ำไหลนองของโครงการ" type="number" min="0.01" max="1" step="0.01" value={rainwaterDraft.runoff_coefficient} onChange={event => setRainwaterDraft(current => ({ ...current, runoff_coefficient: event.target.value }))} />
+                </label>
+                <label style={{ display: 'grid', gap: 2, fontSize: 10, color: '#52677d' }}>กำลังรับต่อจุด (ลิตร/วินาที)
+                  <input aria-label="กำลังระบายต่อท่อของโครงการ" type="number" min="0.01" max="10000" step="any" value={rainwaterDraft.outlet_capacity_lps} onChange={event => setRainwaterDraft(current => ({ ...current, outlet_capacity_lps: event.target.value }))} />
+                </label>
+                <label style={{ display: 'grid', gap: 2, fontSize: 10, color: '#52677d' }}>เส้นผ่านศูนย์กลางท่อ (มม.)
+                  <input aria-label="เส้นผ่านศูนย์กลางท่อน้ำฝนของโครงการ" type="number" min="25" max="1000" step="any" value={rainwaterDraft.downpipe_diameter_mm} onChange={event => setRainwaterDraft(current => ({ ...current, downpipe_diameter_mm: event.target.value }))} />
+                </label>
+                <label style={{ display: 'grid', gap: 2, fontSize: 10, color: '#52677d', gridColumn: '1 / -1' }}>แหล่งข้อมูลฝน / หน่วยงาน / สถานี
+                  <input aria-label="แหล่งอ้างอิงข้อมูลฝนโครงการ" value={rainwaterDraft.source} onChange={event => setRainwaterDraft(current => ({ ...current, source: event.target.value }))} />
+                </label>
+              </div>
+              <button type="button" className="cf-button" disabled={!validRainwaterDraft} onClick={saveRainwaterDesign}>บันทึกค่าคำนวณน้ำฝนทั้งโครงการ</button>
+              <div style={{ background: '#f8fafc', padding: '6px 7px', borderRadius: 3, fontSize: 10, display: 'grid', gap: 2 }}>
+                <span>หลังคารับน้ำ {rainwater.catchment.catchment_area_m2.toFixed(2)} ตร.ม. · อัตราไหล {rainwater.catchment.peak_flow_lps.toFixed(2)} ลิตร/วินาที</span>
+                <strong>แนะนำ {rainwater.downpipes.length} จุด · Ø{rainSettings.downpipe_diameter_mm} มม. · ราง {rainwater.gutters.reduce((sum, gutter) => sum + gutter.length_m, 0).toFixed(2)} ม.</strong>
+                {(rainSettings.source.includes('ชั่วคราว') || !rainSettings.location?.trim()) && <span role="status" style={{ color: '#a16207' }}>ค่า 120 มม./ชม. เป็นค่าเริ่มต้นชั่วคราว · ระบุตำแหน่งโครงการและแหล่งข้อมูลฝน/รอบอุบัติก่อนใช้คำนวณขั้นสุดท้าย</span>}
+              </div>
+            </details>
             <label className="cf-property-row">ระดับอ้างอิงหลังคา ({displayUnit})
               <LengthInput value={Number(rData.elevation_mm ?? 0)} unit={displayUnit} onChange={value => update({ elevation_mm: value })} aria-label={`ระดับอ้างอิงหลังคา (${displayUnit})`} />
             </label>

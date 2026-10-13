@@ -20,6 +20,7 @@ export const CATALOG_FAMILIES = [
   ["structure.foundation", "ฐานราก"],
   ["structure.beam", "คาน"],
   ["structure.slab", "พื้น"],
+  ["roof.system", "ระบบหลังคา"],
   ["architecture.wall", "ผนัง"],
   ["architecture.floor", "พื้นสถาปัตย์"],
   ["architecture.ceiling", "ฝ้าเพดาน"],
@@ -44,6 +45,7 @@ export const TOOL_FAMILIES: Record<string, string> = {
   door: "door_window.door",
   window: "door_window.window",
   slab: "structure.slab",
+  roof: "roof.system",
 };
 
 export function typeDescription(type: TypeDefinition): string {
@@ -86,6 +88,15 @@ export function typeDescription(type: TypeDefinition): string {
     };
     return systems[String(p.wall_system)] ?? "ผนังประกอบหลายชั้น";
   }
+  if (type.object_type === "roof.system") {
+    const systems: Record<string, string> = {
+      none: "ไม่สร้างโครงหลังคา",
+      rafter_purlin: "จันทัน + แป",
+      truss_purlin: "ทรัส + แป",
+      rafter_truss_purlin: "จันทัน + ทรัส + แป",
+    };
+    return `${systems[String(p.framing_system ?? "rafter_purlin")] ?? "โครงหลังคา"} · ${p.framing_material === "timber" ? "ไม้" : "เหล็ก"}`;
+  }
   const materials: Record<string, string> = {
     reinforced_concrete: "คอนกรีตเสริมเหล็ก",
     steel: "เหล็ก",
@@ -100,6 +111,7 @@ export function typeSizeLabel(type: TypeDefinition, unit: DisplayLengthUnit = "m
   const p = type.parameters;
   const label = (value: number) => formatLengthMm(value, unit);
   if (p.section_mm) return p.section_mm.map(label).join(" × ") + ` ${unit}`;
+  if (type.object_type === "roof.system" && p.rafter_section_mm) return `จันทัน ${p.rafter_section_mm.map(label).join(" × ")} ${unit}`;
   if (p.size_mm) return p.size_mm.map(label).join(" × ") + ` ${unit}`;
   if (p.width_mm && p.height_mm) return `${label(p.width_mm)} × ${label(p.height_mm)} ${unit}`;
   return p.thickness_mm ? `หนา ${label(p.thickness_mm)} ${unit}` : "";
@@ -126,6 +138,16 @@ export function TypeThumbnail({
         {...controls}
       />
     );
+  if (type.object_type === "roof.system") {
+    const truss = String(type.parameters.framing_system ?? "rafter_purlin").includes("truss");
+    return <svg role="img" aria-label={`ตัวอย่าง${typeDescription(type)}`} viewBox="0 0 160 104">
+      <rect width="160" height="104" rx="8" fill="#f2f7fb" />
+      <path d="M 18 78 L 80 26 L 142 78" fill="none" stroke="#475569" strokeWidth="4" />
+      <path d="M 28 74 L 78 32 M 48 78 L 80 50 M 70 78 L 82 68 M 90 78 L 80 50 M 112 78 L 82 32 M 132 78 L 84 28" stroke="#0f766e" strokeWidth="3" />
+      <path d="M 30 62 L 130 62 M 42 50 L 118 50 M 56 38 L 104 38" stroke="#64748b" strokeWidth="2" />
+      {truss && <path d="M 30 83 L 130 83 M 30 78 L 30 83 M 130 78 L 130 83 M 80 83 L 80 26 M 55 83 L 80 55 M 105 83 L 80 55" fill="none" stroke="#7c3aed" strokeWidth="2" />}
+    </svg>;
+  }
   const wall = type.object_type === "architecture.wall",
     slab = type.object_type === "structure.slab",
     footing = type.object_type === "structure.foundation";

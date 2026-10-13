@@ -76,6 +76,7 @@ const basic: Record<string, string[]> = {
   "structure.beam": ["section_mm", "plaster_thickness_mm", "drop_mm"],
   "structure.foundation": ["size_mm", "foundation_type"],
   "structure.slab": ["thickness_mm", "topping_mm", "slab_system", "slope_ratio", "drain_direction_deg", "finish_layers", "finish_pattern_mm"],
+  "roof.system": ["framing_system", "rafter_spacing_mm", "purlin_spacing_mm", "truss_spacing_mm", "rafter_section_mm", "purlin_section_mm", "truss_chord_section_mm", "truss_web_section_mm", "truss_depth_mm", "framing_material"],
   "architecture.floor": ["thickness_mm", "finish_layers", "finish_pattern_mm", "finish_pattern_origin_mm", "finish_pattern_rotation_deg"],
   "architecture.ceiling": ["thickness_mm", "grid_mm"],
   "architecture.wall": [
@@ -106,6 +107,18 @@ const defaults: Record<string, TypeParameters> = {
     drain_direction_deg: 0,
     finish_layers: [],
     finish_pattern_mm: [600, 600],
+  },
+  "roof.system": {
+    framing_system: "rafter_purlin",
+    rafter_spacing_mm: 1000,
+    purlin_spacing_mm: 1000,
+    truss_spacing_mm: 1200,
+    rafter_section_mm: [50, 100],
+    purlin_section_mm: [45, 75],
+    truss_chord_section_mm: [50, 100],
+    truss_web_section_mm: [40, 40],
+    truss_depth_mm: 500,
+    framing_material: "steel",
   },
   "architecture.floor": {
     thickness_mm: 50,
@@ -450,6 +463,7 @@ function CatalogDialog({
     "glazing_material",
     "plaster_inside_material",
     "plaster_outside_material",
+    "framing_material",
   ];
   const canChoose = (type: TypeDefinition) =>
     selectionIntent === "assign"

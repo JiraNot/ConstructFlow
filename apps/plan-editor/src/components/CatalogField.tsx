@@ -12,6 +12,16 @@ const labels: Record<string, string> = {
   quantity_unit: "หน่วยปริมาณ",
   section_mm: "หน้าตัด",
   size_mm: "ขนาดฐานราก",
+  framing_material: "วัสดุโครงหลังคา",
+  framing_system: "ระบบรับน้ำหนักหลังคา",
+  rafter_spacing_mm: "ระยะจันทัน",
+  purlin_spacing_mm: "ระยะแป",
+  truss_spacing_mm: "ระยะทรัส",
+  rafter_section_mm: "หน้าตัดจันทัน",
+  purlin_section_mm: "หน้าตัดแป",
+  truss_chord_section_mm: "หน้าตัดคอร์ดทรัส",
+  truss_web_section_mm: "หน้าตัดเอ็นทรัส",
+  truss_depth_mm: "ความลึกทรัส",
   width_mm: "กว้าง",
   height_mm: "สูง",
   thickness_mm: "ความหนารวม",
@@ -117,6 +127,13 @@ const options: Record<string, [string, string][]> = {
     ["precast_plank", "พื้นสำเร็จรูป"],
     ["hollow_core", "พื้น Hollow Core"],
   ],
+  framing_system: [
+    ["none", "ไม่สร้างโครงหลังคา"],
+    ["rafter_purlin", "จันทัน + แป"],
+    ["truss_purlin", "ทรัส + แป"],
+    ["rafter_truss_purlin", "จันทัน + ทรัส + แป"],
+  ],
+  framing_material: [["steel", "เหล็ก"], ["timber", "ไม้"]],
   plaster_inside_material: [
     ["cement_plaster", "ฉาบปูน"], ["wall_paint", "สีทาผนัง"], ["interior_paint", "สีทาผนัง (ข้อมูลเดิม)"], ["exterior_paint", "สีทาผนัง (ข้อมูลเดิม)"], ["ceramic_tile", "กระเบื้อง"],
     ["stone_cladding", "กรุหิน"], ["timber_cladding", "กรุไม้"], ["wallpaper", "วอลล์เปเปอร์"],
@@ -180,7 +197,7 @@ export function CatalogField({
             <div key={i}>
               <CatalogField
                 name={
-                  ["section_mm", "size_mm"].includes(name)
+                  ["section_mm", "size_mm", "rafter_section_mm", "purlin_section_mm", "truss_chord_section_mm", "truss_web_section_mm"].includes(name)
                     ? ["กว้าง", "ลึก / ยาว", "หนา"][i]
                     : String(i + 1)
                 }
@@ -191,7 +208,7 @@ export function CatalogField({
                   onChange(value.map((v, j) => (i === j ? next : v)))
                 }
               />
-              {!["section_mm", "size_mm"].includes(name) && (
+              {!["section_mm", "size_mm", "rafter_section_mm", "purlin_section_mm", "truss_chord_section_mm", "truss_web_section_mm"].includes(name) && (
                 <button
                   type="button"
                   className="cf-button"
@@ -203,7 +220,7 @@ export function CatalogField({
             </div>
           ))}
         </div>
-        {!["section_mm", "size_mm"].includes(name) && (
+        {!["section_mm", "size_mm", "rafter_section_mm", "purlin_section_mm", "truss_chord_section_mm", "truss_web_section_mm"].includes(name) && (
           <button
             type="button"
             className="cf-button cf-button-quiet"

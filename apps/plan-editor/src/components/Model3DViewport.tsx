@@ -467,6 +467,7 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
   const selectRef = useRef(onSelectObject)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [hasModel, setHasModel] = useState(false)
+  const [roofFramingOnly, setRoofFramingOnly] = useState(false)
   selectRef.current = onSelectObject
 
   useEffect(() => {
@@ -588,7 +589,7 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
       })
     }
     meshByIdRef.current.clear()
-    const representationResult = buildProjectRepresentations3D(project)
+    const representationResult = buildProjectRepresentations3D(project, { roofFramingOnly })
     for (const representation of representationResult.objects) {
       const mesh = makeObjectMesh(representation)
       scene.add(mesh)
@@ -606,7 +607,7 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
       cameraRef.current?.updateProjectionMatrix()
       orbitRef.current?.update()
     }
-  }, [project])
+  }, [project, roofFramingOnly])
 
   const frameObjects = (ids?: readonly string[]) => {
     const camera = cameraRef.current
@@ -687,7 +688,16 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
     <div style={{ position: 'absolute', left: 12, top: 10, zIndex: 1, color: '#94a3b8', background: 'rgba(8,15,30,0.76)', padding: '4px 6px', borderRadius: 2, fontSize: 11, pointerEvents: 'none' }}>
       ภาพตัวอย่าง 3D · ลากเพื่อหมุน · เลื่อนเพื่อซูม · เลือกวัตถุเพื่อดูคุณสมบัติ
     </div>
-    <div role="group" aria-label="คำสั่งมุมมอง 3D" style={{ position: 'absolute', top: 10, right: 12, zIndex: 2, display: 'flex', gap: 6 }}>
+    <div role="group" aria-label="คำสั่งมุมมอง 3D" style={{ position: 'absolute', top: 46, right: 12, zIndex: 2, display: 'flex', gap: 6 }}>
+      <button
+        type="button"
+        aria-pressed={roofFramingOnly}
+        aria-label={roofFramingOnly ? 'แสดงหลังคาคลุม' : 'แสดงโครงหลังคา'}
+        title={roofFramingOnly ? 'คืนหลังคาคลุม' : 'ซ่อนหลังคาคลุมเพื่อดูจันทัน แป และทรัส'}
+        onClick={() => setRoofFramingOnly(value => !value)}
+        disabled={!Object.values(project.objects).some(object => object.object_type === 'roof.system')}
+        style={roofFramingOnly ? { ...viewButtonStyle, background: '#0f766e', color: '#fff', borderColor: '#0f766e' } : viewButtonStyle}
+      >{roofFramingOnly ? 'แสดงหลังคาคลุม' : 'ดูโครงหลังคา'}</button>
       <button type="button" title="จัดกรอบโมเดลทั้งหมด" onClick={() => frameObjects()} disabled={!hasModel} style={viewButtonStyle}>จัดกรอบโมเดล</button>
       <button type="button" title="จัดกรอบวัตถุที่เลือก" onClick={() => frameObjects(selectedIds.length ? selectedIds : selectedId ? [selectedId] : [])} disabled={!hasModel || (!selectedId && !selectedIds.length)} style={viewButtonStyle}>กรอบที่เลือก</button>
     </div>

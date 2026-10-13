@@ -133,7 +133,7 @@ test('architectural and framing plans use distinct visible and selectable object
     const beams = framing.filter(o => o.object_type === 'structure.beam')
     assert.ok(beams.length > 0)
     assert.ok(beams.every(o => o.module_data.level_id === (level === 'GF' ? 'DATUM' : 'L1')))
-    assert.ok(framing.every(o => ['structure.beam', 'structure.column', 'structure.foundation', 'structure.grid'].includes(o.object_type)))
+    assert.ok(framing.every(o => ['structure.beam', 'structure.column', 'structure.foundation', 'structure.grid', 'roof.system'].includes(o.object_type)))
   }
   assert.ok(family('structure.column').every(o => o.module_data.mark === 'C1' && o.module_data.section_mm.every(n => n === 200)))
   for (const o of family('architecture.wall')) {
@@ -196,7 +196,9 @@ test('stair ends follow edited floor datums and fixed-height mode remains availa
 
 test('representations contain all physical objects, hosted openings and finite geometry', () => {
   const representations = buildProjectRepresentations3D(model)
-  assert.deepEqual(representations.warnings, [])
+  const rainfallWarnings = representations.warnings.filter(warning => warning.includes('ยืนยันตำแหน่งพื้นที่และข้อมูลความเข้มฝน'))
+  assert.deepEqual(representations.warnings.filter(warning => !rainfallWarnings.includes(warning)), [])
+  assert.equal(rainfallWarnings.length, family('roof.system').length, 'each roof should identify provisional project rainfall inputs')
   for (const o of representations.objects) {
     const triangles = getRepresentationTriangles(o)
     // Opening frame/leaf geometry is produced by the 3D opening renderer,

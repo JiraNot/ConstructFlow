@@ -77,6 +77,16 @@ export interface TypeParameters {
   glazing_transmission?: number
   topping_mm?: number
   slab_system?: 'slab_on_ground' | 'suspended' | 'precast_plank' | 'hollow_core'
+  framing_system?: 'none' | 'rafter_purlin' | 'truss_purlin' | 'rafter_truss_purlin'
+  rafter_spacing_mm?: number
+  purlin_spacing_mm?: number
+  truss_spacing_mm?: number
+  rafter_section_mm?: [number, number]
+  purlin_section_mm?: [number, number]
+  truss_chord_section_mm?: [number, number]
+  truss_web_section_mm?: [number, number]
+  truss_depth_mm?: number
+  framing_material?: string
   drop_mm?: number
   rebar_type?: Record<string, unknown>
   mass_per_m_kg?: number
@@ -97,6 +107,52 @@ export interface TypeDefinition {
   parameters: TypeParameters
 }
 
+export interface RainwaterDesignSettings {
+  /** Project site location used to identify the governing rainfall record. */
+  location?: string
+  /** Local design rainfall intensity, sourced from the project authority/station data. */
+  design_rainfall_mm_per_hr: number
+  /** Design return period in years. */
+  design_return_period_years: number
+  /** Human-readable source reference for the project rainfall value. */
+  source: string
+  runoff_coefficient: number
+  /** Checked capacity per downpipe/outlet, supplied by the selected system/type. */
+  outlet_capacity_lps: number
+  downpipe_diameter_mm: number
+}
+
+export const DEFAULT_RAINWATER_DESIGN: RainwaterDesignSettings = {
+  location: '',
+  design_rainfall_mm_per_hr: 120,
+  design_return_period_years: 5,
+  source: 'ค่าเริ่มต้นชั่วคราว · กรุณาแทนด้วยข้อมูลฝนของพื้นที่โครงการ',
+  runoff_coefficient: 0.9,
+  outlet_capacity_lps: 3,
+  downpipe_diameter_mm: 75,
+}
+
+export function validateRainwaterDesignSettings(value: unknown): asserts value is RainwaterDesignSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Rainwater design settings must be an object')
+  const settings = value as Record<string, unknown>
+  const positive = (field: string, maximum: number) => {
+    const number = settings[field]
+    if (typeof number !== 'number' || !Number.isFinite(number) || number <= 0 || number > maximum)
+      throw new Error(`Rainwater ${field} must be greater than zero and at most ${maximum}`)
+  }
+  positive('design_rainfall_mm_per_hr', 1000)
+  positive('design_return_period_years', 1000)
+  positive('outlet_capacity_lps', 10000)
+  positive('downpipe_diameter_mm', 1000)
+  const runoff = settings.runoff_coefficient
+  if (typeof runoff !== 'number' || !Number.isFinite(runoff) || runoff <= 0 || runoff > 1)
+    throw new Error('Rainwater runoff_coefficient must be greater than zero and at most one')
+  if (typeof settings.source !== 'string' || settings.source.trim().length < 3 || settings.source.length > 500)
+    throw new Error('Rainwater source must contain 3 to 500 characters')
+  if (settings.location !== undefined && (typeof settings.location !== 'string' || settings.location.length > 200))
+    throw new Error('Rainwater location must be a string of at most 200 characters')
+}
+
 export interface ProjectDocument {
   schema_version: 2
   project: ProjectMetadata
@@ -109,6 +165,8 @@ export interface ProjectDocument {
   drawing_settings?: DrawingSettings
   /** Project deviations from the versioned clash/coordination rule dataset. */
   coordination_settings?: CoordinationSettings
+  /** Shared local rainfall and outlet design inputs used by all roof catchments. */
+  rainwater_design?: RainwaterDesignSettings
   legal_metadata?: ProjectLegalMetadata
   /** Embedded reference drawings, keyed by view and level so they travel with .cfproj. */
   underlays?: Record<string, ProjectUnderlay>
@@ -461,6 +519,9 @@ DEFAULT_TYPES.push(
   { id: 'd661d25e-2c7b-41c1-b4d0-d153a50f8711', object_type: 'architecture.wall_finish', name: 'W1', parameters: { material: 'wall_paint', thickness_mm: 2, description_th: 'สีทาผนังภายใน' } },
   { id: 'c95cbb8e-70d6-4903-9d3b-c452e4170faa', object_type: 'architecture.wall_finish', name: 'W2', parameters: { material: 'ceramic_tile', thickness_mm: 10, description_th: 'ผนังกรุกระเบื้อง' } },
   { id: 'c3c38a2b-a732-423e-b827-7192c24c67ce', object_type: 'architecture.wall_finish', name: 'W3', parameters: { material: 'cement_plaster', thickness_mm: 15, description_th: 'ฉาบปูนและทาสี' } },
+  { id: '218c14ea-b8ab-5e1b-96be-2e9f5f2e2bc0', object_type: 'roof.system', name: 'RF1', parameters: { framing_system: 'rafter_purlin', rafter_spacing_mm: 1000, purlin_spacing_mm: 1000, truss_spacing_mm: 1200, rafter_section_mm: [50, 100], purlin_section_mm: [45, 75], truss_chord_section_mm: [50, 100], truss_web_section_mm: [40, 40], truss_depth_mm: 500, framing_material: 'steel' } },
+  { id: '6a932a36-96d6-55e5-85e9-1785e2a8d2ee', object_type: 'roof.system', name: 'RT1', parameters: { framing_system: 'truss_purlin', rafter_spacing_mm: 1000, purlin_spacing_mm: 1000, truss_spacing_mm: 1200, rafter_section_mm: [50, 100], purlin_section_mm: [45, 75], truss_chord_section_mm: [50, 100], truss_web_section_mm: [40, 40], truss_depth_mm: 500, framing_material: 'steel' } },
+  { id: 'faf6edb7-6f38-576a-a9fc-3708294e1306', object_type: 'roof.system', name: 'RF-TIMBER', parameters: { framing_system: 'rafter_truss_purlin', rafter_spacing_mm: 800, purlin_spacing_mm: 1000, truss_spacing_mm: 1000, rafter_section_mm: [50, 100], purlin_section_mm: [50, 75], truss_chord_section_mm: [50, 150], truss_web_section_mm: [50, 75], truss_depth_mm: 600, framing_material: 'timber' } },
   { id: 'aed33941-9ba8-5e5c-977a-b35a81d2b903', object_type: 'structure.slab', name: 'GS', parameters: { thickness_mm: 120, topping_mm: 0, slab_system: 'slab_on_ground', material: 'reinforced_concrete', finish_layers: [], finish_pattern_mm: [600, 600], slope_ratio: 0, drain_direction_deg: 0 } },
   { id: '1a6d1781-cf3a-5c29-9f43-4b1efa2577cf', object_type: 'structure.slab', name: 'S1', parameters: { thickness_mm: 150, topping_mm: 50, slab_system: 'precast_plank', material: 'precast_concrete', finish_layers: [{ mark: 'Tile', material: 'porcelain_tile', thickness_mm: 10, quantity_unit: 'm2' }], finish_pattern_mm: [600, 600], slope_ratio: 0, drain_direction_deg: 0 } }
 )
@@ -471,6 +532,7 @@ export const CATALOG_PARAMETER_FIELDS: Record<string, string[]> = {
   'structure.foundation': ['size_mm', 'foundation_type', 'pile_type', 'pile_offsets_mm', 'pile_length_mm', 'material'],
   'structure.beam': ['plaster_thickness_mm', 'section_mm', 'material', 'drop_mm', 'rebar_type', 'mass_per_m_kg'],
   'structure.slab': ['thickness_mm', 'topping_mm', 'slab_system', 'material', 'slope_ratio', 'drain_direction_deg', 'finish_layers', 'finish_pattern_mm', 'finish_pattern_origin_mm', 'finish_pattern_rotation_deg'],
+  'roof.system': ['framing_system', 'rafter_spacing_mm', 'purlin_spacing_mm', 'truss_spacing_mm', 'rafter_section_mm', 'purlin_section_mm', 'truss_chord_section_mm', 'truss_web_section_mm', 'truss_depth_mm', 'framing_material'],
   'architecture.floor': ['thickness_mm', 'material', 'finish_layers', 'finish_pattern_mm', 'finish_pattern_origin_mm', 'finish_pattern_rotation_deg'],
   'architecture.ceiling': ['thickness_mm', 'material', 'grid_mm'],
   'interior.cabinet_run': ['width_mm','height_mm','depth_mm','board_mm','back_mm','plinth_mm','front','carcass_material','front_material','back_material','countertop_material','countertop_mm'],
@@ -537,6 +599,7 @@ export function createEmptyProjectDocument(
     types: structuredClone(DEFAULT_TYPES),
     objects: {},
     relationships: [],
+    rainwater_design: structuredClone(DEFAULT_RAINWATER_DESIGN),
   }
 }
 

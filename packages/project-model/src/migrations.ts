@@ -1,7 +1,7 @@
 import { validateDoorFaceComponents } from './doorFace.js'
 import { validateOpeningPlanSymbolLines } from './openingPlanSymbol.js'
 import type { Phase } from './types.js'
-import { DEFAULT_PHASES, type ProjectDocument, type TypeDefinition } from './project.js'
+import { DEFAULT_PHASES, DEFAULT_TYPES, validateRainwaterDesignSettings, type ProjectDocument, type TypeDefinition } from './project.js'
 import { validateConstructionPayloads } from './constructionValidation.js'
 import { validateDrawingSettings } from './sheetSettings.js'
 import { validateCoordinationSettings } from './coordinationSettings.js'
@@ -21,6 +21,39 @@ const V5_NAMESPACE = '6770dbfa-ff6e-47e6-b5e8-18c0581970c8'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const PHASES = new Set<Phase>(['existing', 'demolition', 'new_construction'])
 const PILE_TYPES = new Set(['micro_pile_i18', 'micro_pile_i22', 'spun_micro_pile_20', 'spun_micro_pile_25', 'bored_pile'])
+const ROOF_CATALOG_FIELDS = ['framing_system', 'rafter_spacing_mm', 'purlin_spacing_mm', 'truss_spacing_mm', 'rafter_section_mm', 'purlin_section_mm', 'truss_chord_section_mm', 'truss_web_section_mm', 'truss_depth_mm', 'framing_material']
+
+/** Add the built-in roof framing types to older files and link legacy RF marks once. */
+export function ensureRoofCatalogTypes(project: ProjectDocument): void {
+  const defaults = DEFAULT_TYPES.filter(type => type.object_type === 'roof.system')
+  for (const type of defaults) {
+    const normalizedName = type.name.trim().toLowerCase()
+    const exists = project.types.some(candidate => candidate.object_type === 'roof.system'
+      && (candidate.id === type.id || candidate.name.trim().toLowerCase() === normalizedName))
+    if (!exists) project.types.push(structuredClone(type))
+  }
+
+  for (const object of Object.values(project.objects)) {
+    if (object.object_type !== 'roof.system') continue
+    const data = object.module_data as Record<string, unknown>
+    if (typeof data.type_id === 'string' && data.type_id) continue
+    const mark = typeof data.mark === 'string' ? data.mark.trim().toLowerCase() : ''
+    const matches = project.types.filter(type => type.object_type === 'roof.system' && type.name.trim().toLowerCase() === mark)
+    if (matches.length !== 1) continue
+    const type = matches[0]
+    data.type_id = type.id
+    const overrides = data.instance_overrides && typeof data.instance_overrides === 'object' && !Array.isArray(data.instance_overrides)
+      ? structuredClone(data.instance_overrides as Record<string, unknown>)
+      : {}
+    for (const field of ROOF_CATALOG_FIELDS) {
+      if (data[field] !== undefined && type.parameters[field] !== undefined
+        && JSON.stringify(data[field]) !== JSON.stringify(type.parameters[field])) {
+        overrides[field] = structuredClone(data[field])
+      }
+    }
+    data.instance_overrides = overrides
+  }
+}
 
 /** Deterministic RFC-4122 UUID v5 using the ConstructFlow catalog namespace. */
 export function legacyTypeUuid(objectType: string, legacyId: string, name: string): string {
@@ -125,12 +158,14 @@ export function migrateProjectV1ToV2(source: ProjectDocumentV1): ProjectDocument
     ? structuredClone(source.phases) as unknown as ProjectDocument['phases']
     : structuredClone(DEFAULT_PHASES)
   project.relationships = Array.isArray(source.relationships) ? structuredClone(source.relationships) as unknown as ProjectDocument['relationships'] : []
+  ensureRoofCatalogTypes(project)
   validateProjectV2(project)
   return project
 }
 
 export function validateProjectV2(project: ProjectDocument): void {
   if (project.schema_version !== 2) throw new Error(`Unsupported schema_version: ${project.schema_version}`)
+  if (project.rainwater_design !== undefined) validateRainwaterDesignSettings(project.rainwater_design)
   if (!project.project || typeof project.project.id !== 'string' || !project.project.id) throw new Error('Invalid project format: missing project metadata')
   if (typeof project.project.name !== 'string' || !project.project.name.trim()) throw new Error('Invalid project format: project name is required')
   if (project.project.units !== 'mm') throw new Error('Invalid project format: canonical project units must be mm')
@@ -197,6 +232,16 @@ export function validateProjectV2(project: ProjectDocument): void {
       head_offset_mm: ['door_window.door', 'door_window.window'],
       elevation_offset_mm: ['structure.slab', 'architecture.floor', 'architecture.ceiling'],
       voids_mm: ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'],
+      framing_system: ['roof.system'],
+      rafter_spacing_mm: ['roof.system'],
+      purlin_spacing_mm: ['roof.system'],
+      truss_spacing_mm: ['roof.system'],
+      rafter_section_mm: ['roof.system'],
+      purlin_section_mm: ['roof.system'],
+      truss_chord_section_mm: ['roof.system'],
+      truss_web_section_mm: ['roof.system'],
+      truss_depth_mm: ['roof.system'],
+      framing_material: ['roof.system'],
       finish_layers: ['architecture.floor', 'structure.slab'],
       finish_pattern_mm: ['architecture.floor', 'structure.slab'],
       finish_pattern_origin_mm: ['architecture.floor', 'structure.slab'],
@@ -260,6 +305,18 @@ export function validateProjectV2(project: ProjectDocument): void {
       })
     }
     if (values.finish_pattern_mm !== undefined) requireTuple(values.finish_pattern_mm, 2, owner, 'finish_pattern_mm', true)
+    for (const field of ['rafter_spacing_mm', 'purlin_spacing_mm', 'truss_spacing_mm', 'truss_depth_mm'] as const) {
+      if (values[field] !== undefined) requirePositive(values[field], owner, field)
+    }
+    for (const field of ['rafter_section_mm', 'purlin_section_mm', 'truss_chord_section_mm', 'truss_web_section_mm'] as const) {
+      if (values[field] !== undefined) requireTuple(values[field], 2, owner, field, true)
+    }
+    if (values.framing_system !== undefined && !['none', 'rafter_purlin', 'truss_purlin', 'rafter_truss_purlin'].includes(String(values.framing_system))) {
+      throw new Error(`Invalid project format: ${owner} has an invalid framing_system`)
+    }
+    if (values.framing_material !== undefined && (typeof values.framing_material !== 'string' || !values.framing_material.trim())) {
+      throw new Error(`Invalid project format: ${owner} has an invalid framing_material`)
+    }
     if (values.finish_pattern_origin_mm !== undefined) requireTuple(values.finish_pattern_origin_mm, 2, owner, 'finish_pattern_origin_mm')
     if (values.finish_pattern_rotation_deg !== undefined) requireFinite(values.finish_pattern_rotation_deg, owner, 'finish_pattern_rotation_deg')
     if (values.slope_ratio !== undefined) {

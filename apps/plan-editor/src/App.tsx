@@ -23,6 +23,7 @@ import {
   type DisplayLengthUnit,
   type StairModuleData,
   type RoofModuleData,
+  type RainwaterDesignSettings,
 } from '@constructflow/project-model'
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
 import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
@@ -246,6 +247,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [activeDoorType, setActiveDoorType] = useState<string>('D1')
   const [activeWindowType, setActiveWindowType] = useState<string>('W1')
   const [activeSlabType, setActiveSlabType] = useState<string>('GS')
+  const [activeRoofType, setActiveRoofType] = useState<string>('RF1')
   const previousTypesRef = useRef(project.types)
   useEffect(() => {
     const entries: Array<[string, string, (value: string) => void]> = [
@@ -256,6 +258,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       ['door_window.door', activeDoorType, setActiveDoorType],
       ['door_window.window', activeWindowType, setActiveWindowType],
       ['structure.slab', activeSlabType, setActiveSlabType],
+      ['roof.system', activeRoofType, setActiveRoofType],
     ]
     for (const [family, name, setName] of entries) {
       if (project.types.some(type => type.object_type === family && type.name === name)) continue
@@ -677,6 +680,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     } else setFileFeedback(result.result.errors?.join(' · ') ?? 'คำสั่งไม่สำเร็จ')
   }
   const handleCommitRoof = (boundary_mm: [number, number][], options: { shape: 'hip' | 'gable' | 'flat'; slope_deg: number; thickness_mm: number; elevation_offset_mm: number; material: string } = { shape: 'hip', slope_deg: 25, thickness_mm: 30, elevation_offset_mm: 2800, material: 'metal_sheet' }) => {
+    const roofType = project.types.find(type => type.object_type === 'roof.system' && type.name.toLowerCase() === activeRoofType.toLowerCase())
     const level = project.levels.find(item => item.id === project.project.active_level_id)
     if (!level || boundary_mm.length < 3) return
     if (options.shape === 'gable' && boundary_mm.length !== 4) {
@@ -684,7 +688,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       return
     }
     runArchitectureCommand('GenerateRoof', {
-      id: crypto.randomUUID(), mark: 'R1', level_id: level.id,
+      id: crypto.randomUUID(), mark: roofType?.name ?? 'R1', ...(roofType ? { type_id: roofType.id } : {}), level_id: level.id,
       created_phase: 'new_construction', boundary_mm, voids_mm: [],
       elevation_mm: level.elevation_mm + Number(options.elevation_offset_mm),
       edges: boundary_mm.map((_, index) => {
@@ -702,6 +706,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       setProject(result.updatedProject)
       if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
     } else if (result.result.errors?.length) setFileFeedback(result.result.errors.join(' · '))
+  }
+  const handleUpdateRainwaterDesign = (settings: RainwaterDesignSettings) => {
+    const result = dispatchCommandBatch([{ name: 'UpdateRainwaterDesign', input: { settings } }])
+    if (result.status !== 'success') setFileFeedback(result.errors?.[0] ?? 'บันทึกข้อมูลออกแบบน้ำฝนไม่สำเร็จ')
+    else setFileFeedback('บันทึกข้อมูลออกแบบน้ำฝนของโครงการแล้ว · ใช้คำนวณหลังคาทุกผืน')
   }
   const handleUpdateDomainObject = (objectId: string, commandName: string, changes: object) => {
     const object = project.objects[objectId]
@@ -949,14 +958,14 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     const entries: Array<[string,string,(value:string)=>void]> = [
       ['structure.column',activeColumnType,setActiveColumnType], ['structure.foundation',activeFoundationType,setActiveFoundationType],
       ['structure.beam',activeBeamType,setActiveBeamType], ['architecture.wall',activeWallType,setActiveWallType],
-      ['door_window.door',activeDoorType,setActiveDoorType], ['door_window.window',activeWindowType,setActiveWindowType], ['structure.slab',activeSlabType,setActiveSlabType],
+      ['door_window.door',activeDoorType,setActiveDoorType], ['door_window.window',activeWindowType,setActiveWindowType], ['structure.slab',activeSlabType,setActiveSlabType], ['roof.system',activeRoofType,setActiveRoofType],
     ]
     for(const [family,value,setValue] of entries) if(family===type.object_type && value===type.name) setValue(name)
   }
   const openCatalog = (edit=false, fromSelection=false, familyOverride?:string) => {
     const object = fromSelection && selectedId ? project.objects[selectedId] : null
     const family = familyOverride ?? object?.object_type ?? TOOL_FAMILIES[activeTool] ?? 'structure.column'
-    const marks:Record<string,string> = {column:activeColumnType,foundation:activeFoundationType,beam:activeBeamType,wall:activeWallType,door:activeDoorType,window:activeWindowType,slab:activeSlabType}
+    const marks:Record<string,string> = {column:activeColumnType,foundation:activeFoundationType,beam:activeBeamType,wall:activeWallType,door:activeDoorType,window:activeWindowType,slab:activeSlabType,roof:activeRoofType}
     const data = object?.module_data as Record<string,unknown> | undefined
     const type = project.types.find(t=>t.object_type===family && (data ? t.id===data.type_id || t.name===data.mark : t.name===marks[activeTool]))
     setCatalogContext({family,typeId:type?.id,edit,intent:object?'assign':'draw'})
@@ -966,7 +975,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     if(catalogContext.intent==='assign' && selectedId) { handleAssignType(selectedId,type.id); return }
     const tool = Object.entries(TOOL_FAMILIES).find(([,family])=>family===type.object_type)?.[0] as ToolType | undefined
     if(!tool) return
-    const setters:Record<string,(value:string)=>void> = {column:setActiveColumnType,foundation:setActiveFoundationType,beam:setActiveBeamType,wall:setActiveWallType,door:setActiveDoorType,window:setActiveWindowType,slab:setActiveSlabType}
+    const setters:Record<string,(value:string)=>void> = {column:setActiveColumnType,foundation:setActiveFoundationType,beam:setActiveBeamType,wall:setActiveWallType,door:setActiveDoorType,window:setActiveWindowType,slab:setActiveSlabType,roof:setActiveRoofType}
     setters[tool](type.name);setActiveTool(tool)
   }
 
@@ -2174,6 +2183,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               activeDoorTypeMark={activeDoorType}
               activeWindowTypeMark={activeWindowType}
               activeSlabTypeMark={activeSlabType}
+              activeRoofTypeMark={activeRoofType}
               labelMode={labelMode}
               labelVisibility={labelVisibility}
               coordination={coordinationFindings}
@@ -2187,6 +2197,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 else if (activeTool === 'door') setActiveDoorType(mark)
                 else if (activeTool === 'window') setActiveWindowType(mark)
                 else if (activeTool === 'slab') setActiveSlabType(mark)
+                else if (activeTool === 'roof') setActiveRoofType(mark)
               }}
               selectedId={selectedId}
               selectedIds={selectedIds}
@@ -2322,6 +2333,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             onUpdateArchitectureSurface={handleUpdateArchitectureSurface}
             onUpdateSlab={handleUpdateSlab}
             onUpdateRoof={handleUpdateRoof}
+            onUpdateRainwaterDesign={handleUpdateRainwaterDesign}
             onUpdatePipeRoute={(id, changes) => handleUpdateDomainObject(id, 'EditPipeRoute', changes)}
             onUpdateElectricalFixture={(id, changes) => handleUpdateDomainObject(id, 'UpdateElectricalFixture', changes)}
             onAssignElectricalFixtureToCircuit={handleAssignElectricalFixtureToCircuit}

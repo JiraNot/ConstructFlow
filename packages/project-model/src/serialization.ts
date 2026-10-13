@@ -1,5 +1,5 @@
 import type { ProjectDocument } from './project.js'
-import { migrateProjectV1ToV2, validateProjectV2, type ProjectDocumentV1 } from './migrations.js'
+import { ensureRoofCatalogTypes, migrateProjectV1ToV2, validateProjectV2, type ProjectDocumentV1 } from './migrations.js'
 
 export function serializeProject(doc: ProjectDocument): string {
   validateProjectV2(doc)
@@ -19,6 +19,7 @@ export function deserializeProject(jsonText: string): ProjectDocument {
   if (candidate.schema_version === 1) return migrateProjectV1ToV2(parsed as ProjectDocumentV1)
   if (candidate.schema_version === 2) {
     const project = parsed as ProjectDocument
+    ensureRoofCatalogTypes(project)
     validateProjectV2(project)
     return project
   }

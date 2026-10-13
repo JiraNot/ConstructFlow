@@ -60,6 +60,7 @@ interface PlanCanvasProps {
   activeDoorTypeMark: string
   activeWindowTypeMark: string
   activeSlabTypeMark: string
+  activeRoofTypeMark: string
   labelMode: 'name' | 'name-size'
   labelVisibility: PlanLabelVisibility
   onOpenTypeManager: () => void
@@ -617,6 +618,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   activeDoorTypeMark,
   activeWindowTypeMark,
   activeSlabTypeMark,
+  activeRoofTypeMark,
   labelMode,
   labelVisibility,
   onChangeActiveTypeMark,
@@ -1479,10 +1481,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       project,
       labelMode,
       labelVisibility,
-      []
+      [],
+      planDiscipline
     )
     if (manipulationPreview) {
-      drawDirectManipulationGhost(ctx, planProject, manipulationPreview.project, manipulationPreview.ids, viewport, manipulationPreview.valid)
+      drawDirectManipulationGhost(ctx, planProject, manipulationPreview.project, manipulationPreview.ids, viewport, manipulationPreview.valid, planDiscipline)
     }
     // 10.6 Coordination overlay — the shared report is drawn here in plan space so the canvas,
     // the inspector panel and the permit sheets quote identical millimetres.
@@ -3097,20 +3100,20 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             <small>คั่นแต่ละช่วงด้วยจุลภาค · คลิกจุดกำเนิดหนึ่งครั้งเพื่อสร้างได้ทั้งสองแนว · ลบช่องระยะของแนวที่ไม่ใช้</small>
             {gridSystemError && <small role="alert" style={{ color: '#b42332' }}>{gridSystemError}</small>}
         </div>}
-        {(['column', 'foundation', 'beam', 'wall', 'door', 'window', 'slab'] as ToolType[]).includes(activeTool) && (() => {
+        {(['column', 'foundation', 'beam', 'wall', 'door', 'window', 'slab', 'roof'] as ToolType[]).includes(activeTool) && (() => {
           const familyByTool: Partial<Record<ToolType, string>> = {
             column: 'structure.column', foundation: 'structure.foundation', beam: 'structure.beam',
-            wall: 'architecture.wall', door: 'door_window.door', window: 'door_window.window', slab: 'structure.slab',
+            wall: 'architecture.wall', door: 'door_window.door', window: 'door_window.window', slab: 'structure.slab', roof: 'roof.system',
           }
           const activeTypeMark = activeTool === 'column' ? activeColumnTypeMark
             : activeTool === 'foundation' ? activeFoundationTypeMark
               : activeTool === 'beam' ? activeBeamTypeMark
                 : activeTool === 'wall' ? activeWallTypeMark
-                  : activeTool === 'door' ? activeDoorTypeMark : activeTool === 'window' ? activeWindowTypeMark : activeSlabTypeMark
+                  : activeTool === 'door' ? activeDoorTypeMark : activeTool === 'window' ? activeWindowTypeMark : activeTool === 'roof' ? activeRoofTypeMark : activeSlabTypeMark
           const availableTypes = project.types.filter(type => type.object_type === familyByTool[activeTool])
           const label = activeTool === 'column' ? 'เสา' : activeTool === 'foundation' ? 'ฐานราก'
             : activeTool === 'beam' ? 'คาน' : activeTool === 'wall' ? 'ผนัง'
-              : activeTool === 'door' ? 'ประตู' : activeTool === 'window' ? 'หน้าต่าง' : 'พื้น'
+              : activeTool === 'door' ? 'ประตู' : activeTool === 'window' ? 'หน้าต่าง' : activeTool === 'roof' ? 'ระบบหลังคา' : 'พื้น'
           return <TypePicker types={availableTypes} value={activeTypeMark} label={label} displayUnit={displayUnit} onChange={onChangeActiveTypeMark} onOpenCatalog={onOpenTypeManager}/>
         })()}
         {(activeTool === 'wall' || activeTool === 'beam') && <label className="cf-reference-control">

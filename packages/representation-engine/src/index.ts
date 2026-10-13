@@ -610,7 +610,7 @@ export function getPlanVisibleObjects(project: ProjectDocument, discipline: Plan
   return Object.values(project.objects).filter(object => {
     if (discipline === 'architecture' && ['structure.beam', 'structure.foundation', 'structure.rebar_set', 'roof.system'].includes(object.object_type)) return false
     if (discipline === 'roof' && ['structure.beam', 'structure.foundation', 'structure.rebar_set'].includes(object.object_type)) return false
-    if (discipline === 'framing' && !['structure.beam', 'structure.column', 'structure.foundation', 'structure.grid'].includes(object.object_type)) return false
+    if (discipline === 'framing' && !['structure.beam', 'structure.column', 'structure.foundation', 'structure.grid', 'roof.system'].includes(object.object_type)) return false
     const data = moduleData(object)
     if (!data) return true
 
@@ -984,7 +984,7 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
 }
 
 /** Build deterministic, renderer-neutral 3D descriptions for supported Smart Objects. */
-export function buildProjectRepresentations3D(project: ProjectDocument, options: { visibleObjectIds?: ReadonlySet<string> } = {}): RepresentationResult {
+export function buildProjectRepresentations3D(project: ProjectDocument, options: { visibleObjectIds?: ReadonlySet<string>; roofFramingOnly?: boolean } = {}): RepresentationResult {
   const warnings: string[] = []
   const objects = Object.values(project.objects)
     .filter(object => !options.visibleObjectIds || options.visibleObjectIds.has(object.id))
@@ -994,8 +994,9 @@ export function buildProjectRepresentations3D(project: ProjectDocument, options:
   for (const out of constructionOutputs(project)) {
     if (options.visibleObjectIds && !options.visibleObjectIds.has(out.object_id)) continue
     const object = project.objects[out.object_id], data = moduleData(object) ?? {}
-    const triangles = [...out.meshes]
-    if (!triangles.length) for(const path of out.paths) for(let i=1;i<path.length;i++) if(Math.hypot(...path[i].map((v,j)=>v-path[i-1][j]))>1e-8)triangles.push(...tube(path[i-1],path[i],typeof data.diameter_mm==='number'?data.diameter_mm/2:10))
+    const roofStructureOnly = options.roofFramingOnly && object?.object_type === 'roof.system'
+    const triangles = roofStructureOnly ? [...(out.mesh_groups?.roof_framing ?? [])] : [...out.meshes]
+    if (!triangles.length && !roofStructureOnly) for(const path of out.paths) for(let i=1;i<path.length;i++) if(Math.hypot(...path[i].map((v,j)=>v-path[i-1][j]))>1e-8)triangles.push(...tube(path[i-1],path[i],typeof data.diameter_mm==='number'?data.diameter_mm/2:10))
     if(triangles.length) objects.push(baseObject(object,data,[0,0,0],0,{kind:'triangle_mesh',triangles_mm:triangles},{kind:'select_only'}))
     warnings.push(...out.warnings.map(w=>`${object.id}: ${w}`))
   }

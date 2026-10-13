@@ -14,6 +14,7 @@ import {
   DoorHanding,
   isMasonryWallPlanHatch,
   getDisplayPhase,
+  resolveCatalogType,
 } from '@constructflow/project-model'
 import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
 import { resolveArchitecturalFloorPatternKind, decodeStair, getStairPlanDrawing } from '@constructflow/architecture-engine'
@@ -22,6 +23,9 @@ import { constructionOutputs } from '@constructflow/domain-providers'
 import { clippedGridSegments, clippedStaggeredPlankSegments, offsetPolygonOutward, polygonDiagonalHatchSegments, polygonInteriorPoint, wallMasonryHatchSegments , clippedCarpetSegments, clippedTerrazzoSegments} from "@constructflow/geometry-kernel"
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
 import { getPlanWallLayerBoundaries, getPlanFinishBoundaries, structuralPlasterThickness, getPlanVisibleObjects, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '@constructflow/representation-engine'
+import type { PlanDiscipline } from '@constructflow/representation-engine'
+import { getRoofEaveBoundary, solveRoofFraming } from '@constructflow/roof-engine'
+import type { RoofModuleData } from '@constructflow/project-model'
 import { beginPlanLabels, queuePlanLabel, flushPlanLabels, planLabelScale } from './planLabels.js'
 
 function openingValue(project: ProjectDocument, object: SmartObject, field: string, fallback: unknown) {
@@ -79,7 +83,8 @@ export function renderPlanView(
   sourceProject: ProjectDocument = project,
   labelMode: 'name' | 'name-size' = 'name-size',
   labelVisibility: PlanLabelVisibility = DEFAULT_PLAN_LABEL_VISIBILITY,
-  clashes: any[] = []
+  clashes: any[] = [],
+  discipline: PlanDiscipline = 'architecture'
 ) {
   const isSelected = (id: string) => Array.isArray(selectedId) ? selectedId.includes(id) : selectedId === id
   beginPlanLabels(ctx, viewport.zoom)
@@ -345,6 +350,16 @@ export function renderPlanView(
     }
   }
 
+  // 8.5 Roof framing is an explicit structural plan discipline, so the roof
+  // footprint can stay hidden while its rafters, purlins and trusses remain editable.
+  if (discipline === 'framing') {
+    for (const obj of Object.values(project.objects)) {
+      if (obj.object_type === 'roof.system') {
+        drawRoofFraming(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.structure)
+      }
+    }
+  }
+
   for (const boundary of getPlanFinishBoundaries(project)) {
     const style = resolvePlanPhaseStyle(boundary.phase)
     ctx.save(); ctx.strokeStyle = style.stroke; ctx.lineWidth = boundary.phase === 'new_construction' ? 2 : 1.5; ctx.setLineDash(style.dash); ctx.beginPath()
@@ -426,6 +441,7 @@ export function drawDirectManipulationGhost(
   objectIds: readonly string[],
   viewport: ViewportState,
   valid: boolean,
+  discipline: PlanDiscipline = 'architecture',
 ) {
   const accent = valid ? '#0284c7' : '#dc2626'
   const ids = [...new Set(objectIds)]
@@ -506,6 +522,8 @@ export function drawDirectManipulationGhost(
       const levelElevation = candidate.levels.find(level => level.id === stair.level_id)?.elevation_mm ?? stair.start_point_mm[2]
       const drawing = getStairPlanDrawing(stair, levelElevation)
       for (const path of [...drawing.solid_paths_mm, ...drawing.overhead_paths_mm]) drawRing(path, false, false)
+    } else if (object.object_type === 'roof.system' && discipline === 'framing') {
+      drawRoofFraming(ctx, object, candidate, viewport, false, false, false, accent)
     } else if (Array.isArray(data.boundary_mm)) {
       const boundary = object.object_type === 'roof.system'
         ? offsetPolygonOutward(data.boundary_mm as [number, number][], Number(data.eaves_overhang_mm ?? 0)) ?? data.boundary_mm
@@ -536,6 +554,70 @@ export function drawDirectManipulationGhost(
   }
   ctx.setLineDash([])
   ctx.restore()
+}
+
+function drawRoofFraming(
+  ctx: CanvasRenderingContext2D,
+  object: SmartObject,
+  project: ProjectDocument,
+  viewport: ViewportState,
+  selected: boolean,
+  hovered: boolean,
+  showLabel: boolean,
+  accent?: string,
+) {
+  const data = object.module_data as Record<string, unknown>
+  const roofType = resolveCatalogType(project, 'roof.system', typeof data.type_id === 'string' ? data.type_id : String(data.mark ?? ''))
+  const overrides = data.instance_overrides && typeof data.instance_overrides === 'object'
+    ? data.instance_overrides as Record<string, unknown>
+    : {}
+  // Module data owns the footprint and instance geometry; catalog dimensions feed
+  // framing when there is no instance override, matching the property inspector.
+  const roof = { ...data, ...roofType?.parameters, ...overrides } as unknown as RoofModuleData
+  try {
+    const boundary = getRoofEaveBoundary(roof)
+    const members = solveRoofFraming(roof).members
+    const colors: Record<string, string> = {
+      rafter: '#0f766e', purlin: '#475569', truss_top_chord: '#1d4ed8',
+      truss_bottom_chord: '#7c3aed', truss_web: '#9333ea',
+    }
+    ctx.save()
+    ctx.globalAlpha = selected ? 0.95 : hovered ? 0.8 : 0.74
+    ctx.strokeStyle = accent ?? (selected ? '#f59e0b' : '#64748b')
+    ctx.lineWidth = selected ? 2 : 1
+    ctx.setLineDash([5, 4])
+    ctx.beginPath()
+    boundary.forEach((point, index) => {
+      const [x, y] = worldToScreen(point, viewport)
+      if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+    })
+    ctx.closePath(); ctx.stroke(); ctx.setLineDash([])
+    for (const member of members) {
+      const [a, b] = [
+        worldToScreen([member.start_point_mm[0], member.start_point_mm[1]], viewport),
+        worldToScreen([member.end_point_mm[0], member.end_point_mm[1]], viewport),
+      ]
+      ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b)
+      ctx.strokeStyle = accent ?? colors[member.role] ?? '#334155'
+      ctx.lineWidth = selected ? 2.25 : Math.max(0.8, Math.min(3, member.section_mm[0] * viewport.zoom))
+      ctx.stroke()
+    }
+    ctx.restore()
+
+    if (showLabel && boundary.length && members.length) {
+      const center: [number, number] = [
+        boundary.reduce((sum, point) => sum + point[0], 0) / boundary.length,
+        boundary.reduce((sum, point) => sum + point[1], 0) / boundary.length,
+      ]
+      const [x, y] = worldToScreen(center, viewport)
+      const rafters = members.filter(member => member.role === 'rafter').length
+      const purlins = members.filter(member => member.role === 'purlin').length
+      const trusses = new Set(members.filter(member => member.role === 'truss_bottom_chord').map(member => member.start_point_mm.join(','))).size
+      queuePlanLabel(ctx, x, y, `${String(data.mark ?? 'R1')} · จันทัน ${rafters} · แป ${purlins}${trusses ? ` · ทรัส ${trusses}` : ''}`, selected ? '#b45309' : '#334155', '#c7d3df', selected ? 10 : 2, '#fbfdff', false, 'rect')
+    }
+  } catch {
+    // A malformed legacy roof should not prevent the rest of the plan from drawing.
+  }
 }
 
 function drawBackgroundCadGrid(
