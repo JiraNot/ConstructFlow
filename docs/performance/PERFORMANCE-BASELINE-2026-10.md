@@ -27,6 +27,6 @@ The indexed path rebuilds the plan index when the memoized plan-project snapshot
 
 ## Broader engine measurements
 
-The first engine matrix now measures object summaries, plan projection, snap index construction/query, coordination, takeoff, phased BOQ and drawing-set compilation on 21-, 239- and 260-object projects. Results and methodology are in [EDITOR-PERFORMANCE-MATRIX-2026-10.md](./EDITOR-PERFORMANCE-MATRIX-2026-10.md). It remains an engine-only representative-project matrix, not the full stress/perceived-latency matrix.
+The first engine matrix now measures object summaries, plan projection and hit testing, snap index construction/query, coordination, takeoff, phased BOQ and drawing-set compilation on 21-, 239- and 260-object projects. Results and methodology are in [EDITOR-PERFORMANCE-MATRIX-2026-10.md](./EDITOR-PERFORMANCE-MATRIX-2026-10.md). It remains an engine-only representative-project matrix, not the full stress/perceived-latency matrix.
 
-Still unmeasured are 500/1,000/5,000/20,000-object stress fixtures, project load/schema validation, canvas hit testing, marquee selection, Undo/Redo, serialization and browser pointer-to-paint/frame timing. Do not infer those results from either benchmark.
+Still unmeasured are 500/1,000/5,000/20,000-object stress fixtures, project load/schema validation, marquee selection, Undo/Redo, serialization and browser pointer-to-paint/frame timing. Do not infer those results from either benchmark.

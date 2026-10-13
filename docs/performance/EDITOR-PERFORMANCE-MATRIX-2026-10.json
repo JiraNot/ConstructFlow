@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-13T09:52:17.108Z",
+  "generated_at": "2026-10-13T10:28:42.229Z",
   "runtime": {
     "node": "v24.19.0",
     "platform": "win32",
@@ -25,161 +25,182 @@
       "object_count": 21,
       "task": "plan_projection",
       "p50_ms": 0.002,
-      "p95_ms": 0.005
+      "p95_ms": 0.017
+    },
+    {
+      "fixture": "kitchen-proof",
+      "object_count": 21,
+      "task": "plan_hit_test",
+      "p50_ms": 0.004,
+      "p95_ms": 0.025
     },
     {
       "fixture": "kitchen-proof",
       "object_count": 21,
       "task": "snap_index_build",
-      "p50_ms": 0.025,
-      "p95_ms": 0.045
+      "p50_ms": 0.035,
+      "p95_ms": 0.069
     },
     {
       "fixture": "kitchen-proof",
       "object_count": 21,
       "task": "snap_candidate_query",
       "p50_ms": 0.006,
-      "p95_ms": 0.009
+      "p95_ms": 0.02
     },
     {
       "fixture": "kitchen-proof",
       "object_count": 21,
       "task": "coordination",
-      "p50_ms": 9.258,
-      "p95_ms": 13.864
+      "p50_ms": 11.025,
+      "p95_ms": 14.977
     },
     {
       "fixture": "kitchen-proof",
       "object_count": 21,
       "task": "takeoff",
-      "p50_ms": 0.256,
-      "p95_ms": 0.327
+      "p50_ms": 0.268,
+      "p95_ms": 0.319
     },
     {
       "fixture": "kitchen-proof",
       "object_count": 21,
       "task": "phased_boq",
-      "p50_ms": 0.378,
-      "p95_ms": 0.405
+      "p50_ms": 0.355,
+      "p95_ms": 0.546
     },
     {
       "fixture": "kitchen-proof",
       "object_count": 21,
       "task": "drawing_set_compile",
-      "p50_ms": 0.407,
-      "p95_ms": 0.508
+      "p50_ms": 0.31,
+      "p95_ms": 0.396
     },
     {
       "fixture": "reference-house-2storey",
       "object_count": 239,
       "task": "project_object_summary",
-      "p50_ms": 0.033,
-      "p95_ms": 0.08
+      "p50_ms": 0.032,
+      "p95_ms": 0.078
     },
     {
       "fixture": "reference-house-2storey",
       "object_count": 239,
       "task": "plan_projection",
-      "p50_ms": 0.008,
-      "p95_ms": 0.107
+      "p50_ms": 0.009,
+      "p95_ms": 0.165
     },
     {
       "fixture": "reference-house-2storey",
       "object_count": 239,
-      "task": "snap_index_build",
-      "p50_ms": 0.14,
-      "p95_ms": 0.733
-    },
-    {
-      "fixture": "reference-house-2storey",
-      "object_count": 239,
-      "task": "snap_candidate_query",
-      "p50_ms": 0.028,
+      "task": "plan_hit_test",
+      "p50_ms": 0.012,
       "p95_ms": 0.043
     },
     {
       "fixture": "reference-house-2storey",
       "object_count": 239,
+      "task": "snap_index_build",
+      "p50_ms": 0.136,
+      "p95_ms": 0.383
+    },
+    {
+      "fixture": "reference-house-2storey",
+      "object_count": 239,
+      "task": "snap_candidate_query",
+      "p50_ms": 0.012,
+      "p95_ms": 0.028
+    },
+    {
+      "fixture": "reference-house-2storey",
+      "object_count": 239,
       "task": "coordination",
-      "p50_ms": 164.994,
-      "p95_ms": 170.058
+      "p50_ms": 212.836,
+      "p95_ms": 268.24
     },
     {
       "fixture": "reference-house-2storey",
       "object_count": 239,
       "task": "takeoff",
-      "p50_ms": 4.119,
-      "p95_ms": 6.569
+      "p50_ms": 5.89,
+      "p95_ms": 9.307
     },
     {
       "fixture": "reference-house-2storey",
       "object_count": 239,
       "task": "phased_boq",
-      "p50_ms": 4.491,
-      "p95_ms": 6.807
+      "p50_ms": 6.322,
+      "p95_ms": 8.758
     },
     {
       "fixture": "reference-house-2storey",
       "object_count": 239,
       "task": "drawing_set_compile",
-      "p50_ms": 0.551,
-      "p95_ms": 0.842
+      "p50_ms": 0.886,
+      "p95_ms": 1.415
     },
     {
       "fixture": "renovation-house-plus-kitchen",
       "object_count": 260,
       "task": "project_object_summary",
-      "p50_ms": 0.042,
-      "p95_ms": 0.096
+      "p50_ms": 0.037,
+      "p95_ms": 0.077
     },
     {
       "fixture": "renovation-house-plus-kitchen",
       "object_count": 260,
       "task": "plan_projection",
-      "p50_ms": 0.015,
-      "p95_ms": 0.023
+      "p50_ms": 0.017,
+      "p95_ms": 0.037
+    },
+    {
+      "fixture": "renovation-house-plus-kitchen",
+      "object_count": 260,
+      "task": "plan_hit_test",
+      "p50_ms": 0.011,
+      "p95_ms": 0.028
     },
     {
       "fixture": "renovation-house-plus-kitchen",
       "object_count": 260,
       "task": "snap_index_build",
-      "p50_ms": 0.101,
-      "p95_ms": 0.405
+      "p50_ms": 0.226,
+      "p95_ms": 0.722
     },
     {
       "fixture": "renovation-house-plus-kitchen",
       "object_count": 260,
       "task": "snap_candidate_query",
-      "p50_ms": 0.01,
-      "p95_ms": 0.011
+      "p50_ms": 0.021,
+      "p95_ms": 0.043
     },
     {
       "fixture": "renovation-house-plus-kitchen",
       "object_count": 260,
       "task": "coordination",
-      "p50_ms": 184.887,
-      "p95_ms": 212.06
+      "p50_ms": 243.79,
+      "p95_ms": 328.373
     },
     {
       "fixture": "renovation-house-plus-kitchen",
       "object_count": 260,
       "task": "takeoff",
-      "p50_ms": 4.146,
-      "p95_ms": 5.703
+      "p50_ms": 4.196,
+      "p95_ms": 6.738
     },
     {
       "fixture": "renovation-house-plus-kitchen",
       "object_count": 260,
       "task": "phased_boq",
-      "p50_ms": 2.649,
-      "p95_ms": 4.836
+      "p50_ms": 4.747,
+      "p95_ms": 6.416
     },
     {
       "fixture": "renovation-house-plus-kitchen",
       "object_count": 260,
       "task": "drawing_set_compile",
-      "p50_ms": 0.758,
-      "p95_ms": 1.244
+      "p50_ms": 1.213,
+      "p95_ms": 1.873
     }
   ]
 }

@@ -8,6 +8,7 @@ import { runCoordination } from '../packages/clash-engine/dist/index.js'
 import { calculateTakeoff, calculatePhasedBOQ } from '../packages/takeoff-engine/dist/index.js'
 import { compileInitialDrawingSet } from '../packages/sheet-engine/dist/index.js'
 import { createRenovationIntegrationProject } from './fixtures/renovationIntegrationProject.mjs'
+import { findPlanHitObject } from '../apps/plan-editor/src/components/planHitTesting.mjs'
 
 const iterations = Number(process.env.CONSTRUCTFLOW_BENCH_ITERATIONS ?? 12)
 const warmups = Math.min(3, Math.max(1, Math.floor(iterations / 4)))
@@ -40,6 +41,7 @@ for (const { name, project } of fixtures) {
   const objects = Object.values(project.objects)
   const ground = project.project.active_level_id
   const planObjects = getPlanVisibleObjects(project, 'architecture')
+  const projectedPlan = getPlanViewProject(project, planObjects)
   const snapIndex = new SnapSpatialIndex(project)
   const samplePoint = (() => {
     const point = objects.find(object => Array.isArray(object.module_data.location_mm))?.module_data.location_mm
@@ -48,6 +50,7 @@ for (const { name, project } of fixtures) {
   const tasks = {
     project_object_summary: () => countProjectObjects(project),
     plan_projection: () => getPlanViewProject(project, planObjects),
+    plan_hit_test: () => findPlanHitObject(samplePoint, projectedPlan, project, 0.08),
     snap_index_build: () => new SnapSpatialIndex(project),
     snap_candidate_query: () => snapIndex.candidateObjectIds(samplePoint, 3000),
     coordination: () => runCoordination(project),
@@ -71,19 +74,20 @@ const output = new URL('../docs/performance/EDITOR-PERFORMANCE-MATRIX-2026-10.js
 fs.writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`)
 const taskLabels = {
   project_object_summary: 'Object summary', plan_projection: 'Plan projection', snap_index_build: 'Snap index build',
+  plan_hit_test: 'Plan hit test',
   snap_candidate_query: 'Snap candidate query', coordination: 'Coordination', takeoff: 'Takeoff',
   phased_boq: 'Phased BOQ', drawing_set_compile: 'Drawing set compile',
 }
 const markdown = [
   '# Editor Engine Performance Matrix — 2026-10', '',
-  `**Generated:** ${report.generated_at}  `,
-  `**Runtime:** ${report.runtime.node}, ${report.runtime.platform} ${report.runtime.arch}  `,
-  `**Method:** ${warmups} warmups, ${iterations} measured runs per operation; nearest-rank p50/p95. All values are milliseconds.`, '',
+  `- **Generated:** ${report.generated_at}`,
+  `- **Runtime:** ${report.runtime.node}, ${report.runtime.platform} ${report.runtime.arch}`,
+  `- **Method:** ${warmups} warmups, ${iterations} measured runs per operation; nearest-rank p50/p95. All values are milliseconds.`, '',
   'These are synchronous Node engine timings for named project fixtures. They do not measure browser rendering, pointer-to-paint latency, React scheduling, or native CAD. Results are informational; no latency thresholds are defined.', '',
   '| Fixture | Objects | Operation | p50 ms | p95 ms |', '| --- | ---: | --- | ---: | ---: |',
   ...matrix.map(row => `| ${row.fixture} | ${row.object_count} | ${taskLabels[row.task] ?? row.task} | ${row.p50_ms.toFixed(3)} | ${row.p95_ms.toFixed(3)} |`), '',
   `Raw measurements: [EDITOR-PERFORMANCE-MATRIX-2026-10.json](./EDITOR-PERFORMANCE-MATRIX-2026-10.json).`,
-  'This matrix covers 21-object kitchen, 239-object two-storey house, and 260-object combined renovation fixtures. It does not cover 500/1,000/5,000/20,000-object stress projects, load/schema validation, hit testing, marquee selection, undo/redo, serialization, or canvas frame time.', '',
+  'This matrix covers 21-object kitchen, 239-object two-storey house, and 260-object combined renovation fixtures, including plan hit testing. It does not cover 500/1,000/5,000/20,000-object stress projects, load/schema validation, marquee selection, undo/redo, serialization, or canvas frame time.', '',
 ].join('\n')
 fs.writeFileSync(new URL('../docs/performance/EDITOR-PERFORMANCE-MATRIX-2026-10.md', import.meta.url), markdown)
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`)
