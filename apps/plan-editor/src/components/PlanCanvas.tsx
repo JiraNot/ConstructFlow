@@ -50,6 +50,7 @@ import { usePlanCanvasOpeningPlacementDimensions } from './usePlanCanvasOpeningP
 import { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
 import { usePlanCanvasPointerHandlers } from './usePlanCanvasPointerHandlers.js'
 import { PlanCanvasSurface } from './PlanCanvasSurface.js'
+import { buildPlanCanvasContextMenu } from './buildPlanCanvasContextMenu.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -539,35 +540,18 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     width: containerRef.current?.clientWidth ?? 800,
     height: containerRef.current?.clientHeight ?? 600,
   }
-  const contextMenu = objectContextMenu && planProject.objects[objectContextMenu.id]
-    ? {
-        object: planProject.objects[objectContextMenu.id]!,
-        position: { x: objectContextMenu.x, y: objectContextMenu.y },
-        onStartGridCopy: (objectId: string) => {
-          setGridCopySourceId(objectId)
-          onSelectionChange?.([objectId], objectId)
-          onSelectObject(objectId)
-          onActivateTool?.('gridCopy')
-          setObjectContextMenu(null)
-        },
-        onCopy: (objectId: string) => {
-          onSelectionChange?.([objectId], objectId)
-          onSelectObject(objectId)
-          onCopyObjects?.([objectId])
-          setObjectContextMenu(null)
-        },
-        onEditProperties: (objectId: string) => {
-          onSelectionChange?.([objectId], objectId)
-          onSelectObject(objectId)
-          onRequestEditProperties?.()
-          setObjectContextMenu(null)
-        },
-        onDelete: (objectId: string) => {
-          onDeleteObjects?.([objectId])
-          setObjectContextMenu(null)
-        },
-      }
-    : null
+  const contextMenu = buildPlanCanvasContextMenu({
+    project: planProject,
+    menu: objectContextMenu,
+    setGridCopySourceId,
+    onSelectionChange,
+    onSelectObject,
+    onActivateTool,
+    onCopyObjects,
+    onRequestEditProperties,
+    onDeleteObjects,
+    closeMenu: () => setObjectContextMenu(null),
+  })
   const overlays: Parameters<typeof PlanCanvasSurface>[0]['overlays'] = {
     hints: {
       activeTool,
