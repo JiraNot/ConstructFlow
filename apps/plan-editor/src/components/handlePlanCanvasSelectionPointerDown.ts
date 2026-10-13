@@ -69,7 +69,10 @@ export function handlePlanCanvasSelectionPointerDown({
     setResizeDimensionHeight(editSize ? formatLengthMm(Number(editSize[1]), displayUnit) : '')
     setResizeDimensionLength(editHandle.startPointMm && editHandle.endPointMm
       ? formatLengthMm(Math.hypot(editHandle.endPointMm[0] - editHandle.startPointMm[0], editHandle.endPointMm[1] - editHandle.startPointMm[1]), displayUnit)
-      : '')
+      : editHandle.kind === 'stair-run' && editHandle.stairData
+        ? formatLengthMm(Math.max(1, editHandle.stairData.num_risers - 1) * editHandle.stairData.tread_depth_mm, displayUnit)
+        : '')
+    if (editHandle.kind === 'stair-width' && editHandle.stairData) setResizeDimensionWidth(formatLengthMm(editHandle.stairData.width_mm, displayUnit))
     setDraggingObject({ id: editHandle.id, kind: editHandle.kind, endpointIndex: editHandle.endpointIndex,
       startPointMm: editHandle.startPointMm, endPointMm: editHandle.endPointMm,
       boundaryPointsMm: editHandle.boundaryPointsMm,
@@ -79,6 +82,7 @@ export function handlePlanCanvasSelectionPointerDown({
       roofSeamGripMm: editHandle.roofSeamGripMm,
       pipeRouteData: editHandle.pipeRouteData, mouldingData: editHandle.mouldingData,
       cabinetData: editHandle.cabinetData,
+      stairData: editHandle.stairData,
       centerMm: editHandle.centerMm, sectionMm: editHandle.sectionMm, rotationDeg: editHandle.rotationDeg,
       hostStartMm: editHandle.hostStartMm, hostEndMm: editHandle.hostEndMm,
       openingWidthMm: editHandle.openingWidthMm, openingCenterOffsetMm: editHandle.openingCenterOffsetMm,

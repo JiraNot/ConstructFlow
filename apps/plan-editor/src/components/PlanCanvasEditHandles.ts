@@ -72,6 +72,8 @@ export function findPlanCanvasEditHandle({ planProject, editableSelectionIds, vi
         const [x, y] = worldToScreen([point[0], point[1]], viewport)
         if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
           id, kind: isStart || isEnd ? 'pipe-endpoint' as const : 'pipe-node' as const, endpointIndex,
+          startPointMm: isStart ? [route.nodes_mm[0][0], route.nodes_mm[0][1]] as [number, number] : isEnd ? [route.nodes_mm[endpointIndex - 1][0], route.nodes_mm[endpointIndex - 1][1]] as [number, number] : undefined,
+          endPointMm: isStart ? [route.nodes_mm[1][0], route.nodes_mm[1][1]] as [number, number] : isEnd ? [point[0], point[1]] as [number, number] : undefined,
           pipeRouteData: structuredClone(route),
         }
       }
@@ -81,12 +83,12 @@ export function findPlanCanvasEditHandle({ planProject, editableSelectionIds, vi
       const side = stair.turn_direction === 'left' && stair.stair_type !== 'straight' ? -1 : 1
       const widthGrip: [number, number] = [sx - Math.sin(angle) * stair.width_mm * side, sy + Math.cos(angle) * stair.width_mm * side]
       const [wx, wy] = worldToScreen(widthGrip, viewport)
-      if (Math.hypot(screenPoint[0] - wx, screenPoint[1] - wy) <= tolerance) return { id, kind: 'stair-width' as const, endpointIndex: 0 }
+      if (Math.hypot(screenPoint[0] - wx, screenPoint[1] - wy) <= tolerance) return { id, kind: 'stair-width' as const, endpointIndex: 0, stairData: structuredClone(stair) }
       if (stair.stair_type === 'straight') {
         const run = Math.max(1, stair.num_risers - 1) * stair.tread_depth_mm
         const runGrip: [number, number] = [sx + Math.cos(angle) * run, sy + Math.sin(angle) * run]
         const [rx, ry] = worldToScreen(runGrip, viewport)
-        if (Math.hypot(screenPoint[0] - rx, screenPoint[1] - ry) <= tolerance) return { id, kind: 'stair-run' as const, endpointIndex: 0 }
+        if (Math.hypot(screenPoint[0] - rx, screenPoint[1] - ry) <= tolerance) return { id, kind: 'stair-run' as const, endpointIndex: 0, stairData: structuredClone(stair) }
       }
     } else if (object.object_type === 'decorative.moulding_run') {
       const moulding = object.module_data as unknown as MouldingModuleData
@@ -96,6 +98,8 @@ export function findPlanCanvasEditHandle({ planProject, editableSelectionIds, vi
         const [x, y] = worldToScreen([point[0], point[1]], viewport)
         if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
           id, kind: 'moulding-endpoint' as const, endpointIndex,
+          startPointMm: endpointIndex === 0 ? [point[0], point[1]] as [number, number] : [moulding.path_mm[endpointIndex - 1][0], moulding.path_mm[endpointIndex - 1][1]] as [number, number],
+          endPointMm: endpointIndex === 0 ? [moulding.path_mm[1][0], moulding.path_mm[1][1]] as [number, number] : [point[0], point[1]] as [number, number],
           mouldingData: structuredClone(moulding),
         }
       }

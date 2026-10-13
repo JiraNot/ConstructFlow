@@ -94,6 +94,33 @@ with `npm run build:standalone` (or `npm run test:standalone`).
 Tools that export directly to a live SketchUp session still require the WebSocket bridge;
 when no SketchUp client is connected they return `unavailable`, never a simulated success.
 
+### Plan Editor AI sidebar
+
+The right inspector's **AI** tab asks the HTTP gateway for a structured command proposal. The
+gateway returns a plan only; the editor previews it with the same `CommandBus`, then a human
+confirmation commits the batch as actor `ai` so it is undoable as one action. The HTTP endpoint
+never executes the proposed commands.
+
+Configure the gateway in PowerShell and start it:
+
+```powershell
+$env:OPENAI_API_KEY = "<provider API key>"
+$env:CONSTRUCTFLOW_AI_TOKEN = "<a private random token>"
+$env:CONSTRUCTFLOW_AI_MODEL = "gpt-4o-mini" # optional
+python apps/mcp-server/http_bridge.py
+```
+
+By default the gateway binds to `127.0.0.1:8000`. The AI route requires the configured bearer
+token. In the editor's AI tab, use `http://localhost:8000/api/ai/plan` and enter the same token;
+the editor keeps it in memory only. The project name, active level/phase, catalog types, selected
+IDs and a capped object summary are sent to the configured gateway. Set
+`CONSTRUCTFLOW_AI_BASE_URL` to use an OpenAI-compatible provider endpoint or
+`CONSTRUCTFLOW_HTTP_HOST` only when intentionally changing the listener interface.
+
+The editor currently describes built-in wall, column, beam, door and window commands, plus
+AI-enabled commands contributed by registered SDK modules. AI asks for missing host/level/design
+inputs instead of inventing them. Final domain validation remains authoritative.
+
 คุณสามารถพิมพ์สั่งงานด้วยภาษาไทยหรืออังกฤษได้ทันที เช่น:
 - *"สร้างเสา ค.ส.ล. 4 ต้น ขนาด 0.3x0.3 เมตร สูง 3.5 เมตร ที่พิกัด 0,0 และ 0,6 และ 4,0 และ 4,6"*
 - *"สร้างกำแพงรอบห้อง 4x6 เมตร ความหนา 0.15 เมตร"*

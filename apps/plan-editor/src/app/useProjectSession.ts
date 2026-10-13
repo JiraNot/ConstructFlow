@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { ProjectDocument } from '@constructflow/project-model'
-import type { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
+import type { CommandActorKind, CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
 import { CommandBus, ProjectCommandSession } from '../commands/CommandBus.js'
 
 /**
@@ -20,8 +20,8 @@ export function useProjectSession(initialProject: ProjectDocument | (() => Proje
     setProjectState(updated)
   }
 
-  const dispatchCommandBatch = (commands: CommandRequest[]) => {
-    const result = sessionRef.current!.execute(commands)
+  const dispatchCommandBatch = (commands: CommandRequest[], actorKind: CommandActorKind = 'human') => {
+    const result = sessionRef.current!.execute(commands, actorKind)
     if (result.status === 'success') {
       setProjectState(result.updatedProject)
       if (result.emittedEnvelopes.length > 0) {
@@ -31,8 +31,8 @@ export function useProjectSession(initialProject: ProjectDocument | (() => Proje
     return result
   }
 
-  const previewCommands = (commands: CommandRequest[]) => {
-    const result = CommandBus.executeBatch(project, commands)
+  const previewCommands = (commands: CommandRequest[], actorKind: CommandActorKind = 'human') => {
+    const result = CommandBus.executeBatch(project, commands, actorKind)
     return {
       valid: result.status === 'success',
       project: result.updatedProject,

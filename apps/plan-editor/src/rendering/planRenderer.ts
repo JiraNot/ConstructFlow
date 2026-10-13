@@ -29,6 +29,85 @@ import { getRoofEaveBoundary, solveRoofFraming } from '@constructflow/roof-engin
 import type { RoofModuleData } from '@constructflow/project-model'
 import { beginPlanLabels, queuePlanLabel, flushPlanLabels, planLabelScale } from './planLabels.js'
 
+interface CachedPlanSourceData {
+  visibleObjectIds: Set<string>
+  outputs: ReturnType<typeof constructionOutputs>
+}
+
+interface CachedPlanProjectGeometry {
+  finishBoundaries: ReturnType<typeof getPlanFinishBoundaries>
+  wallLayerBoundaries: ReturnType<typeof getPlanWallLayerBoundaries>
+}
+
+interface HostedOpeningSpan {
+  width_mm: number
+  center_mm: number
+}
+
+interface OpeningSpan {
+  start_dist: number
+  end_dist: number
+}
+
+const planSourceDataCache = new WeakMap<ProjectDocument, CachedPlanSourceData>()
+const planProjectGeometryCache = new WeakMap<ProjectDocument, CachedPlanProjectGeometry>()
+const hostedOpeningsByProject = new WeakMap<ProjectDocument, Map<string, HostedOpeningSpan[]>>()
+
+function getHostedOpeningsByWall(project: ProjectDocument): Map<string, HostedOpeningSpan[]> {
+  const cached = hostedOpeningsByProject.get(project)
+  if (cached) return cached
+  const openings = new Map<string, HostedOpeningSpan[]>()
+  for (const object of Object.values(project.objects)) {
+    if (!isDoorObject(object) && !isWindowObject(object)) continue
+    const wallId = object.module_data.wall_id
+    if (!wallId) continue
+    const hosted = openings.get(wallId) ?? []
+    hosted.push({ width_mm: object.module_data.width_mm, center_mm: object.module_data.offset_along_wall_mm })
+    openings.set(wallId, hosted)
+  }
+  hostedOpeningsByProject.set(project, openings)
+  return openings
+}
+
+function getCachedPlanSourceData(project: ProjectDocument): CachedPlanSourceData {
+  const cached = planSourceDataCache.get(project)
+  if (cached) return cached
+  const value = {
+    visibleObjectIds: new Set(getPlanVisibleObjects(project).map(object => object.id)),
+    outputs: constructionOutputs(project),
+  }
+  planSourceDataCache.set(project, value)
+  return value
+}
+
+function getCachedPlanProjectGeometry(project: ProjectDocument): CachedPlanProjectGeometry {
+  const cached = planProjectGeometryCache.get(project)
+  if (cached) return cached
+  const value = {
+    finishBoundaries: getPlanFinishBoundaries(project),
+    wallLayerBoundaries: getPlanWallLayerBoundaries(project),
+  }
+  planProjectGeometryCache.set(project, value)
+  return value
+}
+
+function areWorldPointsVisible(
+  points: readonly (readonly number[])[],
+  viewport: ViewportState,
+  width: number,
+  height: number,
+  paddingPx = 64,
+): boolean {
+  if (!points.length) return false
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const point of points) {
+    const [screenX, screenY] = worldToScreen([Number(point[0]), Number(point[1])], viewport)
+    minX = Math.min(minX, screenX); maxX = Math.max(maxX, screenX)
+    minY = Math.min(minY, screenY); maxY = Math.max(maxY, screenY)
+  }
+  return maxX >= -paddingPx && minX <= width + paddingPx && maxY >= -paddingPx && minY <= height + paddingPx
+}
+
 function openingValue(project: ProjectDocument, object: SmartObject, field: string, fallback: unknown) {
   const data = object.module_data as Record<string, unknown>
   const overrides = data.instance_overrides as Record<string, unknown> | undefined
@@ -195,8 +274,10 @@ export function renderPlanView(
   }
 
   // 3. Structural/architectural domain linework for the active level
-  const visibleDomainIds = new Set(getPlanVisibleObjects(sourceProject).map(object => object.id))
-  for (const out of constructionOutputs(sourceProject).filter(out => project.objects[out.object_id] && visibleDomainIds.has(out.object_id))) {
+  const { visibleObjectIds, outputs } = getCachedPlanSourceData(sourceProject)
+  for (const out of outputs) {
+    if (!project.objects[out.object_id] || !visibleObjectIds.has(out.object_id)) continue
+    if (out.paths.length && !out.paths.some(path => areWorldPointsVisible(path, viewport, width, height))) continue
     const phase=out.removed_phase==='demolition'?'demolition':out.phase
     const outputObject = project.objects[out.object_id]
     const family = outputObject?.object_type ?? ''
@@ -335,6 +416,8 @@ export function renderPlanView(
   // 6. Walls (rendered with opening cutouts)
   for (const obj of Object.values(project.objects)) {
     if (isWallObject(obj)) {
+      const halfThicknessPx = Math.max(0, Number(obj.module_data.thickness_mm) * viewport.zoom / 2)
+      if (!areWorldPointsVisible([obj.module_data.start_point_mm, obj.module_data.end_point_mm], viewport, width, height, 64 + halfThicknessPx)) continue
       drawWall(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.walls)
     }
   }
@@ -365,13 +448,14 @@ export function renderPlanView(
     }
   }
 
-  for (const boundary of getPlanFinishBoundaries(project)) {
+  const { finishBoundaries, wallLayerBoundaries } = getCachedPlanProjectGeometry(project)
+  for (const boundary of finishBoundaries) {
     const style = resolvePlanPhaseStyle(boundary.phase)
     ctx.save(); ctx.strokeStyle = style.stroke; ctx.lineWidth = boundary.phase === 'new_construction' ? 2 : 1.5; ctx.setLineDash(style.dash); ctx.beginPath()
     for (const [a, b] of boundary.segments_mm) { const [ax, ay] = worldToScreen(a, viewport), [bx, by] = worldToScreen(b, viewport); ctx.moveTo(ax, ay); ctx.lineTo(bx, by) }
     ctx.stroke(); ctx.restore()
   }
-  for (const boundary of getPlanWallLayerBoundaries(project)) {
+  for (const boundary of wallLayerBoundaries) {
     ctx.save(); ctx.strokeStyle = boundary.phase === 'demolition' ? '#fca5a5' : '#a3adb8'; ctx.lineWidth = 1; ctx.beginPath()
     for (const [a, b] of boundary.segments_mm) { const [ax, ay] = worldToScreen(a, viewport), [bx, by] = worldToScreen(b, viewport); ctx.moveTo(ax, ay); ctx.lineTo(bx, by) }
     ctx.stroke(); ctx.restore()
@@ -1129,30 +1213,15 @@ function drawWall(
   const nx = -uy
   const ny = ux
 
-  // Collect openings hosted on this wall
-  interface OpeningSpan {
-    start_dist: number
-    end_dist: number
-  }
-  const openings: OpeningSpan[] = []
-
-  for (const obj of Object.values(project.objects)) {
-    if (isDoorObject(obj) && obj.module_data.wall_id === wall.id) {
-      const halfW = obj.module_data.width_mm / 2
-      const center = obj.module_data.offset_along_wall_mm
-      openings.push({
-        start_dist: Math.max(0, center - halfW),
-        end_dist: Math.min(len, center + halfW),
-      })
-    } else if (isWindowObject(obj) && obj.module_data.wall_id === wall.id) {
-      const halfW = obj.module_data.width_mm / 2
-      const center = obj.module_data.offset_along_wall_mm
-      openings.push({
-        start_dist: Math.max(0, center - halfW),
-        end_dist: Math.min(len, center + halfW),
-      })
+  // Build the hosted-opening index once per project snapshot rather than scanning
+  // every door and window for every wall on each redraw.
+  const openings = (getHostedOpeningsByWall(project).get(wall.id) ?? []).map(opening => {
+    const halfWidth = opening.width_mm / 2
+    return {
+      start_dist: Math.max(0, opening.center_mm - halfWidth),
+      end_dist: Math.min(len, opening.center_mm + halfWidth),
     }
-  }
+  })
 
   // Sort and merge openings
   openings.sort((a, b) => a.start_dist - b.start_dist)

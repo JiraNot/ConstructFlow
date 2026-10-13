@@ -76,6 +76,8 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    const probe = (window as unknown as { __cfPlanRedrawDurationsMs?: number[] }).__cfPlanRedrawDurationsMs
+    const drawStartedAt = probe ? performance.now() : 0
 
     const ghost = buildPlanPlacementGhost({
       activeTool, activeSnap, project, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark,
@@ -98,6 +100,7 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
       displayUnit, activeWallSnap, project, activeDoorTypeMark, activeWindowTypeMark,
       dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, slabBoundary,
     })
+    if (probe) probe.push(performance.now() - drawStartedAt)
   }, [
     canvasRef, activeTool, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark,
     activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,

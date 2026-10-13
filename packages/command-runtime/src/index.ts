@@ -18,15 +18,34 @@ import { executeInteriorCommand } from '@constructflow/interior-engine'
 import { validateConstructionProject } from '@constructflow/domain-providers'
 import { executeDuplicateObjects } from './clipboardCommands.js'
 import { ConstructFlowSolver } from '@constructflow/constraint-engine'
+import { ModuleRegistry, type ConstructFlowModule } from '@constructflow/module-sdk'
 
 const handlers = [(context: CommandHandlerContext) => context.commandName === 'DuplicateObjects' ? executeDuplicateObjects(context) : null,
   executeProjectCommand, executeStructureCommand, executeArchitectureCommand, executeCatalogCommand,
   executeStructureConstructionCommand, executeBathroomCommand, executeRoofCommand, executeDecorativeCommand,
   executePlumbingCommand, executeDrainageCommand, executeElectricalCommand, executeInteriorCommand]
 const phases = new Set(['existing', 'demolition', 'new_construction'])
+const extensionModules = new ModuleRegistry()
 
 /** Host-independent CQRS runtime. Domain handlers never receive the live document. */
 export class CommandBus {
+  /** Register a namespaced third-party module; its commands share validation and transaction behavior. */
+  static registerModule(module: ConstructFlowModule): () => void {
+    return extensionModules.register(module)
+  }
+
+  static getRegisteredModules() {
+    return extensionModules.list()
+  }
+
+  static getModuleProviders() {
+    return extensionModules.providers()
+  }
+
+  static getAICommandDescriptors() {
+    return extensionModules.aiCommandDescriptors()
+  }
+
   static execute(
     project: ProjectDocument,
     commandName: string,
@@ -72,7 +91,7 @@ export class CommandBus {
       const context: CommandHandlerContext = {
         project, updated, commandName, input: payload, command_id, now, envelope,
       }
-      for (const handle of handlers) {
+      for (const handle of [...handlers, (ctx: CommandHandlerContext) => extensionModules.execute(ctx)]) {
         const response = handle(context)
         if (!response) continue
         if (response.result.status !== 'success') return { ...response, updatedProject: project }
@@ -155,6 +174,9 @@ export class CommandBus {
         response.updatedProject.project.updated_at = now
         validateProjectV2(response.updatedProject)
         validateConstructionProject(response.updatedProject)
+        const moduleErrors = extensionModules.validate(response.updatedProject)
+          .filter(issue => issue.severity === 'error')
+        if (moduleErrors.length) return reject(moduleErrors.map(issue => `${issue.code}: ${issue.message}`).join('\n'))
         return response
       }
       return reject(`Unknown command: ${commandName}`)

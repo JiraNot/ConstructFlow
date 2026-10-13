@@ -14,6 +14,7 @@ import json
 import sys
 import types
 import unittest
+import os
 from unittest.mock import patch
 
 
@@ -70,6 +71,8 @@ def _ensure_importable():
 
 _ensure_importable()
 import server  # noqa: E402  (apps/mcp-server/server.py, same directory)
+import ai_provider  # noqa: E402
+import http_bridge  # noqa: E402
 
 
 class FakeWebSocket:
@@ -228,6 +231,85 @@ class McpBridgeServerTest(unittest.TestCase):
             result = asyncio.run(server.app.call_tool_handler("cf_standalone_history", arguments))
         runtime.assert_called_once_with({"project_json": "{}", "history": {"past": [], "future": []}, "action": "undo", "operation": "undo"})
         self.assertEqual(json.loads(result[0]["text"]), expected)
+
+    def test_ai_gateway_builds_a_schema_bounded_plan_without_exposing_provider_secrets(self):
+        provider_body = {"choices": [{"message": {"content": json.dumps({
+            "summary": "เพิ่มผนังหนึ่งช่วง",
+            "questions": [],
+            "commands": [{"name": "CreateWall", "input": {"start_point_mm": [0, 0], "end_point_mm": [4000, 0], "thickness_mm": 100, "height_mm": 2800}}],
+        })}}]}
+
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+            def read(self): return json.dumps(provider_body).encode("utf-8")
+
+        descriptors = [{
+            "name": "CreateWall", "version": 1, "owner_module": "constructflow.architecture",
+            "ai_allowed": True, "confirmation": "none",
+            "input_schema": {"type": "object", "properties": {"start_point_mm": {"type": "array"}}},
+        }]
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "server-only-secret", "CONSTRUCTFLOW_AI_MODEL": "test-model"}), \
+             patch.object(ai_provider, "urlopen", return_value=FakeResponse()) as send:
+            result = ai_provider.generate_command_plan({
+                "prompt": "สร้างผนังยาว 4 เมตร",
+                "project_context": {"active_level_id": "GF"},
+                "command_descriptors": descriptors,
+            })
+        self.assertEqual(result["commands"][0]["name"], "CreateWall")
+        request = send.call_args.args[0]
+        self.assertEqual(request.get_header("Authorization"), "Bearer server-only-secret")
+        self.assertNotIn("server-only-secret", request.data.decode("utf-8"))
+        self.assertEqual(json.loads(request.data)["model"], "test-model")
+
+    def test_ai_gateway_rejects_unregistered_provider_commands(self):
+        provider_body = {"choices": [{"message": {"content": json.dumps({
+            "summary": "unsupported", "questions": [], "commands": [{"name": "DeleteObject", "input": {"object_id": "x"}}],
+        })}}]}
+
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+            def read(self): return json.dumps(provider_body).encode("utf-8")
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "server-only-secret"}), \
+             patch.object(ai_provider, "urlopen", return_value=FakeResponse()):
+            with self.assertRaisesRegex(ai_provider.AIPlanError, "unregistered command"):
+                ai_provider.generate_command_plan({
+                    "prompt": "delete all objects",
+                    "project_context": {},
+                    "command_descriptors": [{
+                        "name": "CreateWall", "ai_allowed": True,
+                        "input_schema": {"type": "object", "properties": {}},
+                    }],
+                })
+
+    def test_ai_gateway_requires_explicit_local_credentials_and_bounded_context(self):
+        with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
+            with self.assertRaisesRegex(ai_provider.AIPlanError, "Set OPENAI_API_KEY"):
+                ai_provider.generate_command_plan({
+                    "prompt": "Create a wall",
+                    "project_context": {},
+                    "command_descriptors": [{
+                        "name": "CreateWall", "ai_allowed": True,
+                        "input_schema": {"type": "object", "properties": {}},
+                    }],
+                })
+
+    def test_ai_gateway_token_comparison_rejects_missing_or_wrong_tokens(self):
+        self.assertFalse(http_bridge.ai_gateway_authorized("", "secret"))
+        self.assertFalse(http_bridge.ai_gateway_authorized("Bearer wrong", "secret"))
+        self.assertFalse(http_bridge.ai_gateway_authorized("Bearer secret", ""))
+        self.assertTrue(http_bridge.ai_gateway_authorized("Bearer secret", "secret"))
+        with self.assertRaisesRegex(ai_provider.AIPlanError, "bounded object"):
+            ai_provider.generate_command_plan({
+                "prompt": "Create a wall",
+                "project_context": {"oversized": "x" * (ai_provider.MAX_CONTEXT_BYTES + 1)},
+                "command_descriptors": [{
+                    "name": "CreateWall", "ai_allowed": True,
+                    "input_schema": {"type": "object", "properties": {}},
+                }],
+            })
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

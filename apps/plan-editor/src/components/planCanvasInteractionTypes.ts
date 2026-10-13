@@ -1,4 +1,4 @@
-import type { CabinetModuleData, MouldingModuleData, PipeRouteModuleData } from '@constructflow/project-model'
+import type { CabinetModuleData, MouldingModuleData, PipeRouteModuleData, StairModuleData } from '@constructflow/project-model'
 
 export interface PlanCanvasDraggingObject {
   id: string
@@ -26,4 +26,5 @@ export interface PlanCanvasDraggingObject {
   pipeRouteData?: PipeRouteModuleData
   mouldingData?: MouldingModuleData
   cabinetData?: CabinetModuleData
+  stairData?: StairModuleData
 }

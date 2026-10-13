@@ -68,8 +68,10 @@ export function usePlanCanvasManipulationDimensions({
 
   const rectangle = draggingObject?.kind === 'column-corner' || draggingObject?.kind === 'foundation-corner'
   const openingWidth = draggingObject?.kind === 'opening-edge'
-  const lineLength = draggingObject?.kind === 'wall-endpoint' || draggingObject?.kind === 'beam-endpoint'
-  const mode = rectangle ? 'rectangle' : openingWidth ? 'opening-width' : lineLength ? 'line-length' : 'move'
+  const stairWidth = draggingObject?.kind === 'stair-width'
+  const stairRun = draggingObject?.kind === 'stair-run'
+  const lineLength = draggingObject?.kind === 'wall-endpoint' || draggingObject?.kind === 'beam-endpoint' || draggingObject?.kind === 'grid-endpoint' || draggingObject?.kind === 'separator-endpoint' || draggingObject?.kind === 'pipe-endpoint' || draggingObject?.kind === 'moulding-endpoint'
+  const mode = rectangle ? 'rectangle' : openingWidth ? 'opening-width' : stairWidth ? 'stair-width' : stairRun ? 'stair-run' : lineLength ? 'line-length' : 'move'
   const readout = dimensions?.length !== null && dimensions?.length !== undefined
     ? `L ${formatLengthMm(dimensions.length, displayUnit)} ${displayUnit}`
     : dimensions?.width !== null && dimensions?.width !== undefined && dimensions?.height !== null && dimensions?.height !== undefined

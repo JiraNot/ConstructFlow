@@ -9,22 +9,15 @@ import {
   RemovalPhase,
   isGridObject,
   isColumnObject,
-  isFoundationObject,
-  isBeamObject,
   isWallObject,
   isDoorObject,
   isWindowObject,
   DoorHanding,
   PlacementReference,
   formatLengthMm,
-  resolveArchitectureSurfaceElevation,
-  resolveColumnVerticalExtent,
-  resolveSlabElevation,
   type DisplayLengthUnit,
   type ProjectViewTemplate,
   type StairModuleData,
-  type RoofModuleData,
-  type RainwaterDesignSettings,
 } from '@constructflow/project-model'
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
 import { useProjectSession } from './app/useProjectSession.js'
@@ -36,6 +29,7 @@ import { PlanCanvas, type PlanCanvasProps } from './components/PlanCanvas.js'
 import { ElevationCanvas, ElevationDirection, type CoordinatedElevationNavigation } from './components/ElevationCanvas.js'
 import { PropertiesPanel } from './components/PropertiesPanel.js'
 import { ProjectBrowser } from './components/ProjectBrowser.js'
+import { AICommandPanel } from './components/AICommandPanel.js'
 import { SettingsModal } from './components/SettingsModal.js'
 import { TOOL_FAMILIES } from './components/catalogPresentation.js'
 import { TypeManagerModal } from './components/TypeManagerModal.js'
@@ -52,6 +46,7 @@ import { loadLocalProjectSnapshot, saveLocalProjectSnapshot } from './projectAut
 import { buildElevationManipulationCommands as buildElevationManipulationCommandsForView } from './elevationManipulationCommands.js'
 import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { usePlanPlacementCommands } from './app/usePlanPlacementCommands.js'
+import { usePropertiesPanelActions } from './app/usePropertiesPanelActions.js'
 import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
 import { getRoofEaveBoundary } from '@constructflow/roof-engine'
 import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
@@ -263,7 +258,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     && paneModes.includes('rcp')
   const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
   const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
-  const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination'>('properties')
+  const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination' | 'ai'>('properties')
   const coordination = useCoordinationReport(project, true)
   const coordinationFindings = coordination.report?.findings ?? []
   const [activeColumnType, setActiveColumnType] = useState<string>('C1')
@@ -524,29 +519,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setCommandQueue,
     setFileFeedback,
   })
-  // Update Object Phase (Existing / Demolition / New Construction)
-  const handleUpdateObjectPhase = (objectId: string, newPhase: Phase) => {
-    const res = CommandBus.execute(project, 'UpdateObjectPhase', {
-      object_id: objectId,
-      created_phase: newPhase,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
-  const handleUpdateObjectRemovalPhase = (objectId: string, removedPhase: RemovalPhase | null) => {
-    const res = CommandBus.execute(project, 'UpdateObjectPhase', {
-      object_id: objectId,
-      removed_phase: removedPhase,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
+  const propertiesActions = usePropertiesPanelActions({ project, setProject, setCommandQueue, dispatchCommandBatch, setFileFeedback, setSelectedId, setSelectedIds })
   const handleSetWorkingPhase = (phase: Phase) => {
     const res = CommandBus.execute(project, 'SetWorkingPhase', { phase })
     if (res.result.status === 'success') {
@@ -651,36 +624,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     ])
   }
 
-  const handleUpdateRoof = (objectId: string, changes: Partial<RoofModuleData>) => {
-    const object = project.objects[objectId]
-    if (!object || object.object_type !== 'roof.system') return
-    const result = CommandBus.execute(project, 'UpdateRoof', { ...object.module_data, ...changes, id: objectId })
-    if (result.result.status === 'success') {
-      setProject(result.updatedProject)
-      if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
-    } else if (result.result.errors?.length) setFileFeedback(result.result.errors.join(' · '))
-  }
-  const handleUpdateRainwaterDesign = (settings: RainwaterDesignSettings) => {
-    const result = dispatchCommandBatch([{ name: 'UpdateRainwaterDesign', input: { settings } }])
-    if (result.status !== 'success') setFileFeedback(result.errors?.[0] ?? 'บันทึกข้อมูลออกแบบน้ำฝนไม่สำเร็จ')
-    else setFileFeedback('บันทึกข้อมูลออกแบบน้ำฝนของโครงการแล้ว · ใช้คำนวณหลังคาทุกผืน')
-  }
-  const handleUpdateDomainObject = (objectId: string, commandName: string, changes: object) => {
-    const object = project.objects[objectId]
-    if (!object) return
-    const result = CommandBus.execute(project, commandName, { ...(object.module_data as Record<string, unknown>), ...changes, id: objectId })
-    if (result.result.status === 'success') {
-      setProject(result.updatedProject)
-      if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
-    } else if (result.result.errors?.length) setFileFeedback(result.result.errors.join(' · '))
-  }
-  const handleAssignElectricalFixtureToCircuit = (fixtureId: string, circuitId: string | null) => {
-    const result = dispatchCommandBatch([{
-      name: 'AssignFixtureToCircuit',
-      input: { fixture_id: fixtureId, circuit_id: circuitId },
-    }])
-    if (result.status !== 'success') setFileFeedback(result.errors?.[0] ?? 'กำหนดวงจรให้กับอุปกรณ์ไฟฟ้าไม่สำเร็จ')
-  }
   const handleCommitPipeRoute = (start: [number, number], end: [number, number], system: 'waste' | 'soil' | 'rainwater' | 'vent' | 'cold_water' | 'hot_water') => {
     const level = project.levels.find(item => item.id === project.project.active_level_id)
     const runMm = Math.hypot(end[0] - start[0], end[1] - start[1])
@@ -869,44 +812,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     }
   }
 
-  // Assign instance type
-  const handleAssignType = (objectId: string, typeName: string) => {
-    const object = project.objects[objectId]
-    if (!object) return
-    const type = project.types.find((candidate) =>
-      candidate.object_type === object.object_type &&
-      (candidate.id.toLowerCase() === typeName.toLowerCase() || candidate.name.toLowerCase() === typeName.toLowerCase())
-    )
-    if (!type) return
-    const res = CommandBus.execute(project, 'AssignInstanceType', {
-      object_id: objectId,
-      type_id: type.id,
-      type_name: type.name,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
-  const handleAssignTypeMany = (objectIds: string[], typeId: string) => {
-    const objects = [...new Set(objectIds)].map(id => project.objects[id]).filter(Boolean)
-    if (objects.length < 2 || objects.some(object => object.object_type !== objects[0].object_type)) return
-    const type = project.types.find(candidate => candidate.id === typeId && candidate.object_type === objects[0].object_type)
-    if (!type) return
-    const result = dispatchCommandBatch(objects.map(object => ({
-      name: 'AssignInstanceType',
-      input: { object_id: object.id, type_id: type.id, type_name: type.name },
-    })))
-    if (result.status !== 'success') {
-      setFileFeedback(result.errors?.[0] ?? 'เปลี่ยน Type ให้หลายวัตถุไม่สำเร็จ')
-      return
-    }
-    setSelectedIds(objects.map(object => object.id))
-    setSelectedId(objects.at(-1)!.id)
-    setFileFeedback(`เปลี่ยน ${objects.length} ชิ้นเป็น ${type.name} แล้ว`)
-  }
-
   const syncRenamedActiveType = (type: TypeDefinition, name: string) => {
     const entries: Array<[string,string,(value:string)=>void]> = [
       ['structure.column',activeColumnType,setActiveColumnType], ['structure.foundation',activeFoundationType,setActiveFoundationType],
@@ -925,7 +830,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setIsTypeManagerOpen(true)
   }
   const chooseCatalogType = (type:TypeDefinition) => {
-    if(catalogContext.intent==='assign' && selectedId) { handleAssignType(selectedId,type.id); return }
+    if(catalogContext.intent==='assign' && selectedId) { propertiesActions.onAssignType(selectedId,type.id); return }
     const tool = Object.entries(TOOL_FAMILIES).find(([,family])=>family===type.object_type)?.[0] as ToolType | undefined
     if(!tool) return
     const setters:Record<string,(value:string)=>void> = {column:setActiveColumnType,foundation:setActiveFoundationType,beam:setActiveBeamType,wall:setActiveWallType,door:setActiveDoorType,window:setActiveWindowType,slab:setActiveSlabType,roof:setActiveRoofType}
@@ -949,12 +854,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       setProject(res.updatedProject)
       if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
     }
-  }
-
-  const handleModifyGrid = (objectId: string, changes: { start_point_mm?: [number, number]; end_point_mm?: [number, number]; bubble_visible?: boolean; auto_tag?: boolean; sequence_style?: 'auto' | 'alpha' | 'numeric' }) => {
-    const res = CommandBus.execute(project, 'ModifyGrid', { object_id: objectId, ...changes })
-    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
-    else if (res.result.errors?.length) window.alert(res.result.errors.join('\n'))
   }
 
   const handleCopyGrid = (sourceId: string, start_mm: [number, number], end_mm: [number, number]) => {
@@ -1013,261 +912,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       return true
     }
     return false
-  }
-
-  const handleUpdateOpeningInstanceParameters = (objectId: string, parameters: Record<string, unknown | null>) => {
-    const res = CommandBus.execute(project, 'UpdateOpeningInstanceParameters', { object_id: objectId, parameters })
-    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
-    else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
-  }
-
-  // Rename Column Mark handler
-  const handleUpdateColumnMark = (objectId: string, newMark: string) => {
-    const res = CommandBus.execute(project, 'UpdateColumnMark', {
-      object_id: objectId,
-      mark: newMark,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
-  const handleUpdateColumnVerticalReference = (objectId: string, changes: { base_level_id?: string; top_level_id?: string | null; base_offset_mm?: number; top_offset_mm?: number }) => {
-    const res = CommandBus.execute(project, 'UpdateColumnVerticalReference', { object_id: objectId, ...changes })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
-    } else if (res.result.errors?.length) window.alert(res.result.errors.join('\n'))
-  }
-
-  const handleUpdateBeamVerticalReference = (objectId: string, changes: { level_id?: string; base_offset_mm?: number }) => {
-    const res = CommandBus.execute(project, 'UpdateBeamVerticalReference', { object_id: objectId, ...changes })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
-    } else if (res.result.errors?.length) window.alert(res.result.errors.join('\n'))
-  }
-
-  const handleUpdateLevelMany = (objectIds: string[], levelId: string) => {
-    const targetLevel = project.levels.find(level => level.id === levelId)
-    if (!targetLevel) return
-    const commands: CommandRequest[] = []
-    for (const objectId of [...new Set(objectIds)]) {
-      const object = project.objects[objectId]
-      if (!object) continue
-      const data = object.module_data as Record<string, unknown>
-      if (isBeamObject(object)) {
-        commands.push({ name: 'UpdateBeamVerticalReference', input: { object_id: objectId, level_id: levelId, base_offset_mm: Number(data.base_offset_mm ?? 0) } })
-      } else if (isColumnObject(object)) {
-        const oldBaseLevel = project.levels.find(level => level.id === data.base_level_id)
-        const oldTopLevel = project.levels.find(level => level.id === data.top_level_id)
-        if (oldBaseLevel && resolveColumnVerticalExtent(project, object)) {
-          const oldFallbackTop = oldTopLevel ?? project.levels.filter(level => level.elevation_mm > oldBaseLevel.elevation_mm).sort((a, b) => a.elevation_mm - b.elevation_mm)[0]
-          const storeyDelta = oldFallbackTop ? oldFallbackTop.storey_index - oldBaseLevel.storey_index : 1
-          const newTopLevel = project.levels.find(level => level.storey_index === targetLevel.storey_index + storeyDelta)
-          commands.push({ name: 'UpdateColumnVerticalReference', input: {
-            object_id: objectId,
-            base_level_id: levelId,
-            ...(newTopLevel ? { top_level_id: newTopLevel.id } : { top_level_id: null }),
-            base_offset_mm: Number(data.base_offset_mm ?? 0),
-            top_offset_mm: Number(data.top_offset_mm ?? 0),
-          } })
-        }
-      } else if (object.object_type === 'structure.slab' || object.object_type === 'architecture.floor' || object.object_type === 'architecture.ceiling') {
-        const oldLevel = project.levels.find(level => level.id === data.level_id)
-        const worldElevation = object.object_type === 'structure.slab' ? resolveSlabElevation(project, object) : resolveArchitectureSurfaceElevation(project, object)
-        if (worldElevation !== undefined && oldLevel) {
-          const command = object.object_type === 'structure.slab' ? 'UpdateSlab' : object.object_type === 'architecture.floor' ? 'UpdateArchitecturalFloor' : 'UpdateCeiling'
-          const elevationOffset = Number(data.elevation_offset_mm ?? (worldElevation - oldLevel.elevation_mm))
-          commands.push({ name: command, input: { ...data, id: objectId, level_id: levelId, elevation_offset_mm: elevationOffset, elevation_mm: targetLevel.elevation_mm + elevationOffset, ...(object.object_type !== 'structure.slab' ? { elevation_reference: 'level' } : {}) } })
-        }
-      }
-    }
-    if (!commands.length) return
-    const result = dispatchCommandBatch(commands)
-    if (result.status !== 'success') {
-      setFileFeedback(result.errors?.[0] ?? 'เปลี่ยนระดับให้วัตถุที่เลือกไม่สำเร็จ')
-      return
-    }
-    setFileFeedback(`ย้าย ${commands.length} ชิ้นไปยัง ${targetLevel.name} แล้ว`)
-  }
-
-  const handleUpdateArchitectureSurface = (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; material?: string; finish_layers?: Array<{ material: string; thickness_mm: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number; grid_mm?: [number, number] }) => {
-    const object = project.objects[objectId]
-    if (!object || (object.object_type !== 'architecture.floor' && object.object_type !== 'architecture.ceiling')) return
-    const data = object.module_data as Record<string, unknown>
-    const oldLevelId = typeof data.level_id === 'string' ? data.level_id : project.project.active_level_id
-    const levelId = changes.level_id ?? oldLevelId
-    const level = project.levels.find(item => item.id === levelId)
-    if (!level) { setFileFeedback(`ไม่พบระดับชั้น ${levelId}`); return }
-    const oldLevel = project.levels.find(item => item.id === oldLevelId)
-    const worldElevation = resolveArchitectureSurfaceElevation(project, object) ?? Number(data.elevation_mm ?? 0)
-    const currentOffset = worldElevation - Number(oldLevel?.elevation_mm ?? 0)
-    const offset = changes.elevation_offset_mm ?? currentOffset
-    const command = object.object_type === 'architecture.floor' ? 'UpdateArchitecturalFloor' : 'UpdateCeiling'
-    const res = CommandBus.execute(project, command, {
-      ...data,
-      ...changes,
-      id: objectId,
-      level_id: levelId,
-      elevation_reference: 'level',
-      elevation_offset_mm: offset,
-      elevation_mm: level.elevation_mm + offset,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
-    } else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
-  }
-
-  const handleUpdateSlab = (objectId: string, changes: { level_id?: string; elevation_offset_mm?: number; thickness_mm?: number; slab_system?: string; material?: string; slope_ratio?: number; drain_direction_deg?: number; finish_layers?: Array<{ material: string; thickness_mm: number; offset_mm?: number; mark?: string; quantity_unit?: 'm2' | 'm3' }>; finish_pattern_mm?: [number, number]; finish_pattern_origin_mm?: [number, number]; finish_pattern_rotation_deg?: number }) => {
-    const object = project.objects[objectId]
-    if (!object || object.object_type !== 'structure.slab') return
-    const data = object.module_data as Record<string, unknown>
-    const oldLevelId = typeof data.level_id === 'string' ? data.level_id : project.project.active_level_id
-    const levelId = changes.level_id ?? oldLevelId
-    const level = project.levels.find(item => item.id === levelId)
-    if (!level) { setFileFeedback(`ไม่พบระดับชั้น ${levelId}`); return }
-    const oldLevel = project.levels.find(item => item.id === oldLevelId)
-    const currentResolved = Number(data.elevation_mm ?? (oldLevel ? oldLevel.elevation_mm + Number(data.elevation_offset_mm ?? 0) : 0))
-    const currentOffset = Number(data.elevation_offset_mm ?? (oldLevel ? currentResolved - oldLevel.elevation_mm : 0))
-    const offset = changes.elevation_offset_mm !== undefined ? changes.elevation_offset_mm : currentOffset
-    const res = CommandBus.execute(project, 'UpdateSlab', {
-      ...data,
-      ...changes,
-      id: objectId,
-      level_id: levelId,
-      elevation_offset_mm: offset,
-      elevation_mm: level.elevation_mm + offset,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
-    } else if (res.result.errors?.length) {
-      setFileFeedback(res.result.errors.join(' · '))
-    }
-  }
-
-  const handleUpdateStair = (objectId: string, changes: Partial<StairModuleData>) => {
-    const res = CommandBus.execute(project, 'UpdateStair', { ...changes, id: objectId })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
-    } else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
-  }
-
-  // Rename Foundation Mark handler
-  const handleUpdateFoundationMark = (objectId: string, newMark: string) => {
-    const res = CommandBus.execute(project, 'UpdateFoundationMark', {
-      object_id: objectId,
-      mark: newMark,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
-  // Rename Grid Tag handler
-  const handleUpdateGridTag = (objectId: string, newTag: string) => {
-    const res = CommandBus.execute(project, 'UpdateGridTag', {
-      object_id: objectId,
-      tag: newTag,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
-  const handleUpdateGridSystem = (systemId: string, changes: { positions_mm?: number[]; first_tag?: string }) => {
-    const member = Object.values(project.objects).filter(isGridObject).find(object => object.module_data.system_id === systemId)
-    if (!member) return
-    const data = member.module_data
-    const members = Object.values(project.objects).filter(isGridObject)
-      .filter(object => object.module_data.system_id === systemId)
-      .sort((a, b) => (a.module_data.system_index ?? 0) - (b.module_data.system_index ?? 0))
-    const positions_mm = changes.positions_mm ?? members.map(object => object.module_data.position_mm)
-    const gridIds = Array.from({ length: positions_mm.length }, (_, index) => members[index]?.id ?? crypto.randomUUID())
-    const res = CommandBus.execute(project, 'UpdateGridSystem', {
-      system_id: systemId, grid_ids: gridIds,
-      positions_mm,
-      first_tag: changes.first_tag ?? data.system_first_tag ?? data.tag,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue(q => [...q, res.emittedEnvelope!])
-    }
-  }
-
-  const handleUpdateWallFace = (objectId: string, changes: {
-    fit_to_stair?: boolean
-    plaster_inside_thickness_mm?: number
-    plaster_outside_thickness_mm?: number
-    plaster_inside_material?: string
-    plaster_outside_material?: string
-    inside_finish_mark?: string
-    outside_finish_mark?: string
-    inside_finish_type_id?: string
-    outside_finish_type_id?: string
-    interior_side?: 'left' | 'right'
-    top_level_id?: string
-    base_offset_mm?: number
-    top_offset_mm?: number
-    vertical_constraint?: 'fixed_height' | 'top_level'
-  }) => {
-    const wall = project.objects[objectId]
-    if (!isWallObject(wall)) return
-    const res = CommandBus.execute(project, 'UpdateWallDimensions', {
-      object_id: objectId,
-      thickness_mm: wall.module_data.thickness_mm,
-      ...changes,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
-  const handleDefineWallFinish = (name: string, parameters: Record<string, unknown>) => {
-    const result = dispatchCommandBatch([{ name: 'DefineStructuralType', input: { id: crypto.randomUUID(), name, object_type: 'architecture.wall_finish', parameters } }])
-    if (result.status !== 'success') setFileFeedback(result.errors?.join(' · ') ?? 'เพิ่มชนิดผิวไม่สำเร็จ')
-  }
-
-  const handleUpdateWallFinish = (typeId: string, name: string, parameters: Record<string, unknown>) => {
-    const finish = project.types.find(type => type.id === typeId && type.object_type === 'architecture.wall_finish')
-    if (!finish) return
-    const commands: CommandRequest[] = []
-    if (name.trim() && name.trim() !== finish.name) commands.push({ name: 'RenameCatalogType', input: { type_id: typeId, name: name.trim() } })
-    commands.push({ name: 'UpdateStructuralTypeDimensions', input: { type_id_or_name: typeId, object_type: 'architecture.wall_finish', parameters } })
-    const result = dispatchCommandBatch(commands)
-    if (result.status !== 'success') setFileFeedback(result.errors?.join(' · ') ?? 'แก้ชนิดผิวไม่สำเร็จ')
-  }
-
-  const handleUpdateOpeningVertical = (objectId: string, changes: {
-    sill_height_mm?: number
-    height_mm?: number
-    head_level_id?: string
-    head_offset_mm?: number
-    vertical_constraint?: 'fixed_height' | 'head_level'
-  }) => {
-    const opening = project.objects[objectId]
-    if (!opening || (!isDoorObject(opening) && !isWindowObject(opening))) return
-    const data = opening.module_data
-    const isFixed = changes.vertical_constraint === 'fixed_height' || changes.head_level_id === '' || changes.head_level_id === null
-    const result = CommandBus.execute(project, isDoorObject(opening) ? 'UpdateDoorDimensions' : 'UpdateWindowDimensions', {
-      object_id: objectId,
-      width_mm: data.width_mm,
-      height_mm: changes.height_mm ?? data.height_mm,
-      ...(isWindowObject(opening) ? { sill_height_mm: changes.sill_height_mm ?? data.sill_height_mm } : {}),
-      ...changes,
-      ...(isFixed ? { head_level_id: '', vertical_constraint: 'fixed_height' } : {}),
-    })
-    if (result.result.status === 'success') {
-      setProject(result.updatedProject)
-      if (result.emittedEnvelope) setCommandQueue((q) => [...q, result.emittedEnvelope!])
-    }
   }
 
   const buildElevationManipulationCommands = (objectId: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move'|'top'|'base', gripIndex?: number): CommandRequest[] =>
@@ -2184,6 +1828,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             <button type="button" role="tab" aria-selected={rightPanelTab === 'properties'} className={rightPanelTab === 'properties' ? 'is-active' : ''} onClick={() => setRightPanelTab('properties')}>คุณสมบัติ</button>
             <button type="button" role="tab" aria-selected={rightPanelTab === 'quantities'} className={rightPanelTab === 'quantities' ? 'is-active' : ''} onClick={() => setRightPanelTab('quantities')}>ปริมาณ</button>
             <button type="button" role="tab" aria-selected={rightPanelTab === 'objects'} className={rightPanelTab === 'objects' ? 'is-active' : ''} onClick={() => setRightPanelTab('objects')}>รายการ</button>
+            <button type="button" role="tab" aria-selected={rightPanelTab === 'ai'} className={rightPanelTab === 'ai' ? 'is-active' : ''} onClick={() => setRightPanelTab('ai')} title="วางแผนคำสั่งด้วย AI แล้วตรวจสอบก่อนใช้">AI</button>
             <button
               type="button"
               role="tab"
@@ -2204,34 +1849,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             displayUnit={displayUnit}
             selectedId={selectedId}
             selectedIds={selectedIds}
-            onAssignType={handleAssignType}
-            onAssignTypeMany={handleAssignTypeMany}
-            onUpdateLevelMany={handleUpdateLevelMany}
+            {...propertiesActions}
             onDeleteObjects={handleDeleteObjects}
-            onUpdateColumnMark={handleUpdateColumnMark}
-            onUpdateColumnVerticalReference={handleUpdateColumnVerticalReference}
-            onUpdateBeamVerticalReference={handleUpdateBeamVerticalReference}
-            onUpdateArchitectureSurface={handleUpdateArchitectureSurface}
-            onUpdateSlab={handleUpdateSlab}
-            onUpdateRoof={handleUpdateRoof}
-            onUpdateRainwaterDesign={handleUpdateRainwaterDesign}
-            onUpdatePipeRoute={(id, changes) => handleUpdateDomainObject(id, 'EditPipeRoute', changes)}
-            onUpdateElectricalFixture={(id, changes) => handleUpdateDomainObject(id, 'UpdateElectricalFixture', changes)}
-            onAssignElectricalFixtureToCircuit={handleAssignElectricalFixtureToCircuit}
-            onUpdateCabinet={(id, changes) => handleUpdateDomainObject(id, 'UpdateCabinetRun', changes)}
-            onUpdateMoulding={(id, changes) => handleUpdateDomainObject(id, 'UpdateMouldingRun', changes)}
-            onUpdateStair={handleUpdateStair}
-            onUpdateFoundationMark={handleUpdateFoundationMark}
-            onUpdateGridTag={handleUpdateGridTag}
-            onModifyGrid={handleModifyGrid}
-            onUpdateGridSystem={handleUpdateGridSystem}
-            onUpdateWallFace={handleUpdateWallFace}
-            onDefineWallFinish={handleDefineWallFinish}
-            onUpdateWallFinish={handleUpdateWallFinish}
-            onUpdateOpeningVertical={handleUpdateOpeningVertical}
-            onUpdateOpeningInstanceParameters={handleUpdateOpeningInstanceParameters}
-            onUpdatePhase={handleUpdateObjectPhase}
-            onUpdateRemovalPhase={handleUpdateObjectRemovalPhase}
             onFlipDoorHanding={handleFlipDoorHanding}
             onOpenTypeManager={() => openCatalog(true,true)}
             onAddFoundation={(colId) => handleCommitFoundation({ columnId: colId })}
@@ -2307,6 +1926,13 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             selectedIds={selectedIds}
             onSelectObjects={(ids) => { setSelectedIds(ids); setSelectedId(ids[0] ?? null) }}
             onSubmitSettings={(settings) => dispatchCommandBatch([{ name: 'UpdateCoordinationSettings', input: { settings } }])}
+          />}
+
+          {rightPanelTab === 'ai' && <AICommandPanel
+            project={project}
+            selectedIds={selectedIds}
+            onPreview={commands => previewDirectManipulation(commands, 'ai')}
+            onExecute={(commands, actor) => dispatchCommandBatch(commands, actor)}
           />}
 
           {rightPanelTab === 'objects' && <ProjectBrowser

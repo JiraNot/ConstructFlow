@@ -21,6 +21,7 @@
     "@constructflow/plumbing-engine": "file:../plumbing-engine",
     "@constructflow/electrical-engine": "file:../electrical-engine",
     "@constructflow/interior-engine": "file:../interior-engine",
+    "@constructflow/module-sdk": "file:../module-sdk",
     "@constructflow/domain-providers": "file:../domain-providers",
     "@constructflow/constraint-engine": "file:../constraint-engine"
   },

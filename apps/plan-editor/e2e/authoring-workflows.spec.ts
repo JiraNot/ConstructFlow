@@ -1,4 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
+import { randomUUID } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { CommandBus } from '@constructflow/command-runtime'
+import { createEmptyProjectDocument, serializeProject } from '@constructflow/project-model'
 
 const canvas = (page: Page) => page.locator('canvas').first()
 
@@ -24,7 +28,338 @@ async function clickSurveyPoint(page: Page, xMm: number, yMm: number) {
   await canvas(page).click({ position: { x: panX + xMm * zoom, y: panY + yMm * zoom } })
 }
 
-async function findGripPoints(page: Page, color: 'blue' | 'orange') {
+function createSyntheticPlanStressProject(objectCount: number) {
+  const project = createEmptyProjectDocument(randomUUID(), `Synthetic plan stress · ${objectCount} walls`)
+  const templateId = randomUUID()
+  const created = CommandBus.execute(project, 'CreateWall', {
+    id: templateId,
+    mark: 'STRESS-0001',
+    level_id: 'L1',
+    start_point_mm: [0, 0],
+    end_point_mm: [4000, 0],
+    thickness_mm: 100,
+    height_mm: 2800,
+  })
+  if (created.result.status !== 'success') throw new Error(`Could not create stress-project wall: ${created.result.errors?.join(', ')}`)
+  const seeded = created.updatedProject
+  const template = seeded.objects[templateId]
+  if (!template) throw new Error('Stress-project wall template was not created')
+
+  for (let index = 1; index < objectCount; index++) {
+    const id = randomUUID()
+    const column = index % 24
+    const row = Math.floor(index / 24)
+    const x = column * 5_000
+    const y = row * 5_000
+    const wall = structuredClone(template)
+    wall.id = id
+    wall.module_data = {
+      ...wall.module_data,
+      mark: `STRESS-${String(index + 1).padStart(4, '0')}`,
+      start_point_mm: [x, y, 0],
+      end_point_mm: [x + 4_000, y, 0],
+      length_mm: 4_000,
+    }
+    seeded.objects[id] = wall
+  }
+  return serializeProject(seeded)
+}
+
+function createSyntheticStraightStairProject() {
+  const project = createEmptyProjectDocument(randomUUID(), 'Synthetic straight stair dimension acceptance')
+  const id = randomUUID()
+  const created = CommandBus.execute(project, 'CreateStair', {
+    id,
+    mark: 'STAIR-DIM-01',
+    level_id: project.project.active_level_id,
+    stair_type: 'straight',
+    structure_type: 'rc_monolithic',
+    start_point_mm: [3000, 3000, 0],
+    total_rise_mm: 3000,
+    width_mm: 1000,
+    num_risers: 18,
+    tread_depth_mm: 250,
+    landing_depth_mm: 1000,
+    has_handrail: false,
+  })
+  if (created.result.status !== 'success') throw new Error(`Could not create test stair: ${created.result.errors?.join(', ')}`)
+  return serializeProject(created.updatedProject)
+}
+
+async function seedLocalProjectSnapshot(page: Page, projectJson: string) {
+  await page.evaluate(async json => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('constructflow-local-projects', 1)
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains('snapshots')) request.result.createObjectStore('snapshots')
+      }
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => {
+        const database = request.result
+        const transaction = database.transaction('snapshots', 'readwrite')
+        transaction.objectStore('snapshots').put({
+          projectJson: json,
+          savedProjectJson: null,
+          replacementBaselineJson: json,
+          fileHandle: null,
+          savedAt: Date.now(),
+        }, 'active-project')
+        transaction.oncomplete = () => { database.close(); resolve() }
+        transaction.onerror = () => { database.close(); reject(transaction.error) }
+        transaction.onabort = () => { database.close(); reject(transaction.error) }
+      }
+    })
+  }, projectJson)
+}
+
+async function readStoredProjectJson(page: Page) {
+  return page.evaluate(() => new Promise<string | null>((resolve, reject) => {
+    const request = indexedDB.open('constructflow-local-projects', 1)
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => {
+      const database = request.result
+      const transaction = database.transaction('snapshots', 'readonly')
+      const read = transaction.objectStore('snapshots').get('active-project')
+      read.onsuccess = () => {
+        database.close()
+        resolve((read.result as { projectJson?: string } | undefined)?.projectJson ?? null)
+      }
+      read.onerror = () => { database.close(); reject(read.error) }
+    }
+  }))
+}
+
+test('AI proposal is previewed, validated, committed through CommandBus, and undoable', async ({ page }) => {
+  await page.route('http://localhost:8000/api/ai/plan', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        summary: 'เพิ่มผนังตัวอย่าง',
+        questions: [],
+        commands: [{ name: 'CreateWall', input: { mark: 'AI-W1', start_point_mm: [1000, 1000], end_point_mm: [4000, 1000], thickness_mm: 100, height_mm: 2800 } }],
+      }),
+    })
+  })
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'AI' }).click()
+  await page.getByLabel('Gateway token').fill('test-token')
+  await page.getByLabel('คำขอผู้ช่วย AI').fill('เพิ่มผนังทดสอบ')
+  await page.getByRole('button', { name: 'สร้างแผนคำสั่ง' }).click()
+
+  const plan = page.getByLabel('แผนคำสั่ง AI')
+  await expect(plan).toContainText('เพิ่มผนังตัวอย่าง')
+  await expect(plan).toContainText('CreateWall')
+  await expect(plan.getByRole('status')).toContainText('ผ่าน validation')
+  const apply = plan.getByRole('button', { name: 'ยืนยันและใช้ผ่าน CommandBus' })
+  await expect(apply).toBeEnabled()
+  await apply.click()
+  await expect(page.locator('.cf-ai-notice')).toContainText('ใช้แผน AI แล้ว')
+  await expect(page.getByRole('button', { name: 'ย้อนกลับ' })).toBeEnabled()
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const browser = page.getByLabel('Project Browser')
+  await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill('AI-W1')
+  await expect(browser.locator('li[data-object-id]')).toHaveCount(1)
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(browser.locator('li[data-object-id]')).toHaveCount(0)
+})
+
+test('synthetic 600-wall project supports browser search, persistent selection, cross-view navigation, and reload', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await seedLocalProjectSnapshot(page, createSyntheticPlanStressProject(600))
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
+  const firstRestoreMs = await page.evaluate(() => performance.now())
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const browser = page.getByLabel('Project Browser')
+  await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  const rows = browser.locator('li[data-object-id]')
+  await expect(rows).toHaveCount(600, { timeout: 30_000 })
+  const primaryPane = page.locator('.cf-multiview-pane').first()
+  const searchSelectSamplesMs: number[] = []
+  let selectedObjectId: string | null = null
+  for (const mark of ['STRESS-0001', 'STRESS-0300', 'STRESS-0600']) {
+    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await page.evaluate(() => {
+      performance.clearMarks('stress-search-select-start')
+      performance.clearMarks('stress-search-select-end')
+      performance.clearMeasures('stress-search-select')
+      performance.mark('stress-search-select-start')
+    })
+    await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill(mark)
+    await expect(rows).toHaveCount(1)
+    const objectId = await rows.first().getAttribute('data-object-id')
+    expect(objectId).toBeTruthy()
+    selectedObjectId = objectId
+    await rows.first().locator('.cf-browser-object').click()
+    await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
+    const elapsed = await page.evaluate(() => {
+      performance.mark('stress-search-select-end')
+      const measure = performance.measure('stress-search-select', 'stress-search-select-start', 'stress-search-select-end')
+      return measure.duration
+    })
+    searchSelectSamplesMs.push(elapsed)
+  }
+  const objectId = selectedObjectId
+  expect(objectId).toBeTruthy()
+
+  const planBounds = await canvas(page).boundingBox()
+  if (!planBounds) throw new Error('Plan canvas is not visible')
+  await page.evaluate(() => {
+    const state = window as unknown as { __cfRafProbe?: { running: boolean; samples: number[]; last: number } }
+      & { __cfPlanRedrawDurationsMs?: number[] }
+    state.__cfPlanRedrawDurationsMs = []
+    const probe = { running: true, samples: [] as number[], last: performance.now() }
+    state.__cfRafProbe = probe
+    const tick = (now: number) => {
+      if (!probe.running) return
+      probe.samples.push(now - probe.last)
+      probe.last = now
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+  const panCenter = { x: planBounds.x + planBounds.width / 2, y: planBounds.y + planBounds.height / 2 }
+  await page.mouse.move(panCenter.x, panCenter.y)
+  await page.mouse.down({ button: 'middle' })
+  await page.mouse.move(panCenter.x + 96, panCenter.y + 48, { steps: 16 })
+  await page.mouse.up({ button: 'middle' })
+  await page.mouse.move(panCenter.x, panCenter.y)
+  await page.mouse.wheel(0, -240)
+  await page.waitForTimeout(300)
+  const navigationFrameIntervalsMs = await page.evaluate(() => {
+    const state = window as unknown as { __cfRafProbe?: { running: boolean; samples: number[] } }
+      & { __cfPlanRedrawDurationsMs?: number[] }
+    const probe = state.__cfRafProbe
+    if (!probe) return []
+    probe.running = false
+    return [...probe.samples]
+  })
+  const planRedrawDurationsMs = await page.evaluate(() => {
+    const state = window as unknown as { __cfPlanRedrawDurationsMs?: number[] }
+    const samples = [...(state.__cfPlanRedrawDurationsMs ?? [])]
+    delete state.__cfPlanRedrawDurationsMs
+    return samples
+  })
+  expect(navigationFrameIntervalsMs.length).toBeGreaterThan(10)
+  expect(planRedrawDurationsMs.length).toBeGreaterThan(0)
+  const sortedFrameIntervalsMs = [...navigationFrameIntervalsMs].sort((left, right) => left - right)
+  const sortedPlanRedrawDurationsMs = [...planRedrawDurationsMs].sort((left, right) => left - right)
+
+  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', objectId!)
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill('')
+  await browser.getByRole('button', { name: 'ตะวันออก' }).click()
+  await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill('STRESS-0600')
+  await expect(rows).toHaveCount(1)
+  await rows.first().locator('.cf-browser-object').click()
+  const initialProjectJson = await readStoredProjectJson(page)
+  expect(initialProjectJson).toBeTruthy()
+  const initialProject = JSON.parse(initialProjectJson!) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+  const initialWall = initialProject.objects[objectId!]
+  expect(initialWall).toBeTruthy()
+  const initialStart = [...initialWall.module_data.start_point_mm as number[]]
+  const initialEnd = [...initialWall.module_data.end_point_mm as number[]]
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.getByText('แก้ไขและทำสำเนา · 1 ชิ้น').click()
+  await page.getByRole('spinbutton', { name: 'ระยะย้ายแกน X เมตร' }).fill('0.125')
+  await page.getByRole('spinbutton', { name: 'ระยะย้ายแกน Y เมตร' }).fill('-0.05')
+  const transformStartedAt = await page.evaluate(() => performance.now())
+  await page.getByRole('button', { name: 'ย้ายตามระยะ · Undo ได้' }).click()
+  await expect(page.getByRole('status')).toContainText('ย้าย 1 ชิ้น · ΔX 0.125 · ΔY -0.050')
+  const transformResponseAt = await page.evaluate(() => performance.now())
+  await expect.poll(async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const project = JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+    return project.objects[objectId!]?.module_data.start_point_mm
+  }).toEqual([Number(initialStart[0]) + 125, Number(initialStart[1]) - 50, initialStart[2]])
+  const transformPersistedAt = await page.evaluate(() => performance.now())
+  const transformResponseMs = transformResponseAt - transformStartedAt
+  const transformAutosaveMs = transformPersistedAt - transformStartedAt
+  const autosaveAfterTransformResponseMs = transformPersistedAt - transformResponseAt
+
+  const undoStartedAt = await page.evaluate(() => performance.now())
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const project = JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+    return project.objects[objectId!]?.module_data.start_point_mm
+  }).toEqual(initialStart)
+  const undoPersistedAt = await page.evaluate(() => performance.now())
+  const undoAutosaveMs = undoPersistedAt - undoStartedAt
+  const redoStartedAt = await page.evaluate(() => performance.now())
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const project = JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+    return project.objects[objectId!]?.module_data.start_point_mm
+  }).toEqual([Number(initialStart[0]) + 125, Number(initialStart[1]) - 50, initialStart[2]])
+  const redoPersistedAt = await page.evaluate(() => performance.now())
+  const redoAutosaveMs = redoPersistedAt - redoStartedAt
+  const movedProjectJson = await readStoredProjectJson(page)
+  expect(movedProjectJson).toBeTruthy()
+  const movedProject = JSON.parse(movedProjectJson!) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+  expect(movedProject.objects[objectId!]?.module_data.start_point_mm).toEqual([Number(initialStart[0]) + 125, Number(initialStart[1]) - 50, initialStart[2]])
+  expect(movedProject.objects[objectId!]?.module_data.end_point_mm).toEqual([Number(initialEnd[0]) + 125, Number(initialEnd[1]) - 50, initialEnd[2]])
+
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const restoredBrowser = page.getByLabel('Project Browser')
+  await restoredBrowser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  await expect(restoredBrowser.locator('li[data-object-id]')).toHaveCount(600, { timeout: 30_000 })
+  await expect(restoredBrowser.locator(`li[data-object-id="${objectId}"] .cf-browser-object`)).toBeVisible()
+  const reopenedProjectJson = await readStoredProjectJson(page)
+  expect(reopenedProjectJson).toBeTruthy()
+  const reopenedProject = JSON.parse(reopenedProjectJson!) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+  expect(reopenedProject.objects[objectId!]?.module_data.start_point_mm).toEqual(movedProject.objects[objectId!]?.module_data.start_point_mm)
+  expect(reopenedProject.objects[objectId!]?.module_data.end_point_mm).toEqual(movedProject.objects[objectId!]?.module_data.end_point_mm)
+  const reloadRestoreMs = await page.evaluate(() => performance.now())
+  const sortedSearchSelectSamples = [...searchSelectSamplesMs].sort((left, right) => left - right)
+  const metrics = {
+    object_count: 600,
+    transform_undo_redo: 'one selected wall moved, undone, redone, and persisted with its original UUID',
+    initial_restore_ms: Math.round(firstRestoreMs * 100) / 100,
+    reload_restore_ms: Math.round(reloadRestoreMs * 100) / 100,
+    transform_response_ms: Math.round(transformResponseMs * 100) / 100,
+    transform_to_autosave_ms: Math.round(transformAutosaveMs * 100) / 100,
+    autosave_after_transform_response_ms: Math.round(autosaveAfterTransformResponseMs * 100) / 100,
+    undo_to_autosave_ms: Math.round(undoAutosaveMs * 100) / 100,
+    redo_to_autosave_ms: Math.round(redoAutosaveMs * 100) / 100,
+    search_select_sample_count: sortedSearchSelectSamples.length,
+    search_select_p50_ms: Math.round(sortedSearchSelectSamples[Math.floor((sortedSearchSelectSamples.length - 1) * 0.5)] * 100) / 100,
+    search_select_p95_ms: Math.round(sortedSearchSelectSamples[Math.ceil((sortedSearchSelectSamples.length - 1) * 0.95)] * 100) / 100,
+    samples_ms: searchSelectSamplesMs.map(value => Math.round(value * 100) / 100),
+    pan_zoom_frame_interval_sample_count: sortedFrameIntervalsMs.length,
+    pan_zoom_raf_p50_ms: Math.round(sortedFrameIntervalsMs[Math.floor((sortedFrameIntervalsMs.length - 1) * 0.5)] * 100) / 100,
+    pan_zoom_raf_p95_ms: Math.round(sortedFrameIntervalsMs[Math.ceil((sortedFrameIntervalsMs.length - 1) * 0.95)] * 100) / 100,
+    pan_zoom_raf_over_50ms_count: navigationFrameIntervalsMs.filter(value => value > 50).length,
+    plan_redraw_sample_count: sortedPlanRedrawDurationsMs.length,
+    plan_redraw_p50_ms: Math.round(sortedPlanRedrawDurationsMs[Math.floor((sortedPlanRedrawDurationsMs.length - 1) * 0.5)] * 100) / 100,
+    plan_redraw_p95_ms: Math.round(sortedPlanRedrawDurationsMs[Math.ceil((sortedPlanRedrawDurationsMs.length - 1) * 0.95)] * 100) / 100,
+    fixture: 'synthetic walls; not a surveyed residential model',
+  }
+  console.log(`[browser-stress] ${JSON.stringify(metrics)}`)
+  await test.info().attach('synthetic-600-wall-browser-metrics.json', {
+    body: Buffer.from(JSON.stringify(metrics, null, 2)),
+    contentType: 'application/json',
+  })
+})
+
+async function findGripPoints(page: Page, color: 'blue' | 'orange' | 'stair-width' | 'stair-run') {
   const bounds = await canvas(page).boundingBox()
   if (!bounds) throw new Error('Plan canvas is not visible')
   return canvas(page).evaluate((element, options) => {
@@ -35,10 +370,14 @@ async function findGripPoints(page: Page, color: 'blue' | 'orange') {
     const counts = new Map<number, { count: number; yTotal: number }>()
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
       const index = (y * width + x) * 4
-      // Grip outlines use the renderer's blue #087cf0 or orange #f97316 stroke.
+      // Standard grip outlines use blue/orange; stair grips use teal/purple fills.
       const isGripStroke = color === 'blue'
         ? data[index] <= 16 && data[index + 1] >= 116 && data[index + 1] <= 132 && data[index + 2] >= 224
-        : data[index] >= 225 && data[index + 1] >= 90 && data[index + 1] <= 140 && data[index + 2] <= 60
+        : color === 'orange'
+          ? data[index] >= 225 && data[index + 1] >= 90 && data[index + 1] <= 140 && data[index + 2] <= 60
+          : color === 'stair-width'
+            ? data[index] <= 20 && data[index + 1] >= 135 && data[index + 1] <= 155 && data[index + 2] >= 125 && data[index + 2] <= 145
+            : data[index] >= 115 && data[index] <= 135 && data[index + 1] >= 50 && data[index + 1] <= 70 && data[index + 2] >= 225
       if (isGripStroke && data[index + 3] > 200) {
         const current = counts.get(x) ?? { count: 0, yTotal: 0 }
         current.count++
@@ -197,6 +536,43 @@ test('repeat last tool resets an active wall session and starts another wall', a
   await expect(page.locator('li[data-object-type="architecture.wall"]')).toHaveCount(2)
 })
 
+test('beam placement clears cancelled steps and repeats through keyboard and mouse', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const beams = page.locator('.cf-browser-tree [data-object-type="structure.beam"]')
+  const initialCount = await beams.count()
+
+  await page.locator('.cf-tool-button[title^="คาน"]').click()
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
+  await clickCanvasFraction(page, 0.24, 0.30)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
+  await expect(beams).toHaveCount(initialCount)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.cf-tool-button.is-active')).toHaveAttribute('title', /เลือก/)
+
+  await page.getByRole('button', { name: /ใช้เครื่องมือล่าสุดซ้ำ/ }).click()
+  await expect(page.locator('.cf-tool-button.is-active')).toHaveAttribute('title', /คาน/)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
+  await clickCanvasFraction(page, 0.25, 0.62)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
+  const lengthInput = page.getByRole('textbox', { name: /ความยาวช่วงที่วาด/ })
+  await lengthInput.fill('1.8')
+  await lengthInput.press('Enter')
+  await expect(beams).toHaveCount(initialCount + 1)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
+
+  await page.getByRole('button', { name: /ใช้เครื่องมือล่าสุดซ้ำ/ }).click()
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
+  await clickCanvasFraction(page, 0.60, 0.62)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
+  await clickCanvasFraction(page, 0.75, 0.62)
+  await expect(beams).toHaveCount(initialCount + 2)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
+})
+
 test('window placement identifies its wall host and commits with the keyboard', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'ผนัง' }).click()
@@ -218,6 +594,76 @@ test('window placement identifies its wall host and commits with the keyboard', 
   await expect(page.locator('[data-tool-step]')).toContainText('กำหนดตำแหน่งบนผนัง')
   await page.keyboard.press('Escape')
   await expect(page.locator('.cf-tool-button.is-active')).toHaveAttribute('title', /เลือก/)
+})
+
+test('hosted opening and point tools cancel cleanly and repeat through mouse and keyboard', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const doors = page.locator('.cf-browser-tree [data-object-type="door_window.door"]')
+  const columns = page.locator('.cf-browser-tree [data-object-type="structure.column"]')
+  const initialDoorCount = await doors.count()
+  const initialColumnCount = await columns.count()
+
+  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickCanvasFraction(page, 0.20, 0.45)
+  await clickCanvasFraction(page, 0.80, 0.45)
+
+  await page.locator('.cf-tool-button[title^="ประตู"]').click()
+  await moveToCanvasFraction(page, 0.50, 0.45)
+  await expect(page.getByTestId('snap-feedback')).toContainText(/Snap:/i)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'position-on-host')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.cf-tool-button.is-active')).toHaveAttribute('title', /เลือก/)
+  await expect(doors).toHaveCount(initialDoorCount)
+
+  await page.getByRole('button', { name: /ใช้เครื่องมือล่าสุดซ้ำ/ }).click()
+  await expect(page.locator('.cf-tool-button.is-active')).toHaveAttribute('title', /ประตู/)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'find-host-wall')
+  await moveToCanvasFraction(page, 0.50, 0.45)
+  await page.locator('canvas').first().focus()
+  await page.keyboard.press('Enter')
+  await expect(doors).toHaveCount(initialDoorCount + 1)
+
+  await page.getByRole('button', { name: /ใช้เครื่องมือล่าสุดซ้ำ/ }).click()
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'find-host-wall')
+  await moveToCanvasFraction(page, 0.64, 0.45)
+  await expect(page.getByTestId('snap-feedback')).toContainText(/Snap:/i)
+  await clickCanvasFraction(page, 0.64, 0.45)
+  await expect(doors).toHaveCount(initialDoorCount + 2)
+
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await moveToCanvasFraction(page, 0.72, 0.70)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'position')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.cf-tool-button.is-active')).toHaveAttribute('title', /เลือก/)
+  await expect(columns).toHaveCount(initialColumnCount)
+
+  await page.getByRole('button', { name: /ใช้เครื่องมือล่าสุดซ้ำ/ }).click()
+  await expect(page.locator('.cf-tool-button.is-active')).toHaveAttribute('title', /เสา/)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'position')
+  await moveToCanvasFraction(page, 0.72, 0.70)
+  await page.locator('canvas').first().focus()
+  await page.keyboard.press('Enter')
+  await expect(columns).toHaveCount(initialColumnCount + 1)
+})
+
+test('pipe and moulding tools report pending endpoints and Escape cancels drafts before exiting', async ({ page }) => {
+  await page.goto('/')
+  for (const workflow of [
+    { tool: 'แนวท่อ', family: 'drainage.pipe_route', prompt: 'แนวท่อ น้ำทิ้ง' },
+    { tool: 'แนวบัว', family: 'decorative.moulding_run', prompt: 'แนวบัว' },
+  ]) {
+    await page.locator(`.cf-tool-button[title^="${workflow.tool}"]`).click()
+    await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
+    await expect(page.locator('[data-tool-step]')).toContainText(workflow.prompt)
+    await clickCanvasFraction(page, 0.32, 0.48)
+    await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
+    await page.keyboard.press('Escape')
+    await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
+    await expect(page.locator(`.cf-browser-tree [data-object-type="${workflow.family}"]`)).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'ready')
+  }
 })
 
 test('polygon placement commits a slab boundary through the shared placement session', async ({ page }) => {
@@ -314,6 +760,57 @@ test('Project Browser selection and type edits preserve one object identity acro
   await expect(sameRow.locator('.cf-browser-object')).toContainText('C2')
 })
 
+test('multi-selection type changes commit as one undoable Properties action', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickCanvasFraction(page, 0.31, 0.63)
+  await clickCanvasFraction(page, 0.69, 0.63)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+
+  const rows = page.locator('.cf-browser-tree [data-object-type="structure.column"]')
+  await expect(rows).toHaveCount(2)
+  const ids = await rows.evaluateAll(elements => elements.map(element => element.getAttribute('data-object-id')).filter((id): id is string => Boolean(id)))
+  expect(ids).toHaveLength(2)
+  await rows.nth(0).locator('.cf-browser-object').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await rows.nth(1).locator('.cf-browser-object').click({ modifiers: ['Control'] })
+  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await expect(page.locator('.cf-inspector-content')).toContainText('เลือก 2 ชิ้น')
+
+  await expect.poll(async () => readStoredProjectJson(page)).toBeTruthy()
+  const originalJson = await readStoredProjectJson(page)
+  expect(originalJson).toBeTruthy()
+  const originalProject = JSON.parse(originalJson!) as { types: Array<{ id: string; name: string }>; objects: Record<string, { module_data: Record<string, unknown> }> }
+  const targetType = originalProject.types.find(type => type.name === 'C2')
+  expect(targetType).toBeTruthy()
+  const originalTypeIds = ids.map(id => originalProject.objects[id]!.module_data.type_id)
+
+  await page.getByLabel('เปลี่ยน Type ให้หลายวัตถุ').selectOption(targetType!.id)
+  await expect.poll(async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return []
+    const project = JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+    return ids.map(id => project.objects[id]?.module_data.type_id)
+  }).toEqual([targetType!.id, targetType!.id])
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return []
+    const project = JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+    return ids.map(id => project.objects[id]?.module_data.type_id)
+  }).toEqual(originalTypeIds)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return []
+    const project = JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+    return ids.map(id => project.objects[id]?.module_data.type_id)
+  }).toEqual([targetType!.id, targetType!.id])
+})
+
 test('placement type picker applies the chosen catalog type to the created object', async ({ page }) => {
   await page.goto('/')
   await page.locator('.cf-tool-button[title^="เสา"]').click()
@@ -326,6 +823,62 @@ test('placement type picker applies the chosen catalog type to the created objec
   const properties = page.getByTestId('properties-selection')
   await expect(properties).toHaveAttribute('data-object-type', 'structure.column')
   await expect(properties).toContainText('Column C2')
+})
+
+test('personal type library persists saved types and imports a project copy through the command bus', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTitle('คลังชนิด').click()
+  let dialog = page.getByRole('dialog', { name: 'คลังชนิด' })
+  await dialog.getByLabel('ค้นหาชนิด').fill('C1')
+  await expect(dialog.locator('.cf-type-card').first()).toContainText('C1')
+  await dialog.getByRole('button', { name: 'บันทึก C1 ลงคลังส่วนตัว' }).click()
+  await expect(dialog.getByRole('status')).toContainText('บันทึก C1 ลงคลังส่วนตัวแล้ว')
+  const [libraryDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    dialog.getByRole('button', { name: 'ส่งออกคลังส่วนตัว' }).click(),
+  ])
+  expect(libraryDownload.suggestedFilename()).toBe('constructflow-type-library.cflib')
+  const downloadedPath = await libraryDownload.path()
+  if (!downloadedPath) throw new Error('Exported type library file is unavailable')
+  const exportedLibrary = await readFile(downloadedPath)
+  const libraryDocument = JSON.parse(exportedLibrary.toString('utf8')) as Record<string, unknown>
+  expect(libraryDocument.format).toBe('constructflow-type-library')
+  expect(libraryDocument.format_version).toBe(1)
+
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await page.evaluate(() => localStorage.removeItem('cf-personal-type-library-v1'))
+  await page.reload()
+  await page.getByTitle('คลังชนิด').click()
+  dialog = page.getByRole('dialog', { name: 'คลังชนิด' })
+  await expect(dialog.getByRole('button', { name: 'คลังส่วนตัว (0)' })).toBeVisible()
+  await dialog.getByLabel('เลือกไฟล์คลังชนิด').setInputFiles({
+    name: 'invalid.cflib',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ format: 'other-library', format_version: 1, types: [] })),
+  })
+  await expect(dialog.getByRole('alert')).toContainText('ไม่รองรับรูปแบบ')
+  await expect(dialog.getByRole('button', { name: 'คลังส่วนตัว (0)' })).toBeVisible()
+  await dialog.getByLabel('เลือกไฟล์คลังชนิด').setInputFiles({
+    name: libraryDownload.suggestedFilename(),
+    mimeType: 'application/json',
+    buffer: exportedLibrary,
+  })
+  await expect(dialog.getByRole('status')).toContainText('นำเข้าคลังชนิดแล้ว · เพิ่ม 1 · อัปเดต 0')
+  await dialog.getByRole('button', { name: 'คลังส่วนตัว (1)' }).click()
+  await expect(dialog.locator('.cf-type-card').first()).toContainText('C1')
+  await dialog.getByRole('button', { name: 'เพิ่มลงโครงการและเลือก' }).click()
+  await expect(dialog).toBeHidden()
+
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  const placementType = page.getByLabel('ชนิดเสา')
+  await expect(placementType.locator('option').filter({ hasText: 'C1-2' })).toHaveCount(1)
+
+  await page.getByTitle('คลังชนิด').click()
+  dialog = page.getByRole('dialog', { name: 'คลังชนิด' })
+  await dialog.getByRole('button', { name: 'คลังส่วนตัว (1)' }).click()
+  await dialog.getByRole('button', { name: 'ลบ C1 จากคลังส่วนตัว' }).click()
+  await expect(dialog.getByRole('button', { name: 'คลังส่วนตัว (0)' })).toBeVisible()
 })
 
 test('plan, framing, and roof plan share pan and zoom navigation', async ({ page }) => {
@@ -438,7 +991,7 @@ test('dragging one selected elevation member moves the selected group in one edi
   await expect(rows).toHaveCount(2)
 })
 
-test('DXF underlay imports unit-scaled vector art and survives project reload', async ({ page }) => {
+test('DXF underlay imports, calibrates from two points, and preserves scale through project reload', async ({ page }) => {
   await page.goto('/')
   const dxf = [
     '0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC',
@@ -458,9 +1011,48 @@ test('DXF underlay imports unit-scaled vector art and survives project reload', 
   await expect(page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]')).toBeVisible()
   await expect.poll(async () => page.locator('.cf-save-status').innerText()).toContain('กำลังบันทึกในเครื่อง')
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
+
+  const importedJson = await readStoredProjectJson(page)
+  expect(importedJson).toBeTruthy()
+  const importedProject = JSON.parse(importedJson!) as { underlays: Record<string, { scale_mm_per_px: number }> }
+  const underlayKey = Object.keys(importedProject.underlays)[0]
+  expect(underlayKey).toBeTruthy()
+  const importedScale = importedProject.underlays[underlayKey!].scale_mm_per_px
+
+  await page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]').click()
+  await clickCanvasFraction(page, 0.25, 0.55)
+  await clickCanvasFraction(page, 0.75, 0.55)
+  const calibration = page.locator('.cf-legacy-dialog')
+  await expect(calibration).toBeVisible()
+  const measuredText = await calibration.innerText()
+  const measuredMatch = measuredText.match(/Current Measured\):\s*([\d.]+)\s*m/)
+  expect(measuredMatch).toBeTruthy()
+  const measuredDistanceMm = Number(measuredMatch![1]) * 1000
+  const pixelDistance = measuredDistanceMm / importedScale
+  await calibration.locator('input').fill('4.0')
+  await calibration.getByRole('button', { name: 'ยืนยันปรับสเกล 1:1' }).click()
+  await expect(calibration).toBeHidden()
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
+  await expect.poll(async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const project = JSON.parse(json) as { underlays: Record<string, { scale_mm_per_px: number }> }
+    return project.underlays[underlayKey!]?.scale_mm_per_px
+  }).toBeCloseTo(4000 / pixelDistance, 3)
+
+  const calibratedJson = await readStoredProjectJson(page)
+  expect(calibratedJson).toBeTruthy()
+  const calibratedProject = JSON.parse(calibratedJson!) as { underlays: Record<string, { scale_mm_per_px: number; rotation_deg: number }> }
+  const calibratedUnderlay = calibratedProject.underlays[underlayKey!]
+  expect(calibratedUnderlay.scale_mm_per_px).not.toBe(importedScale)
+
   await page.reload()
   await expect(page.locator('.cf-underlay-button')).toContainText('Underlay ON')
   await expect(page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]')).toBeVisible()
+  const reopenedJson = await readStoredProjectJson(page)
+  expect(reopenedJson).toBeTruthy()
+  const reopenedProject = JSON.parse(reopenedJson!) as { underlays: Record<string, { scale_mm_per_px: number; rotation_deg: number }> }
+  expect(reopenedProject.underlays[underlayKey!]).toEqual(calibratedUnderlay)
 })
 
 test('site survey CSV preserves measured and assumed points through project reload', async ({ page }) => {
@@ -930,6 +1522,320 @@ test('wall endpoint grip accepts target length and commits the validated edit', 
   await page.mouse.up()
   await expect(page.getByTestId('properties-selection')).toContainText('WALL LENGTH')
   await expect(page.getByTestId('properties-selection')).toContainText('3.000 m')
+})
+
+test('beam endpoint grip accepts target span and preserves its UUID through Undo/Redo', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="คาน"]').click()
+  await clickCanvasFraction(page, 0.25, 0.40)
+  await clickCanvasFraction(page, 0.75, 0.40)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await page.locator('.cf-tool-button[title^="เลือก"]').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+
+  const beamRow = page.locator('.cf-browser-tree [data-object-type="structure.beam"]').first()
+  await expect(beamRow).toBeVisible()
+  const beamId = await beamRow.getAttribute('data-object-id')
+  expect(beamId).toBeTruthy()
+  await beamRow.locator('.cf-browser-object').click()
+  const properties = page.getByTestId('properties-selection')
+  await expect(properties).toHaveAttribute('data-object-id', beamId!)
+  const initialSpanMatch = (await properties.innerText()).match(/SPAN LENGTH \(ความยาวช่วงคาน\)\s*([\d.]+)\s*m/)
+  expect(initialSpanMatch).toBeTruthy()
+  const initialSpan = initialSpanMatch![1]
+
+  const bounds = await canvas(page).boundingBox()
+  if (!bounds) throw new Error('Plan canvas is not visible')
+  const lengthInput = page.getByRole('textbox', { name: 'ความยาวเป้าหมาย (m)' })
+  let foundGrip = false
+  for (const point of await findGripPoints(page, 'blue')) {
+    const endpoint = { x: bounds.x + point.x, y: bounds.y + point.y }
+    await page.mouse.move(endpoint.x, endpoint.y)
+    await page.mouse.down()
+    await page.mouse.move(endpoint.x + 3, endpoint.y + 3)
+    if (await lengthInput.isVisible().catch(() => false)) { foundGrip = true; break }
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+  }
+  expect(foundGrip).toBe(true)
+  await lengthInput.fill('3.0')
+  await lengthInput.press('Enter')
+  await page.mouse.up()
+  await expect(properties).toHaveAttribute('data-object-id', beamId!)
+  await expect(properties).toContainText('3.000 m')
+
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.locator(`li[data-object-id="${beamId}"] .cf-browser-object`).click()
+  await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', beamId!)
+  await expect(page.getByTestId('properties-selection')).toContainText(`${initialSpan} m`)
+
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.locator(`li[data-object-id="${beamId}"] .cf-browser-object`).click()
+  await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', beamId!)
+  await expect(page.getByTestId('properties-selection')).toContainText('3.000 m')
+})
+
+test('room-separator endpoint exposes a temporary target length and keeps identity through Undo/Redo', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="เส้นแบ่งห้อง"]').click()
+  await clickCanvasFraction(page, 0.25, 0.50)
+  await clickCanvasFraction(page, 0.75, 0.50)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await page.locator('.cf-tool-button[title^="เลือก"]').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+
+  const separator = page.locator('.cf-browser-tree [data-object-type="architecture.room_separator"]').first()
+  await expect(separator).toBeVisible()
+  const separatorId = await separator.getAttribute('data-object-id')
+  expect(separatorId).toBeTruthy()
+  await separator.locator('.cf-browser-object').click()
+  const properties = page.getByTestId('properties-selection')
+  await expect(properties).toHaveAttribute('data-object-id', separatorId!)
+
+  await expect.poll(async () => readStoredProjectJson(page)).toBeTruthy()
+  const originalJson = await readStoredProjectJson(page)
+  expect(originalJson).toBeTruthy()
+  const originalProject = JSON.parse(originalJson!) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+  const originalData = originalProject.objects[separatorId!].module_data
+  const originalStart = originalData.start_point_mm as number[]
+  const originalEnd = originalData.end_point_mm as number[]
+  const originalLength = Math.hypot(originalEnd[0] - originalStart[0], originalEnd[1] - originalStart[1])
+
+  const bounds = await canvas(page).boundingBox()
+  if (!bounds) throw new Error('Plan canvas is not visible')
+  const lengthInput = page.getByRole('textbox', { name: 'ความยาวเป้าหมาย (m)' })
+  let foundGrip = false
+  for (const point of await findGripPoints(page, 'blue')) {
+    const endpoint = { x: bounds.x + point.x, y: bounds.y + point.y }
+    await page.mouse.move(endpoint.x, endpoint.y)
+    await page.mouse.down()
+    await page.mouse.move(endpoint.x + 3, endpoint.y + 3)
+    if (await lengthInput.isVisible().catch(() => false)) { foundGrip = true; break }
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+  }
+  expect(foundGrip).toBe(true)
+  await lengthInput.fill('2.5')
+  await lengthInput.press('Enter')
+  await page.mouse.up()
+  await expect(properties).toHaveAttribute('data-object-id', separatorId!)
+  await expect.poll(async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const project = JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+    const data = project.objects[separatorId!]?.module_data
+    if (!data?.start_point_mm || !data?.end_point_mm) return null
+    const start = data.start_point_mm as number[], end = data.end_point_mm as number[]
+    return Math.hypot(end[0] - start[0], end[1] - start[1])
+  }).toBeCloseTo(2500, 0)
+
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.locator(`li[data-object-id="${separatorId}"] .cf-browser-object`).click()
+  await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', separatorId!)
+  await expect.poll(async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const project = JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+    const data = project.objects[separatorId!]?.module_data
+    if (!data?.start_point_mm || !data?.end_point_mm) return null
+    const start = data.start_point_mm as number[], end = data.end_point_mm as number[]
+    return Math.hypot(end[0] - start[0], end[1] - start[1])
+  }).toBeCloseTo(originalLength, 0)
+  const undoneJson = await readStoredProjectJson(page)
+  expect(undoneJson).toBeTruthy()
+  const undoneProject = JSON.parse(undoneJson!) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+  const undoneData = undoneProject.objects[separatorId!].module_data
+  expect(Math.hypot(
+    (undoneData.end_point_mm as number[])[0] - (undoneData.start_point_mm as number[])[0],
+    (undoneData.end_point_mm as number[])[1] - (undoneData.start_point_mm as number[])[1],
+  )).toBeCloseTo(originalLength, 0)
+
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.locator(`li[data-object-id="${separatorId}"] .cf-browser-object`).click()
+  await expect.poll(async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const project = JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+    const data = project.objects[separatorId!]?.module_data
+    if (!data?.start_point_mm || !data?.end_point_mm) return null
+    const start = data.start_point_mm as number[], end = data.end_point_mm as number[]
+    return Math.hypot(end[0] - start[0], end[1] - start[1])
+  }).toBeCloseTo(2500, 0)
+  const redoneJson = await readStoredProjectJson(page)
+  expect(redoneJson).toBeTruthy()
+  const redoneProject = JSON.parse(redoneJson!) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+  const redoneData = redoneProject.objects[separatorId!].module_data
+  expect(Math.hypot(
+    (redoneData.end_point_mm as number[])[0] - (redoneData.start_point_mm as number[])[0],
+    (redoneData.end_point_mm as number[])[1] - (redoneData.start_point_mm as number[])[1],
+  )).toBeCloseTo(2500, 0)
+})
+
+for (const workflow of [
+  { name: 'pipe route', tool: 'แนวท่อ', family: 'drainage.pipe_route', field: 'nodes_mm' },
+  { name: 'moulding run', tool: 'แนวบัว', family: 'decorative.moulding_run', field: 'path_mm' },
+] as const) {
+  test(`${workflow.name} endpoint accepts target length and preserves UUID through Undo/Redo`, async ({ page }) => {
+    test.setTimeout(60_000)
+    await page.goto('/')
+    await page.locator(`.cf-tool-button[title^="${workflow.tool}"]`).click()
+    await clickCanvasFraction(page, 0.25, 0.46)
+    await clickCanvasFraction(page, 0.75, 0.46)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+    await page.locator('.cf-tool-button[title^="เลือก"]').click()
+    await page.getByRole('tab', { name: 'รายการ' }).click()
+
+    const row = page.locator(`.cf-browser-tree [data-object-type="${workflow.family}"]`).last()
+    await expect(row).toBeVisible()
+    const objectId = await row.getAttribute('data-object-id')
+    expect(objectId).toBeTruthy()
+    await row.locator('.cf-browser-object').click()
+    const properties = page.getByTestId('properties-selection')
+    await expect(properties).toHaveAttribute('data-object-id', objectId!)
+
+    const getSegmentLength = async () => {
+      const json = await readStoredProjectJson(page)
+      if (!json) return null
+      const project = JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+      const data = project.objects[objectId!]?.module_data
+      const points = data?.[workflow.field] as number[][] | undefined
+      if (!points || points.length < 2) return null
+      const start = points[points.length - 2]
+      const end = points[points.length - 1]
+      return Math.hypot(end[0] - start[0], end[1] - start[1])
+    }
+    await expect.poll(getSegmentLength).toBeGreaterThan(3000)
+    const originalLength = await getSegmentLength()
+    expect(originalLength).toBeGreaterThan(3000)
+
+    const bounds = await canvas(page).boundingBox()
+    if (!bounds) throw new Error('Plan canvas is not visible')
+    const lengthInput = page.getByRole('textbox', { name: 'ความยาวเป้าหมาย (m)' })
+    let foundGrip = false
+    for (const point of await findGripPoints(page, 'blue')) {
+      const endpoint = { x: bounds.x + point.x, y: bounds.y + point.y }
+      await page.mouse.move(endpoint.x, endpoint.y)
+      await page.mouse.down()
+      await page.mouse.move(endpoint.x + 3, endpoint.y + 3)
+      if (await lengthInput.isVisible().catch(() => false)) { foundGrip = true; break }
+      await page.keyboard.press('Escape')
+      await page.mouse.up()
+    }
+    expect(foundGrip).toBe(true)
+    await lengthInput.fill('3.0')
+    await lengthInput.press('Enter')
+    await page.mouse.up()
+    await expect(properties).toHaveAttribute('data-object-id', objectId!)
+    await expect.poll(getSegmentLength).toBeCloseTo(3000, 0)
+
+    await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await page.locator(`li[data-object-id="${objectId}"] .cf-browser-object`).click()
+    await expect(properties).toHaveAttribute('data-object-id', objectId!)
+    await expect.poll(getSegmentLength).toBeCloseTo(originalLength!, 0)
+
+    await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await page.locator(`li[data-object-id="${objectId}"] .cf-browser-object`).click()
+    await expect(properties).toHaveAttribute('data-object-id', objectId!)
+    await expect.poll(getSegmentLength).toBeCloseTo(3000, 0)
+  })
+}
+
+test('stair width and straight-flight run accept target dimensions with UUID-preserving Undo/Redo', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await seedLocalProjectSnapshot(page, createSyntheticStraightStairProject())
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const stairRow = page.locator('.cf-browser-tree [data-object-type="architecture.stair"]').first()
+  await expect(stairRow).toBeVisible()
+  const stairId = await stairRow.getAttribute('data-object-id')
+  expect(stairId).toBeTruthy()
+  await stairRow.locator('.cf-browser-object').click()
+  const properties = page.getByTestId('properties-selection')
+  await expect(properties).toHaveAttribute('data-object-id', stairId!)
+  await page.getByRole('button', { name: 'จัดแปลนให้อยู่ในหน้าจอ' }).click()
+  for (let zoomOut = 0; zoomOut < 4; zoomOut++) await page.getByRole('button', { name: 'ซูมออก' }).click()
+
+  const readStair = async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const project = JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+    return project.objects[stairId!]?.module_data ?? null
+  }
+  await expect.poll(async () => Number((await readStair())?.width_mm)).toBeGreaterThan(0)
+  const original = await readStair()
+  expect(original).toBeTruthy()
+  const originalWidth = Number(original!.width_mm)
+  const originalRun = Math.max(1, Number(original!.num_risers) - 1) * Number(original!.tread_depth_mm)
+
+  const bounds = await canvas(page).boundingBox()
+  if (!bounds) throw new Error('Plan canvas is not visible')
+  const applyGripDimension = async (kind: 'stair-width' | 'stair-run', label: string, target: string) => {
+    const input = page.getByRole('textbox', { name: label })
+    const data = await readStair()
+    if (!data) throw new Error('Selected stair is missing from the project')
+    const [sx, sy] = data.start_point_mm as number[]
+    const angle = Number(data.rotation_deg ?? 0) * Math.PI / 180
+    const run = Math.max(1, Number(data.num_risers) - 1) * Number(data.tread_depth_mm)
+    const side = data.turn_direction === 'left' && data.stair_type !== 'straight' ? -1 : 1
+    const grip = kind === 'stair-width'
+      ? [sx - Math.sin(angle) * Number(data.width_mm) * side, sy + Math.cos(angle) * Number(data.width_mm) * side]
+      : [sx + Math.cos(angle) * run, sy + Math.sin(angle) * run]
+    const viewport = page.locator('.cf-plan-canvas').first()
+    const panX = Number(await viewport.getAttribute('data-viewport-pan-x'))
+    const panY = Number(await viewport.getAttribute('data-viewport-pan-y'))
+    const zoom = Number(await viewport.getAttribute('data-viewport-zoom'))
+    const x = bounds.x + panX + grip[0] * zoom, y = bounds.y + panY + grip[1] * zoom
+    await page.mouse.move(x, y)
+    await page.mouse.down()
+    await page.mouse.move(x + 3, y + 3)
+    await expect(input).toBeVisible()
+    await input.fill(target)
+    await input.press('Enter')
+    await page.mouse.up()
+    await expect(properties).toHaveAttribute('data-object-id', stairId!)
+  }
+
+  await applyGripDimension('stair-run', 'ความยาวช่วงบันไดเป้าหมาย (m)', '5.0')
+  await expect.poll(async () => {
+    const data = await readStair()
+    return Math.max(1, Number(data?.num_risers) - 1) * Number(data?.tread_depth_mm)
+  }).toBeCloseTo(5000, 0)
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(async () => {
+    const data = await readStair()
+    return Math.max(1, Number(data?.num_risers) - 1) * Number(data?.tread_depth_mm)
+  }).toBeCloseTo(originalRun, 0)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(async () => {
+    const data = await readStair()
+    return Math.max(1, Number(data?.num_risers) - 1) * Number(data?.tread_depth_mm)
+  }).toBeCloseTo(5000, 0)
+
+  await applyGripDimension('stair-width', 'ความกว้างเป้าหมายบันได (m)', '1.2')
+  await expect.poll(async () => Number((await readStair())?.width_mm)).toBeCloseTo(1200, 0)
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(async () => Number((await readStair())?.width_mm)).toBeCloseTo(originalWidth, 0)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(async () => Number((await readStair())?.width_mm)).toBeCloseTo(1200, 0)
+  await expect.poll(async () => {
+    const data = await readStair()
+    return Math.max(1, Number(data?.num_risers) - 1) * Number(data?.tread_depth_mm)
+  }).toBeCloseTo(5000, 0)
+  await expect(properties).toHaveAttribute('data-object-id', stairId!)
 })
 
 test('hosted opening jamb accepts a target width and Escape cancels the preview', async ({ page }) => {

@@ -5,6 +5,13 @@ import { resolveDragDimensionTarget, resolveLineEndpointLengthTarget, resolveOpe
 
 type PreviewDrag = (drag: PlanDragGesture, point: [number, number], ctrlKey: boolean, manual?: boolean) => { commands: unknown[]; valid: boolean }
 
+function endpointSegment(points: number[][] | undefined, endpointIndex: number | undefined) {
+  if (!points || points.length < 2 || endpointIndex === undefined) return null
+  if (endpointIndex === 0) return { start: points[0] as [number, number], end: points[1] as [number, number], endpoint: 0 as const }
+  if (endpointIndex === points.length - 1) return { start: points[points.length - 2] as [number, number], end: points[points.length - 1] as [number, number], endpoint: 1 as const }
+  return null
+}
+
 export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
   const [moveX, setMoveX] = useState('0')
   const [moveY, setMoveY] = useState('0')
@@ -30,10 +37,30 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
     let target: { point_mm: [number, number] } | null = null
     if ((drag.kind === 'column-corner' || drag.kind === 'foundation-corner') && drag.centerMm && drag.sectionMm && drag.endpointIndex !== undefined) {
       target = resolveRectangleResizeTarget(drag.centerMm, drag.sectionMm, drag.rotationDeg ?? 0, drag.endpointIndex, axis === 'width' ? value : width, axis === 'height' ? value : height, displayUnit)
-    } else if ((drag.kind === 'wall-endpoint' || drag.kind === 'beam-endpoint') && drag.startPointMm && drag.endPointMm && drag.endpointIndex !== undefined && axis === 'length') {
+    } else if ((drag.kind === 'wall-endpoint' || drag.kind === 'beam-endpoint' || drag.kind === 'grid-endpoint' || drag.kind === 'separator-endpoint') && drag.startPointMm && drag.endPointMm && drag.endpointIndex !== undefined && axis === 'length') {
       target = resolveLineEndpointLengthTarget(drag.startPointMm, drag.endPointMm, drag.endpointIndex as 0 | 1, value, displayUnit)
+    } else if (drag.kind === 'pipe-endpoint' && drag.pipeRouteData && axis === 'length') {
+      const routeData = drag.pipeRouteData as Record<string, unknown>
+      const segment = endpointSegment(routeData.nodes_mm as number[][] | undefined, drag.endpointIndex)
+      if (segment) target = resolveLineEndpointLengthTarget(segment.start, segment.end, segment.endpoint, value, displayUnit)
+    } else if (drag.kind === 'moulding-endpoint' && drag.mouldingData && axis === 'length') {
+      const mouldingData = drag.mouldingData as Record<string, unknown>
+      const segment = endpointSegment(mouldingData.path_mm as number[][] | undefined, drag.endpointIndex)
+      if (segment) target = resolveLineEndpointLengthTarget(segment.start, segment.end, segment.endpoint, value, displayUnit)
     } else if (drag.kind === 'opening-edge' && drag.hostStartMm && drag.hostEndMm && drag.openingCenterOffsetMm !== undefined && drag.openingWidthMm !== undefined && drag.endpointIndex !== undefined && axis === 'width') {
       target = resolveOpeningEdgeWidthTarget(drag.hostStartMm, drag.hostEndMm, drag.openingCenterOffsetMm, drag.openingWidthMm, drag.endpointIndex as 0 | 1, value, displayUnit)
+    } else if (drag.kind === 'stair-width' && drag.stairData && axis === 'width') {
+      const stair = drag.stairData, [sx, sy] = stair.start_point_mm
+      const angle = Number(stair.rotation_deg ?? 0) * Math.PI / 180
+      const side = stair.turn_direction === 'left' && stair.stair_type !== 'straight' ? -1 : 1
+      const grip: [number, number] = [sx - Math.sin(angle) * stair.width_mm * side, sy + Math.cos(angle) * stair.width_mm * side]
+      target = resolveLineEndpointLengthTarget([sx, sy], grip, 1, value, displayUnit)
+    } else if (drag.kind === 'stair-run' && drag.stairData && axis === 'length') {
+      const stair = drag.stairData, [sx, sy] = stair.start_point_mm
+      const angle = Number(stair.rotation_deg ?? 0) * Math.PI / 180
+      const run = Math.max(1, stair.num_risers - 1) * stair.tread_depth_mm
+      const grip: [number, number] = [sx + Math.cos(angle) * run, sy + Math.sin(angle) * run]
+      target = resolveLineEndpointLengthTarget([sx, sy], grip, 1, value, displayUnit)
     }
     if (!target) { manualPointRef.current = null; return }
     previewAt(drag, target.point_mm, true, true)
@@ -50,10 +77,20 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
       if (size) { setWidth(formatLengthMm(Number(size[0]), displayUnit)); setHeight(formatLengthMm(Number(size[1]), displayUnit)) }
     } else if (data && drag.kind === 'opening-edge') {
       setWidth(formatLengthMm(Number(data.width_mm), displayUnit))
-    } else if (data && (drag.kind === 'wall-endpoint' || drag.kind === 'beam-endpoint')) {
+    } else if (data && (drag.kind === 'wall-endpoint' || drag.kind === 'beam-endpoint' || drag.kind === 'grid-endpoint' || drag.kind === 'separator-endpoint')) {
       const start = data.start_point_mm as [number, number] | undefined
       const end = data.end_point_mm as [number, number] | undefined
       if (start && end) setLength(formatLengthMm(Math.hypot(end[0] - start[0], end[1] - start[1]), displayUnit))
+    } else if (data && drag.kind === 'pipe-endpoint') {
+      const segment = endpointSegment(data.nodes_mm as number[][] | undefined, drag.endpointIndex)
+      if (segment) setLength(formatLengthMm(Math.hypot(segment.end[0] - segment.start[0], segment.end[1] - segment.start[1]), displayUnit))
+    } else if (data && drag.kind === 'moulding-endpoint') {
+      const segment = endpointSegment(data.path_mm as number[][] | undefined, drag.endpointIndex)
+      if (segment) setLength(formatLengthMm(Math.hypot(segment.end[0] - segment.start[0], segment.end[1] - segment.start[1]), displayUnit))
+    } else if (data && drag.kind === 'stair-width') {
+      setWidth(formatLengthMm(Number(data.width_mm), displayUnit))
+    } else if (data && drag.kind === 'stair-run') {
+      setLength(formatLengthMm(Math.max(1, Number(data.num_risers) - 1) * Number(data.tread_depth_mm), displayUnit))
     }
   }
 

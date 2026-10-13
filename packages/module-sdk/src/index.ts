@@ -8,6 +8,17 @@ import type {
   CommandBusResult,
 } from "@constructflow/command-schema";
 import type { Vec2, Vec3, Triangle } from "@constructflow/geometry-kernel";
+export {
+  ModuleRegistry,
+  type ConstructFlowModule,
+  type ModuleCommandHandler,
+  type ModuleCommandDescriptor,
+  type ModuleContribution,
+  type ModuleHostApi,
+  type ModuleManifest,
+  type ModuleValidationIssue,
+  type ModuleValidator,
+} from "./registry.js";
 export type { Vec2, Vec3, Triangle };
 export interface DomainQuantity {
   classification: string;

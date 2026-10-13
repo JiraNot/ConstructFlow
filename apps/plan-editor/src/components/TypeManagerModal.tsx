@@ -5,6 +5,7 @@ import type {
   TypeDefinition,
   TypeParameters,
 } from "@constructflow/project-model";
+import { validateProjectV2 } from "@constructflow/project-model";
 import type {
   CommandRequest,
   CommandBatchResult,
@@ -17,6 +18,10 @@ import {
   Copy,
   Pencil,
   Check,
+  BookmarkPlus,
+  Trash2,
+  Download,
+  Upload,
 } from "lucide-react";
 import { Dialog } from "./ui/Dialog.js";
 import { CatalogField } from "./CatalogField.js";
@@ -54,6 +59,86 @@ type Editor = {
   creating: boolean;
 };
 type Preferences = { favorites: string[]; recent: string[] };
+type PersonalCatalogEntry = {
+  id: string;
+  sourceTypeId: string;
+  name: string;
+  object_type: string;
+  parameters: TypeParameters;
+};
+const PERSONAL_CATALOG_KEY = "cf-personal-type-library-v1";
+const PERSONAL_CATALOG_FILE_FORMAT = "constructflow-type-library";
+const PERSONAL_CATALOG_FILE_VERSION = 1;
+const PERSONAL_CATALOG_FILE_LIMIT = 2 * 1024 * 1024;
+const PERSONAL_CATALOG_ENTRY_LIMIT = 500;
+function loadPersonalCatalog(): PersonalCatalogEntry[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(PERSONAL_CATALOG_KEY) ?? "[]");
+    if (!Array.isArray(value)) return [];
+    return value.filter((entry): entry is PersonalCatalogEntry =>
+      !!entry && typeof entry === "object" &&
+      typeof entry.id === "string" && typeof entry.sourceTypeId === "string" &&
+      typeof entry.name === "string" && typeof entry.object_type === "string" &&
+      !!entry.parameters && typeof entry.parameters === "object" && !Array.isArray(entry.parameters),
+    );
+  } catch {
+    return [];
+  }
+}
+function parsePersonalCatalogFile(raw: string, project: ProjectDocument): PersonalCatalogEntry[] {
+  if (raw.length > PERSONAL_CATALOG_FILE_LIMIT)
+    throw new Error("ไฟล์คลังชนิดมีขนาดเกิน 2 MB");
+  const payload: unknown = JSON.parse(raw);
+  if (!payload || typeof payload !== "object" || Array.isArray(payload))
+    throw new Error("โครงสร้างไฟล์คลังชนิดไม่ถูกต้อง");
+  const document = payload as Record<string, unknown>;
+  if (document.format !== PERSONAL_CATALOG_FILE_FORMAT || document.format_version !== PERSONAL_CATALOG_FILE_VERSION)
+    throw new Error("ไม่รองรับรูปแบบหรือเวอร์ชันไฟล์คลังชนิดนี้");
+  if (!Array.isArray(document.types) || document.types.length > PERSONAL_CATALOG_ENTRY_LIMIT)
+    throw new Error("ไฟล์คลังชนิดต้องมีไม่เกิน 500 รายการ");
+
+  const families = new Set<string>(CATALOG_FAMILIES.map(([family]) => family));
+  const keys = new Set<string>();
+  const entries: PersonalCatalogEntry[] = [];
+  for (const [index, value] of document.types.entries()) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error(`ชนิดลำดับ ${index + 1} มีโครงสร้างไม่ถูกต้อง`);
+    const type = value as Record<string, unknown>;
+    const name = typeof type.name === "string" ? type.name.trim() : "";
+    const object_type = typeof type.object_type === "string" ? type.object_type : "";
+    const parameters = type.parameters;
+    if (!name || name.length > 100)
+      throw new Error(`ชนิดลำดับ ${index + 1} ต้องมีชื่อไม่เกิน 100 ตัวอักษร`);
+    if (!families.has(object_type))
+      throw new Error(`ชนิด “${name}” ใช้ family ที่ไม่รองรับ`);
+    if (!parameters || typeof parameters !== "object" || Array.isArray(parameters))
+      throw new Error(`พารามิเตอร์ของชนิด “${name}” ไม่ถูกต้อง`);
+    const key = `${object_type}\u0000${name.toLocaleLowerCase()}`;
+    if (keys.has(key)) throw new Error(`ไฟล์มีชนิด “${name}” ซ้ำใน family เดียวกัน`);
+    keys.add(key);
+    entries.push({
+      id: crypto.randomUUID(),
+      sourceTypeId: `import:${crypto.randomUUID()}`,
+      name,
+      object_type,
+      parameters: structuredClone(parameters) as TypeParameters,
+    });
+  }
+
+  const candidate = structuredClone(project);
+  candidate.types.push(...entries.map((entry, index) => ({
+    id: crypto.randomUUID(),
+    name: `__library_import_validation_${index}`,
+    object_type: entry.object_type,
+    parameters: entry.parameters,
+  })));
+  try {
+    validateProjectV2(candidate);
+  } catch (error) {
+    throw new Error(`ไฟล์มีชนิดที่ไม่ผ่านการตรวจสอบ: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return entries;
+}
 function loadPreferences(): Preferences {
   try {
     const p = JSON.parse(
@@ -195,6 +280,7 @@ function CatalogDialog({
   onExecute,
   onRenamed,
 }: Props) {
+  const personalCatalogFileInput = useRef<HTMLInputElement>(null);
   const displayUnit = project.project.display_unit ?? "m";
   const initial = project.types.find((t) => t.id === initialTypeId);
   const [family, setFamily] = useState(
@@ -204,6 +290,7 @@ function CatalogDialog({
     [filter, setFilter] = useState("all"),
     [selected, setSelected] = useState(initial?.id ?? "");
   const [collection, setCollection] = useState("all");
+  const [personalCatalog, setPersonalCatalog] = useState(loadPersonalCatalog);
   const collections = { modern: "โมเดิร์น", classic: "คลาสสิก", natural: "อบอุ่นลายไม้", utility: "ใช้งานทั่วไป" };
   const designs = OPENING_DESIGNS.filter(d => d.object_type === family
     && (collection === "all" || d.collection === collection)
@@ -283,6 +370,13 @@ function CatalogDialog({
       /* optional UI preferences */
     }
   }, [preferences]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(PERSONAL_CATALOG_KEY, JSON.stringify(personalCatalog));
+    } catch {
+      setError("บันทึกคลังส่วนตัวไม่ได้ พื้นที่จัดเก็บของเบราว์เซอร์อาจเต็มหรือถูกปิดใช้งาน");
+    }
+  }, [personalCatalog]);
   const usage = useMemo(() => {
     const counts = new Map<string, number>();
     for (const object of Object.values(project.objects)) {
@@ -296,7 +390,14 @@ function CatalogDialog({
     }
     return counts;
   }, [project]);
-  const items = project.types.filter(
+  const personalTypes: TypeDefinition[] = personalCatalog.map((entry) => ({
+    id: `personal:${entry.id}`,
+    name: entry.name,
+    object_type: entry.object_type,
+    parameters: entry.parameters,
+  }));
+  const catalogSource = filter === "library" ? personalTypes : project.types;
+  const items = catalogSource.filter(
     (t) =>
       filter !== "designs" &&
       t.object_type === family &&
@@ -307,7 +408,7 @@ function CatalogDialog({
         ? !!usage.get(t.id)
         : filter === "favorites"
           ? preferences.favorites.includes(t.id)
-          : filter === "recent"
+            : filter === "recent"
             ? preferences.recent.includes(t.id)
             : true),
   );
@@ -331,6 +432,101 @@ function CatalogDialog({
     setPreferences(next);
     onChoose(t);
     onClose();
+  };
+  const saveToPersonalCatalog = (type: TypeDefinition) => {
+    const source = project.types.find((entry) => entry.id === type.id);
+    if (!source) return;
+    setPersonalCatalog((current) => {
+      const existing = current.find((entry) => entry.sourceTypeId === source.id);
+      const entry: PersonalCatalogEntry = {
+        id: existing?.id ?? crypto.randomUUID(),
+        sourceTypeId: source.id,
+        name: source.name,
+        object_type: source.object_type,
+        parameters: structuredClone(source.parameters),
+      };
+      return existing
+        ? current.map((candidate) => candidate.id === existing.id ? entry : candidate)
+        : [...current, entry];
+    });
+    setFeedback(`บันทึก ${type.name} ลงคลังส่วนตัวแล้ว`);
+    setError("");
+  };
+  const removeFromPersonalCatalog = (type: TypeDefinition) => {
+    const entryId = type.id.replace(/^personal:/, "");
+    setPersonalCatalog((current) => current.filter((entry) => entry.id !== entryId));
+    setSelected("");
+    setFeedback(`ลบ ${type.name} ออกจากคลังส่วนตัวแล้ว`);
+  };
+  const importPersonalType = (type: TypeDefinition) => {
+    const nameBase = type.name;
+    let name = nameBase;
+    let suffix = 2;
+    while (project.types.some((entry) => entry.object_type === type.object_type && entry.name.toLowerCase() === name.toLowerCase()))
+      name = `${nameBase}-${suffix++}`;
+    const id = crypto.randomUUID();
+    const result = onExecute([{
+      name: "DefineStructuralType",
+      input: { id, name, object_type: type.object_type, parameters: structuredClone(type.parameters) },
+    }]);
+    if (result.status !== "success") {
+      setError((result.errors ?? []).join("\n") || "เพิ่มชนิดจากคลังส่วนตัวไม่สำเร็จ");
+      return;
+    }
+    const imported = result.updatedProject.types.find((entry) => entry.id === id);
+    if (imported) choose(imported);
+  };
+  const exportPersonalCatalog = () => {
+    const content = JSON.stringify({
+      format: PERSONAL_CATALOG_FILE_FORMAT,
+      format_version: PERSONAL_CATALOG_FILE_VERSION,
+      exported_at: new Date().toISOString(),
+      types: personalCatalog.map(({ name, object_type, parameters }) => ({
+        name, object_type, parameters,
+      })),
+    }, null, 2);
+    const url = URL.createObjectURL(new Blob([content], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "constructflow-type-library.cflib";
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setFeedback(`ส่งออกคลังส่วนตัว ${personalCatalog.length} ชนิดแล้ว`);
+    setError("");
+  };
+  const importPersonalCatalog = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      if (file.size > PERSONAL_CATALOG_FILE_LIMIT)
+        throw new Error("ไฟล์คลังชนิดมีขนาดเกิน 2 MB");
+      const entries = parsePersonalCatalogFile(await file.text(), project);
+      if (!entries.length) throw new Error("ไฟล์คลังชนิดไม่มีรายการให้เพิ่ม");
+      const merged = [...personalCatalog];
+      let added = 0;
+      let updated = 0;
+      for (const entry of entries) {
+        const index = merged.findIndex((existing) =>
+          existing.object_type === entry.object_type && existing.name.toLocaleLowerCase() === entry.name.toLocaleLowerCase(),
+        );
+        if (index >= 0) {
+          merged[index] = { ...entry, id: merged[index].id, sourceTypeId: merged[index].sourceTypeId };
+          updated++;
+        } else {
+          merged.push(entry);
+          added++;
+        }
+      }
+      setPersonalCatalog(merged);
+      setFamily(entries[0].object_type);
+      setFilter("library");
+      setSelected("");
+      setFeedback(`นำเข้าคลังชนิดแล้ว · เพิ่ม ${added} · อัปเดต ${updated}`);
+      setError("");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (personalCatalogFileInput.current) personalCatalogFileInput.current.value = "";
+    }
   };
   const openEditor = (next: Editor) => {
     setSelectedPart("all");
@@ -998,6 +1194,14 @@ function CatalogDialog({
             </nav>
             <div className="cf-catalog-main">
               <div className="cf-catalog-toolbar">
+                <input
+                  ref={personalCatalogFileInput}
+                  type="file"
+                  accept=".cflib,.json,application/json"
+                  aria-label="เลือกไฟล์คลังชนิด"
+                  className="cf-visually-hidden"
+                  onChange={(event) => { void importPersonalCatalog(event.currentTarget.files?.[0]); }}
+                />
                 <label className="cf-search">
                   <Search size={17} />
                   <input
@@ -1008,6 +1212,14 @@ function CatalogDialog({
                     onChange={(e) => setQuery(e.target.value)}
                   />
                 </label>
+                <div className="cf-catalog-library-tools">
+                  <button className="cf-button cf-button-quiet" aria-label="นำเข้าคลังชนิดจากไฟล์" onClick={() => personalCatalogFileInput.current?.click()}>
+                    <Upload size={15} /> นำเข้า
+                  </button>
+                  <button className="cf-button cf-button-quiet" aria-label="ส่งออกคลังส่วนตัว" disabled={!personalCatalog.length} onClick={exportPersonalCatalog}>
+                    <Download size={15} /> ส่งออก
+                  </button>
+                </div>
                 <button
                   className="cf-button cf-button-primary"
                   onClick={() =>
@@ -1030,6 +1242,7 @@ function CatalogDialog({
                   ["used", "ใช้ในโครงการ"],
                   ["recent", "ล่าสุด"],
                   ["favorites", "รายการโปรด"],
+                  ["library", `คลังส่วนตัว (${personalCatalog.length})`],
                   ...(family.startsWith("door_window.") ? [["designs", "แบบสำเร็จรูป · เลือกสไตล์"]] : []),
                 ].map(([id, label]) => (
                   <button
@@ -1045,6 +1258,11 @@ function CatalogDialog({
               {feedback && (
                 <p role="status" className="cf-success">
                   {feedback}
+                </p>
+              )}
+              {error && (
+                <p role="alert" className="cf-error">
+                  {error}
                 </p>
               )}
               {filter === "designs" && <section className="cf-opening-designs" aria-label="แบบประตูและหน้าต่างสำเร็จรูป">
@@ -1076,7 +1294,7 @@ function CatalogDialog({
                       aria-pressed={chosen?.id === type.id}
                       onClick={() => setSelected(type.id)}
                       onDoubleClick={() => {
-                        if (canChoose(type)) choose(type);
+                        if (filter !== "library" && canChoose(type)) choose(type);
                       }}
                     >
                       <TypeThumbnail type={type} />
@@ -1108,6 +1326,19 @@ function CatalogDialog({
                         }
                       />
                     </button>
+                    {filter === "library" ? (
+                      <button className="cf-library-action" aria-label={`ลบ ${type.name} จากคลังส่วนตัว`} onClick={() => removeFromPersonalCatalog(type)}>
+                        <Trash2 size={15} />
+                      </button>
+                    ) : (
+                      <button
+                        className="cf-library-action"
+                        aria-label={`${personalCatalog.some((entry) => entry.sourceTypeId === type.id) ? "อัปเดต" : "บันทึก"} ${type.name} ลงคลังส่วนตัว`}
+                        onClick={() => saveToPersonalCatalog(type)}
+                      >
+                        <BookmarkPlus size={15} />
+                      </button>
+                    )}
                   </article>
                 ))}
               </div>
@@ -1135,8 +1366,7 @@ function CatalogDialog({
                 <>
                   <strong>{chosen.name}</strong>
                   <p>
-                    {typeSizeLabel(chosen, displayUnit)} · ใช้ในแบบ{" "}
-                    {usage.get(chosen.id) ?? 0} ชิ้น
+                    {typeSizeLabel(chosen, displayUnit)} · {filter === "library" ? "ยังไม่ได้นำเข้าโครงการ" : `ใช้ในแบบ ${usage.get(chosen.id) ?? 0} ชิ้น`}
                   </p>
                 </>
               ) : (
@@ -1152,14 +1382,19 @@ function CatalogDialog({
               สร้างจากชนิดนี้
             </button>
             <button
-              disabled={!chosen}
+              disabled={!chosen || filter === "library"}
               className="cf-button cf-button-quiet"
               onClick={() => chosen && openEditor(makeEditor(chosen))}
             >
               <Pencil size={16} />
               แก้ไขชนิด
             </button>
-            {chosen && canChoose(chosen) && (
+            {chosen && filter === "library" && (
+              <button className="cf-button cf-button-primary" onClick={() => importPersonalType(chosen)}>
+                เพิ่มลงโครงการและเลือก
+              </button>
+            )}
+            {chosen && filter !== "library" && canChoose(chosen) && (
               <button
                 className="cf-button cf-button-primary"
                 onClick={() => choose(chosen)}

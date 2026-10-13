@@ -42,6 +42,9 @@
       "@constructflow/interior-engine": [
         "../interior-engine/dist/index.d.ts"
       ],
+      "@constructflow/module-sdk": [
+        "../module-sdk/dist/index.d.ts"
+      ],
       "@constructflow/domain-providers": [
         "../domain-providers/dist/index.d.ts"
       ],

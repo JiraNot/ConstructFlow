@@ -39,7 +39,7 @@ export const PlanCanvasInteractionHints: React.FC<PlanCanvasInteractionHintsProp
       ตลับเมตร · {tapeMeasure?.complete ? 'คลิกเพื่อเริ่มวัดเส้นใหม่' : tapeMeasure ? 'คลิกจุดปลาย' : 'คลิกจุดเริ่ม'} · Esc ออก
     </div>}
     {activeTool === 'select' && showSelectionHandleHint && <div className="cf-tape-measure-hint" aria-live="polite">
-      จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด ท่อ และแนวบัว · จุดสีม่วง: หมุนบิลท์อินรอบจุดวาง · จุดสีส้ม: ลากขอบปรับความกว้าง หรือลากจุดกึ่งกลางปรับตำแหน่ง (BIM Snap ขอบเสา 100 มม.) · ปุ่ม ⇄: สลับด้านบานประตู
+      จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด เส้นแบ่งห้อง ท่อ และแนวบัว · กริด เส้นแบ่งห้อง แนวท่อ และแนวบัวระบุความยาวเป้าหมายได้หลังเริ่มลากจุดปลาย · จุด W/R บันไดระบุความกว้างหรือความยาวช่วงเป้าหมายได้ · จุดสีม่วง: หมุนบิลท์อินรอบจุดวาง · จุดสีส้ม: ลากขอบปรับความกว้าง หรือลากจุดกึ่งกลางปรับตำแหน่ง (BIM Snap ขอบเสา 100 มม.) · ปุ่ม ⇄: สลับด้านบานประตู
     </div>}
     {placementHint && <div className="cf-tape-measure-hint" aria-live="polite" data-tool-step={placementStatus?.step}>
       <strong>{placementStatus?.stepLabel}</strong> · {placementHint} · {placementStatus?.constraint}

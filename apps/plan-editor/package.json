@@ -22,6 +22,7 @@
     "@constructflow/drainage-engine": "file:../../packages/drainage-engine",
     "@constructflow/extension-engine": "file:../../packages/extension-engine",
     "@constructflow/geometry-kernel": "file:../../packages/geometry-kernel",
+    "@constructflow/module-sdk": "file:../../packages/module-sdk",
     "@constructflow/project-model": "file:../../packages/project-model",
     "@constructflow/representation-engine": "file:../../packages/representation-engine",
     "@constructflow/roof-engine": "file:../../packages/roof-engine",

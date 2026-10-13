@@ -1,10 +1,13 @@
 import asyncio
+import hmac
 import json
+import os
 import uuid
 import sys
 import websockets
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
+from ai_provider import AIPlanError, generate_command_plan
 
 # Configuration
 HTTP_PORT = 8000
@@ -82,9 +85,39 @@ OPENAPI_SPEC = {
                     }
                 }
             }
+        },
+        "/api/ai/plan": {
+            "post": {
+                "summary": "Draft a validated ConstructFlow command plan",
+                "description": "Proposes commands from supplied project context and AI-eligible command descriptors. The editor must preview and confirm them through its CommandBus before execution.",
+                "security": [{"GatewayToken": []}],
+                "requestBody": {
+                    "required": True,
+                    "content": {"application/json": {"schema": {
+                        "type": "object",
+                        "required": ["prompt", "project_context", "command_descriptors"],
+                        "properties": {
+                            "prompt": {"type": "string", "maxLength": 8000},
+                            "project_context": {"type": "object"},
+                            "command_descriptors": {"type": "array", "minItems": 1, "maxItems": 250},
+                        },
+                    }}}
+                },
+                "responses": {
+                    "200": {"description": "Structured command proposal; this endpoint does not execute commands."},
+                    "401": {"description": "Invalid or missing gateway token."},
+                    "422": {"description": "Invalid request or command plan."},
+                },
+            }
         }
-    }
+    },
+    "components": {"securitySchemes": {"GatewayToken": {"type": "http", "scheme": "bearer"}}}
 }
+
+def ai_gateway_authorized(authorization, expected_token):
+    return bool(expected_token) and hmac.compare_digest(
+        authorization or "", f"Bearer {expected_token}"
+    )
 
 async def send_to_sketchup(command_name, params):
     try:
@@ -134,6 +167,41 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if self.path == "/api/ai/plan":
+            expected_token = os.environ.get("CONSTRUCTFLOW_AI_TOKEN", "")
+            if not expected_token:
+                self.send_response(503)
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(b'{"error":"Set CONSTRUCTFLOW_AI_TOKEN on the AI gateway"}')
+                return
+            provided = self.headers.get("Authorization", "")
+            if not ai_gateway_authorized(provided, expected_token):
+                self.send_response(401)
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(b'{"error":"Invalid AI gateway token"}')
+                return
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+                if content_length < 1 or content_length > 128_000:
+                    raise AIPlanError("Request must be between 1 and 128000 bytes")
+                data = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                result = generate_command_plan(data)
+                status = 200
+            except (AIPlanError, json.JSONDecodeError, UnicodeDecodeError) as error:
+                result = {"error": str(error)}
+                status = 422
+            except Exception as error:
+                result = {"error": f"AI gateway failed: {error}"}
+                status = 502
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self._send_cors_headers()
+            self.end_headers()
+            self.wfile.write(json.dumps(result, ensure_ascii=False).encode("utf-8"))
+            return
+
         if self.path == "/api/command":
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length)
@@ -165,8 +233,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
 def run_http_server():
-    server = HTTPServer(('0.0.0.0', HTTP_PORT), BridgeHandler)
-    print(f"🌐 HTTP/OpenAPI Bridge running at http://localhost:{HTTP_PORT}")
+    host = os.environ.get("CONSTRUCTFLOW_HTTP_HOST", "127.0.0.1")
+    server = HTTPServer((host, HTTP_PORT), BridgeHandler)
+    print(f"🌐 HTTP/OpenAPI Bridge running at http://{host}:{HTTP_PORT}")
     print(f"📄 OpenAPI schema for Custom GPT: http://localhost:{HTTP_PORT}/openapi.json")
     try:
         server.serve_forever()

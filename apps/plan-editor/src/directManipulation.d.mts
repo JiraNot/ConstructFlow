@@ -1,4 +1,5 @@
 import type { ProjectDocument } from '@constructflow/project-model'
+import type { StairModuleData } from '@constructflow/project-model'
 import type { CommandRequest } from '@constructflow/command-schema'
 
 export interface DirectManipulationPreviewResult {
@@ -34,6 +35,7 @@ export interface PlanDragGesture {
   pipeRouteData?: unknown
   mouldingData?: unknown
   cabinetData?: unknown
+  stairData?: StairModuleData
 }
 
 export function resizeOrientedRectangle(center: [number, number], size: [number, number], rotationDeg: number, cornerIndex: number, cursor: [number, number]): { center_mm: [number, number]; size_mm: [number, number] } | null
