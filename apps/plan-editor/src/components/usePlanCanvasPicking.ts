@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectDocument } from '@constructflow/project-model'
 import type { ViewportState } from '../viewport/viewportTransform.js'
-import type { PlanCanvasProps } from './PlanCanvas.js'
+import type { PlanCanvasProps } from './PlanCanvas.types.js'
 import { findPlanHitObject } from './planHitTesting.mjs'
 import { resolvePlanCanvasPickCandidates } from './resolvePlanCanvasPickCandidates.mjs'
 import type { ToolType } from './Toolbar.js'

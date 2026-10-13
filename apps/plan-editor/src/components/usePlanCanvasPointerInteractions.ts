@@ -4,7 +4,7 @@ import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-eng
 import { resolvePlanCanvasPointerSnap } from './resolvePlanCanvasPointerSnap.js'
 import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import type { ViewportState } from '../viewport/viewportTransform.js'
-import type { PlanCanvasProps } from './PlanCanvas.js'
+import type { PlanCanvasProps } from './PlanCanvas.types.js'
 import { usePlanCanvasPointerHandlers } from './usePlanCanvasPointerHandlers.js'
 import type { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
 import type { usePlanCanvasPointerState } from './usePlanCanvasPointerState.js'

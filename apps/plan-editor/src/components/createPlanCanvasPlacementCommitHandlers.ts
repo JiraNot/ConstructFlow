@@ -3,7 +3,7 @@ import type { ProjectDocument } from '@constructflow/project-model'
 import type { SnapResult } from '@constructflow/snapping-engine'
 import type { ViewportState } from '../viewport/viewportTransform.js'
 import { worldToScreen } from '../viewport/viewportTransform.js'
-import type { PlanCanvasProps } from './PlanCanvas.js'
+import type { PlanCanvasProps } from './PlanCanvas.types.js'
 import type { ToolType } from './Toolbar.js'
 
 type PlacementCommitCallbacks = Pick<PlanCanvasProps,

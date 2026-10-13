@@ -5,7 +5,7 @@ import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import { updatePlanCanvasPreference } from '../app/planCanvasPreferences.mjs'
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
 import { usePlanCanvasPointerState } from './usePlanCanvasPointerState.js'
-import type { PlanCanvasProps } from './PlanCanvas.js'
+import type { PlanCanvasProps } from './PlanCanvas.types.js'
 import { nextDoorHanding, usePlanCanvasGlobalShortcuts } from './usePlanCanvasGlobalShortcuts.js'
 import { usePlanCanvasToolInteraction } from './usePlanCanvasToolInteraction.js'
 
