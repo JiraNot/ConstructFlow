@@ -52,10 +52,6 @@ import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
 import { handlePlanCanvasPointerDownNavigation } from './handlePlanCanvasPointerDownNavigation.js'
 import { findPlanHitObject } from './planHitTesting.mjs'
 import { handlePlanCanvasPointerUp } from './handlePlanCanvasPointerUp.js'
-import { drawPlanCanvasSelectionHandles } from './drawPlanCanvasSelectionHandles.js'
-import { drawPlanCanvasToolOverlays } from './drawPlanCanvasToolOverlays.js'
-import { buildPlanPlacementGhost } from './buildPlanPlacementGhost.js'
-import { drawPlanCanvasBaseScene } from './drawPlanCanvasBaseScene.js'
 import { resolvePlanCanvasLineSnap } from '../app/placementLineSnap.mjs'
 import { updatePlanCanvasPreference, type PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import { hasPendingToolStep, resolveEscapeAction, resolveToolInteractionStatus } from '../app/toolInteractionStatus.mjs'
@@ -70,6 +66,7 @@ import { handlePlanCanvasPlacementPointerDown } from './handlePlanCanvasPlacemen
 import { usePlanCanvasManipulationPreview } from './usePlanCanvasManipulationPreview.js'
 import { createPlanCanvasPlacementCommitHandlers } from './createPlanCanvasPlacementCommitHandlers.js'
 import { nextDoorHanding, usePlanCanvasGlobalShortcuts } from './usePlanCanvasGlobalShortcuts.js'
+import { usePlanCanvasDrawing } from './usePlanCanvasDrawing.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -444,99 +441,52 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     onPreviewManipulation,
   })
 
-  const redraw = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    const ghost = buildPlanPlacementGhost({
-      activeTool, activeSnap, project, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark,
-      activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, beamStartNode, wallStartNode, activeWallSnap,
-      doorHanding, stairPreview, stairStartPoint, resolveReferencePath,
-    })
-    const calibrationOverlay =
-      activeTool === 'calibrate'
-        ? {
-            point1_mm: calibrationP1,
-            point2_mm: null,
-            mouse_mm: calibrationMousePoint,
-          }
-        : null
-
-    drawPlanCanvasBaseScene({
-      ctx, width: canvas.width, height: canvas.height, project, planProject, viewport, selectedIds,
-      editableSelectionIds, hoveredId, activeSnap, ghost, underlay, calibrationOverlay, labelMode,
-      labelVisibility, planDiscipline, manipulationPreview, externalManipulationPreview, coordination,
-      coordinationSeverities, coordinationFocusSelection,
-    })
-    drawPlanCanvasSelectionHandles(ctx, editableSelectionIds, planProject, viewport, displayUnit, manipulationPreview)
-    drawPlanCanvasToolOverlays({
-      ctx, activeTool, gridStartPoint, activeSnap, planProject, viewport, gridCopySourceId, tapeMeasure,
-      displayUnit, activeWallSnap, project, activeDoorTypeMark, activeWindowTypeMark, dimensionReferenceMode,
-      selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, slabBoundary,
-    })
-  }, [
+  usePlanCanvasDrawing({
+    containerRef,
+    canvasRef,
     project,
-    displayUnit,
-    labelMode,
-    labelVisibility,
     planProject,
-    viewport,
-    selectedIds,
-    selectedId,
-    editableSelectionIds,
-    hoveredId,
+    activeTool,
     activeSnap,
     activeWallSnap,
-    activeTool,
-    gridStartPoint,
-    stairStartPoint,
-    stairPreview,
-    gridCopySourceId,
-    dimensionInputX,
-    dimensionInputY,
-    dimensionAnchorX,
-    dimensionAnchorY,
     activeColumnTypeMark,
     activeFoundationTypeMark,
     activeBeamTypeMark,
     activeWallTypeMark,
     activeDoorTypeMark,
     activeWindowTypeMark,
-    activeSlabTypeMark,
-    slabBoundary,
-    roomSeparatorStart,
-    roofShape,
-    roofSlopeDeg,
-    roofThicknessMm,
-    roofElevationOffsetMm,
-    roofMaterial,
-    pipeSystem,
-    fixtureKind,
     beamStartNode,
     wallStartNode,
-    resolveReferencePath,
     doorHanding,
-    underlay,
+    stairPreview,
+    stairStartPoint,
+    resolveReferencePath,
     calibrationP1,
     calibrationMousePoint,
-    selectionBox,
-    dimensionReferenceMode,
-    tapeMeasure,
+    selectedIds,
+    editableSelectionIds,
+    hoveredId,
+    underlay,
+    labelMode,
+    labelVisibility,
+    planDiscipline,
+    viewport,
+    displayUnit,
+    manipulationPreview,
+    externalManipulationPreview,
     coordination,
     coordinationSeverities,
     coordinationFocusSelection,
-    manipulationPreview,
-    externalManipulationPreview,
-  ])
-
-  useEffect(() => {
-    redraw()
-  }, [redraw])
-
-  const redrawRef = useRef(redraw)
-  redrawRef.current = redraw
+    gridStartPoint,
+    gridCopySourceId,
+    tapeMeasure,
+    dimensionReferenceMode,
+    selectionBox,
+    roomSeparatorStart,
+    pipeSystem,
+    fixtureKind,
+    slabBoundary,
+  })
 
   const updateDragDimension = (axis: 'x' | 'y', value: string) => dragDimensionInput.updateMove(draggingObject, axis, value, previewDragAt)
   const updateResizeDimension = (axis: 'width' | 'height' | 'length', value: string) => dragDimensionInput.updateResize(draggingObject, axis, value, previewDragAt)
@@ -551,27 +501,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     dragDimensionInput.clearResizeValues()
     canvasRef.current?.focus({ preventScroll: true })
   }
-
-  // Observe the drawing area, including changes from collapsing the inspector.
-  // Canvas bitmap dimensions must not contribute to the flex item's minimum size.
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-    const resizeCanvas = () => {
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const rect = container.getBoundingClientRect()
-      const width = Math.round(rect.width), height = Math.round(rect.height)
-      if (canvas.width !== width) canvas.width = width
-      if (canvas.height !== height) canvas.height = height
-      redrawRef.current()
-    }
-
-    const observer = new ResizeObserver(resizeCanvas)
-    observer.observe(container)
-    resizeCanvas()
-    return () => observer.disconnect()
-  }, [])
 
   const findHitObject = (worldPoint_mm: [number, number], preferWall = false, excluded = new Set<string>()): string | null =>
     findPlanHitObject(worldPoint_mm, planProject, project, viewport.zoom, preferWall, excluded)
