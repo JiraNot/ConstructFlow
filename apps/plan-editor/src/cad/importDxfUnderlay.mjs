@@ -242,6 +242,27 @@ function shapesForEntity(entity) {
     const boundaries = hatchPolylineBoundaries(entity)
     return boundaries.length ? boundaries : null
   }
+  if (entity.type === 'ELLIPSE') {
+    const centerX = numberOf(entity, 10), centerY = numberOf(entity, 20)
+    const majorX = numberOf(entity, 11), majorY = numberOf(entity, 21), ratio = numberOf(entity, 40)
+    if (![centerX, centerY, majorX, majorY, ratio].every(Number.isFinite) || ratio <= 0) return null
+    const majorLength = Math.hypot(majorX, majorY)
+    if (majorLength <= 1e-9) return null
+    const start = numberOf(entity, 41) ?? 0
+    const end = numberOf(entity, 42) ?? Math.PI * 2
+    if (![start, end].every(Number.isFinite)) return null
+    let sweep = (end - start) % (Math.PI * 2)
+    if (sweep < 0) sweep += Math.PI * 2
+    if (Math.abs(sweep) < 1e-9) sweep = Math.PI * 2
+    const closed = Math.abs(sweep - Math.PI * 2) < 1e-9
+    const segments = Math.max(8, Math.min(720, Math.ceil(sweep / (Math.PI / 36))))
+    const points = Array.from({ length: segments + 1 }, (_, index) => {
+      const angle = start + sweep * index / segments
+      const majorFactor = Math.cos(angle), minorFactor = Math.sin(angle) * ratio
+      return [centerX + majorX * majorFactor - majorY * minorFactor, centerY + majorY * majorFactor + majorX * minorFactor]
+    })
+    return [{ kind: 'polyline', points, closed }]
+  }
   if (entity.type === 'CIRCLE' || entity.type === 'ARC') {
     const x = numberOf(entity, 10), y = numberOf(entity, 20), radius = numberOf(entity, 40)
     if (![x, y, radius].every(Number.isFinite) || radius <= 0) return null
@@ -313,7 +334,7 @@ export function importDxfUnderlay(source, { maxImageDimension = 4096 } = {}) {
   let unsupportedEntities = 0
   expandEntities(entities, blocks, IDENTITY, geometry, () => { unsupportedEntities += 1 })
 
-  if (!geometry.length) throw new Error('ไม่พบ LINE, POLYLINE, LWPOLYLINE, HATCH, CIRCLE, ARC หรือ INSERT ที่ใช้เป็น underlay ได้')
+  if (!geometry.length) throw new Error('ไม่พบ LINE, POLYLINE, LWPOLYLINE, HATCH, ELLIPSE, CIRCLE, ARC หรือ INSERT ที่ใช้เป็น underlay ได้')
   const points = geometry.flatMap(shape => shape.points)
   const minX = Math.min(...points.map(point => point[0]))
   const maxX = Math.max(...points.map(point => point[0]))

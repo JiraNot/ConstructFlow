@@ -109,6 +109,26 @@ test('DXF underlay imports legacy 2D POLYLINE sequences from model space and ins
   assert.equal((svg.match(/ Z/g) ?? []).length, 2)
 })
 
+test('DXF underlay approximates full and partial ELLIPSE entities and skips malformed axes', () => {
+  const entities = [
+    '0', 'ELLIPSE', '10', '0', '20', '0', '11', '100', '21', '0', '40', '0.5', '41', '0', '42', String(Math.PI * 2),
+    '0', 'ELLIPSE', '10', '200', '20', '0', '11', '50', '21', '0', '40', '0.5', '41', '0', '42', String(Math.PI / 2),
+    '0', 'ELLIPSE', '10', '0', '20', '0', '11', '0', '21', '0', '40', '0.5', '41', '0', '42', String(Math.PI * 2),
+  ].join('\n')
+
+  const result = importDxfUnderlay(dxf(4, entities))
+  const svg = decodeURIComponent(result.dataUrl)
+  const paths = svg.match(/<path d="[^"]+"\/>/g) ?? []
+
+  assert.equal(result.imported_entities, 2)
+  assert.equal(result.skipped_entities, 1)
+  assert.equal(paths.length, 2)
+  assert.equal(paths.filter(path => path.includes(' Z')).length, 1, 'only the full ellipse is closed')
+  assert.ok((svg.match(/L/g) ?? []).length > 30, 'ellipse curves are approximated with sufficiently smooth segments')
+  assert.ok(result.origin_mm[0] < -100)
+  assert.ok(result.origin_mm[1] > 50)
+})
+
 test('DXF underlay import rejects documents without supported model-space geometry', () => {
   assert.throws(() => importDxfUnderlay(dxf(4, ['0', 'TEXT', '10', '0', '20', '0', '1', 'note'].join('\n'))), /ไม่พบ LINE/)
 })
