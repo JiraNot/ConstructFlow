@@ -304,6 +304,20 @@ test('Project Browser selection and type edits preserve one object identity acro
   await expect(sameRow.locator('.cf-browser-object')).toContainText('C2')
 })
 
+test('placement type picker applies the chosen catalog type to the created object', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+
+  const placementType = page.getByLabel('ชนิดเสา')
+  await expect(placementType).toBeVisible()
+  await placementType.selectOption('C2')
+  await clickCanvasFraction(page, 0.61, 0.72)
+
+  const properties = page.getByTestId('properties-selection')
+  await expect(properties).toHaveAttribute('data-object-type', 'structure.column')
+  await expect(properties).toContainText('Column C2')
+})
+
 test('plan, framing, and roof plan share pan and zoom navigation', async ({ page }) => {
   await page.goto('/')
   const planCanvas = page.locator('.cf-plan-canvas')
