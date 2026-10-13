@@ -54,6 +54,7 @@ import { PlanCanvasDragDimensions, type DragDimensionField, type DragDimensionMo
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
 import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
+import { commitPlanCanvasDragPreview } from './commitPlanCanvasDragPreview.mjs'
 import { findPlanHitObject } from './planHitTesting.mjs'
 import { resolvePlanCanvasBoxSelection } from './resolvePlanCanvasBoxSelection.mjs'
 import { drawPlanCanvasSelectionHandles } from './drawPlanCanvasSelectionHandles.js'
@@ -1324,14 +1325,17 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         const hasManualDimensions = manualDragPointRef.current !== null
         const rawWorld = manualDragPointRef.current ?? pointerWorld
         const movedPixels = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
-        if (movedPixels >= 3 || hasManualDimensions) {
-          const commands = buildDragCommands(draggingObject, rawWorld, e.ctrlKey || hasManualDimensions)
-          if (commands.length) {
-            const validation = onPreviewManipulation(commands)
-            if (validation.valid) onCommitManipulation(commands)
-            else onManipulationRejected?.(validation.errors)
-          }
-        }
+        commitPlanCanvasDragPreview({
+          drag: draggingObject,
+          rawWorld,
+          ctrlKey: e.ctrlKey,
+          hasManualDimensions,
+          movedPixels,
+          buildCommands: buildDragCommands,
+          preview: onPreviewManipulation,
+          commit: onCommitManipulation,
+          onRejected: onManipulationRejected,
+        })
         manualDragPointRef.current = null
         setDraggingObject(null); setDragPreviewPoint(null); setManipulationPreview(null)
         setResizeDimensionWidth(''); setResizeDimensionHeight(''); setResizeDimensionLength('')
