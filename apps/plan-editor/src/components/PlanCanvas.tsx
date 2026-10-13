@@ -38,7 +38,7 @@ import {
   worldToScreen,
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
-import { constrainPointToReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, SnapSpatialIndex, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware } from '@constructflow/snapping-engine'
+import { SnapMode, SnapSpatialIndex, snapPoint, snapToWallHost, type LinearReference, type SnapResult, type WallHostSnapResult, snapOpeningOffsetBimAware } from '@constructflow/snapping-engine'
 import { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { CommandRequest } from '@constructflow/command-schema'
@@ -68,6 +68,7 @@ import { handlePlanCanvasSelectionPointerDown } from './handlePlanCanvasSelectio
 import type { PlanCanvasDraggingObject } from './planCanvasInteractionTypes.js'
 import { PlanCanvasInteractionHints } from './PlanCanvasInteractionHints.js'
 import { PlanCanvasPlacementDimensions } from './PlanCanvasPlacementDimensions.js'
+import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParallelOffset, constrainPlanCanvasLineSnap, resolvePlanCanvasReferencePath } from './planCanvasPlacementConstraints.mjs'
 
 interface PlanCanvasProps {
   project: ProjectDocument
@@ -272,31 +273,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     previousDisplayUnit.current = displayUnit
   }, [displayUnit])
 
-  const applyPlacementDimensions = (point: [number, number], refs: { refX?: number; refY?: number }, rawPoint: [number, number] = point): [number, number] => {
-    const result: [number, number] = [...point]
-    for (const axis of ['x', 'y'] as const) {
-      const valueText = axis === 'x' ? dimensionInputX : dimensionInputY
-      const anchor = axis === 'x' ? dimensionAnchorX ?? refs.refX : dimensionAnchorY ?? refs.refY
-      const value = parseLengthMm(valueText, displayUnit)
-      if (!valueText.trim() || anchor === undefined || anchor === null || value === null || value < 0) continue
-      const coordinate = axis === 'x' ? rawPoint[0] : rawPoint[1]
-      const sign = coordinate < anchor ? -1 : 1
-      if (axis === 'x') result[0] = Math.round(anchor + sign * value)
-      else result[1] = Math.round(anchor + sign * value)
-    }
-    return result
-  }
+  const applyPlacementDimensions = (point: [number, number], refs: { refX?: number; refY?: number }, rawPoint: [number, number] = point): [number, number] =>
+    applyPlanCanvasPlacementDimensions(point, refs, rawPoint, { dimensionInputX, dimensionInputY, dimensionAnchorX, dimensionAnchorY, displayUnit })
 
   const constrainGridCopyToParallelOffset = (point: [number, number], source: Parameters<typeof gridLineEndpoints>[0]): [number, number] => {
-    const [start, end] = gridLineEndpoints(source)
-    const dx = end[0] - start[0], dy = end[1] - start[1]
-    const length = Math.hypot(dx, dy)
-    if (length < 1) return point
-    // Shift constrains the copy displacement to the normal of the source line,
-    // so the new grid remains parallel and only its spacing changes.
-    const nx = -dy / length, ny = dx / length
-    const offset = (point[0] - start[0]) * nx + (point[1] - start[1]) * ny
-    return [Math.round(start[0] + nx * offset), Math.round(start[1] + ny * offset)]
+    return constrainPlanCanvasGridCopyToParallelOffset(point, source, gridLineEndpoints)
   }
 
   const clearDimensionOverrides = () => {
@@ -349,57 +330,14 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   }, [dimensionInputX, dimensionInputY, dimensionAnchorX, dimensionAnchorY, dimensionReferenceMode, activeTool])
 
   const resolveReferencePath = useCallback((start: [number, number], end: [number, number], widthMm: number): [[number, number], [number, number]] => {
-    if (placementReference === 'centerline') return [start, end]
-    const dx = end[0] - start[0], dy = end[1] - start[1]
-    const length = Math.hypot(dx, dy)
-    if (length < 1) return [start, end]
-    const side = placementReference === 'left_face' ? -1 : 1
-    const offsetX = (-dy / length) * widthMm / 2 * side
-    const offsetY = (dx / length) * widthMm / 2 * side
-    return [[start[0] + offsetX, start[1] + offsetY], [end[0] + offsetX, end[1] + offsetY]]
+    return resolvePlanCanvasReferencePath(start, end, widthMm, placementReference)
   }, [placementReference])
 
   const constrainLineSnap = useCallback((snap: SnapResult, pointerPoint: [number, number], start: [number, number], lockAxis: boolean, reference?: LinearReference): SnapResult => {
-    let constrainedSnap = snap
-    const inferredMode = !lockAxis && lineConstraintMode === 'auto' && reference
-      ? inferLinearConstraint(pointerPoint, start, reference, 12 / Math.max(viewport.zoom, 0.0001))
-      : null
-    const appliedMode = lineConstraintMode === 'auto' ? inferredMode : lineConstraintMode === 'none' ? null : lineConstraintMode
-    if (!lockAxis && appliedMode && reference) {
-      constrainedSnap = constrainPointToReference(snap.point_mm, start, reference, appliedMode)
-    }
-    let dx = constrainedSnap.point_mm[0] - start[0], dy = constrainedSnap.point_mm[1] - start[1]
-    if (lockAxis) {
-      if (Math.abs(dx) >= Math.abs(dy)) dy = 0
-      else dx = 0
-    }
-    const targetLengthMm = parseLengthMm(drawLengthMeters, displayUnit) ?? Number.NaN
-    const targetAngle = Number(drawAngleDegrees)
-    if (drawAngleDegrees.trim() && Number.isFinite(targetAngle)) {
-      const cursorLength = Math.hypot(dx, dy)
-      const length = Number.isFinite(targetLengthMm) && targetLengthMm > 0 ? targetLengthMm : cursorLength
-      if (length > 0) {
-        const radians = targetAngle * Math.PI / 180
-        dx = Math.cos(radians) * length
-        dy = -Math.sin(radians) * length
-      }
-    } else if (Number.isFinite(targetLengthMm) && targetLengthMm > 0) {
-      const length = Math.hypot(dx, dy)
-      if (length > 0) {
-        dx = dx / length * targetLengthMm
-        dy = dy / length * targetLengthMm
-      }
-    }
-    const point_mm: [number, number] = [Math.round(start[0] + dx), Math.round(start[1] + dy)]
-    const changed = Math.hypot(point_mm[0] - snap.point_mm[0], point_mm[1] - snap.point_mm[1]) >= 1
-    const constraintApplied = !lockAxis && !!appliedMode && !!reference
-    return {
-      ...snap,
-      point_mm,
-      kind: constraintApplied ? constrainedSnap.kind : snap.kind,
-      target_id: constraintApplied ? reference?.target_id : changed ? undefined : snap.target_id,
-      description: `${constraintApplied ? constrainedSnap.description : snap.description}${!lockAxis && lineConstraintMode !== 'none' && !reference ? ' · ไม่พบแนวอ้างอิงใกล้จุดเริ่ม' : ''}${lineConstraintMode === 'auto' && reference && !inferredMode && !lockAxis ? ' · Auto: เล็งใกล้แนวขนาน/ตั้งฉากเพื่อจัดแนว' : ''}${lockAxis ? ' · Ortho' : ''}${Number.isFinite(targetLengthMm) && targetLengthMm > 0 ? ` · ${formatLengthMm(targetLengthMm, displayUnit)} ${displayUnit}` : ''}`,
-    }
+    return constrainPlanCanvasLineSnap(snap, pointerPoint, start, lockAxis, reference, {
+      lineConstraintMode, viewportZoom: viewport.zoom, drawLength: drawLengthMeters,
+      drawAngle: drawAngleDegrees, displayUnit,
+    })
   }, [drawLengthMeters, drawAngleDegrees, lineConstraintMode, viewport.zoom, displayUnit])
 
   const [hoveredId, setHoveredId] = useState<string | null>(null)
