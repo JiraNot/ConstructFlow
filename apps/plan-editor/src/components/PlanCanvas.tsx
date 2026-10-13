@@ -23,7 +23,6 @@ import {
   DisplayLengthUnit,
 } from '@constructflow/project-model'
 import { projectPointToWallOffsetMm, stairFromRun, type StairPlacementOptions } from '@constructflow/architecture-engine'
-import { movePipeRouteEndpoint, movePipeRouteNode } from '@constructflow/drainage-engine'
 import { polygonInteriorPoint } from '@constructflow/geometry-kernel'
 import { getEditableRoofRidge } from '@constructflow/roof-engine'
 import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
@@ -39,7 +38,7 @@ import {
   worldToScreen,
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
-import { constrainPointToReference, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, SnapSpatialIndex, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware, resizeOpeningFromEdge } from '@constructflow/snapping-engine'
+import { constrainPointToReference, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, SnapSpatialIndex, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware } from '@constructflow/snapping-engine'
 import { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { CommandRequest } from '@constructflow/command-schema'
@@ -111,25 +110,11 @@ interface PlanCanvasProps {
   onCommitSurfaceVoid: (hostId: string, boundary_mm: [number, number][]) => void
   onCommitGrid: (tag: string, start_mm: [number, number], end_mm: [number, number], sequenceStyle?: 'auto' | 'alpha' | 'numeric') => void
   onCommitGridSystem: (origin_mm: [number, number], xIntervals_mm: number[], yIntervals_mm: number[], xFirstTag: string, yFirstTag: string) => void
-  onModifyGrid?: (id: string, changes: { start_point_mm?: [number, number]; end_point_mm?: [number, number] }) => void
   onCopyGrid?: (sourceId: string, start: [number, number], end: [number, number]) => void
   onActivateTool?: (tool: ToolType) => void
   onCommitStair?: (stair: StairModuleData) => boolean
-  onMoveColumn: (id: string, newLocation_mm: [number, number]) => void
-  onMoveWall: (id: string, delta_mm: [number, number]) => void
-  onMoveOpening: (id: string, offset_along_wall_mm: number) => void
-  onUpdateWallEndpoints?: (id: string, start: [number, number], end: [number, number]) => void
-  onUpdateBeamEndpoints?: (id: string, start: [number, number], end: [number, number], startColumnId?: string | null, endColumnId?: string | null) => void
-  onResizeOpening?: (id: string, width_mm: number, offset_along_wall_mm: number) => void
-  onUpdateBoundaryVertex?: (id: string, boundary_mm: [number, number][]) => void
-  onUpdateRoomSeparator?: (id: string, start: [number, number], end: [number, number]) => void
-  onUpdatePipeRoute?: (id: string, changes: Partial<PipeRouteModuleData>) => void
-  onUpdateMoulding?: (id: string, changes: Partial<MouldingModuleData>) => void
-  onUpdateCabinet?: (id: string, changes: Partial<CabinetModuleData>) => void
-  onResizeColumn?: (id: string, section_mm: [number, number]) => void
-  onResizeFoundation?: (id: string, size_mm: [number, number]) => void
-  onPreviewManipulation?: (commands: CommandRequest[]) => DirectManipulationPreviewResult
-  onCommitManipulation?: (commands: CommandRequest[]) => { status: string; errors?: string[] }
+  onPreviewManipulation: (commands: CommandRequest[]) => DirectManipulationPreviewResult
+  onCommitManipulation: (commands: CommandRequest[]) => { status: string; errors?: string[] }
   externalManipulationPreview?: { project: ProjectDocument; ids: string[]; valid: boolean } | null
   onManipulationRejected?: (errors: string[]) => void
   onFlipDoorHanding?: (doorId: string) => void
@@ -145,7 +130,7 @@ interface PlanCanvasProps {
 
 import {
   getSnappedWallId, getWallVerticalReference, getPlanObjectBounds,
-  cabinetFootprintPoints, cabinetRotationFromGrip,
+  cabinetFootprintPoints,
   gridLineEndpoints, findTemporaryDimensionRefs, openingDimensionRefs, openingDimensionPoint,
   drawTemporaryDimensions, drawTapeMeasure,
   type WallVerticalReference,
@@ -197,23 +182,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onCommitSurfaceVoid,
   onCommitGrid,
   onCommitGridSystem,
-  onModifyGrid,
   onCopyGrid,
   onActivateTool,
   onCommitStair,
-  onMoveColumn,
-  onMoveWall,
-  onMoveOpening,
-  onUpdateWallEndpoints,
-  onUpdateBeamEndpoints,
-  onResizeOpening,
-  onUpdateBoundaryVertex,
-  onUpdateRoomSeparator,
-  onUpdatePipeRoute,
-  onUpdateMoulding,
-  onUpdateCabinet,
-  onResizeColumn,
-  onResizeFoundation,
   onPreviewManipulation,
   onCommitManipulation,
   externalManipulationPreview = null,
@@ -1319,7 +1290,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
     if (draggingObject) {
       const rect = canvasRef.current?.getBoundingClientRect()
-      if (rect && onPreviewManipulation && onCommitManipulation) {
+      if (rect) {
         const screenX = e.clientX - rect.left, screenY = e.clientY - rect.top
         const pointerWorld = screenToWorld([screenX, screenY], viewport)
         const hasManualDimensions = manualDragPointRef.current !== null
@@ -1336,134 +1307,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           commit: onCommitManipulation,
           onRejected: onManipulationRejected,
         })
-        manualDragPointRef.current = null
-        setDraggingObject(null); setDragPreviewPoint(null); setManipulationPreview(null)
-        setResizeDimensionWidth(''); setResizeDimensionHeight(''); setResizeDimensionLength('')
-        try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
-        return
-      }
-      if (rect) {
-        const screenX = e.clientX - rect.left
-        const screenY = e.clientY - rect.top
-        const rawWorld = screenToWorld([screenX, screenY], viewport)
-        const movedPixels = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
-        if (movedPixels >= 3) {
-          if ((draggingObject.kind === 'column-corner' || draggingObject.kind === 'foundation-corner') && draggingObject.centerMm) {
-            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
-            const size: [number, number] = [Math.max(100, Math.round(2 * Math.abs(point[0] - draggingObject.centerMm[0]))), Math.max(100, Math.round(2 * Math.abs(point[1] - draggingObject.centerMm[1])))]
-            if (draggingObject.kind === 'column-corner') onResizeColumn?.(draggingObject.id, size)
-            else onResizeFoundation?.(draggingObject.id, size)
-          } else if (draggingObject.kind === 'polygon-vertex' && draggingObject.boundaryPointsMm && draggingObject.endpointIndex !== undefined) {
-            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
-            const boundary: [number, number][] = structuredClone(draggingObject.boundaryPointsMm)
-            boundary[draggingObject.endpointIndex] = point
-            onUpdateBoundaryVertex?.(draggingObject.id, boundary)
-          } else if (draggingObject.kind === 'wall-endpoint' && draggingObject.startPointMm && draggingObject.endPointMm && draggingObject.endpointIndex !== undefined) {
-            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
-            const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
-            if (draggingObject.endpointIndex === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
-            onUpdateWallEndpoints?.(draggingObject.id, start, end)
-          } else if (draggingObject.kind === 'beam-endpoint' && draggingObject.startPointMm && draggingObject.endPointMm && draggingObject.endpointIndex !== undefined) {
-            const snap = e.ctrlKey ? { point_mm: rawWorld, target_id: undefined } : snapPlanPoint(rawWorld, 16, draggingObject.id)
-            let point: [number, number] = snap.point_mm
-            const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
-            const targetColumn = snap.target_id ? planProject.objects[snap.target_id] : undefined
-            const columnId = targetColumn && isColumnObject(targetColumn) ? targetColumn.id : null
-            if (targetColumn && isColumnObject(targetColumn)) point = [targetColumn.module_data.location_mm[0], targetColumn.module_data.location_mm[1]]
-            if (draggingObject.endpointIndex === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
-            const beam = planProject.objects[draggingObject.id]
-            const oldStartColumn = beam && isBeamObject(beam) ? beam.module_data.start_column_id ?? null : null
-            const oldEndColumn = beam && isBeamObject(beam) ? beam.module_data.end_column_id ?? null : null
-            onUpdateBeamEndpoints?.(draggingObject.id, start, end, draggingObject.endpointIndex === 0 ? columnId : oldStartColumn, draggingObject.endpointIndex === 1 ? columnId : oldEndColumn)
-          } else if (draggingObject.kind === 'grid-endpoint' && draggingObject.startPointMm && draggingObject.endPointMm && draggingObject.endpointIndex !== undefined) {
-            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
-            const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
-            if (draggingObject.endpointIndex === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
-            onModifyGrid?.(draggingObject.id, { start_point_mm: start, end_point_mm: end })
-          } else if (draggingObject.kind === 'separator-endpoint' && draggingObject.startPointMm && draggingObject.endPointMm && draggingObject.endpointIndex !== undefined) {
-            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
-            const start: [number, number] = [...draggingObject.startPointMm], end: [number, number] = [...draggingObject.endPointMm]
-            if (draggingObject.endpointIndex === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
-            onUpdateRoomSeparator?.(draggingObject.id, start, end)
-          } else if (draggingObject.kind === 'pipe-endpoint' && draggingObject.pipeRouteData && draggingObject.endpointIndex !== undefined) {
-            const route = draggingObject.pipeRouteData
-            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
-            const adjacentIndex = draggingObject.endpointIndex === 0 ? 1 : route.nodes_mm.length - 2
-            const adjacent = route.nodes_mm[adjacentIndex]
-            if (Math.hypot(point[0] - adjacent[0], point[1] - adjacent[1]) >= 1) {
-              const endpoint = draggingObject.endpointIndex === 0 ? 'start' : 'end'
-              onUpdatePipeRoute?.(draggingObject.id, movePipeRouteEndpoint(route, endpoint, point))
-            }
-          } else if (draggingObject.kind === 'pipe-node' && draggingObject.pipeRouteData && draggingObject.endpointIndex !== undefined) {
-            const route = draggingObject.pipeRouteData
-            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
-            try { onUpdatePipeRoute?.(draggingObject.id, movePipeRouteNode(route, draggingObject.endpointIndex, point)) }
-            catch (error) { onManipulationRejected?.([error instanceof Error ? error.message : String(error)]) }
-          } else if (draggingObject.kind === 'moulding-endpoint' && draggingObject.mouldingData && draggingObject.endpointIndex !== undefined) {
-            const moulding = draggingObject.mouldingData
-            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
-            const path_mm = structuredClone(moulding.path_mm) as [number, number, number][]
-            const current = path_mm[draggingObject.endpointIndex]
-            const adjacentIndex = draggingObject.endpointIndex === 0 ? 1 : path_mm.length - 2
-            const adjacent = path_mm[adjacentIndex]
-            if (Math.hypot(point[0] - adjacent[0], point[1] - adjacent[1], current[2] - adjacent[2]) >= 1) {
-              path_mm[draggingObject.endpointIndex] = [point[0], point[1], current[2]]
-              onUpdateMoulding?.(draggingObject.id, { path_mm })
-            }
-          } else if (draggingObject.kind === 'cabinet-rotation' && draggingObject.cabinetData) {
-            const point = e.ctrlKey ? rawWorld : snapPlanPoint(rawWorld, 16, draggingObject.id).point_mm
-            const rotation_deg = cabinetRotationFromGrip(draggingObject.cabinetData, point, viewport.zoom)
-            if (rotation_deg !== null) onUpdateCabinet?.(draggingObject.id, { rotation_deg })
-          } else if (draggingObject.kind === 'opening-edge' && draggingObject.endpointIndex !== undefined && draggingObject.hostStartMm && draggingObject.hostEndMm && draggingObject.openingCenterOffsetMm !== undefined && draggingObject.openingWidthMm !== undefined) {
-            const offset = projectPointToWallOffsetMm(rawWorld, draggingObject.hostStartMm, draggingObject.hostEndMm, 1)
-            if (offset !== undefined) {
-              const hostLength = Math.hypot(draggingObject.hostEndMm[0] - draggingObject.hostStartMm[0], draggingObject.hostEndMm[1] - draggingObject.hostStartMm[1])
-              const resized = resizeOpeningFromEdge(offset, draggingObject.endpointIndex === 0 ? 0 : 1,
-                draggingObject.openingCenterOffsetMm, draggingObject.openingWidthMm, hostLength, { snap: !e.ctrlKey })
-              if (resized) onResizeOpening?.(draggingObject.id, resized.width_mm, resized.offset_along_wall_mm)
-            }
-          } else if (draggingObject.kind === 'column') {
-            const snap = e.ctrlKey
-              ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
-              : snapPlanPoint(rawWorld, 16, draggingObject.id)
-            onMoveColumn(draggingObject.id, snap.point_mm)
-          } else if (draggingObject.kind === 'wall') {
-            const delta: [number, number] = [
-              rawWorld[0] - draggingObject.startWorldMm[0],
-              rawWorld[1] - draggingObject.startWorldMm[1],
-            ]
-            if (Math.hypot(...delta) >= 1) onMoveWall(draggingObject.id, delta)
-          } else if (draggingObject.kind === 'grid' && draggingObject.gridStartMm && draggingObject.gridEndMm) {
-            const delta: [number, number] = [rawWorld[0] - draggingObject.startWorldMm[0], rawWorld[1] - draggingObject.startWorldMm[1]]
-            if (Math.hypot(...delta) >= 1) onModifyGrid?.(draggingObject.id, {
-              start_point_mm: [draggingObject.gridStartMm[0] + delta[0], draggingObject.gridStartMm[1] + delta[1]],
-              end_point_mm: [draggingObject.gridEndMm[0] + delta[0], draggingObject.gridEndMm[1] + delta[1]],
-            })
-          } else if ((draggingObject.kind === 'opening' || draggingObject.kind === 'opening-center') && draggingObject.hostStartMm && draggingObject.hostEndMm && draggingObject.openingWidthMm) {
-            const hostLength = Math.hypot(draggingObject.hostEndMm[0] - draggingObject.hostStartMm[0], draggingObject.hostEndMm[1] - draggingObject.hostStartMm[1])
-            const rawOffset = projectPointToWallOffsetMm(rawWorld, draggingObject.hostStartMm, draggingObject.hostEndMm, draggingObject.openingWidthMm)
-            if (rawOffset !== undefined) {
-              let startColW: number | undefined
-              let endColW: number | undefined
-              for (const col of Object.values(planProject.objects)) {
-                if (!isColumnObject(col)) continue
-                const [colX, colY] = col.module_data.location_mm
-                const colDim = Math.max(...col.module_data.section_mm)
-                if (Math.hypot(colX - draggingObject.hostStartMm[0], colY - draggingObject.hostStartMm[1]) <= colDim) startColW = colDim
-                if (Math.hypot(colX - draggingObject.hostEndMm[0], colY - draggingObject.hostEndMm[1]) <= colDim) endColW = colDim
-              }
-              const snapped = e.ctrlKey
-                ? { offset_along_wall_mm: Math.round(rawOffset) }
-                : snapOpeningOffsetBimAware(rawOffset, hostLength, draggingObject.openingWidthMm, {
-                    startColumnWidth_mm: startColW,
-                    endColumnWidth_mm: endColW,
-                    minClearance_mm: 100,
-                  })
-              onMoveOpening(draggingObject.id, snapped.offset_along_wall_mm)
-            }
-          }
-        }
-      }
+       }
       manualDragPointRef.current = null
       setDraggingObject(null); setDragPreviewPoint(null)
       setResizeDimensionWidth(''); setResizeDimensionHeight(''); setResizeDimensionLength('')

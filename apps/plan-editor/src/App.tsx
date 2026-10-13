@@ -1062,118 +1062,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     return false
   }
 
-  const handleMoveWall = (objectId: string, delta_mm: [number, number]): boolean => {
-    const res = CommandBus.execute(project, 'MoveWall', { object_id: objectId, delta_mm })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-      return true
-    }
-    return false
-  }
-
-  const handleUpdateWallEndpoints = (objectId: string, start_point_mm: [number, number], end_point_mm: [number, number]) => {
-    const res = CommandBus.execute(project, 'UpdateWallEndpoints', { object_id: objectId, start_point_mm, end_point_mm })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
-    } else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
-  }
-
-  const handleUpdateBeamEndpoints = (objectId: string, start_point_mm: [number, number], end_point_mm: [number, number], start_column_id?: string | null, end_column_id?: string | null) => {
-    if (start_column_id && isColumnObject(project.objects[start_column_id])) start_point_mm = [project.objects[start_column_id].module_data.location_mm[0], project.objects[start_column_id].module_data.location_mm[1]]
-    if (end_column_id && isColumnObject(project.objects[end_column_id])) end_point_mm = [project.objects[end_column_id].module_data.location_mm[0], project.objects[end_column_id].module_data.location_mm[1]]
-    const res = CommandBus.execute(project, 'UpdateBeamEndpoints', { object_id: objectId, start_point_mm, end_point_mm, start_column_id, end_column_id })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
-    } else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
-  }
-
-  const handleResizeOpening = (objectId: string, width_mm: number, offset_along_wall_mm: number) => {
-    const opening = project.objects[objectId]
-    if (!opening || (!isDoorObject(opening) && !isWindowObject(opening))) return
-    const data = opening.module_data
-    const name = isDoorObject(opening) ? 'UpdateDoorDimensions' : 'UpdateWindowDimensions'
-    const input = { object_id: objectId, width_mm, offset_along_wall_mm, height_mm: data.height_mm,
-      ...(isDoorObject(opening) ? { sill_height_mm: Number(data.sill_height_mm ?? 0) } : { sill_height_mm: Number(data.sill_height_mm ?? 900) }),
-      ...(data.vertical_constraint === 'head_level' ? { head_level_id: data.head_level_id, head_offset_mm: data.head_offset_mm, vertical_constraint: 'head_level' } : { vertical_constraint: 'fixed_height' }),
-    }
-    const res = CommandBus.execute(project, name, input)
-    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
-    else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
-  }
-
   const handleUpdateOpeningInstanceParameters = (objectId: string, parameters: Record<string, unknown | null>) => {
     const res = CommandBus.execute(project, 'UpdateOpeningInstanceParameters', { object_id: objectId, parameters })
     if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
     else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
-  }
-
-  const handleUpdateBoundaryVertex = (objectId: string, boundary_mm: [number, number][]) => {
-    const object = project.objects[objectId]
-    if (!object) return
-    const data = object.module_data as Record<string, unknown>
-    const command = object.object_type === 'structure.slab' ? 'UpdateSlab'
-      : object.object_type === 'architecture.floor' ? 'UpdateArchitecturalFloor'
-      : object.object_type === 'architecture.ceiling' ? 'UpdateCeiling'
-        : object.object_type === 'roof.system' ? 'UpdateRoof' : null
-    if (!command) return
-    const input = object.object_type === 'structure.slab' || object.object_type === 'roof.system'
-      ? { ...data, id: objectId, boundary_mm }
-      : { ...data, id: objectId, boundary_mm, follows_room_boundary: false }
-    const res = CommandBus.execute(project, command, input)
-    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
-    else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
-  }
-
-  const handleUpdateRoomSeparator = (objectId: string, start_point_mm: [number, number], end_point_mm: [number, number]) => {
-    const object = project.objects[objectId]
-    if (!object || object.object_type !== 'architecture.room_separator') return
-    const res = CommandBus.execute(project, 'UpdateRoomSeparator', { ...object.module_data, id: objectId, start_point_mm, end_point_mm })
-    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
-    else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
-  }
-
-  const handleResizeColumn = (objectId: string, section_mm: [number, number]) => {
-    const res = CommandBus.execute(project, 'UpdateColumnDimensions', { object_id: objectId, section_mm })
-    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
-    else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
-  }
-
-  const handleResizeFoundation = (objectId: string, size_mm: [number, number]) => {
-    const foundation = project.objects[objectId]
-    if (!foundation || !isFoundationObject(foundation)) return
-    const res = CommandBus.execute(project, 'UpdateFoundationDimensions', { object_id: objectId, size_mm: [size_mm[0], size_mm[1], foundation.module_data.size_mm[2]] })
-    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
-    else if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
-  }
-
-  const handleMoveFoundation = (objectId: string, center_mm: [number, number]): boolean => {
-    const foundation = project.objects[objectId]
-    if (!foundation || foundation.object_type !== 'structure.foundation') return false
-    const data = foundation.module_data as Record<string, unknown>
-    const supportedColumnId = typeof data.supported_column_id === 'string'
-      ? data.supported_column_id
-      : foundation.host_refs.find(hostId => project.objects[hostId]?.object_type === 'structure.column')
-    const column = supportedColumnId ? project.objects[supportedColumnId] : undefined
-    if (!column || column.object_type !== 'structure.column') return false
-    const columnData = column.module_data as Record<string, unknown>
-    const location = columnData.location_mm as number[]
-    const currentCenter = data.center_mm as number[]
-    const deltaX = center_mm[0] - currentCenter[0]
-    const deltaY = center_mm[1] - currentCenter[1]
-    return handleMoveColumn(column.id, [location[0] + deltaX, location[1] + deltaY])
-  }
-
-  const handleMoveOpening = (objectId: string, offset_along_wall_mm: number): boolean => {
-    const res = CommandBus.execute(project, 'MoveOpening', { object_id: objectId, offset_along_wall_mm })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-      return true
-    }
-    return false
   }
 
   // Rename Column Mark handler
@@ -2530,23 +2422,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               onCommitSurfaceVoid={handleCommitSurfaceVoid}
               onCommitGrid={handleCommitGrid}
               onCommitGridSystem={handleCommitGridSystem}
-              onModifyGrid={handleModifyGrid}
               onCopyGrid={handleCopyGrid}
               onActivateTool={setActiveTool}
               onCommitStair={handleCommitStair}
-              onMoveColumn={handleMoveColumn}
-              onMoveWall={handleMoveWall}
-              onMoveOpening={handleMoveOpening}
-              onUpdateWallEndpoints={handleUpdateWallEndpoints}
-              onUpdateBeamEndpoints={handleUpdateBeamEndpoints}
-              onResizeOpening={handleResizeOpening}
-              onUpdateBoundaryVertex={handleUpdateBoundaryVertex}
-              onUpdateRoomSeparator={handleUpdateRoomSeparator}
-              onUpdatePipeRoute={(id, changes) => handleUpdateDomainObject(id, 'EditPipeRoute', changes)}
-              onUpdateCabinet={(id, changes) => handleUpdateDomainObject(id, 'UpdateCabinetRun', changes)}
-              onUpdateMoulding={(id, changes) => handleUpdateDomainObject(id, 'UpdateMouldingRun', changes)}
-              onResizeColumn={handleResizeColumn}
-              onResizeFoundation={handleResizeFoundation}
               onPreviewManipulation={previewDirectManipulation}
               onCommitManipulation={commitDirectManipulation}
               externalManipulationPreview={alignmentPreview ? { project: alignmentPreview.project, ids: alignmentPreview.ids, valid: true } : null}
