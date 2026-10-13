@@ -39,7 +39,7 @@ import { SnapMode, SnapSpatialIndex, snapPoint, snapToWallHost, type LinearRefer
 import { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { CommandRequest } from '@constructflow/command-schema'
-import { optimisticManipulationProject, type DirectManipulationPreviewResult, type PlanDragGesture } from '../directManipulation.mjs'
+import type { DirectManipulationPreviewResult, PlanDragGesture } from '../directManipulation.mjs'
 import { isPolygonInteraction, isTwoPointInteraction, usesPlacementDimensions } from '../app/toolInteractionRegistry.mjs'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { usePlanCanvasPointerCancel } from './usePlanCanvasPointerCancel.js'
@@ -68,6 +68,7 @@ import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParall
 import { resolvePlanCanvasPickCandidates } from './resolvePlanCanvasPickCandidates.mjs'
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
 import { handlePlanCanvasPlacementPointerDown } from './handlePlanCanvasPlacementPointerDown.js'
+import { usePlanCanvasManipulationPreview } from './usePlanCanvasManipulationPreview.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -355,7 +356,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const setResizeDimensionHeight = dragDimensionInput.setHeight
   const setResizeDimensionLength = dragDimensionInput.setLength
   const manualDragPointRef = dragDimensionInput.manualPointRef
-  const lastPreviewValidationRef = useRef<{ at: number; valid: boolean }>({ at: 0, valid: true })
   const panStartRef = useRef<[number, number]>([0, 0])
   const selectionStartRef = useRef<[number, number] | null>(null)
   const pointerPositionsRef = useRef(new Map<number, [number, number]>())
@@ -460,6 +460,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
   const buildDragCommands = (drag: PlanDragGesture, rawWorld: [number, number], ctrlKey: boolean): CommandRequest[] => buildPlanCanvasDragCommands({ planProject, drag, rawWorld, ctrlKey, viewport, snapPlanPoint })
 
+  const { previewDragAt, lastPreviewValidationRef } = usePlanCanvasManipulationPreview({
+    planProject,
+    buildCommands: buildDragCommands,
+    syncDimensions: dragDimensionInput.syncFromPreview,
+    manualDragPointRef,
+    setDragPreviewPoint,
+    setManipulationPreview,
+    onPreviewManipulation,
+  })
+
   const redraw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -553,37 +563,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
   const redrawRef = useRef(redraw)
   redrawRef.current = redraw
-
-  const previewDragAt = (drag: PlanDragGesture, point: [number, number], ctrlKey: boolean, manual = false) => {
-    manualDragPointRef.current = manual ? point : null
-    setDragPreviewPoint(point)
-    const commands = buildDragCommands(drag, point, ctrlKey)
-    if (!commands.length) { setManipulationPreview(null); return { commands, valid: false } }
-    const optimistic = optimisticManipulationProject(planProject, commands)
-    dragDimensionInput.syncFromPreview(drag, point, optimistic, manual)
-    const now = performance.now()
-    const validation = (manual || now - lastPreviewValidationRef.current.at >= 50) ? onPreviewManipulation?.(commands) : undefined
-    if (validation) lastPreviewValidationRef.current = { at: now, valid: validation.valid }
-    const idsFromCommands = commands.map(command => String(command.input.object_id ?? command.input.id ?? '')).filter(Boolean)
-    const relatedIds = new Set(idsFromCommands)
-    for (const command of commands) {
-      const id = String(command.input.object_id ?? command.input.id ?? '')
-      const object = planProject.objects[id]
-      if (command.name === 'MoveWall' || command.name === 'UpdateWallEndpoints') {
-        for (const child of Object.values(planProject.objects)) if ((isDoorObject(child) || isWindowObject(child)) && child.module_data.wall_id === id) relatedIds.add(child.id)
-      }
-      if (command.name === 'MoveColumn' && object) {
-        for (const child of Object.values(planProject.objects)) {
-          if ((isBeamObject(child) && (child.module_data.start_column_id === id || child.module_data.end_column_id === id)) ||
-              (isFoundationObject(child) && (child.module_data.supported_column_id === id || child.host_refs.includes(id)))) relatedIds.add(child.id)
-        }
-      }
-    }
-    const valid = validation?.valid ?? lastPreviewValidationRef.current.valid
-    const ids = validation?.affected_object_ids?.length ? validation.affected_object_ids : [...relatedIds]
-    setManipulationPreview({ project: valid && validation ? validation.project : optimistic, ids, valid })
-    return { commands, valid }
-  }
 
   const updateDragDimension = (axis: 'x' | 'y', value: string) => dragDimensionInput.updateMove(draggingObject, axis, value, previewDragAt)
   const updateResizeDimension = (axis: 'width' | 'height' | 'length', value: string) => dragDimensionInput.updateResize(draggingObject, axis, value, previewDragAt)
