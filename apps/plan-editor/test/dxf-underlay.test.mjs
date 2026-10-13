@@ -75,6 +75,40 @@ test('DXF underlay renders closed HATCH polyline boundaries including bulged arc
   assert.ok((svg.match(/L/g) ?? []).length > 10, 'bulged arc is approximated by enough line segments for a smooth underlay')
 })
 
+test('DXF underlay imports legacy 2D POLYLINE sequences from model space and inserted blocks', () => {
+  const directPolyline = [
+    '0', 'POLYLINE', '66', '1', '70', '1',
+    '0', 'VERTEX', '10', '0', '20', '0', '42', '1',
+    '0', 'VERTEX', '10', '100', '20', '0',
+    '0', 'VERTEX', '10', '100', '20', '100',
+    '0', 'SEQEND',
+  ]
+  const blockPolyline = [
+    '0', 'POLYLINE', '66', '1', '70', '1',
+    '0', 'VERTEX', '10', '0', '20', '0',
+    '0', 'VERTEX', '10', '50', '20', '0',
+    '0', 'VERTEX', '10', '50', '20', '50',
+    '0', 'SEQEND',
+  ]
+  const source = [
+    '0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC',
+    '0', 'SECTION', '2', 'BLOCKS', '0', 'BLOCK', '2', 'PANEL', '70', '0', '10', '0', '20', '0',
+    ...blockPolyline, '0', 'ENDBLK', '0', 'ENDSEC',
+    '0', 'SECTION', '2', 'ENTITIES', ...directPolyline,
+    '0', 'INSERT', '2', 'PANEL', '10', '200', '20', '200',
+    '0', 'ENDSEC', '0', 'EOF',
+  ].join('\n')
+
+  const result = importDxfUnderlay(source)
+  const svg = decodeURIComponent(result.dataUrl)
+
+  assert.equal(result.imported_entities, 2)
+  assert.equal(result.skipped_entities, 0)
+  assert.equal((svg.match(/<path /g) ?? []).length, 2)
+  assert.ok((svg.match(/L/g) ?? []).length > 20, 'legacy bulges are tessellated into smooth underlay paths')
+  assert.equal((svg.match(/ Z/g) ?? []).length, 2)
+})
+
 test('DXF underlay import rejects documents without supported model-space geometry', () => {
   assert.throws(() => importDxfUnderlay(dxf(4, ['0', 'TEXT', '10', '0', '20', '0', '1', 'note'].join('\n'))), /ไม่พบ LINE/)
 })

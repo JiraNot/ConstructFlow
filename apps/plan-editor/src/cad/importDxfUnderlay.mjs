@@ -46,7 +46,25 @@ function parseEntities(pairs) {
     } else if (entity) entity.pairs.push(pair)
   }
   if (entity) entities.push(entity)
-  return entities
+  return collectLegacyPolylines(entities)
+}
+
+function collectLegacyPolylines(entities) {
+  const collected = []
+  for (let index = 0; index < entities.length; index += 1) {
+    const entity = entities[index]
+    if (entity.type !== 'POLYLINE') {
+      if (entity.type !== 'VERTEX' && entity.type !== 'SEQEND') collected.push(entity)
+      continue
+    }
+    const vertices = []
+    let cursor = index + 1
+    while (cursor < entities.length && entities[cursor].type === 'VERTEX') vertices.push(entities[cursor++])
+    if (entities[cursor]?.type === 'SEQEND') cursor += 1
+    collected.push({ ...entity, vertices })
+    index = cursor - 1
+  }
+  return collected
 }
 
 function readBlocks(pairs) {
@@ -64,7 +82,7 @@ function readBlocks(pairs) {
       else if (pair.value === 'ENDBLK') {
         if (block) {
           const name = valueOf({ pairs: block.headerPairs }, 2) ?? valueOf({ pairs: block.headerPairs }, 3)
-          if (name) blocks.set(name.toUpperCase(), { base: [numberOf({ pairs: block.headerPairs }, 10) ?? 0, numberOf({ pairs: block.headerPairs }, 20) ?? 0], entities: block.entities })
+          if (name) blocks.set(name.toUpperCase(), { base: [numberOf({ pairs: block.headerPairs }, 10) ?? 0, numberOf({ pairs: block.headerPairs }, 20) ?? 0], entities: collectLegacyPolylines(block.entities) })
         }
         block = null
       } else if (block) entity = { type: pair.value, pairs: [] }
@@ -209,6 +227,17 @@ function shapesForEntity(entity) {
     const points = polylinePoints(entity)
     return points.length >= 2 ? [{ kind: 'polyline', points, closed: (Number(valueOf(entity, 70) ?? 0) & 1) === 1 }] : null
   }
+  if (entity.type === 'POLYLINE') {
+    const flags = Number(valueOf(entity, 70) ?? 0)
+    if ((flags & (8 | 16 | 64)) !== 0) return null
+    const vertices = (entity.vertices ?? []).map(vertex => {
+      const x = numberOf(vertex, 10), y = numberOf(vertex, 20), bulge = numberOf(vertex, 42) ?? 0
+      return Number.isFinite(x) && Number.isFinite(y) ? [x, y, bulge] : null
+    }).filter(Boolean)
+    if (vertices.length < 2) return null
+    const closed = (flags & 1) === 1
+    return [{ kind: 'polyline', points: approximateBulgedPolyline(vertices, closed), closed }]
+  }
   if (entity.type === 'HATCH') {
     const boundaries = hatchPolylineBoundaries(entity)
     return boundaries.length ? boundaries : null
@@ -284,7 +313,7 @@ export function importDxfUnderlay(source, { maxImageDimension = 4096 } = {}) {
   let unsupportedEntities = 0
   expandEntities(entities, blocks, IDENTITY, geometry, () => { unsupportedEntities += 1 })
 
-  if (!geometry.length) throw new Error('ไม่พบ LINE, LWPOLYLINE, HATCH, CIRCLE, ARC หรือ INSERT ที่ใช้เป็น underlay ได้')
+  if (!geometry.length) throw new Error('ไม่พบ LINE, POLYLINE, LWPOLYLINE, HATCH, CIRCLE, ARC หรือ INSERT ที่ใช้เป็น underlay ได้')
   const points = geometry.flatMap(shape => shape.points)
   const minX = Math.min(...points.map(point => point[0]))
   const maxX = Math.max(...points.map(point => point[0]))
