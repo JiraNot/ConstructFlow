@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type WheelEvent } from 'react'
 import type { SmartObject, CabinetModuleData } from '@constructflow/project-model'
 import { isGridObject } from '@constructflow/project-model'
 import { cabinetFootprintPoints } from './PlanCanvasGeometry.js'
-import type { ViewportState } from '../viewport/viewportTransform.js'
+import { zoomAtScreenPoint, type ViewportState } from '../viewport/viewportTransform.js'
 
 export const usePlanCanvasViewport = (
   containerRef: { current: HTMLDivElement | null },
@@ -10,6 +10,14 @@ export const usePlanCanvasViewport = (
 ) => {
   const hasInitialFitRef = useRef(false)
   const [viewport, setViewport] = useState<ViewportState>({ panX: 400, panY: 300, zoom: 0.08 })
+
+  const handleWheel = useCallback((event: WheelEvent<HTMLCanvasElement>) => {
+    event.preventDefault()
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const screenPoint: [number, number] = [event.clientX - rect.left, event.clientY - rect.top]
+    setViewport(current => zoomAtScreenPoint(current, screenPoint, event.deltaY < 0 ? 1.15 : 0.85))
+  }, [containerRef])
 
   const fitView = useCallback(() => {
     const container = containerRef.current
@@ -76,5 +84,5 @@ export const usePlanCanvasViewport = (
   }, [fitView, planVisibleObjects.length])
 
 
-  return { viewport, setViewport, fitView }
+  return { viewport, setViewport, fitView, handleWheel }
 }

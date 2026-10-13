@@ -46,6 +46,7 @@ import type { CommandRequest } from '@constructflow/command-schema'
 import { optimisticManipulationProject, type DirectManipulationPreviewResult, type PlanDragGesture } from '../directManipulation.mjs'
 import { isPolygonInteraction, isTwoPointInteraction, usesPlacementDimensions } from '../app/toolInteractionRegistry.mjs'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
+import { usePlanCanvasPointerCancel } from './usePlanCanvasPointerCancel.js'
 import { PlanCanvasDragDimensions, type DragDimensionField, type DragDimensionMode } from './PlanCanvasDragDimensions.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
@@ -234,7 +235,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   ) => onPreferencesChange(current => updatePlanCanvasPreference(current, key, value))
 
   // Viewport state: 0.08 zoom = 1000mm -> 80px on screen.
-  const { viewport, setViewport, fitView } = usePlanCanvasViewport(containerRef, planVisibleObjects)
+  const { viewport, setViewport, fitView, handleWheel } = usePlanCanvasViewport(containerRef, planVisibleObjects)
   const [gridStartPoint, setGridStartPoint] = useState<[number, number] | null>(null)
   const [stairStartPoint, setStairStartPoint] = useState<[number, number] | null>(null)
   const [stairOptions, setStairOptions] = useState<StairPlacementOptions>({ stair_type: 'u_shape', width_mm: 900, landing_depth_mm: 900, turn_direction: 'right', num_risers: 18, flight_gap_mm: 100, top_level_id: '' })
@@ -513,6 +514,22 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     cabinetData?: CabinetModuleData
   } | null>(null)
 
+  const clearPointerDrag = useCallback(() => {
+    manualDragPointRef.current = null
+    setDraggingObject(null)
+    setDragPreviewPoint(null)
+    setManipulationPreview(null)
+    setIsPanning(false)
+    setResizeDimensionWidth('')
+    setResizeDimensionHeight('')
+    setResizeDimensionLength('')
+  }, [setResizeDimensionWidth, setResizeDimensionHeight, setResizeDimensionLength])
+
+  const handlePointerCancel = usePlanCanvasPointerCancel({
+    longPressTimerRef, longPressStartRef, pointerPositionsRef, pinchRef, pinchActiveRef,
+    selectionStartRef, setSelectionBox, eraseActiveRef, erasedIdsRef, cancelDragGesture: clearPointerDrag,
+  })
+
   // 2-click beam placement state (start node -> end node)
   const [beamStartNode, setBeamStartNode] = useState<{ point_mm: [number, number]; columnId?: string; reference?: LinearReference } | null>(null)
 
@@ -540,9 +557,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const pendingState = hasPendingToolStep({ draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, gridCopySourceId, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError })
     const escapeAction = resolveEscapeAction(activeTool, pendingState, Boolean(selectedId || selectedIds.length))
     setObjectContextMenu(null)
-    manualDragPointRef.current = null
-    setDraggingObject(null); setDragPreviewPoint(null); setManipulationPreview(null)
-    setResizeDimensionWidth(''); setResizeDimensionHeight(''); setResizeDimensionLength('')
+    clearPointerDrag()
     setDimensionInputX(''); setDimensionInputY(''); setDimensionAnchorX(null); setDimensionAnchorY(null)
     setGridStartPoint(null); setGridCopySourceId(null); setBeamStartNode(null); setWallStartNode(null); setRoomSeparatorStart(null); setStairStartPoint(null); setStairError('')
     setSlabBoundary([]); setCalibrationP1(null); setCalibrationMousePoint(null); setTapeMeasure(null)
@@ -624,7 +639,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTool, selectedId, project.objects, onFlipDoorHanding, onActivateTool, draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, gridCopySourceId, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError])
+  }, [activeTool, selectedId, project.objects, onFlipDoorHanding, onActivateTool, clearPointerDrag, draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, gridCopySourceId, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError])
 
   const editableSelectionIds = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
   const findEditHandle = (screenPoint: [number, number]) => findPlanCanvasEditHandle({ planProject, editableSelectionIds, viewport, screenPoint, onFlipDoorHanding })
@@ -1519,31 +1534,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       setResizeDimensionWidth(''); setResizeDimensionHeight(''); setResizeDimensionLength('')
       try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
     }
-  }
-
-  const handlePointerCancel = (e: React.PointerEvent) => {
-    if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current)
-    longPressTimerRef.current = null; longPressStartRef.current = null
-    pointerPositionsRef.current.delete(e.pointerId)
-    pinchActiveRef.current = false; pinchRef.current = null
-    selectionStartRef.current = null; setSelectionBox(null)
-    eraseActiveRef.current = false; erasedIdsRef.current.clear()
-    manualDragPointRef.current = null
-    setDraggingObject(null); setDragPreviewPoint(null); setManipulationPreview(null); setIsPanning(false)
-    setResizeDimensionWidth(''); setResizeDimensionHeight(''); setResizeDimensionLength('')
-    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
-  }
-
-  // Mouse wheel zoom
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault()
-    const rect = canvasRef.current?.getBoundingClientRect()
-    if (!rect) return
-    const screenX = e.clientX - rect.left
-    const screenY = e.clientY - rect.top
-
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85
-    setViewport((v) => zoomAtScreenPoint(v, [screenX, screenY], zoomFactor))
   }
 
   const dimensionHostAxis = activeWallSnap
