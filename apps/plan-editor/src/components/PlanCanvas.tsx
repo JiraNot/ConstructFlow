@@ -64,6 +64,7 @@ import { updatePlanCanvasPreference, type PlanCanvasPreferences } from '../app/p
 import { hasPendingToolStep, resolveEscapeAction, resolveToolInteractionStatus } from '../app/toolInteractionStatus.mjs'
 import { handlePlanCanvasSelectionPointerDown } from './handlePlanCanvasSelectionPointerDown.js'
 import type { PlanCanvasDraggingObject } from './planCanvasInteractionTypes.js'
+import { PlanCanvasInteractionHints } from './PlanCanvasInteractionHints.js'
 
 interface PlanCanvasProps {
   project: ProjectDocument
@@ -1352,16 +1353,24 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           setObjectContextMenu(null)
         }}
       />}
-      {activeTool === 'measure' && <div className="cf-tape-measure-hint" aria-live="polite">
-        ตลับเมตร · {tapeMeasure?.complete ? 'คลิกเพื่อเริ่มวัดเส้นใหม่' : tapeMeasure ? 'คลิกจุดปลาย' : 'คลิกจุดเริ่ม'} · Esc ออก
-      </div>}
-      {activeTool === 'select' && editableSelectionIds.some(id => {
-        const object = planProject.objects[id]
-        return object && (isColumnObject(object) || isFoundationObject(object) || isWallObject(object) || isBeamObject(object) || isGridObject(object) || isDoorObject(object) || isWindowObject(object) || ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system', 'architecture.room_separator', 'drainage.pipe_route', 'plumbing.pipe_route', 'decorative.moulding_run', 'interior.cabinet_run'].includes(object.object_type))
-      }) && <div className="cf-tape-measure-hint" aria-live="polite">จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด ท่อ และแนวบัว · จุดสีม่วง: หมุนบิลท์อินรอบจุดวาง · จุดสีส้ม: ลากขอบปรับความกว้าง หรือลากจุดกึ่งกลางปรับตำแหน่ง (BIM Snap ขอบเสา 100 มม.) · ปุ่ม ⇄: สลับด้านบานประตู</div>}
-      {placementHint && <div className="cf-tape-measure-hint" aria-live="polite" data-tool-step={placementStatus?.step}>
-        <strong>{placementStatus?.stepLabel}</strong> · {placementHint} · {placementStatus?.constraint} {escapeLabel && `· ${escapeLabel}`}
-      </div>}
+      <PlanCanvasInteractionHints
+        activeTool={activeTool}
+        tapeMeasure={tapeMeasure}
+        showSelectionHandleHint={editableSelectionIds.some(id => {
+          const object = planProject.objects[id]
+          return object && (isColumnObject(object) || isFoundationObject(object) || isWallObject(object) || isBeamObject(object) || isGridObject(object) || isDoorObject(object) || isWindowObject(object) || ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system', 'architecture.room_separator', 'drainage.pipe_route', 'plumbing.pipe_route', 'decorative.moulding_run', 'interior.cabinet_run'].includes(object.object_type))
+        })}
+        placementStatus={placementStatus}
+        placementHint={placementHint}
+        escapeLabel={escapeLabel}
+        pickCandidates={pickCandidates}
+        hoveredId={hoveredId}
+        project={planProject}
+        onCyclePick={cyclePick}
+        onHoverChange={setHoveredId}
+        onSelectionChange={onSelectionChange}
+        onSelectObject={onSelectObject}
+      />
       {manipulationDimensions && dragPreviewPoint && draggingObject && <PlanCanvasDragDimensions
         mode={(targetRectangleDimensions ? 'rectangle' : targetOpeningWidth ? 'opening-width' : targetLineLength ? 'line-length' : 'move') as DragDimensionMode}
         displayUnit={displayUnit}
@@ -1391,21 +1400,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         </>}
         {(showXDimension || showYDimension) && <button type="button" className="cf-dimension-reference-toggle" aria-label="สลับวัดจากกึ่งกลางหรือขอบวัตถุ" aria-pressed={dimensionReferenceMode === 'edge'} onClick={toggleDimensionReferenceMode}>วัดจาก {dimensionReferenceMode === 'center' ? 'กึ่งกลาง' : 'ขอบ'}</button>}
         <small>{isHostedOpeningPlacement ? 'พิมพ์ระยะจากขอบช่อง · Tab/Shift+Tab สลับขอบ/กึ่งกลาง · Enter วาง' : hasLineGeometryInput ? `ระยะ/องศาคุมช่วงเส้น · Enter วาดช่วง${showXDimension || showYDimension ? ` · ${showXDimension && showYDimension ? 'Shift+Tab สลับ X/Y' : 'Tab ขอบ/กลาง'}` : ''}` : `พิมพ์ระยะ ${showXDimension && showYDimension ? '· Tab ขอบ/กลาง · Shift+Tab สลับ X/Y · ' : '· Tab/Shift+Tab ขอบ/กลาง · '}Enter วาง`} · Esc ยกเลิกขั้นตอน/ออกเมื่อว่าง</small>
-      </div>}
-      {activeTool === 'select' && pickCandidates.length > 1 && <div className="cf-pick-stack" role="group" aria-label="วัตถุซ้อนกัน" onPointerDown={event => event.stopPropagation()}>
-        <span>วัตถุซ้อนกัน {pickCandidates.length} ชิ้น</span>
-          <button type="button" onClick={() => cyclePick(true)} aria-label="เลือกวัตถุก่อนหน้า">‹</button>
-        <select aria-label="เลือกวัตถุที่ซ้อนกัน" value={pickCandidates.includes(hoveredId ?? '') ? hoveredId! : pickCandidates[0]} onChange={event => { setHoveredId(event.target.value); onSelectionChange?.([event.target.value], event.target.value); onSelectObject(event.target.value) }}>
-          {pickCandidates.map(id => {
-            const object = planProject.objects[id]
-            if (!object) return null
-            const family = object.object_type === 'architecture.wall' ? 'ผนัง' : object.object_type === 'structure.beam' ? 'คาน' : object.object_type === 'structure.column' ? 'เสา' : object.object_type === 'structure.foundation' ? 'ฐานราก' : object.object_type === 'door_window.door' ? 'ประตู' : object.object_type === 'door_window.window' ? 'หน้าต่าง' : object.object_type
-            const data = object.module_data as unknown as Record<string, unknown>
-            return <option key={id} value={id}>{family} {String(data.mark ?? data.type_mark ?? 'ไม่มีรหัสแบบ')}</option>
-          })}
-        </select>
-        <button type="button" onClick={() => cyclePick()} aria-label="เลือกวัตถุถัดไป">›</button>
-        <small>Tab / Shift+Tab · iPad แตะลูกศรหรือเลือกจากรายการ</small>
       </div>}
       <div className="cf-authoring-controls" onPointerDown={(event) => event.stopPropagation()}>
         <button type="button" className="cf-authoring-controls-toggle" aria-expanded={authoringControlsOpen} onClick={() => setAuthoringControlsOpen(open => !open)}>
