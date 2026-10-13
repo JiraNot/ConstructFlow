@@ -32,7 +32,7 @@ import { useToolSession } from './app/useToolSession.js'
 import { DEFAULT_PLAN_CANVAS_PREFERENCES, type PlanCanvasPreferences } from './app/planCanvasPreferences.mjs'
 import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
 import { Toolbar, ToolType } from './components/Toolbar.js'
-import { PlanCanvas } from './components/PlanCanvas.js'
+import { PlanCanvas, type PlanCanvasProps } from './components/PlanCanvas.js'
 import { ElevationCanvas, ElevationDirection, type CoordinatedElevationNavigation } from './components/ElevationCanvas.js'
 import { PropertiesPanel } from './components/PropertiesPanel.js'
 import { ProjectBrowser } from './components/ProjectBrowser.js'
@@ -57,6 +57,8 @@ import type { ViewportState } from './viewport/viewportTransform.js'
 import { importDxfUnderlay } from './cad/importDxfUnderlay.mjs'
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
+
+type EditorViewMode = 'plan' | 'framing' | 'roofplan' | ElevationDirection | 'model3d'
 
 const headerActionStyle: React.CSSProperties = {
   display: 'inline-flex',
@@ -217,7 +219,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [planCanvasPreferences, setPlanCanvasPreferences] = useState<PlanCanvasPreferences>(DEFAULT_PLAN_CANVAS_PREFERENCES)
   const [planNavigationViewport, setPlanNavigationViewport] = useState<ViewportState | null>(null)
   const [elevationNavigation, setElevationNavigation] = useState<CoordinatedElevationNavigation>({ zoom: 1, panY: 0, panXNorthSouth: 0, panXEastWest: 0 })
-  const [viewMode, setViewMode] = useState<'plan' | 'framing' | 'roofplan' | ElevationDirection | 'model3d'>('plan')
+  const [viewMode, setViewMode] = useState<EditorViewMode>('plan')
+  const [splitViewEnabled, setSplitViewEnabled] = useState(false)
+  const [secondaryViewMode, setSecondaryViewMode] = useState<EditorViewMode>('model3d')
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
     if (['beam', 'foundation'].includes(activeTool)) setViewMode('framing')
@@ -1792,6 +1796,102 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const takeoff = useMemo(() => calculateTakeoff(project), [project])
   const boq = useMemo(() => calculatePhasedBOQ(project), [project])
 
+  const planCanvasProps: Omit<PlanCanvasProps, 'planDiscipline'> = {
+    project: viewProject,
+    navigationViewport: planNavigationViewport,
+    onNavigationViewportChange: setPlanNavigationViewport,
+    preferences: planCanvasPreferences,
+    onPreferencesChange: setPlanCanvasPreferences,
+    displayUnit,
+    activeTool,
+    toolActivation: toolActivation,
+    activeColumnTypeMark: activeColumnType,
+    activeFoundationTypeMark: activeFoundationType,
+    activeBeamTypeMark: activeBeamType,
+    activeWallTypeMark: activeWallType,
+    activeDoorTypeMark: activeDoorType,
+    activeWindowTypeMark: activeWindowType,
+    activeSlabTypeMark: activeSlabType,
+    activeRoofTypeMark: activeRoofType,
+    labelMode,
+    labelVisibility,
+    coordination: coordinationFindings,
+    coordinationFocusSelection: false,
+    onOpenTypeManager: () => openCatalog(),
+    onChangeActiveTypeMark: mark => {
+      if (activeTool === 'column') setActiveColumnType(mark)
+      else if (activeTool === 'foundation') setActiveFoundationType(mark)
+      else if (activeTool === 'beam') setActiveBeamType(mark)
+      else if (activeTool === 'wall') setActiveWallType(mark)
+      else if (activeTool === 'door') setActiveDoorType(mark)
+      else if (activeTool === 'window') setActiveWindowType(mark)
+      else if (activeTool === 'slab') setActiveSlabType(mark)
+      else if (activeTool === 'roof') setActiveRoofType(mark)
+    },
+    selectedId,
+    selectedIds,
+    underlay,
+    onSelectObject: setSelectedId,
+    onRequestEditProperties: () => { setRightPanelTab('properties'); setInspectorOpen(true) },
+    onSelectionChange: (ids, primary) => { setSelectedIds(ids); setSelectedId(primary) },
+    onDeleteObjects: handleDeleteObjects,
+    onCopyObjects: handleCopyObjects,
+    onCommitColumn: handleCommitColumn,
+    onCommitFoundation: handleCommitFoundation,
+    onCommitBeam: handleCommitBeam,
+    onCommitWall: handleCommitWall,
+    onCommitDoor: handleCommitDoor,
+    onCommitWindow: handleCommitWindow,
+    onCommitSlab: handleCommitSlab,
+    onCommitArchitecturalFloor: handleCommitArchitecturalFloor,
+    onCommitCeiling: handleCommitCeiling,
+    onCommitRoof: handleCommitRoof,
+    onCommitPipeRoute: handleCommitPipeRoute,
+    onCommitFixture: handleCommitFixture,
+    onCommitCabinet: handleCommitCabinet,
+    onCommitMoulding: handleCommitMoulding,
+    onCommitRoomSeparator: handleCommitRoomSeparator,
+    onCommitSurfaceVoid: handleCommitSurfaceVoid,
+    onCommitGrid: handleCommitGrid,
+    onCommitGridSystem: handleCommitGridSystem,
+    onCopyGrid: handleCopyGrid,
+    onActivateTool: setActiveTool,
+    onCommitStair: handleCommitStair,
+    onPreviewManipulation: previewDirectManipulation,
+    onCommitManipulation: commitDirectManipulation,
+    externalManipulationPreview: alignmentPreview ? { project: alignmentPreview.project, ids: alignmentPreview.ids, valid: true } : null,
+    onManipulationRejected: handleManipulationRejected,
+    onFlipDoorHanding: handleFlipDoorHanding,
+    onStartCalibrationModal: (dist, first, second) => {
+      setMeasuredCalibrationDist_mm(dist)
+      calibrationPointsRef.current = { first, second }
+      setCalibrationModalOpen(true)
+    },
+    onCursorChange: (coords, kind) => {
+      setCursorCoords_mm(coords)
+      setSnapKind(kind)
+    },
+  }
+  const renderEditorView = (mode: EditorViewMode, auxiliary = false) => {
+    if (mode === 'plan' || mode === 'framing' || mode === 'roofplan') return <PlanCanvas
+      key={mode}
+      {...planCanvasProps}
+      activeTool={auxiliary ? 'select' : activeTool}
+      toolActivation={auxiliary ? undefined : toolActivation}
+      planDiscipline={mode === 'framing' ? 'framing' : mode === 'roofplan' ? 'roof' : 'architecture'}
+    />
+    if (mode === 'model3d') return <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
+      <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} coordination={coordinationFindings} />
+    </Suspense>
+    return <ElevationCanvas project={viewProject} direction={mode} selectedId={selectedId} selectedIds={selectedIds}
+      onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }}
+      underlay={underlay} coordination={coordinationFindings} navigation={elevationNavigation} onNavigationChange={setElevationNavigation}
+      onMoveObject={mode === 'rcp' ? undefined : handleMoveElevationObject}
+      onBuildManipulation={mode === 'rcp' ? undefined : buildElevationManipulationCommands}
+      onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation}
+      onManipulationRejected={handleManipulationRejected} />
+  }
+
   if (!localAutosaveReady) return (
     <div role="status" aria-live="polite" style={{ display: 'grid', placeItems: 'center', width: '100vw', height: '100vh', color: '#475569', fontFamily: 'sans-serif' }}>
       กำลังตรวจและกู้คืนงานที่บันทึกไว้ในเครื่อง…
@@ -1964,6 +2064,20 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             ] as const).map(([mode, label]) => (
               <button key={mode} type="button" title={['plan', 'framing', 'roofplan'].includes(mode) ? 'แปลนพื้น แปลนคาน และแปลนหลังคาใช้ตำแหน่งและระดับซูมร่วมกัน' : ['north', 'south', 'east', 'west'].includes(mode) ? 'รูปด้านใช้ระดับซูมและตำแหน่งแนวดิ่งร่วมกัน; แนวนอนเชื่อมตามแกนฉาย' : undefined} onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>{label}</button>
             ))}
+            <details className="cf-multiview-menu">
+              <summary aria-label="แบ่งมุมมอง" aria-pressed={splitViewEnabled} title="เปิดมุมมองสอง pane พร้อมกัน">▥</summary>
+              <div className="cf-multiview-popover" role="group" aria-label="ตั้งค่ามุมมองคู่">
+                <label><input type="checkbox" checked={splitViewEnabled} onChange={event => setSplitViewEnabled(event.target.checked)} />แสดงสองมุมมอง</label>
+                {splitViewEnabled && <label>มุมมองที่สอง
+                  <select aria-label="มุมมองที่สอง" value={secondaryViewMode} onChange={event => setSecondaryViewMode(event.target.value as EditorViewMode)}>
+                    {([
+                      ['plan', 'แปลนพื้น'], ['framing', 'แปลนคาน'], ['roofplan', 'แปลนหลังคา'], ['north', 'รูปด้านเหนือ'], ['south', 'รูปด้านใต้'],
+                      ['east', 'รูปด้านตะวันออก'], ['west', 'รูปด้านตะวันตก'], ['rcp', 'แปลนฝ้า RCP'], ['model3d', '3D ดูตัวอย่าง'],
+                    ] as const).filter(([mode]) => mode !== viewMode).map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
+                  </select>
+                </label>}
+              </div>
+            </details>
             {viewMode === 'plan' && <button type="button" onClick={handleDetectRooms} title="ค้นหาห้องจากวงผนังปิด">ตรวจจับห้อง</button>}
             {(viewMode === 'plan' || viewMode === 'framing' || viewMode === 'roofplan') && <details className="cf-label-menu" onClick={event => {
               if ((event.target as HTMLElement).closest('input')) event.stopPropagation()
@@ -1992,7 +2106,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           </div>
 
           {/* Interactive Plan Canvas */}
-          <div className="cf-viewport-stage">
+          <div className="cf-viewport-stage" style={splitViewEnabled ? { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 1, background: '#cbd5e1' } : undefined}>
+            <div className="cf-multiview-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
             {viewMode === 'plan' || viewMode === 'framing' || viewMode === 'roofplan' ? <PlanCanvas
               project={viewProject}
               navigationViewport={planNavigationViewport}
@@ -2072,6 +2187,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             /> : viewMode !== 'model3d' ? <ElevationCanvas project={viewProject} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} navigation={elevationNavigation} onNavigationChange={setElevationNavigation} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} onBuildManipulation={viewMode === 'rcp' ? undefined : buildElevationManipulationCommands} onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation} onManipulationRejected={handleManipulationRejected} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
               <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} coordination={coordinationFindings} />
             </Suspense>}
+            </div>
+            {splitViewEnabled && <div className="cf-multiview-pane" data-testid="secondary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1' }}>
+              {renderEditorView(secondaryViewMode, true)}
+            </div>}
           </div>
 
           {/* Bottom Coordinate Bar */}
