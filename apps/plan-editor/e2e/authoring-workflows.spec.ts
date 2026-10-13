@@ -359,6 +359,53 @@ test('orthographic elevations share zoom and vertical navigation with mirrored h
   await expect(elevation).toHaveAttribute('data-elevation-zoom', northZoom!)
 })
 
+test('dragging one selected elevation member moves the selected group in one edit', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'เสา' }).click()
+  await clickCanvasFraction(page, 0.34, 0.56)
+  await clickCanvasFraction(page, 0.66, 0.56)
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const rows = page.locator('.cf-browser-tree li[data-object-type="structure.column"]')
+  await expect(rows).toHaveCount(2)
+  const first = rows.nth(0).locator('.cf-browser-object')
+  const second = rows.nth(1).locator('.cf-browser-object')
+  const properties = page.getByTestId('properties-selection')
+  const readPosition = async (row: ReturnType<typeof rows.nth>) => {
+    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await row.click()
+    await expect(properties).toBeVisible()
+    return properties.innerText().then(text => text.match(/ตำแหน่ง:\s*\(([^)]+)\)/)?.[1] ?? '')
+  }
+  const firstBefore = await readPosition(first)
+  const secondBefore = await readPosition(second)
+  expect(firstBefore).not.toBe('')
+  expect(secondBefore).not.toBe('')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await first.click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await second.click({ modifiers: ['Control'] })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await expect(first).toHaveAttribute('aria-selected', 'true')
+  await expect(second).toHaveAttribute('aria-selected', 'true')
+
+  await page.getByRole('button', { name: 'รูปด้านเหนือ', exact: true }).click()
+  const elevation = page.getByTestId('elevation-canvas')
+  const bounds = await elevation.locator('canvas').boundingBox()
+  if (!bounds) throw new Error('North elevation canvas is not visible')
+  const start = { x: bounds.x + bounds.width * 0.424, y: bounds.y + bounds.height * 0.45 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(start.x + 45, start.y, { steps: 4 })
+  await page.mouse.up()
+
+  const firstAfter = await readPosition(first)
+  const secondAfter = await readPosition(second)
+  expect(firstAfter).not.toBe(firstBefore)
+  expect(secondAfter).not.toBe(secondBefore)
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await expect(rows).toHaveCount(2)
+})
+
 test('DXF underlay imports unit-scaled vector art and survives project reload', async ({ page }) => {
   await page.goto('/')
   const dxf = [
