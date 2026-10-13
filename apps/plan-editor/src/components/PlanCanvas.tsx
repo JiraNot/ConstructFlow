@@ -25,6 +25,7 @@ import { getEditableRoofRidge } from '@constructflow/roof-engine'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import { PlanCanvasAuthoringControls } from './PlanCanvasAuthoringControls.js'
+import { commitPlanCanvasLinePlacementPoint, type BeamPlacementStart, type WallPlacementStart } from './commitPlanCanvasLinePlacementPoint.js'
 import { handlePlanCanvasAuthoringPointerMove } from './handlePlanCanvasAuthoringPointerMove.js'
 import { usePlanCanvasPlacementKeyboard } from './usePlanCanvasPlacementKeyboard.js'
 import { TOOL_FAMILIES } from './catalogPresentation.js'
@@ -35,7 +36,7 @@ import {
   worldToScreen,
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
-import { constrainPointToReference, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, SnapSpatialIndex, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware } from '@constructflow/snapping-engine'
+import { constrainPointToReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, SnapSpatialIndex, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware } from '@constructflow/snapping-engine'
 import { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { CommandRequest } from '@constructflow/command-schema'
@@ -132,7 +133,7 @@ interface PlanCanvasProps {
 }
 
 import {
-  getSnappedWallId, getWallVerticalReference, getPlanObjectBounds,
+  getPlanObjectBounds,
   cabinetFootprintPoints,
   gridLineEndpoints, findTemporaryDimensionRefs, openingDimensionRefs, openingDimensionPoint,
   drawTemporaryDimensions, drawTapeMeasure,
@@ -484,10 +485,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   })
 
   // 2-click beam placement state (start node -> end node)
-  const [beamStartNode, setBeamStartNode] = useState<{ point_mm: [number, number]; columnId?: string; reference?: LinearReference } | null>(null)
+  const [beamStartNode, setBeamStartNode] = useState<BeamPlacementStart | null>(null)
 
   // 2-click wall placement state (start node -> end node)
-  const [wallStartNode, setWallStartNode] = useState<{ point_mm: [number, number]; reference?: LinearReference; hostWallId?: string } | null>(null)
+  const [wallStartNode, setWallStartNode] = useState<WallPlacementStart | null>(null)
   const [roomSeparatorStart, setRoomSeparatorStart] = useState<[number,number] | null>(null)
   const [roofShape, setRoofShape] = useState<'hip' | 'gable' | 'flat'>('hip')
   const [roofSlopeDeg, setRoofSlopeDeg] = useState(25)
@@ -939,57 +940,26 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           onCommitFoundation({ location_mm: snap.point_mm })
         }
         clearDimensionOverrides()
-      } else if (activeTool === 'beam') {
-        const clickedCol = Object.values(planProject.objects).find((o) => {
-          if (!isColumnObject(o)) return false
-          const [cx, cy] = o.module_data.location_mm
-          const [cw, cd] = o.module_data.section_mm
-          const tol = Math.max(cw, cd, 400)
-          return Math.abs(rawWorld[0] - cx) <= tol && Math.abs(rawWorld[1] - cy) <= tol
+      } else if (activeTool === 'beam' || activeTool === 'wall') {
+        commitPlanCanvasLinePlacementPoint({
+          activeTool,
+          snap,
+          planProject,
+          project,
+          activeBeamTypeMark,
+          activeWallTypeMark,
+          placementReference,
+          beamStartNode,
+          wallStartNode,
+          setBeamStartNode,
+          setWallStartNode,
+          setDrawLengthMeters,
+          setDrawAngleDegrees,
+          resolveReferencePath,
+          clearDimensionOverrides,
+          onCommitBeam,
+          onCommitWall,
         })
-        const colId = clickedCol ? clickedCol.id : (snap.kind === 'column_center' ? snap.target_id : undefined)
-
-        if (!beamStartNode) {
-          setBeamStartNode({ point_mm: snap.point_mm, columnId: colId, reference: findNearestLinearReference(planProject, snap.point_mm) ?? undefined })
-          setDrawLengthMeters('')
-          setDrawAngleDegrees(''); clearDimensionOverrides()
-        } else {
-          const dist = Math.hypot(
-            snap.point_mm[0] - beamStartNode.point_mm[0],
-            snap.point_mm[1] - beamStartNode.point_mm[1]
-          )
-          if (dist >= 100) {
-            const typeDef = project.types?.find(type => type.object_type === 'structure.beam' && type.name.toLowerCase() === activeBeamTypeMark.toLowerCase())
-            const [alignedStart, alignedEnd] = resolveReferencePath(beamStartNode.point_mm, snap.point_mm, typeDef?.parameters?.section_mm?.[0] || 200)
-            onCommitBeam(alignedStart, alignedEnd, beamStartNode.columnId, colId, placementReference)
-          }
-          setBeamStartNode({ point_mm: snap.point_mm, columnId: colId, reference: findNearestLinearReference(planProject, snap.point_mm) ?? undefined })
-          setDrawLengthMeters('')
-          setDrawAngleDegrees('')
-          clearDimensionOverrides()
-        }
-      } else if (activeTool === 'wall') {
-        if (!wallStartNode) {
-          setWallStartNode({ point_mm: snap.point_mm, reference: findNearestLinearReference(planProject, snap.point_mm) ?? undefined, hostWallId: getSnappedWallId(snap, planProject) })
-          setDrawLengthMeters('')
-          setDrawAngleDegrees(''); clearDimensionOverrides()
-        } else {
-          const dist = Math.hypot(
-            snap.point_mm[0] - wallStartNode.point_mm[0],
-            snap.point_mm[1] - wallStartNode.point_mm[1]
-          )
-          if (dist >= 100) {
-            const typeDef = project.types?.find(type => type.object_type === 'architecture.wall' && type.name.toLowerCase() === activeWallTypeMark.toLowerCase())
-            const [alignedStart, alignedEnd] = resolveReferencePath(wallStartNode.point_mm, snap.point_mm, typeDef?.parameters?.thickness_mm || 100)
-            const endHostWallId = getSnappedWallId(snap, planProject)
-            const verticalReference = getWallVerticalReference(planProject, wallStartNode.hostWallId ?? endHostWallId)
-            onCommitWall(alignedStart, alignedEnd, placementReference, verticalReference)
-          }
-          setWallStartNode({ point_mm: snap.point_mm, reference: findNearestLinearReference(planProject, snap.point_mm) ?? undefined, hostWallId: getSnappedWallId(snap, planProject) })
-          setDrawLengthMeters('')
-          setDrawAngleDegrees('')
-          clearDimensionOverrides()
-        }
       } else if (activeTool === 'door') {
         const typeDef = project.types?.find(
           (t) => t.object_type === 'door_window.door' && t.name.toLowerCase() === activeDoorTypeMark.toLowerCase()
