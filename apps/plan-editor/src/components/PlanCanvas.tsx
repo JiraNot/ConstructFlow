@@ -30,7 +30,6 @@ import { TOOL_FAMILIES } from './catalogPresentation.js'
 import { ToolType } from './Toolbar.js'
 import {
   ViewportState,
-  screenToWorld,
   worldToScreen,
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
@@ -48,17 +47,14 @@ import { PlanCanvasDragDimensions, type DragDimensionField, type DragDimensionMo
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
 import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
-import { handlePlanCanvasPointerDownNavigation } from './handlePlanCanvasPointerDownNavigation.js'
+import { handlePlanCanvasPointerDown } from './handlePlanCanvasPointerDown.js'
 import { handlePlanCanvasPointerUp } from './handlePlanCanvasPointerUp.js'
-import { resolvePlanCanvasLineSnap } from '../app/placementLineSnap.mjs'
 import { updatePlanCanvasPreference, type PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import { hasPendingToolStep, resolveEscapeAction, resolveToolInteractionStatus } from '../app/toolInteractionStatus.mjs'
-import { handlePlanCanvasSelectionPointerDown } from './handlePlanCanvasSelectionPointerDown.js'
 import { PlanCanvasInteractionHints } from './PlanCanvasInteractionHints.js'
 import { PlanCanvasPlacementDimensions } from './PlanCanvasPlacementDimensions.js'
 import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParallelOffset, constrainPlanCanvasLineSnap, resolvePlanCanvasReferencePath } from './planCanvasPlacementConstraints.mjs'
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
-import { handlePlanCanvasPlacementPointerDown } from './handlePlanCanvasPlacementPointerDown.js'
 import { usePlanCanvasManipulationPreview } from './usePlanCanvasManipulationPreview.js'
 import { createPlanCanvasPlacementCommitHandlers } from './createPlanCanvasPlacementCommitHandlers.js'
 import { nextDoorHanding, usePlanCanvasGlobalShortcuts } from './usePlanCanvasGlobalShortcuts.js'
@@ -476,88 +472,42 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     })
   }
 
-  // Pointer down
-  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = canvasRef.current?.getBoundingClientRect()
-    if (!rect) return
-    const screenX = e.clientX - rect.left
-    const screenY = e.clientY - rect.top
-    if (handlePlanCanvasPointerDownNavigation({
-      event: e,
-      screenPoint: [screenX, screenY],
-      activeTool,
-      viewport,
-      pointerPositionsRef,
-      pinchRef,
-      pinchActiveRef,
-      longPressStartRef,
-      longPressTimerRef,
-      selectionStartRef,
-      panStartRef,
-      setSelectionBox,
-      setDraggingObject,
-      setIsPanning,
-      setObjectContextMenu,
-      findHitObject,
-      onSelectionChange,
-      onSelectObject,
+  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => handlePlanCanvasPointerDown({
+    event,
+    canvas: canvasRef.current,
+    activeTool,
+    viewport,
+    navigation: {
+      pointerPositionsRef, pinchRef, pinchActiveRef, longPressStartRef, longPressTimerRef,
+      selectionStartRef, panStartRef, setSelectionBox, setDraggingObject, setIsPanning,
+      setObjectContextMenu, findHitObject, onSelectionChange, onSelectObject,
       setPointerCapture: pointerId => canvasRef.current?.setPointerCapture(pointerId),
-    })) return
-
-    if (e.button === 0) {
-      setObjectContextMenu(null)
-      const rawWorld = screenToWorld([screenX, screenY], viewport)
-      let snap = e.ctrlKey
-        ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
-        : snapPlanPoint(rawWorld)
-      snap = resolvePlanCanvasLineSnap(snap, rawWorld, e.shiftKey, activeTool, {
-        beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary,
-      }, constrainLineSnap)
-
-      if (activeTool === 'select') {
-        handlePlanCanvasSelectionPointerDown({
-          event: e,
-          screenPoint: [screenX, screenY],
-          rawWorld,
-          displayUnit,
-          planProject,
-          project,
-          selectedIds,
-          hoveredId,
-          findEditHandle,
-          findCandidates,
-          findHitObject,
-          setCandidates,
-          setHoveredId,
-          setDraggingObject,
-          setManipulationPreview,
-          setResizeDimensionWidth,
-          setResizeDimensionHeight,
-          setResizeDimensionLength,
-          selectionStartRef,
-          selectionAdditiveRef,
-          lastPreviewValidationRef,
-          onSelectionChange,
-          onSelectObject,
-        })
-      } else {
-        handlePlanCanvasPlacementPointerDown({
-          event: e, activeTool, rawWorld, snap, project, planProject, selectedId, displayUnit,
-          viewportZoom: viewport.zoom, placement,
-          settings: { activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, placementReference, doorHanding },
-          callbacks: {
-            onCopyGrid, onCommitColumn, onCommitFoundation, onCommitDoor, onCommitWindow, onCommitFixture,
-            onSelectionChange, onSelectObject, onCommitBeam, onCommitWall, onCommitRoomSeparator, onCommitPipeRoute,
-            onCommitCabinet, onCommitMoulding, onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling,
-            onCommitRoof, onCommitSurfaceVoid, onCommitGrid, onCommitGridSystem, onStartCalibrationModal,
-            onCommitStair, onActivateTool,
-          },
-          operations: { applyPlacementDimensions, constrainGridCopyToParallelOffset, snapPlanWallHost, applyOpeningDistance, resolveReferencePath },
-          interaction: { eraseActiveRef, erasedIdsRef, findCandidates },
-        })
-      }
-    }
-  }
+    },
+    snapping: {
+      snapPlanPoint,
+      lineState: { beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary },
+      constrainLineSnap,
+    },
+    selection: {
+      displayUnit, planProject, project, selectedIds, hoveredId, findEditHandle, findCandidates,
+      findHitObject, setCandidates, setHoveredId, setDraggingObject, setManipulationPreview,
+      setResizeDimensionWidth, setResizeDimensionHeight, setResizeDimensionLength,
+      selectionStartRef, selectionAdditiveRef, lastPreviewValidationRef, onSelectionChange, onSelectObject,
+    },
+    placement: {
+      project, planProject, selectedId, displayUnit, viewportZoom: viewport.zoom, placement,
+      settings: { activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, placementReference, doorHanding },
+      callbacks: {
+        onCopyGrid, onCommitColumn, onCommitFoundation, onCommitDoor, onCommitWindow, onCommitFixture,
+        onSelectionChange, onSelectObject, onCommitBeam, onCommitWall, onCommitRoomSeparator, onCommitPipeRoute,
+        onCommitCabinet, onCommitMoulding, onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling,
+        onCommitRoof, onCommitSurfaceVoid, onCommitGrid, onCommitGridSystem, onStartCalibrationModal,
+        onCommitStair, onActivateTool,
+      },
+      operations: { applyPlacementDimensions, constrainGridCopyToParallelOffset, snapPlanWallHost, applyOpeningDistance, resolveReferencePath },
+      interaction: { eraseActiveRef, erasedIdsRef, findCandidates },
+    },
+  })
 
   // Pointer up
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
