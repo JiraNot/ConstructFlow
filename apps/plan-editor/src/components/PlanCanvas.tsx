@@ -28,24 +28,22 @@ import { ToolType } from './Toolbar.js'
 import { type LinearReference, type SnapResult } from '@constructflow/snapping-engine'
 import { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import type { CommandRequest } from '@constructflow/command-schema'
-import type { DirectManipulationPreviewResult, PlanDragGesture } from '../directManipulation.mjs'
+import type { DirectManipulationPreviewResult } from '../directManipulation.mjs'
 import { isPolygonInteraction, isTwoPointInteraction } from '../app/toolInteractionRegistry.mjs'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { resolvePlanCanvasPointerSnap } from './resolvePlanCanvasPointerSnap.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
-import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
 import { updatePlanCanvasPreference, type PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParallelOffset, constrainPlanCanvasLineSnap, resolvePlanCanvasReferencePath } from './planCanvasPlacementConstraints.mjs'
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
-import { usePlanCanvasManipulationPreview } from './usePlanCanvasManipulationPreview.js'
+import { usePlanCanvasManipulationInteractions } from './usePlanCanvasManipulationInteractions.js'
 import { createPlanCanvasPlacementCommitHandlers } from './createPlanCanvasPlacementCommitHandlers.js'
 import { nextDoorHanding, usePlanCanvasGlobalShortcuts } from './usePlanCanvasGlobalShortcuts.js'
 import { usePlanCanvasDrawing } from './usePlanCanvasDrawing.js'
 import { usePlanCanvasPicking } from './usePlanCanvasPicking.js'
 import { usePlanCanvasPointerState } from './usePlanCanvasPointerState.js'
 import { usePlanCanvasPlacementDimensions } from './usePlanCanvasPlacementDimensions.js'
-import { usePlanCanvasManipulationDimensions } from './usePlanCanvasManipulationDimensions.js'
 import { usePlanCanvasToolInteraction } from './usePlanCanvasToolInteraction.js'
 import { usePlanCanvasOpeningPlacementDimensions } from './usePlanCanvasOpeningPlacementDimensions.js'
 import { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
@@ -354,19 +352,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
   const findEditHandle = (screenPoint: [number, number]) => findPlanCanvasEditHandle({ planProject, editableSelectionIds, viewport, screenPoint, onFlipDoorHanding })
 
-  const buildDragCommands = (drag: PlanDragGesture, rawWorld: [number, number], ctrlKey: boolean): CommandRequest[] => buildPlanCanvasDragCommands({ planProject, drag, rawWorld, ctrlKey, viewport, snapPlanPoint })
-
-  const { previewDragAt, lastPreviewValidationRef } = usePlanCanvasManipulationPreview({
-    planProject,
-    buildCommands: buildDragCommands,
-    syncDimensions: dragDimensionInput.syncFromPreview,
-    manualDragPointRef,
-    setDragPreviewPoint,
-    setManipulationPreview,
-    onPreviewManipulation,
-  })
-
   const {
+    previewDragAt,
+    lastPreviewValidationRef,
+    buildDragCommands,
     dimensions: manipulationDimensions,
     mode: manipulationDimensionMode,
     values: manipulationDimensionValues,
@@ -375,10 +364,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     updateMoveDimension,
     updateResizeDimension,
     commitDragDimensions,
-  } = usePlanCanvasManipulationDimensions({
+  } = usePlanCanvasManipulationInteractions({
     containerRef, canvasRef, planProject, viewport, displayUnit, dragDimensions: dragDimensionInput,
     draggingObject, dragPreviewPoint, manipulationPreview, setDraggingObject, setDragPreviewPoint,
-    setManipulationPreview, previewDragAt, onCommitManipulation, onManipulationRejected,
+    setManipulationPreview, snapPlanPoint, onPreviewManipulation, onCommitManipulation, onManipulationRejected,
   })
 
   usePlanCanvasDrawing({
