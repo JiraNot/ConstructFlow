@@ -359,7 +359,7 @@ test('synthetic 600-wall project supports browser search, persistent selection, 
   })
 })
 
-async function findGripPoints(page: Page, color: 'blue' | 'orange' | 'stair-width' | 'stair-run') {
+async function findGripPoints(page: Page, color: 'blue' | 'orange' | 'slab-edge' | 'stair-width' | 'stair-run') {
   const bounds = await canvas(page).boundingBox()
   if (!bounds) throw new Error('Plan canvas is not visible')
   return canvas(page).evaluate((element, options) => {
@@ -375,6 +375,8 @@ async function findGripPoints(page: Page, color: 'blue' | 'orange' | 'stair-widt
         ? data[index] <= 16 && data[index + 1] >= 116 && data[index + 1] <= 132 && data[index + 2] >= 224
         : color === 'orange'
           ? data[index] >= 225 && data[index + 1] >= 90 && data[index + 1] <= 140 && data[index + 2] <= 60
+          : color === 'slab-edge'
+            ? data[index] <= 24 && data[index + 1] >= 132 && data[index + 1] <= 162 && data[index + 2] >= 165 && data[index + 2] <= 195
           : color === 'stair-width'
             ? data[index] <= 20 && data[index + 1] >= 135 && data[index + 1] <= 155 && data[index + 2] >= 125 && data[index + 2] <= 145
             : data[index] >= 115 && data[index] <= 135 && data[index + 1] >= 50 && data[index + 1] <= 70 && data[index + 2] >= 225
@@ -1490,6 +1492,86 @@ test('foundation corner grips accept target W/H dimensions and support Undo/Redo
   await expect(page.locator('body')).toContainText('0.800 × 0.800 × 0.300 m')
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
   await expect(page.locator('body')).toContainText('1.000 × 0.700 × 0.300 m')
+})
+
+test('slab edge grip accepts a numeric offset with preview cancellation and UUID-preserving Undo/Redo', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="พื้น ("]').click()
+  await clickCanvasFraction(page, 0.25, 0.25)
+  await clickCanvasFraction(page, 0.70, 0.25)
+  await clickCanvasFraction(page, 0.70, 0.70)
+  await canvas(page).focus()
+  await page.keyboard.press('Enter')
+
+  await page.locator('.cf-tool-button[title^="เลือก"]').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const slabRow = page.locator('li[data-object-type="structure.slab"]').first()
+  await expect(slabRow).toBeVisible()
+  const slabId = await slabRow.getAttribute('data-object-id')
+  expect(slabId).toBeTruthy()
+  await slabRow.locator('.cf-browser-object').click()
+  const properties = page.getByTestId('properties-selection')
+  await expect(properties).toHaveAttribute('data-object-id', slabId!)
+
+  const readBoundary = async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const project = JSON.parse(json)
+    return project.objects[slabId!]?.module_data.boundary_mm as [number, number][] | undefined
+  }
+  await expect.poll(readBoundary).toBeTruthy()
+  const originalBoundary = structuredClone((await readBoundary())!)
+  const area = (boundary: [number, number][]) => Math.abs(boundary.reduce((sum, point, index) => {
+    const next = boundary[(index + 1) % boundary.length]
+    return sum + point[0] * next[1] - next[0] * point[1]
+  }, 0) / 2)
+  const originalArea = area(originalBoundary)
+
+  const viewport = page.locator('.cf-plan-canvas').first()
+  const viewportBounds = await viewport.boundingBox()
+  if (!viewportBounds) throw new Error('Plan viewport is not visible')
+  const panX = Number(await viewport.getAttribute('data-viewport-pan-x'))
+  const panY = Number(await viewport.getAttribute('data-viewport-pan-y'))
+  const zoom = Number(await viewport.getAttribute('data-viewport-zoom'))
+  const edgeMidpoint: [number, number] = [
+    (originalBoundary[0][0] + originalBoundary[1][0]) / 2,
+    (originalBoundary[0][1] + originalBoundary[1][1]) / 2,
+  ]
+  const gripScreen = { x: viewportBounds.x + panX + edgeMidpoint[0] * zoom, y: viewportBounds.y + panY + edgeMidpoint[1] * zoom }
+  const offset = page.getByRole('textbox', { name: 'ระยะเยื้องขอบพื้น (m)' })
+
+  const beginEdgeEdit = async () => {
+    await page.mouse.move(gripScreen.x, gripScreen.y)
+    await page.mouse.down()
+    await page.mouse.move(gripScreen.x + 4, gripScreen.y + 4)
+    await expect(offset).toBeVisible()
+  }
+
+  await beginEdgeEdit()
+  await offset.fill('0.2')
+  await offset.press('Escape')
+  await page.mouse.up()
+  await expect(properties).toHaveAttribute('data-object-id', slabId!)
+  await expect.poll(readBoundary).toEqual(originalBoundary)
+
+  await beginEdgeEdit()
+  await offset.fill('0.2')
+  await offset.press('Enter')
+  await page.mouse.up()
+  await expect(properties).toHaveAttribute('data-object-id', slabId!)
+  await expect.poll(async () => {
+    const boundary = await readBoundary()
+    return boundary ? area(boundary) : originalArea
+  }).toBeLessThan(originalArea)
+  const resizedBoundary = structuredClone((await readBoundary())!)
+
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(readBoundary).toEqual(originalBoundary)
+  await expect(properties).toHaveAttribute('data-object-id', slabId!)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(readBoundary).toEqual(resizedBoundary)
+  await expect(properties).toHaveAttribute('data-object-id', slabId!)
 })
 
 test('wall endpoint grip accepts target length and commits the validated edit', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { formatLengthMm, type DisplayLengthUnit, type ProjectDocument } from '@constructflow/project-model'
+import { formatLengthMm, parseLengthMm, type DisplayLengthUnit, type ProjectDocument } from '@constructflow/project-model'
 import type { PlanDragGesture } from '../directManipulation.mjs'
 import { resolveDragDimensionTarget, resolveLineEndpointLengthTarget, resolveOpeningEdgeWidthTarget, resolveRectangleResizeTarget } from '../app/dragDimensionInput.mjs'
 
@@ -18,6 +18,7 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
   const [width, setWidth] = useState('')
   const [height, setHeight] = useState('')
   const [length, setLength] = useState('')
+  const [offset, setOffset] = useState('')
   const manualPointRef = useRef<[number, number] | null>(null)
 
   const updateMove = (drag: PlanDragGesture | null, axis: 'x' | 'y', value: string, previewAt: PreviewDrag) => {
@@ -29,10 +30,11 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
     previewAt(drag, target.point_mm, true, true)
   }
 
-  const updateResize = (drag: PlanDragGesture | null, axis: 'width' | 'height' | 'length', value: string, previewAt: PreviewDrag) => {
+  const updateResize = (drag: PlanDragGesture | null, axis: 'width' | 'height' | 'length' | 'offset', value: string, previewAt: PreviewDrag) => {
     if (axis === 'width') setWidth(value)
     else if (axis === 'height') setHeight(value)
-    else setLength(value)
+    else if (axis === 'length') setLength(value)
+    else setOffset(value)
     if (!drag) return
     let target: { point_mm: [number, number] } | null = null
     if ((drag.kind === 'column-corner' || drag.kind === 'foundation-corner') && drag.centerMm && drag.sectionMm && drag.endpointIndex !== undefined) {
@@ -61,6 +63,11 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
       const run = Math.max(1, stair.num_risers - 1) * stair.tread_depth_mm
       const grip: [number, number] = [sx + Math.cos(angle) * run, sy + Math.sin(angle) * run]
       target = resolveLineEndpointLengthTarget([sx, sy], grip, 1, value, displayUnit)
+    } else if (drag.kind === 'slab-edge' && drag.edgeStartMm && drag.edgeNormalMm && axis === 'offset') {
+      const distance = parseLengthMm(value, displayUnit)
+      if (distance !== null && Number.isFinite(distance)) target = {
+        point_mm: [drag.edgeStartMm[0] + drag.edgeNormalMm[0] * distance, drag.edgeStartMm[1] + drag.edgeNormalMm[1] * distance],
+      }
     }
     if (!target) { manualPointRef.current = null; return }
     previewAt(drag, target.point_mm, true, true)
@@ -91,14 +98,17 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
       setWidth(formatLengthMm(Number(data.width_mm), displayUnit))
     } else if (data && drag.kind === 'stair-run') {
       setLength(formatLengthMm(Math.max(1, Number(data.num_risers) - 1) * Number(data.tread_depth_mm), displayUnit))
+    } else if (data && drag.kind === 'slab-edge' && drag.edgeStartMm && drag.edgeNormalMm) {
+      const dx = point[0] - drag.edgeStartMm[0], dy = point[1] - drag.edgeStartMm[1]
+      setOffset(formatLengthMm(dx * drag.edgeNormalMm[0] + dy * drag.edgeNormalMm[1], displayUnit))
     }
   }
 
-  const clearResizeValues = () => { setWidth(''); setHeight(''); setLength('') }
+  const clearResizeValues = () => { setWidth(''); setHeight(''); setLength(''); setOffset('') }
 
   return {
-    moveX, moveY, width, height, length,
-    setWidth, setHeight, setLength,
+    moveX, moveY, width, height, length, offset,
+    setWidth, setHeight, setLength, setOffset,
     manualPointRef,
     updateMove, updateResize, syncFromPreview, clearResizeValues,
   }

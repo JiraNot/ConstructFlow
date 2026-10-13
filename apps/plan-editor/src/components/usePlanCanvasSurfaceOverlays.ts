@@ -63,10 +63,10 @@ export function usePlanCanvasSurfaceOverlays({
   }
 
   const dragDimensions = manipulation.dimensions && pointer.dragPreviewPoint && pointer.draggingObject ? {
-    mode: manipulation.mode as 'move' | 'rectangle' | 'opening-width' | 'line-length',
+    mode: manipulation.mode,
     displayUnit,
     values: manipulation.values,
-    onChange: (field: 'x' | 'y' | 'width' | 'height' | 'length', value: string) =>
+    onChange: (field: 'x' | 'y' | 'width' | 'height' | 'length' | 'offset', value: string) =>
       field === 'x' || field === 'y'
         ? manipulation.updateMoveDimension(field, value)
         : manipulation.updateResizeDimension(field, value),

@@ -4,6 +4,7 @@ import type { CommandRequest } from '@constructflow/command-schema'
 import { formatLengthMm } from '@constructflow/project-model'
 import type { ViewportState } from '../viewport/viewportTransform.js'
 import { worldToScreen } from '../viewport/viewportTransform.js'
+import type { DragDimensionMode } from './PlanCanvasDragDimensions.js'
 import type { PlanCanvasDraggingObject } from './planCanvasInteractionTypes.js'
 import type { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import type { usePlanCanvasManipulationPreview } from './usePlanCanvasManipulationPreview.js'
@@ -34,7 +35,7 @@ export function usePlanCanvasManipulationDimensions({
 }: UsePlanCanvasManipulationDimensionsOptions) {
   const updateMoveDimension = (axis: 'x' | 'y', value: string) =>
     dragDimensions.updateMove(draggingObject, axis, value, previewDragAt)
-  const updateResizeDimension = (axis: 'width' | 'height' | 'length', value: string) =>
+  const updateResizeDimension = (axis: 'width' | 'height' | 'length' | 'offset', value: string) =>
     dragDimensions.updateResize(draggingObject, axis, value, previewDragAt)
 
   const commitDragDimensions = () => {
@@ -70,9 +71,12 @@ export function usePlanCanvasManipulationDimensions({
   const openingWidth = draggingObject?.kind === 'opening-edge'
   const stairWidth = draggingObject?.kind === 'stair-width'
   const stairRun = draggingObject?.kind === 'stair-run'
+  const slabEdgeOffset = draggingObject?.kind === 'slab-edge'
   const lineLength = draggingObject?.kind === 'wall-endpoint' || draggingObject?.kind === 'beam-endpoint' || draggingObject?.kind === 'grid-endpoint' || draggingObject?.kind === 'separator-endpoint' || draggingObject?.kind === 'pipe-endpoint' || draggingObject?.kind === 'moulding-endpoint'
-  const mode = rectangle ? 'rectangle' : openingWidth ? 'opening-width' : stairWidth ? 'stair-width' : stairRun ? 'stair-run' : lineLength ? 'line-length' : 'move'
-  const readout = dimensions?.length !== null && dimensions?.length !== undefined
+  const mode: DragDimensionMode = rectangle ? 'rectangle' : openingWidth ? 'opening-width' : stairWidth ? 'stair-width' : stairRun ? 'stair-run' : slabEdgeOffset ? 'edge-offset' : lineLength ? 'line-length' : 'move'
+  const readout = slabEdgeOffset
+    ? `ระยะขอบ ${dragDimensions.offset || '0'} ${displayUnit}`
+    : dimensions?.length !== null && dimensions?.length !== undefined
     ? `L ${formatLengthMm(dimensions.length, displayUnit)} ${displayUnit}`
     : dimensions?.width !== null && dimensions?.width !== undefined && dimensions?.height !== null && dimensions?.height !== undefined
       ? `W×H ${formatLengthMm(dimensions.width, displayUnit)} × ${formatLengthMm(dimensions.height, displayUnit)} ${displayUnit}`
@@ -86,7 +90,7 @@ export function usePlanCanvasManipulationDimensions({
   return {
     dimensions,
     mode,
-    values: { x: dragDimensions.moveX, y: dragDimensions.moveY, width: dragDimensions.width, height: dragDimensions.height, length: dragDimensions.length },
+    values: { x: dragDimensions.moveX, y: dragDimensions.moveY, width: dragDimensions.width, height: dragDimensions.height, length: dragDimensions.length, offset: dragDimensions.offset },
     readout,
     style,
     updateMoveDimension,
