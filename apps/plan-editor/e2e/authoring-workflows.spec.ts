@@ -135,6 +135,38 @@ test('mouse and keyboard authoring creates wall, beam, hosted opening, and point
   expect(pageErrors).toEqual([])
 })
 
+test('point placement accepts numeric X/Y dimensions by mouse and keyboard', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const columns = page.locator('.cf-browser-tree [data-object-type="structure.column"]')
+  const initialCount = await columns.count()
+
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickCanvasFraction(page, 0.65, 0.72)
+  await expect(columns).toHaveCount(initialCount + 1)
+
+  await moveToCanvasFraction(page, 0.67, 0.70)
+  const dimensionPanel = page.getByRole('group', { name: 'ระยะและแนวระหว่างวางวัตถุ' })
+  await expect(dimensionPanel).toBeVisible()
+  const xInput = page.getByRole('textbox', { name: /ระยะจากแนวอ้างอิง X/ })
+  const yInput = page.getByRole('textbox', { name: /ระยะจากแนวอ้างอิง Y/ })
+  await expect(xInput).toBeVisible()
+  await expect(yInput).toBeVisible()
+  await xInput.fill('0.75')
+  await yInput.fill('0.50')
+  await clickCanvasFraction(page, 0.67, 0.70)
+
+  await expect(columns).toHaveCount(initialCount + 2)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'position')
+
+  await moveToCanvasFraction(page, 0.69, 0.69)
+  await expect(dimensionPanel).toBeVisible()
+  await xInput.fill('0.40')
+  await yInput.fill('0.60')
+  await yInput.press('Enter')
+  await expect(columns).toHaveCount(initialCount + 3)
+})
+
 test('repeat last tool resets an active wall session and starts another wall', async ({ page }) => {
   await page.goto('/')
   await page.locator('.cf-tool-button[title^="ผนัง"]').click()

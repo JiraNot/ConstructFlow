@@ -435,6 +435,15 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     slabBoundary,
   })
 
+  const resolvePointerSnap = (rawWorld: [number, number], ctrlKey: boolean, shiftKey: boolean) => resolvePlanCanvasPointerSnap({
+    activeTool, rawWorld, ctrlKey, shiftKey, project, planProject,
+    activeDoorTypeMark, activeWindowTypeMark, draggingObjectId: draggingObject?.id, gridCopySourceId,
+    dimensionReferenceMode,
+    lineState: { beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary },
+    snapPlanPoint, snapPlanWallHost, applyOpeningDistance, resolveLineSnap: constrainLineSnap,
+    applyPlacementDimensions, constrainGridCopyToParallelOffset,
+  })
+
   const { handlePointerMove, handlePointerDown, handlePointerUp } = usePlanCanvasPointerHandlers({
     canvasRef,
     pointerMove: {
@@ -444,14 +453,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       },
       authoring: {
         activeTool, viewport, draggingObject, hoveredId,
-        resolveSnap: (rawWorld, ctrlKey, shiftKey) => resolvePlanCanvasPointerSnap({
-          activeTool, rawWorld, ctrlKey, shiftKey, project, planProject,
-          activeDoorTypeMark, activeWindowTypeMark, draggingObjectId: draggingObject?.id, gridCopySourceId,
-          dimensionReferenceMode,
-          lineState: { beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary },
-          snapPlanPoint, snapPlanWallHost, applyOpeningDistance, resolveLineSnap: constrainLineSnap,
-          applyPlacementDimensions, constrainGridCopyToParallelOffset,
-        }),
+        resolveSnap: resolvePointerSnap,
         findCandidates, setActiveWallSnap, setActiveSnap, setTapeMeasure, setCalibrationMousePoint,
         setCandidates, setHoveredId, setManipulationPreview, onCursorChange, previewDragAt,
       },
@@ -465,9 +467,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       setObjectContextMenu, findHitObject, onSelectionChange, onSelectObject,
       },
       snapping: {
-      snapPlanPoint,
-      lineState: { beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary },
-      constrainLineSnap,
+        resolveSnap: resolvePointerSnap,
       },
       selection: {
       displayUnit, planProject, project, selectedIds, hoveredId, findEditHandle, findCandidates,
@@ -485,7 +485,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         onCommitRoof, onCommitSurfaceVoid, onCommitGrid, onCommitGridSystem, onStartCalibrationModal,
         onCommitStair, onActivateTool,
       },
-      operations: { applyPlacementDimensions, constrainGridCopyToParallelOffset, snapPlanWallHost, applyOpeningDistance, resolveReferencePath },
+      operations: { snapPlanWallHost, applyOpeningDistance, resolveReferencePath },
       interaction: { eraseActiveRef, erasedIdsRef, findCandidates },
       },
     },
