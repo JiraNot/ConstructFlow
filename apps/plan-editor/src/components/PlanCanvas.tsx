@@ -55,6 +55,7 @@ import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
 import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
 import { findPlanHitObject } from './planHitTesting.mjs'
+import { resolvePlanCanvasBoxSelection } from './resolvePlanCanvasBoxSelection.mjs'
 import { drawPlanCanvasSelectionHandles } from './drawPlanCanvasSelectionHandles.js'
 import { drawPlanCanvasToolOverlays } from './drawPlanCanvasToolOverlays.js'
 import { buildPlanPlacementGhost } from './buildPlanPlacementGhost.js'
@@ -1295,12 +1296,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         selectionStartRef.current = null; setSelectionBox(null)
         if (Math.hypot(end[0] - start[0], end[1] - start[1]) >= 5) {
           const a = screenToWorld(start, viewport), b = screenToWorld(end, viewport)
-          const box = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])]
-          const contained = Object.values(planProject.objects).filter(object => {
-            const bounds = getPlanObjectBounds(object)
-            return bounds && bounds[0] <= box[2] && bounds[2] >= box[0] && bounds[1] <= box[3] && bounds[3] >= box[1]
-          }).map(object => object.id)
-          const next = selectionAdditiveRef.current ? [...new Set([...selectedIds, ...contained])] : contained
+          const box: [number, number, number, number] = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])]
+          const next = resolvePlanCanvasBoxSelection(box, Object.values(planProject.objects).map(object => ({
+            id: object.id,
+            bounds: getPlanObjectBounds(object),
+          })), selectedIds, selectionAdditiveRef.current)
           onSelectionChange?.(next, next.at(-1) ?? null)
           onSelectObject(next.at(-1) ?? null)
         } else if (!selectionAdditiveRef.current) {
