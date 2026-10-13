@@ -7,7 +7,6 @@ import {
   WallModuleData,
   StairModuleData,
 } from '@constructflow/project-model'
-import { stairFromRun } from '@constructflow/architecture-engine'
 import { polygonInteriorPoint } from '@constructflow/geometry-kernel'
 import { getEditableRoofRidge } from '@constructflow/roof-engine'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
@@ -17,12 +16,12 @@ import type { ViewportState } from '../viewport/viewportTransform.js'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
-import { usePlanCanvasDrawing } from './usePlanCanvasDrawing.js'
 import { usePlanCanvasPicking } from './usePlanCanvasPicking.js'
 import { usePlanCanvasPointerState } from './usePlanCanvasPointerState.js'
 import { usePlanCanvasToolController } from './usePlanCanvasToolController.js'
 import { usePlanCanvasPlacementController } from './usePlanCanvasPlacementController.js'
 import { usePlanCanvasPointerController } from './usePlanCanvasPointerController.js'
+import { usePlanCanvasSceneController } from './usePlanCanvasSceneController.js'
 import { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
 import { PlanCanvasSurface } from './PlanCanvasSurface.js'
 import { buildPlanCanvasContextMenu } from './buildPlanCanvasContextMenu.js'
@@ -134,11 +133,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
   const picking = usePlanCanvasPicking({
     project, planProject, viewport, activeTool, selectedId, onSelectObject, onSelectionChange,
   })
-  const { hoveredId, setHoveredId, pickCandidates, setCandidates, findHitObject, findCandidates, cyclePick } = picking
-  const stairPreview = useMemo(() => {
-    if (activeTool !== 'stair' || !stairStartPoint || !activeSnap) return null
-    try { return stairFromRun(project, stairStartPoint, activeSnap.point_mm, stairOptions) } catch { return null }
-  }, [activeTool, stairStartPoint, activeSnap, stairOptions, project])
+  const { pickCandidates, cyclePick } = picking
   const setResizeDimensionWidth = dragDimensionInput.setWidth
   const setResizeDimensionHeight = dragDimensionInput.setHeight
   const setResizeDimensionLength = dragDimensionInput.setLength
@@ -226,51 +221,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
   } = manipulationInteractions
   const { handlePointerMove, handlePointerDown, handlePointerUp } = pointerInteractions
 
-  usePlanCanvasDrawing({
-    containerRef,
-    canvasRef,
-    project,
-    planProject,
-    activeTool,
-    activeSnap,
-    activeWallSnap,
-    activeColumnTypeMark,
-    activeFoundationTypeMark,
-    activeBeamTypeMark,
-    activeWallTypeMark,
-    activeDoorTypeMark,
-    activeWindowTypeMark,
-    beamStartNode,
-    wallStartNode,
-    doorHanding,
-    stairPreview,
-    stairStartPoint,
-    resolveReferencePath,
-    calibrationP1,
-    calibrationMousePoint,
-    selectedIds,
-    editableSelectionIds,
-    hoveredId,
-    underlay,
-    labelMode,
-    labelVisibility,
-    planDiscipline,
-    viewport,
-    displayUnit,
-    manipulationPreview,
-    externalManipulationPreview,
-    coordination,
-    coordinationSeverities,
-    coordinationFocusSelection,
-    gridStartPoint,
-    gridCopySourceId,
-    tapeMeasure,
-    dimensionReferenceMode,
-    selectionBox,
-    roomSeparatorStart,
-    pipeSystem,
-    fixtureKind,
-    slabBoundary,
+  usePlanCanvasSceneController({
+    props, planProject, viewport, containerRef, canvasRef, selectedIds,
+    editableSelectionIds, placement, placementController, pointer: pointerState, picking,
   })
 
   const containerSize = {
