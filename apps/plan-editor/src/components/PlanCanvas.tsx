@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import React, { useRef, useState, useCallback, useMemo } from 'react'
 import {
   ProjectDocument,
   SmartObject,
@@ -6,7 +6,6 @@ import {
   WindowModuleData,
   WallModuleData,
   StairModuleData,
-  isDoorObject,
   DoorHanding,
   PlacementReference,
   DisplayLengthUnit,
@@ -24,7 +23,6 @@ import { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.j
 import type { CommandRequest } from '@constructflow/command-schema'
 import type { ViewportState } from '../viewport/viewportTransform.js'
 import type { DirectManipulationPreviewResult } from '../directManipulation.mjs'
-import { isPolygonInteraction, isTwoPointInteraction } from '../app/toolInteractionRegistry.mjs'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
@@ -33,12 +31,12 @@ import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParall
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
 import { usePlanCanvasManipulationInteractions } from './usePlanCanvasManipulationInteractions.js'
 import { createPlanCanvasPlacementCommitHandlers } from './createPlanCanvasPlacementCommitHandlers.js'
-import { nextDoorHanding, usePlanCanvasGlobalShortcuts } from './usePlanCanvasGlobalShortcuts.js'
 import { usePlanCanvasDrawing } from './usePlanCanvasDrawing.js'
 import { usePlanCanvasPicking } from './usePlanCanvasPicking.js'
 import { usePlanCanvasPointerState } from './usePlanCanvasPointerState.js'
 import { usePlanCanvasPlacementDimensions } from './usePlanCanvasPlacementDimensions.js'
-import { usePlanCanvasToolInteraction } from './usePlanCanvasToolInteraction.js'
+import { usePlanCanvasToolController } from './usePlanCanvasToolController.js'
+import { usePlanCanvasLineConstraint } from './usePlanCanvasLineConstraint.js'
 import { usePlanCanvasOpeningPlacementDimensions } from './usePlanCanvasOpeningPlacementDimensions.js'
 import { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
 import { usePlanCanvasPointerInteractions } from './usePlanCanvasPointerInteractions.js'
@@ -288,74 +286,26 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
     selectionAdditiveRef, clearPointerDrag, handlePointerCancel,
   } = pointerState
 
-  // Door handing state (can cycle with Spacebar)
-  const setDoorHanding = (value: DoorHanding | ((current: DoorHanding) => DoorHanding)) => setPreference('doorHanding', value)
   const editableSelectionIds = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
-  const selectionHint = editableSelectionIds.some(id => planProject.objects[id]?.object_type === 'interior.cabinet_run')
-    ? 'เลือกบิลท์อิน · ลากด้ามสีม่วงเพื่อหมุน โดยคงตำแหน่งและขนาด · Esc ล้างการเลือก'
-    : 'เลือก · คลิกเลือกหรือ ลากครอบวัตถุ · Tab สลับวัตถุซ้อน · Esc ล้างการเลือก'
-  const interactionState = {
-    draggingObject,
-    objectContextMenu,
-    stairStartPoint,
-    gridStartPoint,
-    gridCopySourceId,
-    beamStartNode,
-    wallStartNode,
-    roomSeparatorStart,
-    slabBoundary,
-    tapeMeasure,
-    calibrationP1,
-    dimensionInputX,
-    dimensionInputY,
-    drawLengthMeters,
-    drawAngleDegrees,
-    gridSystemError,
-    pipeSystem,
-    fixtureKind,
-    activeSnap,
-    activeWallSnap,
-    lineConstraintLabel: ({ auto: 'อัตโนมัติ: ขนาน/ตั้งฉาก', none: 'อิสระ', parallel: 'ขนาน', perpendicular: 'ตั้งฉาก' } as const)[lineConstraintMode],
-    placementReferenceLabel: ({ centerline: 'กึ่งกลาง', left_face: 'ชิดซ้าย', right_face: 'ชิดขวา' } as const)[placementReference],
-    snapCount: snapModes.length,
-  }
-  const interactionStatus = usePlanCanvasToolInteraction({
+  const interactionStatus = usePlanCanvasToolController({
+    project,
+    planProject,
+    preferences,
+    onPreferencesChange,
     activeTool,
-    selectionHint,
-    interactionState,
-    hasSelection: Boolean(selectedId || selectedIds.length),
+    selectedId,
+    editableSelectionIds,
+    selectedIds,
+    placement,
+    pointer: pointerState,
     onActivateTool,
     onSelectionChange,
     onSelectObject,
-    closeObjectContextMenu: () => setObjectContextMenu(null),
-    clearPointerDrag,
-    resetPlacementDrafts: placement.resetPlacementDrafts,
+    onFlipDoorHanding,
   })
   const { placementStatus, placementHint, escapeLabel, cancelCurrentPlacement } = interactionStatus
 
-  const selectedDoorId = selectedId && project.objects[selectedId] && isDoorObject(project.objects[selectedId]) ? selectedId : null
-  usePlanCanvasGlobalShortcuts({
-    activeTool,
-    selectedDoorId,
-    draggingObject: Boolean(draggingObject),
-    onFlipDoorHanding,
-    cancelCurrentPlacement,
-    cycleDoorHanding: () => setDoorHanding(current => nextDoorHanding(current)),
-    cyclePlacementReference: () => setPreference('placementReference', current => {
-      const cycle = { centerline: 'left_face', left_face: 'right_face', right_face: 'centerline' } as const
-      return cycle[current]
-    }),
-  })
-
-  useEffect(() => {
-    if (!activeSnap) return
-    const isPolygonTool = isPolygonInteraction(activeTool)
-    const isTwoPointTool = isTwoPointInteraction(activeTool)
-    const start = activeTool === 'wall' ? wallStartNode : activeTool === 'beam' ? beamStartNode : activeTool === 'stair' && stairStartPoint ? { point_mm: stairStartPoint } : activeTool === 'grid' && gridStartPoint ? { point_mm: gridStartPoint } : isTwoPointTool && roomSeparatorStart ? { point_mm: roomSeparatorStart } : isPolygonTool && slabBoundary.length ? { point_mm: slabBoundary[slabBoundary.length - 1] } : null
-    if (!start) return
-    const constrained = constrainLineSnap(activeSnap, activeSnap.point_mm, start.point_mm, false, 'reference' in start ? start.reference : undefined)
-    if (constrained.point_mm[0] !== activeSnap.point_mm[0] || constrained.point_mm[1] !== activeSnap.point_mm[1]) setActiveSnap(constrained)
-  }, [activeTool, activeSnap, wallStartNode, beamStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary, drawLengthMeters, drawAngleDegrees, constrainLineSnap])
+  usePlanCanvasLineConstraint({ activeTool, placement, constrainLineSnap })
 
   const findEditHandle = (screenPoint: [number, number]) => findPlanCanvasEditHandle({ planProject, editableSelectionIds, viewport, screenPoint, onFlipDoorHanding })
 
