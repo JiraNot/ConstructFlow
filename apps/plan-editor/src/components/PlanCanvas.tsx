@@ -28,6 +28,7 @@ import { ToolType } from './Toolbar.js'
 import { type LinearReference, type SnapResult } from '@constructflow/snapping-engine'
 import { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import type { CommandRequest } from '@constructflow/command-schema'
+import type { ViewportState } from '../viewport/viewportTransform.js'
 import type { DirectManipulationPreviewResult } from '../directManipulation.mjs'
 import { isPolygonInteraction, isTwoPointInteraction } from '../app/toolInteractionRegistry.mjs'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
@@ -112,6 +113,8 @@ export interface PlanCanvasProps {
   coordinationSeverities?: readonly ClashSeverity[]
   /** Highlight coordinate findings that involve the current selection. */
   coordinationFocusSelection?: boolean
+  navigationViewport?: ViewportState | null
+  onNavigationViewportChange?: (viewport: ViewportState) => void
 }
 
 import {
@@ -180,6 +183,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   coordination = [],
   coordinationSeverities,
   coordinationFocusSelection = false,
+  navigationViewport,
+  onNavigationViewportChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -195,7 +200,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   ) => onPreferencesChange(current => updatePlanCanvasPreference(current, key, value))
 
   // Viewport state: 0.08 zoom = 1000mm -> 80px on screen.
-  const { viewport, setViewport, fitView, handleWheel } = usePlanCanvasViewport(containerRef, planVisibleObjects)
+  const { viewport, setViewport, fitView, handleWheel } = usePlanCanvasViewport(
+    containerRef, planVisibleObjects, navigationViewport, onNavigationViewportChange,
+  )
   const placement = usePlanCanvasPlacementSession({ project, displayUnit, activeTool, activation: toolActivation })
   const {
     gridStartPoint, setGridStartPoint, stairStartPoint, setStairStartPoint, stairOptions, setStairOptions, stairError, setStairError,

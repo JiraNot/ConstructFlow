@@ -302,6 +302,34 @@ test('Project Browser selection and type edits preserve one object identity acro
   await expect(sameRow.locator('.cf-browser-object')).toContainText('C2')
 })
 
+test('plan, framing, and roof plan share pan and zoom navigation', async ({ page }) => {
+  await page.goto('/')
+  const planCanvas = page.locator('.cf-plan-canvas')
+  const canvasElement = canvas(page)
+  const bounds = await canvasElement.boundingBox()
+  if (!bounds) throw new Error('Plan canvas is not visible')
+  const start = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down({ button: 'middle' })
+  await page.mouse.move(start.x + 76, start.y + 42, { steps: 4 })
+  await page.mouse.up({ button: 'middle' })
+
+  const panX = await planCanvas.getAttribute('data-viewport-pan-x')
+  const panY = await planCanvas.getAttribute('data-viewport-pan-y')
+  const zoom = await planCanvas.getAttribute('data-viewport-zoom')
+  expect(panX).not.toBeNull()
+  expect(panY).not.toBeNull()
+  await page.getByRole('button', { name: 'แปลนคาน', exact: true }).click()
+  await expect(page.locator('.cf-plan-canvas')).toHaveAttribute('data-viewport-pan-x', panX!)
+  await expect(page.locator('.cf-plan-canvas')).toHaveAttribute('data-viewport-pan-y', panY!)
+  await expect(page.locator('.cf-plan-canvas')).toHaveAttribute('data-viewport-zoom', zoom!)
+
+  await page.locator('.cf-plan-canvas').getByRole('button', { name: 'ซูมเข้า' }).click()
+  const framingZoom = await page.locator('.cf-plan-canvas').getAttribute('data-viewport-zoom')
+  await page.getByRole('button', { name: 'แปลนหลังคา', exact: true }).click()
+  await expect(page.locator('.cf-plan-canvas')).toHaveAttribute('data-viewport-zoom', framingZoom!)
+})
+
 test('Project Browser numeric group move commits once and preserves UUIDs through Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')

@@ -42,6 +42,9 @@ export function PlanCanvasSurface({
     ref={containerRef}
     className="cf-plan-canvas"
     data-active-tool={activeTool}
+    data-viewport-pan-x={viewport.panX}
+    data-viewport-pan-y={viewport.panY}
+    data-viewport-zoom={viewport.zoom}
     style={{
       position: 'absolute',
       inset: 0,

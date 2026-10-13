@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type WheelEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction, type WheelEvent } from 'react'
 import type { SmartObject, CabinetModuleData } from '@constructflow/project-model'
 import { isGridObject } from '@constructflow/project-model'
 import { cabinetFootprintPoints } from './PlanCanvasGeometry.js'
@@ -7,9 +7,20 @@ import { zoomAtScreenPoint, type ViewportState } from '../viewport/viewportTrans
 export const usePlanCanvasViewport = (
   containerRef: { current: HTMLDivElement | null },
   planVisibleObjects: readonly SmartObject[],
+  sharedViewport?: ViewportState | null,
+  onSharedViewportChange?: (viewport: ViewportState) => void,
 ) => {
   const hasInitialFitRef = useRef(false)
-  const [viewport, setViewport] = useState<ViewportState>({ panX: 400, panY: 300, zoom: 0.08 })
+  const [localViewport, setLocalViewport] = useState<ViewportState>({ panX: 400, panY: 300, zoom: 0.08 })
+  const viewport = sharedViewport ?? localViewport
+  const viewportRef = useRef(viewport)
+  viewportRef.current = viewport
+  const setViewport = useCallback<Dispatch<SetStateAction<ViewportState>>>(nextOrUpdater => {
+    const next = typeof nextOrUpdater === 'function' ? nextOrUpdater(viewportRef.current) : nextOrUpdater
+    viewportRef.current = next
+    setLocalViewport(next)
+    onSharedViewportChange?.(next)
+  }, [onSharedViewportChange])
 
   const handleWheel = useCallback((event: WheelEvent<HTMLCanvasElement>) => {
     event.preventDefault()
@@ -75,13 +86,17 @@ export const usePlanCanvasViewport = (
   }, [planVisibleObjects])
 
   useEffect(() => {
+    if (sharedViewport) {
+      hasInitialFitRef.current = true
+      return
+    }
     if (hasInitialFitRef.current || planVisibleObjects.length === 0) return
     const frame = requestAnimationFrame(() => {
       fitView()
       hasInitialFitRef.current = true
     })
     return () => cancelAnimationFrame(frame)
-  }, [fitView, planVisibleObjects.length])
+  }, [fitView, planVisibleObjects.length, sharedViewport])
 
 
   return { viewport, setViewport, fitView, handleWheel }

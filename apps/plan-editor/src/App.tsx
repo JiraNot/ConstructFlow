@@ -53,6 +53,7 @@ import { buildElevationManipulationCommands as buildElevationManipulationCommand
 import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
 import { getRoofEaveBoundary } from '@constructflow/roof-engine'
+import type { ViewportState } from './viewport/viewportTransform.js'
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
@@ -213,6 +214,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
   const { activeTool, activation: toolActivation, lastPlacementTool, activate: setActiveTool, repeat: repeatLastTool } = useToolSession()
   const [planCanvasPreferences, setPlanCanvasPreferences] = useState<PlanCanvasPreferences>(DEFAULT_PLAN_CANVAS_PREFERENCES)
+  const [planNavigationViewport, setPlanNavigationViewport] = useState<ViewportState | null>(null)
   const [viewMode, setViewMode] = useState<'plan' | 'framing' | 'roofplan' | ElevationDirection | 'model3d'>('plan')
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
@@ -1948,7 +1950,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               ['plan', 'แปลนพื้น'], ['framing', 'แปลนคาน'], ['roofplan', 'แปลนหลังคา'], ['north', 'รูปด้านเหนือ'], ['south', 'รูปด้านใต้'],
               ['east', 'รูปด้านตะวันออก'], ['west', 'รูปด้านตะวันตก'], ['rcp', 'แปลนฝ้า RCP'], ['model3d', '3D ดูตัวอย่าง'],
             ] as const).map(([mode, label]) => (
-              <button key={mode} type="button" onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>{label}</button>
+              <button key={mode} type="button" title={['plan', 'framing', 'roofplan'].includes(mode) ? 'แปลนพื้น แปลนคาน และแปลนหลังคาใช้ตำแหน่งและระดับซูมร่วมกัน' : undefined} onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>{label}</button>
             ))}
             {viewMode === 'plan' && <button type="button" onClick={handleDetectRooms} title="ค้นหาห้องจากวงผนังปิด">ตรวจจับห้อง</button>}
             {(viewMode === 'plan' || viewMode === 'framing' || viewMode === 'roofplan') && <details className="cf-label-menu" onClick={event => {
@@ -1981,6 +1983,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           <div className="cf-viewport-stage">
             {viewMode === 'plan' || viewMode === 'framing' || viewMode === 'roofplan' ? <PlanCanvas
               project={viewProject}
+              navigationViewport={planNavigationViewport}
+              onNavigationViewportChange={setPlanNavigationViewport}
               preferences={planCanvasPreferences}
               onPreferencesChange={setPlanCanvasPreferences}
               planDiscipline={viewMode === 'framing' ? 'framing' : viewMode === 'roofplan' ? 'roof' : 'architecture'}
