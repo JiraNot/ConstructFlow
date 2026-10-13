@@ -44,7 +44,7 @@ import { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
 import { usePlanCanvasPointerInteractions } from './usePlanCanvasPointerInteractions.js'
 import { PlanCanvasSurface } from './PlanCanvasSurface.js'
 import { buildPlanCanvasContextMenu } from './buildPlanCanvasContextMenu.js'
-import { hasPlanCanvasSelectionGrip } from '../planCanvasSelectionHint.mjs'
+import { usePlanCanvasSurfaceOverlays } from './usePlanCanvasSurfaceOverlays.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -119,7 +119,8 @@ import {
   type WallVerticalReference,
 } from './PlanCanvasGeometry.js'
 
-export const PlanCanvas: React.FC<PlanCanvasProps> = ({
+export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
+  const {
   project,
   preferences,
   onPreferencesChange,
@@ -180,7 +181,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   coordinationFocusSelection = false,
   navigationViewport,
   onNavigationViewportChange,
-}) => {
+  } = props
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const dragDimensionInput = usePlanCanvasDragDimensions(displayUnit)
@@ -316,7 +317,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     placementReferenceLabel: ({ centerline: 'กึ่งกลาง', left_face: 'ชิดซ้าย', right_face: 'ชิดขวา' } as const)[placementReference],
     snapCount: snapModes.length,
   }
-  const { placementStatus, placementHint, escapeLabel, cancelCurrentPlacement } = usePlanCanvasToolInteraction({
+  const interactionStatus = usePlanCanvasToolInteraction({
     activeTool,
     selectionHint,
     interactionState,
@@ -328,6 +329,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     clearPointerDrag,
     resetPlacementDrafts: placement.resetPlacementDrafts,
   })
+  const { placementStatus, placementHint, escapeLabel, cancelCurrentPlacement } = interactionStatus
 
   const selectedDoorId = selectedId && project.objects[selectedId] && isDoorObject(project.objects[selectedId]) ? selectedId : null
   usePlanCanvasGlobalShortcuts({
@@ -355,6 +357,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
   const findEditHandle = (screenPoint: [number, number]) => findPlanCanvasEditHandle({ planProject, editableSelectionIds, viewport, screenPoint, onFlipDoorHanding })
 
+  const manipulationInteractions = usePlanCanvasManipulationInteractions({
+    containerRef, canvasRef, planProject, viewport, displayUnit, dragDimensions: dragDimensionInput,
+    draggingObject, dragPreviewPoint, manipulationPreview, setDraggingObject, setDragPreviewPoint,
+    setManipulationPreview, snapPlanPoint, onPreviewManipulation, onCommitManipulation, onManipulationRejected,
+  })
   const {
     previewDragAt,
     lastPreviewValidationRef,
@@ -367,11 +374,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     updateMoveDimension,
     updateResizeDimension,
     commitDragDimensions,
-  } = usePlanCanvasManipulationInteractions({
-    containerRef, canvasRef, planProject, viewport, displayUnit, dragDimensions: dragDimensionInput,
-    draggingObject, dragPreviewPoint, manipulationPreview, setDraggingObject, setDragPreviewPoint,
-    setManipulationPreview, snapPlanPoint, onPreviewManipulation, onCommitManipulation, onManipulationRejected,
-  })
+  } = manipulationInteractions
 
   usePlanCanvasDrawing({
     containerRef,
@@ -442,16 +445,17 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       onManipulationRejected, onCursorChange,
     },
   })
-  const {
-    dimensionHostAxis, isHostedOpeningPlacement, dimensionReferences, showXDimension, showYDimension,
-    xDimensionAnchor, yDimensionAnchor, xDimensionDisplay, yDimensionDisplay,
-    dimensionOverlayPosition, supportsPlacementDimensions, hasLineGeometryInput,
-  } = usePlanCanvasPlacementDimensions({
+  const placementDimensions = usePlanCanvasPlacementDimensions({
     project, planProject, activeTool, activeDoorTypeMark, activeWindowTypeMark, activeSnap,
     activeWallSnap, gridCopySourceId, dimensionReferenceMode, dimensionAnchorX, dimensionAnchorY,
     dimensionInputX, dimensionInputY, displayUnit, viewport, stairStartPoint, wallStartNode,
     beamStartNode, roomSeparatorStart, slabBoundary, gridStartPoint,
   })
+  const {
+    dimensionHostAxis, isHostedOpeningPlacement, dimensionReferences, showXDimension, showYDimension,
+    xDimensionAnchor, yDimensionAnchor, xDimensionDisplay, yDimensionDisplay,
+    dimensionOverlayPosition, supportsPlacementDimensions, hasLineGeometryInput,
+  } = placementDimensions
 
   const { commitActivePlacement, handleCanvasDoubleClick } = createPlanCanvasPlacementCommitHandlers({
     canvasRef, activeSnap, activeTool, supportsPlacementDimensions, viewport,
@@ -460,13 +464,14 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling, onCommitRoof, onCommitSurfaceVoid,
   })
 
-  const { handlePlacementInputKeyDown, handleCanvasDimensionKeyDown, handleDimensionInputKeyDown } = usePlanCanvasPlacementKeyboard({
+  const placementKeyboard = usePlanCanvasPlacementKeyboard({
     activeTool, supportsPlacementDimensions, dimensionHostAxis, dimensionKeyboardAxis, dimensionAnchorX, dimensionAnchorY,
     dimensionReferences, dimensionInputX, dimensionInputY, showXDimension, showYDimension,
     dimensionInputXRef, dimensionInputYRef, canvasRef, setDimensionKeyboardAxis, setDimensionAnchorX,
     setDimensionAnchorY, setDimensionInputX, setDimensionInputY, commitActivePlacement, cancelCurrentPlacement,
     toggleDimensionReferenceMode,
   })
+  const { handlePlacementInputKeyDown, handleCanvasDimensionKeyDown, handleDimensionInputKeyDown } = placementKeyboard
   const containerSize = {
     width: containerRef.current?.clientWidth ?? 800,
     height: containerRef.current?.clientHeight ?? 600,
@@ -483,60 +488,25 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     onDeleteObjects,
     closeMenu: () => setObjectContextMenu(null),
   })
-  const overlays: Parameters<typeof PlanCanvasSurface>[0]['overlays'] = {
-    hints: {
-      activeTool,
-      tapeMeasure,
-      showSelectionHandleHint: hasPlanCanvasSelectionGrip(planProject, editableSelectionIds),
-      placementStatus, placementHint, escapeLabel, pickCandidates, hoveredId, project: planProject,
-      onCyclePick: cyclePick, onHoverChange: setHoveredId, onSelectionChange, onSelectObject,
-    },
-    manipulation: manipulationDimensions && dragPreviewPoint && draggingObject ? {
-      mode: manipulationDimensionMode as 'move' | 'rectangle' | 'opening-width' | 'line-length',
-      displayUnit,
-      values: manipulationDimensionValues,
-      onChange: (field, value) => field === 'x' || field === 'y' ? updateMoveDimension(field, value) : updateResizeDimension(field, value),
-      onCommit: commitDragDimensions,
-      onCancel: () => { cancelCurrentPlacement(); canvasRef.current?.focus({ preventScroll: true }) },
-      readout: manipulationDimensionReadout,
-      style: manipulationDimensionStyle ?? {},
-    } : null,
-    placement: {
-      position: supportsPlacementDimensions ? dimensionOverlayPosition : null,
-      containerSize,
-      displayUnit, showX: showXDimension, showY: showYDimension, hasLineGeometryInput, isHostedOpeningPlacement,
-      dimensionReferenceMode, dimensionReferences, dimensionAnchorX, dimensionAnchorY, xDimensionDisplay, yDimensionDisplay,
-      drawLengthMeters, drawAngleDegrees, dimensionInputXRef, dimensionInputYRef,
-      setDimensionKeyboardAxis, setDimensionAnchorX, setDimensionAnchorY, setDimensionInputX, setDimensionInputY,
-      setDrawLengthMeters, setDrawAngleDegrees, onDimensionKeyDown: handleDimensionInputKeyDown,
-      onPlacementKeyDown: handlePlacementInputKeyDown, onToggleDimensionReference: toggleDimensionReferenceMode,
-    },
-    controls: {
-      project, activeTool, displayUnit, preferences, open: authoringControlsOpen, pipeSystem, fixtureKind,
-      roof: { shape: roofShape, slopeDeg: roofSlopeDeg, thicknessMm: roofThicknessMm, elevationOffsetMm: roofElevationOffsetMm, material: roofMaterial },
-      stairOptions, stairError, gridSequenceStyle, gridStartPoint,
-      gridSystem: { xIntervals: gridXIntervals, yIntervals: gridYIntervals, xFirstTag: gridXFirstTag, yFirstTag: gridYFirstTag, error: gridSystemError },
-      lineReferenceDescription: (activeTool === 'beam' ? beamStartNode?.reference : wallStartNode?.reference)?.description,
-      activeTypeMarks: { column: activeColumnTypeMark, foundation: activeFoundationTypeMark, beam: activeBeamTypeMark, wall: activeWallTypeMark, door: activeDoorTypeMark, window: activeWindowTypeMark, slab: activeSlabTypeMark, roof: activeRoofTypeMark },
-      onOpenChange: setAuthoringControlsOpen, onPipeSystemChange: setPipeSystem, onFixtureKindChange: setFixtureKind,
-      onRoofChange: updater => {
-        const next = updater({ shape: roofShape, slopeDeg: roofSlopeDeg, thicknessMm: roofThicknessMm, elevationOffsetMm: roofElevationOffsetMm, material: roofMaterial })
-        setRoofShape(next.shape); setRoofSlopeDeg(next.slopeDeg); setRoofThicknessMm(next.thicknessMm)
-        setRoofElevationOffsetMm(next.elevationOffsetMm); setRoofMaterial(next.material)
-      },
-      onStairOptionsChange: setStairOptions, onGridSequenceStyleChange: setGridSequenceStyle,
-      onGridIntervalsChange: (axis, value) => {
-        if (axis === 'x') setGridXIntervals(value)
-        else setGridYIntervals(value)
-        setGridSystemError('')
-      },
-      onGridFirstTagChange: (axis, value) => axis === 'x' ? setGridXFirstTag(value) : setGridYFirstTag(value),
-      onPlacementReferenceChange: value => setPreference('placementReference', value),
-      onLineConstraintModeChange: value => setPreference('lineConstraintMode', value),
-      onSnapModeToggle: mode => setPreference('snapModes', current => current.includes(mode) ? current.filter(value => value !== mode) : [...current, mode]),
-      onPlacementKeyDown: handlePlacementInputKeyDown, onChangeActiveTypeMark, onOpenTypeManager,
-    },
-  }
+  const overlays = usePlanCanvasSurfaceOverlays({
+    props,
+    planProject,
+    editableSelectionIds,
+    status: interactionStatus,
+    picking,
+    placement,
+    placementDimensions,
+    manipulation: manipulationInteractions,
+    pointer: pointerState,
+    keyboard: placementKeyboard,
+    displayUnit,
+    dimensionReferenceMode,
+    containerSize,
+    canvasRef,
+    authoringControlsOpen,
+    setAuthoringControlsOpen,
+    toggleDimensionReferenceMode,
+  })
 
   return <PlanCanvasSurface
     containerRef={containerRef}
