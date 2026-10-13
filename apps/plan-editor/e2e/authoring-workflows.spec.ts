@@ -1188,3 +1188,43 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   await expect(page.getByTestId('secondary-view-pane').getByTestId('model3d-viewport')).toHaveAttribute('data-auto-framed-selection', objectId!)
 })
 
+test('two-storey residential demo supports browser review and autosave reload at 239 objects', async ({ page }) => {
+  test.setTimeout(90_000)
+  const pageErrors: string[] = []
+  page.on('pageerror', error => pageErrors.push(error.message))
+  await page.goto('/')
+  await page.locator('.cf-more-menu summary').click()
+  await page.getByRole('button', { name: 'เปิดแบบบ้านเดโม 2 ชั้น' }).click()
+  await expect(page.locator('.cf-save-status')).toContainText('เปิดแบบบ้านเดโม 2 ชั้นแล้ว')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const browser = page.getByLabel('Project Browser')
+  await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  const rows = browser.locator('li[data-object-id]')
+  await expect(rows).toHaveCount(239, { timeout: 30_000 })
+  const objectId = await browser.locator('li[data-object-type="structure.column"]').first().getAttribute('data-object-id')
+  expect(objectId).toBeTruthy()
+
+  await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill(objectId!)
+  await expect(rows).toHaveCount(1)
+  await rows.first().locator('.cf-browser-object').click()
+  const primaryPane = page.locator('.cf-multiview-pane').first()
+  await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const activeBrowser = page.getByLabel('Project Browser')
+  await activeBrowser.getByLabel('ค้นหาวัตถุในโครงการ').fill('')
+  await activeBrowser.getByRole('button', { name: 'ตะวันออก' }).click()
+  await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
+  await expect(page.locator('canvas').first()).toBeVisible()
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
+
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const restoredBrowser = page.getByLabel('Project Browser')
+  await restoredBrowser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  await expect(restoredBrowser.locator('li[data-object-id]')).toHaveCount(239, { timeout: 30_000 })
+  expect(pageErrors).toEqual([])
+})
+

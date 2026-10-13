@@ -1795,7 +1795,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const handleStartHouseDemo = async () => {
     if (!confirmReplaceUnsavedProject()) return
     try {
-      const { default: houseDemoRaw } = await import('../../../examples/constructflow-reference-house-2storey.cfproj?raw')
+      const { loadHouseDemoRaw } = await import('./app/houseDemo.js')
+      const houseDemoRaw = loadHouseDemoRaw()
       const restored = deserializeProject(houseDemoRaw)
       projectSessionRef.current!.reset(restored)
       updateActiveProjectFileHandle(null)
