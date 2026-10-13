@@ -27,6 +27,7 @@ import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-en
 import { PlanCanvasAuthoringControls } from './PlanCanvasAuthoringControls.js'
 import { commitPlanCanvasLinePlacementPoint, type BeamPlacementStart, type WallPlacementStart } from './commitPlanCanvasLinePlacementPoint.js'
 import { commitPlanCanvasPointPlacement } from './commitPlanCanvasPointPlacement.js'
+import { commitPlanCanvasConnectedPlacementPoint, commitPlanCanvasGridPoint, commitPlanCanvasGridSystemPoint } from './commitPlanCanvasPlacementPoints.js'
 import { handlePlanCanvasAuthoringPointerMove } from './handlePlanCanvasAuthoringPointerMove.js'
 import { usePlanCanvasPlacementKeyboard } from './usePlanCanvasPlacementKeyboard.js'
 import { TOOL_FAMILIES } from './catalogPresentation.js'
@@ -959,15 +960,20 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           onCommitWall,
         })
       } else if (isTwoPointInteraction(activeTool) && ['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool)) {
-        if (!roomSeparatorStart) { setRoomSeparatorStart(snap.point_mm); setDrawLengthMeters(''); setDrawAngleDegrees('') }
-        else {
-          if (activeTool === 'roomSeparator') onCommitRoomSeparator?.(roomSeparatorStart, snap.point_mm)
-          else if (activeTool === 'pipe') onCommitPipeRoute?.(roomSeparatorStart, snap.point_mm, pipeSystem)
-          else if (activeTool === 'cabinet') onCommitCabinet?.(roomSeparatorStart, snap.point_mm)
-          else if (activeTool === 'moulding') onCommitMoulding?.(roomSeparatorStart, snap.point_mm)
-          setRoomSeparatorStart(null); setDrawLengthMeters(''); setDrawAngleDegrees('')
-        }
-        clearDimensionOverrides()
+        commitPlanCanvasConnectedPlacementPoint({
+          activeTool: activeTool as 'roomSeparator' | 'pipe' | 'cabinet' | 'moulding',
+          point: snap.point_mm,
+          startPoint: roomSeparatorStart,
+          pipeSystem,
+          onStartPointChange: setRoomSeparatorStart,
+          onDrawLengthChange: setDrawLengthMeters,
+          onDrawAngleChange: setDrawAngleDegrees,
+          clearDimensionOverrides,
+          onCommitRoomSeparator,
+          onCommitPipeRoute,
+          onCommitCabinet,
+          onCommitMoulding,
+        })
       } else if (isPolygonInteraction(activeTool)) {
         commitPlanCanvasPolygonPoint({
           activeTool,
@@ -989,24 +995,28 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           clearDimensionOverrides,
         })
       } else if (activeTool === 'grid') {
-        if (!gridStartPoint) { setGridStartPoint(snap.point_mm); clearDimensionOverrides() }
-        else {
-          const dx = snap.point_mm[0] - gridStartPoint[0], dy = snap.point_mm[1] - gridStartPoint[1]
-          if (Math.hypot(dx, dy) >= 100) onCommitGrid('A', gridStartPoint, snap.point_mm, gridSequenceStyle)
-          setGridStartPoint(null)
-          setDrawLengthMeters(''); setDrawAngleDegrees(''); clearDimensionOverrides()
-        }
+        commitPlanCanvasGridPoint({
+          point: snap.point_mm,
+          startPoint: gridStartPoint,
+          sequenceStyle: gridSequenceStyle,
+          onStartPointChange: setGridStartPoint,
+          onDrawLengthChange: setDrawLengthMeters,
+          onDrawAngleChange: setDrawAngleDegrees,
+          clearDimensionOverrides,
+          onCommitGrid,
+        })
       } else if (activeTool === 'gridSystem') {
-        const parseIntervals = (value: string) => value.split(/[,;]+/).map(item => item.trim()).filter(Boolean).map(item => parseLengthMm(item, displayUnit))
-        const xIntervals = parseIntervals(gridXIntervals), yIntervals = parseIntervals(gridYIntervals)
-        const allIntervals = [...xIntervals, ...yIntervals]
-        if (!allIntervals.length) setGridSystemError('กรอกระยะอย่างน้อยหนึ่งแนว')
-        else if (xIntervals.length > 99 || yIntervals.length > 99 || allIntervals.some(value => value === null || !Number.isFinite(value) || value <= 0)) setGridSystemError('ระยะแต่ละช่วงต้องมากกว่า 0 และแต่ละแนวสร้างได้ไม่เกิน 100 เส้น')
-        else {
-          setGridSystemError('')
-          onCommitGridSystem(snap.point_mm, xIntervals as number[], yIntervals as number[], gridXFirstTag.trim() || 'A', gridYFirstTag.trim() || '1')
-          clearDimensionOverrides()
-        }
+        commitPlanCanvasGridSystemPoint({
+          point: snap.point_mm,
+          displayUnit,
+          xIntervalsText: gridXIntervals,
+          yIntervalsText: gridYIntervals,
+          xFirstTag: gridXFirstTag,
+          yFirstTag: gridYFirstTag,
+          setError: setGridSystemError,
+          onCommit: onCommitGridSystem,
+          clearDimensionOverrides,
+        })
       } else if (activeTool === 'measure') {
         if (!tapeMeasure || tapeMeasure.complete) setTapeMeasure({ start: snap.point_mm, end: snap.point_mm, complete: false })
         else setTapeMeasure({ ...tapeMeasure, end: snap.point_mm, complete: true })

@@ -174,6 +174,25 @@ test('polygon placement commits a slab boundary through the shared placement ses
   await expect(page.locator('li[data-object-type="structure.slab"]')).toHaveCount(1)
 })
 
+test('grid-system placement validates entered lengths and commits both axes', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const gridRows = page.locator('li[data-object-type="structure.grid"]')
+  const initialCount = await gridRows.count()
+
+  await page.locator('.cf-tool-button[title^="ระบบ Grid Line"]').click()
+  const xIntervals = page.getByLabel(/ระยะช่วงแนวตั้งของระบบกริด/)
+  const yIntervals = page.getByLabel(/ระยะช่วงแนวนอนของระบบกริด/)
+  await xIntervals.fill('0')
+  await clickCanvasFraction(page, 0.5, 0.5)
+  await expect(page.locator('.cf-authoring-controls-content [role="alert"]')).toContainText('ระยะแต่ละช่วงต้องมากกว่า 0')
+
+  await xIntervals.fill('3m')
+  await yIntervals.fill('2.5m')
+  await clickCanvasFraction(page, 0.5, 0.5)
+  await expect(gridRows).toHaveCount(initialCount + 4)
+})
+
 test('Escape cancels a pending grid-copy destination before leaving the tool', async ({ page }) => {
   await page.goto('/')
   const canvasElement = canvas(page)
