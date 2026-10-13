@@ -41,13 +41,12 @@ import type { ProjectLegalMetadata } from '@constructflow/project-model'
 import { UnderlayConfig, PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
 import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home } from 'lucide-react'
 import { calculateTakeoff, calculatePhasedBOQ } from '@constructflow/takeoff-engine'
-import { readProjectFile, writeProjectFile, type LocalProjectFileHandle } from './projectFileIO.js'
-import { saveLocalProjectSnapshot } from './projectAutosave.js'
 import { buildElevationManipulationCommands as buildElevationManipulationCommandsForView } from './elevationManipulationCommands.js'
 import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { usePlanPlacementCommands } from './app/usePlanPlacementCommands.js'
 import { usePropertiesPanelActions } from './app/usePropertiesPanelActions.js'
 import { useLocalProjectPersistence } from './app/useLocalProjectPersistence.js'
+import { useProjectFileActions, type ProjectFileAccess } from './app/useProjectFileActions.js'
 import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
 import { getRoofEaveBoundary } from '@constructflow/roof-engine'
 import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
@@ -92,33 +91,12 @@ const nextHigherLevelId = (project: ProjectDocument, baseLevelId: string): strin
 const Model3DViewport = lazy(() => import('./components/Model3DViewport.js').then(module => ({ default: module.Model3DViewport })))
 const ConstructionWorkbench=lazy(()=>import('./components/ConstructionWorkbench.js').then(m=>({default:m.ConstructionWorkbench})))
 
-type ProjectSaveWindow = Window & {
-  showOpenFilePicker?: (options: {
-    multiple?: boolean
-    types: Array<{ description: string; accept: Record<string, string[]> }>
-  }) => Promise<LocalProjectFileHandle[]>
-  showSaveFilePicker?: (options: {
-    suggestedName: string
-    types: Array<{ description: string; accept: Record<string, string[]> }>
-  }) => Promise<LocalProjectFileHandle>
-}
-
 export interface AppProps {
   /** Optional picker injection for controlled acceptance runs; production uses the browser APIs. */
-  projectFileAccess?: Pick<ProjectSaveWindow, 'showOpenFilePicker' | 'showSaveFilePicker'>
-}
-
-const projectFileName = (project: ProjectDocument) => {
-  const safeName = project.project.name.trim()
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
-    .replace(/\s+/g, ' ')
-    .replace(/[. ]+$/g, '')
-    .replace(/\.cfproj$/i, '')
-  return `${safeName || project.project.id || 'project'}.cfproj`
+  projectFileAccess?: ProjectFileAccess
 }
 
 export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
-  const fileWindow = projectFileAccess ?? (window as ProjectSaveWindow)
   const {
     project,
     setProjectState,
@@ -136,10 +114,18 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     localAutosaveReady, localAutosaveState, setLocalAutosaveState, activeProjectFileHandle,
     activeProjectFileHandleRef, updateActiveProjectFileHandle, fileFeedback, setFileFeedback,
   } = useLocalProjectPersistence({ project, sessionRef: projectSessionRef, setProjectState, setCommandQueue, setSelectedId })
+  const {
+    supportsProjectFileOpen, confirmReplaceUnsavedProject, handleSaveProject, handleSaveAsProject,
+    handleOpenProject, handleChooseProject,
+  } = useProjectFileActions({
+    project, projectJson, projectFileAccess, sessionRef: projectSessionRef, setProjectState, setCommandQueue,
+    setSelectedId, setSelectedIds, savedProjectJson, setSavedProjectJson, replacementBaselineJson,
+    setReplacementBaselineJson, activeProjectFileHandleRef, updateActiveProjectFileHandle,
+    setLocalAutosaveState, setFileFeedback,
+  })
   const displayUnit: DisplayLengthUnit = project.project.display_unit ?? 'm'
   const [isProjectNameEditing, setIsProjectNameEditing] = useState(false)
   const [projectNameDraft, setProjectNameDraft] = useState(project.project.name)
-  const supportsProjectFileOpen = typeof fileWindow.showOpenFilePicker === 'function'
   const commitDirectManipulation = dispatchCommandBatch
   const handleManipulationRejected = (errors: string[]) => {
     if (errors.length) setFileFeedback(errors[0])
@@ -1016,77 +1002,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     return () => window.removeEventListener('keydown', handleDeleteShortcut)
   }, [selectedId, selectedIds, project, handleDeleteObject])
 
-  const confirmReplaceUnsavedProject = () => {
-    const hasUnsavedProjectChanges = replacementBaselineJson !== projectJson
-    return !hasUnsavedProjectChanges || window.confirm('มีการแก้ไขโครงการหลังเปิดหรือบันทึกไฟล์ครั้งล่าสุด ต้องการแทนที่โครงการปัจจุบันหรือไม่?')
-  }
-
-  // Export .cfproj file
-  const handleDownloadProjectCopy = () => {
-    const json = projectJson
-    const filename = projectFileName(project)
-    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.style.display = 'none'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    setSavedProjectJson(json)
-    setReplacementBaselineJson(json)
-    updateActiveProjectFileHandle(null)
-    setFileFeedback(`ส่งคำขอดาวน์โหลด ${filename} แล้ว`)
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-  }
-
-  const handleSaveProject = async () => {
-    setLocalAutosaveState('saving')
-    const handle = activeProjectFileHandleRef.current
-    try {
-      if (handle) {
-        await writeProjectFile(handle, projectJson)
-        setSavedProjectJson(projectJson)
-        setReplacementBaselineJson(projectJson)
-        setLocalAutosaveState('saved')
-        setFileFeedback(`บันทึกไฟล์ ${projectFileName(project)} แล้ว`)
-      } else {
-        await saveLocalProjectSnapshot({ projectJson, savedProjectJson, replacementBaselineJson: projectJson })
-        setReplacementBaselineJson(projectJson)
-        setLocalAutosaveState('saved')
-        setFileFeedback('บันทึกในเบราว์เซอร์เครื่องนี้แล้ว')
-      }
-    } catch (error) {
-      console.error('Unable to save local ConstructFlow project', error)
-      setLocalAutosaveState('error')
-      setFileFeedback('บันทึกในเครื่องไม่สำเร็จ')
-    }
-  }
-
-  const handleSaveAsProject = async () => {
-    const json = projectJson
-    const filename = projectFileName(project)
-    if (fileWindow.showSaveFilePicker) {
-      try {
-        const handle = await fileWindow.showSaveFilePicker.call(window, {
-          suggestedName: filename,
-          types: [{ description: 'ConstructFlow Project', accept: { 'application/json': ['.cfproj'] } }],
-        })
-        await writeProjectFile(handle, json)
-        updateActiveProjectFileHandle(handle)
-        setSavedProjectJson(json)
-        setReplacementBaselineJson(json)
-        setFileFeedback(`บันทึกไฟล์ ${filename} แล้ว`)
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        window.alert(`บันทึกไฟล์โครงการไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
-      }
-      return
-    }
-    updateActiveProjectFileHandle(null)
-    handleDownloadProjectCopy()
-  }
-
   const handleExportTakeoff = () => {
     const escape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
     const rows = [
@@ -1165,39 +1080,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (error) {
       setFileFeedback(`ส่งออกชุดแบบไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-
-  const handleOpenProject = async (file?: File, fileHandle: LocalProjectFileHandle | null = null) => {
-    if (!file) return
-    try {
-      const { project: loaded, serialized: loadedJson } = await readProjectFile(file)
-      if (!confirmReplaceUnsavedProject()) return
-      projectSessionRef.current!.reset(loaded)
-      updateActiveProjectFileHandle(fileHandle)
-      setProjectState(loaded)
-      setSavedProjectJson(loadedJson)
-      setReplacementBaselineJson(loadedJson)
-      setFileFeedback(`เปิดไฟล์ ${file.name} แล้ว`)
-      setCommandQueue([])
-      setSelectedId(null)
-    } catch (error) {
-      window.alert(`เปิดไฟล์โครงการไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-
-  const handleChooseProject = async () => {
-    if (!fileWindow.showOpenFilePicker) return
-    try {
-      const handles = await fileWindow.showOpenFilePicker.call(window, {
-        multiple: false,
-        types: [{ description: 'ConstructFlow Project', accept: { 'application/json': ['.cfproj'] } }],
-      })
-      const handle = handles[0]
-      if (handle) await handleOpenProject(await handle.getFile(), handle)
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return
-      window.alert(`เปิดไฟล์โครงการไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 

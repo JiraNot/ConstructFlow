@@ -404,6 +404,51 @@ async function findGripPoints(page: Page, color: 'blue' | 'orange' | 'slab-edge'
   }, { box: bounds, color })
 }
 
+test('project file controller opens a .cfproj and saves a downloadable copy with the same objects', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'showOpenFilePicker', { configurable: true, value: undefined })
+    Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, value: undefined })
+  })
+
+  const project = createEmptyProjectDocument(randomUUID(), 'File Controller Acceptance')
+  const objectId = randomUUID()
+  const created = CommandBus.execute(project, 'CreateWall', {
+    id: objectId,
+    mark: 'FILE-W1',
+    level_id: project.project.active_level_id,
+    start_point_mm: [1000, 1000],
+    end_point_mm: [4000, 1000],
+    thickness_mm: 100,
+    height_mm: 2800,
+  })
+  expect(created.result.status).toBe('success')
+
+  await page.goto('/')
+  await page.locator('#cfproj-open').setInputFiles({
+    name: 'file-controller-acceptance.cfproj',
+    mimeType: 'application/json',
+    buffer: Buffer.from(serializeProject(created.updatedProject)),
+  })
+  await expect(page.getByRole('button', { name: 'แก้ชื่อโครงการ: File Controller Acceptance' })).toBeVisible()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const objectRow = page.locator(`li[data-object-id="${objectId}"]`)
+  await expect(objectRow).toBeVisible()
+  await page.getByRole('button', { name: 'บันทึก', exact: true }).click()
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเบราว์เซอร์เครื่องนี้แล้ว')
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByLabel('ตัวเลือกบันทึก').click()
+  await page.getByRole('button', { name: 'บันทึกเป็นไฟล์ .cfproj' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('File Controller Acceptance.cfproj')
+  const downloadPath = await download.path()
+  expect(downloadPath).toBeTruthy()
+  const downloadedProject = JSON.parse(await readFile(downloadPath!, 'utf8'))
+  expect(downloadedProject.project.name).toBe('File Controller Acceptance')
+  expect(downloadedProject.objects[objectId]).toBeTruthy()
+})
+
 test('mouse and keyboard authoring creates wall, beam, hosted opening, and point objects', async ({ page }) => {
   test.setTimeout(60_000)
   const pageErrors: string[] = []
