@@ -67,3 +67,33 @@ test('Escape cancels a pending step first, exits an idle tool, and clears select
   assert.equal(resolveEscapeAction('select', false, true), 'clear-selection')
   assert.equal(resolveEscapeAction('select', false, false), 'noop')
 })
+
+test('step feedback stays aligned with state across two-point, polygon, measurement, and reference tools', () => {
+  for (const tool of ['wall', 'beam', 'grid', 'roomSeparator', 'pipe', 'cabinet', 'moulding', 'stair']) {
+    const state = tool === 'wall' ? { wallStartNode: { point_mm: [0, 0] } }
+      : tool === 'beam' ? { beamStartNode: { point_mm: [0, 0] } }
+        : tool === 'grid' ? { gridStartPoint: [0, 0] }
+          : tool === 'stair' ? { stairStartPoint: [0, 0] }
+            : { roomSeparatorStart: [0, 0] }
+    const status = resolveToolInteractionStatus(tool, state)
+    assert.equal(status.step, 'end-point', `${tool} should report its pending end point`)
+    assert.equal(hasPendingToolStep(state), true, `${tool} should be cancelable as a pending step`)
+    assert.equal(resolveEscapeAction(tool, true), 'cancel-step')
+  }
+
+  for (const tool of ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof']) {
+    const first = resolveToolInteractionStatus(tool)
+    const next = resolveToolInteractionStatus(tool, { slabBoundary: [[0, 0], [4000, 0]] })
+    assert.equal(first.step, 'first-vertex', `${tool} should prompt for the first vertex`)
+    assert.equal(next.step, 'add-vertex', `${tool} should prompt for another vertex`)
+    assert.equal(resolveEscapeAction(tool, hasPendingToolStep({ slabBoundary: [[0, 0]] })), 'cancel-step')
+  }
+
+  assert.equal(resolveToolInteractionStatus('measure').step, 'start-point')
+  assert.equal(resolveToolInteractionStatus('measure', { tapeMeasure: { complete: false } }).step, 'end-point')
+  assert.equal(resolveToolInteractionStatus('measure', { tapeMeasure: { complete: true } }).step, 'complete')
+  assert.equal(resolveToolInteractionStatus('calibrate').step, 'first-reference')
+  assert.equal(resolveToolInteractionStatus('calibrate', { calibrationP1: [0, 0] }).step, 'second-reference')
+  assert.equal(resolveToolInteractionStatus('gridSystem', { gridSystemError: 'invalid' }).step, 'fix-intervals')
+  assert.equal(resolveToolInteractionStatus('gridSystem').step, 'origin')
+})
