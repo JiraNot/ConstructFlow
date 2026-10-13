@@ -19,13 +19,13 @@ import {
   parseLengthMm,
   DisplayLengthUnit,
 } from '@constructflow/project-model'
-import { projectPointToWallOffsetMm, stairFromRun, type StairPlacementOptions } from '@constructflow/architecture-engine'
+import { projectPointToWallOffsetMm, stairFromRun } from '@constructflow/architecture-engine'
 import { polygonInteriorPoint } from '@constructflow/geometry-kernel'
 import { getEditableRoofRidge } from '@constructflow/roof-engine'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import { PlanCanvasAuthoringControls } from './PlanCanvasAuthoringControls.js'
-import { commitPlanCanvasLinePlacementPoint, type BeamPlacementStart, type WallPlacementStart } from './commitPlanCanvasLinePlacementPoint.js'
+import { commitPlanCanvasLinePlacementPoint } from './commitPlanCanvasLinePlacementPoint.js'
 import { commitPlanCanvasPointPlacement } from './commitPlanCanvasPointPlacement.js'
 import { commitPlanCanvasConnectedPlacementPoint, commitPlanCanvasGridPoint, commitPlanCanvasGridSystemPoint } from './commitPlanCanvasPlacementPoints.js'
 import { handlePlanCanvasAuthoringPointerMove } from './handlePlanCanvasAuthoringPointerMove.js'
@@ -70,6 +70,7 @@ import { PlanCanvasInteractionHints } from './PlanCanvasInteractionHints.js'
 import { PlanCanvasPlacementDimensions } from './PlanCanvasPlacementDimensions.js'
 import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParallelOffset, constrainPlanCanvasLineSnap, resolvePlanCanvasReferencePath } from './planCanvasPlacementConstraints.mjs'
 import { resolvePlanCanvasPickCandidates } from './resolvePlanCanvasPickCandidates.mjs'
+import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
 
 interface PlanCanvasProps {
   project: ProjectDocument
@@ -219,35 +220,24 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
   // Viewport state: 0.08 zoom = 1000mm -> 80px on screen.
   const { viewport, setViewport, fitView, handleWheel } = usePlanCanvasViewport(containerRef, planVisibleObjects)
-  const [gridStartPoint, setGridStartPoint] = useState<[number, number] | null>(null)
-  const [stairStartPoint, setStairStartPoint] = useState<[number, number] | null>(null)
-  const [stairOptions, setStairOptions] = useState<StairPlacementOptions>({ stair_type: 'u_shape', width_mm: 900, landing_depth_mm: 900, turn_direction: 'right', num_risers: 18, flight_gap_mm: 100, top_level_id: '' })
-  const [stairError, setStairError] = useState('')
+  const placement = usePlanCanvasPlacementSession({ project, displayUnit, activeTool, activation: toolActivation })
+  const {
+    gridStartPoint, setGridStartPoint, stairStartPoint, setStairStartPoint, stairOptions, setStairOptions, stairError, setStairError,
+    gridSequenceStyle, setGridSequenceStyle, gridCopySourceId, setGridCopySourceId,
+    gridXIntervals, setGridXIntervals, gridYIntervals, setGridYIntervals, gridXFirstTag, setGridXFirstTag,
+    gridYFirstTag, setGridYFirstTag, gridSystemError, setGridSystemError,
+    drawLengthMeters, setDrawLengthMeters, drawAngleDegrees, setDrawAngleDegrees,
+    dimensionInputX, setDimensionInputX, dimensionInputY, setDimensionInputY,
+    dimensionInputXRef, dimensionInputYRef, dimensionAnchorX, setDimensionAnchorX, dimensionAnchorY, setDimensionAnchorY,
+    dimensionKeyboardAxis, setDimensionKeyboardAxis, clearDimensionOverrides,
+    beamStartNode, setBeamStartNode, wallStartNode, setWallStartNode, roomSeparatorStart, setRoomSeparatorStart,
+    roofShape, setRoofShape, roofSlopeDeg, setRoofSlopeDeg, roofThicknessMm, setRoofThicknessMm,
+    roofElevationOffsetMm, setRoofElevationOffsetMm, roofMaterial, setRoofMaterial,
+    pipeSystem, setPipeSystem, fixtureKind, setFixtureKind, slabBoundary, setSlabBoundary,
+    calibrationP1, setCalibrationP1, calibrationMousePoint, setCalibrationMousePoint,
+    tapeMeasure, setTapeMeasure, activeSnap, setActiveSnap, activeWallSnap, setActiveWallSnap,
+  } = placement
   const [authoringControlsOpen, setAuthoringControlsOpen] = useState(true)
-  useEffect(() => {
-    const base = project.levels.find(l => l.id === project.project.active_level_id)
-    const top = project.levels.filter(l => l.elevation_mm > (base?.elevation_mm ?? 0)).sort((a, b) => a.elevation_mm - b.elevation_mm)[0]
-    setStairOptions(o => ({ ...o, top_level_id: top?.id ?? '', num_risers: top && base ? Math.ceil((top.elevation_mm - base.elevation_mm) / 190) : 18, first_flight_risers: undefined }))
-    setStairStartPoint(null)
-  }, [project.project.active_level_id, project.levels])
-  const [gridSequenceStyle, setGridSequenceStyle] = useState<'auto' | 'alpha' | 'numeric'>('auto')
-  const [gridCopySourceId, setGridCopySourceId] = useState<string | null>(null)
-  const [gridXIntervals, setGridXIntervals] = useState(() => [3000, 3000, 3000].map(value => formatLengthMm(value, displayUnit)).join(', '))
-  const [gridYIntervals, setGridYIntervals] = useState(() => [2500, 2500].map(value => formatLengthMm(value, displayUnit)).join(', '))
-  const [gridXFirstTag, setGridXFirstTag] = useState('A')
-  const [gridYFirstTag, setGridYFirstTag] = useState('1')
-  const [gridSystemError, setGridSystemError] = useState('')
-  const [drawLengthMeters, setDrawLengthMeters] = useState('')
-  const [drawAngleDegrees, setDrawAngleDegrees] = useState('')
-  const [dimensionInputX, setDimensionInputX] = useState('')
-  const [dimensionInputY, setDimensionInputY] = useState('')
-  const dimensionInputXRef = useRef<HTMLInputElement>(null)
-  const dimensionInputYRef = useRef<HTMLInputElement>(null)
-  const [dimensionAnchorX, setDimensionAnchorX] = useState<number | null>(null)
-  const [dimensionAnchorY, setDimensionAnchorY] = useState<number | null>(null)
-  const [dimensionKeyboardAxis, setDimensionKeyboardAxis] = useState<'x' | 'y'>('x')
-  const previousDisplayUnit = useRef(displayUnit)
-  const previousToolSession = useRef({ activeTool, activation: toolActivation })
   const enabledSnapModes = useMemo(() => new Set(snapModes), [snapModes])
   const snapPlanPoint = (point: [number, number], distancePx = 16, excludedObjectId?: string) => {
     const radiusMm = distancePx / Math.max(viewport.zoom, 0.0001)
@@ -260,34 +250,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     return snapToWallHost(point, planProject, viewport, openingWidthMm, 36, candidates)
   }
 
-  useEffect(() => {
-    const previousUnit = previousDisplayUnit.current
-    if (previousUnit === displayUnit) return
-    const convert = (value: string) => value.split(/[,;]+/).map(part => part.trim()).filter(Boolean).map(part => {
-      const mm = parseLengthMm(part, previousUnit)
-      return mm === null ? part : formatLengthMm(mm, displayUnit)
-    }).join(', ')
-    setGridXIntervals(convert(gridXIntervals))
-    setGridYIntervals(convert(gridYIntervals))
-    setDimensionInputX(value => value.trim() ? formatLengthMm(parseLengthMm(value, previousUnit) ?? 0, displayUnit) : '')
-    setDimensionInputY(value => value.trim() ? formatLengthMm(parseLengthMm(value, previousUnit) ?? 0, displayUnit) : '')
-    setDrawLengthMeters(value => value.trim() ? formatLengthMm(parseLengthMm(value, previousUnit) ?? 0, displayUnit) : '')
-    previousDisplayUnit.current = displayUnit
-  }, [displayUnit])
-
   const applyPlacementDimensions = (point: [number, number], refs: { refX?: number; refY?: number }, rawPoint: [number, number] = point): [number, number] =>
     applyPlanCanvasPlacementDimensions(point, refs, rawPoint, { dimensionInputX, dimensionInputY, dimensionAnchorX, dimensionAnchorY, displayUnit })
 
   const constrainGridCopyToParallelOffset = (point: [number, number], source: Parameters<typeof gridLineEndpoints>[0]): [number, number] => {
     return constrainPlanCanvasGridCopyToParallelOffset(point, source, gridLineEndpoints)
   }
-
-  const clearDimensionOverrides = () => {
-    setDimensionInputX(''); setDimensionInputY(''); setDimensionAnchorX(null); setDimensionAnchorY(null)
-  }
-  useEffect(() => {
-    clearDimensionOverrides()
-  }, [activeTool, toolActivation])
 
   const toggleDimensionReferenceMode = () => {
     setPreference('dimensionReferenceMode', mode => mode === 'center' ? 'edge' : 'center')
@@ -372,12 +340,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     return () => window.removeEventListener('keydown', handler)
   }, [cyclePick, activeTool])
   useEffect(() => { setCandidates([]) }, [activeTool, planProject])
-  const [activeSnap, setActiveSnap] = useState<SnapResult | null>(null)
   const stairPreview = useMemo(() => {
     if (activeTool !== 'stair' || !stairStartPoint || !activeSnap) return null
     try { return stairFromRun(project, stairStartPoint, activeSnap.point_mm, stairOptions) } catch { return null }
   }, [activeTool, stairStartPoint, activeSnap, stairOptions, project])
-  const [activeWallSnap, setActiveWallSnap] = useState<WallHostSnapResult | null>(null)
   const [isPanning, setIsPanning] = useState(false)
   const [objectContextMenu, setObjectContextMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [selectionBox, setSelectionBox] = useState<{ start: [number, number]; end: [number, number] } | null>(null)
@@ -425,26 +391,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     selectionStartRef, setSelectionBox, eraseActiveRef, erasedIdsRef, cancelDragGesture: clearPointerDrag,
   })
 
-  // 2-click beam placement state (start node -> end node)
-  const [beamStartNode, setBeamStartNode] = useState<BeamPlacementStart | null>(null)
-
-  // 2-click wall placement state (start node -> end node)
-  const [wallStartNode, setWallStartNode] = useState<WallPlacementStart | null>(null)
-  const [roomSeparatorStart, setRoomSeparatorStart] = useState<[number,number] | null>(null)
-  const [roofShape, setRoofShape] = useState<'hip' | 'gable' | 'flat'>('hip')
-  const [roofSlopeDeg, setRoofSlopeDeg] = useState(25)
-  const [roofThicknessMm, setRoofThicknessMm] = useState(30)
-  const [roofElevationOffsetMm, setRoofElevationOffsetMm] = useState(2800)
-  const [roofMaterial, setRoofMaterial] = useState('metal_sheet')
-  const [pipeSystem, setPipeSystem] = useState<'waste' | 'soil' | 'rainwater' | 'vent' | 'cold_water' | 'hot_water'>('waste')
-  const [fixtureKind, setFixtureKind] = useState<'light' | 'switch' | 'outlet' | 'panel'>('light')
-  const [slabBoundary, setSlabBoundary] = useState<[number, number][]>([])
-
-  // Calibration state (P1 -> mouse move -> P2 -> modal)
-  const [calibrationP1, setCalibrationP1] = useState<[number, number] | null>(null)
-  const [calibrationMousePoint, setCalibrationMousePoint] = useState<[number, number] | null>(null)
-  const [tapeMeasure, setTapeMeasure] = useState<{ start: [number, number]; end: [number, number]; complete: boolean } | null>(null)
-
   // Door handing state (can cycle with Spacebar)
   const setDoorHanding = (value: DoorHanding | ((current: DoorHanding) => DoorHanding)) => setPreference('doorHanding', value)
 
@@ -453,10 +399,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const escapeAction = resolveEscapeAction(activeTool, pendingState, Boolean(selectedId || selectedIds.length))
     setObjectContextMenu(null)
     clearPointerDrag()
-    setDimensionInputX(''); setDimensionInputY(''); setDimensionAnchorX(null); setDimensionAnchorY(null)
-    setGridStartPoint(null); setGridCopySourceId(null); setBeamStartNode(null); setWallStartNode(null); setRoomSeparatorStart(null); setStairStartPoint(null); setStairError('')
-    setSlabBoundary([]); setCalibrationP1(null); setCalibrationMousePoint(null); setTapeMeasure(null)
-    setDrawLengthMeters(''); setDrawAngleDegrees(''); setGridSystemError('')
+    placement.resetPlacementDrafts()
     if (escapeAction === 'exit-tool') onActivateTool?.('select')
     else if (escapeAction === 'clear-selection') {
       if (onSelectionChange) onSelectionChange([], null)
@@ -473,50 +416,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const constrained = constrainLineSnap(activeSnap, activeSnap.point_mm, start.point_mm, false, 'reference' in start ? start.reference : undefined)
     if (constrained.point_mm[0] !== activeSnap.point_mm[0] || constrained.point_mm[1] !== activeSnap.point_mm[1]) setActiveSnap(constrained)
   }, [activeTool, activeSnap, wallStartNode, beamStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary, drawLengthMeters, drawAngleDegrees, constrainLineSnap])
-
-  useEffect(() => {
-    const previous = previousToolSession.current
-    previousToolSession.current = { activeTool, activation: toolActivation }
-    if (previous.activeTool !== activeTool || previous.activation === toolActivation) return
-
-    // Repeating the already-active tool is a new placement session too.
-    // Clear that tool's pending step so its next input starts from step one.
-    if (activeTool === 'beam') setBeamStartNode(null)
-    if (activeTool === 'wall') setWallStartNode(null)
-    if (['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool)) setRoomSeparatorStart(null)
-    if (activeTool === 'grid') setGridStartPoint(null)
-    if (activeTool === 'stair') { setStairStartPoint(null); setStairError('') }
-    if (activeTool === 'gridCopy') setGridCopySourceId(null)
-    if (['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool)) setSlabBoundary([])
-    if (activeTool === 'calibrate') { setCalibrationP1(null); setCalibrationMousePoint(null) }
-    if (activeTool === 'measure') setTapeMeasure(null)
-    setActiveSnap(null)
-    setActiveWallSnap(null)
-    clearDimensionOverrides()
-    setDrawLengthMeters('')
-    setDrawAngleDegrees('')
-  }, [activeTool, toolActivation])
-
-  useEffect(() => {
-    if (activeTool !== 'beam') {
-      setBeamStartNode(null)
-    }
-    if (activeTool !== 'wall') {
-      setWallStartNode(null)
-    }
-    if (!['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool)) setRoomSeparatorStart(null)
-    if (activeTool !== 'grid') setGridStartPoint(null)
-    if (activeTool !== 'stair') { setStairStartPoint(null); setStairError('') }
-    if (activeTool !== 'gridCopy') setGridCopySourceId(null)
-    if (!['slab','slabVoid','archFloor','ceiling','roof'].includes(activeTool)) setSlabBoundary([])
-    if (activeTool !== 'calibrate') {
-      setCalibrationP1(null)
-      setCalibrationMousePoint(null)
-    }
-    if (activeTool !== 'measure') setTapeMeasure(null)
-    setDrawLengthMeters('')
-    setDrawAngleDegrees('')
-  }, [activeTool, toolActivation])
 
   // Space cycles the active placement reference for linear elements, or door handing.
   useEffect(() => {
