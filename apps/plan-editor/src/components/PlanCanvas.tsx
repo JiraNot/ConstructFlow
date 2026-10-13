@@ -61,6 +61,7 @@ import { nextDoorHanding, usePlanCanvasGlobalShortcuts } from './usePlanCanvasGl
 import { usePlanCanvasDrawing } from './usePlanCanvasDrawing.js'
 import { usePlanCanvasPicking } from './usePlanCanvasPicking.js'
 import { usePlanCanvasPointerState } from './usePlanCanvasPointerState.js'
+import { usePlanCanvasPlacementDimensions } from './usePlanCanvasPlacementDimensions.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -129,7 +130,7 @@ export interface PlanCanvasProps {
 import {
   getPlanObjectBounds,
   cabinetFootprintPoints,
-  gridLineEndpoints, findTemporaryDimensionRefs, openingDimensionRefs, openingDimensionPoint,
+  gridLineEndpoints, findTemporaryDimensionRefs, openingDimensionRefs,
   drawTemporaryDimensions, drawTapeMeasure,
   type WallVerticalReference,
 } from './PlanCanvasGeometry.js'
@@ -545,29 +546,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       setResizeDimensionLength,
     })
   }
-  const dimensionHostAxis = activeWallSnap
-    ? Math.abs(activeWallSnap.wall_end_mm[0] - activeWallSnap.wall_start_mm[0]) >= Math.abs(activeWallSnap.wall_end_mm[1] - activeWallSnap.wall_start_mm[1]) ? 'x' : 'y'
-    : null
-  const isHostedOpeningPlacement = (activeTool === 'door' || activeTool === 'window') && !!activeWallSnap
-  const copyDimensionSource = activeTool === 'gridCopy' && gridCopySourceId ? planProject.objects[gridCopySourceId] : null
-  const copyDimensionStart = copyDimensionSource && isGridObject(copyDimensionSource) ? gridLineEndpoints(copyDimensionSource)[0] : null
-  const dimensionReferences = activeSnap
-    ? copyDimensionStart ? { refX: copyDimensionStart[0], refY: copyDimensionStart[1] } : activeWallSnap ? openingDimensionRefs(activeSnap.point_mm, planProject, activeWallSnap, dimensionReferenceMode) : findTemporaryDimensionRefs(activeSnap.point_mm, planProject, undefined, dimensionReferenceMode)
-    : { refX: undefined, refY: undefined }
-  const showXDimension = !!activeSnap && (dimensionHostAxis ? dimensionHostAxis === 'x' : dimensionReferences.refX !== undefined)
-  const showYDimension = !!activeSnap && (dimensionHostAxis ? dimensionHostAxis === 'y' : dimensionReferences.refY !== undefined)
-  const xDimensionAnchor = dimensionAnchorX ?? dimensionReferences.refX
-  const yDimensionAnchor = dimensionAnchorY ?? dimensionReferences.refY
-  const activeOpeningWidth = activeWallSnap
-    ? Number(project.types.find(type => type.object_type === (activeTool === 'door' ? 'door_window.door' : 'door_window.window') && type.name.toLowerCase() === (activeTool === 'door' ? activeDoorTypeMark : activeWindowTypeMark).toLowerCase())?.parameters?.width_mm ?? (activeTool === 'door' ? 800 : 1200))
-    : 0
-  const dimensionPoint = activeSnap && activeWallSnap ? openingDimensionPoint(activeWallSnap, dimensionReferences as { refX?: number; refY?: number; axis: 'x' | 'y' }, activeOpeningWidth) : activeSnap?.point_mm
-  const xDimensionDisplay = dimensionInputX || (dimensionPoint && xDimensionAnchor !== undefined ? formatLengthMm(Math.abs(dimensionPoint[0] - xDimensionAnchor), displayUnit) : '')
-  const yDimensionDisplay = dimensionInputY || (dimensionPoint && yDimensionAnchor !== undefined ? formatLengthMm(Math.abs(dimensionPoint[1] - yDimensionAnchor), displayUnit) : '')
-  const dimensionOverlayPosition = activeSnap ? worldToScreen(activeSnap.point_mm, viewport) : null
-  const supportsPlacementDimensions = usesPlacementDimensions(activeTool)
-  const hasPolygonSegment = ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool) && slabBoundary.length > 0
-  const hasLineGeometryInput = !!stairStartPoint || !!wallStartNode || !!beamStartNode || !!roomSeparatorStart || hasPolygonSegment || (activeTool === 'grid' && !!gridStartPoint)
+  const {
+    dimensionHostAxis, isHostedOpeningPlacement, dimensionReferences, showXDimension, showYDimension,
+    xDimensionAnchor, yDimensionAnchor, xDimensionDisplay, yDimensionDisplay,
+    dimensionOverlayPosition, supportsPlacementDimensions, hasLineGeometryInput,
+  } = usePlanCanvasPlacementDimensions({
+    project, planProject, activeTool, activeDoorTypeMark, activeWindowTypeMark, activeSnap,
+    activeWallSnap, gridCopySourceId, dimensionReferenceMode, dimensionAnchorX, dimensionAnchorY,
+    dimensionInputX, dimensionInputY, displayUnit, viewport, stairStartPoint, wallStartNode,
+    beamStartNode, roomSeparatorStart, slabBoundary, gridStartPoint,
+  })
 
   const { commitActivePlacement, handleCanvasDoubleClick } = createPlanCanvasPlacementCommitHandlers({
     canvasRef, activeSnap, activeTool, supportsPlacementDimensions, viewport,
