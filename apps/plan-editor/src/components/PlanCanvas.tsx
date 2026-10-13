@@ -25,9 +25,6 @@ import { getEditableRoofRidge } from '@constructflow/roof-engine'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import { PlanCanvasAuthoringControls } from './PlanCanvasAuthoringControls.js'
-import { commitPlanCanvasLinePlacementPoint } from './commitPlanCanvasLinePlacementPoint.js'
-import { commitPlanCanvasPointPlacement } from './commitPlanCanvasPointPlacement.js'
-import { commitPlanCanvasConnectedPlacementPoint, commitPlanCanvasGridPoint, commitPlanCanvasGridSystemPoint } from './commitPlanCanvasPlacementPoints.js'
 import { handlePlanCanvasAuthoringPointerMove } from './handlePlanCanvasAuthoringPointerMove.js'
 import { usePlanCanvasPlacementKeyboard } from './usePlanCanvasPlacementKeyboard.js'
 import { TOOL_FAMILIES } from './catalogPresentation.js'
@@ -54,7 +51,6 @@ import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
 import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
 import { handlePlanCanvasPointerDownNavigation } from './handlePlanCanvasPointerDownNavigation.js'
-import { commitPlanCanvasPolygonPoint } from './commitPlanCanvasPolygonPoint.mjs'
 import { findPlanHitObject } from './planHitTesting.mjs'
 import { handlePlanCanvasPointerUp } from './handlePlanCanvasPointerUp.js'
 import { drawPlanCanvasSelectionHandles } from './drawPlanCanvasSelectionHandles.js'
@@ -71,8 +67,9 @@ import { PlanCanvasPlacementDimensions } from './PlanCanvasPlacementDimensions.j
 import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParallelOffset, constrainPlanCanvasLineSnap, resolvePlanCanvasReferencePath } from './planCanvasPlacementConstraints.mjs'
 import { resolvePlanCanvasPickCandidates } from './resolvePlanCanvasPickCandidates.mjs'
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
+import { handlePlanCanvasPlacementPointerDown } from './handlePlanCanvasPlacementPointerDown.js'
 
-interface PlanCanvasProps {
+export interface PlanCanvasProps {
   project: ProjectDocument
   preferences: PlanCanvasPreferences
   onPreferencesChange: (updater: (current: PlanCanvasPreferences) => PlanCanvasPreferences) => void
@@ -711,23 +708,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary,
       }, constrainLineSnap)
 
-      if (activeTool === 'gridCopy' && gridCopySourceId) {
-        const source = planProject.objects[gridCopySourceId]
-        if (source && isGridObject(source)) {
-          const [start, end] = gridLineEndpoints(source)
-          const positioned = applyPlacementDimensions(snap.point_mm, { refX: start[0], refY: start[1] }, rawWorld)
-          const destination = e.shiftKey ? constrainGridCopyToParallelOffset(positioned, source) : positioned
-          onCopyGrid?.(source.id, destination, [end[0] + destination[0] - start[0], end[1] + destination[1] - start[1]])
-          clearDimensionOverrides()
-        }
-      } else if (activeTool === 'erase') {
-        eraseActiveRef.current = true
-        erasedIdsRef.current.clear()
-        for (const id of findCandidates(rawWorld, true)) {
-          erasedIdsRef.current.add(id)
-        }
-        e.currentTarget.setPointerCapture(e.pointerId)
-      } else if (activeTool === 'select') {
+      if (activeTool === 'select') {
         handlePlanCanvasSelectionPointerDown({
           event: e,
           screenPoint: [screenX, screenY],
@@ -753,131 +734,21 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           onSelectionChange,
           onSelectObject,
         })
-      } else if (activeTool === 'column' || activeTool === 'foundation' || activeTool === 'door' || activeTool === 'window' || activeTool === 'fixture') {
-        commitPlanCanvasPointPlacement({
-          activeTool,
-          rawWorld,
-          snap,
-          project,
-          planProject,
-          activeDoorTypeMark,
-          activeWindowTypeMark,
-          activeWallSnap,
-          doorHanding,
-          fixtureKind,
-          snapPlanWallHost,
-          applyOpeningDistance,
-          clearDimensionOverrides,
-          onCommitColumn,
-          onCommitFoundation,
-          onCommitDoor,
-          onCommitWindow,
-          onCommitFixture,
-          onSelectionChange,
-          onSelectObject,
+      } else {
+        handlePlanCanvasPlacementPointerDown({
+          event: e, activeTool, rawWorld, snap, project, planProject, selectedId, displayUnit,
+          viewportZoom: viewport.zoom, placement,
+          settings: { activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, placementReference, doorHanding },
+          callbacks: {
+            onCopyGrid, onCommitColumn, onCommitFoundation, onCommitDoor, onCommitWindow, onCommitFixture,
+            onSelectionChange, onSelectObject, onCommitBeam, onCommitWall, onCommitRoomSeparator, onCommitPipeRoute,
+            onCommitCabinet, onCommitMoulding, onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling,
+            onCommitRoof, onCommitSurfaceVoid, onCommitGrid, onCommitGridSystem, onStartCalibrationModal,
+            onCommitStair, onActivateTool,
+          },
+          operations: { applyPlacementDimensions, constrainGridCopyToParallelOffset, snapPlanWallHost, applyOpeningDistance, resolveReferencePath },
+          interaction: { eraseActiveRef, erasedIdsRef, findCandidates },
         })
-      } else if (activeTool === 'beam' || activeTool === 'wall') {
-        commitPlanCanvasLinePlacementPoint({
-          activeTool,
-          snap,
-          planProject,
-          project,
-          activeBeamTypeMark,
-          activeWallTypeMark,
-          placementReference,
-          beamStartNode,
-          wallStartNode,
-          setBeamStartNode,
-          setWallStartNode,
-          setDrawLengthMeters,
-          setDrawAngleDegrees,
-          resolveReferencePath,
-          clearDimensionOverrides,
-          onCommitBeam,
-          onCommitWall,
-        })
-      } else if (isTwoPointInteraction(activeTool) && ['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool)) {
-        commitPlanCanvasConnectedPlacementPoint({
-          activeTool: activeTool as 'roomSeparator' | 'pipe' | 'cabinet' | 'moulding',
-          point: snap.point_mm,
-          startPoint: roomSeparatorStart,
-          pipeSystem,
-          onStartPointChange: setRoomSeparatorStart,
-          onDrawLengthChange: setDrawLengthMeters,
-          onDrawAngleChange: setDrawAngleDegrees,
-          clearDimensionOverrides,
-          onCommitRoomSeparator,
-          onCommitPipeRoute,
-          onCommitCabinet,
-          onCommitMoulding,
-        })
-      } else if (isPolygonInteraction(activeTool)) {
-        commitPlanCanvasPolygonPoint({
-          activeTool,
-          clickCount: e.detail,
-          pointMm: snap.point_mm,
-          zoom: viewport.zoom,
-          boundary: slabBoundary,
-          selectedId,
-          selectedObjectType: planProject.objects[selectedId ?? '']?.object_type,
-          roofOptions: { shape: roofShape, slope_deg: roofSlopeDeg, thickness_mm: roofThicknessMm, elevation_offset_mm: roofElevationOffsetMm, material: roofMaterial },
-          onCommitSlab,
-          onCommitArchitecturalFloor,
-          onCommitCeiling,
-          onCommitRoof,
-          onCommitSurfaceVoid,
-          onBoundaryChange: setSlabBoundary,
-          onDrawLengthChange: setDrawLengthMeters,
-          onDrawAngleChange: setDrawAngleDegrees,
-          clearDimensionOverrides,
-        })
-      } else if (activeTool === 'grid') {
-        commitPlanCanvasGridPoint({
-          point: snap.point_mm,
-          startPoint: gridStartPoint,
-          sequenceStyle: gridSequenceStyle,
-          onStartPointChange: setGridStartPoint,
-          onDrawLengthChange: setDrawLengthMeters,
-          onDrawAngleChange: setDrawAngleDegrees,
-          clearDimensionOverrides,
-          onCommitGrid,
-        })
-      } else if (activeTool === 'gridSystem') {
-        commitPlanCanvasGridSystemPoint({
-          point: snap.point_mm,
-          displayUnit,
-          xIntervalsText: gridXIntervals,
-          yIntervalsText: gridYIntervals,
-          xFirstTag: gridXFirstTag,
-          yFirstTag: gridYFirstTag,
-          setError: setGridSystemError,
-          onCommit: onCommitGridSystem,
-          clearDimensionOverrides,
-        })
-      } else if (activeTool === 'measure') {
-        if (!tapeMeasure || tapeMeasure.complete) setTapeMeasure({ start: snap.point_mm, end: snap.point_mm, complete: false })
-        else setTapeMeasure({ ...tapeMeasure, end: snap.point_mm, complete: true })
-      } else if (activeTool === 'calibrate') {
-        if (!calibrationP1) {
-          setCalibrationP1(snap.point_mm)
-        } else {
-          const dist = Math.hypot(
-            snap.point_mm[0] - calibrationP1[0],
-            snap.point_mm[1] - calibrationP1[1]
-          )
-          if (dist >= 10 && onStartCalibrationModal) {
-            onStartCalibrationModal(dist, calibrationP1, snap.point_mm)
-          }
-          setCalibrationP1(null)
-          setCalibrationMousePoint(null)
-        }
-      } else if (activeTool === 'stair') {
-        if (!stairStartPoint) { setStairStartPoint(snap.point_mm); setStairError('') }
-        else try {
-          const stair = stairFromRun(project, stairStartPoint, snap.point_mm, stairOptions)
-          if (onCommitStair?.(stair)) { setStairStartPoint(null); setStairError(''); onActivateTool?.('select') }
-        } catch (error) { setStairError(error instanceof Error ? error.message : 'ไม่สามารถสร้างบันไดได้') }
-        clearDimensionOverrides()
       }
     }
   }

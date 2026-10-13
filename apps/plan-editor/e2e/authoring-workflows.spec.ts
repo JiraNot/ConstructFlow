@@ -118,41 +118,16 @@ test('mouse and keyboard authoring creates wall, beam, hosted opening, and point
 
   // Find the newly drawn wall through the live hosted-snap feedback, then place a door.
   await page.locator('.cf-tool-button[title^="ประตู"]').click()
-  const bounds = await canvasElement.boundingBox()
-  if (!bounds) throw new Error('Plan canvas is not visible')
-  let hostedPoint: { x: number; y: number } | null = null
-  const seenSnapFeedback = new Set<string>()
-  for (let row = 2; row <= 18 && !hostedPoint; row++) {
-    for (let column = 2; column <= 18 && !hostedPoint; column++) {
-      const x = bounds.x + bounds.width * (column / 20)
-      const y = bounds.y + bounds.height * (row / 20)
-      await page.mouse.move(x, y)
-      const snapFeedback = await page.getByTestId('snap-feedback').innerText()
-      const snapLine = snapFeedback.match(/Snap:\s*[^\n]+/)?.[0]
-      if (snapLine) seenSnapFeedback.add(snapLine)
-      if (/Snap:\s*(?:On Wall|Wall|ผนัง|Host)/i.test(snapFeedback)) hostedPoint = { x, y }
-    }
-  }
-  expect(hostedPoint, `door placement should expose a host snap on the drawn wall; observed: ${[...seenSnapFeedback].join(' | ')}`).not.toBeNull()
-  await page.mouse.click(hostedPoint!.x, hostedPoint!.y)
+  await moveToCanvasFraction(page, 0.50, 0.45)
+  await expect(page.getByTestId('snap-feedback')).toContainText(/Snap:\s*(?:On Wall|Wall|ผนัง|Host)/i)
+  await clickCanvasFraction(page, 0.50, 0.45)
   await expect(page.locator('[data-tool-step]')).toContainText('วางบนผนัง')
   await expect(page.locator('body')).toContainText('Door D1')
   await expect(page.locator('body')).toContainText('Offset along wall:')
 
-  // Commit another door from the keyboard after locating a distinct host snap.
-  let secondHostedPoint: { x: number; y: number } | null = null
-  for (let row = 2; row <= 18 && !secondHostedPoint; row++) {
-    for (let column = 2; column <= 18 && !secondHostedPoint; column++) {
-      const x = bounds.x + bounds.width * (column / 20)
-      const y = bounds.y + bounds.height * (row / 20)
-      await page.mouse.move(x, y)
-      const snapFeedback = await page.getByTestId('snap-feedback').innerText()
-      const match = snapFeedback.match(/Snap:\s*On Wall[^\n]*\(([\d.]+)m\)/i)
-      if (match && Number(match[1]) > 2.0) secondHostedPoint = { x, y }
-    }
-  }
-  expect(secondHostedPoint, 'keyboard door placement should have a distinct wall host offset').not.toBeNull()
-  await page.mouse.move(secondHostedPoint!.x, secondHostedPoint!.y)
+  // Commit another door from the keyboard at a distinct point on that same wall.
+  await moveToCanvasFraction(page, 0.62, 0.45)
+  await expect(page.getByTestId('snap-feedback')).toContainText(/Snap:\s*On Wall[^\n]*\([\d.]+m\)/i)
   await canvasElement.focus()
   await page.keyboard.press('Enter')
   await expect(page.locator('body')).toContainText('Door D1')
