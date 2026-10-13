@@ -537,14 +537,14 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const setDoorHanding = (value: DoorHanding | ((current: DoorHanding) => DoorHanding)) => setPreference('doorHanding', value)
 
   const cancelCurrentPlacement = () => {
-    const pendingState = hasPendingToolStep({ draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError })
+    const pendingState = hasPendingToolStep({ draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, gridCopySourceId, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError })
     const escapeAction = resolveEscapeAction(activeTool, pendingState, Boolean(selectedId || selectedIds.length))
     setObjectContextMenu(null)
     manualDragPointRef.current = null
     setDraggingObject(null); setDragPreviewPoint(null); setManipulationPreview(null)
     setResizeDimensionWidth(''); setResizeDimensionHeight(''); setResizeDimensionLength('')
     setDimensionInputX(''); setDimensionInputY(''); setDimensionAnchorX(null); setDimensionAnchorY(null)
-    setGridStartPoint(null); setBeamStartNode(null); setWallStartNode(null); setRoomSeparatorStart(null); setStairStartPoint(null); setStairError('')
+    setGridStartPoint(null); setGridCopySourceId(null); setBeamStartNode(null); setWallStartNode(null); setRoomSeparatorStart(null); setStairStartPoint(null); setStairError('')
     setSlabBoundary([]); setCalibrationP1(null); setCalibrationMousePoint(null); setTapeMeasure(null)
     setDrawLengthMeters(''); setDrawAngleDegrees(''); setGridSystemError('')
     if (escapeAction === 'exit-tool') onActivateTool?.('select')
@@ -624,7 +624,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTool, selectedId, project.objects, onFlipDoorHanding, onActivateTool, draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError])
+  }, [activeTool, selectedId, project.objects, onFlipDoorHanding, onActivateTool, draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, gridCopySourceId, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError])
 
   const editableSelectionIds = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
   const findEditHandle = (screenPoint: [number, number]) => findPlanCanvasEditHandle({ planProject, editableSelectionIds, viewport, screenPoint, onFlipDoorHanding })
@@ -1620,14 +1620,14 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     ? 'เลือกบิลท์อิน · ลากด้ามสีม่วงเพื่อหมุน โดยคงตำแหน่งและขนาด · Esc ล้างการเลือก'
     : 'เลือก · คลิกเลือกหรือ ลากครอบวัตถุ · Tab สลับวัตถุซ้อน · Esc ล้างการเลือก'
   const placementStatus = resolveToolInteractionStatus(activeTool, {
-    selectionHint, wallStartNode, beamStartNode, gridStartPoint, stairStartPoint, roomSeparatorStart,
+    selectionHint, wallStartNode, beamStartNode, gridStartPoint, gridCopySourceId, stairStartPoint, roomSeparatorStart,
     slabBoundary, tapeMeasure, calibrationP1, gridSystemError, pipeSystem, fixtureKind,
     lineConstraintLabel: ({ auto: 'อัตโนมัติ: ขนาน/ตั้งฉาก', none: 'อิสระ', parallel: 'ขนาน', perpendicular: 'ตั้งฉาก' } as const)[lineConstraintMode],
     placementReferenceLabel: ({ centerline: 'กึ่งกลาง', left_face: 'ชิดซ้าย', right_face: 'ชิดขวา' } as const)[placementReference],
     snapCount: snapModes.length,
   })
   const placementHint = placementStatus?.instruction ?? null
-  const pendingPlacementStep = hasPendingToolStep({ draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError })
+  const pendingPlacementStep = hasPendingToolStep({ draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, gridCopySourceId, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError })
   const escapeAction = resolveEscapeAction(activeTool, pendingPlacementStep, Boolean(selectedId || selectedIds.length))
   const escapeLabel = escapeAction === 'cancel-step' ? 'Esc ยกเลิกขั้นตอนนี้' : escapeAction === 'clear-selection' ? 'Esc ล้างการเลือก' : escapeAction === 'exit-tool' ? 'Esc ออกจากเครื่องมือ' : ''
   const manipulationDimensions = draggingObject && dragPreviewPoint

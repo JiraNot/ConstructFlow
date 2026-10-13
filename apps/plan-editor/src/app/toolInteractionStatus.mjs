@@ -75,6 +75,7 @@ export function resolveEscapeAction(tool, hasPendingStep, hasSelection = false) 
 
 export function hasPendingToolStep(state = {}) {
   return Boolean(state.draggingObject || state.objectContextMenu || state.stairStartPoint || state.gridStartPoint
+    || state.gridCopySourceId
     || state.beamStartNode || state.wallStartNode || state.roomSeparatorStart || state.slabBoundary?.length
     || state.calibrationP1 || state.tapeMeasure || state.dimensionInputX?.trim() || state.dimensionInputY?.trim()
     || state.drawLengthMeters?.trim() || state.drawAngleDegrees?.trim() || state.gridSystemError)

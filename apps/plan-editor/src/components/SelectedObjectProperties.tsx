@@ -12,7 +12,7 @@ import { GridPropertiesSection } from './GridPropertiesSection.js'
 import { ObjectLifecycleProperties } from './ObjectLifecycleProperties.js'
 import { ObjectSelectionHeader } from './ObjectSelectionHeader.js'
 import { resolvePropertiesSelection } from './propertiesSelection.js'
-import type { PropertiesPanelProps } from './PropertiesPanel.js'
+import type { PropertiesPanelProps } from './PropertiesPanel.types.js'
 
 type SingleSelection = ReturnType<typeof resolvePropertiesSelection>
 

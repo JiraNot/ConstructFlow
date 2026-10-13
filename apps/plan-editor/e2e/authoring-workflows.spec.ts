@@ -160,6 +160,29 @@ test('mouse and keyboard authoring creates wall, beam, hosted opening, and point
   expect(pageErrors).toEqual([])
 })
 
+test('Escape cancels a pending grid-copy destination before leaving the tool', async ({ page }) => {
+  await page.goto('/')
+  const canvasElement = canvas(page)
+  await page.locator('.cf-tool-button[title^="เส้นกริด"]').click()
+  await clickCanvasFraction(page, 0.30, 0.45)
+  await clickCanvasFraction(page, 0.70, 0.45)
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const gridRow = page.locator('li[data-object-type="structure.grid"]').first()
+  await expect(gridRow).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  const canvasBounds = await canvasElement.boundingBox()
+  if (!canvasBounds) throw new Error('Plan canvas is not visible')
+  await page.mouse.click(canvasBounds.x + canvasBounds.width * 0.5, canvasBounds.y + canvasBounds.height * 0.45, { button: 'right' })
+  await page.getByRole('menuitem', { name: 'ทำสำเนาแล้ววาง' }).click()
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'place-copy')
+
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'select-source')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'ready')
+})
+
 test('Project Browser selection and type edits preserve one object identity across views', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
