@@ -362,6 +362,34 @@ test('Project Browser visibility persists per view and level after autosave and 
   await expect(page.locator('li[data-object-type="architecture.wall"] .cf-browser-visibility').first()).toHaveAttribute('title', 'ซ่อนวัตถุ')
 })
 
+test('Project Browser saves and applies persistent view templates', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickCanvasFraction(page, 0.61, 0.64)
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const column = page.locator('li[data-object-type="structure.column"]').first()
+  await expect(column).toBeVisible()
+  await column.locator('.cf-browser-visibility').click()
+  await expect(column.locator('.cf-browser-visibility')).toHaveAttribute('title', 'แสดงวัตถุ')
+
+  await page.getByLabel('ชื่อแม่แบบมุมมอง').fill('Presentation plan')
+  await page.getByRole('button', { name: 'บันทึกแม่แบบ' }).click()
+  const template = page.locator('[data-view-template-id]')
+  await expect(template).toContainText('Presentation plan')
+  const savedLevel = await page.locator('.cf-browser-levels button.is-active').textContent()
+
+  await page.getByRole('button', { name: 'รูปด้านเหนือ' }).click()
+  await expect(page.locator('.cf-browser-views button.is-active')).toHaveText('เหนือ')
+  if (await page.locator('.cf-browser-levels button').count() > 1) await page.locator('.cf-browser-levels button').last().click()
+  await page.getByRole('button', { name: 'ใช้แม่แบบ Presentation plan' }).click()
+  await expect(page.locator('.cf-browser-views button.is-active')).toHaveText('แปลน')
+  await expect(page.locator('.cf-browser-levels button.is-active')).toHaveText(savedLevel!)
+  await expect(column.locator('.cf-browser-visibility')).toHaveAttribute('title', 'แสดงวัตถุ')
+
+  await page.getByRole('button', { name: 'ลบแม่แบบ Presentation plan' }).click()
+  await expect(page.locator('[data-view-template-id]')).toHaveCount(0)
+})
+
 test('Project Browser splits an unhosted wall with preview and keeps the original UUID', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')

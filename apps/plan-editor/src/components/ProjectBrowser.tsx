@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import type { ProjectDocument, SmartObject } from '@constructflow/project-model'
+import type { ProjectDocument, ProjectViewTemplate, SmartObject } from '@constructflow/project-model'
 import { Eye, EyeOff, Search } from 'lucide-react'
 import type { AlignmentMode } from '../app/transformOperations.mjs'
 
@@ -26,8 +26,12 @@ interface ProjectBrowserProps {
   hiddenObjectIds: ReadonlySet<string>
   activeLevelId: string
   activeViewId: string
+  viewTemplates: readonly ProjectViewTemplate[]
   onSelectLevel: (levelId: string) => void
   onSelectView: (viewId: string) => void
+  onSaveViewTemplate: (name: string) => boolean
+  onApplyViewTemplate: (template: ProjectViewTemplate) => boolean
+  onDeleteViewTemplate: (templateId: string) => boolean
   onSelectObjects: (ids: string[]) => void
   onToggleVisibility: (objectId: string) => void
   onShowAll: () => void
@@ -44,8 +48,10 @@ interface ProjectBrowserProps {
   alignmentPreviewActive: boolean
 }
 
-export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selectedIds, hiddenObjectIds, activeLevelId, activeViewId, onSelectLevel, onSelectView, onSelectObjects, onToggleVisibility, onShowAll, onPreviewArray, onMoveObjects, onPreviewAlignment, onPreviewOffset, onPreviewMirror, onPreviewSplit, onPreviewJoin, onPreviewTrim, onCommitAlignment, onCancelAlignment, alignmentPreviewActive }) => {
+export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selectedIds, hiddenObjectIds, activeLevelId, activeViewId, viewTemplates, onSelectLevel, onSelectView, onSaveViewTemplate, onApplyViewTemplate, onDeleteViewTemplate, onSelectObjects, onToggleVisibility, onShowAll, onPreviewArray, onMoveObjects, onPreviewAlignment, onPreviewOffset, onPreviewMirror, onPreviewSplit, onPreviewJoin, onPreviewTrim, onCommitAlignment, onCancelAlignment, alignmentPreviewActive }) => {
   const [query, setQuery] = useState('')
+  const [viewTemplateName, setViewTemplateName] = useState('')
+  const [viewTemplateFeedback, setViewTemplateFeedback] = useState('')
   const [scope, setScope] = useState<'level' | 'all'>('level')
   const [copies, setCopies] = useState('2')
   const [spacingX, setSpacingX] = useState('1')
@@ -84,6 +90,27 @@ export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selecte
     <nav className="cf-browser-views" aria-label="มุมมองโครงการ">
       {([['plan', 'แปลน'], ['framing', 'แปลนคาน'], ['roofplan', 'แปลนหลังคา'], ['north', 'เหนือ'], ['south', 'ใต้'], ['east', 'ตะวันออก'], ['west', 'ตะวันตก'], ['rcp', 'RCP'], ['model3d', '3D']] as const).map(([id, label]) => <button key={id} type="button" className={activeViewId === id ? 'is-active' : ''} onClick={() => onSelectView(id)}>{label}</button>)}
     </nav>
+    <section className="cf-browser-view-templates" aria-label="แม่แบบมุมมอง">
+      <form onSubmit={event => {
+        event.preventDefault()
+        const name = viewTemplateName.trim()
+        if (!name) return
+        const saved = onSaveViewTemplate(name)
+        setViewTemplateFeedback(saved ? `บันทึกแม่แบบ “${name}” แล้ว` : 'บันทึกแม่แบบไม่สำเร็จ')
+        if (saved) setViewTemplateName('')
+      }}>
+        <label>บันทึกมุมมองปัจจุบัน<input aria-label="ชื่อแม่แบบมุมมอง" maxLength={80} value={viewTemplateName} onChange={event => setViewTemplateName(event.target.value)} placeholder="เช่น แปลนงานระบบ ชั้น 1" /></label>
+        <button type="submit" disabled={!viewTemplateName.trim()}>บันทึกแม่แบบ</button>
+      </form>
+      {viewTemplateFeedback && <small role="status">{viewTemplateFeedback}</small>}
+      {viewTemplates.length > 0 && <ul aria-label="แม่แบบมุมมองที่บันทึกไว้">
+        {viewTemplates.map(template => <li key={template.id} data-view-template-id={template.id}>
+          <span>{template.name}<small>{template.view_id} · {project.levels.find(level => level.id === template.level_id)?.name ?? template.level_id}</small></span>
+          <button type="button" aria-label={`ใช้แม่แบบ ${template.name}`} onClick={() => setViewTemplateFeedback(onApplyViewTemplate(template) ? `ใช้แม่แบบ “${template.name}” แล้ว` : 'ใช้แม่แบบไม่สำเร็จ')}>ใช้</button>
+          <button type="button" aria-label={`ลบแม่แบบ ${template.name}`} onClick={() => setViewTemplateFeedback(onDeleteViewTemplate(template.id) ? `ลบแม่แบบ “${template.name}” แล้ว` : 'ลบแม่แบบไม่สำเร็จ')}>ลบ</button>
+        </li>)}
+      </ul>}
+    </section>
     {selectedIds.length > 0 && !alignmentPreviewActive && <details className="cf-browser-edit-tools">
       <summary>แก้ไขและทำสำเนา · {selectedIds.length} ชิ้น</summary>
     {selectedIds.length > 0 && <form className="cf-browser-array" onSubmit={event => {

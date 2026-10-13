@@ -21,6 +21,7 @@ import {
   resolveColumnVerticalExtent,
   resolveSlabElevation,
   type DisplayLengthUnit,
+  type ProjectViewTemplate,
   type StairModuleData,
   type RoofModuleData,
   type RainwaterDesignSettings,
@@ -1740,6 +1741,42 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     } }])
   }
 
+  const handleSaveViewTemplate = (name: string): boolean => {
+    const result = dispatchCommandBatch([{ name: 'SaveViewTemplate', input: { template: {
+      id: crypto.randomUUID(),
+      name,
+      view_id: viewMode,
+      level_id: project.project.active_level_id,
+      hidden_object_ids: [...hiddenObjectIds],
+    } } }])
+    if (result.status !== 'success') setFileFeedback((result.errors ?? []).join('\n'))
+    return result.status === 'success'
+  }
+
+  const handleApplyViewTemplate = (template: ProjectViewTemplate): boolean => {
+    const commands: CommandRequest[] = []
+    if (project.project.active_level_id !== template.level_id) commands.push({ name: 'SetWorkingLevel', input: { level_id: template.level_id } })
+    commands.push({ name: 'SetViewVisibility', input: {
+      scope_id: `${template.view_id}:${template.level_id}`,
+      hidden_object_ids: template.hidden_object_ids,
+    } })
+    const result = dispatchCommandBatch(commands)
+    if (result.status !== 'success') {
+      setFileFeedback((result.errors ?? []).join('\n'))
+      return false
+    }
+    if (project.project.active_level_id !== template.level_id) setActiveColumnTopLevelId(nextHigherLevelId(result.updatedProject, template.level_id))
+    setViewMode(template.view_id)
+    setAlignmentPreview(null)
+    return true
+  }
+
+  const handleDeleteViewTemplate = (templateId: string): boolean => {
+    const result = dispatchCommandBatch([{ name: 'DeleteViewTemplate', input: { template_id: templateId } }])
+    if (result.status !== 'success') setFileFeedback((result.errors ?? []).join('\n'))
+    return result.status === 'success'
+  }
+
   useEffect(() => {
     const isEditingText = (target: EventTarget | null) => target instanceof HTMLElement
       && (target.isContentEditable || Boolean(target.closest('input, textarea, select, [contenteditable="true"]')))
@@ -2510,8 +2547,12 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             hiddenObjectIds={hiddenObjectIds}
             activeLevelId={project.project.active_level_id}
             activeViewId={viewMode}
+            viewTemplates={project.view_settings?.view_templates ?? []}
             onSelectLevel={handleSetWorkingLevel}
             onSelectView={view => { setAlignmentPreview(null); setViewMode(view as typeof viewMode) }}
+            onSaveViewTemplate={handleSaveViewTemplate}
+            onApplyViewTemplate={handleApplyViewTemplate}
+            onDeleteViewTemplate={handleDeleteViewTemplate}
             onSelectObjects={ids => {
               const object = project.objects[ids[0] ?? '']
               if (object) {

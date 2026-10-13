@@ -10,7 +10,7 @@ import {
   validateRainwaterDesignSettings,
   resolveStairVerticalExtent,
 } from '@constructflow/project-model'
-import type { SetViewVisibilityInput, UpdateCoordinationSettingsInput, UpdateRainwaterDesignInput, UpdateSheetViewportInput } from '@constructflow/command-schema'
+import type { DeleteViewTemplateInput, SaveViewTemplateInput, SetViewVisibilityInput, UpdateCoordinationSettingsInput, UpdateRainwaterDesignInput, UpdateSheetViewportInput } from '@constructflow/command-schema'
 
 import {
   CommandHandlerContext,
@@ -69,6 +69,32 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       validateDrawingSettings(updated.drawing_settings)
       return {result:{status:'success',command_id,command_name:commandName,affected_object_ids:[]},updatedProject:updated,emittedEnvelope:envelope}
     }
+    case 'SaveViewTemplate': {
+      const { template } = input as unknown as SaveViewTemplateInput
+      if (!template || typeof template !== 'object' || !template.id?.trim() || template.id.length > 100) throw new Error('View template requires a valid ID')
+      if (!template.name?.trim() || template.name.trim().length > 80) throw new Error('View template name must contain 1 to 80 characters')
+      const views = new Set(['plan', 'framing', 'roofplan', 'north', 'south', 'east', 'west', 'rcp', 'model3d'])
+      if (!views.has(template.view_id) || !updated.levels.some(level => level.id === template.level_id)) throw new Error('View template requires a supported view and existing level')
+      if (!Array.isArray(template.hidden_object_ids) || template.hidden_object_ids.some(id => typeof id !== 'string' || !updated.objects[id])) throw new Error('View template can only reference existing object UUIDs')
+      if (new Set(template.hidden_object_ids).size !== template.hidden_object_ids.length) throw new Error('View template object UUIDs must be unique')
+      const current = updated.view_settings?.view_templates ?? []
+      if (current.some(existing => existing.id !== template.id && existing.name.trim().toLowerCase() === template.name.trim().toLowerCase())) throw new Error('View template names must be unique')
+      const next = current.filter(existing => existing.id !== template.id)
+      next.push(structuredClone({ ...template, name: template.name.trim(), hidden_object_ids: [...template.hidden_object_ids] }))
+      updated.view_settings = { hidden_object_ids_by_scope: updated.view_settings?.hidden_object_ids_by_scope ?? {}, view_templates: next }
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] }, updatedProject: updated, emittedEnvelope: envelope }
+    }
+    case 'DeleteViewTemplate': {
+      const { template_id } = input as unknown as DeleteViewTemplateInput
+      const current = updated.view_settings?.view_templates ?? []
+      if (!current.some(template => template.id === template_id)) throw new Error(`View template ${template_id} was not found`)
+      const view_templates = current.filter(template => template.id !== template_id)
+      const visibility = updated.view_settings?.hidden_object_ids_by_scope ?? {}
+      updated.view_settings = Object.keys(visibility).length || view_templates.length
+        ? { hidden_object_ids_by_scope: visibility, ...(view_templates.length ? { view_templates } : {}) }
+        : undefined
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] }, updatedProject: updated, emittedEnvelope: envelope }
+    }
     case 'SetViewVisibility': {
       const { scope_id, hidden_object_ids } = input as unknown as SetViewVisibilityInput
       const [viewId, levelId, extra] = scope_id.split(':')
@@ -84,8 +110,9 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       const visibility = { ...scopes }
       if (hidden_object_ids.length) visibility[scope_id] = [...hidden_object_ids]
       else delete visibility[scope_id]
-      updated.view_settings = Object.keys(visibility).length
-        ? { ...updated.view_settings, hidden_object_ids_by_scope: visibility }
+      const viewTemplates = updated.view_settings?.view_templates
+      updated.view_settings = Object.keys(visibility).length || viewTemplates?.length
+        ? { hidden_object_ids_by_scope: visibility, ...(viewTemplates?.length ? { view_templates: viewTemplates } : {}) }
         : undefined
       return {
         result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] },
@@ -221,7 +248,13 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
             const remaining = ids.filter(id => !allDeletedIds.includes(id))
             return remaining.length ? [[scopeId, remaining]] : []
           }))
-        updated.view_settings = Object.keys(visibility).length ? { hidden_object_ids_by_scope: visibility } : undefined
+        const templates = updated.view_settings.view_templates?.map(template => ({
+          ...template,
+          hidden_object_ids: template.hidden_object_ids.filter(id => !allDeletedIds.includes(id)),
+        }))
+        updated.view_settings = Object.keys(visibility).length || templates?.length
+          ? { hidden_object_ids_by_scope: visibility, ...(templates?.length ? { view_templates: templates } : {}) }
+          : undefined
       }
       const structUpdated = reconcileStructureDeletion(updated, allDeletedIds, now)
 

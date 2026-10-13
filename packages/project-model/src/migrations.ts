@@ -191,6 +191,26 @@ export function validateProjectV2(project: ProjectDocument): void {
       }
       if (new Set(objectIds).size !== objectIds.length) throw new Error(`Invalid project format: view visibility scope ${scopeId} contains duplicate object IDs`)
     }
+    const templates = (settings as Record<string, unknown>).view_templates
+    if (templates !== undefined) {
+      const supportedViews = new Set(['plan', 'framing', 'roofplan', 'north', 'south', 'east', 'west', 'rcp', 'model3d'])
+      if (!Array.isArray(templates)) throw new Error('Invalid project format: view_templates must be an array')
+      const templateIds = new Set<string>(), templateNames = new Set<string>()
+      for (const template of templates) {
+        if (!template || typeof template !== 'object' || Array.isArray(template)) throw new Error('Invalid project format: view template must be an object')
+        const value = template as Record<string, unknown>
+        if (typeof value.id !== 'string' || !value.id.trim() || value.id.length > 100 || templateIds.has(value.id)) throw new Error('Invalid project format: view template ID is invalid or duplicated')
+        if (typeof value.name !== 'string' || !value.name.trim() || value.name.trim().length > 80) throw new Error('Invalid project format: view template name must contain 1 to 80 characters')
+        const normalizedName = value.name.trim().toLowerCase()
+        if (templateNames.has(normalizedName)) throw new Error('Invalid project format: view template names must be unique')
+        if (typeof value.view_id !== 'string' || !supportedViews.has(value.view_id)) throw new Error('Invalid project format: view template has an unsupported view')
+        if (typeof value.level_id !== 'string' || !project.levels.some(level => level.id === value.level_id)) throw new Error('Invalid project format: view template references an unknown level')
+        if (!Array.isArray(value.hidden_object_ids) || value.hidden_object_ids.some(id => typeof id !== 'string' || !project.objects[id])) throw new Error('Invalid project format: view template references an unknown object')
+        if (new Set(value.hidden_object_ids).size !== value.hidden_object_ids.length) throw new Error('Invalid project format: view template contains duplicate object IDs')
+        templateIds.add(value.id)
+        templateNames.add(normalizedName)
+      }
+    }
   }
   if(project.coordination_settings!==undefined)validateCoordinationSettings(project.coordination_settings)
   if (project.underlays !== undefined) {

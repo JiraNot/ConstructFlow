@@ -176,6 +176,18 @@ export interface ProjectDocument {
 
 export interface ProjectViewSettings {
   hidden_object_ids_by_scope: Record<string, string[]>
+  /** Reusable visibility and scope presets keyed by persistent IDs. */
+  view_templates?: ProjectViewTemplate[]
+}
+
+export type ProjectViewId = 'plan' | 'framing' | 'roofplan' | 'north' | 'south' | 'east' | 'west' | 'rcp' | 'model3d'
+
+export interface ProjectViewTemplate {
+  id: string
+  name: string
+  view_id: ProjectViewId
+  level_id: string
+  hidden_object_ids: string[]
 }
 
 export interface ProjectUnderlay {
