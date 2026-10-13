@@ -1150,7 +1150,7 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   await row.locator('.cf-browser-object').click()
   await page.getByRole('button', { name: 'แปลนพื้น', exact: true }).click()
   await page.getByLabel('แบ่งมุมมอง').click()
-  await page.getByLabel('แสดงสองมุมมอง').check()
+  await page.getByLabel('แสดงหลายมุมมอง').check()
   const secondView = page.getByLabel('มุมมองที่สอง')
   await expect(secondView).toBeVisible()
   await secondView.selectOption('framing')
@@ -1168,6 +1168,12 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   await page.mouse.up({ button: 'middle' })
   await expect(canvases.nth(1)).toHaveAttribute('data-viewport-pan-x', await canvases.first().getAttribute('data-viewport-pan-x') ?? '')
   await expect(canvases.nth(1)).toHaveAttribute('data-viewport-pan-y', await canvases.first().getAttribute('data-viewport-pan-y') ?? '')
+
+  await page.getByLabel('จำนวนมุมมอง').selectOption('3')
+  const thirdView = page.getByLabel('มุมมองที่สาม')
+  await thirdView.selectOption('east')
+  await expect(panes).toHaveCount(3)
+  for (const pane of await panes.all()) await expect(pane).toHaveAttribute('data-primary-selected-object-id', objectId!)
 
   await secondView.selectOption('model3d')
   await expect(page.getByTestId('secondary-view-pane').getByTestId('model3d-viewport')).toHaveAttribute('data-auto-framed-selection', objectId!)

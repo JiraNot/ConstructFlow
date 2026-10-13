@@ -60,6 +60,10 @@ import { importSiteSurveyCsv } from './cad/importSiteSurveyCsv.mjs'
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
 type EditorViewMode = 'plan' | 'framing' | 'roofplan' | ElevationDirection | 'model3d'
+const EDITOR_VIEW_OPTIONS: readonly [EditorViewMode, string][] = [
+  ['plan', 'แปลนพื้น'], ['framing', 'แปลนคาน'], ['roofplan', 'แปลนหลังคา'], ['north', 'รูปด้านเหนือ'],
+  ['south', 'รูปด้านใต้'], ['east', 'รูปด้านตะวันออก'], ['west', 'รูปด้านตะวันตก'], ['rcp', 'แปลนฝ้า RCP'], ['model3d', '3D ดูตัวอย่าง'],
+]
 
 const headerActionStyle: React.CSSProperties = {
   display: 'inline-flex',
@@ -222,7 +226,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [elevationNavigation, setElevationNavigation] = useState<CoordinatedElevationNavigation>({ zoom: 1, panY: 0, panXNorthSouth: 0, panXEastWest: 0 })
   const [viewMode, setViewMode] = useState<EditorViewMode>('plan')
   const [splitViewEnabled, setSplitViewEnabled] = useState(false)
+  const [splitViewPaneCount, setSplitViewPaneCount] = useState<2 | 3>(2)
   const [secondaryViewMode, setSecondaryViewMode] = useState<EditorViewMode>('model3d')
+  const [tertiaryViewMode, setTertiaryViewMode] = useState<EditorViewMode>('north')
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
     if (['beam', 'foundation'].includes(activeTool)) setViewMode('framing')
@@ -2084,18 +2090,27 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               <button key={mode} type="button" title={['plan', 'framing', 'roofplan'].includes(mode) ? 'แปลนพื้น แปลนคาน และแปลนหลังคาใช้ตำแหน่งและระดับซูมร่วมกัน' : ['north', 'south', 'east', 'west'].includes(mode) ? 'รูปด้านใช้ระดับซูมและตำแหน่งแนวดิ่งร่วมกัน; แนวนอนเชื่อมตามแกนฉาย' : undefined} onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>{label}</button>
             ))}
             <details className="cf-multiview-menu">
-              <summary aria-label="แบ่งมุมมอง" aria-pressed={splitViewEnabled} title="เปิดมุมมองสอง pane พร้อมกัน">▥</summary>
-              <div className="cf-multiview-popover" role="group" aria-label="ตั้งค่ามุมมองคู่">
-                <label><input type="checkbox" checked={splitViewEnabled} onChange={event => setSplitViewEnabled(event.target.checked)} />แสดงสองมุมมอง</label>
+              <summary aria-label="แบ่งมุมมอง" aria-pressed={splitViewEnabled} title="เปิดมุมมองหลาย pane พร้อมกัน">▥</summary>
+              <div className="cf-multiview-popover" role="group" aria-label="ตั้งค่ามุมมองหลาย pane">
+                <label><input type="checkbox" checked={splitViewEnabled} onChange={event => setSplitViewEnabled(event.target.checked)} />แสดงหลายมุมมอง</label>
                 {splitViewEnabled && <label>มุมมองที่สอง
                   <select aria-label="มุมมองที่สอง" value={secondaryViewMode} onChange={event => setSecondaryViewMode(event.target.value as EditorViewMode)}>
-                    {([
-                      ['plan', 'แปลนพื้น'], ['framing', 'แปลนคาน'], ['roofplan', 'แปลนหลังคา'], ['north', 'รูปด้านเหนือ'], ['south', 'รูปด้านใต้'],
-                      ['east', 'รูปด้านตะวันออก'], ['west', 'รูปด้านตะวันตก'], ['rcp', 'แปลนฝ้า RCP'], ['model3d', '3D ดูตัวอย่าง'],
-                    ] as const).filter(([mode]) => mode !== viewMode).map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
+                    {EDITOR_VIEW_OPTIONS.map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
+                  </select>
+                </label>}
+                {splitViewEnabled && <label>จำนวนมุมมอง
+                  <select aria-label="จำนวนมุมมอง" value={splitViewPaneCount} onChange={event => setSplitViewPaneCount(Number(event.target.value) as 2 | 3)}>
+                    <option value={2}>2 มุมมอง</option>
+                    <option value={3}>3 มุมมอง</option>
+                  </select>
+                </label>}
+                {splitViewEnabled && splitViewPaneCount === 3 && <label>มุมมองที่สาม
+                  <select aria-label="มุมมองที่สาม" value={tertiaryViewMode} onChange={event => setTertiaryViewMode(event.target.value as EditorViewMode)}>
+                    {EDITOR_VIEW_OPTIONS.map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
                   </select>
                 </label>}
                 {splitViewEnabled && secondaryViewMode === 'model3d' && <span>3D จะจัดกรอบตามวัตถุที่เลือกในอีกมุมมอง</span>}
+                {splitViewEnabled && splitViewPaneCount === 3 && tertiaryViewMode === 'model3d' && <span>3D จะจัดกรอบตามวัตถุที่เลือกในอีกมุมมอง</span>}
               </div>
             </details>
             {viewMode === 'plan' && <button type="button" onClick={handleDetectRooms} title="ค้นหาห้องจากวงผนังปิด">ตรวจจับห้อง</button>}
@@ -2126,7 +2141,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           </div>
 
           {/* Interactive Plan Canvas */}
-          <div className="cf-viewport-stage" style={splitViewEnabled ? { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 1, background: '#cbd5e1' } : undefined}>
+          <div className="cf-viewport-stage" style={splitViewEnabled ? { display: 'grid', gridTemplateColumns: `repeat(${splitViewPaneCount}, minmax(0, 1fr))`, gap: 1, background: '#cbd5e1' } : undefined}>
             <div className="cf-multiview-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
             {viewMode === 'plan' || viewMode === 'framing' || viewMode === 'roofplan' ? <PlanCanvas
               project={viewProject}
@@ -2210,6 +2225,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             </div>
             {splitViewEnabled && <div className="cf-multiview-pane" data-testid="secondary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1' }}>
               {renderEditorView(secondaryViewMode, true)}
+            </div>}
+            {splitViewEnabled && splitViewPaneCount === 3 && <div className="cf-multiview-pane" data-testid="tertiary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1' }}>
+              {renderEditorView(tertiaryViewMode, true)}
             </div>}
           </div>
 
