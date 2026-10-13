@@ -330,6 +330,35 @@ test('plan, framing, and roof plan share pan and zoom navigation', async ({ page
   await expect(page.locator('.cf-plan-canvas')).toHaveAttribute('data-viewport-zoom', framingZoom!)
 })
 
+test('orthographic elevations share zoom and vertical navigation with mirrored horizontal pans', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'รูปด้านเหนือ', exact: true }).click()
+  let elevation = page.getByTestId('elevation-canvas')
+  const canvasElement = elevation.locator('canvas')
+  const bounds = await canvasElement.boundingBox()
+  if (!bounds) throw new Error('North elevation canvas is not visible')
+  const start = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down({ button: 'middle' })
+  await page.mouse.move(start.x + 62, start.y + 28, { steps: 4 })
+  await page.mouse.up({ button: 'middle' })
+  const northPanX = Number(await elevation.getAttribute('data-elevation-pan-x'))
+  const northPanY = await elevation.getAttribute('data-elevation-pan-y')
+  const northZoom = await elevation.getAttribute('data-elevation-zoom')
+  expect(northPanX).not.toBe(0)
+
+  await page.getByRole('button', { name: 'รูปด้านใต้', exact: true }).click()
+  elevation = page.getByTestId('elevation-canvas')
+  await expect(elevation).toHaveAttribute('data-elevation-pan-x', String(-northPanX))
+  await expect(elevation).toHaveAttribute('data-elevation-pan-y', northPanY!)
+  await expect(elevation).toHaveAttribute('data-elevation-zoom', northZoom!)
+
+  await page.getByRole('button', { name: 'รูปด้านตะวันออก', exact: true }).click()
+  elevation = page.getByTestId('elevation-canvas')
+  await expect(elevation).toHaveAttribute('data-elevation-pan-y', northPanY!)
+  await expect(elevation).toHaveAttribute('data-elevation-zoom', northZoom!)
+})
+
 test('Project Browser numeric group move commits once and preserves UUIDs through Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')

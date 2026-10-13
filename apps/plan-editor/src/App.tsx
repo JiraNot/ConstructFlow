@@ -33,7 +33,7 @@ import { DEFAULT_PLAN_CANVAS_PREFERENCES, type PlanCanvasPreferences } from './a
 import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
 import { Toolbar, ToolType } from './components/Toolbar.js'
 import { PlanCanvas } from './components/PlanCanvas.js'
-import { ElevationCanvas, ElevationDirection } from './components/ElevationCanvas.js'
+import { ElevationCanvas, ElevationDirection, type CoordinatedElevationNavigation } from './components/ElevationCanvas.js'
 import { PropertiesPanel } from './components/PropertiesPanel.js'
 import { ProjectBrowser } from './components/ProjectBrowser.js'
 import { SettingsModal } from './components/SettingsModal.js'
@@ -215,6 +215,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const { activeTool, activation: toolActivation, lastPlacementTool, activate: setActiveTool, repeat: repeatLastTool } = useToolSession()
   const [planCanvasPreferences, setPlanCanvasPreferences] = useState<PlanCanvasPreferences>(DEFAULT_PLAN_CANVAS_PREFERENCES)
   const [planNavigationViewport, setPlanNavigationViewport] = useState<ViewportState | null>(null)
+  const [elevationNavigation, setElevationNavigation] = useState<CoordinatedElevationNavigation>({ zoom: 1, panY: 0, panXNorthSouth: 0, panXEastWest: 0 })
   const [viewMode, setViewMode] = useState<'plan' | 'framing' | 'roofplan' | ElevationDirection | 'model3d'>('plan')
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
@@ -1950,7 +1951,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               ['plan', 'แปลนพื้น'], ['framing', 'แปลนคาน'], ['roofplan', 'แปลนหลังคา'], ['north', 'รูปด้านเหนือ'], ['south', 'รูปด้านใต้'],
               ['east', 'รูปด้านตะวันออก'], ['west', 'รูปด้านตะวันตก'], ['rcp', 'แปลนฝ้า RCP'], ['model3d', '3D ดูตัวอย่าง'],
             ] as const).map(([mode, label]) => (
-              <button key={mode} type="button" title={['plan', 'framing', 'roofplan'].includes(mode) ? 'แปลนพื้น แปลนคาน และแปลนหลังคาใช้ตำแหน่งและระดับซูมร่วมกัน' : undefined} onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>{label}</button>
+              <button key={mode} type="button" title={['plan', 'framing', 'roofplan'].includes(mode) ? 'แปลนพื้น แปลนคาน และแปลนหลังคาใช้ตำแหน่งและระดับซูมร่วมกัน' : ['north', 'south', 'east', 'west'].includes(mode) ? 'รูปด้านใช้ระดับซูมและตำแหน่งแนวดิ่งร่วมกัน; แนวนอนเชื่อมตามแกนฉาย' : undefined} onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>{label}</button>
             ))}
             {viewMode === 'plan' && <button type="button" onClick={handleDetectRooms} title="ค้นหาห้องจากวงผนังปิด">ตรวจจับห้อง</button>}
             {(viewMode === 'plan' || viewMode === 'framing' || viewMode === 'roofplan') && <details className="cf-label-menu" onClick={event => {
@@ -2057,7 +2058,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 setCursorCoords_mm(coords)
                 setSnapKind(kind)
               }}
-            /> : viewMode !== 'model3d' ? <ElevationCanvas project={viewProject} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} onBuildManipulation={viewMode === 'rcp' ? undefined : buildElevationManipulationCommands} onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation} onManipulationRejected={handleManipulationRejected} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
+            /> : viewMode !== 'model3d' ? <ElevationCanvas project={viewProject} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} navigation={elevationNavigation} onNavigationChange={setElevationNavigation} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} onBuildManipulation={viewMode === 'rcp' ? undefined : buildElevationManipulationCommands} onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation} onManipulationRejected={handleManipulationRejected} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
               <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} coordination={coordinationFindings} />
             </Suspense>}
           </div>
