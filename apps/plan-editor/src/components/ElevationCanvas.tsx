@@ -12,6 +12,7 @@ import type { UnderlayConfig } from '../rendering/planRenderer.js'
 import { drawCoordinationPrimitives, planCoordinationOverlay } from '../rendering/coordinationOverlay.js'
 import type { CommandRequest } from '@constructflow/command-schema'
 import type { DirectManipulationPreviewResult } from '../directManipulation.mjs'
+import type { CoordinatedPlanViewport } from '../viewport/viewportTransform'
 
 export type ElevationDirection = 'north' | 'south' | 'east' | 'west' | 'rcp'
 type ElevationViewState = { zoom: number; panX: number; panY: number }
@@ -62,6 +63,8 @@ interface Props {
   coordination?: readonly CoordinationFinding[]
   navigation?: CoordinatedElevationNavigation
   onNavigationChange?: (navigation: CoordinatedElevationNavigation) => void
+  planNavigation?: CoordinatedPlanViewport | null
+  onPlanNavigationChange?: (navigation: CoordinatedPlanViewport) => void
 }
 
 type TagShape = 'hexagon' | 'circle' | 'triangle'
@@ -119,7 +122,7 @@ function drawTag(ctx: CanvasRenderingContext2D, centerX: number, centerY: number
 }
 
 /** Orthographic, semantic projection of the project model. The canvas never becomes an editable copy of model edges. */
-export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedId, selectedIds = selectedId ? [selectedId] : [], onSelectObject, onSelectionChange, underlay, onMoveObject, onBuildManipulation, onPreviewManipulation, onCommitManipulation, onManipulationRejected, coordination = [], navigation, onNavigationChange }) => {
+export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedId, selectedIds = selectedId ? [selectedId] : [], onSelectObject, onSelectionChange, underlay, onMoveObject, onBuildManipulation, onPreviewManipulation, onCommitManipulation, onManipulationRejected, coordination = [], navigation, onNavigationChange, planNavigation, onPlanNavigationChange }) => {
   const isSelected = (id: string) => selectedIds.includes(id) || selectedId === id
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hitRegions = useRef<Array<{ id: string; x: number; y: number; w: number; h: number }>>([])
@@ -127,10 +130,13 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
   // Each orthographic view keeps its own navigation, as in a CAD viewport.
   // Zooming the north facade must not unexpectedly zoom the RCP or west side.
   const viewState = useRef(createElevationViewStates())
-  const currentView = () => navigation && direction !== 'rcp' ? elevationViewFromNavigation(navigation, direction) : viewState.current[direction]
+  const currentView = () => direction === 'rcp' && planNavigation
+    ? { zoom: planNavigation.zoom, panX: -planNavigation.center_mm[0] * planNavigation.zoom, panY: planNavigation.center_mm[1] * planNavigation.zoom }
+    : navigation && direction !== 'rcp' ? elevationViewFromNavigation(navigation, direction) : viewState.current[direction]
   const updateView = (view: ElevationViewState) => {
     viewState.current[direction] = view
-    if (navigation && direction !== 'rcp') onNavigationChange?.(navigationFromElevationView(navigation, direction, view))
+    if (direction === 'rcp' && planNavigation) onPlanNavigationChange?.({ center_mm: [-view.panX / view.zoom, view.panY / view.zoom], zoom: view.zoom })
+    else if (navigation && direction !== 'rcp') onNavigationChange?.(navigationFromElevationView(navigation, direction, view))
   }
   const [viewRevision, setViewRevision] = useState(0)
   const pointerDown = useRef<{ id: string | null; objectIds: string[]; x: number; y: number; localX: number; localY: number; verticalIntent: 'move' | 'top' | 'base'; gripIndex: number | null; hit: { id: string; x: number; y: number; w: number; h: number } | null; mode: 'pan' | 'object' | 'select'; panX: number; panY: number; additive: boolean } | null>(null)
@@ -160,8 +166,12 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
         if(!points.length){ctx.fillStyle='#64748b';ctx.font='14px sans-serif';ctx.fillText('ยังไม่มีห้องหรือฝ้า · ใช้คำสั่งตรวจจับห้องจากผนังเพื่อเริ่มต้น',24,40);return}
         const minX=Math.min(...points.map(p=>p[0])),maxX=Math.max(...points.map(p=>p[0])),minY=Math.min(...points.map(p=>p[1])),maxY=Math.max(...points.map(p=>p[1]))
         const view=currentView()
-        const pad=50,scale=Math.min((width-pad*2)/Math.max(1000,maxX-minX),(height-pad*2)/Math.max(1000,maxY-minY))*view.zoom,ox=(width-(maxX-minX)*scale)/2+view.panX,oy=(height-(maxY-minY)*scale)/2+view.panY
-        const sx=(x:number)=>ox+(x-minX)*scale,sy=(y:number)=>height-(oy+(y-minY)*scale)
+        const pad=50
+        const fitScale=Math.min((width-pad*2)/Math.max(1000,maxX-minX),(height-pad*2)/Math.max(1000,maxY-minY))
+        const scale=planNavigation ? view.zoom : fitScale*view.zoom
+        const centerX=planNavigation ? planNavigation.center_mm[0] : (minX+maxX)/2
+        const centerY=planNavigation ? planNavigation.center_mm[1] : (minY+maxY)/2
+        const sx=(x:number)=>width/2+(x-centerX)*scale,sy=(y:number)=>height/2-(y-centerY)*scale
         if(underlay?.visible&&underlay.image){ctx.save();ctx.globalAlpha=Math.max(.05,Math.min(1,underlay.opacity));const rotation=-(underlay.rotation_deg??0)*Math.PI/180;ctx.translate(sx(underlay.origin_mm[0]),sy(underlay.origin_mm[1]));ctx.rotate(rotation);ctx.drawImage(underlay.image,0,0,underlay.image.width*underlay.scale_mm_per_px*scale,underlay.image.height*underlay.scale_mm_per_px*scale);ctx.restore()}
         hitRegions.current=[]
         const roomLabels:Array<{x:number;y:number;text:string;color:string}> = []
@@ -552,7 +562,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     draw()
     const observer=new ResizeObserver(draw);observer.observe(canvas)
     return ()=>observer.disconnect()
-  },[project,direction,selectedId,selectedIds,underlay,viewRevision,coordination,manipulationPreview,navigation])
+  },[project,direction,selectedId,selectedIds,underlay,viewRevision,coordination,manipulationPreview,navigation,planNavigation])
 
   const zoomBy = (factor: number) => {
     const view = currentView()
@@ -560,6 +570,24 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     setViewRevision(value => value + 1)
   }
   const fitView = () => {
+    if (direction === 'rcp' && planNavigation) {
+      const canvas = canvasRef.current
+      const rect = canvas?.getBoundingClientRect()
+      const objects = getPlanVisibleObjects(project).filter(object =>
+        (object.object_type === 'architecture.room' || object.object_type === 'architecture.ceiling') && object.status !== 'archived',
+      )
+      const points = objects.flatMap(object => (object.module_data as Record<string, unknown>).boundary_mm as number[][] ?? [])
+      if (rect && points.length) {
+        const minX = Math.min(...points.map(point => point[0])), maxX = Math.max(...points.map(point => point[0]))
+        const minY = Math.min(...points.map(point => point[1])), maxY = Math.max(...points.map(point => point[1]))
+        const spanX = Math.max(1000, maxX - minX), spanY = Math.max(1000, maxY - minY)
+        const zoom = Math.max(.005, Math.min(2, Math.min((rect.width - 100) / spanX, (rect.height - 100) / spanY)))
+        const centerX = (minX + maxX) / 2, centerY = (minY + maxY) / 2
+        updateView({ zoom, panX: -centerX * zoom, panY: centerY * zoom })
+        setViewRevision(value => value + 1)
+        return
+      }
+    }
     updateView({ zoom: 1, panX: 0, panY: 0 })
     setViewRevision(value => value + 1)
   }
@@ -570,14 +598,14 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
   }
 
   const renderedView = currentView()
-  return <div data-testid="elevation-canvas" data-elevation-direction={direction} data-elevation-zoom={renderedView.zoom} data-elevation-pan-x={renderedView.panX} data-elevation-pan-y={renderedView.panY} style={{position:'relative',width:'100%',height:'100%'}}>
+  return <div data-testid="elevation-canvas" data-elevation-direction={direction} data-elevation-zoom={renderedView.zoom} data-elevation-pan-x={renderedView.panX} data-elevation-pan-y={renderedView.panY} data-plan-navigation-center-x={direction === 'rcp' && planNavigation ? planNavigation.center_mm[0] : undefined} data-plan-navigation-center-y={direction === 'rcp' && planNavigation ? planNavigation.center_mm[1] : undefined} style={{position:'relative',width:'100%',height:'100%'}}>
     <canvas ref={canvasRef} aria-label={`มุมมอง${direction}`} title="ลากคลุมพื้นที่ว่างเพื่อเลือกวัตถุ · กดเมาส์กลางค้างเพื่อลากมุมมอง · ล้อเมาส์เพื่อซูม · ดับเบิลคลิกเพื่อจัดภาพพอดี" style={{width:'100%',height:'100%',display:'block',touchAction:'none',cursor:pointerDown.current?.mode==='pan'?'grabbing':pointerDown.current?.mode==='select'?'crosshair':'default'}} onWheel={event=>{
     event.preventDefault()
     const canvas=event.currentTarget,rect=canvas.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top
     const view=currentView(),factor=Math.exp(-event.deltaY*.001)
     updateView(zoomElevationViewAtPoint(view,view.zoom*factor,x,y,rect.width,rect.height))
     setViewRevision(value=>value+1)
-  }} onDoubleClick={()=>{updateView({zoom:1,panX:0,panY:0});setViewRevision(value=>value+1)}} onPointerDown={event=>{
+  }} onDoubleClick={fitView} onPointerDown={event=>{
     if(event.button!==0&&event.button!==1)return
     const rect=event.currentTarget.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top
     const hit=hitRegions.current.filter(r=>x>=r.x-4&&x<=r.x+r.w+4&&y>=r.y-4&&y<=r.y+r.h+4).sort((a,b)=>a.w*a.h-b.w*b.h)[0]

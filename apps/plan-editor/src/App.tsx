@@ -258,6 +258,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     : []
   const planAnd3DNavigationLinked = paneModes.some(mode => mode === 'plan' || mode === 'framing' || mode === 'roofplan')
     && paneModes.includes('model3d')
+  const planAndRcpNavigationLinked = paneModes.some(mode => mode === 'plan' || mode === 'framing' || mode === 'roofplan')
+    && paneModes.includes('rcp')
   const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
   const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
   const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination'>('properties')
@@ -1930,6 +1932,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     return <ElevationCanvas project={viewProject} direction={mode} selectedId={selectedId} selectedIds={selectedIds}
       onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }}
       underlay={underlay} coordination={coordinationFindings} navigation={elevationNavigation} onNavigationChange={setElevationNavigation}
+      planNavigation={mode === 'rcp' && planAndRcpNavigationLinked ? planNavigationViewport : null}
+      onPlanNavigationChange={mode === 'rcp' && planAndRcpNavigationLinked ? setPlanNavigationViewport : undefined}
       onMoveObject={mode === 'rcp' ? undefined : handleMoveElevationObject}
       onBuildManipulation={mode === 'rcp' ? undefined : buildElevationManipulationCommands}
       onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation}
@@ -2253,7 +2257,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 setCursorCoords_mm(coords)
                 setSnapKind(kind)
               }}
-            /> : viewMode !== 'model3d' ? <ElevationCanvas project={viewProject} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} navigation={elevationNavigation} onNavigationChange={setElevationNavigation} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} onBuildManipulation={viewMode === 'rcp' ? undefined : buildElevationManipulationCommands} onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation} onManipulationRejected={handleManipulationRejected} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
+            /> : viewMode !== 'model3d' ? <ElevationCanvas project={viewProject} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} navigation={elevationNavigation} onNavigationChange={setElevationNavigation} planNavigation={viewMode === 'rcp' && planAndRcpNavigationLinked ? planNavigationViewport : null} onPlanNavigationChange={viewMode === 'rcp' && planAndRcpNavigationLinked ? setPlanNavigationViewport : undefined} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} onBuildManipulation={viewMode === 'rcp' ? undefined : buildElevationManipulationCommands} onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation} onManipulationRejected={handleManipulationRejected} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
               <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} autoFrameSelection={splitViewEnabled} planNavigation={planAnd3DNavigationLinked ? planNavigationViewport : null} onPlanNavigationChange={planAnd3DNavigationLinked ? setPlanNavigationViewport : undefined} coordination={coordinationFindings} />
             </Suspense>}
             </div>

@@ -1233,6 +1233,41 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   await page.mouse.up({ button: 'right' })
   await expect.poll(() => model3d.getAttribute('data-camera-target-x')).not.toBe(cameraTargetBeforeOrbitPan)
   await expect.poll(expectPlanAnd3DCenterToMatch).toBeUndefined()
+
+  await page.getByLabel('แบ่งมุมมอง').click()
+  await thirdView.selectOption('rcp')
+  const rcp = page.getByTestId('tertiary-view-pane').getByTestId('elevation-canvas')
+  await expect(rcp).toHaveAttribute('data-elevation-direction', 'rcp')
+  const expectPlanAndRcpNavigationToMatch = async () => {
+    const size = await planCanvas.evaluate(element => ({ width: element.clientWidth, height: element.clientHeight }))
+    const panX = Number(await planCanvas.getAttribute('data-viewport-pan-x'))
+    const panY = Number(await planCanvas.getAttribute('data-viewport-pan-y'))
+    const zoom = Number(await planCanvas.getAttribute('data-viewport-zoom'))
+    const centerXmm = (size.width / 2 - panX) / zoom
+    const centerYmm = (size.height / 2 - panY) / zoom
+    const rcpCenterXmm = Number(await rcp.getAttribute('data-plan-navigation-center-x'))
+    const rcpCenterYmm = Number(await rcp.getAttribute('data-plan-navigation-center-y'))
+    const rcpZoom = Number(await rcp.getAttribute('data-elevation-zoom'))
+    expect(Math.abs(rcpCenterXmm - centerXmm)).toBeLessThan(25)
+    expect(Math.abs(rcpCenterYmm - centerYmm)).toBeLessThan(25)
+    expect(Math.abs(rcpZoom - zoom)).toBeLessThan(0.002)
+  }
+  await expect.poll(expectPlanAndRcpNavigationToMatch).toBeUndefined()
+
+  const rcpBox = await rcp.boundingBox()
+  if (!rcpBox) throw new Error('RCP viewport is not visible')
+  await page.mouse.move(rcpBox.x + rcpBox.width / 2, rcpBox.y + rcpBox.height / 2)
+  await page.mouse.down({ button: 'middle' })
+  await page.mouse.move(rcpBox.x + rcpBox.width / 2 + 30, rcpBox.y + rcpBox.height / 2 - 18, { steps: 3 })
+  await page.mouse.up({ button: 'middle' })
+  await expect.poll(expectPlanAndRcpNavigationToMatch).toBeUndefined()
+  const rcpZoomBefore = Number(await rcp.getAttribute('data-elevation-zoom'))
+  await page.mouse.move(rcpBox.x + rcpBox.width / 2, rcpBox.y + rcpBox.height / 2)
+  await page.mouse.wheel(0, -120)
+  await expect.poll(async () => Number(await rcp.getAttribute('data-elevation-zoom'))).toBeGreaterThan(rcpZoomBefore)
+  await expect.poll(expectPlanAndRcpNavigationToMatch).toBeUndefined()
+  await page.getByLabel('จัดภาพให้พอดี').click()
+  await expect.poll(expectPlanAndRcpNavigationToMatch).toBeUndefined()
 })
 
 test('two-storey residential demo supports browser review and autosave reload at 239 objects', async ({ page }) => {
