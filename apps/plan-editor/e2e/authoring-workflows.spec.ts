@@ -1229,6 +1229,43 @@ test('sheet composer adds, reorders, compiles, and reloads custom viewports', as
   await expect(restoredThirdCenter.nth(1)).toHaveValue(draggedThirdCenter[1])
 })
 
+test('sheet composer supports six views in compact A3 frames and reloads the layout', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.cf-more-menu summary').click()
+  await page.getByRole('button', { name: 'ชุดแบบและตาราง' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.locator('select').first().selectOption('A-05')
+
+  for (const [index, kind] of ['south', 'west', 'section_x', 'section_y'].entries()) {
+    await dialog.getByLabel('ชนิด viewport ใหม่').selectOption(kind)
+    await dialog.getByRole('button', { name: 'เพิ่ม Viewport' }).click()
+    await expect(dialog.getByLabel(`ประเภท viewport ${index + 3}`)).toHaveValue(kind)
+  }
+  await expect(dialog.getByLabel('ประเภท viewport 6')).toHaveValue('section_y')
+  await expect(dialog.getByRole('button', { name: 'เพิ่ม Viewport' })).toBeDisabled()
+  await dialog.getByRole('button', { name: 'อัปเดต Viewport / Preview' }).click()
+
+  const preview = page.getByTestId('sheet-composer-preview')
+  const frames = JSON.parse((await preview.getAttribute('data-paper-frames')) ?? '[]')
+  expect(frames).toHaveLength(6)
+  for (const [x, y, width, height] of frames) {
+    expect(x).toBeGreaterThanOrEqual(0)
+    expect(y).toBeGreaterThanOrEqual(0)
+    expect(x + width).toBeLessThanOrEqual(420)
+    expect(y + height).toBeLessThanOrEqual(297)
+    expect(height).toBeLessThanOrEqual(70)
+  }
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
+  await page.getByRole('button', { name: 'ปิดแบบและตาราง' }).click()
+  await page.reload()
+  await page.locator('.cf-more-menu summary').click()
+  await page.getByRole('button', { name: 'ชุดแบบและตาราง' }).click()
+  const restored = page.getByRole('dialog')
+  await restored.locator('select').first().selectOption('A-05')
+  await expect(restored.getByLabel('ประเภท viewport 6')).toHaveValue('section_y')
+  await expect(page.getByTestId('sheet-composer-preview')).toHaveAttribute('data-paper-frames', JSON.stringify(frames))
+})
+
 test('split workbench keeps selection identity and plan navigation coordinated', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')

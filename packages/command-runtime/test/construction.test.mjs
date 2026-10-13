@@ -512,7 +512,7 @@ test("sheet layout templates persist reusable viewport settings and batch-apply 
     viewports: {
       "A-02": { scale_denominator: 50, level_id: session.project.levels[0].id, center_mm: [5000, 3000] },
       "S-02": { scale_denominator: 50, level_id: session.project.levels[0].id, crop_bounds_mm: [0, 0, 12000, 9000] },
-      "A-05": { scale_denominator: 100, view_layout: ["north", "rcp", "west"], paper_frame_mm: [12, 18, 170, 110], subviews: [{ scale_denominator: 50, paper_frame_mm: [210, 18, 190, 110] }, { scale_denominator: 25 }] },
+      "A-05": { scale_denominator: 100, view_layout: ["north", "rcp", "west", "section_x", "section_y", "isometric"], paper_frame_mm: [12, 18, 170, 110], subviews: [{ scale_denominator: 50, paper_frame_mm: [210, 18, 190, 110] }, { scale_denominator: 25 }, { scale_denominator: 100 }, { scale_denominator: 200 }, { scale_denominator: 500 }] },
     },
   };
   const saved = session.execute([{ name: "SaveSheetLayoutTemplate", input: { template } }]);
@@ -523,8 +523,8 @@ test("sheet layout templates persist reusable viewport settings and batch-apply 
   })));
   assert.equal(applied.status, "success");
   assert.equal(applied.updatedProject.drawing_settings.viewports["A-02"].scale_denominator, 50);
-  assert.deepEqual(applied.updatedProject.drawing_settings.viewports["A-05"].view_layout, ["north", "rcp", "west"]);
-  assert.deepEqual(applied.updatedProject.drawing_settings.viewports["A-05"].subviews, [{ scale_denominator: 50, paper_frame_mm: [210, 18, 190, 110] }, { scale_denominator: 25 }]);
+  assert.deepEqual(applied.updatedProject.drawing_settings.viewports["A-05"].view_layout, ["north", "rcp", "west", "section_x", "section_y", "isometric"]);
+  assert.deepEqual(applied.updatedProject.drawing_settings.viewports["A-05"].subviews, [{ scale_denominator: 50, paper_frame_mm: [210, 18, 190, 110] }, { scale_denominator: 25 }, { scale_denominator: 100 }, { scale_denominator: 200 }, { scale_denominator: 500 }]);
   assert.deepEqual(applied.updatedProject.drawing_settings.viewports["A-05"].paper_frame_mm, [12, 18, 170, 110]);
   assert.deepEqual(session.undo().drawing_settings.viewports, {});
   const redone = session.redo();

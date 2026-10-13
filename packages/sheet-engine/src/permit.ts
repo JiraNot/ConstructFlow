@@ -129,6 +129,11 @@ export function getPermitViewportPaperFrame(
     const [x, y, width, height] = paperFrameMm;
     return { x, y, width, height };
   }
+  if (viewCount >= 5) {
+    const column = viewIndex % 2
+    const row = Math.floor(viewIndex / 2)
+    return { x: 18 + column * 195, y: 34 + row * 78, width: 180, height: 70 }
+  }
   if (viewCount >= 3) {
     const column = viewIndex % 2
     const row = Math.floor(viewIndex / 2)

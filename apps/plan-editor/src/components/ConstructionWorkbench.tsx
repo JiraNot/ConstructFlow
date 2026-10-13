@@ -1017,7 +1017,7 @@ export function ConstructionWorkbench({
     setSubviewViewports(current => current.filter((_, itemIndex) => itemIndex !== index - 1));
   };
   const addViewport = () => {
-    if (sheetViewLayout.length >= 4) return;
+    if (sheetViewLayout.length >= 6) return;
     setSheetViewLayout(current => [...current, newSheetViewKind]);
     setSubviewViewports(current => [...current, { scale_denominator: scale }]);
   };
@@ -1408,7 +1408,7 @@ export function ConstructionWorkbench({
               />
               <section aria-label="จัดวาง viewports" style={{ marginTop: 14, borderTop: "1px solid #dbe3ed", paddingTop: 10 }}>
                 <h3>จัดวาง Viewports บนแผ่น</h3>
-                <p>เลือกมุมมอง เพิ่ม/ลบ และเรียงลำดับได้สูงสุด 4 ช่อง กรอบและศูนย์กลางแต่ละช่องบันทึกแยกกัน</p>
+                <p>เลือกมุมมอง เพิ่ม/ลบ และเรียงลำดับได้สูงสุด 6 ช่อง กรอบและศูนย์กลางแต่ละช่องบันทึกแยกกัน</p>
                 <button type="button" aria-pressed={editViewportFrames} onClick={() => setEditViewportFrames(value => !value)}>
                   {editViewportFrames ? 'เสร็จการจัดกรอบ' : 'จัดกรอบ viewport บนแผ่น'}
                 </button>
@@ -1457,7 +1457,7 @@ export function ConstructionWorkbench({
                     {SHEET_VIEW_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </label>
-                <button type="button" disabled={sheetViewLayout.length >= 4} onClick={addViewport}>เพิ่ม Viewport</button>
+                <button type="button" disabled={sheetViewLayout.length >= 6} onClick={addViewport}>เพิ่ม Viewport</button>
               </section>
               {(/^A-(02|03)(-L\d+)?$/.test(sheetId)) && <section style={{ marginTop: 18, borderTop: "1px solid #dbe3ed", paddingTop: 12 }}>
                 <h3>ตำแหน่งมิติอัตโนมัติ</h3>

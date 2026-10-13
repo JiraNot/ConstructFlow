@@ -98,11 +98,11 @@ export function validateDrawingSettings(
       throw new Error("Invalid sheet paper frame");
     if (v.section_cut_mm !== undefined && !Number.isFinite(v.section_cut_mm))
       throw new Error("Invalid section cut");
-    if (v.view_layout !== undefined && (!Array.isArray(v.view_layout) || v.view_layout.length < 1 || v.view_layout.length > 4 || v.view_layout.some(kind => !['plan', 'rcp', 'north', 'south', 'east', 'west', 'section_x', 'section_y', 'isometric'].includes(kind))))
+    if (v.view_layout !== undefined && (!Array.isArray(v.view_layout) || v.view_layout.length < 1 || v.view_layout.length > 6 || v.view_layout.some(kind => !['plan', 'rcp', 'north', 'south', 'east', 'west', 'section_x', 'section_y', 'isometric'].includes(kind))))
       throw new Error('Invalid sheet view layout');
     if (v.subviews !== undefined) {
-      if (!Array.isArray(v.subviews) || v.subviews.length > 3)
-        throw new Error('Sheet subviews must contain 0 to 3 viewport settings')
+      if (!Array.isArray(v.subviews) || v.subviews.length > 5)
+        throw new Error('Sheet subviews must contain 0 to 5 viewport settings')
       for (const subview of v.subviews) {
         if (!subview || ![20, 25, 50, 100, 200, 500].includes(subview.scale_denominator))
           throw new Error('Invalid sheet subview scale')

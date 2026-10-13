@@ -103,6 +103,24 @@ test('sheet composer view layouts compile ordered custom views into printable A3
   assert.deepEqual(frames.map(frame => [frame.x, frame.y, frame.width, frame.height]), customFrames)
 })
 
+test('six-view sheet layouts use compact A3 rows with six distinct default frames', () => {
+  const viewKinds = ['north', 'south', 'east', 'west', 'section_x', 'section_y']
+  const sheet = compilePermitDrawingSet(createEmptyProjectDocument('SIX-SHEET-VIEWS'), { viewports: {
+    'A-05': { scale_denominator: 100, view_layout: viewKinds, subviews: viewKinds.slice(1).map((_, index) => ({ scale_denominator: [25, 50, 100, 200, 500][index] })) },
+  } }).sheets.find(item => item.id === 'A-05')
+  const frames = viewKinds.map((_, index) => getPermitViewportPaperFrame('A-05', index, viewKinds.length))
+
+  assert.deepEqual(sheet.viewport.view_layout, viewKinds)
+  assert.equal(frames.length, 6)
+  assert.equal(new Set(frames.map(frame => `${frame.x},${frame.y}`)).size, 6)
+  for (const frame of frames) {
+    assert.ok(frame.x >= 0 && frame.y >= 0)
+    assert.ok(frame.x + frame.width <= 420)
+    assert.ok(frame.y + frame.height <= 297)
+    assert.ok(frame.height <= 70)
+  }
+})
+
 test("Phase 6: saved sheet settings control the compiler and invalid coordinate lengths reject", () => {
   const p = createEmptyProjectDocument("PDF-PROOF");
   p.drawing_settings = {
