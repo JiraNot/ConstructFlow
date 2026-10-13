@@ -1095,6 +1095,7 @@ test('DXF underlay imports, calibrates from two points, and preserves scale thro
     '0', 'LINE', '10', '0', '20', '0', '11', '5000', '21', '0',
     '0', 'LWPOLYLINE', '70', '1', '10', '0', '20', '0', '10', '5000', '20', '0', '10', '5000', '20', '3500', '10', '0', '20', '3500',
     '0', 'HATCH', '91', '1', '92', '2', '72', '0', '73', '1', '93', '4', '10', '200', '20', '200', '42', '0', '10', '1200', '20', '200', '42', '0', '10', '1200', '20', '900', '42', '0', '10', '200', '20', '900', '42', '0',
+    '0', 'SPLINE', '70', '0', '71', '3', '72', '8', '73', '4', '40', '0', '40', '0', '40', '0', '40', '0', '40', '1', '40', '1', '40', '1', '40', '1', '10', '1500', '20', '500', '10', '1500', '20', '1000', '10', '2000', '20', '1000', '10', '2000', '20', '500',
     '0', 'ELLIPSE', '10', '2500', '20', '1750', '11', '600', '21', '0', '40', '0.5', '41', '0', '42', String(Math.PI * 2),
     '0', 'ENDSEC', '0', 'EOF',
   ].join('\n')
@@ -1103,7 +1104,7 @@ test('DXF underlay imports, calibrates from two points, and preserves scale thro
     mimeType: 'application/dxf',
     buffer: Buffer.from(dxf),
   })
-  await expect(page.locator('.cf-save-status')).toContainText('นำเข้า DXF 4 รายการแล้ว')
+  await expect(page.locator('.cf-save-status')).toContainText('นำเข้า DXF 5 รายการแล้ว')
   await expect(page.locator('.cf-underlay-button')).toContainText('Underlay ON')
   await expect(page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]')).toBeVisible()
   await expect.poll(async () => page.locator('.cf-save-status').innerText()).toContain('กำลังบันทึกในเครื่อง')

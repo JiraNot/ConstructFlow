@@ -129,6 +129,30 @@ test('DXF underlay approximates full and partial ELLIPSE entities and skips malf
   assert.ok(result.origin_mm[1] > 50)
 })
 
+test('DXF underlay samples rational SPLINE control points and rejects malformed or non-planar splines', () => {
+  const cubic = ['0', 'SPLINE', '70', '0', '71', '3', '72', '8', '73', '4',
+    '40', '0', '40', '0', '40', '0', '40', '0', '40', '1', '40', '1', '40', '1', '40', '1',
+    '10', '0', '20', '0', '10', '0', '20', '100', '10', '100', '20', '100', '10', '100', '20', '0']
+  const rational = ['0', 'SPLINE', '70', '5', '71', '2', '72', '6', '73', '3',
+    '40', '0', '40', '0', '40', '0', '40', '1', '40', '1', '40', '1',
+    '41', '1', '41', String(Math.SQRT1_2), '41', '1',
+    '10', '200', '20', '0', '10', '200', '20', '100', '10', '100', '20', '100']
+  const malformed = ['0', 'SPLINE', '71', '3', '73', '4', '40', '0', '10', '0', '20', '0']
+  const nonPlanar = ['0', 'SPLINE', '71', '1', '72', '4', '73', '2',
+    '40', '0', '40', '0', '40', '1', '40', '1',
+    '10', '0', '20', '0', '30', '100', '10', '100', '20', '100', '30', '100']
+
+  const result = importDxfUnderlay(dxf(4, [...cubic, ...rational, ...malformed, ...nonPlanar].join('\n')))
+  const svg = decodeURIComponent(result.dataUrl)
+  const paths = svg.match(/<path d="[^"]+"\/>/g) ?? []
+
+  assert.equal(result.imported_entities, 2)
+  assert.equal(result.skipped_entities, 2)
+  assert.equal(paths.length, 2)
+  assert.ok((svg.match(/L/g) ?? []).length >= 40, 'curves are sampled into smooth underlay polylines')
+  assert.equal(paths.filter(path => path.includes(' Z')).length, 1, 'closed spline flag is retained for the rational spline')
+})
+
 test('DXF underlay import rejects documents without supported model-space geometry', () => {
   assert.throws(() => importDxfUnderlay(dxf(4, ['0', 'TEXT', '10', '0', '20', '0', '1', 'note'].join('\n'))), /ไม่พบ LINE/)
 })

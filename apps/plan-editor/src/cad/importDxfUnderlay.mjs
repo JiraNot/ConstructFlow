@@ -103,6 +103,69 @@ function numberOf(entity, code) {
   return Number.isFinite(value) ? value : null
 }
 
+function numbersOf(entity, code) {
+  return entity.pairs.filter(pair => pair.code === code).map(pair => Number(pair.value))
+}
+
+function evaluateSplinePoint(controlPoints, knots, degree, parameter) {
+  const lastControl = controlPoints.length - 1
+  let span = lastControl
+  if (parameter < knots[lastControl + 1]) {
+    let low = degree, high = lastControl + 1
+    while (low + 1 < high) {
+      const middle = Math.floor((low + high) / 2)
+      if (parameter < knots[middle]) high = middle
+      else low = middle
+    }
+    span = low
+  }
+  const work = []
+  for (let index = 0; index <= degree; index += 1) {
+    const control = controlPoints[span - degree + index]
+    work.push([control[0] * control[2], control[1] * control[2], control[2]])
+  }
+  for (let level = 1; level <= degree; level += 1) {
+    for (let index = degree; index >= level; index -= 1) {
+      const knotIndex = span - degree + index
+      const denominator = knots[knotIndex + degree - level + 1] - knots[knotIndex]
+      const alpha = denominator === 0 ? 0 : (parameter - knots[knotIndex]) / denominator
+      for (let axis = 0; axis < 3; axis += 1) {
+        work[index][axis] = (1 - alpha) * work[index - 1][axis] + alpha * work[index][axis]
+      }
+    }
+  }
+  const weight = work[degree][2]
+  return weight > 1e-12 ? [work[degree][0] / weight, work[degree][1] / weight] : null
+}
+
+function splineShape(entity) {
+  const degree = numberOf(entity, 71)
+  const declaredCount = numberOf(entity, 73)
+  const declaredKnotCount = numberOf(entity, 72)
+  const xs = numbersOf(entity, 10), ys = numbersOf(entity, 20), zs = numbersOf(entity, 30)
+  const knots = numbersOf(entity, 40), weights = numbersOf(entity, 41)
+  if (!Number.isInteger(degree) || degree < 1 || degree > 10 || xs.length < degree + 1 || xs.length > 2000 ||
+    ys.length !== xs.length || (declaredCount !== null && declaredCount !== xs.length) ||
+    knots.length !== xs.length + degree + 1 || (declaredKnotCount !== null && declaredKnotCount !== knots.length) || !knots.every(Number.isFinite) ||
+    !xs.every(Number.isFinite) || !ys.every(Number.isFinite) ||
+    (zs.length > 0 && (!zs.every(Number.isFinite) || zs.some(value => Math.abs(value) > 1e-6))) ||
+    (weights.length > 0 && (weights.length !== xs.length || !weights.every(value => Number.isFinite(value) && value > 0))) ||
+    knots.some((value, index) => index > 0 && value < knots[index - 1])) return null
+
+  const controlPoints = xs.map((x, index) => [x, ys[index], weights[index] ?? 1])
+  const start = knots[degree], end = knots[xs.length]
+  if (!(end > start)) return null
+  const segments = Math.max(16, Math.min(720, (xs.length - degree) * 24))
+  const points = []
+  for (let index = 0; index <= segments; index += 1) {
+    const point = evaluateSplinePoint(controlPoints, knots, degree, start + (end - start) * index / segments)
+    if (!point) return null
+    points.push(point)
+  }
+  const closed = (Number(valueOf(entity, 70) ?? 0) & (1 | 2)) !== 0
+  return points.length >= 2 ? { kind: 'polyline', points, closed } : null
+}
+
 function polylinePoints(entity) {
   const points = []
   let current = null
@@ -242,6 +305,10 @@ function shapesForEntity(entity) {
     const boundaries = hatchPolylineBoundaries(entity)
     return boundaries.length ? boundaries : null
   }
+  if (entity.type === 'SPLINE') {
+    const shape = splineShape(entity)
+    return shape ? [shape] : null
+  }
   if (entity.type === 'ELLIPSE') {
     const centerX = numberOf(entity, 10), centerY = numberOf(entity, 20)
     const majorX = numberOf(entity, 11), majorY = numberOf(entity, 21), ratio = numberOf(entity, 40)
@@ -334,7 +401,7 @@ export function importDxfUnderlay(source, { maxImageDimension = 4096 } = {}) {
   let unsupportedEntities = 0
   expandEntities(entities, blocks, IDENTITY, geometry, () => { unsupportedEntities += 1 })
 
-  if (!geometry.length) throw new Error('ไม่พบ LINE, POLYLINE, LWPOLYLINE, HATCH, ELLIPSE, CIRCLE, ARC หรือ INSERT ที่ใช้เป็น underlay ได้')
+  if (!geometry.length) throw new Error('ไม่พบ LINE, POLYLINE, LWPOLYLINE, HATCH, SPLINE, ELLIPSE, CIRCLE, ARC หรือ INSERT ที่ใช้เป็น underlay ได้')
   const points = geometry.flatMap(shape => shape.points)
   const minX = Math.min(...points.map(point => point[0]))
   const maxX = Math.max(...points.map(point => point[0]))
