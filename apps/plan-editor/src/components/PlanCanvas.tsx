@@ -39,12 +39,9 @@ import { isPolygonInteraction, isTwoPointInteraction } from '../app/toolInteract
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { PlanCanvasObjectContextMenu } from './PlanCanvasObjectContextMenu.js'
 import { resolvePlanCanvasPointerSnap } from './resolvePlanCanvasPointerSnap.js'
-import { handlePlanCanvasPointerMove } from './handlePlanCanvasPointerMove.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
 import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
-import { handlePlanCanvasPointerDown } from './handlePlanCanvasPointerDown.js'
-import { handlePlanCanvasPointerUp } from './handlePlanCanvasPointerUp.js'
 import { updatePlanCanvasPreference, type PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParallelOffset, constrainPlanCanvasLineSnap, resolvePlanCanvasReferencePath } from './planCanvasPlacementConstraints.mjs'
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
@@ -60,6 +57,7 @@ import { PlanCanvasInteractionOverlays } from './PlanCanvasInteractionOverlays.j
 import { usePlanCanvasToolInteraction } from './usePlanCanvasToolInteraction.js'
 import { usePlanCanvasOpeningPlacementDimensions } from './usePlanCanvasOpeningPlacementDimensions.js'
 import { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
+import { usePlanCanvasPointerHandlers } from './usePlanCanvasPointerHandlers.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -437,12 +435,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     slabBoundary,
   })
 
-  // Pointer move handler
-  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    handlePlanCanvasPointerMove({
-      event: e,
-      canvas,
+  const { handlePointerMove, handlePointerDown, handlePointerUp } = usePlanCanvasPointerHandlers({
+    canvasRef,
+    pointerMove: {
       navigation: {
         pointerPositionsRef, pinchRef, longPressStartRef, longPressTimerRef, selectionStartRef,
         setSelectionBox, eraseActiveRef, erasedIdsRef, isPanning, panStartRef, viewport, setViewport, findCandidates,
@@ -460,32 +455,27 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         findCandidates, setActiveWallSnap, setActiveSnap, setTapeMeasure, setCalibrationMousePoint,
         setCandidates, setHoveredId, setManipulationPreview, onCursorChange, previewDragAt,
       },
-    })
-  }
-
-  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => handlePlanCanvasPointerDown({
-    event,
-    canvas: canvasRef.current,
-    activeTool,
-    viewport,
-    navigation: {
+    },
+    pointerDown: {
+      activeTool,
+      viewport,
+      navigation: {
       pointerPositionsRef, pinchRef, pinchActiveRef, longPressStartRef, longPressTimerRef,
       selectionStartRef, panStartRef, setSelectionBox, setDraggingObject, setIsPanning,
       setObjectContextMenu, findHitObject, onSelectionChange, onSelectObject,
-      setPointerCapture: pointerId => canvasRef.current?.setPointerCapture(pointerId),
-    },
-    snapping: {
+      },
+      snapping: {
       snapPlanPoint,
       lineState: { beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary },
       constrainLineSnap,
-    },
-    selection: {
+      },
+      selection: {
       displayUnit, planProject, project, selectedIds, hoveredId, findEditHandle, findCandidates,
       findHitObject, setCandidates, setHoveredId, setDraggingObject, setManipulationPreview,
       setResizeDimensionWidth, setResizeDimensionHeight, setResizeDimensionLength,
       selectionStartRef, selectionAdditiveRef, lastPreviewValidationRef, onSelectionChange, onSelectObject,
-    },
-    placement: {
+      },
+      placement: {
       project, planProject, selectedId, displayUnit, viewportZoom: viewport.zoom, placement,
       settings: { activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, placementReference, doorHanding },
       callbacks: {
@@ -497,14 +487,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       },
       operations: { applyPlacementDimensions, constrainGridCopyToParallelOffset, snapPlanWallHost, applyOpeningDistance, resolveReferencePath },
       interaction: { eraseActiveRef, erasedIdsRef, findCandidates },
+      },
     },
-  })
-
-  // Pointer up
-  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    handlePlanCanvasPointerUp({
-      event: e,
-      canvas: canvasRef.current,
+    pointerUp: {
       viewport,
       isPanning,
       pointerPositionsRef,
@@ -534,8 +519,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       setResizeDimensionWidth,
       setResizeDimensionHeight,
       setResizeDimensionLength,
-    })
-  }
+    },
+  })
   const {
     dimensionHostAxis, isHostedOpeningPlacement, dimensionReferences, showXDimension, showYDimension,
     xDimensionAnchor, yDimensionAnchor, xDimensionDisplay, yDimensionDisplay,
