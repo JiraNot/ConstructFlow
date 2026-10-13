@@ -7,6 +7,7 @@
     "dev": "vite --host 0.0.0.0 --port 5183 --strictPort",
     "build": "tsc && vite build",
     "test": "node --test test/*.test.mjs",
+    "test:e2e": "playwright test",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -16,6 +17,7 @@
     "@constructflow/clash-engine": "file:../../packages/clash-engine",
     "@constructflow/command-runtime": "file:../../packages/command-runtime",
     "@constructflow/command-schema": "file:../../packages/command-schema",
+    "@constructflow/constraint-engine": "file:../../packages/constraint-engine",
     "@constructflow/domain-providers": "file:../../packages/domain-providers",
     "@constructflow/drainage-engine": "file:../../packages/drainage-engine",
     "@constructflow/extension-engine": "file:../../packages/extension-engine",
@@ -23,17 +25,17 @@
     "@constructflow/project-model": "file:../../packages/project-model",
     "@constructflow/representation-engine": "file:../../packages/representation-engine",
     "@constructflow/roof-engine": "file:../../packages/roof-engine",
-    "@constructflow/snapping-engine": "file:../../packages/snapping-engine",
     "@constructflow/sheet-engine": "file:../../packages/sheet-engine",
+    "@constructflow/snapping-engine": "file:../../packages/snapping-engine",
     "@constructflow/takeoff-engine": "file:../../packages/takeoff-engine",
     "constructflow-standalone": "file:../..",
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "three": "^0.186.1",
-    "@constructflow/constraint-engine": "file:../../packages/constraint-engine"
+    "three": "^0.186.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.186.0",

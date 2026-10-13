@@ -180,6 +180,18 @@ export function validateProjectV2(project: ProjectDocument): void {
   if (!project.objects || typeof project.objects !== 'object' || Array.isArray(project.objects)) throw new Error('Invalid project format: objects map required')
   validateConstructionPayloads(project)
   if(project.drawing_settings!==undefined)validateDrawingSettings(project.drawing_settings)
+  if (project.view_settings !== undefined) {
+    const settings = project.view_settings as unknown
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new Error('Invalid project format: view_settings must be an object')
+    const visibility = (settings as Record<string, unknown>).hidden_object_ids_by_scope
+    if (!visibility || typeof visibility !== 'object' || Array.isArray(visibility)) throw new Error('Invalid project format: hidden_object_ids_by_scope must be a keyed map')
+    for (const [scopeId, objectIds] of Object.entries(visibility)) {
+      if (!scopeId || scopeId.length > 200 || !Array.isArray(objectIds) || objectIds.some(id => typeof id !== 'string' || !id)) {
+        throw new Error(`Invalid project format: view visibility scope ${scopeId || '(empty)'} has invalid object IDs`)
+      }
+      if (new Set(objectIds).size !== objectIds.length) throw new Error(`Invalid project format: view visibility scope ${scopeId} contains duplicate object IDs`)
+    }
+  }
   if(project.coordination_settings!==undefined)validateCoordinationSettings(project.coordination_settings)
   if (project.underlays !== undefined) {
     if (!project.underlays || typeof project.underlays !== 'object' || Array.isArray(project.underlays)) throw new Error('Invalid project format: underlays must be a keyed map')

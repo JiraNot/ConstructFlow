@@ -170,6 +170,12 @@ export interface ProjectDocument {
   legal_metadata?: ProjectLegalMetadata
   /** Embedded reference drawings, keyed by view and level so they travel with .cfproj. */
   underlays?: Record<string, ProjectUnderlay>
+  /** Per-view display overrides keyed by stable view and level scope identifiers. */
+  view_settings?: ProjectViewSettings
+}
+
+export interface ProjectViewSettings {
+  hidden_object_ids_by_scope: Record<string, string[]>
 }
 
 export interface ProjectUnderlay {

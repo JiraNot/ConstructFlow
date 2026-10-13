@@ -10,6 +10,8 @@ dist/
 build/
 coverage/
 *.log
+apps/plan-editor/playwright-report/
+apps/plan-editor/test-results/
 
 # Ruby
 .bundle/

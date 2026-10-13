@@ -24,13 +24,13 @@ import {
 } from '@constructflow/project-model'
 import { projectPointToWallOffsetMm, stairFromRun, type StairPlacementOptions } from '@constructflow/architecture-engine'
 import { movePipeRouteEndpoint, movePipeRouteNode } from '@constructflow/drainage-engine'
-import { polygonEdgeGrip, polygonInteriorPoint } from '@constructflow/geometry-kernel'
-import { getEditableRoofRidge, getRoofSeams } from '@constructflow/roof-engine'
+import { polygonInteriorPoint } from '@constructflow/geometry-kernel'
+import { getEditableRoofRidge } from '@constructflow/roof-engine'
 import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
-import { drawCoordinationPrimitives, planCoordinationOverlay } from '../rendering/coordinationOverlay.js'
 import { TypePicker } from './TypePicker.js'
+import { usePlanCanvasPlacementKeyboard } from './usePlanCanvasPlacementKeyboard.js'
 import { TOOL_FAMILIES } from './catalogPresentation.js'
 import { ToolType } from './Toolbar.js'
 import {
@@ -39,17 +39,30 @@ import {
   worldToScreen,
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
-import { constrainPointToReference, DEFAULT_SNAP_MODES, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, SnapSpatialIndex, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware, resizeOpeningFromEdge } from '@constructflow/snapping-engine'
-import { renderPlanView, drawDirectManipulationGhost, PlacementGhost, UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
+import { constrainPointToReference, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, SnapSpatialIndex, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware, resizeOpeningFromEdge } from '@constructflow/snapping-engine'
+import { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import { Maximize2, Pencil, Trash2, ZoomIn, ZoomOut, PlusCircle, Copy } from 'lucide-react'
 import type { CommandRequest } from '@constructflow/command-schema'
-import { buildDirectManipulationCommands, optimisticManipulationProject, type DirectManipulationPreviewResult, type PlanDragGesture } from '../directManipulation.mjs'
+import { optimisticManipulationProject, type DirectManipulationPreviewResult, type PlanDragGesture } from '../directManipulation.mjs'
 import { isPolygonInteraction, isTwoPointInteraction, usesPlacementDimensions } from '../app/toolInteractionRegistry.mjs'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
+import { PlanCanvasDragDimensions, type DragDimensionField, type DragDimensionMode } from './PlanCanvasDragDimensions.js'
+import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
+import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
+import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
 import { findPlanHitObject } from './planHitTesting.mjs'
+import { drawPlanCanvasSelectionHandles } from './drawPlanCanvasSelectionHandles.js'
+import { drawPlanCanvasToolOverlays } from './drawPlanCanvasToolOverlays.js'
+import { buildPlanPlacementGhost } from './buildPlanPlacementGhost.js'
+import { drawPlanCanvasBaseScene } from './drawPlanCanvasBaseScene.js'
+import { resolvePlanCanvasLineSnap } from '../app/placementLineSnap.mjs'
+import { updatePlanCanvasPreference, type PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
+import { hasPendingToolStep, resolveEscapeAction, resolveToolInteractionStatus } from '../app/toolInteractionStatus.mjs'
 
 interface PlanCanvasProps {
   project: ProjectDocument
+  preferences: PlanCanvasPreferences
+  onPreferencesChange: (updater: (current: PlanCanvasPreferences) => PlanCanvasPreferences) => void
   planDiscipline?: 'architecture' | 'framing' | 'roof'
   displayUnit: DisplayLengthUnit
   activeTool: ToolType
@@ -111,6 +124,7 @@ interface PlanCanvasProps {
   onResizeFoundation?: (id: string, size_mm: [number, number]) => void
   onPreviewManipulation?: (commands: CommandRequest[]) => DirectManipulationPreviewResult
   onCommitManipulation?: (commands: CommandRequest[]) => { status: string; errors?: string[] }
+  externalManipulationPreview?: { project: ProjectDocument; ids: string[]; valid: boolean } | null
   onManipulationRejected?: (errors: string[]) => void
   onFlipDoorHanding?: (doorId: string) => void
   onStartCalibrationModal?: (measuredDist_mm: number, point1_mm: [number, number], point2_mm: [number, number]) => void
@@ -124,15 +138,17 @@ interface PlanCanvasProps {
 }
 
 import {
-  getSnappedWallId, getWallVerticalReference, getPlanObjectBounds, orientedRectangleCorners,
-  cabinetFootprintPoints, cabinetRotationGripPoint, cabinetRotationFromGrip, slabSlopeArrow,
+  getSnappedWallId, getWallVerticalReference, getPlanObjectBounds,
+  cabinetFootprintPoints, cabinetRotationFromGrip,
   gridLineEndpoints, findTemporaryDimensionRefs, openingDimensionRefs, openingDimensionPoint,
-  drawTemporaryDimensions, drawOpeningInspectionDimensions, drawTapeMeasure,
+  drawTemporaryDimensions, drawTapeMeasure,
   type WallVerticalReference,
 } from './PlanCanvasGeometry.js'
 
 export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   project,
+  preferences,
+  onPreferencesChange,
   planDiscipline = 'architecture',
   displayUnit,
   activeTool,
@@ -194,6 +210,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onResizeFoundation,
   onPreviewManipulation,
   onCommitManipulation,
+  externalManipulationPreview = null,
   onManipulationRejected,
   onFlipDoorHanding,
   onStartCalibrationModal,
@@ -204,16 +221,20 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const dragDimensionInput = usePlanCanvasDragDimensions(displayUnit)
   const hasInitialFitRef = useRef(false)
   const planVisibleObjects = useMemo(() => getPlanVisibleObjects(project, planDiscipline), [project, planDiscipline])
   const planProject = useMemo(() => getPlanViewProject(project, planVisibleObjects), [project, planVisibleObjects])
   const snapSpatialIndex = useMemo(() => new SnapSpatialIndex(planProject), [planProject])
 
-
+  const { placementReference, lineConstraintMode, dimensionReferenceMode, doorHanding, snapModes } = preferences
+  const setPreference = <K extends keyof PlanCanvasPreferences>(
+    key: K,
+    value: PlanCanvasPreferences[K] | ((current: PlanCanvasPreferences[K]) => PlanCanvasPreferences[K]),
+  ) => onPreferencesChange(current => updatePlanCanvasPreference(current, key, value))
 
   // Viewport state: 0.08 zoom = 1000mm -> 80px on screen.
   const { viewport, setViewport, fitView } = usePlanCanvasViewport(containerRef, planVisibleObjects)
-  const [placementReference, setPlacementReference] = useState<'centerline' | 'left_face' | 'right_face'>('centerline')
   const [gridStartPoint, setGridStartPoint] = useState<[number, number] | null>(null)
   const [stairStartPoint, setStairStartPoint] = useState<[number, number] | null>(null)
   const [stairOptions, setStairOptions] = useState<StairPlacementOptions>({ stair_type: 'u_shape', width_mm: 900, landing_depth_mm: 900, turn_direction: 'right', num_risers: 18, flight_gap_mm: 100, top_level_id: '' })
@@ -232,8 +253,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [gridXFirstTag, setGridXFirstTag] = useState('A')
   const [gridYFirstTag, setGridYFirstTag] = useState('1')
   const [gridSystemError, setGridSystemError] = useState('')
-  const [snapModes, setSnapModes] = useState<SnapMode[]>(DEFAULT_SNAP_MODES)
-  const [lineConstraintMode, setLineConstraintMode] = useState<'auto' | 'none' | 'parallel' | 'perpendicular'>('auto')
   const [drawLengthMeters, setDrawLengthMeters] = useState('')
   const [drawAngleDegrees, setDrawAngleDegrees] = useState('')
   const [dimensionInputX, setDimensionInputX] = useState('')
@@ -243,7 +262,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [dimensionAnchorX, setDimensionAnchorX] = useState<number | null>(null)
   const [dimensionAnchorY, setDimensionAnchorY] = useState<number | null>(null)
   const [dimensionKeyboardAxis, setDimensionKeyboardAxis] = useState<'x' | 'y'>('x')
-  const [dimensionReferenceMode, setDimensionReferenceMode] = useState<'center' | 'edge'>('center')
   const previousDisplayUnit = useRef(displayUnit)
   const enabledSnapModes = useMemo(() => new Set(snapModes), [snapModes])
   const snapPlanPoint = (point: [number, number], distancePx = 16, excludedObjectId?: string) => {
@@ -303,12 +321,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     setDimensionInputX(''); setDimensionInputY(''); setDimensionAnchorX(null); setDimensionAnchorY(null)
   }
   useEffect(() => {
-    setDimensionInputX(''); setDimensionInputY(''); setDimensionAnchorX(null); setDimensionAnchorY(null)
-    setDimensionReferenceMode(activeTool === 'door' || activeTool === 'window' ? 'edge' : 'center')
-  }, [activeTool])
+    clearDimensionOverrides()
+  }, [activeTool, toolActivation])
 
   const toggleDimensionReferenceMode = () => {
-    setDimensionReferenceMode(mode => mode === 'center' ? 'edge' : 'center')
+    setPreference('dimensionReferenceMode', mode => mode === 'center' ? 'edge' : 'center')
     // Keep the entered distance and re-anchor it to the chosen center/edge reference.
     setDimensionAnchorX(null); setDimensionAnchorY(null)
   }
@@ -443,6 +460,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [objectContextMenu, setObjectContextMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [selectionBox, setSelectionBox] = useState<{ start: [number, number]; end: [number, number] } | null>(null)
   const [manipulationPreview, setManipulationPreview] = useState<{ project: ProjectDocument; ids: string[]; valid: boolean } | null>(null)
+  const [dragPreviewPoint, setDragPreviewPoint] = useState<[number, number] | null>(null)
+  const dragDimensionX = dragDimensionInput.moveX
+  const dragDimensionY = dragDimensionInput.moveY
+  const resizeDimensionWidth = dragDimensionInput.width
+  const resizeDimensionHeight = dragDimensionInput.height
+  const resizeDimensionLength = dragDimensionInput.length
+  const setResizeDimensionWidth = dragDimensionInput.setWidth
+  const setResizeDimensionHeight = dragDimensionInput.setHeight
+  const setResizeDimensionLength = dragDimensionInput.setLength
+  const manualDragPointRef = dragDimensionInput.manualPointRef
   const lastPreviewValidationRef = useRef<{ at: number; valid: boolean }>({ at: 0, valid: true })
   const panStartRef = useRef<[number, number]>([0, 0])
   const selectionStartRef = useRef<[number, number] | null>(null)
@@ -507,16 +534,24 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [tapeMeasure, setTapeMeasure] = useState<{ start: [number, number]; end: [number, number]; complete: boolean } | null>(null)
 
   // Door handing state (can cycle with Spacebar)
-  const [doorHanding, setDoorHanding] = useState<DoorHanding>('left_in')
+  const setDoorHanding = (value: DoorHanding | ((current: DoorHanding) => DoorHanding)) => setPreference('doorHanding', value)
 
   const cancelCurrentPlacement = () => {
-    const hasPendingStep = !!objectContextMenu || !!stairStartPoint || !!gridStartPoint || !!beamStartNode || !!wallStartNode || !!roomSeparatorStart || slabBoundary.length > 0 || !!calibrationP1 || !!tapeMeasure || !!dimensionInputX.trim() || !!dimensionInputY.trim() || !!drawLengthMeters.trim() || !!drawAngleDegrees.trim() || !!gridSystemError
+    const pendingState = hasPendingToolStep({ draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError })
+    const escapeAction = resolveEscapeAction(activeTool, pendingState, Boolean(selectedId || selectedIds.length))
     setObjectContextMenu(null)
+    manualDragPointRef.current = null
+    setDraggingObject(null); setDragPreviewPoint(null); setManipulationPreview(null)
+    setResizeDimensionWidth(''); setResizeDimensionHeight(''); setResizeDimensionLength('')
     setDimensionInputX(''); setDimensionInputY(''); setDimensionAnchorX(null); setDimensionAnchorY(null)
     setGridStartPoint(null); setBeamStartNode(null); setWallStartNode(null); setRoomSeparatorStart(null); setStairStartPoint(null); setStairError('')
     setSlabBoundary([]); setCalibrationP1(null); setCalibrationMousePoint(null); setTapeMeasure(null)
     setDrawLengthMeters(''); setDrawAngleDegrees(''); setGridSystemError('')
-    if (!hasPendingStep && activeTool !== 'select') onActivateTool?.('select')
+    if (escapeAction === 'exit-tool') onActivateTool?.('select')
+    else if (escapeAction === 'clear-selection') {
+      if (onSelectionChange) onSelectionChange([], null)
+      else onSelectObject(null)
+    }
   }
 
   useEffect(() => {
@@ -555,7 +590,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (document.querySelector('[role="dialog"]')) return
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
-      if (e.code === 'Space') {
+      if (e.key === 'Tab' && draggingObject) {
+        e.preventDefault()
+        requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.cf-manipulation-dimensions input')?.focus())
+      } else if (e.code === 'Space') {
         if (activeTool === 'door') {
           e.preventDefault()
           setDoorHanding((prev) => {
@@ -569,7 +607,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           })
         } else if (activeTool === 'wall' || activeTool === 'beam') {
           e.preventDefault()
-          setPlacementReference((prev) => {
+          setPreference('placementReference', (prev) => {
             const cycle = { centerline: 'left_face', left_face: 'right_face', right_face: 'centerline' } as const
             return cycle[prev]
           })
@@ -586,257 +624,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTool, selectedId, project.objects, onFlipDoorHanding, onActivateTool, objectContextMenu, stairStartPoint, gridStartPoint, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError])
+  }, [activeTool, selectedId, project.objects, onFlipDoorHanding, onActivateTool, draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError])
 
   const editableSelectionIds = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
-  const findEditHandle = (screenPoint: [number, number]) => {
-    const tolerance = 13
-    for (const id of editableSelectionIds) {
-      const object = planProject.objects[id]
-      if (!object) continue
-      const data = object.module_data as unknown as Record<string, unknown>
-      if (isColumnObject(object)) {
-        const center = object.module_data.location_mm, [w, d] = object.module_data.section_mm
-        const corners = orientedRectangleCorners([center[0], center[1]], [w, d], object.module_data.rotation_deg)
-        for (const [cornerIndex, point] of corners.entries()) {
-          const [x, y] = worldToScreen(point as [number, number], viewport)
-          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return { id, kind: 'column-corner' as const, endpointIndex: cornerIndex, centerMm: [center[0], center[1]] as [number, number], sectionMm: [w, d] as [number, number], rotationDeg: object.module_data.rotation_deg }
-        }
-      } else if (isFoundationObject(object)) {
-        const center = object.module_data.center_mm, [w, d] = object.module_data.size_mm
-        for (const [cornerIndex, point] of orientedRectangleCorners([center[0], center[1]], [w, d]).entries()) {
-          const [x, y] = worldToScreen(point as [number, number], viewport)
-          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return { id, kind: 'foundation-corner' as const, endpointIndex: cornerIndex, centerMm: [center[0], center[1]] as [number, number], sectionMm: [w, d] as [number, number] }
-        }
-      } else if (isWallObject(object) || isBeamObject(object)) {
-        const start = data.start_point_mm as [number, number] | undefined
-        const end = data.end_point_mm as [number, number] | undefined
-        if (!start || !end) continue
-        for (const [endpointIndex, point] of [start, end].entries()) {
-          const [x, y] = worldToScreen(point, viewport)
-          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
-            id, kind: isWallObject(object) ? 'wall-endpoint' as const : 'beam-endpoint' as const,
-            endpointIndex: endpointIndex as 0 | 1, startPointMm: [...start] as [number, number], endPointMm: [...end] as [number, number],
-          }
-        }
-      } else if (isGridObject(object) && !object.module_data.system_id) {
-        const [start, end] = gridLineEndpoints(object)
-        for (const [endpointIndex, point] of [start, end].entries()) {
-          const [x, y] = worldToScreen(point, viewport)
-          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
-            id, kind: 'grid-endpoint' as const, endpointIndex: endpointIndex as 0 | 1,
-            startPointMm: [...start] as [number, number], endPointMm: [...end] as [number, number],
-          }
-        }
-      } else if (object.object_type === 'architecture.room_separator') {
-        const start = data.start_point_mm as [number, number] | undefined, end = data.end_point_mm as [number, number] | undefined
-        if (!start || !end) continue
-        for (const [endpointIndex, point] of [start, end].entries()) {
-          const [x, y] = worldToScreen(point, viewport)
-          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
-            id, kind: 'separator-endpoint' as const, endpointIndex: endpointIndex as 0 | 1,
-            startPointMm: [...start] as [number, number], endPointMm: [...end] as [number, number],
-          }
-        }
-      } else if (object.object_type === 'drainage.pipe_route' || object.object_type === 'plumbing.pipe_route') {
-        const route = object.module_data as unknown as PipeRouteModuleData
-        if (route.nodes_mm.length < 2) continue
-        for (const endpointIndex of route.nodes_mm.map((_, index) => index)) {
-          const isStart = endpointIndex === 0
-          const isEnd = endpointIndex === route.nodes_mm.length - 1
-          if ((isStart && route.start_node_id) || (isEnd && route.end_node_id)) continue
-          const point = route.nodes_mm[endpointIndex]
-          const [x, y] = worldToScreen([point[0], point[1]], viewport)
-          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
-            id, kind: isStart || isEnd ? 'pipe-endpoint' as const : 'pipe-node' as const, endpointIndex,
-            pipeRouteData: structuredClone(route),
-          }
-        }
-      } else if (object.object_type === 'architecture.stair') {
-        const stair = object.module_data as unknown as StairModuleData
-        const [sx, sy] = stair.start_point_mm, angle = Number(stair.rotation_deg ?? 0) * Math.PI / 180
-        const side = stair.turn_direction === 'left' && stair.stair_type !== 'straight' ? -1 : 1
-        const widthGrip: [number, number] = [sx - Math.sin(angle) * stair.width_mm * side, sy + Math.cos(angle) * stair.width_mm * side]
-        const [wx, wy] = worldToScreen(widthGrip, viewport)
-        if (Math.hypot(screenPoint[0] - wx, screenPoint[1] - wy) <= tolerance) return { id, kind: 'stair-width' as const, endpointIndex: 0 }
-        if (stair.stair_type === 'straight') {
-          const run = Math.max(1, stair.num_risers - 1) * stair.tread_depth_mm
-          const runGrip: [number, number] = [sx + Math.cos(angle) * run, sy + Math.sin(angle) * run]
-          const [rx, ry] = worldToScreen(runGrip, viewport)
-          if (Math.hypot(screenPoint[0] - rx, screenPoint[1] - ry) <= tolerance) return { id, kind: 'stair-run' as const, endpointIndex: 0 }
-        }
-      } else if (object.object_type === 'decorative.moulding_run') {
-        const moulding = object.module_data as unknown as MouldingModuleData
-        if (moulding.closed || moulding.path_mm.length < 2) continue
-        for (const endpointIndex of [0, moulding.path_mm.length - 1]) {
-          const point = moulding.path_mm[endpointIndex]
-          const [x, y] = worldToScreen([point[0], point[1]], viewport)
-          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
-            id, kind: 'moulding-endpoint' as const, endpointIndex,
-            mouldingData: structuredClone(moulding),
-          }
-        }
-      } else if (object.object_type === 'interior.cabinet_run') {
-        const cabinet = object.module_data as unknown as CabinetModuleData
-        const [x, y] = worldToScreen(cabinetRotationGripPoint(cabinet, viewport.zoom), viewport)
-        if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
-          id, kind: 'cabinet-rotation' as const,
-          cabinetData: structuredClone(cabinet),
-        }
-      } else if (isDoorObject(object) || isWindowObject(object)) {
-        const host = planProject.objects[object.module_data.wall_id]
-        if (!host || !isWallObject(host)) continue
-        const [sx, sy] = host.module_data.start_point_mm, [ex, ey] = host.module_data.end_point_mm
-        const length = Math.hypot(ex - sx, ey - sy)
-        if (length < 1) continue
-        const ux = (ex - sx) / length, uy = (ey - sy) / length
-        const halfWidth = object.module_data.width_mm / 2
-        const cx = sx + ux * object.module_data.offset_along_wall_mm
-        const cy = sy + uy * object.module_data.offset_along_wall_mm
+  const findEditHandle = (screenPoint: [number, number]) => findPlanCanvasEditHandle({ planProject, editableSelectionIds, viewport, screenPoint, onFlipDoorHanding })
 
-        // Door Flip Handing Button hit test
-        if (isDoorObject(object) && onFlipDoorHanding) {
-          const nx = -uy, ny = ux
-          const handing = object.module_data.handing || 'left_in'
-          const swingSign = handing.endsWith('_out') ? -1 : 1
-          const flipBtnX = cx - nx * (host.module_data.thickness_mm / 2 + 180) * swingSign
-          const flipBtnY = cy - ny * (host.module_data.thickness_mm / 2 + 180) * swingSign
-          const [sfx, sfy] = worldToScreen([flipBtnX, flipBtnY], viewport)
-          if (Math.hypot(screenPoint[0] - sfx, screenPoint[1] - sfy) <= 18) {
-            onFlipDoorHanding(object.id)
-            return null
-          }
-        }
-
-        // Center Move Handle hit test
-        const [scx, scy] = worldToScreen([cx, cy], viewport)
-        if (Math.hypot(screenPoint[0] - scx, screenPoint[1] - scy) <= tolerance) {
-          return {
-            id, kind: 'opening-center' as const,
-            hostStartMm: [sx, sy] as [number, number], hostEndMm: [ex, ey] as [number, number],
-            openingWidthMm: object.module_data.width_mm, openingCenterOffsetMm: object.module_data.offset_along_wall_mm,
-          }
-        }
-
-        // Edge Resize Handles hit test
-        for (const [endpointIndex, offset] of [[0, object.module_data.offset_along_wall_mm - halfWidth], [1, object.module_data.offset_along_wall_mm + halfWidth]] as const) {
-          const [x, y] = worldToScreen([sx + ux * offset, sy + uy * offset], viewport)
-          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
-            id, kind: 'opening-edge' as const, endpointIndex,
-            hostStartMm: [sx, sy] as [number, number], hostEndMm: [ex, ey] as [number, number],
-            openingWidthMm: object.module_data.width_mm, openingCenterOffsetMm: object.module_data.offset_along_wall_mm,
-          }
-        }
-      } else if (['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(object.object_type)) {
-        const boundary = data.boundary_mm as [number, number][] | undefined
-        if (!boundary || boundary.length < 3) continue
-        for (const [vertexIndex, point] of boundary.entries()) {
-          const [x, y] = worldToScreen(point, viewport)
-          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
-            id, kind: 'polygon-vertex' as const, endpointIndex: vertexIndex,
-            boundaryPointsMm: structuredClone(boundary),
-          }
-        }
-        if (object.object_type === 'structure.slab') {
-          for (const edgeIndex of boundary.map((_, index) => index)) {
-            const grip = polygonEdgeGrip(boundary, edgeIndex)
-            if (!grip) continue
-            const [x, y] = worldToScreen(grip.midpoint_mm, viewport)
-            if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
-              id, kind: 'slab-edge' as const, endpointIndex: edgeIndex,
-              boundaryPointsMm: structuredClone(boundary), edgeStartMm: grip.midpoint_mm,
-              edgeNormalMm: grip.inward_normal,
-            }
-          }
-          const arrow = slabSlopeArrow(boundary, Number(data.slope_ratio ?? 0), Number(data.drain_direction_deg ?? 0), viewport.zoom)
-          if (arrow) {
-            const [x, y] = worldToScreen(arrow.end_mm, viewport)
-            if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
-              id, kind: 'slab-slope' as const, edgeStartMm: arrow.start_mm,
-            }
-          }
-        } else if (object.object_type === 'roof.system') {
-          const roofData = data as unknown as import('@constructflow/project-model').RoofModuleData
-          const editableRidge = getEditableRoofRidge(roofData)
-          for (const seam of getRoofSeams(roofData)) {
-            const [x, y] = worldToScreen(seam.grip_mm, viewport)
-            if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) > tolerance) continue
-            const isEditableRidge = editableRidge && seam.edge_indices[0] === Math.min(...editableRidge.edge_indices) && seam.edge_indices[1] === Math.max(...editableRidge.edge_indices)
-            return {
-              id,
-              kind: isEditableRidge ? 'roof-ridge' as const : 'roof-seam' as const,
-              roofSeamEdgeIndices: seam.edge_indices,
-              roofSeamGripMm: seam.grip_mm,
-            }
-          }
-        }
-      }
-    }
-    return null
-  }
-
-  const buildDragCommands = (drag: PlanDragGesture, rawWorld: [number, number], ctrlKey: boolean): CommandRequest[] => {
-    const snap = ctrlKey
-      ? { point_mm: rawWorld, target_id: undefined }
-      : snapPlanPoint(rawWorld, 16, drag.id)
-    let point = ['slab-edge', 'slab-slope', 'roof-ridge', 'roof-seam'].includes(drag.kind) ? rawWorld : snap.point_mm
-    const options: Record<string, unknown> = {}
-
-    if (drag.kind === 'beam-endpoint') {
-      const target = snap.target_id ? planProject.objects[snap.target_id] : undefined
-      if (target && isColumnObject(target)) {
-        point = [target.module_data.location_mm[0], target.module_data.location_mm[1]]
-        options.targetColumnId = target.id
-      }
-    } else if (drag.kind === 'opening-edge' && drag.hostStartMm && drag.hostEndMm && drag.openingCenterOffsetMm !== undefined && drag.openingWidthMm !== undefined) {
-      const edgeOffset = projectPointToWallOffsetMm(rawWorld, drag.hostStartMm, drag.hostEndMm, 1)
-      const hostLength = Math.hypot(drag.hostEndMm[0] - drag.hostStartMm[0], drag.hostEndMm[1] - drag.hostStartMm[1])
-      const resize = edgeOffset === undefined ? null : resizeOpeningFromEdge(edgeOffset, drag.endpointIndex === 0 ? 0 : 1, drag.openingCenterOffsetMm, drag.openingWidthMm, hostLength, { snap: !ctrlKey })
-      if (!resize) return []
-      options.openingResize = resize
-      point = rawWorld
-    } else if ((drag.kind === 'opening' || drag.kind === 'opening-center') && drag.hostStartMm && drag.hostEndMm && drag.openingWidthMm) {
-      const hostLength = Math.hypot(drag.hostEndMm[0] - drag.hostStartMm[0], drag.hostEndMm[1] - drag.hostStartMm[1])
-      const rawOffset = projectPointToWallOffsetMm(rawWorld, drag.hostStartMm, drag.hostEndMm, drag.openingWidthMm)
-      if (rawOffset === undefined) return []
-      let startColumnWidth: number | undefined, endColumnWidth: number | undefined
-      for (const column of Object.values(planProject.objects)) {
-        if (!isColumnObject(column)) continue
-        const [cx, cy] = column.module_data.location_mm
-        const width = Math.max(...column.module_data.section_mm)
-        if (Math.hypot(cx - drag.hostStartMm[0], cy - drag.hostStartMm[1]) <= width) startColumnWidth = width
-        if (Math.hypot(cx - drag.hostEndMm[0], cy - drag.hostEndMm[1]) <= width) endColumnWidth = width
-      }
-      options.openingOffsetMm = ctrlKey ? Math.round(rawOffset) : snapOpeningOffsetBimAware(rawOffset, hostLength, drag.openingWidthMm, {
-        startColumnWidth_mm: startColumnWidth, endColumnWidth_mm: endColumnWidth, minClearance_mm: 100,
-      }).offset_along_wall_mm
-      point = rawWorld
-    } else if (drag.kind === 'pipe-endpoint' && drag.pipeRouteData && drag.endpointIndex !== undefined) {
-      const route = drag.pipeRouteData as unknown as PipeRouteModuleData
-      const endpointIndex = drag.endpointIndex
-      try { drag = { ...drag, pipeRouteData: movePipeRouteEndpoint(route, endpointIndex === 0 ? 'start' : 'end', point) as unknown as Record<string, unknown> } }
-      catch {
-        const candidate = structuredClone(route)
-        candidate.nodes_mm[endpointIndex][0] = point[0]
-        candidate.nodes_mm[endpointIndex][1] = point[1]
-        drag = { ...drag, pipeRouteData: candidate as unknown as Record<string, unknown> }
-      }
-    } else if (drag.kind === 'pipe-node' && drag.pipeRouteData && drag.endpointIndex !== undefined) {
-      const route = drag.pipeRouteData as unknown as PipeRouteModuleData
-      const nodeIndex = drag.endpointIndex
-      try { drag = { ...drag, pipeRouteData: movePipeRouteNode(route, nodeIndex, point) as unknown as Record<string, unknown> } }
-      catch {
-        const candidate = structuredClone(route)
-        candidate.nodes_mm[nodeIndex][0] = point[0]
-        candidate.nodes_mm[nodeIndex][1] = point[1]
-        drag = { ...drag, pipeRouteData: candidate as unknown as Record<string, unknown> }
-      }
-    } else if (drag.kind === 'cabinet-rotation' && drag.cabinetData) {
-      options.cabinetRotationDeg = cabinetRotationFromGrip(drag.cabinetData as unknown as CabinetModuleData, point, viewport.zoom)
-    }
-
-    return buildDirectManipulationCommands(planProject, drag, point, options)
-  }
+  const buildDragCommands = (drag: PlanDragGesture, rawWorld: [number, number], ctrlKey: boolean): CommandRequest[] => buildPlanCanvasDragCommands({ planProject, drag, rawWorld, ctrlKey, viewport, snapPlanPoint })
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current
@@ -844,88 +637,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    let ghost: PlacementGhost | null = null
-    if (activeTool === 'column' && activeSnap) {
-      const typeDef = project.types?.find(
-        (t) => t.object_type === 'structure.column' && t.name.toLowerCase() === activeColumnTypeMark.toLowerCase()
-      )
-      ghost = {
-        type: 'column',
-        location_mm: activeSnap.point_mm,
-        size_mm: typeDef?.parameters?.section_mm || [200, 200],
-        mark: activeColumnTypeMark,
-      }
-    } else if (activeTool === 'foundation' && activeSnap) {
-      const typeDef = project.types?.find(
-        (t) => t.object_type === 'structure.foundation' && t.name.toLowerCase() === activeFoundationTypeMark.toLowerCase()
-      )
-      ghost = {
-        type: 'foundation',
-        location_mm: activeSnap.point_mm,
-        size_mm: typeDef?.parameters?.size_mm || [800, 800, 300],
-        mark: activeFoundationTypeMark,
-      }
-    } else if (activeTool === 'beam' && activeSnap && beamStartNode) {
-      const typeDef = project.types?.find(
-        (t) => t.object_type === 'structure.beam' && t.name.toLowerCase() === activeBeamTypeMark.toLowerCase()
-      )
-      const [alignedStart, alignedEnd] = resolveReferencePath(beamStartNode.point_mm, activeSnap.point_mm, typeDef?.parameters?.section_mm?.[0] || 200)
-      ghost = {
-        type: 'beam',
-        location_mm: alignedStart,
-        reference_start_mm: beamStartNode.point_mm,
-        target_location_mm: alignedEnd,
-        size_mm: typeDef?.parameters?.section_mm || [200, 400],
-        mark: activeBeamTypeMark,
-      }
-    } else if (activeTool === 'wall' && activeSnap && wallStartNode) {
-      const typeDef = project.types?.find(
-        (t) => t.object_type === 'architecture.wall' && t.name.toLowerCase() === activeWallTypeMark.toLowerCase()
-      )
-      const [alignedStart, alignedEnd] = resolveReferencePath(wallStartNode.point_mm, activeSnap.point_mm, typeDef?.parameters?.thickness_mm || 100)
-      ghost = {
-        type: 'wall',
-        location_mm: alignedStart,
-        reference_start_mm: wallStartNode.point_mm,
-        target_location_mm: alignedEnd,
-        size_mm: [typeDef?.parameters?.thickness_mm || 100, 0],
-        mark: activeWallTypeMark,
-      }
-    } else if (activeTool === 'door' && activeWallSnap) {
-      const typeDef = project.types?.find(
-        (t) => t.object_type === 'door_window.door' && t.name.toLowerCase() === activeDoorTypeMark.toLowerCase()
-      )
-      ghost = {
-        type: 'door',
-        location_mm: activeWallSnap.point_mm,
-        wall_id: activeWallSnap.wall_id,
-        offset_along_wall_mm: activeWallSnap.offset_along_wall_mm,
-        size_mm: [typeDef?.parameters?.width_mm || 800, typeDef?.parameters?.height_mm || 2000],
-        mark: activeDoorTypeMark,
-        handing: doorHanding,
-        operation: typeDef?.parameters?.opening_operation,
-        panel_count: typeDef?.parameters?.panel_count,
-      }
-    } else if (activeTool === 'window' && activeWallSnap) {
-      const typeDef = project.types?.find(
-        (t) => t.object_type === 'door_window.window' && t.name.toLowerCase() === activeWindowTypeMark.toLowerCase()
-      )
-      ghost = {
-        type: 'window',
-        location_mm: activeWallSnap.point_mm,
-        wall_id: activeWallSnap.wall_id,
-        offset_along_wall_mm: activeWallSnap.offset_along_wall_mm,
-        size_mm: [typeDef?.parameters?.width_mm || 1200, typeDef?.parameters?.height_mm || 1200],
-        mark: activeWindowTypeMark,
-        operation: typeDef?.parameters?.opening_operation,
-        panel_count: typeDef?.parameters?.panel_count,
-        sill_height_mm: typeDef?.parameters?.sill_height_mm,
-        glazing_material: typeDef?.parameters?.glazing_material,
-      }
-    } else if (activeTool === 'stair' && activeSnap) {
-      if (stairPreview) ghost = { type: 'stair', location_mm: stairStartPoint!, stair: stairPreview }
-    }
-
+    const ghost = buildPlanPlacementGhost({
+      activeTool, activeSnap, project, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark,
+      activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, beamStartNode, wallStartNode, activeWallSnap,
+      doorHanding, stairPreview, stairStartPoint, resolveReferencePath,
+    })
     const calibrationOverlay =
       activeTool === 'calibrate'
         ? {
@@ -935,313 +651,18 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           }
         : null
 
-    renderPlanView(
-      ctx,
-      canvas.width,
-      canvas.height,
-      planProject,
-      viewport,
-      selectedIds,
-      hoveredId,
-      activeSnap,
-      ghost,
-      underlay,
-      calibrationOverlay,
-      project,
-      labelMode,
-      labelVisibility,
-      [],
-      planDiscipline
-    )
-    if (manipulationPreview) {
-      drawDirectManipulationGhost(ctx, planProject, manipulationPreview.project, manipulationPreview.ids, viewport, manipulationPreview.valid, planDiscipline)
-    }
-    // 10.6 Coordination overlay — the shared report is drawn here in plan space so the canvas,
-    // the inspector panel and the permit sheets quote identical millimetres.
-    if (coordination.length) {
-      const focusIds = coordinationFocusSelection && editableSelectionIds.length ? editableSelectionIds : undefined
-      drawCoordinationPrimitives(ctx, planCoordinationOverlay(coordination, {
-        project: point => worldToScreen([point[0], point[1]], viewport),
-        ...(coordinationSeverities ? { severities: coordinationSeverities } : {}),
-        ...(focusIds ? { objectIds: focusIds } : {}),
-      }), 0.55 + 0.45 * Math.abs(Math.sin(Date.now() / 320)))
-    }
-    if (activeTool === 'select') {
-      ctx.save()
-      for (const id of editableSelectionIds) {
-        const object = planProject.objects[id]
-        if (!object) continue
-        const data = object.module_data as unknown as Record<string, unknown>
-        const points: Array<[number, number, 'linear' | 'opening' | 'opening-center' | 'cabinet-rotation' | 'stair-width' | 'stair-run' | 'slab-edge' | 'slab-slope' | 'pipe-node']> = []
-        let slabArrow: ReturnType<typeof slabSlopeArrow> = null
-        let roofSeams: ReturnType<typeof getRoofSeams> = []
-        if (isColumnObject(object)) {
-          const [cx, cy] = object.module_data.location_mm, [w, d] = object.module_data.section_mm
-          for (const [x, y] of orientedRectangleCorners([cx, cy], [w, d], object.module_data.rotation_deg)) points.push([x, y, 'linear'])
-        } else if (isFoundationObject(object)) {
-          const [cx, cy] = object.module_data.center_mm, [w, d] = object.module_data.size_mm
-          for (const [x, y] of orientedRectangleCorners([cx, cy], [w, d])) points.push([x, y, 'linear'])
-        } else if (isWallObject(object) || isBeamObject(object)) {
-          const start = data.start_point_mm as [number, number] | undefined, end = data.end_point_mm as [number, number] | undefined
-          if (start && end) { points.push([start[0], start[1], 'linear'], [end[0], end[1], 'linear']) }
-        } else if (isGridObject(object) && !object.module_data.system_id) {
-          const [start, end] = gridLineEndpoints(object)
-          points.push([start[0], start[1], 'linear'], [end[0], end[1], 'linear'])
-        } else if (object.object_type === 'architecture.room_separator') {
-          const start = data.start_point_mm as [number, number], end = data.end_point_mm as [number, number]
-          points.push([start[0], start[1], 'linear'], [end[0], end[1], 'linear'])
-        } else if (object.object_type === 'drainage.pipe_route' || object.object_type === 'plumbing.pipe_route') {
-          const route = object.module_data as unknown as PipeRouteModuleData
-          if (route.nodes_mm.length >= 2) {
-            if (!route.start_node_id) points.push([route.nodes_mm[0][0], route.nodes_mm[0][1], 'linear'])
-            const last = route.nodes_mm.length - 1
-            for (let nodeIndex = 1; nodeIndex < last; nodeIndex++)
-              points.push([route.nodes_mm[nodeIndex][0], route.nodes_mm[nodeIndex][1], 'pipe-node'])
-            if (!route.end_node_id) points.push([route.nodes_mm[last][0], route.nodes_mm[last][1], 'linear'])
-          }
-        } else if (object.object_type === 'decorative.moulding_run') {
-          const moulding = object.module_data as unknown as MouldingModuleData
-          if (!moulding.closed && moulding.path_mm.length >= 2) {
-            const first = moulding.path_mm[0], last = moulding.path_mm[moulding.path_mm.length - 1]
-            points.push([first[0], first[1], 'linear'], [last[0], last[1], 'linear'])
-          }
-        } else if (object.object_type === 'interior.cabinet_run') {
-          const cabinet = object.module_data as unknown as CabinetModuleData
-          const angle = cabinet.rotation_deg * Math.PI / 180
-          const frontCenter: [number, number] = [
-            cabinet.location_mm[0] + cabinet.width_mm / 2 * Math.cos(angle) + cabinet.board_mm * Math.sin(angle),
-            cabinet.location_mm[1] + cabinet.width_mm / 2 * Math.sin(angle) - cabinet.board_mm * Math.cos(angle),
-          ]
-          const grip = cabinetRotationGripPoint(cabinet, viewport.zoom)
-          const [fx, fy] = worldToScreen(frontCenter, viewport)
-          const [gx, gy] = worldToScreen(grip, viewport)
-          ctx.save()
-          ctx.strokeStyle = '#8b5cf6'
-          ctx.lineWidth = 1.25
-          ctx.setLineDash([3, 2])
-          ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(gx, gy); ctx.stroke()
-          ctx.restore()
-          points.push([grip[0], grip[1], 'cabinet-rotation'])
-        } else if (isDoorObject(object) || isWindowObject(object)) {
-          const host = planProject.objects[object.module_data.wall_id]
-          if (host && isWallObject(host)) {
-            const [sx, sy] = host.module_data.start_point_mm, [ex, ey] = host.module_data.end_point_mm
-            const length = Math.hypot(ex - sx, ey - sy)
-            if (length > 1) {
-              const ux = (ex - sx) / length, uy = (ey - sy) / length, halfWidth = object.module_data.width_mm / 2
-              const cx = sx + ux * object.module_data.offset_along_wall_mm
-              const cy = sy + uy * object.module_data.offset_along_wall_mm
-              points.push(
-                [sx + ux * (object.module_data.offset_along_wall_mm - halfWidth), sy + uy * (object.module_data.offset_along_wall_mm - halfWidth), 'opening'],
-                [sx + ux * (object.module_data.offset_along_wall_mm + halfWidth), sy + uy * (object.module_data.offset_along_wall_mm + halfWidth), 'opening'],
-                [cx, cy, 'opening-center']
-              )
-
-              // Draw full architectural dimensioning and clearance verification
-              drawOpeningInspectionDimensions(ctx, object, host, planProject, viewport, displayUnit)
-
-              // Draw Flip Handing Icon Button for doors on opposite wall face
-              if (isDoorObject(object)) {
-                const nx = -uy, ny = ux
-                const handing = object.module_data.handing || 'left_in'
-                const swingSign = handing.endsWith('_out') ? -1 : 1
-                const flipBtnX = cx - nx * (host.module_data.thickness_mm / 2 + 180) * swingSign
-                const flipBtnY = cy - ny * (host.module_data.thickness_mm / 2 + 180) * swingSign
-                const [sfx, sfy] = worldToScreen([flipBtnX, flipBtnY], viewport)
-                ctx.save()
-                ctx.fillStyle = '#ffffff'
-                ctx.strokeStyle = '#16a34a'
-                ctx.lineWidth = 2
-                ctx.beginPath(); ctx.arc(sfx, sfy, 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-                ctx.fillStyle = '#16a34a'
-                ctx.font = 'bold 13px sans-serif'
-                ctx.textAlign = 'center'
-                ctx.textBaseline = 'middle'
-                ctx.fillText('⇄', sfx, sfy)
-                ctx.restore()
-              }
-            }
-          }
-        } else if (object.object_type === 'architecture.stair') {
-          const stair = object.module_data as unknown as StairModuleData
-          const [sx, sy] = stair.start_point_mm, angle = Number(stair.rotation_deg ?? 0) * Math.PI / 180
-          const side = stair.turn_direction === 'left' && stair.stair_type !== 'straight' ? -1 : 1
-          points.push([sx - Math.sin(angle) * stair.width_mm * side, sy + Math.cos(angle) * stair.width_mm * side, 'stair-width'])
-          if (stair.stair_type === 'straight') {
-            const run = Math.max(1, stair.num_risers - 1) * stair.tread_depth_mm
-            points.push([sx + Math.cos(angle) * run, sy + Math.sin(angle) * run, 'stair-run'])
-          }
-        } else if (['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(object.object_type)) {
-          const boundary = data.boundary_mm as [number, number][] | undefined
-          boundary?.forEach(point => points.push([point[0], point[1], 'linear']))
-          if (object.object_type === 'structure.slab' && boundary) {
-            for (const edgeIndex of boundary.map((_, index) => index)) {
-              const grip = polygonEdgeGrip(boundary, edgeIndex)
-              if (grip) points.push([grip.midpoint_mm[0], grip.midpoint_mm[1], 'slab-edge'])
-            }
-            const displayObject = manipulationPreview?.ids.includes(id) ? manipulationPreview.project.objects[id] : object
-            const displayData = displayObject?.module_data as unknown as Record<string, unknown> | undefined
-            const displayBoundary = displayData?.boundary_mm as [number, number][] | undefined
-            if (displayData && displayBoundary) slabArrow = slabSlopeArrow(displayBoundary, Number(displayData.slope_ratio ?? 0), Number(displayData.drain_direction_deg ?? 0), viewport.zoom)
-            if (slabArrow) points.push([slabArrow.end_mm[0], slabArrow.end_mm[1], 'slab-slope'])
-          } else if (object.object_type === 'roof.system') {
-            const displayObject = manipulationPreview?.ids.includes(id) ? manipulationPreview.project.objects[id] : object
-            if (displayObject) roofSeams = getRoofSeams(displayObject.module_data as unknown as import('@constructflow/project-model').RoofModuleData)
-          }
-        }
-        if (slabArrow) {
-          const [ax, ay] = worldToScreen(slabArrow.start_mm, viewport), [bx, by] = worldToScreen(slabArrow.end_mm, viewport)
-          const color = manipulationPreview?.ids.includes(id) ? (manipulationPreview.valid ? '#0284c7' : '#dc2626') : '#0f766e'
-          const angle = Math.atan2(by - ay, bx - ax), head = 7
-          ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.8
-          ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke()
-          ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - head * Math.cos(angle - Math.PI / 6), by - head * Math.sin(angle - Math.PI / 6)); ctx.lineTo(bx - head * Math.cos(angle + Math.PI / 6), by - head * Math.sin(angle + Math.PI / 6)); ctx.closePath(); ctx.fill()
-          ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'
-          const labelX = (ax + bx) / 2, labelY = (ay + by) / 2 - 4, labelWidth = ctx.measureText(slabArrow.label).width + 7
-          ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.fillRect(labelX - labelWidth / 2, labelY - 12, labelWidth, 14)
-          ctx.fillStyle = color; ctx.fillText(slabArrow.label, labelX, labelY - 1); ctx.restore()
-        }
-        if (roofSeams.length) {
-          const previewColor = manipulationPreview?.ids.includes(id) ? (manipulationPreview.valid ? '#0284c7' : '#dc2626') : null
-          for (const seam of roofSeams) {
-            const [sx, sy] = worldToScreen(seam.start_mm, viewport), [ex, ey] = worldToScreen(seam.end_mm, viewport)
-            const [gx, gy] = worldToScreen(seam.grip_mm, viewport)
-            const color = previewColor ?? (seam.kind === 'valley' ? '#ea580c' : seam.kind === 'hip' ? '#2563eb' : '#0284c7')
-            ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = '#ffffff'; ctx.lineWidth = seam.kind === 'ridge' ? 2 : 1.6
-            ctx.setLineDash(seam.kind === 'ridge' ? [6, 3] : seam.kind === 'valley' ? [2, 3] : [4, 3])
-            ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke(); ctx.setLineDash([])
-            const label = seam.kind === 'ridge' ? 'สัน' : seam.kind === 'valley' ? 'ร่อง' : 'ตะเข้สัน'
-            ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-            const labelWidth = ctx.measureText(label).width + 6
-            ctx.fillStyle = 'rgba(255,255,255,.94)'; ctx.fillRect(gx - labelWidth / 2, gy - 22, labelWidth, 13)
-            ctx.fillStyle = color; ctx.fillText(label, gx, gy - 15.5)
-            if (seam.kind === 'valley') {
-              ctx.beginPath(); ctx.moveTo(gx, gy - 6); ctx.lineTo(gx + 6, gy); ctx.lineTo(gx, gy + 6); ctx.lineTo(gx - 6, gy); ctx.closePath(); ctx.fill(); ctx.stroke()
-            } else {
-              ctx.fillRect(gx - 5, gy - 5, 10, 10); ctx.strokeRect(gx - 5, gy - 5, 10, 10)
-            }
-            ctx.restore()
-          }
-        }
-        for (const [x, y, kind] of points) {
-          const [sx, sy] = worldToScreen([x, y], viewport)
-          if (kind === 'opening-center') {
-            ctx.fillStyle = '#ea580c'
-            ctx.strokeStyle = '#ffffff'
-            ctx.lineWidth = 2
-            ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-            ctx.fillStyle = '#ffffff'
-            ctx.beginPath(); ctx.arc(sx, sy, 2.5, 0, Math.PI * 2); ctx.fill()
-          } else if (kind === 'cabinet-rotation') {
-            ctx.fillStyle = '#7c3aed'
-            ctx.strokeStyle = '#ffffff'
-            ctx.lineWidth = 2
-            ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-            ctx.fillStyle = '#ffffff'
-            ctx.font = 'bold 12px sans-serif'
-            ctx.textAlign = 'center'
-            ctx.textBaseline = 'middle'
-            ctx.fillText('↻', sx, sy)
-          } else if (kind === 'stair-width' || kind === 'stair-run') {
-            ctx.fillStyle = kind === 'stair-width' ? '#0d9488' : '#7c3aed'
-            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2
-            ctx.beginPath(); ctx.arc(sx, sy, 7.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-            ctx.fillStyle = '#ffffff'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-            ctx.fillText(kind === 'stair-width' ? 'W' : 'R', sx, sy)
-          } else if (kind === 'slab-edge') {
-            ctx.fillStyle = '#ecfeff'; ctx.strokeStyle = '#0891b2'; ctx.lineWidth = 1.6
-            ctx.fillRect(sx - 4.5, sy - 4.5, 9, 9); ctx.strokeRect(sx - 4.5, sy - 4.5, 9, 9)
-          } else if (kind === 'slab-slope') {
-            ctx.fillStyle = '#ffffff'; ctx.strokeStyle = manipulationPreview?.valid === false ? '#dc2626' : '#0f766e'; ctx.lineWidth = 2
-            ctx.beginPath(); ctx.arc(sx, sy, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-            ctx.fillStyle = ctx.strokeStyle; ctx.beginPath(); ctx.arc(sx, sy, 2, 0, Math.PI * 2); ctx.fill()
-          } else if (kind === 'pipe-node') {
-            ctx.fillStyle = manipulationPreview?.valid === false ? '#fee2e2' : '#ecfeff'
-            ctx.strokeStyle = manipulationPreview?.valid === false ? '#dc2626' : '#0891b2'
-            ctx.lineWidth = 1.7
-            ctx.beginPath(); ctx.moveTo(sx, sy - 6); ctx.lineTo(sx + 6, sy); ctx.lineTo(sx, sy + 6); ctx.lineTo(sx - 6, sy); ctx.closePath(); ctx.fill(); ctx.stroke()
-          } else {
-            ctx.fillStyle = kind === 'opening' ? '#fff7ed' : '#ffffff'
-            ctx.strokeStyle = kind === 'opening' ? '#f97316' : '#087cf0'
-            ctx.lineWidth = 2
-            ctx.beginPath(); ctx.arc(sx, sy, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-          }
-        }
-      }
-      ctx.restore()
-    }
-    if (activeTool === 'grid' && gridStartPoint && activeSnap) {
-      const [x1, y1] = worldToScreen(gridStartPoint, viewport)
-      const [x2, y2] = worldToScreen(activeSnap.point_mm, viewport)
-      ctx.save(); ctx.strokeStyle = '#0284c7'; ctx.lineWidth = 1.5; ctx.setLineDash([7, 4])
-      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke()
-      ctx.setLineDash([]); ctx.fillStyle = '#fff'; ctx.strokeStyle = '#0284c7'
-      for (const [x, y] of [[x1, y1], [x2, y2]]) { ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke() }
-      ctx.restore()
-    }
-    if (activeTool === 'gridCopy' && gridCopySourceId && activeSnap) {
-      const source = planProject.objects[gridCopySourceId]
-      if (source && isGridObject(source)) {
-        const [start, end] = gridLineEndpoints(source)
-      const dest = activeSnap.point_mm
-        const a = worldToScreen(dest, viewport), b = worldToScreen([end[0] + dest[0] - start[0], end[1] + dest[1] - start[1]], viewport)
-        ctx.save(); ctx.strokeStyle = '#0284c7'; ctx.lineWidth = 1.5; ctx.setLineDash([7, 4]); ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke(); ctx.restore()
-      }
-    }
-    if (activeTool === 'measure' && tapeMeasure) drawTapeMeasure(ctx, tapeMeasure.start, tapeMeasure.end, viewport, tapeMeasure.complete, displayUnit)
-    if (activeSnap && usesPlacementDimensions(activeTool)) {
-      const openingAxis = activeWallSnap
-        ? Math.abs(activeWallSnap.wall_end_mm[0] - activeWallSnap.wall_start_mm[0]) >= Math.abs(activeWallSnap.wall_end_mm[1] - activeWallSnap.wall_start_mm[1]) ? 'x' : 'y'
-        : undefined
-      const openingRefs = activeWallSnap ? openingDimensionRefs(activeSnap.point_mm, planProject, activeWallSnap, dimensionReferenceMode) : undefined
-      const openingWidth = activeTool === 'door' || activeTool === 'window'
-        ? Number(project.types.find(type => type.object_type === (activeTool === 'door' ? 'door_window.door' : 'door_window.window') && type.name.toLowerCase() === (activeTool === 'door' ? activeDoorTypeMark : activeWindowTypeMark).toLowerCase())?.parameters?.width_mm ?? (activeTool === 'door' ? 800 : 1200))
-        : 0
-      const dimensionPoint = openingRefs && activeWallSnap ? openingDimensionPoint(activeWallSnap, openingRefs, openingWidth) : activeSnap.point_mm
-      const copySource = activeTool === 'gridCopy' && gridCopySourceId ? planProject.objects[gridCopySourceId] : undefined
-      const copyStart = copySource && isGridObject(copySource) ? gridLineEndpoints(copySource)[0] : undefined
-      drawTemporaryDimensions(ctx, dimensionPoint, planProject, viewport, activeWallSnap?.wall_id, openingAxis, copyStart ? { refX: copyStart[0], refY: copyStart[1] } : openingRefs, dimensionReferenceMode, displayUnit)
-    }
-    if (selectionBox) {
-      const left = Math.min(selectionBox.start[0], selectionBox.end[0]), top = Math.min(selectionBox.start[1], selectionBox.end[1])
-      ctx.save(); ctx.strokeStyle = '#087cf0'; ctx.fillStyle = 'rgba(8,124,240,0.1)'; ctx.lineWidth = 1; ctx.setLineDash([5, 3])
-      ctx.fillRect(left, top, Math.abs(selectionBox.end[0] - selectionBox.start[0]), Math.abs(selectionBox.end[1] - selectionBox.start[1]))
-      ctx.strokeRect(left, top, Math.abs(selectionBox.end[0] - selectionBox.start[0]), Math.abs(selectionBox.end[1] - selectionBox.start[1])); ctx.restore()
-    }
-    if (['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool) && roomSeparatorStart && activeSnap) {
-      const start = worldToScreen(roomSeparatorStart, viewport), end = worldToScreen(activeSnap.point_mm, viewport)
-      const color = activeTool === 'pipe' ? (['cold_water', 'hot_water'].includes(pipeSystem) ? '#0284c7' : pipeSystem === 'rainwater' ? '#0891b2' : '#7c3aed') : activeTool === 'cabinet' ? '#92400e' : activeTool === 'moulding' ? '#a21caf' : '#d97706'
-      ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = activeTool === 'cabinet' ? 2 : 1.8; ctx.setLineDash(activeTool === 'roomSeparator' ? [5, 3] : [7, 3]); ctx.beginPath(); ctx.moveTo(...start); ctx.lineTo(...end); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = '#fff'; ctx.strokeStyle = color; ctx.beginPath(); ctx.arc(...start, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore()
-    }
-    if (activeTool === 'fixture' && activeSnap) {
-      const [x, y] = worldToScreen(activeSnap.point_mm, viewport)
-      ctx.save(); ctx.strokeStyle = '#7c3aed'; ctx.fillStyle = 'rgba(124, 58, 237, .12)'; ctx.lineWidth = 1.5; ctx.beginPath()
-      if (fixtureKind === 'panel') ctx.rect(x - 7, y - 9, 14, 18)
-      else { ctx.arc(x, y, fixtureKind === 'light' ? 7 : 6, 0, Math.PI * 2); if (fixtureKind === 'switch') { ctx.moveTo(x - 4, y + 4); ctx.lineTo(x + 4, y - 4) } else if (fixtureKind === 'outlet') { ctx.moveTo(x - 2, y - 2); ctx.lineTo(x - 2, y + 2); ctx.moveTo(x + 2, y - 2); ctx.lineTo(x + 2, y + 2) } }
-      ctx.fill(); ctx.stroke(); ctx.restore()
-    }
-    if ((activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling' || activeTool === 'roof') && slabBoundary.length > 0) {
-      ctx.save()
-      ctx.strokeStyle = activeTool === 'slabVoid' ? '#dc2626' : activeTool === 'ceiling' ? '#7c3aed' : activeTool === 'archFloor' ? '#059669' : activeTool === 'roof' ? '#d97706' : '#0284c7'
-      ctx.fillStyle = activeTool === 'slabVoid' ? 'rgba(239, 68, 68, 0.12)' : activeTool === 'ceiling' ? 'rgba(124, 58, 237, 0.12)' : activeTool === 'archFloor' ? 'rgba(5, 150, 105, 0.12)' : activeTool === 'roof' ? 'rgba(217, 119, 6, 0.12)' : 'rgba(14, 165, 233, 0.12)'
-      ctx.lineWidth = 1.5
-      ctx.setLineDash([6, 4])
-      ctx.beginPath()
-      slabBoundary.forEach((point, index) => {
-        const [x, y] = worldToScreen(point, viewport)
-        if (index === 0) ctx.moveTo(x, y)
-        else ctx.lineTo(x, y)
-      })
-      if (activeSnap) {
-        const [x, y] = worldToScreen(activeSnap.point_mm, viewport)
-        ctx.lineTo(x, y)
-        if (slabBoundary.length >= 2) { ctx.closePath(); ctx.fill() }
-      }
-      ctx.stroke()
-      const [sx, sy] = worldToScreen(slabBoundary[0], viewport)
-      ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.stroke()
-      ctx.restore()
-    }
+    drawPlanCanvasBaseScene({
+      ctx, width: canvas.width, height: canvas.height, project, planProject, viewport, selectedIds,
+      editableSelectionIds, hoveredId, activeSnap, ghost, underlay, calibrationOverlay, labelMode,
+      labelVisibility, planDiscipline, manipulationPreview, externalManipulationPreview, coordination,
+      coordinationSeverities, coordinationFocusSelection,
+    })
+    drawPlanCanvasSelectionHandles(ctx, editableSelectionIds, planProject, viewport, displayUnit, manipulationPreview)
+    drawPlanCanvasToolOverlays({
+      ctx, activeTool, gridStartPoint, activeSnap, planProject, viewport, gridCopySourceId, tapeMeasure,
+      displayUnit, activeWallSnap, project, activeDoorTypeMark, activeWindowTypeMark, dimensionReferenceMode,
+      selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, slabBoundary,
+    })
   }, [
     project,
     displayUnit,
@@ -1294,6 +715,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     coordinationSeverities,
     coordinationFocusSelection,
     manipulationPreview,
+    externalManipulationPreview,
   ])
 
   useEffect(() => {
@@ -1303,12 +725,15 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const redrawRef = useRef(redraw)
   redrawRef.current = redraw
 
-  const previewDragAt = (drag: PlanDragGesture, point: [number, number], ctrlKey: boolean) => {
+  const previewDragAt = (drag: PlanDragGesture, point: [number, number], ctrlKey: boolean, manual = false) => {
+    manualDragPointRef.current = manual ? point : null
+    setDragPreviewPoint(point)
     const commands = buildDragCommands(drag, point, ctrlKey)
     if (!commands.length) { setManipulationPreview(null); return { commands, valid: false } }
     const optimistic = optimisticManipulationProject(planProject, commands)
+    dragDimensionInput.syncFromPreview(drag, point, optimistic, manual)
     const now = performance.now()
-    const validation = now - lastPreviewValidationRef.current.at >= 50 ? onPreviewManipulation?.(commands) : undefined
+    const validation = (manual || now - lastPreviewValidationRef.current.at >= 50) ? onPreviewManipulation?.(commands) : undefined
     if (validation) lastPreviewValidationRef.current = { at: now, valid: validation.valid }
     const idsFromCommands = commands.map(command => String(command.input.object_id ?? command.input.id ?? '')).filter(Boolean)
     const relatedIds = new Set(idsFromCommands)
@@ -1329,6 +754,20 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const ids = validation?.affected_object_ids?.length ? validation.affected_object_ids : [...relatedIds]
     setManipulationPreview({ project: valid && validation ? validation.project : optimistic, ids, valid })
     return { commands, valid }
+  }
+
+  const updateDragDimension = (axis: 'x' | 'y', value: string) => dragDimensionInput.updateMove(draggingObject, axis, value, previewDragAt)
+  const updateResizeDimension = (axis: 'width' | 'height' | 'length', value: string) => dragDimensionInput.updateResize(draggingObject, axis, value, previewDragAt)
+
+  const commitDragDimensions = () => {
+    if (!draggingObject || !manualDragPointRef.current) return
+    const { commands, valid } = previewDragAt(draggingObject, manualDragPointRef.current, true, true)
+    if (commands.length && valid) onCommitManipulation?.(commands)
+    else if (commands.length) onManipulationRejected?.(['ไม่สามารถใช้มิติที่ระบุได้'])
+    manualDragPointRef.current = null
+    setDraggingObject(null); setDragPreviewPoint(null); setManipulationPreview(null)
+    dragDimensionInput.clearResizeValues()
+    canvasRef.current?.focus({ preventScroll: true })
   }
 
   // Observe the drawing area, including changes from collapsing the inspector.
@@ -1465,12 +904,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       let snap = e.ctrlKey
         ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
         : snapPlanPoint(rawWorld, 16, draggingObject?.id)
-      if (activeTool === 'beam' && beamStartNode) snap = constrainLineSnap(snap, rawWorld, beamStartNode.point_mm, e.shiftKey, beamStartNode.reference)
-      if (activeTool === 'wall' && wallStartNode) snap = constrainLineSnap(snap, rawWorld, wallStartNode.point_mm, e.shiftKey, wallStartNode.reference)
-      if (activeTool === 'stair' && stairStartPoint) snap = constrainLineSnap(snap, rawWorld, stairStartPoint, e.shiftKey)
-      if (activeTool === 'grid' && gridStartPoint) snap = constrainLineSnap(snap, rawWorld, gridStartPoint, e.shiftKey)
-      if (['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool) && roomSeparatorStart) snap = constrainLineSnap(snap, rawWorld, roomSeparatorStart, e.shiftKey)
-      if (['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool) && slabBoundary.length) snap = constrainLineSnap(snap, rawWorld, slabBoundary[slabBoundary.length - 1], e.shiftKey)
+      snap = resolvePlanCanvasLineSnap(snap, rawWorld, e.shiftKey, activeTool, {
+        beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary,
+      }, constrainLineSnap)
       const copySource = activeTool === 'gridCopy' && gridCopySourceId ? planProject.objects[gridCopySourceId] : undefined
       const point_mm = activeTool === 'gridCopy' && copySource && isGridObject(copySource)
         ? (() => {
@@ -1578,12 +1014,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       let snap = e.ctrlKey
         ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
         : snapPlanPoint(rawWorld)
-      if (activeTool === 'beam' && beamStartNode) snap = constrainLineSnap(snap, rawWorld, beamStartNode.point_mm, e.shiftKey, beamStartNode.reference)
-      if (activeTool === 'wall' && wallStartNode) snap = constrainLineSnap(snap, rawWorld, wallStartNode.point_mm, e.shiftKey, wallStartNode.reference)
-      if (activeTool === 'stair' && stairStartPoint) snap = constrainLineSnap(snap, rawWorld, stairStartPoint, e.shiftKey)
-      if (activeTool === 'grid' && gridStartPoint) snap = constrainLineSnap(snap, rawWorld, gridStartPoint, e.shiftKey)
-      if (['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool) && roomSeparatorStart) snap = constrainLineSnap(snap, rawWorld, roomSeparatorStart, e.shiftKey)
-      if (['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool) && slabBoundary.length) snap = constrainLineSnap(snap, rawWorld, slabBoundary[slabBoundary.length - 1], e.shiftKey)
+      snap = resolvePlanCanvasLineSnap(snap, rawWorld, e.shiftKey, activeTool, {
+        beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary,
+      }, constrainLineSnap)
 
       if (activeTool === 'gridCopy' && gridCopySourceId) {
         const source = planProject.objects[gridCopySourceId]
@@ -1604,6 +1037,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       } else if (activeTool === 'select') {
         const editHandle = findEditHandle([screenX, screenY])
         if (editHandle) {
+          const editObject = planProject.objects[editHandle.id]
+          const editData = editObject?.module_data as Record<string, unknown> | undefined
+          const editSize = editData && editObject?.object_type === 'structure.column'
+            ? editData.section_mm as [number, number]
+            : editData && editObject?.object_type === 'structure.foundation' ? editData.size_mm as [number, number] : undefined
+          setResizeDimensionWidth(editSize ? formatLengthMm(Number(editSize[0]), displayUnit) : editHandle.kind === 'opening-edge' ? formatLengthMm(Number(editHandle.openingWidthMm), displayUnit) : '')
+          setResizeDimensionHeight(editSize ? formatLengthMm(Number(editSize[1]), displayUnit) : '')
+          setResizeDimensionLength(editHandle.startPointMm && editHandle.endPointMm
+            ? formatLengthMm(Math.hypot(editHandle.endPointMm[0] - editHandle.startPointMm[0], editHandle.endPointMm[1] - editHandle.startPointMm[1]), displayUnit)
+            : '')
           setDraggingObject({ id: editHandle.id, kind: editHandle.kind, endpointIndex: editHandle.endpointIndex,
             startPointMm: editHandle.startPointMm, endPointMm: editHandle.endPointMm,
             boundaryPointsMm: editHandle.boundaryPointsMm,
@@ -1931,17 +1374,21 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       const rect = canvasRef.current?.getBoundingClientRect()
       if (rect && onPreviewManipulation && onCommitManipulation) {
         const screenX = e.clientX - rect.left, screenY = e.clientY - rect.top
-        const rawWorld = screenToWorld([screenX, screenY], viewport)
+        const pointerWorld = screenToWorld([screenX, screenY], viewport)
+        const hasManualDimensions = manualDragPointRef.current !== null
+        const rawWorld = manualDragPointRef.current ?? pointerWorld
         const movedPixels = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
-        if (movedPixels >= 3) {
-          const commands = buildDragCommands(draggingObject, rawWorld, e.ctrlKey)
+        if (movedPixels >= 3 || hasManualDimensions) {
+          const commands = buildDragCommands(draggingObject, rawWorld, e.ctrlKey || hasManualDimensions)
           if (commands.length) {
             const validation = onPreviewManipulation(commands)
             if (validation.valid) onCommitManipulation(commands)
             else onManipulationRejected?.(validation.errors)
           }
         }
-        setDraggingObject(null); setManipulationPreview(null)
+        manualDragPointRef.current = null
+        setDraggingObject(null); setDragPreviewPoint(null); setManipulationPreview(null)
+        setResizeDimensionWidth(''); setResizeDimensionHeight(''); setResizeDimensionLength('')
         try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
         return
       }
@@ -2067,7 +1514,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           }
         }
       }
-      setDraggingObject(null)
+      manualDragPointRef.current = null
+      setDraggingObject(null); setDragPreviewPoint(null)
+      setResizeDimensionWidth(''); setResizeDimensionHeight(''); setResizeDimensionLength('')
       try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
     }
   }
@@ -2079,7 +1528,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     pinchActiveRef.current = false; pinchRef.current = null
     selectionStartRef.current = null; setSelectionBox(null)
     eraseActiveRef.current = false; erasedIdsRef.current.clear()
-    setDraggingObject(null); setManipulationPreview(null); setIsPanning(false)
+    manualDragPointRef.current = null
+    setDraggingObject(null); setDragPreviewPoint(null); setManipulationPreview(null); setIsPanning(false)
+    setResizeDimensionWidth(''); setResizeDimensionHeight(''); setResizeDimensionLength('')
     try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
   }
 
@@ -2158,97 +1609,45 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     commitPlacementAtCursor()
   }
 
-  const handlePlacementInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    event.stopPropagation()
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      commitActivePlacement(true)
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      cancelCurrentPlacement()
-      canvasRef.current?.focus({ preventScroll: true })
-    }
-  }
-
-  const handleCanvasDimensionKeyDown = (event: React.KeyboardEvent<HTMLCanvasElement>) => {
-    if (!supportsPlacementDimensions && activeTool !== 'measure' && activeTool !== 'calibrate') return
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      event.stopPropagation()
-      commitActivePlacement(true)
-      return
-    }
-    if (!supportsPlacementDimensions) return
-    const axis = dimensionHostAxis ?? dimensionKeyboardAxis
-    const anchor = axis === 'x' ? dimensionAnchorX ?? dimensionReferences.refX : dimensionAnchorY ?? dimensionReferences.refY
-    if (event.key === 'Tab' && (showXDimension || showYDimension)) {
-      event.preventDefault()
-      if (event.shiftKey && showXDimension && showYDimension) {
-        const nextAxis = axis === 'x' ? 'y' : 'x'
-        setDimensionKeyboardAxis(nextAxis)
-        requestAnimationFrame(() => (nextAxis === 'x' ? dimensionInputXRef : dimensionInputYRef).current?.focus())
-      } else toggleDimensionReferenceMode()
-      return
-    }
-    if (/^\d$/.test(event.key) || (event.key === '.' && !(axis === 'x' ? dimensionInputX : dimensionInputY).includes('.'))) {
-      if (anchor === undefined) return
-      event.preventDefault()
-      event.stopPropagation()
-      if (axis === 'x') { setDimensionAnchorX(anchor); setDimensionInputX(value => value + event.key) }
-      else { setDimensionAnchorY(anchor); setDimensionInputY(value => value + event.key) }
-    } else if (event.key === 'Backspace') {
-      event.preventDefault()
-      event.stopPropagation()
-      if (anchor !== undefined) {
-        if (axis === 'x') setDimensionInputX(value => value.slice(0, -1))
-        else setDimensionInputY(value => value.slice(0, -1))
-      }
-    }
-  }
-
-  const handleDimensionInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    event.stopPropagation()
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      commitActivePlacement()
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      cancelCurrentPlacement()
-      canvasRef.current?.focus({ preventScroll: true })
-    }
-    if (event.key === 'Tab') {
-      event.preventDefault()
-      if (event.shiftKey && showXDimension && showYDimension) {
-        const focusedAxis = event.currentTarget === dimensionInputXRef.current ? 'x' : 'y'
-        const nextAxis = focusedAxis === 'x' ? 'y' : 'x'
-        setDimensionKeyboardAxis(nextAxis)
-        requestAnimationFrame(() => (nextAxis === 'x' ? dimensionInputXRef : dimensionInputYRef).current?.focus())
-      } else toggleDimensionReferenceMode()
-    }
-  }
-
+  const { handlePlacementInputKeyDown, handleCanvasDimensionKeyDown, handleDimensionInputKeyDown } = usePlanCanvasPlacementKeyboard({
+    activeTool, supportsPlacementDimensions, dimensionHostAxis, dimensionKeyboardAxis, dimensionAnchorX, dimensionAnchorY,
+    dimensionReferences, dimensionInputX, dimensionInputY, showXDimension, showYDimension,
+    dimensionInputXRef, dimensionInputYRef, canvasRef, setDimensionKeyboardAxis, setDimensionAnchorX,
+    setDimensionAnchorY, setDimensionInputX, setDimensionInputY, commitActivePlacement, cancelCurrentPlacement,
+    toggleDimensionReferenceMode,
+  })
   const selectionHint = editableSelectionIds.some(id => planProject.objects[id]?.object_type === 'interior.cabinet_run')
     ? 'เลือกบิลท์อิน · ลากด้ามสีม่วงเพื่อหมุน โดยคงตำแหน่งและขนาด · Esc ล้างการเลือก'
     : 'เลือก · คลิกเลือกหรือ ลากครอบวัตถุ · Tab สลับวัตถุซ้อน · Esc ล้างการเลือก'
-  const placementHint = activeTool === 'select' ? selectionHint :
-    activeTool === 'erase' ? 'ยางลบ · คลิกหรือลากผ่านวัตถุเพื่อลบ · Esc ออกจากเครื่องมือ' :
-    activeTool === 'column' ? 'เสา · Snap ศูนย์กลาง/จุดตัดกริด · เลื่อนแล้ว Enter วาง' :
-    activeTool === 'foundation' ? 'ฐานราก · Snap เสาหรือจุดกริด · เลื่อนแล้ว Enter วาง' :
-    activeTool === 'door' || activeTool === 'window' ? `${activeTool === 'door' ? 'ประตู' : 'หน้าต่าง'} · วางบนผนัง · Tab ขอบ/กึ่งกลาง · Enter วาง` :
-    activeTool === 'wall' ? `${wallStartNode ? 'ผนัง: เลื่อนหาจุดปลาย · กำหนดระยะ/องศาได้' : 'ผนัง: เลือกจุดเริ่ม'} · Enter ${wallStartNode ? 'วาดช่วงและต่อแนว' : 'กำหนดจุดเริ่ม'}` :
-    activeTool === 'beam' ? `${beamStartNode ? 'คาน: เลื่อนหาจุดปลาย · กำหนดระยะ/องศาได้' : 'คาน: เลือกจุดเริ่ม'} · Enter ${beamStartNode ? 'วาดช่วงและต่อแนว' : 'กำหนดจุดเริ่ม'}` :
-    activeTool === 'grid' ? `เส้นกริด · ${gridStartPoint ? 'เลือกจุดปลาย · กำหนดระยะ/องศาได้' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด` :
-    activeTool === 'gridCopy' ? 'สำเนาเส้นกริด · Shift ล็อกแนวขนาน · Enter วางสำเนา' :
-    activeTool === 'gridSystem' ? 'ระบบกริด · กรอกช่วงระยะ แล้วเลือกจุดกำเนิดหรือ Enter วางตรงเคอร์เซอร์' :
-    activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling' || activeTool === 'roof' ? `${activeTool === 'slab' ? 'พื้นโครงสร้าง' : activeTool === 'slabVoid' ? 'ช่องเจาะพื้น/หลังคา' : activeTool === 'archFloor' ? 'พื้นสถาปัตย์' : activeTool === 'ceiling' ? 'ฝ้าเพดาน' : 'หลังคา'} · ${slabBoundary.length ? 'กรอกระยะ/องศาแล้ว Enter เพิ่มจุด' : 'คลิกหรือ Enter จุดแรก'} · Enter บนแปลนปิดรูปเมื่อครบ 3 จุด` :
-    activeTool === 'roomSeparator' ? `เส้นแบ่งห้อง · ${roomSeparatorStart ? 'กำหนดระยะ/องศาแล้วเลือกจุดปลาย' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด` :
-    activeTool === 'pipe' ? `แนวท่อ ${({ waste: 'น้ำทิ้ง', soil: 'โสโครก', rainwater: 'น้ำฝน', vent: 'อากาศ', cold_water: 'น้ำดีเย็น', hot_water: 'น้ำร้อน' } as const)[pipeSystem]} · ${roomSeparatorStart ? 'เลือกจุดปลายเพื่อสร้างช่วงท่อ' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด` :
-    activeTool === 'cabinet' ? `บิลท์อิน · ${roomSeparatorStart ? 'เลือกปลายแนวหน้าตู้เพื่อกำหนดความกว้างและทิศ' : 'เลือกมุมเริ่มแนวหน้าตู้'} · Enter ยืนยันจุด` :
-    activeTool === 'moulding' ? `แนวบัว · ${roomSeparatorStart ? 'เลือกจุดปลายแนวบัว' : 'เลือกจุดเริ่มแนวบัว'} · Enter ยืนยันจุด` :
-    activeTool === 'fixture' ? `อุปกรณ์ไฟฟ้า ${fixtureKind} · เลื่อนแล้ว Enter วาง` :
-    activeTool === 'stair' ? `บันได · ${stairStartPoint ? 'เลือกปลายเที่ยวแรก · ระยะ/องศากำหนดเอง · Shift ล็อกแกน · Enter วาง' : 'เลือกจุดเริ่มริมเที่ยวแรก · เลือกระดับจบและรูปแบบก่อนวาง'} · Esc ยกเลิก` :
-    activeTool === 'measure' ? 'ตลับเมตร · เลือกจุดเริ่มและจุดปลาย · Enter ยืนยันจุด · Esc ยกเลิก/ออก' :
-    activeTool === 'calibrate' ? 'ปรับสเกลภาพ · เลือกจุดอ้างอิงสองจุด · Enter ยืนยันจุด' : null
+  const placementStatus = resolveToolInteractionStatus(activeTool, {
+    selectionHint, wallStartNode, beamStartNode, gridStartPoint, stairStartPoint, roomSeparatorStart,
+    slabBoundary, tapeMeasure, calibrationP1, gridSystemError, pipeSystem, fixtureKind,
+    lineConstraintLabel: ({ auto: 'อัตโนมัติ: ขนาน/ตั้งฉาก', none: 'อิสระ', parallel: 'ขนาน', perpendicular: 'ตั้งฉาก' } as const)[lineConstraintMode],
+    placementReferenceLabel: ({ centerline: 'กึ่งกลาง', left_face: 'ชิดซ้าย', right_face: 'ชิดขวา' } as const)[placementReference],
+    snapCount: snapModes.length,
+  })
+  const placementHint = placementStatus?.instruction ?? null
+  const pendingPlacementStep = hasPendingToolStep({ draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError })
+  const escapeAction = resolveEscapeAction(activeTool, pendingPlacementStep, Boolean(selectedId || selectedIds.length))
+  const escapeLabel = escapeAction === 'cancel-step' ? 'Esc ยกเลิกขั้นตอนนี้' : escapeAction === 'clear-selection' ? 'Esc ล้างการเลือก' : escapeAction === 'exit-tool' ? 'Esc ออกจากเครื่องมือ' : ''
+  const manipulationDimensions = draggingObject && dragPreviewPoint
+    ? (() => {
+        const original = planProject.objects[draggingObject.id]
+        const preview = manipulationPreview?.project.objects[draggingObject.id] ?? original
+        if (!original || !preview) return null
+        const dx = dragPreviewPoint[0] - draggingObject.startWorldMm[0]
+        const dy = dragPreviewPoint[1] - draggingObject.startWorldMm[1]
+        const bounds = getPlanObjectBounds(preview)
+        const data = preview.module_data as unknown as Record<string, unknown>
+        const start = data.start_point_mm as [number, number] | undefined
+        const end = data.end_point_mm as [number, number] | undefined
+        const length = start && end ? Math.hypot(end[0] - start[0], end[1] - start[1]) : null
+        return { dx, dy, width: bounds ? bounds[2] - bounds[0] : null, height: bounds ? bounds[3] - bounds[1] : null, length }
+      })()
+    : null
+  const targetRectangleDimensions = draggingObject?.kind === 'column-corner' || draggingObject?.kind === 'foundation-corner'
+  const targetOpeningWidth = draggingObject?.kind === 'opening-edge'
+  const targetLineLength = draggingObject?.kind === 'wall-endpoint' || draggingObject?.kind === 'beam-endpoint'
   const authoringToolName: Partial<Record<ToolType, string>> = {
     select: 'เลือกวัตถุ', column: 'เสา', foundation: 'ฐานราก', beam: 'คาน', wall: 'ผนัง', door: 'ประตู', window: 'หน้าต่าง',
     slab: 'พื้นโครงสร้าง', slabVoid: 'ช่องเจาะพื้น/หลังคา', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้าเพดาน', roof: 'หลังคา', roomSeparator: 'เส้นแบ่งห้อง',
@@ -2320,7 +1719,26 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         const object = planProject.objects[id]
         return object && (isColumnObject(object) || isFoundationObject(object) || isWallObject(object) || isBeamObject(object) || isGridObject(object) || isDoorObject(object) || isWindowObject(object) || ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system', 'architecture.room_separator', 'drainage.pipe_route', 'plumbing.pipe_route', 'decorative.moulding_run', 'interior.cabinet_run'].includes(object.object_type))
       }) && <div className="cf-tape-measure-hint" aria-live="polite">จุดจับสีน้ำเงิน: ปรับขนาดเสา/ฐานราก หรือลากปลายผนัง คาน กริด ท่อ และแนวบัว · จุดสีม่วง: หมุนบิลท์อินรอบจุดวาง · จุดสีส้ม: ลากขอบปรับความกว้าง หรือลากจุดกึ่งกลางปรับตำแหน่ง (BIM Snap ขอบเสา 100 มม.) · ปุ่ม ⇄: สลับด้านบานประตู</div>}
-      {placementHint && <div className="cf-tape-measure-hint" aria-live="polite">{placementHint} · Esc ยกเลิกขั้นตอน หรือออกเมื่อว่าง</div>}
+      {placementHint && <div className="cf-tape-measure-hint" aria-live="polite" data-tool-step={placementStatus?.step}>
+        <strong>{placementStatus?.stepLabel}</strong> · {placementHint} · {placementStatus?.constraint} {escapeLabel && `· ${escapeLabel}`}
+      </div>}
+      {manipulationDimensions && dragPreviewPoint && draggingObject && <PlanCanvasDragDimensions
+        mode={(targetRectangleDimensions ? 'rectangle' : targetOpeningWidth ? 'opening-width' : targetLineLength ? 'line-length' : 'move') as DragDimensionMode}
+        displayUnit={displayUnit}
+        values={{ x: dragDimensionX, y: dragDimensionY, width: resizeDimensionWidth, height: resizeDimensionHeight, length: resizeDimensionLength }}
+        onChange={(field: DragDimensionField, value) => field === 'x' || field === 'y' ? updateDragDimension(field, value) : updateResizeDimension(field, value)}
+        onCommit={commitDragDimensions}
+        onCancel={() => { cancelCurrentPlacement(); canvasRef.current?.focus({ preventScroll: true }) }}
+        readout={manipulationDimensions.length !== null
+          ? `L ${formatLengthMm(manipulationDimensions.length, displayUnit)} ${displayUnit}`
+          : manipulationDimensions.width !== null && manipulationDimensions.height !== null
+            ? `W×H ${formatLengthMm(manipulationDimensions.width, displayUnit)} × ${formatLengthMm(manipulationDimensions.height, displayUnit)} ${displayUnit}`
+            : null}
+        style={{
+          left: Math.max(8, Math.min(worldToScreen(dragPreviewPoint, viewport)[0] + 16, (containerRef.current?.clientWidth ?? 800) - 220)),
+          top: Math.max(8, Math.min(worldToScreen(dragPreviewPoint, viewport)[1] + 16, (containerRef.current?.clientHeight ?? 600) - 92)),
+        }}
+      />}
       {supportsPlacementDimensions && dimensionOverlayPosition && (showXDimension || showYDimension || hasLineGeometryInput) && <div className="cf-dynamic-dimensions" role="group" aria-label="ระยะและแนวระหว่างวางวัตถุ" onPointerDown={event => event.stopPropagation()} style={{
         left: Math.max(8, Math.min(dimensionOverlayPosition[0] > (containerRef.current?.clientWidth ?? 800) / 2 ? dimensionOverlayPosition[0] - 318 : dimensionOverlayPosition[0] + 18, (containerRef.current?.clientWidth ?? 800) - 318)),
         top: Math.max(8, Math.min(dimensionOverlayPosition[1] > (containerRef.current?.clientHeight ?? 600) / 2 ? dimensionOverlayPosition[1] - 94 : dimensionOverlayPosition[1] + 22, (containerRef.current?.clientHeight ?? 600) - 86)),
@@ -2432,7 +1850,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         })()}
         {(activeTool === 'wall' || activeTool === 'beam') && <label className="cf-reference-control">
           <span>แนวอ้างอิง</span>
-          <select aria-label="แนวอ้างอิงการวาง" value={placementReference} onChange={(event) => setPlacementReference(event.target.value as typeof placementReference)}>
+          <select aria-label="แนวอ้างอิงการวาง" value={placementReference} onChange={(event) => setPreference('placementReference', event.target.value as typeof placementReference)}>
             <option value="centerline">กึ่งกลาง</option>
             <option value="left_face">ริมซ้ายตามทิศลาก</option>
             <option value="right_face">ริมขวาตามทิศลาก</option>
@@ -2440,7 +1858,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         </label>}
         {(activeTool === 'wall' || activeTool === 'beam') && <label className="cf-reference-control">
           <span>จัดแนวช่วงที่วาด</span>
-          <select aria-label="ข้อจำกัดแนวการวาด" value={lineConstraintMode} onChange={(event) => setLineConstraintMode(event.target.value as typeof lineConstraintMode)}>
+          <select aria-label="ข้อจำกัดแนวการวาด" value={lineConstraintMode} onChange={(event) => setPreference('lineConstraintMode', event.target.value as typeof lineConstraintMode)}>
             <option value="auto">อัตโนมัติ: ขนาน/ตั้งฉาก</option>
             <option value="none">อิสระ</option>
             <option value="parallel">ขนานกับแนวใกล้จุดเริ่ม</option>
@@ -2463,7 +1881,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             aria-pressed={snapModes.includes(mode)}
             className={snapModes.includes(mode) ? 'is-enabled' : ''}
             title={`${snapModes.includes(mode) ? 'ปิด' : 'เปิด'} Snap ${label}`}
-            onClick={() => setSnapModes(current => current.includes(mode) ? current.filter(value => value !== mode) : [...current, mode])}
+            onClick={() => setPreference('snapModes', current => current.includes(mode) ? current.filter(value => value !== mode) : [...current, mode])}
           >{label}</button>)}
           <span className="cf-snap-hint">Ctrl วางอิสระ · {activeTool === 'wall' || activeTool === 'beam' ? `Space เปลี่ยนแนวอ้างอิง (ขณะนี้: ${placementReference === 'centerline' ? 'กึ่งกลาง' : placementReference === 'left_face' ? 'ชิดซ้าย' : 'ชิดขวา'})` : 'เลื่อนเมาส์ให้เห็นสัญลักษณ์ก่อนคลิก'}</span>
         </div></details>

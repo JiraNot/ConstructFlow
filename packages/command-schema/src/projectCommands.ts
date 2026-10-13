@@ -4,6 +4,12 @@ import { Phase, RemovalPhase, Level } from '@constructflow/project-model'
 import type { CoordinationSettings, RainwaterDesignSettings, SavedSheetViewport } from '@constructflow/project-model'
 export interface UpdateSheetViewportInput { sheet_id: string; viewport: SavedSheetViewport }
 
+/** Persist hidden objects for one named view and level without changing model objects. */
+export interface SetViewVisibilityInput {
+  scope_id: string
+  hidden_object_ids: string[]
+}
+
 /** Project-level deviations from the versioned coordination rule dataset. */
 export interface UpdateCoordinationSettingsInput {
   settings: CoordinationSettings

@@ -198,6 +198,26 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-dimension-reference-toggle { min-height: 30px; padding: 2px 5px; border: 1px solid #fed7aa; border-radius: 3px; background: #fff7ed; color: #9a3412; font-size: 10px; font-weight: 650; cursor: pointer; }
 .cf-dimension-reference-toggle[aria-pressed="true"] { border-color: #fb923c; background: #ffedd5; }
 .cf-dynamic-dimensions small { flex-basis: 100%; color: #64748b; font-size: 10px; }
+.cf-manipulation-dimensions {
+  position: absolute;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 150px;
+  padding: 5px 7px;
+  border: 1px solid #0284c7;
+  border-radius: 4px;
+  background: rgb(15 23 42 / 92%);
+  color: #e0f2fe;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 22%);
+  font: 600 10px ui-monospace, monospace;
+  pointer-events: none;
+}
+.cf-manipulation-dimensions span:last-child { color: #bae6fd; font: 500 9px system-ui, sans-serif; }
+.cf-manipulation-dimensions label { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cf-manipulation-dimensions input { width: 76px; min-height: 24px; border: 1px solid #38bdf8; border-radius: 3px; padding: 1px 4px; background: #0f172a; color: #e0f2fe; font: inherit; text-align: right; pointer-events: auto; }
+.cf-manipulation-dimensions input:focus { outline: 2px solid #7dd3fc; outline-offset: 1px; }
 .cf-tape-measure-hint { position:absolute; top:58px; left:50%; z-index:10; transform:translateX(-50%); max-width:calc(100% - 24px); padding: 4px 7px; border:1px solid #c4b5fd; border-radius: 4px; background:rgb(255 255 255 / 96%); box-shadow: none; color:#5b21b6; font-size:11px; white-space:nowrap; pointer-events:none; }
 .cf-canvas-zoom {
   position: absolute; top: 12px; left: 12px; z-index: 11; display: inline-flex; align-items: center; gap: 3px;
@@ -422,11 +442,22 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-browser-array > strong { font-size:10px; }
 .cf-browser-array > div { display:grid; grid-template-columns:.7fr 1fr 1fr; gap:5px; }
 .cf-browser-move > div { grid-template-columns:1fr 1fr; }
+.cf-browser-align > label { display:flex; flex-direction:column; gap:3px; color:#718399; font-size:9px; }
+.cf-browser-align select { width:100%; height:28px; border:1px solid #d6e1eb; border-radius:3px; background:#fff; color:#334b65; font-size:10px; }
+.cf-browser-align .cf-browser-offset-fields { grid-template-columns:1fr 1fr; }
+.cf-browser-array .cf-browser-transform-actions { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+.cf-browser-transform-actions button { min-height:27px; border:1px solid #d6e1eb; border-radius:4px; background:#eaf5ff; color:#0876d1; font-size:10px; font-weight:700; cursor:pointer; }
+.cf-browser-transform-actions button:last-child { background:#fff; color:#526a83; }
 .cf-browser-array label { display:flex; flex-direction:column; gap:3px; color:#718399; font-size:9px; }
 .cf-browser-array input { width:100%; min-width:0; height:27px; padding:3px 5px; border:1px solid #d6e1eb; border-radius:3px; color:#334b65; font-size:10px; }
 .cf-browser-array > button { min-height:27px; background:#eaf5ff; color:#0876d1; font-weight:700; }
 .cf-browser-array small { color:#8293a6; font-size:9px; }
-.cf-browser-tree { min-height:0; overflow:auto; border-top:1px solid #e8edf2; }
+.cf-browser-edit-tools { flex:0 0 auto; min-height:0; }
+.cf-browser-edit-tools > summary { padding:6px 8px; border:1px solid #dce6f0; border-radius:4px; background:#f8fbff; color:#526a83; font-size:10px; font-weight:700; cursor:pointer; }
+.cf-browser-edit-tools[open] { max-height:48%; overflow:auto; }
+.cf-browser-edit-tools[open] > summary { position:sticky; top:0; z-index:1; }
+.cf-browser-edit-tools .cf-browser-array { margin-top:6px; }
+.cf-browser-tree { min-height:0; flex:1; overflow:auto; border-top:1px solid #e8edf2; }
 .cf-browser-tree details { border-bottom:1px solid #edf1f5; }
 .cf-browser-tree summary { display:flex; align-items:center; justify-content:space-between; padding:7px 3px; color:#526a83; font-size:10px; font-weight:700; cursor:pointer; }
 .cf-browser-tree summary small { color:#8b9aac; font-size:9px; }

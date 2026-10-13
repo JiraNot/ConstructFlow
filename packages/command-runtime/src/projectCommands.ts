@@ -10,7 +10,7 @@ import {
   validateRainwaterDesignSettings,
   resolveStairVerticalExtent,
 } from '@constructflow/project-model'
-import type { UpdateCoordinationSettingsInput, UpdateRainwaterDesignInput, UpdateSheetViewportInput } from '@constructflow/command-schema'
+import type { SetViewVisibilityInput, UpdateCoordinationSettingsInput, UpdateRainwaterDesignInput, UpdateSheetViewportInput } from '@constructflow/command-schema'
 
 import {
   CommandHandlerContext,
@@ -68,6 +68,30 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       updated.drawing_settings={...updated.drawing_settings,viewports:{...updated.drawing_settings?.viewports,[sheet_id]:viewport}}
       validateDrawingSettings(updated.drawing_settings)
       return {result:{status:'success',command_id,command_name:commandName,affected_object_ids:[]},updatedProject:updated,emittedEnvelope:envelope}
+    }
+    case 'SetViewVisibility': {
+      const { scope_id, hidden_object_ids } = input as unknown as SetViewVisibilityInput
+      const [viewId, levelId, extra] = scope_id.split(':')
+      const views = new Set(['plan', 'framing', 'roofplan', 'north', 'south', 'east', 'west', 'rcp', 'model3d'])
+      if (!scope_id || extra !== undefined || !views.has(viewId) || !updated.levels.some(level => level.id === levelId)) {
+        throw new Error('View visibility requires a supported view and existing level scope')
+      }
+      if (!Array.isArray(hidden_object_ids) || hidden_object_ids.some(id => typeof id !== 'string' || !updated.objects[id])) {
+        throw new Error('View visibility can only reference existing object UUIDs')
+      }
+      if (new Set(hidden_object_ids).size !== hidden_object_ids.length) throw new Error('View visibility object UUIDs must be unique')
+      const scopes = updated.view_settings?.hidden_object_ids_by_scope ?? {}
+      const visibility = { ...scopes }
+      if (hidden_object_ids.length) visibility[scope_id] = [...hidden_object_ids]
+      else delete visibility[scope_id]
+      updated.view_settings = Object.keys(visibility).length
+        ? { ...updated.view_settings, hidden_object_ids_by_scope: visibility }
+        : undefined
+      return {
+        result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] },
+        updatedProject: updated,
+        emittedEnvelope: envelope,
+      }
     }
     case 'SetWorkingLevel': {
       const { level_id } = input as unknown as SetWorkingLevelInput
@@ -191,6 +215,14 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       }
 
       const allDeletedIds = [delInput.object_id, ...hostedIdsToDelete]
+      if (updated.view_settings) {
+        const visibility = Object.fromEntries(Object.entries(updated.view_settings.hidden_object_ids_by_scope)
+          .flatMap(([scopeId, ids]) => {
+            const remaining = ids.filter(id => !allDeletedIds.includes(id))
+            return remaining.length ? [[scopeId, remaining]] : []
+          }))
+        updated.view_settings = Object.keys(visibility).length ? { hidden_object_ids_by_scope: visibility } : undefined
+      }
       const structUpdated = reconcileStructureDeletion(updated, allDeletedIds, now)
 
       const treatmentHostsUpdated: string[] = []

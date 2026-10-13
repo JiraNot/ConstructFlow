@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildDirectManipulationCommands, optimisticManipulationProject, resizeOrientedRectangle } from '../src/directManipulation.mjs'
 import { getEditableRoofRidge, getRoofSeams } from '@constructflow/roof-engine'
+import { computeOffsetDelta } from '../src/app/transformOperations.mjs'
 
 const object = (id, object_type, module_data, extra = {}) => ({
   id, object_type, status: 'active', host_refs: [], level_refs: [], module_data,
@@ -74,6 +75,22 @@ test('group translation does not move a hosted opening twice', () => {
   assert.equal(commands[0].name, 'MoveWall')
   const candidate = optimisticManipulationProject(project, commands)
   assert.equal(candidate.objects.door.module_data.location_mm[0], 1500)
+})
+
+test('wall offset preview preserves its UUID and carries hosted openings with the host', () => {
+  const project = { objects: {
+    wall: object('wall', 'architecture.wall', { start_point_mm: [0, 0, 0], end_point_mm: [4000, 0, 0], thickness_mm: 100, length_mm: 4000 }),
+    door: object('door', 'door_window.door', { wall_id: 'wall', location_mm: [1200, 0, 0], offset_along_wall_mm: 1200, width_mm: 900, height_mm: 2100 }),
+  } }
+  const delta = computeOffsetDelta([0, 0], [4000, 0], 250, 'left')
+  const commands = buildDirectManipulationCommands(project, { id: 'wall', kind: 'object-move', startWorldMm: [0, 0], startScreenPx: [0, 0] }, delta)
+  const preview = optimisticManipulationProject(project, commands)
+  assert.equal(commands[0].name, 'MoveWall')
+  assert.equal(preview.objects.wall.id, 'wall')
+  assert.deepEqual(preview.objects.wall.module_data.start_point_mm, [0, 250, 0])
+  assert.deepEqual(preview.objects.wall.module_data.end_point_mm, [4000, 250, 0])
+  assert.deepEqual(preview.objects.door.module_data.location_mm, [1200, 250, 0])
+  assert.deepEqual(project.objects.wall.module_data.start_point_mm, [0, 0, 0])
 })
 
 test('opening preview preserves its wall host and rejects nothing until the command validator runs', () => {
