@@ -1838,7 +1838,7 @@ test('stair width and straight-flight run accept target dimensions with UUID-pre
   await expect(properties).toHaveAttribute('data-object-id', stairId!)
 })
 
-test('hosted opening jamb accepts a target width and Escape cancels the preview', async ({ page }) => {
+test('hosted opening jamb accepts a target width with UUID-preserving Escape and Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
   await page.getByRole('button', { name: 'ผนัง' }).click()
@@ -1867,8 +1867,11 @@ test('hosted opening jamb accepts a target width and Escape cancels the preview'
   await page.getByRole('tab', { name: 'รายการ' }).click()
   const doorRow = page.locator('li[data-object-type="door_window.door"]').first()
   await expect(doorRow).toBeVisible()
+  const doorId = await doorRow.getAttribute('data-object-id')
+  expect(doorId).toBeTruthy()
   await doorRow.locator('.cf-browser-object').click()
   const properties = page.getByTestId('properties-selection')
+  await expect(properties).toHaveAttribute('data-object-id', doorId!)
   await expect(properties).toContainText('0.800 × 2.000 m')
 
   const boundsForGrip = await canvas(page).boundingBox()
@@ -1884,6 +1887,7 @@ test('hosted opening jamb accepts a target width and Escape cancels the preview'
   await widthInput.fill('1.1')
   await widthInput.press('Escape')
   await page.mouse.up()
+  await expect(properties).toHaveAttribute('data-object-id', doorId!)
   await expect(properties).toContainText('0.800 × 2.000 m')
 
   const nextJamb = (await findGripPoints(page, 'orange'))[0]
@@ -1895,10 +1899,13 @@ test('hosted opening jamb accepts a target width and Escape cancels the preview'
   await widthInput.fill('1.2')
   await widthInput.press('Enter')
   await page.mouse.up()
+  await expect(properties).toHaveAttribute('data-object-id', doorId!)
   await expect(properties).toContainText('1.200 × 2.000 m')
   await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(properties).toHaveAttribute('data-object-id', doorId!)
   await expect(properties).toContainText('0.800 × 2.000 m')
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(properties).toHaveAttribute('data-object-id', doorId!)
   await expect(properties).toContainText('1.200 × 2.000 m')
 })
 
