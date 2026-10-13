@@ -86,6 +86,33 @@ function createSyntheticStraightStairProject() {
   return serializeProject(created.updatedProject)
 }
 
+function createSlabAndRoofTypeAssignmentProject() {
+  let project = createEmptyProjectDocument(randomUUID(), 'Surface type assignment acceptance')
+  const levelId = project.project.active_level_id
+  const slabType = project.types.find(type => type.object_type === 'structure.slab' && type.name === 'GS')
+  const roofType = project.types.find(type => type.object_type === 'roof.system' && type.name === 'RF1')
+  if (!slabType || !roofType) throw new Error('Default slab and roof catalog types are required')
+  const slabId = randomUUID()
+  const slab = CommandBus.execute(project, 'CreateSlab', {
+    id: slabId, type_id: slabType.id, mark: slabType.name, level_id: levelId,
+    boundary_mm: [[0, 0], [4000, 0], [4000, 3000], [0, 3000]],
+    elevation_mm: 0, elevation_offset_mm: 0, thickness_mm: 120, topping_mm: 0,
+    slab_system: 'slab_on_ground', material: 'reinforced_concrete',
+  })
+  if (slab.result.status !== 'success') throw new Error(`Could not create slab fixture: ${slab.result.errors?.join(', ')}`)
+  project = slab.updatedProject
+  const roofId = randomUUID()
+  const boundary_mm: [number, number][] = [[5000, 0], [9000, 0], [9000, 3000], [5000, 3000]]
+  const roof = CommandBus.execute(project, 'GenerateRoof', {
+    id: roofId, type_id: roofType.id, mark: roofType.name, level_id: levelId,
+    created_phase: 'new_construction', boundary_mm, voids_mm: [], elevation_mm: 2800,
+    edges: boundary_mm.map(() => ({ defines_slope: true, slope_deg: 25 })),
+    thickness_mm: 30, material: 'metal_sheet',
+  })
+  if (roof.result.status !== 'success') throw new Error(`Could not create roof fixture: ${roof.result.errors?.join(', ')}`)
+  return serializeProject(roof.updatedProject)
+}
+
 async function seedLocalProjectSnapshot(page: Page, projectJson: string) {
   await page.evaluate(async json => {
     await new Promise<void>((resolve, reject) => {
@@ -964,6 +991,34 @@ test('placement type choices are applied to created columns, foundations, beams,
   await clickCanvasFraction(page, 0.70, 0.45)
   await expect(properties).toHaveAttribute('data-object-type', 'door_window.window')
   await expect(properties).toContainText('Window W2')
+})
+
+test('selected slabs and roofs can change catalog type from Properties', async ({ page }) => {
+  await page.goto('/')
+  await seedLocalProjectSnapshot(page, createSlabAndRoofTypeAssignmentProject())
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const properties = page.getByTestId('properties-selection')
+  const picker = page.getByLabel('ชนิดของชิ้นที่เลือก')
+
+  const slabRow = page.locator('li[data-object-type="structure.slab"] .cf-browser-object')
+  await slabRow.click()
+  await expect(properties).toHaveAttribute('data-object-type', 'structure.slab')
+  await expect(picker).toHaveValue('GS')
+  await picker.selectOption('S1')
+  await expect(picker).toHaveValue('S1')
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const roofRow = page.locator('li[data-object-type="roof.system"] .cf-browser-object')
+  await page.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  await roofRow.click()
+  await expect(properties).toHaveAttribute('data-object-type', 'roof.system')
+  await expect(picker).toHaveValue('RF1')
+  await picker.selectOption('RF-TIMBER')
+  await expect(picker).toHaveValue('RF-TIMBER')
+  await expect(page.getByRole('button', { name: 'ย้อนกลับ' })).toBeEnabled()
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(picker).toHaveValue('RF1')
 })
 
 test('personal type library persists saved types and imports a project copy through the command bus', async ({ page }) => {

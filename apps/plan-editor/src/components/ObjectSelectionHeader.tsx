@@ -12,6 +12,7 @@ interface ObjectSelectionHeaderProps {
 
 export const ObjectSelectionHeader: React.FC<ObjectSelectionHeaderProps> = ({ project, object, title, currentMark, onAssignType, onOpenTypeManager }) => {
   const supportsTypePicker = isColumnObject(object) || isFoundationObject(object) || isBeamObject(object) || isWallObject(object) || isDoorObject(object) || isWindowObject(object)
+    || object.object_type === 'structure.slab' || object.object_type === 'roof.system'
   const data = object.module_data as Record<string, unknown>
   const typeId = typeof data.type_id === 'string' ? data.type_id : null
   const assignedInstances = Object.values(project.objects).filter(candidate => {

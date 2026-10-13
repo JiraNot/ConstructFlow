@@ -56,7 +56,9 @@ export function resolvePropertiesSelection(project: ProjectDocument, selectedId:
   const cabinet = selectedObject.object_type === 'interior.cabinet_run' ? selectedObject : null
   const moulding = selectedObject.object_type === 'decorative.moulding_run' ? selectedObject : null
   const currentMark = column?.module_data.mark ?? foundation?.module_data.mark ?? beam?.module_data.mark ?? wall?.module_data.mark
-    ?? door?.module_data.mark ?? window?.module_data.mark ?? grid?.module_data.tag ?? ''
+    ?? door?.module_data.mark ?? window?.module_data.mark ?? grid?.module_data.tag
+    ?? (slab?.module_data as Record<string, unknown> | undefined)?.mark as string | undefined
+    ?? (roof?.module_data as Record<string, unknown> | undefined)?.mark as string | undefined ?? ''
   const hostedFoundation = column
     ? Object.values(project.objects).find(object => isFoundationObject(object) && (object.module_data.supported_column_id === column.id || object.host_refs?.includes(column.id))) as SmartObject<FoundationModuleData> | undefined
     : undefined
