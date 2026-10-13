@@ -75,6 +75,22 @@ test('DXF underlay renders closed HATCH polyline boundaries including bulged arc
   assert.ok((svg.match(/L/g) ?? []).length > 10, 'bulged arc is approximated by enough line segments for a smooth underlay')
 })
 
+test('DXF underlay renders positive and negative LWPOLYLINE bulges', () => {
+  const entities = [
+    '0', 'LWPOLYLINE', '70', '1', '10', '0', '20', '0', '42', '1', '10', '100', '20', '0', '10', '100', '20', '100', '10', '0', '20', '100',
+    '0', 'LWPOLYLINE', '70', '1', '10', '200', '20', '0', '42', '-1', '10', '300', '20', '0', '10', '300', '20', '100', '10', '200', '20', '100',
+  ].join('\n')
+  const result = importDxfUnderlay(dxf(4, entities))
+  const svg = decodeURIComponent(result.dataUrl)
+  const paths = svg.match(/<path d="[^"]+"\/>/g) ?? []
+
+  assert.equal(result.imported_entities, 2)
+  assert.equal(result.skipped_entities, 0)
+  assert.equal(paths.length, 2)
+  assert.equal(paths.filter(path => path.includes(' Z')).length, 2)
+  assert.ok((svg.match(/L/g) ?? []).length > 20, 'positive and negative bulges are sampled into smooth arcs')
+})
+
 test('DXF underlay imports legacy 2D POLYLINE sequences from model space and inserted blocks', () => {
   const directPolyline = [
     '0', 'POLYLINE', '66', '1', '70', '1',

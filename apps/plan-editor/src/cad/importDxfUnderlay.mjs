@@ -173,10 +173,13 @@ function polylinePoints(entity) {
     if (pair.code === 10) {
       if (current && Number.isFinite(current[1])) points.push(current)
       const x = Number(pair.value)
-      current = Number.isFinite(x) ? [x, NaN] : null
+      current = Number.isFinite(x) ? [x, NaN, 0] : null
     } else if (pair.code === 20 && current) {
       const y = Number(pair.value)
       if (Number.isFinite(y)) current[1] = y
+    } else if (pair.code === 42 && current) {
+      const bulge = Number(pair.value)
+      if (Number.isFinite(bulge)) current[2] = bulge
     }
   }
   if (current && Number.isFinite(current[1])) points.push(current)
@@ -287,8 +290,10 @@ function shapesForEntity(entity) {
     return [x1, y1, x2, y2].every(Number.isFinite) ? [{ kind: 'polyline', points: [[x1, y1], [x2, y2]], closed: false }] : null
   }
   if (entity.type === 'LWPOLYLINE') {
-    const points = polylinePoints(entity)
-    return points.length >= 2 ? [{ kind: 'polyline', points, closed: (Number(valueOf(entity, 70) ?? 0) & 1) === 1 }] : null
+    const vertices = polylinePoints(entity)
+    if (vertices.length < 2) return null
+    const closed = (Number(valueOf(entity, 70) ?? 0) & 1) === 1
+    return [{ kind: 'polyline', points: approximateBulgedPolyline(vertices, closed), closed }]
   }
   if (entity.type === 'POLYLINE') {
     const flags = Number(valueOf(entity, 70) ?? 0)
