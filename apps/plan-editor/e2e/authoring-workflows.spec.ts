@@ -921,6 +921,51 @@ test('in-context placement type pickers cover structural, wall, and hosted-openi
   }
 })
 
+test('placement type choices are applied to created columns, foundations, beams, walls, doors, and windows', async ({ page }) => {
+  await page.goto('/')
+  const properties = page.getByTestId('properties-selection')
+
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await page.getByLabel('ชนิดเสา').selectOption('C2')
+  await clickCanvasFraction(page, 0.24, 0.72)
+  await expect(properties).toHaveAttribute('data-object-type', 'structure.column')
+  await expect(properties).toContainText('Column C2')
+
+  await page.locator('.cf-tool-button[title^="ฐานราก"]').click()
+  await page.getByLabel('ชนิดฐานราก').selectOption('F2')
+  await clickCanvasFraction(page, 0.24, 0.72)
+  await expect(properties).toHaveAttribute('data-object-type', 'structure.foundation')
+  await expect(properties).toContainText('Footing F2')
+
+  await page.locator('.cf-tool-button[title^="คาน"]').click()
+  await page.getByLabel('ชนิดคาน').selectOption('B2')
+  await clickCanvasFraction(page, 0.22, 0.26)
+  await clickCanvasFraction(page, 0.78, 0.26)
+  await page.keyboard.press('Escape')
+  await expect(properties).toHaveAttribute('data-object-type', 'structure.beam')
+  await expect(properties).toContainText('Beam B2')
+
+  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await page.getByLabel('ชนิดผนัง').selectOption('AAC 150 mm')
+  await clickCanvasFraction(page, 0.18, 0.45)
+  await clickCanvasFraction(page, 0.82, 0.45)
+  await page.keyboard.press('Escape')
+  await expect(properties).toHaveAttribute('data-object-type', 'architecture.wall')
+  await expect(properties).toContainText('AAC 150 mm')
+
+  await page.locator('.cf-tool-button[title^="ประตู"]').click()
+  await page.getByLabel('ชนิดประตู').selectOption('D2')
+  await clickCanvasFraction(page, 0.34, 0.45)
+  await expect(properties).toHaveAttribute('data-object-type', 'door_window.door')
+  await expect(properties).toContainText('Door D2')
+
+  await page.locator('.cf-tool-button[title^="หน้าต่าง"]').click()
+  await page.getByLabel('ชนิดหน้าต่าง').selectOption('W2')
+  await clickCanvasFraction(page, 0.70, 0.45)
+  await expect(properties).toHaveAttribute('data-object-type', 'door_window.window')
+  await expect(properties).toContainText('Window W2')
+})
+
 test('personal type library persists saved types and imports a project copy through the command bus', async ({ page }) => {
   await page.goto('/')
   await page.getByTitle('คลังชนิด').click()
