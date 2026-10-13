@@ -25,6 +25,8 @@ Index construction is measured once for each project snapshot. Candidate query u
 
 The indexed path rebuilds the plan index when the memoized plan-project snapshot changes. The benchmark does not measure React scheduling, pointer event frequency, drawing, browser layout, or project mutation cost. It establishes that for this sparse fixture, broad-phase pruning preserves the full-scan snap result and avoids the full scan's segment-pair growth.
 
-## Remaining measurements
+## Broader engine measurements
 
-The sprint's full performance matrix is still open. The following operations have not yet been benchmarked at 500, 1,000 and 5,000 objects: project load and validation, plan representation generation/render preparation, hit testing, marquee selection, coordination broad/narrow phase, takeoff, sheet compilation, Undo/Redo and serialization. The 20,000-object stretch target is also unmeasured. Do not infer those results from the snap benchmark.
+The first engine matrix now measures object summaries, plan projection, snap index construction/query, coordination, takeoff, phased BOQ and drawing-set compilation on 21-, 239- and 260-object projects. Results and methodology are in [EDITOR-PERFORMANCE-MATRIX-2026-10.md](./EDITOR-PERFORMANCE-MATRIX-2026-10.md). It remains an engine-only representative-project matrix, not the full stress/perceived-latency matrix.
+
+Still unmeasured are 500/1,000/5,000/20,000-object stress fixtures, project load/schema validation, canvas hit testing, marquee selection, Undo/Redo, serialization and browser pointer-to-paint/frame timing. Do not infer those results from either benchmark.

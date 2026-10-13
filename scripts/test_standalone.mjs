@@ -104,7 +104,7 @@ const pythonOutput = runDirect("apps/mcp-server Python tests", process.platform 
 const pythonSummary = pythonOutput.match(/Ran (\d+) tests?/);
 if (!pythonSummary) throw new Error("Could not read Python test count for apps/mcp-server");
 testSuites.push({ directory: "apps/mcp-server (Python)", tests: Number(pythonSummary[1]) });
-const integrationVerifiers = ["verify:kitchen", "verify:file-io", "verify:phases", "verify:coordination", "verify:house-demo"];
+const integrationVerifiers = ["verify:kitchen", "verify:renovation-integration", "verify:file-io", "verify:phases", "verify:coordination", "verify:house-demo"];
 for (const verifier of integrationVerifiers) {
   run(".", ["run", verifier]);
   integrationResults.push({ verifier, result: "PASS" });

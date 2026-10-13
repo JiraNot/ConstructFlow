@@ -13,6 +13,8 @@
     "verify:coordination": "node scripts/verify_coordination.mjs",
     "verify:branches": "node scripts/verify_feature_branches.mjs",
     "verify:kitchen": "node scripts/verify_kitchen_vertical_slice.mjs",
+    "verify:renovation-integration": "node scripts/verify_renovation_integration.mjs",
+    "bench:editor": "node scripts/benchmark_editor_matrix.mjs",
     "verify:kitchen-file": "node scripts/verify_kitchen_saved_project.mjs",
     "package:sketchup": "node scripts/package_sketchup_rbz.mjs"
   }

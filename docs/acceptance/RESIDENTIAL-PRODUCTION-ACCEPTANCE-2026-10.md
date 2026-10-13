@@ -1,12 +1,15 @@
 # Residential Production Acceptance — 2026-10
 
 **Review date:** 2026-10-13  
-**Status:** PARTIAL — the current evidence is split between the 239-object two-storey reference house and smaller command-generated Kitchen Proof acceptance projects. A single awkward-geometry renovation-extension project has not yet been assembled and reviewed end to end.
+**Status:** PARTIAL — a combined 260-object renovation-extension acceptance now runs from the two-storey reference-house fixture, but that fixture is not a surveyed/approved client project and does not provide visual or native CAD acceptance.
 
 ## Evidence used
 
 - `examples/constructflow-reference-house-2storey.cfproj` is validated by `verify:house-demo`: datums, storey-specific plans/framing, hosted openings, stairs, level/layer/slope edits, Undo/Redo, save/reopen, representations and supported clash checks.
 - `verify:kitchen` checks the kitchen extension vertical slice through model, phase, takeoff, serialization and A-02/S-01/A-08 output.
+- `verify:renovation-integration` reclassifies the 239-object reference house as existing, records one explicit demolition, generates a 21-object kitchen adjacent to its east facade, then checks UUIDs, save/reopen, takeoff and two BOQ cost centers, coordination determinism, A-02/S-01/A-08 and edit/undo/redo. The fixture is generated for verification and is not a field-verified project.
+- `npm run bench:editor` records p50/p95 engine timings for object summary, plan projection, snap index/query, coordination, takeoff, phased BOQ and drawing-set compilation at 21, 239 and 260 objects. See `docs/performance/EDITOR-PERFORMANCE-MATRIX-2026-10.md`.
+- Plan editor now has a centralized ToolSession and a typed interaction registry, and multi-selection/empty-selection inspector views are separate components. Full PlanCanvas and object-family PropertiesPanel decomposition is still in progress.
 - `verify:coordination` checks a 21-object project and 47 coordination assertions. It is not broad full-house MEP acceptance.
 - `verify:phases` checks a 44-object phase proof, 21 domain outputs, 22 A3 pages and 62 takeoff rows; it reports 14 missing-data warnings.
 - `docs/generated/BUILD-STATUS.md` records the most recent complete automated build/test/verifier run. These checks do not replace live editor, visual sheet or native CAD acceptance.
@@ -16,22 +19,22 @@
 | Workflow | Status | Evidence and remaining gap |
 | --- | --- | --- |
 | Existing two-storey house and levels | PASS | Reference-house verifier covers stable IDs, level datums, floor build-ups, stair, representations and storey visibility. Boundary survey and real company project provenance are absent. |
-| Existing / demolition lifecycle | PARTIAL | Phases and phase-aware outputs exist and are covered separately. A demolition plan tied to a remodeled existing host has not been exercised in the reference house workflow. |
-| Kitchen extension attached to existing house | PARTIAL | Kitchen preset/fixture passes its standalone slice. It has not been reconciled against the two-storey house's irregular existing wall or opened/visually reviewed as one combined project. |
+| Existing / demolition lifecycle | PASS for combined command-driven model | The combined verifier sets all 239 reference-house objects to existing and marks one interior wall for demolition; takeoff and BOQ place the removed wall in demolition/site-prep. A project-specific demolition drawing review remains open. |
+| Kitchen extension attached to existing house | PASS for generated geometry adjacency; otherwise PARTIAL | The command-driven preset starts at the reference house's east facade datum and adds 21 new objects; model roundtrip, sheets and takeoff run on the combined 260-object document. It does not prove a client-surveyed junction, opening cut in the existing facade, flashing/joint-treatment quantity, or visual fit review. |
 | Carport extension | PARTIAL | Preset validation covers editable structural/slab/roof objects and non-zero datums. Attachment, awkward parcel geometry and full downstream outputs are not part of an integrated acceptance project. |
 | Structural frame and foundations | PARTIAL | Commands, levels, reinforcement and schedules have package-level coverage; whole-project design coordination and engineering review remain open. |
 | Roof and rainwater | PARTIAL | Roof topology, openings, overhang, gutters/downpipes and saved rainwater settings have targeted tests. Family catalog cascade and live cross-view acceptance remain open. |
 | Architecture, openings and interior | PARTIAL | Hosted openings, walls, floors, ceilings, stairs and some cabinet behavior have automated coverage. Long interactive editing, cabinet/worktop completeness and family-accurate elevation preview remain unreviewed. |
 | Electrical and plumbing | PARTIAL | Fixture/circuit assignment, load validation, pipe-route editing and gravity-grade logic have targeted tests. Visible circuit paths, conduit, fittings and broad MEP coverage remain open. |
 | Drainage / roof discharge | PARTIAL | Coordination verifier and roof/rainwater regressions pass on limited fixtures. End-to-end roof-to-destination routing on the combined renovation project remains unverified. |
-| Coordination | PARTIAL | 47 checks pass for the configured 21-object fixture. The listed real interactions across all target families have not all been accepted on a large residential project. |
+| Coordination | PARTIAL | 47 checks pass for the configured 21-object fixture; the combined 260-object report is deterministic but includes soft generic-interference findings and is not a clash-free approval. The listed real interactions across all target families have not all been accepted on a large residential project. |
 | Sheets, takeoff and BOQ | PARTIAL | Deterministic sheet/takeoff verifiers pass. Visual review across a representative combined project and publication readiness remain open; `issue_ready` is not legal or engineering approval. |
-| Save, reopen, undo and redo | PASS for tested slices | File-I/O, command-runtime and reference-house tests verify tested objects and relationships. A single combined full-workflow project roundtrip remains to be run. |
+| Save, reopen, undo and redo | PASS for tested slices | The combined verifier roundtrips all 260 objects and checks one extension wall edit/undo/redo; file-I/O, command-runtime and reference-house tests cover other tested objects and relationships. The combined flow does not exercise every supported family or UI path. |
 
-## Production project still required
+## Remaining production acceptance
 
-Build one command-driven `.cfproj` from the reference house and a selected extension workflow. Use a surveyed/approved source if available; do not invent parcel, structural or hydraulic design inputs. The acceptance model should capture the existing host's actual offset, explicit demolition intent, wet area, roof discharge, cabinets, devices, pipe routes and structural coordination. Record all missing inputs rather than filling them with assumed values.
+Replace the generic reference-house input with a surveyed/approved source when available; do not treat the sample house as field evidence or invent parcel, structural or hydraulic design inputs. The acceptance model still needs verified host openings and junction treatment, wet-area drain/discharge, cabinets/devices/pipe routes and structural coordination. Record missing inputs rather than filling them with assumptions.
 
-Then run and record create/edit/move/resize/delete, undo/redo and save/reopen for supported families, followed by plan/elevation/3D review, coordination, sheet, takeoff and BOQ checks. Update each PARTIAL row only when that evidence exists.
+The automated combined verifier currently covers wall edit, undo/redo, serialization, coordination, three generated sheets, takeoff and two BOQ cost centers. It does not cover the full supported-family create/move/resize/delete matrix, browser plan/elevation/3D review, 500+ object engine stress, hit testing, undo/redo/serialization performance, or visual/native CAD review. Update each PARTIAL row only when that evidence exists.
 
 No permit readiness, legal compliance conclusion, or engineering design approval is claimed by this report.

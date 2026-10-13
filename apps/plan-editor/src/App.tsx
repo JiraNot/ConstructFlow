@@ -27,6 +27,7 @@ import {
 } from '@constructflow/project-model'
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
 import { useProjectSession } from './app/useProjectSession.js'
+import { useToolSession } from './app/useToolSession.js'
 import { countProjectObjects } from './app/projectStatistics.mjs'
 import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
 import { Toolbar, ToolType } from './components/Toolbar.js'
@@ -207,7 +208,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setFileFeedback('แก้ชื่อโครงการแล้ว')
   }
 
-  const [activeTool, setActiveTool] = useState<ToolType>('select')
+  const { activeTool, activation: toolActivation, activate: setActiveTool } = useToolSession()
   const [viewMode, setViewMode] = useState<'plan' | 'framing' | 'roofplan' | ElevationDirection | 'model3d'>('plan')
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
@@ -2108,6 +2109,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               planDiscipline={viewMode === 'framing' ? 'framing' : viewMode === 'roofplan' ? 'roof' : 'architecture'}
               displayUnit={displayUnit}
               activeTool={activeTool}
+              toolActivation={toolActivation}
               activeColumnTypeMark={activeColumnType}
               activeFoundationTypeMark={activeFoundationType}
               activeBeamTypeMark={activeBeamType}

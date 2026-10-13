@@ -99,7 +99,7 @@ node scripts/test_standalone.mjs --install
 
 The runner writes the latest completed verification to [docs/generated/BUILD-STATUS.md](docs/generated/BUILD-STATUS.md), including the source commit, build targets, test suites, integration verifiers, and Plan Editor chunk warnings. Test totals in dated implementation notes are historical evidence for those runs, not the current count.
 
-The deterministic snapping benchmark is available with `npm --prefix packages/snapping-engine run bench:snap`; its measured scope and remaining performance work are recorded in [docs/performance/PERFORMANCE-BASELINE-2026-10.md](docs/performance/PERFORMANCE-BASELINE-2026-10.md).
+The deterministic snapping benchmark is available with `npm --prefix packages/snapping-engine run bench:snap`. Engine timings across kitchen, house and combined renovation fixtures are available with `npm run bench:editor`; see [the performance matrix](docs/performance/EDITOR-PERFORMANCE-MATRIX-2026-10.md) and [the snapping baseline](docs/performance/PERFORMANCE-BASELINE-2026-10.md) for scope and remaining measurements.
 
 The implementation has achieved major milestones across the **Plan-Driven Modeling Engine**, **Permit Sheet Engine**, and **Downstream Adapters**:
 
