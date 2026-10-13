@@ -28,12 +28,12 @@ import {
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
 import { useProjectSession } from './app/useProjectSession.js'
 import { useToolSession } from './app/useToolSession.js'
-import { countProjectObjects } from './app/projectStatistics.mjs'
 import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
 import { Toolbar, ToolType } from './components/Toolbar.js'
 import { PlanCanvas } from './components/PlanCanvas.js'
 import { ElevationCanvas, ElevationDirection } from './components/ElevationCanvas.js'
 import { PropertiesPanel } from './components/PropertiesPanel.js'
+import { ProjectBrowser } from './components/ProjectBrowser.js'
 import { SettingsModal } from './components/SettingsModal.js'
 import { TOOL_FAMILIES } from './components/catalogPresentation.js'
 import { TypeManagerModal } from './components/TypeManagerModal.js'
@@ -208,7 +208,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setFileFeedback('แก้ชื่อโครงการแล้ว')
   }
 
-  const { activeTool, activation: toolActivation, activate: setActiveTool } = useToolSession()
+  const { activeTool, activation: toolActivation, lastPlacementTool, activate: setActiveTool, repeat: repeatLastTool } = useToolSession()
   const [viewMode, setViewMode] = useState<'plan' | 'framing' | 'roofplan' | ElevationDirection | 'model3d'>('plan')
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
@@ -260,6 +260,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [isConstructionOpen,setIsConstructionOpen]=useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [hiddenObjectIds, setHiddenObjectIds] = useState<Set<string>>(() => new Set())
+  const viewProject = useMemo(() => {
+    if (!hiddenObjectIds.size) return project
+    return { ...project, objects: Object.fromEntries(Object.entries(project.objects).filter(([id]) => !hiddenObjectIds.has(id))) }
+  }, [project, hiddenObjectIds])
   const copiedObjectIdsRef = useRef<string[]>([])
   const pasteCountRef = useRef(0)
   useEffect(() => {
@@ -1588,6 +1593,53 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setFileFeedback(`วางสำเนา ${ids.length} ชิ้นแล้ว · เยื้องจากชุดต้นฉบับ ${distance} มม.`)
   }
 
+  const handleArrayObjects = (objectIds: string[], copies: number, deltaXmm: number, deltaYmm: number) => {
+    const ids = [...new Set(objectIds)].filter(id => Boolean(project.objects[id]))
+    if (!ids.length || copies < 1 || copies > 100 || !Number.isFinite(deltaXmm) || !Number.isFinite(deltaYmm) || Math.hypot(deltaXmm, deltaYmm) < 1) return
+    const commands: CommandRequest[] = []
+    const createdIds: string[] = []
+    for (let index = 1; index <= copies; index += 1) {
+      const id_map = Object.fromEntries(ids.map(id => [id, crypto.randomUUID()]))
+      createdIds.push(...Object.values(id_map))
+      commands.push({ name: 'DuplicateObjects', input: { object_ids: ids, delta_x_mm: deltaXmm * index, delta_y_mm: deltaYmm * index, id_map } })
+    }
+    const result = dispatchCommandBatch(commands)
+    if (result.status !== 'success') {
+      setFileFeedback(result.errors?.[0] ?? 'สร้างอาร์เรย์ไม่สำเร็จ')
+      return
+    }
+    setSelectedIds(createdIds)
+    setSelectedId(createdIds[0] ?? null)
+    setRightPanelTab('properties')
+    setFileFeedback(`สร้างสำเนา ${createdIds.length} ชิ้นใน ${copies} ชุด · Undo ครั้งเดียวเพื่อย้อนกลับ`)
+  }
+
+  const handleMoveObjectsByDelta = (objectIds: string[], deltaXmm: number, deltaYmm: number) => {
+    const ids = [...new Set(objectIds)].filter(id => Boolean(project.objects[id]))
+    if (!ids.length || !Number.isFinite(deltaXmm) || !Number.isFinite(deltaYmm) || Math.hypot(deltaXmm, deltaYmm) < 1) return
+    const commands = buildDirectManipulationCommands(project, { id: ids[0], kind: 'group-move', objectIds: ids, startWorldMm: [0, 0], startScreenPx: [0, 0] }, [deltaXmm, deltaYmm])
+    if (!commands.length) { setFileFeedback('วัตถุที่เลือกไม่มีการย้ายแบบกลุ่มที่รองรับ'); return }
+    const result = dispatchCommandBatch(commands)
+    if (result.status !== 'success') {
+      setFileFeedback(result.errors?.[0] ?? 'ย้ายวัตถุไม่สำเร็จ')
+      return
+    }
+    setFileFeedback(`ย้าย ${ids.length} ชิ้น · ΔX ${formatLengthMm(deltaXmm, displayUnit)} · ΔY ${formatLengthMm(deltaYmm, displayUnit)} · Undo ครั้งเดียวเพื่อย้อนกลับ`)
+  }
+
+  const handleToggleObjectVisibility = (objectId: string) => {
+    setHiddenObjectIds(current => {
+      const next = new Set(current)
+      if (next.has(objectId)) next.delete(objectId)
+      else next.add(objectId)
+      return next
+    })
+    if (!hiddenObjectIds.has(objectId)) {
+      setSelectedIds(current => current.filter(id => id !== objectId))
+      setSelectedId(current => current === objectId ? null : current)
+    }
+  }
+
   useEffect(() => {
     const isEditingText = (target: EventTarget | null) => target instanceof HTMLElement
       && (target.isContentEditable || Boolean(target.closest('input, textarea, select, [contenteditable="true"]')))
@@ -1901,7 +1953,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
 
   // Counts & Schedule breakdown
-  const objectCounts = useMemo(() => countProjectObjects(project), [project])
   const takeoff = useMemo(() => calculateTakeoff(project), [project])
   const boq = useMemo(() => calculatePhasedBOQ(project), [project])
 
@@ -2024,7 +2075,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           <div className="cf-rail-caption">เครื่องมือ</div>
             <Toolbar orientation="vertical"
               activeTool={activeTool}
+              lastPlacementTool={lastPlacementTool}
               onSelectTool={setActiveTool}
+              onRepeatLastTool={repeatLastTool}
               activeColumnType={activeColumnType}
               onChangeActiveColumnType={setActiveColumnType}
               activeFoundationType={activeFoundationType}
@@ -2105,7 +2158,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           {/* Interactive Plan Canvas */}
           <div className="cf-viewport-stage">
             {viewMode === 'plan' || viewMode === 'framing' || viewMode === 'roofplan' ? <PlanCanvas
-              project={project}
+              project={viewProject}
               planDiscipline={viewMode === 'framing' ? 'framing' : viewMode === 'roofplan' ? 'roof' : 'architecture'}
               displayUnit={displayUnit}
               activeTool={activeTool}
@@ -2189,8 +2242,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 setCursorCoords_mm(coords)
                 setSnapKind(kind)
               }}
-            /> : viewMode !== 'model3d' ? <ElevationCanvas project={project} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} onBuildManipulation={viewMode === 'rcp' ? undefined : buildElevationManipulationCommands} onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation} onManipulationRejected={handleManipulationRejected} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
-              <Model3DViewport project={project} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} coordination={coordinationFindings} />
+            /> : viewMode !== 'model3d' ? <ElevationCanvas project={viewProject} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} onBuildManipulation={viewMode === 'rcp' ? undefined : buildElevationManipulationCommands} onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation} onManipulationRejected={handleManipulationRejected} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
+              <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} coordination={coordinationFindings} />
             </Suspense>}
           </div>
 
@@ -2362,9 +2415,33 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             onSubmitSettings={(settings) => dispatchCommandBatch([{ name: 'UpdateCoordinationSettings', input: { settings } }])}
           />}
 
-          {rightPanelTab === 'objects' && <div className="cf-object-summary">
-            {[['แกนเสา', objectCounts['structure.grid'] ?? 0, 'เส้น'], ['เสา', objectCounts['structure.column'] ?? 0, 'ต้น'], ['ฐานราก', objectCounts['structure.foundation'] ?? 0, 'ฐาน'], ['คาน', objectCounts['structure.beam'] ?? 0, 'ช่วง'], ['ผนัง', objectCounts['architecture.wall'] ?? 0, 'แผง'], ['ประตู', objectCounts['door_window.door'] ?? 0, 'บาน'], ['หน้าต่าง', objectCounts['door_window.window'] ?? 0, 'บาน']].map(([label, count, unit]) => <div className="cf-object-row" key={String(label)}><span>{label}</span><strong>{count} {unit}</strong></div>)}
-          </div>}
+          {rightPanelTab === 'objects' && <ProjectBrowser
+            project={project}
+            selectedIds={selectedIds}
+            hiddenObjectIds={hiddenObjectIds}
+            activeLevelId={project.project.active_level_id}
+            activeViewId={viewMode}
+            onSelectLevel={handleSetWorkingLevel}
+            onSelectView={view => setViewMode(view as typeof viewMode)}
+            onSelectObjects={ids => {
+              const object = project.objects[ids[0] ?? '']
+              if (object) {
+                const levelId = object.level_refs?.[0]?.level_id
+                if (levelId && project.levels.some(level => level.id === levelId)) handleSetWorkingLevel(levelId)
+                if (object.object_type === 'roof.system') setViewMode('roofplan')
+                else if (['structure.beam', 'structure.foundation'].includes(object.object_type)) setViewMode('framing')
+                else if (['plan', 'framing', 'roofplan'].includes(viewMode)) setViewMode('plan')
+              }
+              setSelectedIds(ids)
+              setSelectedId(ids[0] ?? null)
+              setRightPanelTab('properties')
+              setInspectorOpen(true)
+            }}
+            onToggleVisibility={handleToggleObjectVisibility}
+            onShowAll={() => setHiddenObjectIds(new Set())}
+            onArrayObjects={handleArrayObjects}
+            onMoveObjects={handleMoveObjectsByDelta}
+          />}
 
 
         </aside>}

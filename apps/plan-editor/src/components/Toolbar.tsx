@@ -17,6 +17,7 @@ import {
   Eraser,
   Layers,
   House,
+  Repeat2,
 } from 'lucide-react'
 
 const panelLayoutLabel = (layout?: string[]) => layout && layout.length > 1
@@ -55,7 +56,9 @@ export type ToolType =
 interface ToolbarProps {
   orientation?: 'horizontal' | 'vertical'
   activeTool: ToolType
+  lastPlacementTool?: ToolType
   onSelectTool: (tool: ToolType) => void
+  onRepeatLastTool?: () => void
   activeColumnType: string
   onChangeActiveColumnType: (type: string) => void
   activeFoundationType: string
@@ -87,7 +90,9 @@ interface ToolbarProps {
 export const Toolbar: React.FC<ToolbarProps> = ({
   orientation = 'horizontal',
   activeTool,
+  lastPlacementTool = 'wall',
   onSelectTool,
+  onRepeatLastTool,
   activeColumnType,
   onChangeActiveColumnType,
   activeFoundationType,
@@ -194,6 +199,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           )
         })}
       </div>
+
+      {onRepeatLastTool && <button type="button" className="cf-tool-repeat" onClick={onRepeatLastTool} title={`ใช้เครื่องมือล่าสุดซ้ำ (${lastPlacementTool})`} aria-label={`ใช้เครื่องมือล่าสุดซ้ำ ${lastPlacementTool}`}><Repeat2 size={14} /><span>ใช้ซ้ำ</span></button>}
 
       {/* Type Manager Launcher Button */}
       <div className="cf-toolbar-utility" style={{ borderLeft: '1px solid #334155', paddingLeft: 8 }}>

@@ -400,6 +400,47 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-object-summary { display: flex; flex-direction: column; gap: 1px; padding: 5px 10px; }
 .cf-object-row { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding: 0 2px; border-bottom: 1px solid #edf1f5; color: #536981; font-size: 11px; }
 .cf-object-row strong { color: #304962; font-size: 11px; font-weight: 650; }
+.cf-tool-repeat { display:inline-flex; align-items:center; justify-content:center; gap:5px; min-height:27px; padding:3px 7px; border:1px solid #475569; border-radius:4px; background:#172338; color:#cbd5e1; font-size:10px; cursor:pointer; }
+.cf-tool-repeat:hover { border-color:#38bdf8; color:#fff; }
+.cf-project-browser { display:flex; min-height:0; flex:1; flex-direction:column; gap:8px; padding:9px; color:#334b65; }
+.cf-browser-toolbar { display:flex; gap:5px; }
+.cf-browser-toolbar > button, .cf-browser-array > button { border:1px solid #d6e1eb; border-radius:4px; background:#f8fbfe; color:#526a83; font-size:10px; cursor:pointer; }
+.cf-browser-toolbar > button { padding:4px 6px; white-space:nowrap; }
+.cf-browser-toolbar > button:disabled { opacity:.45; cursor:default; }
+.cf-browser-search { display:flex; min-width:0; flex:1; align-items:center; gap:5px; padding:0 7px; border:1px solid #d6e1eb; border-radius:4px; color:#8293a6; }
+.cf-browser-search input { width:100%; min-width:0; height:29px; border:0; outline:0; background:transparent; color:#263e57; font-size:11px; }
+.cf-browser-scope { display:grid; grid-template-columns:1fr 1fr; gap:3px; padding:3px; border-radius:5px; background:#edf3f8; }
+.cf-browser-scope button, .cf-browser-levels button { border:0; border-radius:3px; background:transparent; color:#718399; font-size:10px; cursor:pointer; }
+.cf-browser-scope button { padding:5px; }
+.cf-browser-scope button.is-active, .cf-browser-levels button.is-active { background:#fff; color:#0876d1; box-shadow:0 1px 3px #10233a18; font-weight:700; }
+.cf-browser-levels { display:flex; gap:4px; overflow:auto; padding-bottom:2px; }
+.cf-browser-levels button { flex:0 0 auto; padding:5px 7px; border:1px solid #e2e9f0; }
+.cf-browser-views { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:3px; }
+.cf-browser-views button { min-width:0; min-height:25px; overflow:hidden; border:1px solid #e2e9f0; border-radius:3px; background:#fff; color:#718399; font-size:9px; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+.cf-browser-views button.is-active { border-color:#8dcaf4; background:#eaf5ff; color:#0876d1; font-weight:700; }
+.cf-browser-array { display:flex; flex-direction:column; gap:6px; padding:8px; border:1px solid #dce6f0; border-radius:5px; background:#f8fbff; }
+.cf-browser-array > strong { font-size:10px; }
+.cf-browser-array > div { display:grid; grid-template-columns:.7fr 1fr 1fr; gap:5px; }
+.cf-browser-move > div { grid-template-columns:1fr 1fr; }
+.cf-browser-array label { display:flex; flex-direction:column; gap:3px; color:#718399; font-size:9px; }
+.cf-browser-array input { width:100%; min-width:0; height:27px; padding:3px 5px; border:1px solid #d6e1eb; border-radius:3px; color:#334b65; font-size:10px; }
+.cf-browser-array > button { min-height:27px; background:#eaf5ff; color:#0876d1; font-weight:700; }
+.cf-browser-array small { color:#8293a6; font-size:9px; }
+.cf-browser-tree { min-height:0; overflow:auto; border-top:1px solid #e8edf2; }
+.cf-browser-tree details { border-bottom:1px solid #edf1f5; }
+.cf-browser-tree summary { display:flex; align-items:center; justify-content:space-between; padding:7px 3px; color:#526a83; font-size:10px; font-weight:700; cursor:pointer; }
+.cf-browser-tree summary small { color:#8b9aac; font-size:9px; }
+.cf-browser-tree ul { margin:0; padding:0 0 4px 9px; list-style:none; }
+.cf-browser-tree li { display:flex; align-items:center; gap:3px; min-height:27px; border-radius:3px; }
+.cf-browser-tree li.is-selected { background:#eaf5ff; }
+.cf-browser-object { display:flex; min-width:0; flex:1; align-items:center; gap:6px; padding:4px 3px; overflow:hidden; border:0; background:transparent; color:#536981; text-align:left; font-size:10px; cursor:pointer; }
+.cf-browser-object span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cf-browser-phase { width:7px; height:7px; flex:0 0 7px; border-radius:50%; background:#0284c7; }
+.cf-browser-phase.phase-existing { background:#94a3b8; }
+.cf-browser-phase.phase-demolition { background:#ef4444; }
+.cf-browser-visibility { display:grid; width:25px; height:24px; flex:0 0 25px; place-items:center; border:0; border-radius:3px; background:transparent; color:#8293a6; cursor:pointer; }
+.cf-browser-visibility:hover { background:#e7f1fa; color:#0876d1; }
+.cf-browser-empty { padding:12px 3px; color:#8293a6; font-size:10px; text-align:center; }
 .cf-adapter-details { margin: auto 12px 12px; padding: 7px; border: 1px solid #e5ebf1; border-radius: 4px; color: #708197; font-size: 10px; }
 .cf-adapter-details summary { cursor: pointer; }
 

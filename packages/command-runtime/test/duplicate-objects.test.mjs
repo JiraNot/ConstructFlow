@@ -46,3 +46,26 @@ test('DuplicateObjects is one undoable batch and leaves a hosted opening on its 
   assert.equal(Object.hasOwn(session.undo().objects, windowCopyId), false)
   assert.equal(Object.hasOwn(session.redo().objects, windowCopyId), true)
 })
+
+test('an array batch creates each offset copy and undo removes the complete array at once', () => {
+  const project = createEmptyProjectDocument(crypto.randomUUID())
+  const sourceId = crypto.randomUUID()
+  const created = CommandBus.execute(project, 'CreateColumn', {
+    id: sourceId, mark: 'C1', level_id: project.project.active_level_id, location_mm: [0, 0],
+  })
+  assert.equal(created.result.status, 'success')
+  const session = new ProjectCommandSession(created.updatedProject)
+  const firstId = crypto.randomUUID(), secondId = crypto.randomUUID()
+  const array = session.execute([
+    { name: 'DuplicateObjects', input: { object_ids: [sourceId], delta_x_mm: 1000, delta_y_mm: 0, id_map: { [sourceId]: firstId } } },
+    { name: 'DuplicateObjects', input: { object_ids: [sourceId], delta_x_mm: 2000, delta_y_mm: 0, id_map: { [sourceId]: secondId } } },
+  ])
+  assert.equal(array.status, 'success')
+  assert.deepEqual(array.updatedProject.objects[firstId].module_data.location_mm.slice(0, 2), [1000, 0])
+  assert.deepEqual(array.updatedProject.objects[secondId].module_data.location_mm.slice(0, 2), [2000, 0])
+  const undone = session.undo()
+  assert.ok(undone.objects[sourceId])
+  assert.equal(undone.objects[firstId], undefined)
+  assert.equal(undone.objects[secondId], undefined)
+  assert.equal(session.redo().objects[secondId].module_data.location_mm[0], 2000)
+})

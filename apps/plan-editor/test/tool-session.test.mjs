@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { TOOL_INTERACTION_REGISTRY, isPolygonInteraction, isTwoPointInteraction, usesPlacementDimensions } from '../src/app/toolInteractionRegistry.mjs'
-import { transitionToolSession } from '../src/app/toolSession.mjs'
+import { repeatToolSession, transitionToolSession } from '../src/app/toolSession.mjs'
 
 const toolbarTools = [
   'select', 'column', 'foundation', 'beam', 'wall', 'door', 'window', 'slab', 'slabVoid', 'archFloor',
@@ -25,4 +25,9 @@ test('tool session activation is stable for the current tool and increments on a
   const drawing = transitionToolSession(initial, 'wall')
   assert.deepEqual(drawing, { activeTool: 'wall', activation: 1 })
   assert.deepEqual(transitionToolSession(drawing, 'select'), { activeTool: 'select', activation: 2 })
+})
+
+test('repeat last tool starts a fresh placement session even when it is already active', () => {
+  assert.deepEqual(repeatToolSession({ activeTool: 'wall', activation: 3 }, 'wall'), { activeTool: 'wall', activation: 4 })
+  assert.deepEqual(repeatToolSession({ activeTool: 'select', activation: 4 }, 'beam'), { activeTool: 'beam', activation: 5 })
 })

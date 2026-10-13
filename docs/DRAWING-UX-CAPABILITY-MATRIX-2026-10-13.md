@@ -63,3 +63,12 @@ This matrix maps the main model families to their current canvas workflow, edit 
 1. Add family/type catalogs for roofs, MEP fixtures/routes, cabinetry and moulding profiles, including type-cascade behavior; add structural valley framing and project-specific rainwater design inputs.
 2. Complete family-accurate elevation ghost geometry, cross-view selection feedback, vertical datum badges and focused visual acceptance across plan, framing, elevation, 3D, takeoff and saved-project round trips.
 3. Add chained wall/beam drawing with junction cleanup and continuous-beam break/merge editing.
+
+## Daily-use UX first slice — 2026-10-13
+
+- The plan-editor toolbar exposes **ใช้ซ้ำ** for the last placement tool. Repeating the same tool starts a fresh interaction activation so pending points and numeric overrides are cleared while the selected type and project phase remain in editor state.
+- The **รายการ** inspector tab now provides a Project Browser with level and view navigation, active-level/all-project scope, family-grouped object rows, UUID-backed selection, search, and per-object visibility toggles. Visibility is editor-only and filters plan, elevation and 3D view inputs; it does not change the canonical model or takeoff quantities.
+- Ctrl/⌘-click and Shift-click add or remove rows from the current selection. Selected objects expose an array control with copy count (1–100) and X/Y spacing in meters. The app dispatches repeated `DuplicateObjects` commands as one `CommandBus` batch with new UUIDs, so one Undo removes the complete array.
+- Selected objects also expose numeric X/Y group movement in meters. The app reuses family-aware direct-manipulation commands so hosted openings and supported footings are not moved twice; the complete move is committed as one validated batch.
+- Acceptance added for forced repeat activation and one-step undo/redo of an array batch. The browser was checked against the kitchen-extension proof for view navigation, object selection, visibility hide/show and array controls.
+- Still open in the daily-use sequence: temporary dimensions that edit selected move/resize operations, visual previews for align/offset/mirror/trim/split/join, persistent named view templates, and large-project browser/snap performance. The browser visibility set currently resets with the editor session and is not saved into the project.
