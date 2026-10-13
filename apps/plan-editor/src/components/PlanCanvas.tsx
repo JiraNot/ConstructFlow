@@ -41,12 +41,13 @@ import {
 } from '../viewport/viewportTransform.js'
 import { constrainPointToReference, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, SnapSpatialIndex, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware, resizeOpeningFromEdge } from '@constructflow/snapping-engine'
 import { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
-import { Maximize2, Pencil, Trash2, ZoomIn, ZoomOut, PlusCircle, Copy } from 'lucide-react'
+import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { CommandRequest } from '@constructflow/command-schema'
 import { optimisticManipulationProject, type DirectManipulationPreviewResult, type PlanDragGesture } from '../directManipulation.mjs'
 import { isPolygonInteraction, isTwoPointInteraction, usesPlacementDimensions } from '../app/toolInteractionRegistry.mjs'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { usePlanCanvasPointerCancel } from './usePlanCanvasPointerCancel.js'
+import { PlanCanvasObjectContextMenu } from './PlanCanvasObjectContextMenu.js'
 import { PlanCanvasDragDimensions, type DragDimensionField, type DragDimensionMode } from './PlanCanvasDragDimensions.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
@@ -1672,36 +1673,34 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         onPointerCancel={handlePointerCancel}
         style={{ position: 'absolute', inset: 0, display: 'block', width: '100%', height: '100%', touchAction: 'none' }}
       />
-      {objectContextMenu && planProject.objects[objectContextMenu.id] && <div
-        className="cf-object-context-menu"
-        role="menu"
-        aria-label="คำสั่งวัตถุ"
-        onPointerDown={event => event.stopPropagation()}
-        style={{
-          left: Math.max(8, Math.min(objectContextMenu.x, (containerRef.current?.clientWidth ?? 800) - 184)),
-          top: Math.max(8, Math.min(objectContextMenu.y, (containerRef.current?.clientHeight ?? 600) - 92)),
-        }}
-      >
-        {(() => { const object = planProject.objects[objectContextMenu.id]; return object && isGridObject(object) && !object.module_data.system_id ? <button type="button" role="menuitem" onClick={() => {
-          setGridCopySourceId(object.id); onSelectionChange?.([object.id], object.id); onSelectObject(object.id); onActivateTool?.('gridCopy'); setObjectContextMenu(null)
-        }}><PlusCircle size={15} />ทำสำเนาแล้ววาง</button> : null })()}
-        <button type="button" role="menuitem" onClick={() => {
-          onSelectionChange?.([objectContextMenu.id], objectContextMenu.id)
-          onSelectObject(objectContextMenu.id)
-          onCopyObjects?.([objectContextMenu.id])
+      {objectContextMenu && planProject.objects[objectContextMenu.id] && <PlanCanvasObjectContextMenu
+        object={planProject.objects[objectContextMenu.id]!}
+        position={objectContextMenu}
+        containerSize={{ width: containerRef.current?.clientWidth ?? 800, height: containerRef.current?.clientHeight ?? 600 }}
+        onStartGridCopy={objectId => {
+          setGridCopySourceId(objectId)
+          onSelectionChange?.([objectId], objectId)
+          onSelectObject(objectId)
+          onActivateTool?.('gridCopy')
           setObjectContextMenu(null)
-        }}><Copy size={15} />คัดลอก · Ctrl+C</button>
-        <button type="button" role="menuitem" onClick={() => {
-          onSelectionChange?.([objectContextMenu.id], objectContextMenu.id)
-          onSelectObject(objectContextMenu.id)
+        }}
+        onCopy={objectId => {
+          onSelectionChange?.([objectId], objectId)
+          onSelectObject(objectId)
+          onCopyObjects?.([objectId])
+          setObjectContextMenu(null)
+        }}
+        onEditProperties={objectId => {
+          onSelectionChange?.([objectId], objectId)
+          onSelectObject(objectId)
           onRequestEditProperties?.()
           setObjectContextMenu(null)
-        }}><Pencil size={15} />แก้ไขคุณสมบัติ</button>
-        <button type="button" role="menuitem" className="is-danger" onClick={() => {
-          onDeleteObjects?.([objectContextMenu.id])
+        }}
+        onDelete={objectId => {
+          onDeleteObjects?.([objectId])
           setObjectContextMenu(null)
-        }}><Trash2 size={15} />ลบวัตถุ</button>
-      </div>}
+        }}
+      />}
       {activeTool === 'measure' && <div className="cf-tape-measure-hint" aria-live="polite">
         ตลับเมตร · {tapeMeasure?.complete ? 'คลิกเพื่อเริ่มวัดเส้นใหม่' : tapeMeasure ? 'คลิกจุดปลาย' : 'คลิกจุดเริ่ม'} · Esc ออก
       </div>}
