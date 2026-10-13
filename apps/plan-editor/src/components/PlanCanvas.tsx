@@ -22,10 +22,9 @@ import {
 import { projectPointToWallOffsetMm, stairFromRun, type StairPlacementOptions } from '@constructflow/architecture-engine'
 import { polygonInteriorPoint } from '@constructflow/geometry-kernel'
 import { getEditableRoofRidge } from '@constructflow/roof-engine'
-import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
-import { TypePicker } from './TypePicker.js'
+import { PlanCanvasAuthoringControls } from './PlanCanvasAuthoringControls.js'
 import { usePlanCanvasPlacementKeyboard } from './usePlanCanvasPlacementKeyboard.js'
 import { TOOL_FAMILIES } from './catalogPresentation.js'
 import { ToolType } from './Toolbar.js'
@@ -1291,12 +1290,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const targetRectangleDimensions = draggingObject?.kind === 'column-corner' || draggingObject?.kind === 'foundation-corner'
   const targetOpeningWidth = draggingObject?.kind === 'opening-edge'
   const targetLineLength = draggingObject?.kind === 'wall-endpoint' || draggingObject?.kind === 'beam-endpoint'
-  const authoringToolName: Partial<Record<ToolType, string>> = {
-    select: 'เลือกวัตถุ', column: 'เสา', foundation: 'ฐานราก', beam: 'คาน', wall: 'ผนัง', door: 'ประตู', window: 'หน้าต่าง',
-    slab: 'พื้นโครงสร้าง', slabVoid: 'ช่องเจาะพื้น/หลังคา', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้าเพดาน', roof: 'หลังคา', roomSeparator: 'เส้นแบ่งห้อง',
-    stair: 'บันได', grid: 'เส้นกริด', gridSystem: 'ระบบกริด', gridCopy: 'คัดลอกกริด', pipe: 'แนวท่อ', fixture: 'อุปกรณ์ไฟฟ้า', cabinet: 'บิลท์อิน', moulding: 'แนวบัว', measure: 'ตลับเมตร', calibrate: 'ปรับสเกลภาพ', erase: 'ลบวัตถุ',
-  }
-
   return (
     <div
       className="cf-plan-canvas"
@@ -1418,127 +1411,48 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         onPlacementKeyDown={handlePlacementInputKeyDown}
         onToggleDimensionReference={toggleDimensionReferenceMode}
       />
-      <div className="cf-authoring-controls" onPointerDown={(event) => event.stopPropagation()}>
-        <button type="button" className="cf-authoring-controls-toggle" aria-expanded={authoringControlsOpen} onClick={() => setAuthoringControlsOpen(open => !open)}>
-          <span>ตัวเลือกการวาด · {authoringToolName[activeTool] ?? activeTool}</span>
-          <span aria-hidden="true">{authoringControlsOpen ? 'ยุบ' : 'แสดง'}</span>
-        </button>
-        {authoringControlsOpen && <div className="cf-authoring-controls-content">
-        {activeTool === 'pipe' && <label className="cf-reference-control">ระบบท่อ
-          <select aria-label="ระบบของแนวท่อ" value={pipeSystem} onChange={event => setPipeSystem(event.target.value as typeof pipeSystem)}>
-            <option value="waste">น้ำทิ้ง</option><option value="soil">โสโครก</option><option value="rainwater">น้ำฝน</option>
-            <option value="vent">อากาศ</option><option value="cold_water">น้ำดีเย็น</option><option value="hot_water">น้ำร้อน</option>
-          </select>
-          <small>น้ำทิ้ง/โสโครก/น้ำฝนสร้างระดับปลายให้ลาดลง 1:100 · ปรับขนาดและระดับต่อได้ในคุณสมบัติ</small>
-        </label>}
-        {activeTool === 'fixture' && <label className="cf-reference-control">อุปกรณ์ไฟฟ้า
-          <select aria-label="ชนิดอุปกรณ์ไฟฟ้าที่จะวาง" value={fixtureKind} onChange={event => setFixtureKind(event.target.value as typeof fixtureKind)}>
-            <option value="light">ดวงโคม</option><option value="switch">สวิตช์</option><option value="outlet">เต้ารับ</option><option value="panel">ตู้ไฟ</option>
-          </select>
-        </label>}
-        {activeTool === 'roof' && <div className="cf-grid-orientation-control" role="group" aria-label="ตั้งค่าหลังคาก่อนวาด">
-          <label>ทรงหลังคา <select aria-label="ทรงหลังคาก่อนวาด" value={roofShape} onChange={event => setRoofShape(event.target.value as typeof roofShape)}><option value="hip">ปั้นหยา</option><option value="gable">จั่ว · รูป 4 ด้าน</option><option value="flat">ดาดฟ้า</option></select></label>
-          {roofShape !== 'flat' && <label>ความลาด (องศา)<input aria-label="ความลาดหลังคาก่อนวาด (องศา)" type="number" min="0.5" max="88" step="0.5" value={roofSlopeDeg} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) setRoofSlopeDeg(Math.max(0.5, Math.min(88, value))) }} /></label>}
-          <label>ยกจากระดับชั้น ({displayUnit}) <WorkbenchNumberInput ariaLabel={`ระยะยกหลังคาจากระดับชั้น (${displayUnit})`} value={roofElevationOffsetMm} unit={displayUnit} onChange={setRoofElevationOffsetMm} style={{ width: 72 }} /></label>
-          <label>หนา (มม.) <WorkbenchNumberInput ariaLabel="ความหนาหลังคาก่อนวาด (มม.)" value={roofThicknessMm} onChange={value => setRoofThicknessMm(Math.max(1, value))} style={{ width: 58 }} /></label>
-          <label>วัสดุมุง <select aria-label="วัสดุมุงหลังคาก่อนวาด" value={roofMaterial} onChange={event => setRoofMaterial(event.target.value)}><option value="metal_sheet">เมทัลชีท</option><option value="pu_metal_sheet">เมทัลชีท PU</option><option value="concrete_tile">กระเบื้องคอนกรีต</option><option value="clay_tile">กระเบื้องดินเผา</option><option value="reinforced_concrete">คอนกรีตเสริมเหล็ก</option><option value="polycarbonate">โพลีคาร์บอเนต</option></select></label>
-          <small>{roofShape === 'gable' ? 'กำหนดความลาดสลับด้านที่ 1 และ 3 · ต้องวาดขอบเขต 4 จุด' : roofShape === 'flat' ? 'สร้างผืนราบตามขอบเขต · ตั้งความหนาและวัสดุก่อนวาด' : 'สร้างความลาดเข้าหาสันปั้นหยา · ปรับความลาดรายด้านได้หลังวาง'}</small>
-        </div>}
-        {activeTool === 'stair' && <div role="group" aria-label="ตั้งค่าบันไดก่อนวาด" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxWidth: 650, alignItems: 'center' }}>
-          <label>รูปแบบ <select aria-label="รูปแบบบันไดก่อนวาด" value={stairOptions.stair_type} onChange={e => setStairOptions(o => ({ ...o, stair_type: e.target.value as StairModuleData['stair_type'] }))}><option value="straight">ตรง</option><option value="l_shape">L</option><option value="u_shape">U</option></select></label>
-          <label>จบที่ <select aria-label="ระดับจบบันไดก่อนวาด" value={stairOptions.top_level_id} onChange={e => {
-            const top = project.levels.find(l => l.id === e.target.value), base = project.levels.find(l => l.id === project.project.active_level_id)
-            setStairOptions(o => ({ ...o, top_level_id: e.target.value, num_risers: top && base ? Math.ceil((top.elevation_mm - base.elevation_mm) / 190) : o.num_risers, first_flight_risers: undefined }))
-          }}><option value="">เลือกระดับจบ</option>{project.levels.filter(l => l.elevation_mm > (project.levels.find(b => b.id === project.project.active_level_id)?.elevation_mm ?? 0)).map(l => <option key={l.id} value={l.id}>{l.name} +{(l.elevation_mm / 1000).toFixed(2)}</option>)}</select></label>
-          <label>กว้าง ({displayUnit}) <WorkbenchNumberInput ariaLabel="ความกว้างบันไดก่อนวาด" value={stairOptions.width_mm} unit={displayUnit} onChange={v => setStairOptions(o => ({ ...o, width_mm: v }))} style={{ width: 65 }} /></label>
-          <label>ขั้นรวม <WorkbenchNumberInput ariaLabel="จำนวนลูกตั้งก่อนวาด" value={stairOptions.num_risers} onChange={v => setStairOptions(o => ({ ...o, num_risers: v }))} style={{ width: 48 }} /></label>
-          {stairOptions.stair_type !== 'straight' && <>
-            <label>เที่ยวแรก <WorkbenchNumberInput ariaLabel="ลูกตั้งเที่ยวแรกก่อนวาด" value={stairOptions.first_flight_risers ?? Math.floor(stairOptions.num_risers / 2)} onChange={v => setStairOptions(o => ({ ...o, first_flight_risers: v }))} style={{ width: 48 }} /></label>
-            <label>ชานพัก ({displayUnit}) <WorkbenchNumberInput ariaLabel="ความลึกชานพักก่อนวาด" value={stairOptions.landing_depth_mm} unit={displayUnit} onChange={v => setStairOptions(o => ({ ...o, landing_depth_mm: v }))} style={{ width: 65 }} /></label>
-            <label>เลี้ยว <select aria-label="ทิศเลี้ยวบันไดก่อนวาด" value={stairOptions.turn_direction} onChange={e => setStairOptions(o => ({ ...o, turn_direction: e.target.value as 'left' | 'right' }))}><option value="right">ขวา</option><option value="left">ซ้าย</option></select></label>
-            {stairOptions.stair_type === 'u_shape' && <label>ช่องกลาง ({displayUnit}) <WorkbenchNumberInput ariaLabel="ช่องกลางบันไดก่อนวาด" value={stairOptions.flight_gap_mm ?? 100} unit={displayUnit} onChange={v => setStairOptions(o => ({ ...o, flight_gap_mm: v }))} style={{ width: 65 }} /></label>}
-          </>}
-          <small>จุดเริ่ม → ปลายเที่ยวแรกกำหนดระยะวิ่งและทิศ · ลูกนอนคำนวณตามระยะจริง</small>
-          {stairError && <span role="alert" style={{ color: '#b91c1c' }}>{stairError}</span>}
-        </div>}
-        {activeTool === 'grid' && <div className="cf-grid-orientation-control" role="group" aria-label="วาดเส้นกริดอ้างอิง">
-          <strong>เส้นกริดอ้างอิง · เส้นเดี่ยว</strong>
-          <label>ลำดับป้าย
-            <select aria-label="ลำดับป้ายเส้นกริดอ้างอิง" value={gridSequenceStyle} onChange={event => setGridSequenceStyle(event.target.value as typeof gridSequenceStyle)}>
-              <option value="auto">อัตโนมัติ (ตั้ง A / นอน 1)</option><option value="alpha">ตัวอักษร A, B, C</option><option value="numeric">ตัวเลข 1, 2, 3</option>
-            </select>
-          </label>
-          <small>{gridStartPoint ? 'คลิกจุดปลายเพื่อกำหนดแนวและมุมเอียง · Esc ยกเลิก' : 'คลิกจุดเริ่มและจุดปลาย · ปรับย้าย คัดลอก และตั้ง bubble ได้ภายหลัง'}</small>
-        </div>}
-        {activeTool === 'gridSystem' && <div className="cf-grid-orientation-control" role="group" aria-label="สร้างระบบ Grid Line">
-          <strong>ระบบ Grid Line · ระยะเป็นช่วงจากเส้นก่อนหน้า ({displayUnit})</strong>
-          <div className="cf-grid-system-axis">
-            <label>แนวตั้ง · ระยะ X<input aria-label={`ระยะช่วงแนวตั้งของระบบกริด (${displayUnit})`} value={gridXIntervals} onChange={event => { setGridXIntervals(event.target.value); setGridSystemError('') }} onKeyDown={handlePlacementInputKeyDown} placeholder={`3, 2.5, 3 ${displayUnit}`} /></label>
-            <label>ป้ายแรก<input aria-label="ป้ายเริ่มต้นแนวตั้ง" value={gridXFirstTag} onChange={event => setGridXFirstTag(event.target.value)} /></label>
-          </div>
-          <div className="cf-grid-system-axis">
-            <label>แนวนอน · ระยะ Y<input aria-label={`ระยะช่วงแนวนอนของระบบกริด (${displayUnit})`} value={gridYIntervals} onChange={event => { setGridYIntervals(event.target.value); setGridSystemError('') }} onKeyDown={handlePlacementInputKeyDown} placeholder={`2.5, 3 ${displayUnit}`} /></label>
-            <label>ป้ายแรก<input aria-label="ป้ายเริ่มต้นแนวนอน" value={gridYFirstTag} onChange={event => setGridYFirstTag(event.target.value)} /></label>
-          </div>
-            <small>คั่นแต่ละช่วงด้วยจุลภาค · คลิกจุดกำเนิดหนึ่งครั้งเพื่อสร้างได้ทั้งสองแนว · ลบช่องระยะของแนวที่ไม่ใช้</small>
-            {gridSystemError && <small role="alert" style={{ color: '#b42332' }}>{gridSystemError}</small>}
-        </div>}
-        {(['column', 'foundation', 'beam', 'wall', 'door', 'window', 'slab', 'roof'] as ToolType[]).includes(activeTool) && (() => {
-          const familyByTool: Partial<Record<ToolType, string>> = {
-            column: 'structure.column', foundation: 'structure.foundation', beam: 'structure.beam',
-            wall: 'architecture.wall', door: 'door_window.door', window: 'door_window.window', slab: 'structure.slab', roof: 'roof.system',
-          }
-          const activeTypeMark = activeTool === 'column' ? activeColumnTypeMark
-            : activeTool === 'foundation' ? activeFoundationTypeMark
-              : activeTool === 'beam' ? activeBeamTypeMark
-                : activeTool === 'wall' ? activeWallTypeMark
-                  : activeTool === 'door' ? activeDoorTypeMark : activeTool === 'window' ? activeWindowTypeMark : activeTool === 'roof' ? activeRoofTypeMark : activeSlabTypeMark
-          const availableTypes = project.types.filter(type => type.object_type === familyByTool[activeTool])
-          const label = activeTool === 'column' ? 'เสา' : activeTool === 'foundation' ? 'ฐานราก'
-            : activeTool === 'beam' ? 'คาน' : activeTool === 'wall' ? 'ผนัง'
-              : activeTool === 'door' ? 'ประตู' : activeTool === 'window' ? 'หน้าต่าง' : activeTool === 'roof' ? 'ระบบหลังคา' : 'พื้น'
-          return <TypePicker types={availableTypes} value={activeTypeMark} label={label} displayUnit={displayUnit} onChange={onChangeActiveTypeMark} onOpenCatalog={onOpenTypeManager}/>
-        })()}
-        {(activeTool === 'wall' || activeTool === 'beam') && <label className="cf-reference-control">
-          <span>แนวอ้างอิง</span>
-          <select aria-label="แนวอ้างอิงการวาง" value={placementReference} onChange={(event) => setPreference('placementReference', event.target.value as typeof placementReference)}>
-            <option value="centerline">กึ่งกลาง</option>
-            <option value="left_face">ริมซ้ายตามทิศลาก</option>
-            <option value="right_face">ริมขวาตามทิศลาก</option>
-          </select>
-        </label>}
-        {(activeTool === 'wall' || activeTool === 'beam') && <label className="cf-reference-control">
-          <span>จัดแนวช่วงที่วาด</span>
-          <select aria-label="ข้อจำกัดแนวการวาด" value={lineConstraintMode} onChange={(event) => setPreference('lineConstraintMode', event.target.value as typeof lineConstraintMode)}>
-            <option value="auto">อัตโนมัติ: ขนาน/ตั้งฉาก</option>
-            <option value="none">อิสระ</option>
-            <option value="parallel">ขนานกับแนวใกล้จุดเริ่ม</option>
-            <option value="perpendicular">ตั้งฉากกับแนวใกล้จุดเริ่ม</option>
-          </select>
-          {lineConstraintMode !== 'none' && <span className="cf-snap-hint">
-            {(activeTool === 'beam' ? beamStartNode?.reference : wallStartNode?.reference)?.description
-              ? `อ้างอิง: ${(activeTool === 'beam' ? beamStartNode?.reference : wallStartNode?.reference)?.description}`
-              : 'เริ่มจากหรือใกล้แนวผนัง/คาน ภายใน 150 มม.'}
-          </span>}
-        </label>}
-        <details className="cf-snap-details"><summary>Snap · {snapModes.length ? `เปิด ${snapModes.length} ประเภท` : 'วางอิสระ'} · ตั้งค่า</summary><div className="cf-snap-controls" role="group" aria-label="ประเภทจุด Snap">
-          <span>Snap</span>
-          {([
-            ['grid', 'กริด'], ['endpoint', 'ปลาย/มุม'], ['midpoint', 'กึ่งกลาง'], ['center', 'ศูนย์กลาง'],
-            ['face', 'ขอบ'], ['centerline', 'แนว'], ['intersection', 'จุดตัด'],
-          ] as [SnapMode, string][]).map(([mode, label]) => <button
-            key={mode}
-            type="button"
-            aria-pressed={snapModes.includes(mode)}
-            className={snapModes.includes(mode) ? 'is-enabled' : ''}
-            title={`${snapModes.includes(mode) ? 'ปิด' : 'เปิด'} Snap ${label}`}
-            onClick={() => setPreference('snapModes', current => current.includes(mode) ? current.filter(value => value !== mode) : [...current, mode])}
-          >{label}</button>)}
-          <span className="cf-snap-hint">Ctrl วางอิสระ · {activeTool === 'wall' || activeTool === 'beam' ? `Space เปลี่ยนแนวอ้างอิง (ขณะนี้: ${placementReference === 'centerline' ? 'กึ่งกลาง' : placementReference === 'left_face' ? 'ชิดซ้าย' : 'ชิดขวา'})` : 'เลื่อนเมาส์ให้เห็นสัญลักษณ์ก่อนคลิก'}</span>
-        </div></details>
-        </div>}
-      </div>
-      <div className="cf-canvas-zoom" aria-label="ควบคุมมุมมองแปลน">
+      <PlanCanvasAuthoringControls
+        project={project}
+        activeTool={activeTool}
+        displayUnit={displayUnit}
+        preferences={preferences}
+        open={authoringControlsOpen}
+        pipeSystem={pipeSystem}
+        fixtureKind={fixtureKind}
+        roof={{ shape: roofShape, slopeDeg: roofSlopeDeg, thicknessMm: roofThicknessMm, elevationOffsetMm: roofElevationOffsetMm, material: roofMaterial }}
+        stairOptions={stairOptions}
+        stairError={stairError}
+        gridSequenceStyle={gridSequenceStyle}
+        gridStartPoint={gridStartPoint}
+        gridSystem={{ xIntervals: gridXIntervals, yIntervals: gridYIntervals, xFirstTag: gridXFirstTag, yFirstTag: gridYFirstTag, error: gridSystemError }}
+        lineReferenceDescription={(activeTool === 'beam' ? beamStartNode?.reference : wallStartNode?.reference)?.description}
+        activeTypeMarks={{ column: activeColumnTypeMark, foundation: activeFoundationTypeMark, beam: activeBeamTypeMark, wall: activeWallTypeMark, door: activeDoorTypeMark, window: activeWindowTypeMark, slab: activeSlabTypeMark, roof: activeRoofTypeMark }}
+        onOpenChange={setAuthoringControlsOpen}
+        onPipeSystemChange={setPipeSystem}
+        onFixtureKindChange={setFixtureKind}
+        onRoofChange={updater => {
+          const next = updater({ shape: roofShape, slopeDeg: roofSlopeDeg, thicknessMm: roofThicknessMm, elevationOffsetMm: roofElevationOffsetMm, material: roofMaterial })
+          setRoofShape(next.shape)
+          setRoofSlopeDeg(next.slopeDeg)
+          setRoofThicknessMm(next.thicknessMm)
+          setRoofElevationOffsetMm(next.elevationOffsetMm)
+          setRoofMaterial(next.material)
+        }}
+        onStairOptionsChange={setStairOptions}
+        onGridSequenceStyleChange={setGridSequenceStyle}
+        onGridIntervalsChange={(axis, value) => {
+          if (axis === 'x') setGridXIntervals(value)
+          else setGridYIntervals(value)
+          setGridSystemError('')
+        }}
+        onGridFirstTagChange={(axis, value) => axis === 'x' ? setGridXFirstTag(value) : setGridYFirstTag(value)}
+        onPlacementReferenceChange={value => setPreference('placementReference', value)}
+        onLineConstraintModeChange={value => setPreference('lineConstraintMode', value)}
+        onSnapModeToggle={mode => setPreference('snapModes', current => current.includes(mode) ? current.filter(value => value !== mode) : [...current, mode])}
+        onPlacementKeyDown={handlePlacementInputKeyDown}
+        onChangeActiveTypeMark={onChangeActiveTypeMark}
+        onOpenTypeManager={onOpenTypeManager}
+      />      <div className="cf-canvas-zoom" aria-label="ควบคุมมุมมองแปลน">
         <button type="button" aria-label="ซูมออก" title="ซูมออก" onPointerDown={(event) => event.stopPropagation()} onClick={() => {
           const box = containerRef.current
           if (box) setViewport((current) => zoomAtScreenPoint(current, [box.clientWidth / 2, box.clientHeight / 2], 0.8))
