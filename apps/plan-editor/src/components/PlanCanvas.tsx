@@ -48,6 +48,7 @@ import { isPolygonInteraction, isTwoPointInteraction, usesPlacementDimensions } 
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { usePlanCanvasPointerCancel } from './usePlanCanvasPointerCancel.js'
 import { PlanCanvasObjectContextMenu } from './PlanCanvasObjectContextMenu.js'
+import { resolvePlanCanvasPointerSnap } from './resolvePlanCanvasPointerSnap.js'
 import { PlanCanvasDragDimensions, type DragDimensionField, type DragDimensionMode } from './PlanCanvasDragDimensions.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
@@ -891,55 +892,18 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
     const rawWorld = screenToWorld([screenX, screenY], viewport)
 
-    if (activeTool === 'door' || activeTool === 'window') {
-      const typeDef = project.types?.find(
-        (t) =>
-          t.object_type === (activeTool === 'door' ? 'door_window.door' : 'door_window.window') &&
-          t.name.toLowerCase() === (activeTool === 'door' ? activeDoorTypeMark : activeWindowTypeMark).toLowerCase()
-      )
-      const openingW = typeDef?.parameters?.width_mm || (activeTool === 'door' ? 800 : 1200)
-      const hostSnap = snapPlanWallHost(rawWorld, openingW)
-      const wallSnap = hostSnap ? applyOpeningDistance(hostSnap, rawWorld, openingW) : null
-      setActiveWallSnap(wallSnap)
-      if (wallSnap) {
-        setActiveSnap({
-          point_mm: wallSnap.point_mm,
-          kind: 'free',
-          description: wallSnap.description,
-        })
-        onCursorChange(wallSnap.point_mm, wallSnap.description)
-      } else {
-        const snap = e.ctrlKey
-          ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
-          : snapPlanPoint(rawWorld)
-        setActiveSnap(snap)
-        onCursorChange(snap.point_mm, snap.description)
-      }
-    } else {
-      setActiveWallSnap(null)
-      let snap = e.ctrlKey
-        ? { point_mm: rawWorld, kind: 'free' as const, description: 'Free / อิสระ (Ctrl)' }
-        : snapPlanPoint(rawWorld, 16, draggingObject?.id)
-      snap = resolvePlanCanvasLineSnap(snap, rawWorld, e.shiftKey, activeTool, {
-        beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary,
-      }, constrainLineSnap)
-      const copySource = activeTool === 'gridCopy' && gridCopySourceId ? planProject.objects[gridCopySourceId] : undefined
-      const point_mm = activeTool === 'gridCopy' && copySource && isGridObject(copySource)
-        ? (() => {
-          const [start] = gridLineEndpoints(copySource)
-          const positioned = applyPlacementDimensions(snap.point_mm, { refX: start[0], refY: start[1] }, rawWorld)
-          return e.shiftKey ? constrainGridCopyToParallelOffset(positioned, copySource) : positioned
-        })()
-        : usesPlacementDimensions(activeTool)
-          ? applyPlacementDimensions(snap.point_mm, findTemporaryDimensionRefs(snap.point_mm, planProject, undefined, dimensionReferenceMode), rawWorld)
-          : snap.point_mm
-      if (point_mm[0] !== snap.point_mm[0] || point_mm[1] !== snap.point_mm[1]) {
-        snap = { ...snap, point_mm, kind: 'free', target_id: undefined, description: `${snap.description} · ระยะกำหนดเอง` }
-      }
-      setActiveSnap(snap)
-      onCursorChange(snap.point_mm, snap.description)
-      if (activeTool === 'measure') setTapeMeasure(current => current && !current.complete ? { ...current, end: snap.point_mm } : current)
-    }
+    const { snap, wallSnap } = resolvePlanCanvasPointerSnap({
+      activeTool, rawWorld, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, project, planProject,
+      activeDoorTypeMark, activeWindowTypeMark, draggingObjectId: draggingObject?.id, gridCopySourceId,
+      dimensionReferenceMode,
+      lineState: { beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary },
+      snapPlanPoint, snapPlanWallHost, applyOpeningDistance, resolveLineSnap: constrainLineSnap,
+      applyPlacementDimensions, constrainGridCopyToParallelOffset,
+    })
+    setActiveWallSnap(wallSnap)
+    setActiveSnap(snap)
+    onCursorChange(snap.point_mm, snap.description)
+    if (activeTool === 'measure') setTapeMeasure(current => current && !current.complete ? { ...current, end: snap.point_mm } : current)
 
     if (activeTool === 'calibrate') {
       setCalibrationMousePoint(rawWorld)
