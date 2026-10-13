@@ -902,6 +902,25 @@ test('placement type picker applies the chosen catalog type to the created objec
   await expect(properties).toContainText('Column C2')
 })
 
+test('in-context placement type pickers cover structural, wall, and hosted-opening families', async ({ page }) => {
+  await page.goto('/')
+  const cases = [
+    { tool: 'เสา', label: 'ชนิดเสา', typeName: 'C2' },
+    { tool: 'ฐานราก', label: 'ชนิดฐานราก', typeName: 'F2' },
+    { tool: 'คาน', label: 'ชนิดคาน', typeName: 'B2' },
+    { tool: 'ผนัง', label: 'ชนิดผนัง', typeName: 'AAC 150 mm' },
+    { tool: 'ประตู', label: 'ชนิดประตู', typeName: 'D2' },
+    { tool: 'หน้าต่าง', label: 'ชนิดหน้าต่าง', typeName: 'W2' },
+  ]
+  for (const { tool, label, typeName } of cases) {
+    await page.locator(`.cf-tool-button[title^="${tool}"]`).click()
+    const picker = page.getByLabel(label)
+    await expect(picker).toBeVisible()
+    await picker.selectOption(typeName)
+    await expect(picker).toHaveValue(typeName)
+  }
+})
+
 test('personal type library persists saved types and imports a project copy through the command bus', async ({ page }) => {
   await page.goto('/')
   await page.getByTitle('คลังชนิด').click()
