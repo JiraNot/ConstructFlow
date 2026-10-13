@@ -12,6 +12,7 @@ import {
   type OpeningViewOverride,
   type DimensionViewOverride,
   type SavedSheetSubviewport,
+  type SheetViewKind,
 } from "@constructflow/project-model";
 import { constructionOutputs } from "@constructflow/domain-providers";
 import { resolveArchitecturalFloorPatternKind, computeStairGeometry, decodeStair } from "@constructflow/architecture-engine";
@@ -84,6 +85,7 @@ export type VectorPrimitive =
     };
 export interface SheetViewport {
   scale_denominator: number;
+  view_layout?: SheetViewKind[];
   level_id?: string;
   center_mm?: Vec2;
   crop_bounds_mm?: [number, number, number, number];
@@ -121,6 +123,11 @@ export function getPermitViewportPaperFrame(
   viewIndex: number,
   viewCount: number,
 ): PermitViewportPaperFrame {
+  if (viewCount >= 3) {
+    const column = viewIndex % 2
+    const row = Math.floor(viewIndex / 2)
+    return { x: 18 + column * 195, y: 38 + row * 112, width: 180, height: 104 }
+  }
   const paired = viewCount === 2 || sheetId === "E-02";
   return {
     x: 18 + viewIndex * 195,
@@ -231,9 +238,18 @@ function compilePermitDrawingSetBase(
           : id === 'A-10'
             ? (viewport.level_id ?? project.project.active_level_id ?? ground)
           : undefined;
-      const displayTitle = id === "A-10" && planLevelId
-        ? `${title} · ${project.levels.find(level => level.id === planLevelId)?.name ?? planLevelId}`
+      const customViewTitles: Record<SheetViewKind, [string, string]> = {
+        plan: ['แปลน', 'Plan'], rcp: ['แปลนฝ้า', 'RCP'],
+        north: ['รูปด้านเหนือ', 'North Elevation'], south: ['รูปด้านใต้', 'South Elevation'],
+        east: ['รูปด้านตะวันออก', 'East Elevation'], west: ['รูปด้านตะวันตก', 'West Elevation'],
+        section_x: ['รูปตัด X', 'Section X'], section_y: ['รูปตัด Y', 'Section Y'], isometric: ['ภาพสามมิติ', 'Isometric'],
+      };
+      const configuredTitle = viewport.view_layout
+        ? `${viewport.view_layout.map(kind => customViewTitles[kind][0]).join(' · ')} / ${viewport.view_layout.map(kind => customViewTitles[kind][1]).join(' · ')}`
         : title;
+      const displayTitle = id === "A-10" && planLevelId
+        ? `${configuredTitle} · ${project.levels.find(level => level.id === planLevelId)?.name ?? planLevelId}`
+        : configuredTitle;
       if (![20, 25, 50, 100, 200, 500].includes(viewport.scale_denominator))
         throw new Error("Unsupported drawing scale");
       if (
@@ -1637,7 +1653,7 @@ function compilePermitDrawingSetBase(
           mesh: triangles(o.id),
           out: outputs.find((v) => v.object_id === o.id),
         }));
-        const views =
+        const standardViews =
           id === "A-05" || id === "A-06"
             ? ["xz", "yz"]
             : id === "A-07"
@@ -1649,19 +1665,25 @@ function compilePermitDrawingSetBase(
                 : id === "M-01"
                   ? ["iso"]
                   : ["xy"];
+        const viewKinds = viewport.view_layout ?? standardViews.map(mode =>
+          mode === 'xz' ? (id === 'A-06' ? 'south' : 'north') :
+          mode === 'yz' ? (id === 'A-06' ? 'west' : 'east') :
+          mode === 'xy' ? 'plan' : mode === 'iso' ? 'isometric' : mode,
+        ) as Array<'plan' | 'rcp' | 'north' | 'south' | 'east' | 'west' | 'section_x' | 'section_y' | 'isometric'>
+        const viewModes: Record<string, string> = { plan: 'xy', north: 'xz', south: 'xz', east: 'yz', west: 'yz', isometric: 'iso' }
         const sheetViewport = viewport;
-        for (const [viewIndex, mode] of views.entries()) {
+        for (const [viewIndex, viewKind] of viewKinds.entries()) {
+          const mode = viewModes[viewKind] ?? viewKind
           const viewport: SheetViewport = viewIndex === 0
             ? sheetViewport
             : { ...sheetViewport, ...(sheetViewport.subviews?.[viewIndex - 1] ?? {}) };
           const elevationDirection: "north" | "south" | "east" | "west" | undefined =
-            id === "A-05" ? (mode === "xz" ? "north" : "east") :
-            id === "A-06" ? (mode === "xz" ? "south" : "west") : undefined;
+            ['north', 'south', 'east', 'west'].includes(viewKind) ? viewKind as "north" | "south" | "east" | "west" : undefined;
           const visibleOpeningIds = elevationDirection ? getElevationVisibleOpeningIds(project, elevationDirection) : undefined;
-          const viewObjects = id === "A-10" && mode === "rcp"
+          const viewObjects = viewKind === "rcp"
             ? objectsWithMesh.filter(({ object }) => ["architecture.room", "architecture.floor", "architecture.ceiling"].includes(object.object_type))
             : objectsWithMesh.filter(({ object }) => {
-              if (id === "A-05" || id === "A-06") {
+              if (elevationDirection) {
                 const type = object.object_type;
                 if (
                   type === "structure.foundation" || type === "structure.slab" ||
@@ -1674,7 +1696,7 @@ function compilePermitDrawingSetBase(
               }
               return !visibleOpeningIds || !object.object_type.startsWith("door_window.") || visibleOpeningIds.has(object.id);
             });
-          const paperFrame = getPermitViewportPaperFrame(id, viewIndex, views.length);
+          const paperFrame = getPermitViewportPaperFrame(id, viewIndex, viewKinds.length);
           const view = {
             x: paperFrame.x,
             y: paperFrame.y,
@@ -1682,10 +1704,14 @@ function compilePermitDrawingSetBase(
             h: paperFrame.height,
           };
           const projectPoint = (v: Vec3): Vec2 =>
-            mode === "xz" || mode === "section_x"
-              ? [id === "A-06" ? -v[0] : v[0], v[2]]
-              : mode === "yz" || mode === "section_y"
-                ? [id === "A-06" ? -v[1] : v[1], v[2]]
+            viewKind === "north" || mode === "section_x"
+              ? [v[0], v[2]]
+              : viewKind === "south"
+                ? [-v[0], v[2]]
+              : viewKind === "east" || mode === "section_y"
+                ? [v[1], v[2]]
+              : viewKind === "west"
+                ? [-v[1], v[2]]
                 : mode === "iso"
                   ? [v[0] - v[1], v[2] + (v[0] + v[1]) * 0.35]
                   : [v[0], v[1]];
@@ -1772,16 +1798,16 @@ function compilePermitDrawingSetBase(
               dash,
             );
           };
-          const isElevation = mode === "xz" || mode === "yz" || mode === "iso";
-          const isBuildingElevation = (id === "A-05" || id === "A-06") && (mode === "xz" || mode === "yz");
-          const facadeDirection = id === "A-05"
+          const isElevation = !!elevationDirection || mode === "iso";
+          const isBuildingElevation = !!elevationDirection;
+          const facadeDirection = elevationDirection ?? (id === "A-05"
             ? mode === "xz" ? "north" : "east"
-            : mode === "xz" ? "south" : "west";
+            : mode === "xz" ? "south" : "west");
           const getDepth = (v: Vec3): number => {
             if (mode === "xz" || mode === "section_x") {
-              return id === "A-06" ? -v[1] : v[1];
+              return (elevationDirection ? elevationDirection === 'south' : id === "A-06") ? -v[1] : v[1];
             } else if (mode === "yz" || mode === "section_y") {
-              return id === "A-06" ? -v[0] : v[0];
+              return (elevationDirection ? elevationDirection === 'west' : id === "A-06") ? -v[0] : v[0];
             } else if (mode === "iso") {
               return v[0] + v[1];
             } else {
@@ -1791,11 +1817,11 @@ function compilePermitDrawingSetBase(
 
           const viewDir: Vec3 =
             mode === "xz" || mode === "section_x"
-              ? id === "A-06"
+              ? (elevationDirection ? elevationDirection === 'south' : id === "A-06")
                 ? [0, -1, 0]
                 : [0, 1, 0]
               : mode === "yz" || mode === "section_y"
-                ? id === "A-06"
+                ? (elevationDirection ? elevationDirection === 'west' : id === "A-06")
                   ? [-1, 0, 0]
                   : [1, 0, 0]
                 : mode === "iso"
@@ -2522,7 +2548,7 @@ function compilePermitDrawingSetBase(
                 if (start && end && mesh.length) {
                   const dx = end[0] - start[0], dy = end[1] - start[1];
                   const wallLength = Math.hypot(dx, dy);
-                  const facesElevation = isWallFacadeForElevation(o, mode === "xz" ? (id === "A-06" ? "south" : "north") : (id === "A-06" ? "west" : "east"));
+                  const facesElevation = isWallFacadeForElevation(o, facadeDirection);
                   if (!facesElevation || wallLength <= 1e-8) continue;
                   const intervals = viewObjects
                     .filter(({ object }) => (object.object_type === "door_window.door" || object.object_type === "door_window.window") && data(object).wall_id === o.id)
@@ -3253,7 +3279,9 @@ function compilePermitDrawingSetBase(
           }
           text(
             [view.x, 35],
-            id === "A-05"
+            elevationDirection
+              ? ({ north: 'NORTH / ทิศเหนือ', south: 'SOUTH / ทิศใต้', east: 'EAST / ทิศตะวันออก', west: 'WEST / ทิศตะวันตก' } as const)[elevationDirection]
+              : id === "A-05"
               ? mode === "xz" ? "NORTH / ทิศเหนือ" : "EAST / ทิศตะวันออก"
               : id === "A-06"
                 ? mode === "xz" ? "SOUTH / ทิศใต้" : "WEST / ทิศตะวันตก"

@@ -7,6 +7,7 @@ import {
   compilePermitDrawingSet,
   compilePermitPdf,
   PERMIT_INDEX,
+  getPermitViewportPaperFrame,
 } from "../dist/index.js";
 import { PDFDocument, PDFName } from "pdf-lib";
 test("Phase 6: deterministic 20-sheet index and explicit missing data; valid A3 and embedded Thai font", async () => {
@@ -68,6 +69,34 @@ test('paired sheet views use and expose independent saved scale and center setti
   assert.ok(labels.includes('1:100'))
   assert.ok(labels.includes('1:25'))
   assert.deepEqual(sheet.viewport.subviews, [{ scale_denominator: 25, center_mm: [1200, 800] }])
+})
+
+test('sheet composer view layouts compile ordered custom views into printable A3 frames', () => {
+  const project = createEmptyProjectDocument('CUSTOM-SHEET-VIEWS')
+  const viewLayout = ['north', 'rcp', 'isometric', 'plan']
+  const sheet = compilePermitDrawingSet(project, { viewports: {
+    'A-05': {
+      scale_denominator: 100,
+      view_layout: viewLayout,
+      subviews: [{ scale_denominator: 25 }, { scale_denominator: 50 }, { scale_denominator: 200 }],
+    },
+  } }).sheets.find(item => item.id === 'A-05')
+  const labels = sheet.primitives.filter(primitive => primitive.kind === 'text').map(primitive => primitive.text)
+  const frames = viewLayout.map((_, index) => getPermitViewportPaperFrame('A-05', index, viewLayout.length))
+
+  assert.deepEqual(sheet.viewport.view_layout, viewLayout)
+  assert.match(sheet.title, /North Elevation.*RCP.*Isometric.*Plan/)
+  assert.ok(labels.includes('1:100'))
+  assert.ok(labels.includes('1:25'))
+  assert.ok(labels.includes('1:50'))
+  assert.ok(labels.includes('1:200'))
+  for (const frame of frames) {
+    assert.ok(frame.x >= 0 && frame.y >= 0)
+    assert.ok(frame.x + frame.width <= 420)
+    assert.ok(frame.y + frame.height <= 297)
+  }
+  assert.notDeepEqual(frames[0], frames[1])
+  assert.notDeepEqual(frames[1], frames[2])
 })
 
 test("Phase 6: saved sheet settings control the compiler and invalid coordinate lengths reject", () => {

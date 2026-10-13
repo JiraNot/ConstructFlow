@@ -6,6 +6,7 @@ import { WorkbenchNumberInput } from "./WorkbenchNumberInput";
 import { formatLengthMm, parseLengthMm, type DisplayLengthUnit } from "@constructflow/project-model";
 import { OpeningPlanSymbolEditor } from "./OpeningPlanSymbolEditor.js";
 import type { OpeningPlanSymbolLine } from "@constructflow/project-model";
+import type { SavedSheetSubviewport, SheetViewKind } from "@constructflow/project-model";
 import { SheetViewportComposerPreview } from "./SheetViewportComposerPreview.js";
 import type {
   CommandRequest,
@@ -27,6 +28,23 @@ import {
 
 type Payload = Record<string, unknown>;
 const EMPTY_PERMIT_OPTIONS: PermitOptions = Object.freeze({});
+const SHEET_VIEW_OPTIONS: Array<{ value: SheetViewKind; label: string }> = [
+  { value: 'plan', label: 'แปลน' }, { value: 'rcp', label: 'แปลนฝ้า RCP' },
+  { value: 'north', label: 'รูปด้านเหนือ' }, { value: 'south', label: 'รูปด้านใต้' },
+  { value: 'east', label: 'รูปด้านตะวันออก' }, { value: 'west', label: 'รูปด้านตะวันตก' },
+  { value: 'section_x', label: 'รูปตัด X' }, { value: 'section_y', label: 'รูปตัด Y' },
+  { value: 'isometric', label: 'ภาพสามมิติ' },
+];
+function standardSheetViewLayout(sheetId: string): SheetViewKind[] {
+  if (sheetId === 'A-05') return ['north', 'east'];
+  if (sheetId === 'A-06') return ['south', 'west'];
+  if (sheetId === 'A-07') return ['section_x', 'section_y'];
+  if (sheetId === 'A-10') return ['plan', 'rcp'];
+  if (sheetId === 'A-09') return ['plan', 'section_x'];
+  if (sheetId === 'M-01') return ['isometric'];
+  return ['plan'];
+}
+const sheetViewLabel = (kind: SheetViewKind) => SHEET_VIEW_OPTIONS.find(option => option.value === kind)?.label ?? kind;
 const polygon = [
   [0, 0],
   [4000, 0],
@@ -816,10 +834,9 @@ export function ConstructionWorkbench({
     ]),
     [useCrop, setUseCrop] = useState(false),
     [sheetPreview, setSheetPreview] = useState("");
-  const [useSubviewViewport, setUseSubviewViewport] = useState(false);
-  const [subviewScale, setSubviewScale] = useState(100);
-  const [subviewCenter, setSubviewCenter] = useState<[number, number]>([0, 0]);
-  const [useSubviewCenter, setUseSubviewCenter] = useState(false);
+  const [sheetViewLayout, setSheetViewLayout] = useState<SheetViewKind[]>(() => standardSheetViewLayout('A-02'));
+  const [subviewViewports, setSubviewViewports] = useState<SavedSheetSubviewport[]>([]);
+  const [newSheetViewKind, setNewSheetViewKind] = useState<SheetViewKind>('north');
   const [sheetLayoutTemplateName, setSheetLayoutTemplateName] = useState("");
   const [selectedSheetLayoutTemplateId, setSelectedSheetLayoutTemplateId] = useState("");
   const [selectedDimensionId, setSelectedDimensionId] = useState(""),
@@ -882,11 +899,9 @@ export function ConstructionWorkbench({
           number,
         ]) ?? [-5, -5, 5, 5],
       );
-      const subview = saved?.subviews?.[0];
-      setUseSubviewViewport(!!subview);
-      setSubviewScale(subview?.scale_denominator ?? Number(selectedSheet?.scale.split(":")[1] ?? 100));
-      setUseSubviewCenter(!!subview?.center_mm);
-      setSubviewCenter((subview?.center_mm?.map(value => value / 1000) as [number, number]) ?? [0, 0]);
+      const viewLayout = saved?.view_layout ?? standardSheetViewLayout(sheetId);
+      setSheetViewLayout(viewLayout);
+      setSubviewViewports(viewLayout.slice(1).map((_, index) => saved?.subviews?.[index] ?? { scale_denominator: saved?.scale_denominator ?? Number(selectedSheet?.scale.split(":")[1] ?? 100) }));
       setSheetPreview(
         selectedSheet?.svg ?? "",
       );
@@ -912,6 +927,8 @@ export function ConstructionWorkbench({
     const viewport = {
       ...saved,
       scale_denominator: scale,
+      view_layout: sheetViewLayout,
+      ...(subviewViewports.length ? { subviews: subviewViewports } : {}),
       ...((/^(A-02|A-03|S-02|S-03)$/.test(sheetId) || /^(A-02|S-02)-L\d+$/.test(sheetId)) ? { level_id: planLevelId } : {}),
       center_mm,
       ...(useCrop ? { crop_bounds_mm: crop.map(value => value * 1000) as [number, number, number, number] } : {}),
@@ -923,17 +940,14 @@ export function ConstructionWorkbench({
     setSheetPreview(compilePermitDrawingSet(project, options).sheets.find(sheet => sheet.id === sheetId)!.svg);
     return true;
   };
-  const commitSheetSubviewportCenter = (center_mm: [number, number]) => {
+  const commitSheetSubviewportCenter = (index: number, center_mm: [number, number]) => {
     const saved = project.drawing_settings?.viewports[sheetId] ?? { scale_denominator: scale };
-    const subviews = [...(saved.subviews ?? [])];
-    const current = subviews[0] ?? { scale_denominator: subviewScale };
-    const viewport = {
-      ...saved,
-      subviews: [{ ...current, scale_denominator: subviewScale, center_mm }, ...subviews.slice(1)],
-    };
+    const subviews = [...subviewViewports];
+    while (subviews.length <= index) subviews.push({ scale_denominator: scale });
+    subviews[index] = { ...subviews[index], ...subviewViewports[index], center_mm };
+    const viewport = { ...saved, view_layout: sheetViewLayout, subviews };
     if (!execute([{ name: "UpdateSheetViewport", input: { sheet_id: sheetId, viewport } }])) return false;
-    setUseSubviewCenter(true);
-    setSubviewCenter([center_mm[0] / 1000, center_mm[1] / 1000]);
+    setSubviewViewports(subviews);
     const options = { ...viewportOptions, viewports: { ...viewportOptions.viewports, [sheetId]: viewport } };
     const preview = compilePermitDrawingSet(project, options).sheets.find(sheet => sheet.id === sheetId);
     if (preview) setSheetPreview(preview.svg);
@@ -941,18 +955,33 @@ export function ConstructionWorkbench({
   };
   const buildSelectedSheetViewport = () => ({
     scale_denominator: scale,
+    view_layout: sheetViewLayout,
+    ...(subviewViewports.length ? { subviews: subviewViewports } : {}),
     ...((/^(A-02|A-03|S-02|S-03)$/.test(sheetId) || /^(A-02|S-02)-L\d+$/.test(sheetId)) ? { level_id: planLevelId } : {}),
     ...(project.drawing_settings?.viewports[sheetId]?.opening_overrides ? { opening_overrides: project.drawing_settings.viewports[sheetId].opening_overrides } : {}),
     ...(project.drawing_settings?.viewports[sheetId]?.dimension_overrides ? { dimension_overrides: project.drawing_settings.viewports[sheetId].dimension_overrides } : {}),
     ...(useCenter ? { center_mm: center.map(value => value * 1000) as [number, number] } : {}),
     ...(useCrop ? { crop_bounds_mm: crop.map(value => value * 1000) as [number, number, number, number] } : {}),
-    ...((['A-05', 'A-06', 'A-07', 'A-09', 'A-10'].includes(sheetId) && useSubviewViewport) ? {
-      subviews: [{
-        scale_denominator: subviewScale,
-        ...(useSubviewCenter ? { center_mm: subviewCenter.map(value => value * 1000) as [number, number] } : {}),
-      }],
-    } : {}),
   });
+  const setSubviewViewport = (index: number, update: (viewport: SavedSheetSubviewport) => SavedSheetSubviewport) => {
+    setSubviewViewports(current => current.map((viewport, itemIndex) => itemIndex === index ? update(viewport) : viewport));
+  };
+  const moveAdditionalViewport = (index: number, delta: -1 | 1) => {
+    const target = index + delta;
+    if (index < 1 || target < 1 || target >= sheetViewLayout.length) return;
+    setSheetViewLayout(current => { const next = [...current]; [next[index], next[target]] = [next[target], next[index]]; return next; });
+    setSubviewViewports(current => { const next = [...current]; [next[index - 1], next[target - 1]] = [next[target - 1], next[index - 1]]; return next; });
+  };
+  const removeViewport = (index: number) => {
+    if (index < 1) return;
+    setSheetViewLayout(current => current.filter((_, itemIndex) => itemIndex !== index));
+    setSubviewViewports(current => current.filter((_, itemIndex) => itemIndex !== index - 1));
+  };
+  const addViewport = () => {
+    if (sheetViewLayout.length >= 4) return;
+    setSheetViewLayout(current => [...current, newSheetViewKind]);
+    setSubviewViewports(current => [...current, { scale_denominator: scale }]);
+  };
   const sheetLayoutTemplates = project.drawing_settings?.layout_templates ?? [];
   const saveSheetLayoutTemplate = () => {
     if (!sheetLayoutTemplateName.trim()) { setFeedback("กรุณาตั้งชื่อ layout template"); return; }
@@ -1338,20 +1367,55 @@ export function ConstructionWorkbench({
                 project={project}
                 onChange={(v) => setCrop(v as [number, number, number, number])}
               />
-              {['A-05', 'A-06', 'A-07', 'A-09', 'A-10'].includes(sheetId) && <section aria-label="การจัดกรอบ viewport ที่สอง" style={{ marginTop: 14, borderTop: "1px solid #dbe3ed", paddingTop: 10 }}>
-                <h3>Viewport มุมมองที่สอง</h3>
-                <p>ตั้งมาตราส่วนและศูนย์กลางแยกสำหรับรูปด้าน/รูปตัดอีกฝั่งหรือ RCP ที่อยู่บนชีตเดียวกัน</p>
-                <label style={fieldStyle}><input type="checkbox" checked={useSubviewViewport} onChange={event => { setUseSubviewViewport(event.target.checked); if (!event.target.checked) setUseSubviewCenter(false); }} /> กำหนดกรอบมุมมองที่สอง</label>
-                {useSubviewViewport && <>
-                  <label style={fieldStyle}>มาตราส่วนมุมมองที่สอง
-                    <select aria-label="มาตราส่วน viewport ที่สอง" value={subviewScale} onChange={event => setSubviewScale(Number(event.target.value))}>
-                      {[20, 25, 50, 100, 200, 500].map(value => <option key={value} value={value}>1:{value}</option>)}
+              <section aria-label="จัดวาง viewports" style={{ marginTop: 14, borderTop: "1px solid #dbe3ed", paddingTop: 10 }}>
+                <h3>จัดวาง Viewports บนแผ่น</h3>
+                <p>เลือกมุมมอง เพิ่ม/ลบ และเรียงลำดับได้สูงสุด 4 ช่อง กรอบและศูนย์กลางแต่ละช่องบันทึกแยกกัน</p>
+                {sheetViewLayout.map((kind, index) => <section key={`${index}-${kind}`} aria-label={`ตั้งค่า viewport ${index + 1}`} style={{ border: '1px solid #dbe3ed', borderRadius: 4, padding: 8, marginTop: 8 }}>
+                  <strong>Viewport {index + 1}</strong>
+                  <label style={fieldStyle}>มุมมอง
+                    <select aria-label={`ประเภท viewport ${index + 1}`} value={kind} onChange={event => setSheetViewLayout(current => current.map((entry, itemIndex) => itemIndex === index ? event.target.value as SheetViewKind : entry))}>
+                      {SHEET_VIEW_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </label>
-                  <label style={fieldStyle}><input type="checkbox" checked={useSubviewCenter} onChange={event => setUseSubviewCenter(event.target.checked)} /> กำหนดจุดกึ่งกลางมุมมองที่สอง (m)</label>
-                  {useSubviewCenter && <Field name="center" value={subviewCenter} project={project} onChange={value => setSubviewCenter(value as [number, number])} />}
-                </>}
-              </section>}
+                  {index === 0 ? <>
+                    <span>{sheetViewLabel(kind)} · มาตราส่วนหลัก 1:{scale}</span>
+                    {sheetViewLayout.length > 1 && <button type="button" aria-label="ลบ viewport 1" onClick={() => {
+                      const promoted = subviewViewports[0] ?? { scale_denominator: scale };
+                      setScale(promoted.scale_denominator);
+                      setCenter(promoted.center_mm ? [promoted.center_mm[0] / 1000, promoted.center_mm[1] / 1000] : [0, 0]);
+                      setUseCenter(!!promoted.center_mm);
+                      setSheetViewLayout(current => current.slice(1));
+                      setSubviewViewports(current => current.slice(1));
+                    }}>ลบ viewport 1</button>}
+                  </> : (() => {
+                    const view = subviewViewports[index - 1] ?? { scale_denominator: scale };
+                    const centerMm = view.center_mm ?? [0, 0];
+                    return <>
+                      <label style={fieldStyle}>มาตราส่วน viewport {index + 1}
+                        <select aria-label={index === 1 ? 'มาตราส่วน viewport ที่สอง' : `มาตราส่วน viewport ที่ ${index + 1}`} value={view.scale_denominator} onChange={event => setSubviewViewport(index - 1, current => ({ ...current, scale_denominator: Number(event.target.value) }))}>
+                          {[20, 25, 50, 100, 200, 500].map(value => <option key={value} value={value}>1:{value}</option>)}
+                        </select>
+                      </label>
+                      <label style={fieldStyle}><input type="checkbox" aria-label={`กำหนดจุดกึ่งกลาง viewport ${index + 1}`} checked={!!view.center_mm} onChange={event => setSubviewViewport(index - 1, current => {
+                        if (event.target.checked) return { ...current, center_mm: current.center_mm ?? [0, 0] };
+                        const { center_mm: _center, ...rest } = current; return rest;
+                      })} /> กำหนดจุดกึ่งกลาง (m)</label>
+                      {view.center_mm && <Field name={`center viewport ${index + 1}`} value={[centerMm[0] / 1000, centerMm[1] / 1000]} project={project} onChange={value => setSubviewViewport(index - 1, current => ({ ...current, center_mm: (value as [number, number]).map(item => item * 1000) as [number, number] }))} />}
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button type="button" aria-label={`เลื่อน viewport ${index + 1} ขึ้น`} disabled={index <= 1} onClick={() => moveAdditionalViewport(index, -1)}>ขึ้น</button>
+                        <button type="button" aria-label={`เลื่อน viewport ${index + 1} ลง`} disabled={index >= sheetViewLayout.length - 1} onClick={() => moveAdditionalViewport(index, 1)}>ลง</button>
+                        <button type="button" aria-label={`ลบ viewport ${index + 1}`} onClick={() => removeViewport(index)}>ลบ</button>
+                      </div>
+                    </>;
+                  })()}
+                </section>)}
+                <label style={fieldStyle}>เพิ่มมุมมอง
+                  <select aria-label="ชนิด viewport ใหม่" value={newSheetViewKind} onChange={event => setNewSheetViewKind(event.target.value as SheetViewKind)}>
+                    {SHEET_VIEW_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+                <button type="button" disabled={sheetViewLayout.length >= 4} onClick={addViewport}>เพิ่ม Viewport</button>
+              </section>
               {(/^A-(02|03)(-L\d+)?$/.test(sheetId)) && <section style={{ marginTop: 18, borderTop: "1px solid #dbe3ed", paddingTop: 12 }}>
                 <h3>ตำแหน่งมิติอัตโนมัติ</h3>
                 <p>เลื่อนตำแหน่งเส้นและข้อความเป็นมม. ค่าระยะยังคำนวณจากโมเดลเสมอ</p>
@@ -1492,11 +1556,16 @@ export function ConstructionWorkbench({
                 centerMm={[center[0] * 1000, center[1] * 1000]}
                 scaleDenominator={scale}
                 onCommitCenter={commitSheetViewportCenter}
-                secondaryFrame={['A-05', 'A-06', 'A-07', 'A-09', 'A-10'].includes(sheetId) ? getPermitViewportPaperFrame(sheetId, 1, 2) : undefined}
-                secondaryManualCenter={useSubviewViewport && useSubviewCenter}
-                secondaryCenterMm={[subviewCenter[0] * 1000, subviewCenter[1] * 1000]}
-                secondaryScaleDenominator={subviewScale}
-                onCommitSecondaryCenter={commitSheetSubviewportCenter}
+                additionalViewports={sheetViewLayout.slice(1).map((_, index) => {
+                  const viewport = subviewViewports[index] ?? { scale_denominator: scale };
+                  return {
+                    frame: getPermitViewportPaperFrame(sheetId, index + 1, sheetViewLayout.length),
+                    manualCenter: !!viewport.center_mm,
+                    centerMm: viewport.center_mm ?? [0, 0],
+                    scaleDenominator: viewport.scale_denominator,
+                  };
+                })}
+                onCommitAdditionalCenter={commitSheetSubviewportCenter}
               />
             </>
           )}

@@ -512,6 +512,7 @@ test("sheet layout templates persist reusable viewport settings and batch-apply 
     viewports: {
       "A-02": { scale_denominator: 50, level_id: session.project.levels[0].id, center_mm: [5000, 3000] },
       "S-02": { scale_denominator: 50, level_id: session.project.levels[0].id, crop_bounds_mm: [0, 0, 12000, 9000] },
+      "A-05": { scale_denominator: 100, view_layout: ["north", "rcp", "west"], subviews: [{ scale_denominator: 50 }, { scale_denominator: 25 }] },
     },
   };
   const saved = session.execute([{ name: "SaveSheetLayoutTemplate", input: { template } }]);
@@ -522,6 +523,8 @@ test("sheet layout templates persist reusable viewport settings and batch-apply 
   })));
   assert.equal(applied.status, "success");
   assert.equal(applied.updatedProject.drawing_settings.viewports["A-02"].scale_denominator, 50);
+  assert.deepEqual(applied.updatedProject.drawing_settings.viewports["A-05"].view_layout, ["north", "rcp", "west"]);
+  assert.deepEqual(applied.updatedProject.drawing_settings.viewports["A-05"].subviews, [{ scale_denominator: 50 }, { scale_denominator: 25 }]);
   assert.deepEqual(session.undo().drawing_settings.viewports, {});
   assert.deepEqual(session.redo().drawing_settings.viewports["S-02"].crop_bounds_mm, [0, 0, 12000, 9000]);
   assert.equal(session.execute([{ name: "SaveSheetLayoutTemplate", input: { template: { ...template, id: "duplicate", name: "บ้านสองชั้น" } } }]).status, "failed");

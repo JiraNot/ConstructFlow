@@ -25,8 +25,11 @@ export interface SavedSheetSubviewport {
   center_mm?: [number, number]
   crop_bounds_mm?: [number, number, number, number]
 }
+export type SheetViewKind = 'plan' | 'rcp' | 'north' | 'south' | 'east' | 'west' | 'section_x' | 'section_y' | 'isometric'
 export interface SavedSheetViewport {
   scale_denominator: number;
+  /** Ordered view composition for interactive sheet layouts. Omitted means the sheet's standard view set. */
+  view_layout?: SheetViewKind[];
   /** Selects the story shown by a level plan sheet. */
   level_id?: string;
   center_mm?: [number, number];
@@ -88,9 +91,11 @@ export function validateDrawingSettings(
       throw new Error("Invalid sheet crop");
     if (v.section_cut_mm !== undefined && !Number.isFinite(v.section_cut_mm))
       throw new Error("Invalid section cut");
+    if (v.view_layout !== undefined && (!Array.isArray(v.view_layout) || v.view_layout.length < 1 || v.view_layout.length > 4 || v.view_layout.some(kind => !['plan', 'rcp', 'north', 'south', 'east', 'west', 'section_x', 'section_y', 'isometric'].includes(kind))))
+      throw new Error('Invalid sheet view layout');
     if (v.subviews !== undefined) {
-      if (!Array.isArray(v.subviews) || v.subviews.length < 1 || v.subviews.length > 3)
-        throw new Error('Sheet subviews must contain 1 to 3 viewport settings')
+      if (!Array.isArray(v.subviews) || v.subviews.length > 3)
+        throw new Error('Sheet subviews must contain 0 to 3 viewport settings')
       for (const subview of v.subviews) {
         if (!subview || ![20, 25, 50, 100, 200, 500].includes(subview.scale_denominator))
           throw new Error('Invalid sheet subview scale')

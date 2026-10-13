@@ -85,6 +85,8 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       if (current.some(existing => existing.id !== template.id && existing.name.trim().toLowerCase() === template.name.trim().toLowerCase())) throw new Error('Sheet layout template names must be unique')
       const viewports = Object.fromEntries(Object.entries(template.viewports ?? {}).map(([sheetId, viewport]) => [sheetId, {
         scale_denominator: viewport.scale_denominator,
+        ...(viewport.view_layout !== undefined ? { view_layout: [...viewport.view_layout] } : {}),
+        ...(viewport.subviews !== undefined ? { subviews: structuredClone(viewport.subviews) } : {}),
         ...(viewport.level_id !== undefined ? { level_id: viewport.level_id } : {}),
         ...(viewport.center_mm !== undefined ? { center_mm: [...viewport.center_mm] as [number, number] } : {}),
         ...(viewport.crop_bounds_mm !== undefined ? { crop_bounds_mm: [...viewport.crop_bounds_mm] as [number, number, number, number] } : {}),
