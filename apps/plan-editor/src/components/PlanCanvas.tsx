@@ -15,10 +15,9 @@ import {
   isWindowObject,
   DoorHanding,
   PlacementReference,
-  parseLengthMm,
   DisplayLengthUnit,
 } from '@constructflow/project-model'
-import { projectPointToWallOffsetMm, stairFromRun } from '@constructflow/architecture-engine'
+import { stairFromRun } from '@constructflow/architecture-engine'
 import { polygonInteriorPoint } from '@constructflow/geometry-kernel'
 import { getEditableRoofRidge } from '@constructflow/roof-engine'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
@@ -31,12 +30,12 @@ import {
   worldToScreen,
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
-import { SnapMode, SnapSpatialIndex, snapPoint, snapToWallHost, type LinearReference, type SnapResult, type WallHostSnapResult, snapOpeningOffsetBimAware } from '@constructflow/snapping-engine'
+import { SnapMode, SnapSpatialIndex, snapPoint, snapToWallHost, type LinearReference, type SnapResult, snapOpeningOffsetBimAware } from '@constructflow/snapping-engine'
 import { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { CommandRequest } from '@constructflow/command-schema'
 import type { DirectManipulationPreviewResult, PlanDragGesture } from '../directManipulation.mjs'
-import { isPolygonInteraction, isTwoPointInteraction, usesPlacementDimensions } from '../app/toolInteractionRegistry.mjs'
+import { isPolygonInteraction, isTwoPointInteraction } from '../app/toolInteractionRegistry.mjs'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { PlanCanvasObjectContextMenu } from './PlanCanvasObjectContextMenu.js'
 import { resolvePlanCanvasPointerSnap } from './resolvePlanCanvasPointerSnap.js'
@@ -59,6 +58,7 @@ import { usePlanCanvasPlacementDimensions } from './usePlanCanvasPlacementDimens
 import { usePlanCanvasManipulationDimensions } from './usePlanCanvasManipulationDimensions.js'
 import { PlanCanvasInteractionOverlays } from './PlanCanvasInteractionOverlays.js'
 import { usePlanCanvasToolInteraction } from './usePlanCanvasToolInteraction.js'
+import { usePlanCanvasOpeningPlacementDimensions } from './usePlanCanvasOpeningPlacementDimensions.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -126,7 +126,7 @@ export interface PlanCanvasProps {
 
 import {
   cabinetFootprintPoints,
-  gridLineEndpoints, findTemporaryDimensionRefs, openingDimensionRefs,
+  gridLineEndpoints,
   drawTemporaryDimensions, drawTapeMeasure,
   type WallVerticalReference,
 } from './PlanCanvasGeometry.js'
@@ -240,6 +240,25 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const applyPlacementDimensions = (point: [number, number], refs: { refX?: number; refY?: number }, rawPoint: [number, number] = point): [number, number] =>
     applyPlanCanvasPlacementDimensions(point, refs, rawPoint, { dimensionInputX, dimensionInputY, dimensionAnchorX, dimensionAnchorY, displayUnit })
 
+  const { applyOpeningDistance } = usePlanCanvasOpeningPlacementDimensions({
+    project,
+    planProject,
+    activeTool,
+    activeDoorTypeMark,
+    activeWindowTypeMark,
+    activeSnap,
+    setActiveSnap,
+    activeWallSnap,
+    setActiveWallSnap,
+    dimensionReferenceMode,
+    dimensionInputX,
+    dimensionInputY,
+    dimensionAnchorX,
+    dimensionAnchorY,
+    displayUnit,
+    applyPlacementDimensions,
+  })
+
   const constrainGridCopyToParallelOffset = (point: [number, number], source: Parameters<typeof gridLineEndpoints>[0]): [number, number] => {
     return constrainPlanCanvasGridCopyToParallelOffset(point, source, gridLineEndpoints)
   }
@@ -249,42 +268,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     // Keep the entered distance and re-anchor it to the chosen center/edge reference.
     setDimensionAnchorX(null); setDimensionAnchorY(null)
   }
-
-  const applyOpeningDistance = (wallSnap: WallHostSnapResult, rawPoint: [number, number], openingWidthMm: number): WallHostSnapResult => {
-    const refs = openingDimensionRefs(wallSnap.point_mm, planProject, wallSnap, dimensionReferenceMode)
-    const point: [number, number] = [...wallSnap.point_mm]
-    const valueText = refs.axis === 'x' ? dimensionInputX : dimensionInputY
-    const anchor = refs.axis === 'x' ? dimensionAnchorX ?? refs.refX : dimensionAnchorY ?? refs.refY
-    const value = parseLengthMm(valueText, displayUnit)
-    if (valueText.trim() && anchor !== undefined && value !== null && value >= 0) {
-      const rawCoordinate = refs.axis === 'x' ? rawPoint[0] : rawPoint[1]
-      const direction = rawCoordinate < anchor ? -1 : 1
-      const center = anchor + direction * (value + openingWidthMm / 2)
-      if (refs.axis === 'x') point[0] = Math.round(center)
-      else point[1] = Math.round(center)
-    }
-    const offset = projectPointToWallOffsetMm(point, wallSnap.wall_start_mm, wallSnap.wall_end_mm, openingWidthMm)
-    if (offset === undefined) return wallSnap
-    const dx = wallSnap.wall_end_mm[0] - wallSnap.wall_start_mm[0], dy = wallSnap.wall_end_mm[1] - wallSnap.wall_start_mm[1]
-    const length = Math.hypot(dx, dy)
-    const adjustedPoint: [number, number] = [Math.round(wallSnap.wall_start_mm[0] + dx / length * offset), Math.round(wallSnap.wall_start_mm[1] + dy / length * offset)]
-    const axis = refs.axis
-    return { ...wallSnap, point_mm: adjustedPoint, offset_along_wall_mm: Math.round(offset), description: `${wallSnap.description}${point[axis === 'x' ? 0 : 1] !== wallSnap.point_mm[axis === 'x' ? 0 : 1] ? ' · ระยะกำหนดเอง' : ''}` }
-  }
-  useEffect(() => {
-    if (!activeSnap || !usesPlacementDimensions(activeTool)) return
-    if ((activeTool === 'door' || activeTool === 'window') && activeWallSnap) {
-      const typeId = activeTool === 'door' ? 'door_window.door' : 'door_window.window'
-      const mark = activeTool === 'door' ? activeDoorTypeMark : activeWindowTypeMark
-      const type = project.types.find(candidate => candidate.object_type === typeId && candidate.name.toLowerCase() === mark.toLowerCase())
-      const width = Number(type?.parameters?.width_mm ?? (activeTool === 'door' ? 800 : 1200))
-      const adjusted = applyOpeningDistance(activeWallSnap, activeSnap.point_mm, width)
-      setActiveWallSnap(adjusted); setActiveSnap({ ...activeSnap, point_mm: adjusted.point_mm, description: adjusted.description })
-    } else {
-      const point = applyPlacementDimensions(activeSnap.point_mm, findTemporaryDimensionRefs(activeSnap.point_mm, planProject, undefined, dimensionReferenceMode), activeSnap.point_mm)
-      if (point[0] !== activeSnap.point_mm[0] || point[1] !== activeSnap.point_mm[1]) setActiveSnap({ ...activeSnap, point_mm: point, kind: 'free', target_id: undefined, description: `${activeSnap.description} · ระยะกำหนดเอง` })
-    }
-  }, [dimensionInputX, dimensionInputY, dimensionAnchorX, dimensionAnchorY, dimensionReferenceMode, activeTool])
 
   const resolveReferencePath = useCallback((start: [number, number], end: [number, number], widthMm: number): [[number, number], [number, number]] => {
     return resolvePlanCanvasReferencePath(start, end, widthMm, placementReference)
