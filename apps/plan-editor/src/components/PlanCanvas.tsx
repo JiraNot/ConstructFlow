@@ -5,10 +5,7 @@ import {
   DoorModuleData,
   WindowModuleData,
   WallModuleData,
-  CabinetModuleData,
   StairModuleData,
-  PipeRouteModuleData,
-  MouldingModuleData,
   isColumnObject,
   isFoundationObject,
   isGridObject,
@@ -65,6 +62,8 @@ import { drawPlanCanvasBaseScene } from './drawPlanCanvasBaseScene.js'
 import { resolvePlanCanvasLineSnap } from '../app/placementLineSnap.mjs'
 import { updatePlanCanvasPreference, type PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import { hasPendingToolStep, resolveEscapeAction, resolveToolInteractionStatus } from '../app/toolInteractionStatus.mjs'
+import { handlePlanCanvasSelectionPointerDown } from './handlePlanCanvasSelectionPointerDown.js'
+import type { PlanCanvasDraggingObject } from './planCanvasInteractionTypes.js'
 
 interface PlanCanvasProps {
   project: ProjectDocument
@@ -464,33 +463,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   currentViewportRef.current = viewport
 
   // Direct-manipulation state for objects whose geometry can move in plan.
-  const [draggingObject, setDraggingObject] = useState<{
-    id: string
-    kind: 'column' | 'wall' | 'opening' | 'opening-center' | 'grid' | 'column-corner' | 'foundation-corner' | 'wall-endpoint' | 'beam-endpoint' | 'grid-endpoint' | 'separator-endpoint' | 'pipe-endpoint' | 'pipe-node' | 'moulding-endpoint' | 'cabinet-rotation' | 'opening-edge' | 'polygon-vertex' | 'slab-edge' | 'slab-slope' | 'roof-ridge' | 'roof-seam' | 'object-move' | 'group-move' | 'stair-width' | 'stair-run'
-    startWorldMm: [number, number]
-    startScreenPx: [number, number]
-    endpointIndex?: number
-    roofSeamEdgeIndices?: [number, number]
-    roofSeamGripMm?: [number, number]
-    startPointMm?: [number, number]
-    endPointMm?: [number, number]
-    boundaryPointsMm?: [number, number][]
-    edgeStartMm?: [number, number]
-    edgeNormalMm?: [number, number]
-    centerMm?: [number, number]
-    sectionMm?: [number, number]
-    rotationDeg?: number
-    objectIds?: string[]
-    openingCenterOffsetMm?: number
-    hostStartMm?: [number, number]
-    hostEndMm?: [number, number]
-    openingWidthMm?: number
-    gridStartMm?: [number, number]
-    gridEndMm?: [number, number]
-    pipeRouteData?: PipeRouteModuleData
-    mouldingData?: MouldingModuleData
-    cabinetData?: CabinetModuleData
-  } | null>(null)
+  const [draggingObject, setDraggingObject] = useState<PlanCanvasDraggingObject | null>(null)
 
   const clearPointerDrag = useCallback(() => {
     manualDragPointRef.current = null
@@ -864,7 +837,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   }
 
   // Pointer down
-  const handlePointerDown = (e: React.PointerEvent) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return
     const screenX = e.clientX - rect.left
@@ -918,109 +891,31 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         }
         e.currentTarget.setPointerCapture(e.pointerId)
       } else if (activeTool === 'select') {
-        const editHandle = findEditHandle([screenX, screenY])
-        if (editHandle) {
-          const editObject = planProject.objects[editHandle.id]
-          const editData = editObject?.module_data as Record<string, unknown> | undefined
-          const editSize = editData && editObject?.object_type === 'structure.column'
-            ? editData.section_mm as [number, number]
-            : editData && editObject?.object_type === 'structure.foundation' ? editData.size_mm as [number, number] : undefined
-          setResizeDimensionWidth(editSize ? formatLengthMm(Number(editSize[0]), displayUnit) : editHandle.kind === 'opening-edge' ? formatLengthMm(Number(editHandle.openingWidthMm), displayUnit) : '')
-          setResizeDimensionHeight(editSize ? formatLengthMm(Number(editSize[1]), displayUnit) : '')
-          setResizeDimensionLength(editHandle.startPointMm && editHandle.endPointMm
-            ? formatLengthMm(Math.hypot(editHandle.endPointMm[0] - editHandle.startPointMm[0], editHandle.endPointMm[1] - editHandle.startPointMm[1]), displayUnit)
-            : '')
-          setDraggingObject({ id: editHandle.id, kind: editHandle.kind, endpointIndex: editHandle.endpointIndex,
-            startPointMm: editHandle.startPointMm, endPointMm: editHandle.endPointMm,
-            boundaryPointsMm: editHandle.boundaryPointsMm,
-            edgeStartMm: editHandle.edgeStartMm,
-            edgeNormalMm: editHandle.edgeNormalMm,
-            roofSeamEdgeIndices: editHandle.roofSeamEdgeIndices,
-            roofSeamGripMm: editHandle.roofSeamGripMm,
-            pipeRouteData: editHandle.pipeRouteData, mouldingData: editHandle.mouldingData,
-            cabinetData: editHandle.cabinetData,
-            centerMm: editHandle.centerMm, sectionMm: editHandle.sectionMm, rotationDeg: editHandle.rotationDeg,
-            hostStartMm: editHandle.hostStartMm, hostEndMm: editHandle.hostEndMm,
-            openingWidthMm: editHandle.openingWidthMm, openingCenterOffsetMm: editHandle.openingCenterOffsetMm,
-            startWorldMm: rawWorld, startScreenPx: [screenX, screenY] })
-          setManipulationPreview(null)
-          lastPreviewValidationRef.current = { at: 0, valid: true }
-          e.currentTarget.setPointerCapture(e.pointerId)
-        } else {
-        const candidates = findCandidates(rawWorld, e.shiftKey)
-        setCandidates(candidates)
-        const hitId = e.shiftKey ? findHitObject(rawWorld, true) : candidates.includes(hoveredId ?? '') ? hoveredId : candidates[0] ?? null
-        setHoveredId(hitId)
-        if (hitId && e.shiftKey) {
-          const next = selectedIds.includes(hitId) ? selectedIds.filter(id => id !== hitId) : [...selectedIds, hitId]
-          onSelectionChange?.(next, next.at(-1) ?? null)
-          onSelectObject(next.at(-1) ?? null)
-        } else if (hitId) {
-          const retainGroup = selectedIds.includes(hitId) && selectedIds.length > 1
-          if (!retainGroup) {
-            onSelectionChange?.([hitId], hitId)
-            onSelectObject(hitId)
-          }
-        } else {
-          selectionStartRef.current = [screenX, screenY]
-          selectionAdditiveRef.current = e.shiftKey
-          e.currentTarget.setPointerCapture(e.pointerId)
-        }
-
-        if (hitId && !e.shiftKey) {
-          const object = project.objects[hitId]
-          const startScreenPx: [number, number] = [screenX, screenY]
-          const retainGroup = selectedIds.includes(hitId) && selectedIds.length > 1
-          if (retainGroup) {
-            setDraggingObject({ id: hitId, kind: 'group-move', objectIds: [...selectedIds], startWorldMm: rawWorld, startScreenPx })
-            setManipulationPreview(null)
-            lastPreviewValidationRef.current = { at: 0, valid: true }
-            e.currentTarget.setPointerCapture(e.pointerId)
-          } else if (isColumnObject(object)) {
-            setDraggingObject({ id: hitId, kind: 'column', startWorldMm: rawWorld, startScreenPx })
-            setManipulationPreview(null)
-            lastPreviewValidationRef.current = { at: 0, valid: true }
-            e.currentTarget.setPointerCapture(e.pointerId)
-          } else if (isWallObject(object)) {
-            setDraggingObject({
-              id: hitId,
-              kind: 'wall',
-              startWorldMm: rawWorld,
-              startScreenPx,
-            })
-            setManipulationPreview(null)
-            lastPreviewValidationRef.current = { at: 0, valid: true }
-            e.currentTarget.setPointerCapture(e.pointerId)
-          } else if (isGridObject(object) && !object.module_data.system_id) {
-            const [gridStartMm, gridEndMm] = gridLineEndpoints(object)
-            setDraggingObject({ id: hitId, kind: 'grid', startWorldMm: rawWorld, startScreenPx, gridStartMm, gridEndMm })
-            setManipulationPreview(null)
-            e.currentTarget.setPointerCapture(e.pointerId)
-          } else if (isDoorObject(object) || isWindowObject(object)) {
-            const host = project.objects[object.module_data.wall_id]
-            if (host && isWallObject(host) && Number.isFinite(object.module_data.width_mm) && object.module_data.width_mm > 0) {
-              setDraggingObject({
-                id: hitId,
-                kind: 'opening-center',
-                startWorldMm: rawWorld,
-                startScreenPx,
-                hostStartMm: [host.module_data.start_point_mm[0], host.module_data.start_point_mm[1]],
-                hostEndMm: [host.module_data.end_point_mm[0], host.module_data.end_point_mm[1]],
-                openingWidthMm: object.module_data.width_mm,
-                openingCenterOffsetMm: object.module_data.offset_along_wall_mm,
-              })
-              setManipulationPreview(null)
-              lastPreviewValidationRef.current = { at: 0, valid: true }
-              e.currentTarget.setPointerCapture(e.pointerId)
-            }
-          } else {
-            setDraggingObject({ id: hitId, kind: 'object-move', startWorldMm: rawWorld, startScreenPx })
-            setManipulationPreview(null)
-            lastPreviewValidationRef.current = { at: 0, valid: true }
-            e.currentTarget.setPointerCapture(e.pointerId)
-          }
-        }
-        }
+        handlePlanCanvasSelectionPointerDown({
+          event: e,
+          screenPoint: [screenX, screenY],
+          rawWorld,
+          displayUnit,
+          planProject,
+          project,
+          selectedIds,
+          hoveredId,
+          findEditHandle,
+          findCandidates,
+          findHitObject,
+          setCandidates,
+          setHoveredId,
+          setDraggingObject,
+          setManipulationPreview,
+          setResizeDimensionWidth,
+          setResizeDimensionHeight,
+          setResizeDimensionLength,
+          selectionStartRef,
+          selectionAdditiveRef,
+          lastPreviewValidationRef,
+          onSelectionChange,
+          onSelectObject,
+        })
       } else if (activeTool === 'column') {
         onCommitColumn(snap.point_mm)
         clearDimensionOverrides()
