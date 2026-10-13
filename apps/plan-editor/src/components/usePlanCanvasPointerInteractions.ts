@@ -1,6 +1,8 @@
 import type { RefObject } from 'react'
 import type { DisplayLengthUnit, ProjectDocument } from '@constructflow/project-model'
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
+import { resolvePlanCanvasPointerSnap } from './resolvePlanCanvasPointerSnap.js'
+import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import type { ViewportState } from '../viewport/viewportTransform.js'
 import type { PlanCanvasProps } from './PlanCanvas.js'
 import { usePlanCanvasPointerHandlers } from './usePlanCanvasPointerHandlers.js'
@@ -51,7 +53,11 @@ interface UsePlanCanvasPointerInteractionsOptions {
   resizeDimensionWidth: (value: string) => void
   resizeDimensionHeight: (value: string) => void
   resizeDimensionLength: (value: string) => void
-  resolvePointerSnap: (rawWorld: [number, number], ctrlKey: boolean, shiftKey: boolean) => { snap: SnapResult; wallSnap: WallHostSnapResult | null }
+  dimensionReferenceMode: PlanCanvasPreferences['dimensionReferenceMode']
+  snapPlanPoint: ReturnType<typeof usePlanCanvasSnapping>['snapPlanPoint']
+  resolveLineSnap: (snap: SnapResult, pointerPoint: [number, number], start: [number, number], lockAxis: boolean, reference?: import('@constructflow/snapping-engine').LinearReference) => SnapResult
+  applyPlacementDimensions: (point: [number, number], refs: { refX?: number; refY?: number }, rawPoint?: [number, number]) => [number, number]
+  constrainGridCopyToParallelOffset: (point: [number, number], source: Parameters<typeof import('./PlanCanvasGeometry.js').gridLineEndpoints>[0]) => [number, number]
   snapPlanWallHost: ReturnType<typeof usePlanCanvasSnapping>['snapPlanWallHost']
   applyOpeningDistance: (wallSnap: WallHostSnapResult, rawPoint: [number, number], widthMm: number) => WallHostSnapResult
   resolveReferencePath: (start: [number, number], end: [number, number], widthMm: number) => [[number, number], [number, number]]
@@ -66,7 +72,9 @@ export function usePlanCanvasPointerInteractions({
   placementReference, doorHanding, draggingObject, gridCopySourceId, hoveredId,
   pointerState, placement, picking, dragDimensions, manipulation,
   resizeDimensionWidth, resizeDimensionHeight, resizeDimensionLength,
-  resolvePointerSnap, snapPlanWallHost, applyOpeningDistance, resolveReferencePath, findEditHandle, callbacks,
+  dimensionReferenceMode, snapPlanPoint, resolveLineSnap, applyPlacementDimensions,
+  constrainGridCopyToParallelOffset, snapPlanWallHost, applyOpeningDistance, resolveReferencePath,
+  findEditHandle, callbacks,
 }: UsePlanCanvasPointerInteractionsOptions) {
   const {
     isPanning, setIsPanning, setObjectContextMenu, setSelectionBox,
@@ -76,6 +84,21 @@ export function usePlanCanvasPointerInteractions({
     selectionAdditiveRef,
   } = pointerState
   const { setHoveredId, setCandidates, findHitObject, findCandidates } = picking
+  const resolvePointerSnap = (rawWorld: [number, number], ctrlKey: boolean, shiftKey: boolean) => resolvePlanCanvasPointerSnap({
+    activeTool, rawWorld, ctrlKey, shiftKey, project, planProject,
+    activeDoorTypeMark, activeWindowTypeMark, draggingObjectId: draggingObject?.id, gridCopySourceId,
+    dimensionReferenceMode,
+    lineState: {
+      beamStartNode: placement.beamStartNode,
+      wallStartNode: placement.wallStartNode,
+      stairStartPoint: placement.stairStartPoint,
+      gridStartPoint: placement.gridStartPoint,
+      roomSeparatorStart: placement.roomSeparatorStart,
+      slabBoundary: placement.slabBoundary,
+    },
+    snapPlanPoint, snapPlanWallHost, applyOpeningDistance, resolveLineSnap,
+    applyPlacementDimensions, constrainGridCopyToParallelOffset,
+  })
 
   return usePlanCanvasPointerHandlers({
     canvasRef,

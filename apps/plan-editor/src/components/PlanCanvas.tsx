@@ -32,7 +32,6 @@ import type { ViewportState } from '../viewport/viewportTransform.js'
 import type { DirectManipulationPreviewResult } from '../directManipulation.mjs'
 import { isPolygonInteraction, isTwoPointInteraction } from '../app/toolInteractionRegistry.mjs'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
-import { resolvePlanCanvasPointerSnap } from './resolvePlanCanvasPointerSnap.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
 import { updatePlanCanvasPreference, type PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
@@ -426,15 +425,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     slabBoundary,
   })
 
-  const resolvePointerSnap = (rawWorld: [number, number], ctrlKey: boolean, shiftKey: boolean) => resolvePlanCanvasPointerSnap({
-    activeTool, rawWorld, ctrlKey, shiftKey, project, planProject,
-    activeDoorTypeMark, activeWindowTypeMark, draggingObjectId: draggingObject?.id, gridCopySourceId,
-    dimensionReferenceMode,
-    lineState: { beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary },
-    snapPlanPoint, snapPlanWallHost, applyOpeningDistance, resolveLineSnap: constrainLineSnap,
-    applyPlacementDimensions, constrainGridCopyToParallelOffset,
-  })
-
   const { handlePointerMove, handlePointerDown, handlePointerUp } = usePlanCanvasPointerInteractions({
     canvasRef,
     activeTool, viewport, setViewport, project, planProject, selectedId, selectedIds, displayUnit,
@@ -445,7 +435,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     resizeDimensionWidth: setResizeDimensionWidth,
     resizeDimensionHeight: setResizeDimensionHeight,
     resizeDimensionLength: setResizeDimensionLength,
-    resolvePointerSnap, snapPlanWallHost, applyOpeningDistance, resolveReferencePath, findEditHandle,
+    dimensionReferenceMode, snapPlanPoint, resolveLineSnap: constrainLineSnap,
+    applyPlacementDimensions, constrainGridCopyToParallelOffset,
+    snapPlanWallHost, applyOpeningDistance, resolveReferencePath, findEditHandle,
     callbacks: {
       onCopyGrid, onCommitColumn, onCommitFoundation, onCommitDoor, onCommitWindow, onCommitFixture,
       onSelectionChange, onSelectObject, onCommitBeam, onCommitWall, onCommitRoomSeparator, onCommitPipeRoute,
