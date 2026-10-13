@@ -26,6 +26,7 @@ import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/repres
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import { PlanCanvasAuthoringControls } from './PlanCanvasAuthoringControls.js'
 import { commitPlanCanvasLinePlacementPoint, type BeamPlacementStart, type WallPlacementStart } from './commitPlanCanvasLinePlacementPoint.js'
+import { commitPlanCanvasPointPlacement } from './commitPlanCanvasPointPlacement.js'
 import { handlePlanCanvasAuthoringPointerMove } from './handlePlanCanvasAuthoringPointerMove.js'
 import { usePlanCanvasPlacementKeyboard } from './usePlanCanvasPlacementKeyboard.js'
 import { TOOL_FAMILIES } from './catalogPresentation.js'
@@ -914,32 +915,29 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           onSelectionChange,
           onSelectObject,
         })
-      } else if (activeTool === 'column') {
-        onCommitColumn(snap.point_mm)
-        clearDimensionOverrides()
-      } else if (activeTool === 'foundation') {
-        const colHit = Object.values(planProject.objects).find((o) => {
-          if (!isColumnObject(o)) return false
-          const [cx, cy] = o.module_data.location_mm
-          const [cw, cd] = o.module_data.section_mm
-          const tol = Math.max(cw, cd, 400)
-          return Math.abs(rawWorld[0] - cx) <= tol && Math.abs(rawWorld[1] - cy) <= tol
+      } else if (activeTool === 'column' || activeTool === 'foundation' || activeTool === 'door' || activeTool === 'window' || activeTool === 'fixture') {
+        commitPlanCanvasPointPlacement({
+          activeTool,
+          rawWorld,
+          snap,
+          project,
+          planProject,
+          activeDoorTypeMark,
+          activeWindowTypeMark,
+          activeWallSnap,
+          doorHanding,
+          fixtureKind,
+          snapPlanWallHost,
+          applyOpeningDistance,
+          clearDimensionOverrides,
+          onCommitColumn,
+          onCommitFoundation,
+          onCommitDoor,
+          onCommitWindow,
+          onCommitFixture,
+          onSelectionChange,
+          onSelectObject,
         })
-
-        if (colHit) {
-          const existingFnd = Object.values(planProject.objects).find(
-            (o) => isFoundationObject(o) && (o.module_data.supported_column_id === colHit.id || o.host_refs?.includes(colHit.id))
-          )
-          if (existingFnd) {
-            onSelectionChange?.([existingFnd.id], existingFnd.id)
-            onSelectObject(existingFnd.id)
-          } else {
-            onCommitFoundation({ columnId: colHit.id })
-          }
-        } else {
-          onCommitFoundation({ location_mm: snap.point_mm })
-        }
-        clearDimensionOverrides()
       } else if (activeTool === 'beam' || activeTool === 'wall') {
         commitPlanCanvasLinePlacementPoint({
           activeTool,
@@ -960,37 +958,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           onCommitBeam,
           onCommitWall,
         })
-      } else if (activeTool === 'door') {
-        const typeDef = project.types?.find(
-          (t) => t.object_type === 'door_window.door' && t.name.toLowerCase() === activeDoorTypeMark.toLowerCase()
-        )
-        const openingW = typeDef?.parameters?.width_mm || 800
-        const hostSnap = snapPlanWallHost(rawWorld, openingW) || activeWallSnap
-        const wallSnap = hostSnap ? applyOpeningDistance(hostSnap, rawWorld, openingW) : null
-        if (wallSnap) {
-          onCommitDoor(
-            wallSnap.wall_id,
-            wallSnap.point_mm,
-            wallSnap.offset_along_wall_mm,
-            doorHanding
-          )
-          clearDimensionOverrides()
-        }
-      } else if (activeTool === 'window') {
-        const typeDef = project.types?.find(
-          (t) => t.object_type === 'door_window.window' && t.name.toLowerCase() === activeWindowTypeMark.toLowerCase()
-        )
-        const openingW = typeDef?.parameters?.width_mm || 1200
-        const hostSnap = snapPlanWallHost(rawWorld, openingW) || activeWallSnap
-        const wallSnap = hostSnap ? applyOpeningDistance(hostSnap, rawWorld, openingW) : null
-        if (wallSnap) {
-          onCommitWindow(
-            wallSnap.wall_id,
-            wallSnap.point_mm,
-            wallSnap.offset_along_wall_mm
-          )
-          clearDimensionOverrides()
-        }
       } else if (isTwoPointInteraction(activeTool) && ['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool)) {
         if (!roomSeparatorStart) { setRoomSeparatorStart(snap.point_mm); setDrawLengthMeters(''); setDrawAngleDegrees('') }
         else {
@@ -1000,9 +967,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           else if (activeTool === 'moulding') onCommitMoulding?.(roomSeparatorStart, snap.point_mm)
           setRoomSeparatorStart(null); setDrawLengthMeters(''); setDrawAngleDegrees('')
         }
-        clearDimensionOverrides()
-      } else if (activeTool === 'fixture') {
-        onCommitFixture?.(snap.point_mm, fixtureKind)
         clearDimensionOverrides()
       } else if (isPolygonInteraction(activeTool)) {
         commitPlanCanvasPolygonPoint({
