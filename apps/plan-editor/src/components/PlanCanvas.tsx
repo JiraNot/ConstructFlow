@@ -69,6 +69,7 @@ import type { PlanCanvasDraggingObject } from './planCanvasInteractionTypes.js'
 import { PlanCanvasInteractionHints } from './PlanCanvasInteractionHints.js'
 import { PlanCanvasPlacementDimensions } from './PlanCanvasPlacementDimensions.js'
 import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParallelOffset, constrainPlanCanvasLineSnap, resolvePlanCanvasReferencePath } from './planCanvasPlacementConstraints.mjs'
+import { resolvePlanCanvasPickCandidates } from './resolvePlanCanvasPickCandidates.mjs'
 
 interface PlanCanvasProps {
   project: ProjectDocument
@@ -703,31 +704,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     findPlanHitObject(worldPoint_mm, planProject, project, viewport.zoom, preferWall, excluded)
 
   const findCandidates = (point: [number, number], preferWall = false) => {
-    const excluded = new Set<string>()
-    for (let index = 0; index < Object.keys(planProject.objects).length; index++) {
-      const id = findHitObject(point, preferWall, excluded)
-      if (!id) break
-      excluded.add(id)
-    }
-    const ids = [...excluded]
-    // Pick the small structural/architectural object under the pointer before
-    // its enclosing slab or room face. The former default rank placed slabs
-    // above walls, so clicks on visible wall edges selected floor objects.
-    return ids.sort((a, b) => {
-      const rank = (id: string) => {
-        const object = planProject.objects[id]
-        if (isDoorObject(object)) return 0
-        if (isWindowObject(object)) return 1
-        if (isColumnObject(object)) return 2
-        if (isWallObject(object)) return 3
-        if (isBeamObject(object)) return 4
-        if (object.object_type === 'architecture.stair') return 5
-        if (isFoundationObject(object)) return 6
-        if (isGridObject(object)) return 7
-        return object.object_type === 'architecture.room' ? 9 : 8
-      }
-      return rank(a) - rank(b)
-    })
+    return resolvePlanCanvasPickCandidates(planProject, findHitObject, point, preferWall)
   }
 
   // Pointer move handler
