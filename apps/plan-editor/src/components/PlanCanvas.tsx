@@ -50,7 +50,6 @@ import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
 import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
 import { handlePlanCanvasPointerDownNavigation } from './handlePlanCanvasPointerDownNavigation.js'
-import { findPlanHitObject } from './planHitTesting.mjs'
 import { handlePlanCanvasPointerUp } from './handlePlanCanvasPointerUp.js'
 import { resolvePlanCanvasLineSnap } from '../app/placementLineSnap.mjs'
 import { updatePlanCanvasPreference, type PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
@@ -60,13 +59,13 @@ import type { PlanCanvasDraggingObject } from './planCanvasInteractionTypes.js'
 import { PlanCanvasInteractionHints } from './PlanCanvasInteractionHints.js'
 import { PlanCanvasPlacementDimensions } from './PlanCanvasPlacementDimensions.js'
 import { applyPlanCanvasPlacementDimensions, constrainPlanCanvasGridCopyToParallelOffset, constrainPlanCanvasLineSnap, resolvePlanCanvasReferencePath } from './planCanvasPlacementConstraints.mjs'
-import { resolvePlanCanvasPickCandidates } from './resolvePlanCanvasPickCandidates.mjs'
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
 import { handlePlanCanvasPlacementPointerDown } from './handlePlanCanvasPlacementPointerDown.js'
 import { usePlanCanvasManipulationPreview } from './usePlanCanvasManipulationPreview.js'
 import { createPlanCanvasPlacementCommitHandlers } from './createPlanCanvasPlacementCommitHandlers.js'
 import { nextDoorHanding, usePlanCanvasGlobalShortcuts } from './usePlanCanvasGlobalShortcuts.js'
 import { usePlanCanvasDrawing } from './usePlanCanvasDrawing.js'
+import { usePlanCanvasPicking } from './usePlanCanvasPicking.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -306,36 +305,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     })
   }, [drawLengthMeters, drawAngleDegrees, lineConstraintMode, viewport.zoom, displayUnit])
 
-  const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const [pickCandidates, setPickCandidates] = useState<string[]>([])
-  const pickCandidatesRef = useRef<string[]>([])
-  const setCandidates = (ids: string[]) => {
-    if (ids.join('|') !== pickCandidatesRef.current.join('|')) {
-      pickCandidatesRef.current = ids
-      setPickCandidates(ids)
-    }
-  }
-  const cyclePick = useCallback((reverse = false) => {
-    const ids = pickCandidatesRef.current.filter(id => !!planProject.objects[id])
-    if (ids.length < 2) return
-    const current = ids.indexOf(hoveredId ?? selectedId ?? '')
-    const next = ids[(current + (reverse ? -1 : 1) + ids.length) % ids.length]
-    setHoveredId(next)
-    onSelectionChange?.([next], next)
-    onSelectObject(next)
-  }, [hoveredId, selectedId, onSelectObject, onSelectionChange, planProject])
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab' || activeTool !== 'select' || pickCandidatesRef.current.length < 2) return
-      if (document.querySelector('[role="dialog"]')) return
-      if (event.target instanceof HTMLElement && (event.target.matches('input,select,textarea,button,a') || event.target.isContentEditable)) return
-      event.preventDefault()
-      cyclePick(event.shiftKey)
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [cyclePick, activeTool])
-  useEffect(() => { setCandidates([]) }, [activeTool, planProject])
+  const { hoveredId, setHoveredId, pickCandidates, setCandidates, findHitObject, findCandidates, cyclePick } = usePlanCanvasPicking({
+    project, planProject, viewport, activeTool, selectedId, onSelectObject, onSelectionChange,
+  })
   const stairPreview = useMemo(() => {
     if (activeTool !== 'stair' || !stairStartPoint || !activeSnap) return null
     try { return stairFromRun(project, stairStartPoint, activeSnap.point_mm, stairOptions) } catch { return null }
@@ -500,13 +472,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     setDraggingObject(null); setDragPreviewPoint(null); setManipulationPreview(null)
     dragDimensionInput.clearResizeValues()
     canvasRef.current?.focus({ preventScroll: true })
-  }
-
-  const findHitObject = (worldPoint_mm: [number, number], preferWall = false, excluded = new Set<string>()): string | null =>
-    findPlanHitObject(worldPoint_mm, planProject, project, viewport.zoom, preferWall, excluded)
-
-  const findCandidates = (point: [number, number], preferWall = false) => {
-    return resolvePlanCanvasPickCandidates(planProject, findHitObject, point, preferWall)
   }
 
   // Pointer move handler
