@@ -2306,7 +2306,7 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   await expect.poll(expectPlanAndRcpNavigationToMatch).toBeUndefined()
 })
 
-test('two-storey residential demo supports browser review and autosave reload at 239 objects', async ({ page }) => {
+test('two-storey residential demo supports browser review, 3D selection, and autosave reload at 239 objects', async ({ page }) => {
   test.setTimeout(90_000)
   const pageErrors: string[] = []
   page.on('pageerror', error => pageErrors.push(error.message))
@@ -2343,6 +2343,23 @@ test('two-storey residential demo supports browser review and autosave reload at
   const restoredBrowser = page.getByLabel('Project Browser')
   await restoredBrowser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   await expect(restoredBrowser.locator('li[data-object-id]')).toHaveCount(239, { timeout: 30_000 })
+  await restoredBrowser.getByLabel('ค้นหาวัตถุในโครงการ').fill(objectId!)
+  const restoredObjectRow = restoredBrowser.locator(`li[data-object-id="${objectId}"]`)
+  await expect(restoredObjectRow).toHaveCount(1)
+  await restoredObjectRow.locator('.cf-browser-object').click()
+  await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', objectId!)
+  await page.getByRole('button', { name: '3D ดูตัวอย่าง', exact: true }).click()
+  const houseModel = page.getByTestId('model3d-viewport')
+  await expect(houseModel).toBeVisible()
+  await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', objectId!)
+  await expect(houseModel.getByRole('button', { name: 'ซูมเข้า 3D' })).toBeEnabled()
+  const cameraPose = await houseModel.evaluate(element => ({
+    x: Number(element.getAttribute('data-camera-target-x')),
+    y: Number(element.getAttribute('data-camera-target-y')),
+    distance: Number(element.getAttribute('data-camera-distance')),
+  }))
+  expect(Object.values(cameraPose).every(Number.isFinite)).toBe(true)
+  expect(cameraPose.distance).toBeGreaterThan(0)
   expect(pageErrors).toEqual([])
 })
 
