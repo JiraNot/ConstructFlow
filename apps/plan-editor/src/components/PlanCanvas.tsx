@@ -25,6 +25,7 @@ import { getEditableRoofRidge } from '@constructflow/roof-engine'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import { PlanCanvasAuthoringControls } from './PlanCanvasAuthoringControls.js'
+import { handlePlanCanvasAuthoringPointerMove } from './handlePlanCanvasAuthoringPointerMove.js'
 import { usePlanCanvasPlacementKeyboard } from './usePlanCanvasPlacementKeyboard.js'
 import { TOOL_FAMILIES } from './catalogPresentation.js'
 import { ToolType } from './Toolbar.js'
@@ -790,51 +791,46 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   }
 
   // Pointer move handler
-  const handlePointerMove = (e: React.PointerEvent) => {
-    const rect = canvasRef.current?.getBoundingClientRect()
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
     if (!rect) return
     const screenX = e.clientX - rect.left
     const screenY = e.clientY - rect.top
-    if (activeTool !== 'select' && activeTool !== 'erase' && e.pointerType === 'mouse' && document.activeElement !== canvasRef.current) {
-      canvasRef.current?.focus({ preventScroll: true })
-    }
-
     if (handlePlanCanvasNavigationPointerMove({
       pointerPositionsRef, pinchRef, longPressStartRef, longPressTimerRef, selectionStartRef,
       setSelectionBox, eraseActiveRef, erasedIdsRef, isPanning, panStartRef, viewport, setViewport,
       findCandidates,
     }, e.pointerId, e.pointerType, [screenX, screenY])) return
 
-    const rawWorld = screenToWorld([screenX, screenY], viewport)
-
-    const { snap, wallSnap } = resolvePlanCanvasPointerSnap({
-      activeTool, rawWorld, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, project, planProject,
-      activeDoorTypeMark, activeWindowTypeMark, draggingObjectId: draggingObject?.id, gridCopySourceId,
-      dimensionReferenceMode,
-      lineState: { beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary },
-      snapPlanPoint, snapPlanWallHost, applyOpeningDistance, resolveLineSnap: constrainLineSnap,
-      applyPlacementDimensions, constrainGridCopyToParallelOffset,
+    handlePlanCanvasAuthoringPointerMove({
+      event: e,
+      screenPoint: [screenX, screenY],
+      canvas,
+      activeTool,
+      viewport,
+      draggingObject,
+      hoveredId,
+      resolveSnap: (rawWorld, ctrlKey, shiftKey) => resolvePlanCanvasPointerSnap({
+        activeTool, rawWorld, ctrlKey, shiftKey, project, planProject,
+        activeDoorTypeMark, activeWindowTypeMark, draggingObjectId: draggingObject?.id, gridCopySourceId,
+        dimensionReferenceMode,
+        lineState: { beamStartNode, wallStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary },
+        snapPlanPoint, snapPlanWallHost, applyOpeningDistance, resolveLineSnap: constrainLineSnap,
+        applyPlacementDimensions, constrainGridCopyToParallelOffset,
+      }),
+      findCandidates,
+      setActiveWallSnap,
+      setActiveSnap,
+      setTapeMeasure,
+      setCalibrationMousePoint,
+      setCandidates,
+      setHoveredId,
+      setManipulationPreview,
+      onCursorChange,
+      previewDragAt,
     })
-    setActiveWallSnap(wallSnap)
-    setActiveSnap(snap)
-    onCursorChange(snap.point_mm, snap.description)
-    if (activeTool === 'measure') setTapeMeasure(current => current && !current.complete ? { ...current, end: snap.point_mm } : current)
-
-    if (activeTool === 'calibrate') {
-      setCalibrationMousePoint(rawWorld)
-    }
-
-    // Check hover
-    const candidates = findCandidates(rawWorld)
-    if (activeTool === 'select' && !draggingObject) setCandidates(candidates)
-    setHoveredId(candidates.includes(hoveredId ?? '') ? hoveredId : candidates[0] ?? null)
-
-    // Drag candidates stay outside the project model until a valid release.
-    if (draggingObject) {
-      const moved = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
-      if (moved >= 3) previewDragAt(draggingObject, rawWorld, e.ctrlKey)
-      else setManipulationPreview(null)
-    }
   }
 
   // Pointer down
