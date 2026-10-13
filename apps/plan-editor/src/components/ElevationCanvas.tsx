@@ -5,6 +5,7 @@ import { clipElevationEdgeBySurfaces, getElevationFinishSurfaces, buildProjectRe
 import { clippedGridSegments, polygonDiagonalHatchSegments, polygonInteriorPoint } from '@constructflow/geometry-kernel'
 import { getElevationBeamHorizontalBounds, getElevationWallStyle, getVisibleElevationLevelRows, layoutElevationTags, packElevationLevelLabelCenters, panElevationView, resolveElevationWallFaceMark, sortElevationObjectsForDrawing, zoomElevationViewAtPoint, zoomElevationViewFromCenter } from '../elevationLabelLayout.mjs'
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
+import { buildElevationGroupMoveCommands, resolveElevationMoveSelection } from '../elevationMoveSelection.mjs'
 
 import type { CoordinationFinding } from '@constructflow/clash-engine'
 import type { UnderlayConfig } from '../rendering/planRenderer.js'
@@ -132,7 +133,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     if (navigation && direction !== 'rcp') onNavigationChange?.(navigationFromElevationView(navigation, direction, view))
   }
   const [viewRevision, setViewRevision] = useState(0)
-  const pointerDown = useRef<{ id: string | null; x: number; y: number; localX: number; localY: number; verticalIntent: 'move' | 'top' | 'base'; gripIndex: number | null; hit: { id: string; x: number; y: number; w: number; h: number } | null; mode: 'pan' | 'object' | 'select'; panX: number; panY: number; additive: boolean } | null>(null)
+  const pointerDown = useRef<{ id: string | null; objectIds: string[]; x: number; y: number; localX: number; localY: number; verticalIntent: 'move' | 'top' | 'base'; gripIndex: number | null; hit: { id: string; x: number; y: number; w: number; h: number } | null; mode: 'pan' | 'object' | 'select'; panX: number; panY: number; additive: boolean } | null>(null)
   const [selectionBox, setSelectionBox] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
   const [manipulationPreview, setManipulationPreview] = useState<{ rect: { x: number; y: number; w: number; h: number }; valid: boolean } | null>(null)
   const lastPreviewValidationRef = useRef<{ at: number; valid: boolean }>({ at: 0, valid: true })
@@ -589,7 +590,10 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     const view=currentView()
     const mode=panMode?'pan':hit?'object':'select'
     const verticalIntent = gripIndex === 1 ? 'top' : gripIndex === 6 ? 'base' : 'move'
-    pointerDown.current={id:hit?.id??null,x:event.clientX,y:event.clientY,localX:x,localY:y,verticalIntent,gripIndex,hit:hit??null,mode,panX:view.panX,panY:view.panY,additive:event.shiftKey}
+    const objectIds = hit
+      ? selectedHit && !nearestGrip ? [...selectedIds] : [hit.id]
+      : []
+    pointerDown.current={id:hit?.id??null,objectIds,x:event.clientX,y:event.clientY,localX:x,localY:y,verticalIntent,gripIndex,hit:hit??null,mode,panX:view.panX,panY:view.panY,additive:event.shiftKey}
     setManipulationPreview(null)
     lastPreviewValidationRef.current={at:0,valid:true}
     if(mode==='select')setSelectionBox({x1:x,y1:y,x2:x,y2:y})
@@ -617,10 +621,18 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
       else if(grip===4)w=Math.abs(base.x+base.w+dx-base.x)
       else{x+=dx;y+=dy}
       const view=viewTransform.current,horizontal=(dx/view.scale)*(view.reversed?-1:1),deltaWorld:[number,number]=view.isEastWest?[0,horizontal]:[horizontal,0],deltaZ=-dy/view.scale
-      const commands=onBuildManipulation(start.id,deltaWorld,deltaZ,start.verticalIntent,grip??undefined)
+      const moveIds = grip === null ? start.objectIds : [start.id]
+      const commands=buildElevationGroupMoveCommands(project,moveIds,id=>onBuildManipulation(id,deltaWorld,deltaZ,start.verticalIntent,grip??undefined))
       if(!commands.length){setManipulationPreview(null);return}
       const now=performance.now(),validation=now-lastPreviewValidationRef.current.at>=50?onPreviewManipulation?.(commands):undefined
       if(validation)lastPreviewValidationRef.current={at:now,valid:validation.valid}
+      const previewIds = resolveElevationMoveSelection(project,moveIds)
+      const baseRegions = previewIds.map(id => hitRegions.current.find(region=>region.id===id)).filter((region): region is { id:string;x:number;y:number;w:number;h:number } => !!region)
+      if(baseRegions.length>1){
+        const left=Math.min(...baseRegions.map(region=>region.x)),top=Math.min(...baseRegions.map(region=>region.y))
+        const right=Math.max(...baseRegions.map(region=>region.x+region.w)),bottom=Math.max(...baseRegions.map(region=>region.y+region.h))
+        x=left+(grip===null?dx:0);y=top+(grip===null?dy:0);w=right-left;h=bottom-top
+      }
       setManipulationPreview({rect:{x,y,w:Math.max(2,w),h:Math.max(2,h)},valid:validation?.valid??lastPreviewValidationRef.current.valid})
     }
   }} onPointerUp={event=>{
@@ -643,7 +655,8 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     setManipulationPreview(null)
     if(start.id&&Math.hypot(dx,dy)>3&&onBuildManipulation&&onPreviewManipulation&&onCommitManipulation){
       const view=viewTransform.current,horizontal=(dx/view.scale)*(view.reversed?-1:1),deltaWorld:[number,number]=view.isEastWest?[0,horizontal]:[horizontal,0],deltaZ=-dy/view.scale
-      const commands=onBuildManipulation(start.id,deltaWorld,deltaZ,start.verticalIntent,start.gripIndex??undefined)
+      const moveIds = start.gripIndex === null ? start.objectIds : [start.id]
+      const commands=buildElevationGroupMoveCommands(project,moveIds,id=>onBuildManipulation(id,deltaWorld,deltaZ,start.verticalIntent,start.gripIndex??undefined))
       if(commands.length){const validation=onPreviewManipulation(commands);if(validation.valid)onCommitManipulation(commands);else onManipulationRejected?.(validation.errors)}
       onSelectObject(start.id)
       return

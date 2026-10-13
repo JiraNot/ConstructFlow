@@ -45,7 +45,7 @@ This matrix maps the main model families to their current canvas workflow, edit 
 ## Remaining interaction risks
 
 - Elevation preview is currently a translucent candidate bounding rectangle. Family-specific rotated outlines and fully regenerated hosted geometry are shown more accurately in plan; the elevation ghost can be refined to project the candidate representation itself.
-- Elevation multi-selection currently supports box selection, but dragging one member does not yet translate the full selected set as a group.
+- Elevation multi-selection now builds one flattened preview/commit command batch when any selected member is dragged; hosted doors/windows are omitted from the explicit move list when their host wall is also selected, avoiding a duplicate move. Focused tests cover UUID de-duplication, hosted-opening filtering and batch construction. Browser acceptance for selecting and dragging a group in an elevation remains open. The preview remains a combined candidate bounding rectangle rather than family-specific regenerated outlines.
 - Multi-click pipe routing, fittings, visible circuit paths and conduit geometry remain separate feature work, as do chained wall junction cleanup, continuous-beam break/merge, structural valley framing, roof family/type catalogs, and cabinet/MEP type catalogs.
 - The preview uses the existing command validator and geometry services; large-project snap/search performance still needs a measured acceptance run at 5,000+ objects and a spatially indexed snap candidate path.
 
