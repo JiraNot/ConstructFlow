@@ -55,7 +55,7 @@ export function usePlanCanvasPlacementKeyboard({
     if (event.key === 'Enter') {
       event.preventDefault()
       event.stopPropagation()
-      commitActivePlacement(true)
+      commitActivePlacement()
       return
     }
     if (!supportsPlacementDimensions) return

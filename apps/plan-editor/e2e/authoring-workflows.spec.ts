@@ -160,6 +160,20 @@ test('mouse and keyboard authoring creates wall, beam, hosted opening, and point
   expect(pageErrors).toEqual([])
 })
 
+test('polygon placement commits a slab boundary through the shared placement session', async ({ page }) => {
+  await page.goto('/')
+  const canvasElement = canvas(page)
+  await page.locator('.cf-tool-button[title^="พื้น ("]').click()
+  await clickCanvasFraction(page, 0.25, 0.25)
+  await clickCanvasFraction(page, 0.70, 0.25)
+  await clickCanvasFraction(page, 0.70, 0.70)
+  await canvasElement.focus()
+  await page.keyboard.press('Enter')
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await expect(page.locator('li[data-object-type="structure.slab"]')).toHaveCount(1)
+})
+
 test('Escape cancels a pending grid-copy destination before leaving the tool', async ({ page }) => {
   await page.goto('/')
   const canvasElement = canvas(page)

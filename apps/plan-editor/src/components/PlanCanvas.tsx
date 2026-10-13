@@ -55,6 +55,7 @@ import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
 import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
 import { commitPlanCanvasDragPreview } from './commitPlanCanvasDragPreview.mjs'
 import { handlePlanCanvasPointerDownNavigation } from './handlePlanCanvasPointerDownNavigation.js'
+import { commitPlanCanvasPolygonPoint } from './commitPlanCanvasPolygonPoint.mjs'
 import { findPlanHitObject } from './planHitTesting.mjs'
 import { resolvePlanCanvasBoxSelection } from './resolvePlanCanvasBoxSelection.mjs'
 import { drawPlanCanvasSelectionHandles } from './drawPlanCanvasSelectionHandles.js'
@@ -1142,18 +1143,25 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         onCommitFixture?.(snap.point_mm, fixtureKind)
         clearDimensionOverrides()
       } else if (isPolygonInteraction(activeTool)) {
-        const closeDistance = Math.max(150, 18 / viewport.zoom)
-        const closesAtStart = slabBoundary.length >= 3 && Math.hypot(snap.point_mm[0] - slabBoundary[0][0], snap.point_mm[1] - slabBoundary[0][1]) <= closeDistance
-        if ((e.detail >= 2 || closesAtStart) && slabBoundary.length >= 3) {
-          if (activeTool === 'slab') onCommitSlab(slabBoundary)
-          else if (activeTool === 'archFloor') onCommitArchitecturalFloor?.(slabBoundary)
-          else if (activeTool === 'ceiling') onCommitCeiling?.(slabBoundary)
-          else if (activeTool === 'roof') onCommitRoof?.(slabBoundary, { shape: roofShape, slope_deg: roofSlopeDeg, thickness_mm: roofThicknessMm, elevation_offset_mm: roofElevationOffsetMm, material: roofMaterial })
-          else if (selectedId && ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(planProject.objects[selectedId]?.object_type ?? '')) onCommitSurfaceVoid(selectedId, slabBoundary)
-          setSlabBoundary([])
-          setDrawLengthMeters(''); setDrawAngleDegrees('')
-          clearDimensionOverrides()
-        } else if (e.detail < 2) { setSlabBoundary(current => [...current, snap.point_mm]); setDrawLengthMeters(''); setDrawAngleDegrees(''); clearDimensionOverrides() }
+        commitPlanCanvasPolygonPoint({
+          activeTool,
+          clickCount: e.detail,
+          pointMm: snap.point_mm,
+          zoom: viewport.zoom,
+          boundary: slabBoundary,
+          selectedId,
+          selectedObjectType: planProject.objects[selectedId ?? '']?.object_type,
+          roofOptions: { shape: roofShape, slope_deg: roofSlopeDeg, thickness_mm: roofThicknessMm, elevation_offset_mm: roofElevationOffsetMm, material: roofMaterial },
+          onCommitSlab,
+          onCommitArchitecturalFloor,
+          onCommitCeiling,
+          onCommitRoof,
+          onCommitSurfaceVoid,
+          onBoundaryChange: setSlabBoundary,
+          onDrawLengthChange: setDrawLengthMeters,
+          onDrawAngleChange: setDrawAngleDegrees,
+          clearDimensionOverrides,
+        })
       } else if (activeTool === 'grid') {
         if (!gridStartPoint) { setGridStartPoint(snap.point_mm); clearDimensionOverrides() }
         else {
@@ -1335,6 +1343,12 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     return true
   }
 
+  const handleCanvasDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool)) return
+    event.preventDefault()
+    finishPolygonPlacement()
+  }
+
   const commitActivePlacement = (fromInput = false) => {
     const polygonTool = ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool)
     if (polygonTool && !fromInput && finishPolygonPlacement()) return
@@ -1407,6 +1421,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         aria-label="แปลน: คลิกขวาหรือแตะค้างบนวัตถุเพื่อเปิดเมนูแก้ไขและลบ; กด Tab เพื่อสลับวัตถุที่ซ้อนกัน"
         onPointerMove={handlePointerMove}
         onPointerDown={handlePointerDown}
+        onDoubleClick={handleCanvasDoubleClick}
         onContextMenu={event => event.preventDefault()}
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
