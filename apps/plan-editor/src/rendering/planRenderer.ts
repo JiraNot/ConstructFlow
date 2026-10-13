@@ -12,6 +12,7 @@ import {
   DoorModuleData,
   WindowModuleData,
   DoorHanding,
+  SiteSurvey,
   isMasonryWallPlanHatch,
   getDisplayPhase,
   resolveCatalogType,
@@ -99,6 +100,10 @@ export function renderPlanView(
   if (underlay && underlay.visible && underlay.image) {
     drawUnderlayImage(ctx, underlay, viewport)
   }
+
+  // Site survey is the measured reference layer. Keep it above imported underlays and
+  // below model geometry so parcel points remain visible without obscuring the design.
+  if (sourceProject.site_survey) drawSiteSurveyOverlay(ctx, sourceProject.site_survey, width, height, viewport)
 
   // Active level room filtering and deduplication
   const activeLevelId = project.project.active_level_id
@@ -431,6 +436,91 @@ export function renderPlanView(
     drawCalibrationOverlay(ctx, calibration, viewport)
   }
   flushPlanLabels(ctx, width, height)
+}
+
+function drawSiteSurveyOverlay(
+  ctx: CanvasRenderingContext2D,
+  survey: SiteSurvey,
+  width: number,
+  height: number,
+  viewport: ViewportState,
+) {
+  const points = new Map(survey.points.map(point => [point.id, point]))
+  const screenPoints = new Map(survey.points.map(point => [point.id, worldToScreen([point.x_mm, point.y_mm], viewport)]))
+  const visible = ([x, y]: [number, number]) => x >= -24 && x <= width + 24 && y >= -24 && y <= height + 24
+
+  ctx.save()
+  for (const boundary of survey.boundaries) {
+    const ring = boundary.point_ids.map(id => points.get(id)).filter((point): point is SiteSurvey['points'][number] => !!point)
+    if (ring.length < 3) continue
+    ctx.beginPath()
+    ring.forEach((point, index) => {
+      const [x, y] = worldToScreen([point.x_mm, point.y_mm], viewport)
+      if (index === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    })
+    ctx.closePath()
+    ctx.strokeStyle = ring.every(point => point.source_status === 'measured') ? '#0284c7' : '#d97706'
+    ctx.lineWidth = 2
+    ctx.setLineDash(ring.every(point => point.source_status === 'measured') ? [] : [8, 5])
+    ctx.stroke()
+    ctx.setLineDash([])
+    const anchor = screenPoints.get(ring[0].id)
+    if (anchor && visible(anchor)) {
+      ctx.font = '600 11px sans-serif'
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'bottom'
+      ctx.fillStyle = '#0f172a'
+      ctx.fillText(boundary.name, anchor[0] + 7, anchor[1] - 7)
+    }
+  }
+
+  for (const point of survey.points) {
+    const position = screenPoints.get(point.id)!
+    if (!visible(position)) continue
+    const measured = point.source_status === 'measured'
+    const color = measured ? '#0284c7' : '#d97706'
+    ctx.beginPath()
+    if (measured) {
+      ctx.arc(position[0], position[1], 5, 0, Math.PI * 2)
+    } else {
+      ctx.moveTo(position[0], position[1] - 6)
+      ctx.lineTo(position[0] + 6, position[1] + 5)
+      ctx.lineTo(position[0] - 6, position[1] + 5)
+      ctx.closePath()
+    }
+    ctx.fillStyle = '#ffffff'
+    ctx.strokeStyle = color
+    ctx.lineWidth = 2
+    ctx.fill()
+    ctx.stroke()
+    if (viewport.zoom >= 0.025) {
+      const elevation = point.elevation_mm === undefined ? '' : ` · ${(point.elevation_mm / 1000).toFixed(3)} m`
+      ctx.font = '11px sans-serif'
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'top'
+      ctx.fillStyle = '#0f172a'
+      ctx.fillText(`${point.name}${elevation}`, position[0] + 8, position[1] + 7)
+    }
+  }
+
+  ctx.fillStyle = 'rgba(255,255,255,.94)'
+  ctx.strokeStyle = '#cbd5e1'
+  ctx.lineWidth = 1
+  ctx.fillRect(12, 12, 190, 42)
+  ctx.strokeRect(12, 12, 190, 42)
+  ctx.font = '600 11px sans-serif'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#334155'
+  ctx.fillText('สำรวจ · วัดจริง', 24, 26)
+  ctx.fillStyle = '#0284c7'
+  ctx.beginPath(); ctx.arc(16, 26, 4, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = '#334155'
+  ctx.fillText('ประมาณ · สมมติ', 24, 42)
+  ctx.fillStyle = '#d97706'
+  ctx.beginPath(); ctx.moveTo(16, 37); ctx.lineTo(21, 46); ctx.lineTo(11, 46); ctx.closePath(); ctx.fill()
+  ctx.restore()
 }
 
 /** Draws a non-destructive drag candidate above the committed model geometry. */
