@@ -1499,7 +1499,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setFileFeedback(`วางสำเนา ${ids.length} ชิ้นแล้ว · เยื้องจากชุดต้นฉบับ ${distance} มม.`)
   }
 
-  const handleArrayObjects = (objectIds: string[], copies: number, deltaXmm: number, deltaYmm: number) => {
+  const handlePreviewArrayObjects = (objectIds: string[], copies: number, deltaXmm: number, deltaYmm: number) => {
     const ids = [...new Set(objectIds)].filter(id => Boolean(project.objects[id]))
     if (!ids.length || copies < 1 || copies > 100 || !Number.isFinite(deltaXmm) || !Number.isFinite(deltaYmm) || Math.hypot(deltaXmm, deltaYmm) < 1) return
     const commands: CommandRequest[] = []
@@ -1509,15 +1509,14 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       createdIds.push(...Object.values(id_map))
       commands.push({ name: 'DuplicateObjects', input: { object_ids: ids, delta_x_mm: deltaXmm * index, delta_y_mm: deltaYmm * index, id_map } })
     }
-    const result = dispatchCommandBatch(commands)
-    if (result.status !== 'success') {
-      setFileFeedback(result.errors?.[0] ?? 'สร้างอาร์เรย์ไม่สำเร็จ')
+    const validation = CommandBus.executeBatch(project, commands)
+    if (validation.status !== 'success') {
+      setFileFeedback(validation.errors?.[0] ?? 'ตรวจสอบ Preview อาร์เรย์ไม่ผ่าน')
       return
     }
-    setSelectedIds(createdIds)
-    setSelectedId(createdIds[0] ?? null)
-    setRightPanelTab('properties')
-    setFileFeedback(`สร้างสำเนา ${createdIds.length} ชิ้นใน ${copies} ชุด · Undo ครั้งเดียวเพื่อย้อนกลับ`)
+    setAlignmentPreview({ project: validation.updatedProject, ids: createdIds, commands, sourceIds: ids, description: 'Array' })
+    setViewMode('plan')
+    setFileFeedback(`Preview อาร์เรย์ ${createdIds.length} ชิ้นใน ${copies} ชุดแล้ว · ยืนยันหรือยกเลิกใน Project Browser`)
   }
 
   const handleMoveObjectsByDelta = (objectIds: string[], deltaXmm: number, deltaYmm: number) => {
@@ -1819,6 +1818,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       return
     }
     setAlignmentPreview(null)
+    if (alignmentPreview.description === 'Array') {
+      setSelectedIds(alignmentPreview.ids)
+      setSelectedId(alignmentPreview.ids[0] ?? null)
+      setRightPanelTab('properties')
+    }
     if (alignmentPreview.description === 'Join' || alignmentPreview.description === 'Trim') {
       setSelectedId(alignmentPreview.sourceIds[0] ?? null)
       setSelectedIds(alignmentPreview.sourceIds[0] ? [alignmentPreview.sourceIds[0]] : [])
@@ -2636,7 +2640,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             }}
             onToggleVisibility={handleToggleObjectVisibility}
             onShowAll={handleShowAllObjects}
-            onArrayObjects={handleArrayObjects}
+            onPreviewArray={handlePreviewArrayObjects}
             onMoveObjects={handleMoveObjectsByDelta}
             onPreviewAlignment={handlePreviewAlignment}
             onPreviewOffset={handlePreviewOffset}

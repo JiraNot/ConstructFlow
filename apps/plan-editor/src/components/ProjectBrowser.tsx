@@ -31,7 +31,7 @@ interface ProjectBrowserProps {
   onSelectObjects: (ids: string[]) => void
   onToggleVisibility: (objectId: string) => void
   onShowAll: () => void
-  onArrayObjects: (objectIds: string[], copies: number, deltaXmm: number, deltaYmm: number) => void
+  onPreviewArray: (objectIds: string[], copies: number, deltaXmm: number, deltaYmm: number) => void
   onMoveObjects: (objectIds: string[], deltaXmm: number, deltaYmm: number) => void
   onPreviewAlignment: (objectIds: string[], mode: AlignmentMode) => void
   onPreviewOffset: (objectIds: string[], distanceMm: number, side: 'left' | 'right') => void
@@ -44,7 +44,7 @@ interface ProjectBrowserProps {
   alignmentPreviewActive: boolean
 }
 
-export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selectedIds, hiddenObjectIds, activeLevelId, activeViewId, onSelectLevel, onSelectView, onSelectObjects, onToggleVisibility, onShowAll, onArrayObjects, onMoveObjects, onPreviewAlignment, onPreviewOffset, onPreviewMirror, onPreviewSplit, onPreviewJoin, onPreviewTrim, onCommitAlignment, onCancelAlignment, alignmentPreviewActive }) => {
+export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selectedIds, hiddenObjectIds, activeLevelId, activeViewId, onSelectLevel, onSelectView, onSelectObjects, onToggleVisibility, onShowAll, onPreviewArray, onMoveObjects, onPreviewAlignment, onPreviewOffset, onPreviewMirror, onPreviewSplit, onPreviewJoin, onPreviewTrim, onCommitAlignment, onCancelAlignment, alignmentPreviewActive }) => {
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<'level' | 'all'>('level')
   const [copies, setCopies] = useState('2')
@@ -89,12 +89,12 @@ export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selecte
     {selectedIds.length > 0 && <form className="cf-browser-array" onSubmit={event => {
       event.preventDefault()
       const count = Math.trunc(Number(copies)), dx = Number(spacingX) * 1000, dy = Number(spacingY) * 1000
-      if (Number.isInteger(count) && count >= 1 && count <= 100 && Number.isFinite(dx) && Number.isFinite(dy) && Math.hypot(dx, dy) > 0) onArrayObjects(selectedIds, count, Math.round(dx), Math.round(dy))
+      if (Number.isInteger(count) && count >= 1 && count <= 100 && Number.isFinite(dx) && Number.isFinite(dy) && Math.hypot(dx, dy) > 0) onPreviewArray(selectedIds, count, Math.round(dx), Math.round(dy))
     }}>
       <strong>อาร์เรย์ชุดที่เลือก</strong>
       <div><label>สำเนา<input aria-label="จำนวนสำเนาในอาร์เรย์" type="number" min="1" max="100" step="1" value={copies} onChange={event => setCopies(event.target.value)} /></label><label>ΔX (m)<input aria-label="ระยะอาร์เรย์แกน X เมตร" type="number" step="0.1" value={spacingX} onChange={event => setSpacingX(event.target.value)} /></label><label>ΔY (m)<input aria-label="ระยะอาร์เรย์แกน Y เมตร" type="number" step="0.1" value={spacingY} onChange={event => setSpacingY(event.target.value)} /></label></div>
-      <button type="submit" disabled={!selectedIds.some(id => project.objects[id])}>สร้างสำเนา</button>
-      <small>ทุกสำเนารวมอยู่ใน Undo เดียว · UUID ใหม่อัตโนมัติ</small>
+      <button type="submit" disabled={!selectedIds.some(id => project.objects[id])}>แสดงตัวอย่างอาร์เรย์</button>
+      <small>ตรวจตำแหน่งก่อนยืนยัน · ทุกสำเนารวมอยู่ใน Undo เดียว</small>
     </form>}
     {selectedIds.length > 0 && <form className="cf-browser-array cf-browser-move" onSubmit={event => {
       event.preventDefault()

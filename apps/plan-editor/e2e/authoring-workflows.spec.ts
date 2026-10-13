@@ -296,6 +296,40 @@ test('Project Browser numeric group move commits once and preserves UUIDs throug
   for (const id of ids) await expect(page.locator(`li[data-object-id="${id}"]`)).toBeVisible()
 })
 
+test('Project Browser array previews before one atomic commit and supports Undo/Redo', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickCanvasFraction(page, 0.50, 0.45)
+  await page.keyboard.press('Escape')
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const rows = page.locator('li[data-object-type="structure.column"]')
+  await expect(rows).toHaveCount(1)
+  const sourceId = await rows.first().getAttribute('data-object-id')
+  expect(sourceId).toBeTruthy()
+  await rows.first().locator('.cf-browser-object').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.getByText('แก้ไขและทำสำเนา · 1 ชิ้น').click()
+  await page.getByRole('spinbutton', { name: 'จำนวนสำเนาในอาร์เรย์' }).fill('2')
+  await page.getByRole('spinbutton', { name: 'ระยะอาร์เรย์แกน X เมตร' }).fill('1')
+  await page.getByRole('spinbutton', { name: 'ระยะอาร์เรย์แกน Y เมตร' }).fill('0')
+  await page.getByRole('button', { name: 'แสดงตัวอย่างอาร์เรย์' }).click()
+
+  await expect(page.getByRole('status')).toContainText('Preview อาร์เรย์ 2 ชิ้นใน 2 ชุดแล้ว')
+  await expect(rows).toHaveCount(1)
+  await page.getByRole('button', { name: 'ยืนยัน · Undo ได้' }).click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await expect(rows).toHaveCount(3)
+  await expect(page.locator(`li[data-object-id="${sourceId}"]`)).toBeVisible()
+
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await expect(rows).toHaveCount(1)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(rows).toHaveCount(3)
+})
+
 test('Project Browser visibility persists per view and level after autosave and reload', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
