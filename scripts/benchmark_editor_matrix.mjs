@@ -18,10 +18,47 @@ const kitchen = createKitchenProofProject('human')
 if (kitchen.status !== 'success') throw new Error(kitchen.errors?.join('; ') ?? 'Kitchen proof generation failed')
 const referenceHouse = JSON.parse(fs.readFileSync(new URL('../examples/constructflow-reference-house-2storey.cfproj', import.meta.url), 'utf8'))
 const renovation = createRenovationIntegrationProject()
+const makeStressFixture = (sourceProject, targetObjectCount) => {
+  const sourceObjects = Object.values(sourceProject.objects)
+  if (targetObjectCount % sourceObjects.length !== 0) throw new Error('Stress fixture size must be a multiple of the source object count')
+  const columns = 5
+  const tileSpacingMm = 50_000
+  const coordinateKeys = new Set(['location_mm', 'center_mm', 'start_point_mm', 'end_point_mm', 'origin_mm', 'boundary_mm', 'vertices_mm', 'points_mm', 'outline_mm', 'path_mm', 'route_points_mm'])
+  const objects = { ...sourceProject.objects }
+  const remapAndTranslate = (value, key, ids, dx, dy) => {
+    if (typeof value === 'string') return ids.get(value) ?? value
+    if (Array.isArray(value)) {
+      if (coordinateKeys.has(key) && value.every(item => typeof item === 'number')) {
+        return value.map((item, index) => index === 0 ? item + dx : index === 1 ? item + dy : item)
+      }
+      return value.map(item => remapAndTranslate(item, key, ids, dx, dy))
+    }
+    if (!value || typeof value !== 'object') return value
+    return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [
+      childKey,
+      remapAndTranslate(childValue, childKey, ids, dx, dy),
+    ]))
+  }
+  const tileCount = targetObjectCount / sourceObjects.length
+  for (let tile = 1; tile < tileCount; tile += 1) {
+    const ids = new Map(sourceObjects.map(object => [object.id, crypto.randomUUID()]))
+    const dx = (tile % columns) * tileSpacingMm
+    const dy = Math.floor(tile / columns) * tileSpacingMm
+    for (const object of sourceObjects) {
+      const clone = remapAndTranslate(object, '', ids, dx, dy)
+      clone.id = ids.get(object.id)
+      objects[clone.id] = clone
+    }
+  }
+  return { ...sourceProject, objects }
+}
 const fixtures = [
   { name: 'kitchen-proof', project: kitchen.updatedProject },
   { name: 'reference-house-2storey', project: referenceHouse },
   { name: 'renovation-house-plus-kitchen', project: renovation.project },
+  { name: 'synthetic-house-478', project: makeStressFixture(referenceHouse, 478), stress: true },
+  { name: 'synthetic-house-956', project: makeStressFixture(referenceHouse, 956), stress: true },
+  { name: 'synthetic-house-4780', project: makeStressFixture(referenceHouse, 4780), stress: true },
 ]
 
 const quantile = (values, fraction) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.ceil(values.length * fraction) - 1)]
@@ -37,7 +74,7 @@ const benchmark = (fn) => {
 }
 
 const matrix = []
-for (const { name, project } of fixtures) {
+for (const { name, project, stress = false } of fixtures) {
   const objects = Object.values(project.objects)
   const ground = project.project.active_level_id
   const planObjects = getPlanVisibleObjects(project, 'architecture')
@@ -53,10 +90,12 @@ for (const { name, project } of fixtures) {
     plan_hit_test: () => findPlanHitObject(samplePoint, projectedPlan, project, 0.08),
     snap_index_build: () => new SnapSpatialIndex(project),
     snap_candidate_query: () => snapIndex.candidateObjectIds(samplePoint, 3000),
-    coordination: () => runCoordination(project),
-    takeoff: () => calculateTakeoff(project),
-    phased_boq: () => calculatePhasedBOQ(project),
-    drawing_set_compile: () => compileInitialDrawingSet(project),
+    ...(!stress ? {
+      coordination: () => runCoordination(project),
+      takeoff: () => calculateTakeoff(project),
+      phased_boq: () => calculatePhasedBOQ(project),
+      drawing_set_compile: () => compileInitialDrawingSet(project),
+    } : {}),
   }
   for (const [task, execute] of Object.entries(tasks)) {
     matrix.push({ fixture: name, object_count: objects.length, task, ...benchmark(execute) })
@@ -87,7 +126,7 @@ const markdown = [
   '| Fixture | Objects | Operation | p50 ms | p95 ms |', '| --- | ---: | --- | ---: | ---: |',
   ...matrix.map(row => `| ${row.fixture} | ${row.object_count} | ${taskLabels[row.task] ?? row.task} | ${row.p50_ms.toFixed(3)} | ${row.p95_ms.toFixed(3)} |`), '',
   `Raw measurements: [EDITOR-PERFORMANCE-MATRIX-2026-10.json](./EDITOR-PERFORMANCE-MATRIX-2026-10.json).`,
-  'This matrix covers 21-object kitchen, 239-object two-storey house, and 260-object combined renovation fixtures, including plan hit testing. It does not cover 500/1,000/5,000/20,000-object stress projects, load/schema validation, marquee selection, undo/redo, serialization, or canvas frame time.', '',
+  'This matrix covers 21-object kitchen, 239-object two-storey house, 260-object combined renovation fixture, and synthetic 478/956/4,780-object geometry tiles for object summary, plan projection/hit-testing, and snap-index/query paths. Synthetic stress fixtures are not residential acceptance models. Stress rows omit coordination, takeoff, BOQ, and drawing compilation to avoid implying those whole-project engines are performance-qualified at that scale. Browser frame time, marquee selection, undo/redo, load/schema validation, and serialization still require separate evidence.', '',
 ].join('\n')
 fs.writeFileSync(new URL('../docs/performance/EDITOR-PERFORMANCE-MATRIX-2026-10.md', import.meta.url), markdown)
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`)
