@@ -65,6 +65,7 @@ import { hasPendingToolStep, resolveEscapeAction, resolveToolInteractionStatus }
 import { handlePlanCanvasSelectionPointerDown } from './handlePlanCanvasSelectionPointerDown.js'
 import type { PlanCanvasDraggingObject } from './planCanvasInteractionTypes.js'
 import { PlanCanvasInteractionHints } from './PlanCanvasInteractionHints.js'
+import { PlanCanvasPlacementDimensions } from './PlanCanvasPlacementDimensions.js'
 
 interface PlanCanvasProps {
   project: ProjectDocument
@@ -1388,19 +1389,35 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           top: Math.max(8, Math.min(worldToScreen(dragPreviewPoint, viewport)[1] + 16, (containerRef.current?.clientHeight ?? 600) - 92)),
         }}
       />}
-      {supportsPlacementDimensions && dimensionOverlayPosition && (showXDimension || showYDimension || hasLineGeometryInput) && <div className="cf-dynamic-dimensions" role="group" aria-label="ระยะและแนวระหว่างวางวัตถุ" onPointerDown={event => event.stopPropagation()} style={{
-        left: Math.max(8, Math.min(dimensionOverlayPosition[0] > (containerRef.current?.clientWidth ?? 800) / 2 ? dimensionOverlayPosition[0] - 318 : dimensionOverlayPosition[0] + 18, (containerRef.current?.clientWidth ?? 800) - 318)),
-        top: Math.max(8, Math.min(dimensionOverlayPosition[1] > (containerRef.current?.clientHeight ?? 600) / 2 ? dimensionOverlayPosition[1] - 94 : dimensionOverlayPosition[1] + 22, (containerRef.current?.clientHeight ?? 600) - 86)),
-      }}>
-        {showXDimension && <label><span>X · {displayUnit}</span><input ref={dimensionInputXRef} aria-label={`ระยะจากแนวอ้างอิง X (${displayUnit})`} type="text" inputMode="decimal" value={xDimensionDisplay} onFocus={event => { if (dimensionReferences.refX !== undefined) setDimensionAnchorX(dimensionAnchorX ?? dimensionReferences.refX); setDimensionKeyboardAxis('x'); event.currentTarget.select() }} onChange={event => { setDimensionAnchorX(dimensionAnchorX ?? dimensionReferences.refX ?? null); setDimensionInputX(event.target.value) }} onKeyDown={handleDimensionInputKeyDown} /></label>}
-        {showYDimension && <label><span>Y · {displayUnit}</span><input ref={dimensionInputYRef} aria-label={`ระยะจากแนวอ้างอิง Y (${displayUnit})`} type="text" inputMode="decimal" value={yDimensionDisplay} onFocus={event => { if (dimensionReferences.refY !== undefined) setDimensionAnchorY(dimensionAnchorY ?? dimensionReferences.refY); setDimensionKeyboardAxis('y'); event.currentTarget.select() }} onChange={event => { setDimensionAnchorY(dimensionAnchorY ?? dimensionReferences.refY ?? null); setDimensionInputY(event.target.value) }} onKeyDown={handleDimensionInputKeyDown} /></label>}
-        {hasLineGeometryInput && <>
-          <label><span>ระยะ · {displayUnit}</span><input aria-label={`ความยาวช่วงที่วาด (${displayUnit})`} type="text" inputMode="decimal" value={drawLengthMeters} placeholder="ตามเมาส์" onFocus={event => event.currentTarget.select()} onChange={event => setDrawLengthMeters(event.target.value)} onKeyDown={handlePlacementInputKeyDown} /></label>
-          <label><span>องศ</span><input aria-label="องศาช่วงที่วาด (0 องศาขวา 90 องศาขึ้น)" type="number" step="0.1" value={drawAngleDegrees} placeholder="ตามเมาส์" onFocus={event => event.currentTarget.select()} onChange={event => setDrawAngleDegrees(event.target.value)} onKeyDown={handlePlacementInputKeyDown} /></label>
-        </>}
-        {(showXDimension || showYDimension) && <button type="button" className="cf-dimension-reference-toggle" aria-label="สลับวัดจากกึ่งกลางหรือขอบวัตถุ" aria-pressed={dimensionReferenceMode === 'edge'} onClick={toggleDimensionReferenceMode}>วัดจาก {dimensionReferenceMode === 'center' ? 'กึ่งกลาง' : 'ขอบ'}</button>}
-        <small>{isHostedOpeningPlacement ? 'พิมพ์ระยะจากขอบช่อง · Tab/Shift+Tab สลับขอบ/กึ่งกลาง · Enter วาง' : hasLineGeometryInput ? `ระยะ/องศาคุมช่วงเส้น · Enter วาดช่วง${showXDimension || showYDimension ? ` · ${showXDimension && showYDimension ? 'Shift+Tab สลับ X/Y' : 'Tab ขอบ/กลาง'}` : ''}` : `พิมพ์ระยะ ${showXDimension && showYDimension ? '· Tab ขอบ/กลาง · Shift+Tab สลับ X/Y · ' : '· Tab/Shift+Tab ขอบ/กลาง · '}Enter วาง`} · Esc ยกเลิกขั้นตอน/ออกเมื่อว่าง</small>
-      </div>}
+      <PlanCanvasPlacementDimensions
+        position={supportsPlacementDimensions ? dimensionOverlayPosition : null}
+        containerSize={{ width: containerRef.current?.clientWidth ?? 800, height: containerRef.current?.clientHeight ?? 600 }}
+        displayUnit={displayUnit}
+        showX={showXDimension}
+        showY={showYDimension}
+        hasLineGeometryInput={hasLineGeometryInput}
+        isHostedOpeningPlacement={isHostedOpeningPlacement}
+        dimensionReferenceMode={dimensionReferenceMode}
+        dimensionReferences={dimensionReferences}
+        dimensionAnchorX={dimensionAnchorX}
+        dimensionAnchorY={dimensionAnchorY}
+        xDimensionDisplay={xDimensionDisplay}
+        yDimensionDisplay={yDimensionDisplay}
+        drawLengthMeters={drawLengthMeters}
+        drawAngleDegrees={drawAngleDegrees}
+        dimensionInputXRef={dimensionInputXRef}
+        dimensionInputYRef={dimensionInputYRef}
+        setDimensionKeyboardAxis={setDimensionKeyboardAxis}
+        setDimensionAnchorX={setDimensionAnchorX}
+        setDimensionAnchorY={setDimensionAnchorY}
+        setDimensionInputX={setDimensionInputX}
+        setDimensionInputY={setDimensionInputY}
+        setDrawLengthMeters={setDrawLengthMeters}
+        setDrawAngleDegrees={setDrawAngleDegrees}
+        onDimensionKeyDown={handleDimensionInputKeyDown}
+        onPlacementKeyDown={handlePlacementInputKeyDown}
+        onToggleDimensionReference={toggleDimensionReferenceMode}
+      />
       <div className="cf-authoring-controls" onPointerDown={(event) => event.stopPropagation()}>
         <button type="button" className="cf-authoring-controls-toggle" aria-expanded={authoringControlsOpen} onClick={() => setAuthoringControlsOpen(open => !open)}>
           <span>ตัวเลือกการวาด · {authoringToolName[activeTool] ?? activeTool}</span>
