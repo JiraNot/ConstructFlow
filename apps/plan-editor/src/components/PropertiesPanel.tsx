@@ -31,9 +31,11 @@ import {
   type RoofModuleData,
   type PipeRouteModuleData,
   type ElectricalFixtureModuleData,
+  type CircuitModuleData,
   type CabinetModuleData,
   type MouldingModuleData,
 } from '@constructflow/project-model'
+import { getRoofEaveBoundary, getRoofSeams } from '@constructflow/roof-engine'
 import { Trash2, PlusCircle, RefreshCw, SlidersHorizontal, MousePointer2 } from 'lucide-react'
 import { OpeningElevationThumbnail } from './OpeningElevationThumbnail.js'
 import { buildOpeningRepresentationShapeFromObject } from '@constructflow/representation-engine'
@@ -41,7 +43,7 @@ import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
 import { CatalogField } from './CatalogField.js'
 import { StairProperties } from './StairProperties.js'
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
-import { evaluateRoomVentilationCompliance } from '@constructflow/clash-engine'
+import { evaluateProjectSiteAndLegalCompliance, evaluateRoomVentilationCompliance } from '@constructflow/clash-engine'
 
 const LengthInput: React.FC<{ value: number; unit: DisplayLengthUnit; onChange: (value: number) => void; style?: React.CSSProperties; disabled?: boolean; 'aria-label'?: string }> = ({ value, unit, onChange, style, disabled, 'aria-label': ariaLabel }) => <WorkbenchNumberInput value={value} unit={unit} onChange={onChange} style={style} disabled={disabled} ariaLabel={ariaLabel} />
 
@@ -75,6 +77,7 @@ interface PropertiesPanelProps {
   onUpdateRoof?: (objectId: string, changes: Partial<RoofModuleData>) => void
   onUpdatePipeRoute?: (objectId: string, changes: Partial<PipeRouteModuleData>) => void
   onUpdateElectricalFixture?: (objectId: string, changes: Partial<ElectricalFixtureModuleData>) => void
+  onAssignElectricalFixtureToCircuit?: (fixtureId: string, circuitId: string | null) => void
   onUpdateCabinet?: (objectId: string, changes: Partial<CabinetModuleData>) => void
   onUpdateMoulding?: (objectId: string, changes: Partial<MouldingModuleData>) => void
   onUpdateStair?: (objectId: string, changes: Partial<StairModuleData>) => void
@@ -114,6 +117,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateRoof,
   onUpdatePipeRoute,
   onUpdateElectricalFixture,
+  onAssignElectricalFixtureToCircuit,
   onUpdateCabinet,
   onUpdateMoulding,
   onUpdateStair,
@@ -838,10 +842,18 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const rData = (roofObj.module_data ?? {}) as Record<string, unknown>
         const boundary = Array.isArray(rData.boundary_mm) ? rData.boundary_mm as [number, number][] : []
         const edges = Array.isArray(rData.edges) ? rData.edges as RoofModuleData['edges'] : []
+        let eavesBoundary = boundary
+        try { eavesBoundary = getRoofEaveBoundary(rData as unknown as RoofModuleData) } catch { /* Keep malformed legacy roof data inspectable. */ }
         const definedSlopes = edges.filter(edge => edge.defines_slope)
+        const roofSeams = getRoofSeams(rData as unknown as RoofModuleData)
+        const seamCounts = {
+          ridge: roofSeams.filter(seam => seam.kind === 'ridge').length,
+          hip: roofSeams.filter(seam => seam.kind === 'hip').length,
+          valley: roofSeams.filter(seam => seam.kind === 'valley').length,
+        }
         const slopeDeg = definedSlopes.length ? definedSlopes.reduce((total, edge) => total + edge.slope_deg, 0) / definedSlopes.length : 0
-        const footprintArea = boundary.length >= 3 ? Math.abs(boundary.reduce((area, point, index) => {
-          const next = boundary[(index + 1) % boundary.length]
+        const footprintArea = eavesBoundary.length >= 3 ? Math.abs(eavesBoundary.reduce((area, point, index) => {
+          const next = eavesBoundary[(index + 1) % eavesBoundary.length]
           return area + point[0] * next[1] - next[0] * point[1]
         }, 0)) / 2_000_000 : 0
         const update = (changes: Partial<RoofModuleData>) => onUpdateRoof?.(roofObj.id, changes)
@@ -851,6 +863,13 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
         const material = String(rData.material ?? 'metal_sheet')
         const knownMaterials = ['metal_sheet', 'pu_metal_sheet', 'concrete_tile', 'clay_tile', 'reinforced_concrete', 'polycarbonate']
+        const hasParcelBoundary = (project.legal_metadata?.boundary_pegs?.length ?? 0) >= 3
+        const hasManualSetback = typeof rData.distance_to_boundary_m === 'number' || typeof rData.eaves_setback_m === 'number'
+        const eavesFinding = hasParcelBoundary || hasManualSetback
+          ? evaluateProjectSiteAndLegalCompliance(project).building_compliance.findings.find(finding => finding.rule_id.startsWith('TH-MR55-RULE-50-EAVES') && finding.title.includes(`[${roofObj.id}]`))
+          : undefined
+        const setbackStatusLabel = eavesFinding?.status === 'pass' ? 'ผ่าน' : eavesFinding?.status === 'fail' ? 'ไม่ผ่าน' : eavesFinding?.status === 'warning' ? 'ตรวจรางน้ำ' : eavesFinding?.status === 'insufficient_data' ? 'ข้อมูลไม่ครบ' : 'ยังตรวจไม่ได้'
+        const setbackStatusColor = eavesFinding?.status === 'pass' ? '#15803d' : eavesFinding?.status === 'fail' ? '#b91c1c' : '#a16207'
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -867,16 +886,26 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 <strong style={{ color: '#0f172a' }}>{slopeDeg.toFixed(1)}&deg;</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                <span style={{ color: '#475569' }}>พื้นที่ฉายในแปลน:</span>
+                <span style={{ color: '#475569' }}>พื้นที่ฉายหลังคารวมชายคา:</span>
                 <strong style={{ color: '#0873c4' }}>{footprintArea.toFixed(2)} ตร.ม.</strong>
               </div>
             </div>
+            {roofSeams.length > 0 && <small style={{ fontSize: 10, color: '#64748b' }}>
+              เส้นหลังคา: สัน {seamCounts.ridge} · ตะเข้สัน {seamCounts.hip} · ร่อง {seamCounts.valley} — ลากจุดกึ่งกลางเส้นในแปลนเพื่อปรับแนว
+            </small>}
             <label className="cf-property-row">ระดับอ้างอิงหลังคา ({displayUnit})
               <LengthInput value={Number(rData.elevation_mm ?? 0)} unit={displayUnit} onChange={value => update({ elevation_mm: value })} aria-label={`ระดับอ้างอิงหลังคา (${displayUnit})`} />
             </label>
             <label className="cf-property-row">ความหนาหลังคา ({displayUnit})
               <LengthInput value={Number(rData.thickness_mm ?? 30)} unit={displayUnit} onChange={value => update({ thickness_mm: Math.max(1, value) })} aria-label={`ความหนาหลังคา (${displayUnit})`} />
             </label>
+            <label className="cf-property-row">ระยะชายคายื่นรอบด้าน ({displayUnit})
+              <LengthInput value={Number(rData.eaves_overhang_mm ?? 0)} unit={displayUnit} onChange={value => update({ eaves_overhang_mm: Math.max(0, Math.min(3000, value)) })} aria-label={`ระยะชายคายื่นรอบด้าน (${displayUnit})`} />
+            </label>
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 3, padding: '5px 7px', display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11 }}>
+              <span style={{ color: '#475569' }}>ระยะร่นชายคาถึงเขตที่ดิน</span>
+              <strong style={{ color: setbackStatusColor, textAlign: 'right' }}>{setbackStatusLabel}{eavesFinding ? ` · ${String(eavesFinding.actual)}` : ' · ระบุหลักเขตอย่างน้อย 3 จุด'}</strong>
+            </div>
             <label className="cf-property-row">วัสดุมุง
               <select aria-label="วัสดุมุงหลังคา" value={material} onChange={event => update({ material: event.target.value })}>
                 {!knownMaterials.includes(material) && <option value={material}>{material} (ค่าปัจจุบัน)</option>}
@@ -898,6 +927,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 <small style={{ color: '#64748b' }}>เปิดความลาดชันเฉพาะด้านที่กำหนด · ด้านที่ปิดจะใช้เป็นแนวสัน/หน้าจั่ว</small>
               </div>
             </details>
+            <button type="button" onClick={() => onDrawSurfaceVoid(roofObj.id)} style={verticalSelectStyle}>วาดช่องเจาะหลังคา ({Array.isArray(rData.voids_mm) ? rData.voids_mm.length : 0})</button>
             <small style={{ color: '#64748b', lineHeight: 1.4 }}>ระยะร่นชายคาต้องตรวจเทียบแนวเขตที่ดินและระยะยื่นจริงของแบบหลังคา</small>
           </div>
         )
@@ -907,14 +937,43 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const data = pipeObj.module_data as unknown as PipeRouteModuleData
         const nodes = data.nodes_mm ?? []
         const gravity = ['waste', 'soil', 'rainwater'].includes(data.system)
+        const gravityNodeElevationsDerived = gravity && data.start_invert_mm !== null && data.end_invert_mm !== null
         const update = (changes: Partial<PipeRouteModuleData>) => onUpdatePipeRoute?.(pipeObj.id, changes)
         const updateNodeElevation = (index: number, elevation: number) => {
           const next = nodes.map((node, nodeIndex) => nodeIndex === index ? [node[0], node[1], elevation] as [number, number, number] : [...node] as [number, number, number])
           update({ nodes_mm: next, ...(gravity ? index === 0 ? { start_invert_mm: elevation } : index === nodes.length - 1 ? { end_invert_mm: elevation } : {} : {}) })
         }
         const material = String(data.material ?? 'PVC')
+        const compatibleNetworkNodes = Object.values(project.objects).filter(object => {
+          if (object.removed_phase !== null) return false
+          if (object.object_type === 'drainage.manhole') {
+            const node = object.module_data as unknown as { system?: string }
+            return data.system === 'vent' || node.system === data.system
+          }
+          if (object.object_type === 'drainage.septic_tank') return ['soil', 'waste', 'vent'].includes(data.system)
+          return object.object_type === 'plumbing.pump_bypass' && ['cold_water', 'hot_water'].includes(data.system)
+        })
+        const addBend = (segmentIndex: number) => {
+          const a = nodes[segmentIndex], b = nodes[segmentIndex + 1]
+          if (!a || !b) return
+          const next = nodes.map(node => [...node] as [number, number, number])
+          next.splice(segmentIndex + 1, 0, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2])
+          update({ nodes_mm: next })
+        }
+        const removeBend = (nodeIndex: number) => {
+          if (nodeIndex <= 0 || nodeIndex >= nodes.length - 1) return
+          update({ nodes_mm: nodes.filter((_, index) => index !== nodeIndex).map(node => [...node] as [number, number, number]) })
+        }
+        const connectionControl = (label: string, field: 'start_node_id' | 'end_node_id', value: string | undefined) => <label className="cf-property-row">{label}
+          <select aria-label={label} value={value ?? ''} onChange={event => update({ [field]: event.target.value || undefined })}>
+            <option value="">ไม่เชื่อมต่อ</option>
+            {compatibleNetworkNodes.map(node => <option key={node.id} value={node.id}>{String((node.module_data as Record<string, unknown>).mark ?? node.id)} · {node.object_type === 'drainage.manhole' ? 'บ่อพัก' : node.object_type === 'drainage.septic_tank' ? 'ถังบำบัด' : 'ปั๊ม/บายพาส'}</option>)}
+          </select>
+        </label>
         return <div style={{ display: 'grid', gap: 7 }}>
           <strong style={{ fontSize: 12, color: '#334155' }}>แนวท่อ · {data.system}</strong>
+          {connectionControl('จุดเชื่อมต้นทาง', 'start_node_id', data.start_node_id)}
+          {connectionControl('จุดเชื่อมปลายทาง', 'end_node_id', data.end_node_id)}
           <label className="cf-property-row">เส้นผ่านศูนย์กลาง (มม.)
             <input aria-label="เส้นผ่านศูนย์กลางท่อ (มม.)" type="number" min="1" step="1" value={data.diameter_mm} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value) && value > 0) update({ diameter_mm: value }) }} />
           </label>
@@ -929,6 +988,20 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           {gravity && <label className="cf-property-row">อัตราความลาดขั้นต่ำ (0.01 = 1:100)
             <input aria-label="อัตราความลาดขั้นต่ำของท่อแบบแรงโน้มถ่วง" type="number" min="0" max="1" step="0.001" value={data.minimum_slope_ratio} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value) && value >= 0) update({ minimum_slope_ratio: value }) }} />
           </label>}
+          {nodes.length > 2 && <div style={{ display: 'grid', gap: 5, padding: '6px 0', borderTop: '1px solid #e2e8f0' }}>
+            <strong style={{ fontSize: 11, color: '#52677d' }}>จุดหักกลาง · ลากจุดสีฟ้าบนแปลนเพื่อปรับแนว</strong>
+            {nodes.slice(1, -1).map((node, index) => {
+              const nodeIndex = index + 1
+              return <div key={nodeIndex} style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 6 }}>
+                <label className="cf-property-row">จุด {nodeIndex + 1} ระดับ ({displayUnit})
+                  <LengthInput value={node[2]} unit={displayUnit} disabled={gravityNodeElevationsDerived} onChange={value => updateNodeElevation(nodeIndex, value)} aria-label={`ระดับจุดหักท่อ ${nodeIndex + 1} (${displayUnit})`} />
+                </label>
+                <button type="button" onClick={() => removeBend(nodeIndex)} aria-label={`ลบจุดหักท่อ ${nodeIndex + 1}`} title="ลบจุดหักนี้" style={{ border: '1px solid #d7e0e9', borderRadius: 4, background: '#fff', color: '#64748b', padding: '4px 7px', cursor: 'pointer' }}>ลบ</button>
+              </div>
+            })}
+          </div>}
+          {nodes.slice(0, -1).map((_, index) => <button key={`bend-${index}`} type="button" onClick={() => addBend(index)} aria-label={`เพิ่มจุดหักท่อช่วง ${index + 1} ถึง ${index + 2}`} style={{ border: '1px solid #bfdbfe', borderRadius: 4, background: '#eff6ff', color: '#1d4ed8', padding: '5px 7px', textAlign: 'left', cursor: 'pointer', fontSize: 11 }}>＋ เพิ่มจุดหักช่วง {index + 1}–{index + 2}</button>)}
+          {nodes.length > 2 && gravityNodeElevationsDerived && <small style={{ color: '#64748b' }}>ระดับจุดหักคำนวณจากระดับต้นทาง/ปลายทางและความยาวแนวท่อ</small>}
           <label className="cf-property-row">วัสดุท่อ
             <select aria-label="วัสดุท่อ" value={material} onChange={event => update({ material: event.target.value })}>
               {!['PVC', 'PPR', 'HDPE', 'PE', 'Copper'].includes(material) && <option value={material}>{material} (ค่าปัจจุบัน)</option>}
@@ -941,13 +1014,32 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       {fixtureObj && (() => {
         const data = fixtureObj.module_data as unknown as ElectricalFixtureModuleData
         const update = (changes: Partial<ElectricalFixtureModuleData>) => onUpdateElectricalFixture?.(fixtureObj.id, changes)
+        const circuits = Object.values(project.objects).filter(object => object.object_type === 'electrical.circuit' && object.removed_phase === null)
+        const inferredCircuitId = circuits.find(circuit => (circuit.module_data as unknown as CircuitModuleData).device_ids.includes(fixtureObj.id))?.id
+        const assignedCircuitId = data.circuit_id ?? inferredCircuitId ?? ''
+        const circuitExists = circuits.some(circuit => circuit.id === assignedCircuitId)
+        const lights = Object.values(project.objects).filter(object => object.object_type === 'electrical.fixture' && object.removed_phase === null && (object.module_data as unknown as ElectricalFixtureModuleData).kind === 'light')
         return <div style={{ display: 'grid', gap: 7 }}>
           <strong style={{ fontSize: 12, color: '#334155' }}>อุปกรณ์ไฟฟ้า · {data.mark}</strong>
           <label className="cf-property-row">ประเภท
-            <select aria-label="ประเภทอุปกรณ์ไฟฟ้า" value={data.kind} onChange={event => update({ kind: event.target.value as ElectricalFixtureModuleData['kind'] })}>
+            <select aria-label="ประเภทอุปกรณ์ไฟฟ้า" value={data.kind} onChange={event => { const kind = event.target.value as ElectricalFixtureModuleData['kind']; update({ kind, ...(kind !== 'switch' ? { controlled_ids: [] } : {}) }) }}>
               <option value="light">ดวงโคม</option><option value="switch">สวิตช์</option><option value="outlet">เต้ารับ</option><option value="panel">ตู้ไฟ</option>
             </select>
           </label>
+          <label className="cf-property-row">วงจรไฟฟ้า
+            <select aria-label="กำหนดวงจรไฟฟ้า" value={assignedCircuitId} disabled={data.kind === 'panel'} onChange={event => onAssignElectricalFixtureToCircuit?.(fixtureObj.id, event.target.value || null)}>
+              <option value="">ไม่กำหนดวงจร</option>
+              {assignedCircuitId && !circuitExists && <option value={assignedCircuitId}>{assignedCircuitId} · ไม่พบวงจร</option>}
+              {circuits.map(circuit => {
+                const circuitData = circuit.module_data as unknown as CircuitModuleData
+                const panel = project.objects[circuitData.panel_id]
+                const panelMark = panel ? String((panel.module_data as Record<string, unknown>).mark ?? circuitData.panel_id) : circuitData.panel_id
+                const circuitMark = String((circuit.module_data as Record<string, unknown>).mark ?? circuit.id)
+                return <option key={circuit.id} value={circuit.id}>{circuitMark} · {panelMark} · {circuitData.breaker_a} A</option>
+              })}
+            </select>
+          </label>
+          {data.kind === 'panel' && <small style={{ color: '#64748b' }}>ตู้ไฟเป็นต้นทางของวงจร จึงกำหนดวงจรให้ตู้ไฟไม่ได้</small>}
           <label className="cf-property-row">กำลังไฟฟ้า (W)
             <input aria-label="กำลังไฟฟ้าของอุปกรณ์ (วัตต์)" type="number" min="0" step="1" value={data.watts} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value) && value >= 0) update({ watts: value }) }} />
           </label>
@@ -955,6 +1047,17 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <LengthInput value={data.location_mm[2]} unit={displayUnit} onChange={value => update({ location_mm: [data.location_mm[0], data.location_mm[1], value] })} aria-label={`ระดับติดตั้งอุปกรณ์ไฟฟ้า (${displayUnit})`} />
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}><input type="checkbox" checked={data.grounded} onChange={event => update({ grounded: event.target.checked })} /> ต่อสายดิน</label>
+          {data.kind === 'switch' && <div style={{ display: 'grid', gap: 4, paddingTop: 5, borderTop: '1px solid #e2e8f0' }}>
+            <strong style={{ fontSize: 11, color: '#52677d' }}>ดวงโคมที่สวิตช์ควบคุม</strong>
+            {lights.length ? lights.map(light => {
+              const lightData = light.module_data as unknown as ElectricalFixtureModuleData
+              const checked = data.controlled_ids.includes(light.id)
+              return <label key={light.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#334155' }}>
+                <input type="checkbox" checked={checked} onChange={event => update({ controlled_ids: event.target.checked ? [...new Set([...data.controlled_ids, light.id])] : data.controlled_ids.filter(id => id !== light.id) })} />
+                {lightData.mark} · {lightData.watts} W
+              </label>
+            }) : <small style={{ color: '#64748b' }}>ยังไม่มีดวงโคมในโครงการ</small>}
+          </div>}
         </div>
       })()}
 
@@ -1315,7 +1418,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   <input aria-label="ทิศระบายน้ำของพื้น องศา" type="number" step="1" value={Number(slabData.drain_direction_deg ?? 0)} onChange={event => updateSlab({ drain_direction_deg: Number(event.target.value) || 0 })} style={verticalSelectStyle} />
                 </label>
               </div>
-              <small style={{ fontSize: 10, color: '#64748b' }}>น้ำไหลลงตามทิศนี้ · 0° = ตะวันออก, 90° = เหนือ · เช่น 1.0% = ลาด 1:100</small>
+              <small style={{ fontSize: 10, color: '#64748b' }}>ลากลูกศรบนแปลนเพื่อเปลี่ยนทิศ · ลากสี่เหลี่ยมกลางขอบเพื่อเยื้องขอบ · 0° = ตะวันออก, 90° = เหนือ · 1.0% = ลาด 1:100</small>
               <details className="cf-inspector-section">
                 <summary>ชั้นปิดผิว · {finishLayers.length} ชั้น{finishLayers.length ? ` · ผิวสำเร็จ +${formatLengthMm((resolvedElevation ?? 0) + Number(slabData.topping_mm ?? 0) + finishLayers.reduce((sum, layer) => sum + Number(layer.offset_mm ?? 0) + Number(layer.thickness_mm ?? 0), 0), displayUnit)} ${displayUnit}` : ''}</summary>
               <strong style={{ fontSize: 11, marginTop: 3 }}>ชั้นปิดผิวในพื้นชิ้นนี้</strong>

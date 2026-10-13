@@ -44,6 +44,9 @@ import { calculateTakeoff, calculatePhasedBOQ } from '@constructflow/takeoff-eng
 import { renderPermitDrawingSetHtml } from '@constructflow/sheet-engine'
 import { readProjectFile, writeProjectFile, type LocalProjectFileHandle } from './projectFileIO.js'
 import { loadLocalProjectSnapshot, saveLocalProjectSnapshot } from './projectAutosave.js'
+import { buildDirectManipulationCommands } from './directManipulation.mjs'
+import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
+import { getRoofEaveBoundary } from '@constructflow/roof-engine'
 import houseDemoRaw from '../../../examples/constructflow-reference-house-2storey.cfproj?raw'
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
@@ -192,6 +195,19 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       }
     }
     return result
+  }
+  const previewDirectManipulation = (commands: CommandRequest[]) => {
+    const result = CommandBus.executeBatch(project, commands)
+    return {
+      valid: result.status === 'success',
+      project: result.updatedProject,
+      affected_object_ids: [...new Set(result.results.flatMap(item => item.affected_object_ids))],
+      errors: result.errors ?? [],
+    }
+  }
+  const commitDirectManipulation = (commands: CommandRequest[]) => dispatchCommandBatch(commands)
+  const handleManipulationRejected = (errors: string[]) => {
+    if (errors.length) setFileFeedback(errors[0])
   }
   const handleProjectNameCommit = () => {
     const name = projectNameDraft.trim()
@@ -696,6 +712,13 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
     } else if (result.result.errors?.length) setFileFeedback(result.result.errors.join(' · '))
   }
+  const handleAssignElectricalFixtureToCircuit = (fixtureId: string, circuitId: string | null) => {
+    const result = dispatchCommandBatch([{
+      name: 'AssignFixtureToCircuit',
+      input: { fixture_id: fixtureId, circuit_id: circuitId },
+    }])
+    if (result.status !== 'success') setFileFeedback(result.errors?.[0] ?? 'กำหนดวงจรให้กับอุปกรณ์ไฟฟ้าไม่สำเร็จ')
+  }
   const handleCommitPipeRoute = (start: [number, number], end: [number, number], system: 'waste' | 'soil' | 'rainwater' | 'vent' | 'cold_water' | 'hot_water') => {
     const level = project.levels.find(item => item.id === project.project.active_level_id)
     const runMm = Math.hypot(end[0] - start[0], end[1] - start[1])
@@ -710,7 +733,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       level_id: level.id, created_phase: 'new_construction', system,
       nodes_mm: [[start[0], start[1], startZ], [end[0], end[1], endZ]],
       diameter_mm: ({ waste: 50, soil: 100, rainwater: 75, vent: 50, cold_water: 20, hot_water: 20 } as const)[system],
-      start_node_id: '', end_node_id: '', start_invert_mm: gravity ? startZ : null,
+      start_invert_mm: gravity ? startZ : null,
       end_invert_mm: gravity ? endZ : null, minimum_slope_ratio: gravity ? 0.01 : 0,
       material: system === 'cold_water' || system === 'hot_water' ? 'PPR' : 'PVC',
     })
@@ -767,25 +790,28 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
   const handleCommitSurfaceVoid = (hostId: string, boundary_mm: [number, number][]) => {
     const host = project.objects[hostId]
-    if (!host || !['structure.slab', 'architecture.floor', 'architecture.ceiling'].includes(host.object_type) || boundary_mm.length < 3) return
+    if (!host || !['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(host.object_type) || boundary_mm.length < 3) return
     const data = host.module_data as Record<string, unknown>
-    const inside = (point: [number, number], ring: [number, number][]) => {
-      let result = false
-      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-        const [xi, yi] = ring[i], [xj, yj] = ring[j]
-        if (((yi > point[1]) !== (yj > point[1])) && point[0] < (xj - xi) * (point[1] - yi) / (yj - yi) + xi) result = !result
-      }
-      return result
-    }
-    const boundary = data.boundary_mm as [number, number][]
-    if (!boundary || !boundary_mm.every(point => inside(point, boundary))) {
-      setFileFeedback('ช่องเจาะต้องอยู่ภายในขอบเขตของพื้นหรือฝ้าทั้งหมด')
+    const boundary = data.boundary_mm as [number, number][] | undefined
+    if (!boundary || boundary.length < 3) return
+    const voids = Array.isArray(data.voids_mm) ? data.voids_mm as [number, number][][] : []
+    let hostBoundary = boundary
+    try {
+      if (host.object_type === 'roof.system')
+        hostBoundary = getRoofEaveBoundary({ boundary_mm: boundary, eaves_overhang_mm: Number(data.eaves_overhang_mm ?? 0) })
+    } catch {
+      setFileFeedback('ขอบเขตชายคาหลังคาไม่ถูกต้อง จึงวาดช่องเจาะไม่ได้')
       return
     }
-    const voids = Array.isArray(data.voids_mm) ? data.voids_mm as [number, number][][] : []
+    const validation = validatePolygonWithVoids(hostBoundary, [...voids, boundary_mm])
+    if (!validation.valid) {
+      setFileFeedback(`ช่องเจาะต้องอยู่ภายในขอบเขตและไม่ทับช่องเดิม: ${validation.reason}`)
+      return
+    }
     const command = host.object_type === 'structure.slab'
       ? 'UpdateSlab'
-      : host.object_type === 'architecture.floor' ? 'UpdateArchitecturalFloor' : 'UpdateCeiling'
+      : host.object_type === 'architecture.floor' ? 'UpdateArchitecturalFloor'
+        : host.object_type === 'architecture.ceiling' ? 'UpdateCeiling' : 'UpdateRoof'
     const result = CommandBus.execute(project, command, { ...data, id: hostId, voids_mm: [...voids, boundary_mm] })
     if (result.result.status === 'success') {
       setProject(result.updatedProject)
@@ -1390,7 +1416,122 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     }
   }
 
-  const handleMoveElevationObject = (objectId: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move'|'top') => {
+  const buildElevationManipulationCommands = (objectId: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move'|'top'|'base', gripIndex?: number): CommandRequest[] => {
+    const object = project.objects[objectId]
+    if (!object) return []
+    const [dx,dy]=deltaWorldMm,commands:CommandRequest[]=[]
+    const sideGrip=gripIndex===3||gripIndex===4
+    const horizontalAxis=viewMode==='east'||viewMode==='west'?1:0
+    const horizontalDelta=horizontalAxis===0?dx:dy
+    const effectiveHorizontalDelta=gripIndex===undefined||sideGrip?horizontalDelta:0
+    if(sideGrip){
+      const reversed=viewMode==='south'||viewMode==='west'
+      const sign=(gripIndex===3?-1:1)*(reversed?-1:1)
+      if(object.object_type==='architecture.wall'){
+        const data=object.module_data as Record<string,any>,coordinates=[data.start_point_mm[horizontalAxis],data.end_point_mm[horizontalAxis]]
+        const leftIndex=(coordinates[0]===coordinates[1]?0:((coordinates[0]<coordinates[1])!==reversed?0:1))
+        const endpointIndex=gripIndex===3?leftIndex:1-leftIndex
+        const start:[number,number]=[data.start_point_mm[0],data.start_point_mm[1]],end:[number,number]=[data.end_point_mm[0],data.end_point_mm[1]]
+        const target=endpointIndex===0?start:end;target[horizontalAxis]+=effectiveHorizontalDelta
+        commands.push({name:'UpdateWallEndpoints',input:{object_id:object.id,start_point_mm:start,end_point_mm:end}})
+      }else if(isDoorObject(object)||isWindowObject(object)){
+        const wall=project.objects[object.module_data.wall_id]
+        if(!wall||!isWallObject(wall))return []
+        const wallStart=wall.module_data.start_point_mm,wallEnd=wall.module_data.end_point_mm
+        const wallLength=Math.hypot(wallEnd[0]-wallStart[0],wallEnd[1]-wallStart[1])
+        if(wallLength<1)return []
+        const tangent:[number,number]=[(wallEnd[0]-wallStart[0])/wallLength,(wallEnd[1]-wallStart[1])/wallLength]
+        const projectedDirection=tangent[horizontalAxis]*(viewMode==='south'||viewMode==='west'?-1:1)
+        if(Math.abs(projectedDirection)<0.01)return []
+        const startSide=(gripIndex===3)===(projectedDirection>0)
+        const deltaAlong=effectiveHorizontalDelta/(horizontalAxis===0?tangent[0]:tangent[1])
+        const width=object.module_data.width_mm,offset=object.module_data.offset_along_wall_mm
+        const change=startSide?-deltaAlong:deltaAlong
+        const nextWidth=Math.max(100,width+change),actualChange=nextWidth-width,nextOffset=offset+(startSide?-actualChange/2:actualChange/2)
+        commands.push({name:isDoorObject(object)?'UpdateDoorDimensions':'UpdateWindowDimensions',input:{object_id:object.id,width_mm:nextWidth,height_mm:object.module_data.height_mm,offset_along_wall_mm:nextOffset,...(isDoorObject(object)?{sill_height_mm:Number(object.module_data.sill_height_mm??0)}:{sill_height_mm:object.module_data.sill_height_mm}),...(object.module_data.vertical_constraint==='head_level'?{head_level_id:object.module_data.head_level_id,head_offset_mm:object.module_data.head_offset_mm,vertical_constraint:'head_level'}:{vertical_constraint:'fixed_height'})}})
+      }else if(isBeamObject(object)){
+        const d=object.module_data,coordinates=[d.start_point_mm[horizontalAxis],d.end_point_mm[horizontalAxis]],leftIndex=(coordinates[0]===coordinates[1]?0:((coordinates[0]<coordinates[1])!==reversed?0:1)),endpointIndex=gripIndex===3?leftIndex:1-leftIndex
+        const start:[number,number]=[d.start_point_mm[0],d.start_point_mm[1]],end:[number,number]=[d.end_point_mm[0],d.end_point_mm[1]]
+        const target=endpointIndex===0?start:end;target[horizontalAxis]+=effectiveHorizontalDelta
+        commands.push({name:'UpdateBeamEndpoints',input:{object_id:object.id,start_point_mm:start,end_point_mm:end,start_column_id:endpointIndex===0?null:d.start_column_id??null,end_column_id:endpointIndex===1?null:d.end_column_id??null}})
+      }else if(isColumnObject(object)){
+        const d=object.module_data,angle=((d.rotation_deg%180)+180)%180
+        if(Math.min(angle,Math.abs(angle-90),180-angle)>1)return []
+        const sectionIndex=horizontalAxis===(angle===0?0:1)?0:1
+        const section:[number,number]=[...d.section_mm] as [number,number]
+        const nextSection=Math.max(100,section[sectionIndex]+sign*effectiveHorizontalDelta)
+        const actualEdgeMove=(nextSection-section[sectionIndex])/sign
+        section[sectionIndex]=nextSection
+        const location:[number,number,number]=[...d.location_mm]
+        location[horizontalAxis]+=actualEdgeMove/2
+        commands.push({name:'MoveColumn',input:{object_id:object.id,location_mm:location}},{name:'UpdateColumnDimensions',input:{object_id:object.id,section_mm:section}})
+      }else if(['structure.slab','architecture.floor','architecture.ceiling','roof.system','architecture.room'].includes(object.object_type)){
+        const d=object.module_data as Record<string,any>,boundary=d.boundary_mm as [number,number][]
+        if(!boundary?.length)return []
+        const min=Math.min(...boundary.map(point=>point[horizontalAxis])),max=Math.max(...boundary.map(point=>point[horizontalAxis])),leftAtMin=!reversed,moveMin=(gripIndex===3)===leftAtMin,edge=moveMin?min:max,next=boundary.map(point=>{const updated:[number,number]=[...point];if(Math.abs(point[horizontalAxis]-edge)<1)updated[horizontalAxis]+=effectiveHorizontalDelta;return updated})
+        const command=object.object_type==='structure.slab'?'UpdateSlab':object.object_type==='architecture.floor'?'UpdateArchitecturalFloor':object.object_type==='architecture.ceiling'?'UpdateCeiling':object.object_type==='roof.system'?'UpdateRoof':'UpdateRoom'
+        commands.push({name:command,input:{...d,id:object.id,boundary_mm:next,...(command==='UpdateArchitecturalFloor'||command==='UpdateCeiling'?{follows_room_boundary:false}:{})}})
+      }
+    }else if(gripIndex===undefined&&Math.hypot(dx,dy)>0.1){
+      const movement=buildDirectManipulationCommands(project,{id:objectId,kind:'object-move',startWorldMm:[0,0],startScreenPx:[0,0]},deltaWorldMm)
+      commands.push(...movement)
+    }
+    const effectiveDeltaZMm=gripIndex===undefined||gripIndex===1||gripIndex===6?deltaZMm:0
+    if(Math.abs(effectiveDeltaZMm)>0.1){
+      const d=object.module_data as Record<string,any>,top=verticalIntent==='top',base=verticalIntent==='base'
+      if(isWallObject(object)){
+        if(d.vertical_constraint==='top_level'){
+          commands.push({name:'UpdateWallDimensions',input:{object_id:objectId,thickness_mm:d.thickness_mm,...(top?{top_level_id:d.top_level_id,top_offset_mm:Number(d.top_offset_mm??0)+deltaZMm,vertical_constraint:'top_level'}:base?{top_level_id:d.top_level_id,base_offset_mm:Number(d.base_offset_mm??0)+deltaZMm,top_offset_mm:Number(d.top_offset_mm??0),vertical_constraint:'top_level'}:{top_level_id:d.top_level_id,base_offset_mm:Number(d.base_offset_mm??0)+deltaZMm,top_offset_mm:Number(d.top_offset_mm??0)+deltaZMm,vertical_constraint:'top_level'})}})
+        }else commands.push({name:'UpdateWallDimensions',input:{object_id:objectId,thickness_mm:d.thickness_mm,height_mm:Math.max(100,Number(d.height_mm)+(top?deltaZMm:base?-deltaZMm:0)),base_offset_mm:Number(d.base_offset_mm??0)+(base||!top?deltaZMm:0),vertical_constraint:'fixed_height'}})
+      }else if(isDoorObject(object)||isWindowObject(object)){
+        const oldSill=Number(d.sill_height_mm??0),oldHeight=Number(d.height_mm??2000)
+        let sill=oldSill,height=oldHeight
+        let vertical:Record<string,unknown>
+        if(top){
+          vertical=d.vertical_constraint==='head_level'
+            ?{head_level_id:d.head_level_id,head_offset_mm:Number(d.head_offset_mm??0)+deltaZMm,vertical_constraint:'head_level'}
+            :{vertical_constraint:'fixed_height'}
+          if(d.vertical_constraint!=='head_level')height=Math.max(100,oldHeight+deltaZMm)
+        }else if(base){
+          const proposedSill=Math.max(0,oldSill+deltaZMm)
+          const actualSillDelta=Math.min(proposedSill-oldSill,Math.max(0,oldHeight-100))
+          sill=oldSill+actualSillDelta;height=oldHeight-actualSillDelta
+          vertical=d.vertical_constraint==='head_level'
+            ?{head_level_id:d.head_level_id,head_offset_mm:Number(d.head_offset_mm??0),vertical_constraint:'head_level'}
+            :{vertical_constraint:'fixed_height'}
+        }else{
+          sill=Math.max(0,oldSill+deltaZMm)
+          const actualSillDelta=sill-oldSill
+          vertical=d.vertical_constraint==='head_level'
+            ?{head_level_id:d.head_level_id,head_offset_mm:Number(d.head_offset_mm??0)+actualSillDelta,vertical_constraint:'head_level'}
+            :{vertical_constraint:'fixed_height'}
+        }
+        commands.push({name:isDoorObject(object)?'UpdateDoorDimensions':'UpdateWindowDimensions',input:{object_id:objectId,width_mm:d.width_mm,height_mm:height,sill_height_mm:sill,...vertical}})
+      }else if(isColumnObject(object)){
+        const baseOffset=Number(d.base_offset_mm??0),topOffset=Number(d.top_offset_mm??0)
+        commands.push({name:'UpdateColumnVerticalReference',input:{object_id:objectId,...(d.top_level_id?{top_level_id:d.top_level_id}:{}),base_offset_mm:baseOffset+(base||(!top&&!base)?deltaZMm:0),top_offset_mm:topOffset+(top||(!top&&!base)?deltaZMm:0)}})
+      }else if(isBeamObject(object)){
+        const section:[number,number]=[...d.section_mm] as [number,number]
+        if(top){
+          const oldDepth=section[1]
+          section[1]=Math.max(100,oldDepth+deltaZMm)
+          const actualTopDelta=section[1]-oldDepth
+          commands.push({name:'UpdateBeamDimensions',input:{object_id:objectId,section_mm:section}},{name:'UpdateBeamVerticalReference',input:{object_id:objectId,level_id:d.level_id,base_offset_mm:Number(d.base_offset_mm??0)+actualTopDelta}})
+        }else if(base){section[1]=Math.max(100,section[1]-deltaZMm);commands.push({name:'UpdateBeamDimensions',input:{object_id:objectId,section_mm:section}})}
+        else commands.push({name:'UpdateBeamVerticalReference',input:{object_id:objectId,level_id:d.level_id,base_offset_mm:Number(d.base_offset_mm??0)+deltaZMm}})
+      }else if(object.object_type==='structure.slab'){
+        const thickness=Math.max(25,Number(d.thickness_mm)+(top?deltaZMm:base?-deltaZMm:0)),moveTop=top||(!top&&!base),elevation=Number(d.elevation_mm??0)+(moveTop?deltaZMm:0)
+        commands.push({name:'UpdateSlab',input:{...d,id:objectId,thickness_mm:thickness,elevation_mm:elevation,...(d.elevation_offset_mm!==undefined?{elevation_offset_mm:Number(d.elevation_offset_mm)+(moveTop?deltaZMm:0)}:{})}})
+      }else if(object.object_type==='architecture.floor'||object.object_type==='architecture.ceiling'){
+        const thickness=Math.max(25,Number(d.thickness_mm)+(top?deltaZMm:base?-deltaZMm:0)),moveTop=top||(!top&&!base),offset=d.elevation_offset_mm===undefined?undefined:Number(d.elevation_offset_mm)+(moveTop?deltaZMm:0)
+        commands.push({name:object.object_type==='architecture.floor'?'UpdateArchitecturalFloor':'UpdateCeiling',input:{...d,id:objectId,thickness_mm:thickness,elevation_mm:Number(d.elevation_mm??0)+(moveTop?deltaZMm:0),...(offset!==undefined?{elevation_offset_mm:offset}:{})}})
+      }else if(object.object_type==='roof.system')commands.push({name:'UpdateRoof',input:{...d,id:objectId,elevation_mm:Number(d.elevation_mm??0)+deltaZMm}})
+      else if(object.object_type==='architecture.stair')commands.push({name:'UpdateStair',input:{...d,id:objectId,base_offset_mm:Number(d.base_offset_mm??0)+deltaZMm,...(d.top_level_id?{top_offset_mm:Number(d.top_offset_mm??0)+deltaZMm}:{}),start_point_mm:[d.start_point_mm[0],d.start_point_mm[1],Number(d.start_point_mm[2]??0)+deltaZMm]}})
+    }
+    return commands
+  }
+
+  const handleMoveElevationObject = (objectId: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move'|'top'|'base') => {
     const object=project.objects[objectId];if(!object)return
     if(isWallObject(object)){
       const commands:CommandRequest[]=[]
@@ -2090,6 +2231,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               onUpdateMoulding={(id, changes) => handleUpdateDomainObject(id, 'UpdateMouldingRun', changes)}
               onResizeColumn={handleResizeColumn}
               onResizeFoundation={handleResizeFoundation}
+              onPreviewManipulation={previewDirectManipulation}
+              onCommitManipulation={commitDirectManipulation}
+              onManipulationRejected={handleManipulationRejected}
               onFlipDoorHanding={handleFlipDoorHanding}
               onStartCalibrationModal={(dist, first, second) => {
                 setMeasuredCalibrationDist_mm(dist)
@@ -2100,7 +2244,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 setCursorCoords_mm(coords)
                 setSnapKind(kind)
               }}
-            /> : viewMode !== 'model3d' ? <ElevationCanvas project={project} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
+            /> : viewMode !== 'model3d' ? <ElevationCanvas project={project} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} onBuildManipulation={viewMode === 'rcp' ? undefined : buildElevationManipulationCommands} onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation} onManipulationRejected={handleManipulationRejected} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
               <Model3DViewport project={project} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} coordination={coordinationFindings} />
             </Suspense>}
           </div>
@@ -2180,6 +2324,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             onUpdateRoof={handleUpdateRoof}
             onUpdatePipeRoute={(id, changes) => handleUpdateDomainObject(id, 'EditPipeRoute', changes)}
             onUpdateElectricalFixture={(id, changes) => handleUpdateDomainObject(id, 'UpdateElectricalFixture', changes)}
+            onAssignElectricalFixtureToCircuit={handleAssignElectricalFixtureToCircuit}
             onUpdateCabinet={(id, changes) => handleUpdateDomainObject(id, 'UpdateCabinetRun', changes)}
             onUpdateMoulding={(id, changes) => handleUpdateDomainObject(id, 'UpdateMouldingRun', changes)}
             onUpdateStair={handleUpdateStair}
@@ -2198,7 +2343,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             onOpenTypeManager={() => openCatalog(true,true)}
             onAddFoundation={(colId) => handleCommitFoundation({ columnId: colId })}
             onDeleteObject={handleDeleteObject}
-            onDrawSurfaceVoid={(surfaceId) => { setSelectedId(surfaceId); setViewMode('plan'); setActiveTool('slabVoid') }}
+            onDrawSurfaceVoid={(surfaceId) => { setSelectedId(surfaceId); setViewMode(project.objects[surfaceId]?.object_type === 'roof.system' ? 'roofplan' : 'plan'); setActiveTool('slabVoid') }}
             onCreateRoomFinish={handleCreateRoomFinish}
           /></div>}
 

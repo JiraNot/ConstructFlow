@@ -316,6 +316,7 @@ export interface RoofEdgeSlope { defines_slope:boolean; slope_deg:number }
 export interface RoofModuleData extends CatalogPlacement {
   boundary_mm:Point2Mm[]
   voids_mm?:Point2Mm[][]
+  eaves_overhang_mm?:number
   elevation_mm:number
   edges:RoofEdgeSlope[]
   material:string

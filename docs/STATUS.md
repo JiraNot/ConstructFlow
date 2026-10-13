@@ -19,9 +19,55 @@ Continuation on 2026-10-13: cabinet runs now render a selectable plan envelope, 
 separators. A purple rotation grip snaps to plan references (Ctrl disables snapping) and rotates about
 the original placement point while preserving the cabinet dimensions and UUID. Fit-to-view and window
 selection include the rotated cabinet footprint. `DRAWING-UX-CAPABILITY-MATRIX-2026-10-13.md` tracks
-the remaining roof-ridge, slab-edge and cross-domain editing work. `npm run test:standalone` passed all
+the remaining hipped-roof and cross-domain editing work. `npm run test:standalone` passed all
 406 Node tests across 25 build targets and five integration verifiers; the production build still warns
 about oversized app, PDF and Three.js chunks.
+
+Continuation on 2026-10-13: selected structural slabs now expose parallel edge-offset grips and a
+drainage arrow that can be dragged to set its direction. Edge edits keep openings in model coordinates;
+slab validation now rejects voids that cross or leave the edited footprint. Two-slope gable roofs expose
+a ridge grip that moves the ridge by adjusting the opposing pitches while holding the peak elevation.
+These edits use the normal command-bus preview and undoable commit path. Hipped-roof valleys, eaves
+overhangs and roof openings remain open work. Targeted geometry, roof, command-runtime and direct-grip
+tests pass; the final `npm run test:standalone` passed 420 Node tests across 25 build targets and all
+five integration verifiers. The Vite build still reports oversized application, PDF and Three.js chunks.
+
+Continuation on 2026-10-13: pipe routes can now insert/remove midpoint bends, expose draggable grips for
+interior nodes, and connect each end to compatible manholes, septic tanks or water pump-bypass
+assemblies from the route inspector. Gravity edits recalculate intermediate elevations from known
+endpoint datums; unknown inverts remain unknown, and a proposed invalid known grade is shown as a
+rejected ghost that cannot be committed. Empty legacy endpoint IDs are normalized as
+unconnected hosts. Electrical fixture properties now assign/unassign circuits and select light loads
+for switches. The new `AssignFixtureToCircuit` command updates the fixture and all affected circuit load
+lists together, validates panel/load/breaker rules, and is one undo/redo step. Empty circuits can be
+created before assigning devices. `npm run test:standalone` passed 424 Node tests across 25 build
+targets and all five integration verifiers. Multi-click route authoring, fittings, visible circuit paths,
+conduit geometry, and full MEP clash coverage remain open; the Vite build still reports oversized app,
+PDF and Three.js chunks.
+
+Continuation on 2026-10-13: selected hip roofs now show their derived facet seams in the roof plan:
+primary ridge, hip lines, and valley lines originating at reflex footprint corners use distinct line
+styles and grips. Dragging a ridge preserves its peak datum; dragging another seam grip adjusts the two
+supporting pitches while keeping the seam through the cursor. Candidate roof facets and seams follow
+the existing validated ghost/undo path. Roof-engine and Plan Editor regression tests cover rectangular
+hip ridges, hip grips, and an L-shaped valley grip. `npm run test:standalone` passed all 428 Node tests
+across 25 build targets and five integration verifiers. The current roof mesh still derives from edge
+pitch planes; separately modeled valley framing/gutters, eave overhangs, roof openings, and visual
+acceptance in the live editor remain open. Vite continues to report oversized app, PDF and Three.js
+chunks.
+
+Continuation on 2026-10-13: roof footprints now support concave geometry, and a uniform 0–3000 mm eaves
+overhang expands the plan outline, surface mesh, catchment area, gutters and legal setback measurement.
+Roof openings can be drawn from the roof inspector in roof plan; the command validates containment and
+overlap, subtracts openings from the actual facet triangles and covering quantity, and preserves the
+opening outline at the pitched surface elevation. Concave roofs generate a separate valley-gutter
+channel mesh and length takeoff. Gable rake edges no longer receive false eave gutters, and generated
+downpipes now match the catchment recommendation. Rule 50 uses surveyed deed pegs when available and
+reports insufficient data when no survey or explicit measured setback is supplied. `npm run
+test:standalone` passed all 435 Node tests across 25 build targets and five integration verifiers;
+Plan Editor production build passed with the existing oversized app, PDF and Three.js chunk warnings.
+Live visual acceptance remains open, as do roof type catalogs, structural valley rafters/purlins/trusses,
+and project-specific rainfall/outlet design inputs.
 
 Verification on 2026-10-12: `apps/plan-editor` production build passed and its 24 tests passed. The
 selected command-runtime, architecture, geometry, clash, snapping and sheet suites passed 188 tests;

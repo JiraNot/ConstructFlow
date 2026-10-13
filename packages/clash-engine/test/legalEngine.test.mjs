@@ -642,3 +642,46 @@ test('Pillar 1: evaluateProjectSiteAndLegalCompliance executes all-in-one legal 
   assert.ok(report.all_findings.length >= 4)
 })
 
+test('roof eaves setback measures the overhang against surveyed parcel pegs', () => {
+  const project = {
+    levels: [],
+    legal_metadata: {
+      boundary_pegs: [
+        { peg_no: '1', coordinate_m: [0, 0] }, { peg_no: '2', coordinate_m: [5, 0] },
+        { peg_no: '3', coordinate_m: [5, 5] }, { peg_no: '4', coordinate_m: [0, 5] },
+      ],
+    },
+    objects: {
+      roof: {
+        id: 'roof', object_type: 'roof.system', status: 'active',
+        module_data: {
+          name: 'Test roof', boundary_mm: [[1000, 1000], [3000, 1000], [3000, 3000], [1000, 3000]],
+          eaves_overhang_mm: 500, distance_to_boundary_m: 1.5, has_gutter: true,
+        },
+      },
+    },
+  }
+  const measured = evaluateProjectSiteAndLegalCompliance(project)
+  let finding = measured.building_compliance.findings.find(item => item.rule_id === 'TH-MR55-RULE-50-EAVES')
+  assert.equal(finding?.status, 'pass')
+  assert.equal(finding?.actual, '0.50 ม.')
+
+  project.objects.roof.module_data.eaves_overhang_mm = 600
+  const tooClose = evaluateProjectSiteAndLegalCompliance(project)
+  finding = tooClose.building_compliance.findings.find(item => item.rule_id === 'TH-MR55-RULE-50-EAVES-VIOLATION')
+  assert.equal(finding?.status, 'fail')
+  assert.equal(finding?.actual, '0.40 ม. (ไม่มีหนังสือยินยอม)')
+})
+
+test('roof setback is insufficient data when no surveyed boundary or measured offset exists', () => {
+  const report = evaluateProjectSiteAndLegalCompliance({
+    levels: [],
+    objects: {
+      roof: { id: 'roof-unknown', object_type: 'roof.system', status: 'active', module_data: { name: 'Roof' } },
+    },
+  })
+  const finding = report.building_compliance.findings.find(item => item.rule_id === 'TH-MR55-RULE-50-EAVES-DATA')
+  assert.equal(finding?.status, 'insufficient_data')
+  assert.equal(report.building_compliance.overall_status, 'insufficient_data')
+})
+

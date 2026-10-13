@@ -71,11 +71,15 @@ export function decodeCircuit(
     resolvedData(p, p.objects[panel_id]).kind !== "panel"
   )
     throw new Error("Circuit requires a panel");
-  const device_ids = list(d.device_ids, "devices", (v) => text(v, "device id"));
+  const device_ids = list(d.device_ids, "devices", (v) => text(v, "device id"), 0);
   if (new Set(device_ids).size !== device_ids.length)
     throw new Error("Circuit has duplicate device IDs");
   for (const id of device_ids)
-    if (p.objects[id]?.object_type !== "electrical.fixture" || id === panel_id)
+    if (
+      p.objects[id]?.object_type !== "electrical.fixture" ||
+      id === panel_id ||
+      resolvedData(p, p.objects[id]).kind === "panel"
+    )
       throw new Error("Circuit device is missing or is the panel");
   const voltage = positive(d.voltage, "voltage"),
     breaker_a = positive(d.breaker_a, "breaker"),
@@ -104,6 +108,90 @@ export function decodeCircuit(
   if (load / voltage > breaker_a + 1e-9)
     throw new Error("Connected load exceeds breaker current");
   return result;
+}
+
+function assignFixtureToCircuit(
+  c: CommandHandlerContext,
+): CommandBusResult {
+  const fixtureId = text(c.input.fixture_id, "fixture_id");
+  const fixture = c.updated.objects[fixtureId];
+  if (
+    !fixture ||
+    fixture.object_type !== "electrical.fixture" ||
+    fixture.removed_phase !== null
+  )
+    throw new Error("Electrical fixture is missing or inactive");
+
+  const circuitId =
+    typeof c.input.circuit_id === "string" && c.input.circuit_id.trim()
+      ? c.input.circuit_id
+      : undefined;
+  const targetCircuit = circuitId ? c.updated.objects[circuitId] : undefined;
+  if (circuitId && (!targetCircuit || targetCircuit.object_type !== "electrical.circuit" || targetCircuit.removed_phase !== null))
+    throw new Error("Target electrical circuit is missing or inactive");
+  if (circuitId && resolvedData(c.updated, fixture).kind === "panel")
+    throw new Error("A panel cannot be assigned as a circuit load");
+
+  const affectedIds: string[] = [];
+  for (const circuit of Object.values(c.updated.objects)) {
+    if (circuit.object_type !== "electrical.circuit" || circuit.removed_phase !== null)
+      continue;
+    const data = circuit.module_data as unknown as CircuitModuleData;
+    const alreadyContains = data.device_ids.includes(fixtureId);
+    const isTarget = circuit.id === circuitId;
+    if (!alreadyContains && !isTarget) continue;
+    const device_ids = data.device_ids.filter((id) => id !== fixtureId);
+    if (isTarget) device_ids.push(fixtureId);
+    c.updated.objects[circuit.id] = {
+      ...circuit,
+      module_data: { ...data, device_ids },
+      updated_at: c.now,
+      revision_meta: {
+        ...circuit.revision_meta,
+        dirty_quantity: true,
+        dirty_drawing: true,
+      },
+    };
+    affectedIds.push(circuit.id);
+  }
+
+  const fixtureData = {
+    ...(fixture.module_data as unknown as ElectricalFixtureModuleData),
+  };
+  if (circuitId) fixtureData.circuit_id = circuitId;
+  else delete fixtureData.circuit_id;
+  c.updated.objects[fixtureId] = {
+    ...fixture,
+    module_data: fixtureData,
+    updated_at: c.now,
+    revision_meta: {
+      ...fixture.revision_meta,
+      dirty_quantity: true,
+      dirty_drawing: true,
+    },
+  };
+  affectedIds.push(fixtureId);
+
+  for (const id of affectedIds) {
+    const object = c.updated.objects[id];
+    if (object.object_type === "electrical.circuit")
+      decodeCircuit(object.module_data as unknown as Record<string, unknown>, c.updated);
+  }
+
+  return {
+    result: {
+      status: "success",
+      command_id: c.command_id,
+      command_name: c.commandName,
+      affected_object_ids: affectedIds,
+      updated_object_ids: affectedIds,
+    },
+    updatedProject: c.updated,
+    emittedEnvelope: {
+      ...c.envelope,
+      input: { fixture_id: fixtureId, circuit_id: circuitId ?? null },
+    },
+  };
 }
 export function decodeLED(
   d: Record<string, unknown>,
@@ -136,6 +224,8 @@ export function decodeLED(
 export function executeElectricalCommand(
   c: CommandHandlerContext,
 ): CommandBusResult | undefined {
+  if (c.commandName === "AssignFixtureToCircuit")
+    return assignFixtureToCircuit(c);
   if (
     ["PlaceElectricalFixture", "UpdateElectricalFixture"].includes(
       c.commandName,
@@ -266,6 +356,19 @@ export function electricalOutputs(p: ProjectDocument): DomainOutput[] {
 export function validateElectrical(p: ProjectDocument): void {
   electricalOutputs(p);
   const assigned = new Map<string, string>();
+  for (const fixture of Object.values(p.objects))
+    if (fixture.object_type === "electrical.fixture" && fixture.removed_phase === null) {
+      const data = decodeFixture(resolvedData(p, fixture), p);
+      if (!data.circuit_id) continue;
+      const circuit = p.objects[data.circuit_id];
+      if (
+        !circuit ||
+        circuit.object_type !== "electrical.circuit" ||
+        circuit.removed_phase !== null ||
+        !(resolvedData(p, circuit).device_ids as string[]).includes(fixture.id)
+      )
+        throw new Error("Fixture circuit reference is missing or out of sync");
+    }
   for (const o of Object.values(p.objects))
     if (o.object_type === "electrical.circuit" && o.removed_phase === null) {
       const d = decodeCircuit(resolvedData(p, o), p);

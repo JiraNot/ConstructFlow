@@ -63,6 +63,20 @@ test("Phase 1: slab catalog cascade, UUID roundtrip and atomic undo/redo", () =>
   corrupt.objects[id].module_data.thickness_mm = -1;
   assert.throws(() => deserializeProject(JSON.stringify(corrupt)), /thickness/);
 });
+test("slab edge edits reject a footprint that would leave a floor opening outside", () => {
+  const id = crypto.randomUUID();
+  const created = execute(empty(), "CreateSlab", {
+    ...slab,
+    id,
+    voids_mm: [[[1500, 900], [2500, 900], [2500, 1900], [1500, 1900]]],
+  });
+  const data = created.objects[id].module_data;
+  const boundary_mm = [[0, 1500], [4000, 1500], [4000, 2500], [0, 2500]];
+  const rejected = CommandBus.execute(created, "UpdateSlab", { ...data, id, boundary_mm });
+  assert.equal(rejected.result.status, "failed", JSON.stringify(rejected.result));
+  assert.match(rejected.result.errors.join(" "), /opening|void|strictly inside/i);
+  assert.deepEqual(rejected.updatedProject, created, "a rejected grip edit must leave committed geometry unchanged");
+});
 test("Phase 2: explicit BBS reference mass, stirrup end deduplication and drop", () => {
   let p = execute(empty(), "CreateBeam", {
       mark: "B1",
@@ -122,7 +136,7 @@ test("Phase 2: explicit BBS reference mass, stirrup end deduplication and drop",
   assert.equal(out.paths.length, 26);
   assert.ok(out.paths.flat().every((v) => v[2] >= -75 && v[2] <= 325));
 });
-test("Phase 3: flat, shed, gable and hip analytic areas; unsupported polygons reject", () => {
+test("Phase 3: flat, shed, gable and hip analytic areas; concave roofs work and self-intersections reject", () => {
   const d = {
     ...slab,
     thickness_mm: 30,
@@ -147,7 +161,7 @@ test("Phase 3: flat, shed, gable and hip analytic areas; unsupported polygons re
     }).reduce((s, v) => s + v.area_m2, 0),
     10,
   );
-  const bad = CommandBus.execute(empty(), "GenerateRoof", {
+  const concave = CommandBus.execute(empty(), "GenerateRoof", {
     ...d,
     boundary_mm: [
       [0, 0],
@@ -158,8 +172,15 @@ test("Phase 3: flat, shed, gable and hip analytic areas; unsupported polygons re
     ],
     edges: Array(5).fill({ defines_slope: true, slope_deg: 30 }),
   });
-  assert.equal(bad.result.status, "failed");
-  assert.match(bad.result.errors[0], /convex/i);
+  assert.equal(concave.result.status, "success");
+  assert.ok(constructionOutputs(concave.updatedProject).find(output => output.object_id === concave.result.created_object_ids[0]).meshes.length > 0);
+  const selfIntersecting = CommandBus.execute(empty(), "GenerateRoof", {
+    ...d,
+    boundary_mm: [[0, 0], [4000, 0], [0, 4000], [4000, 4000], [0, 2000]],
+    edges: Array(5).fill({ defines_slope: true, slope_deg: 30 }),
+  });
+  assert.equal(selfIntersecting.result.status, "failed");
+  assert.match(selfIntersecting.result.errors[0], /self-intersects/i);
 });
 test("Plan authoring commands create editable roof, MEP, cabinet and moulding objects", () => {
   let p = empty();
@@ -179,8 +200,10 @@ test("Plan authoring commands create editable roof, MEP, cabinet and moulding ob
   p = execute(p, "CreatePipeRoute", {
     id: pipeId, mark: "WST1", system: "waste", nodes_mm: [[0, 0, -300], [4000, 0, -340]],
     diameter_mm: 100, start_invert_mm: -300, end_invert_mm: -340, minimum_slope_ratio: 0.01, material: "PVC",
+    start_node_id: "", end_node_id: "",
   });
   assert.equal(p.objects[pipeId].object_type, "drainage.pipe_route");
+  assert.equal(p.objects[pipeId].module_data.start_node_id, undefined);
   p = execute(p, "EditPipeRoute", { ...p.objects[pipeId].module_data, id: pipeId, diameter_mm: 125 });
   assert.equal(p.objects[pipeId].module_data.diameter_mm, 125);
 
@@ -224,6 +247,101 @@ test("Plan authoring commands create editable roof, MEP, cabinet and moulding ob
 
   const outputs = constructionOutputs(p);
   for (const id of [roofId, pipeId, fixtureId, cabinetId, mouldingId]) assert.ok(outputs.some(output => output.object_id === id));
+});
+
+test("Electrical circuit assignment updates fixture and circuit in one validated command", () => {
+  let p = empty();
+  const panelId = crypto.randomUUID();
+  p = execute(p, "PlaceElectricalFixture", {
+    id: panelId, mark: "DB1", location_mm: [0, 0, 1800], kind: "panel", watts: 0,
+    controlled_ids: [], switch_ways: 1, grounded: true,
+  });
+  const firstCircuitId = crypto.randomUUID();
+  const secondCircuitId = crypto.randomUUID();
+  const circuit = (id, mark) => ({
+    id, mark, panel_id: panelId, device_ids: [], voltage: 230,
+    breaker_a: 16, allowable_current_a: 20, cable_mm2: 2.5,
+  });
+  p = execute(p, "CreateCircuit", circuit(firstCircuitId, "CKT1"));
+  p = execute(p, "CreateCircuit", circuit(secondCircuitId, "CKT2"));
+  const lightId = crypto.randomUUID();
+  p = execute(p, "PlaceElectricalFixture", {
+    id: lightId, mark: "L1", location_mm: [1000, 1000, 2700], kind: "light", watts: 120,
+    controlled_ids: [], switch_ways: 1, grounded: false,
+  });
+  const switchId = crypto.randomUUID();
+  p = execute(p, "PlaceElectricalFixture", {
+    id: switchId, mark: "S1", location_mm: [1000, 1000, 1200], kind: "switch", watts: 0,
+    controlled_ids: [], switch_ways: 1, grounded: false,
+  });
+  p = execute(p, "UpdateElectricalFixture", {
+    ...p.objects[switchId].module_data, id: switchId, controlled_ids: [lightId],
+  });
+  assert.deepEqual(p.objects[switchId].module_data.controlled_ids, [lightId]);
+  const outletId = crypto.randomUUID();
+  p = execute(p, "PlaceElectricalFixture", {
+    id: outletId, mark: "O1", location_mm: [2000, 1000, 300], kind: "outlet", watts: 0,
+    controlled_ids: [], switch_ways: 1, grounded: true,
+  });
+  const invalidSwitchLink = CommandBus.execute(p, "UpdateElectricalFixture", {
+    ...p.objects[switchId].module_data, id: switchId, controlled_ids: [outletId],
+  });
+  assert.equal(invalidSwitchLink.result.status, "failed");
+  assert.match(invalidSwitchLink.result.errors[0], /must be a light/i);
+  assert.deepEqual(invalidSwitchLink.updatedProject.objects[switchId].module_data.controlled_ids, [lightId]);
+
+  const assignmentSession = new ProjectCommandSession(p);
+  const firstAssignment = assignmentSession.execute([{
+    name: "AssignFixtureToCircuit", input: { fixture_id: lightId, circuit_id: firstCircuitId },
+  }]);
+  assert.equal(firstAssignment.status, "success", JSON.stringify(firstAssignment.errors));
+  p = firstAssignment.updatedProject;
+  assert.equal(p.objects[lightId].module_data.circuit_id, firstCircuitId);
+  assert.deepEqual(p.objects[firstCircuitId].module_data.device_ids, [lightId]);
+  const undoneAssignment = assignmentSession.undo();
+  assert.equal(undoneAssignment.objects[lightId].module_data.circuit_id, undefined);
+  assert.deepEqual(undoneAssignment.objects[firstCircuitId].module_data.device_ids, []);
+  p = assignmentSession.redo();
+  assert.equal(p.objects[lightId].module_data.circuit_id, firstCircuitId);
+  assert.deepEqual(p.objects[firstCircuitId].module_data.device_ids, [lightId]);
+
+  p = execute(p, "AssignFixtureToCircuit", { fixture_id: lightId, circuit_id: secondCircuitId });
+  assert.equal(p.objects[lightId].module_data.circuit_id, secondCircuitId);
+  assert.deepEqual(p.objects[firstCircuitId].module_data.device_ids, []);
+  assert.deepEqual(p.objects[secondCircuitId].module_data.device_ids, [lightId]);
+
+  p = execute(p, "AssignFixtureToCircuit", { fixture_id: lightId, circuit_id: null });
+  assert.equal(p.objects[lightId].module_data.circuit_id, undefined);
+  assert.deepEqual(p.objects[secondCircuitId].module_data.device_ids, []);
+
+  const panelAssignment = CommandBus.execute(p, "AssignFixtureToCircuit", { fixture_id: panelId, circuit_id: firstCircuitId });
+  assert.equal(panelAssignment.result.status, "failed");
+  assert.match(panelAssignment.result.errors[0], /panel/i);
+});
+
+test("Electrical circuit assignment rolls back when connected load exceeds the breaker", () => {
+  let p = empty();
+  const panelId = crypto.randomUUID();
+  p = execute(p, "PlaceElectricalFixture", {
+    id: panelId, mark: "DB1", location_mm: [0, 0, 1800], kind: "panel", watts: 0,
+    controlled_ids: [], switch_ways: 1, grounded: true,
+  });
+  const circuitId = crypto.randomUUID();
+  p = execute(p, "CreateCircuit", {
+    id: circuitId, mark: "CKT1", panel_id: panelId, device_ids: [], voltage: 230,
+    breaker_a: 16, allowable_current_a: 20, cable_mm2: 2.5,
+  });
+  const heaterId = crypto.randomUUID();
+  p = execute(p, "PlaceElectricalFixture", {
+    id: heaterId, mark: "WH1", location_mm: [1000, 1000, 1200], kind: "outlet", watts: 5000,
+    controlled_ids: [], switch_ways: 1, grounded: true,
+  });
+
+  const result = CommandBus.execute(p, "AssignFixtureToCircuit", { fixture_id: heaterId, circuit_id: circuitId });
+  assert.equal(result.result.status, "failed");
+  assert.match(result.result.errors[0], /connected load/i);
+  assert.deepEqual(result.updatedProject.objects[circuitId].module_data.device_ids, []);
+  assert.equal(result.updatedProject.objects[heaterId].module_data.circuit_id, undefined);
 });
 test("Phase 4: manhole IL propagation, unknown state and invalid network rollback", () => {
   let p = empty(),
@@ -289,6 +407,20 @@ test("Phase 4: pump bypass contradictory states and PE capacity reject", () => {
     valve_states: { inlet: true, outlet: true, bypass: true },
   });
   assert.equal(r.result.status, "failed");
+  const pumpBypassId = crypto.randomUUID();
+  const waterPipeId = crypto.randomUUID();
+  let p = execute(empty(), "CreatePumpBypass", {
+    id: pumpBypassId, mark: "PB1", location_mm: [1000, 2000, 2200],
+    span_mm: 2000, diameter_mm: 25, mode: "pump",
+    valve_states: { inlet: true, outlet: true, bypass: false },
+  });
+  p = execute(p, "CreatePipeRoute", {
+    id: waterPipeId, mark: "CW1", system: "cold_water",
+    nodes_mm: [[900, 2000, 2200], [4000, 2000, 2200]],
+    start_node_id: pumpBypassId, diameter_mm: 20, material: "PPR",
+  });
+  assert.deepEqual(p.objects[waterPipeId].module_data.nodes_mm[0], [1000, 2000, 2200]);
+  assert.deepEqual(p.objects[waterPipeId].host_refs, [pumpBypassId]);
   const septic = CommandBus.execute(empty(), "CreateSepticTank", {
     mark: "ST",
     location_mm: [0, 0, 0],

@@ -9,6 +9,8 @@ import { formatRoomAreaM2 } from '../roomLabel.mjs'
 import type { CoordinationFinding } from '@constructflow/clash-engine'
 import type { UnderlayConfig } from '../rendering/planRenderer.js'
 import { drawCoordinationPrimitives, planCoordinationOverlay } from '../rendering/coordinationOverlay.js'
+import type { CommandRequest } from '@constructflow/command-schema'
+import type { DirectManipulationPreviewResult } from '../directManipulation.mjs'
 
 export type ElevationDirection = 'north' | 'south' | 'east' | 'west' | 'rcp'
 type ElevationViewState = { zoom: number; panX: number; panY: number }
@@ -26,12 +28,28 @@ interface Props {
   onSelectObject: (id: string | null) => void
   onSelectionChange?: (ids: string[], primaryId: string | null) => void
   underlay?: UnderlayConfig | null
-  onMoveObject?: (id: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move' | 'top') => void
+  onMoveObject?: (id: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move' | 'top' | 'base') => void
+  onBuildManipulation?: (id: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move' | 'top' | 'base', gripIndex?: number) => CommandRequest[]
+  onPreviewManipulation?: (commands: CommandRequest[]) => DirectManipulationPreviewResult
+  onCommitManipulation?: (commands: CommandRequest[]) => { status: string; errors?: string[] }
+  onManipulationRejected?: (errors: string[]) => void
   /** Same coordination report the plan canvas draws, projected onto this elevation. */
   coordination?: readonly CoordinationFinding[]
 }
 
 type TagShape = 'hexagon' | 'circle' | 'triangle'
+
+function activeElevationGrips(object: ProjectDocument['objects'][string] | undefined): number[] {
+  if (!object) return []
+  if (object.object_type === 'roof.system') return [3, 4]
+  if (object.object_type === 'structure.column') {
+    const data = object.module_data as Record<string, unknown>
+    const angle = ((Number(data.rotation_deg ?? 0) % 90) + 90) % 90
+    return Math.min(angle, 90 - angle) < 1 ? [1, 3, 4, 6] : [1, 6]
+  }
+  if (['architecture.wall','door_window.door','door_window.window','structure.beam','structure.slab','architecture.floor','architecture.ceiling'].includes(object.object_type)) return [1,3,4,6]
+  return []
+}
 
 function measureTag(ctx: CanvasRenderingContext2D, text: string, shape: TagShape) {
   ctx.save()
@@ -74,7 +92,7 @@ function drawTag(ctx: CanvasRenderingContext2D, centerX: number, centerY: number
 }
 
 /** Orthographic, semantic projection of the project model. The canvas never becomes an editable copy of model edges. */
-export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedId, selectedIds = selectedId ? [selectedId] : [], onSelectObject, onSelectionChange, underlay, onMoveObject, coordination = [] }) => {
+export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedId, selectedIds = selectedId ? [selectedId] : [], onSelectObject, onSelectionChange, underlay, onMoveObject, onBuildManipulation, onPreviewManipulation, onCommitManipulation, onManipulationRejected, coordination = [] }) => {
   const isSelected = (id: string) => selectedIds.includes(id) || selectedId === id
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hitRegions = useRef<Array<{ id: string; x: number; y: number; w: number; h: number }>>([])
@@ -83,8 +101,10 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
   // Zooming the north facade must not unexpectedly zoom the RCP or west side.
   const viewState = useRef(createElevationViewStates())
   const [viewRevision, setViewRevision] = useState(0)
-  const pointerDown = useRef<{ id: string | null; x: number; y: number; localX: number; localY: number; verticalIntent: 'move' | 'top'; mode: 'pan' | 'object' | 'select'; panX: number; panY: number; additive: boolean } | null>(null)
+  const pointerDown = useRef<{ id: string | null; x: number; y: number; localX: number; localY: number; verticalIntent: 'move' | 'top' | 'base'; gripIndex: number | null; hit: { id: string; x: number; y: number; w: number; h: number } | null; mode: 'pan' | 'object' | 'select'; panX: number; panY: number; additive: boolean } | null>(null)
   const [selectionBox, setSelectionBox] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
+  const [manipulationPreview, setManipulationPreview] = useState<{ rect: { x: number; y: number; w: number; h: number }; valid: boolean } | null>(null)
+  const lastPreviewValidationRef = useRef<{ at: number; valid: boolean }>({ at: 0, valid: true })
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -418,6 +438,17 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
         }))
       }
 
+      if (manipulationPreview) {
+        const { x, y, w, h } = manipulationPreview.rect
+        ctx.save()
+        ctx.fillStyle = manipulationPreview.valid ? 'rgba(2,132,199,.18)' : 'rgba(220,38,38,.18)'
+        ctx.strokeStyle = manipulationPreview.valid ? '#0284c7' : '#dc2626'
+        ctx.lineWidth = 2.5
+        ctx.setLineDash(manipulationPreview.valid ? [] : [7, 4])
+        ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h)
+        ctx.setLineDash([]); ctx.restore()
+      }
+
       // Revit-style selection outline, grip handles, and temporary elevation badges
       if(selectedVisual){
         ctx.save()
@@ -489,7 +520,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     draw()
     const observer=new ResizeObserver(draw);observer.observe(canvas)
     return ()=>observer.disconnect()
-  },[project,direction,selectedId,selectedIds,underlay,viewRevision,coordination])
+  },[project,direction,selectedId,selectedIds,underlay,viewRevision,coordination,manipulationPreview])
 
   const zoomBy = (factor: number) => {
     const currentView = viewState.current[direction]
@@ -518,11 +549,17 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     const rect=event.currentTarget.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top
     const hit=hitRegions.current.filter(r=>x>=r.x-4&&x<=r.x+r.w+4&&y>=r.y-4&&y<=r.y+r.h+4).sort((a,b)=>a.w*a.h-b.w*b.h)[0]
     const target=hit?.id?project.objects[hit.id]:undefined
-    const isVerticalShape=target?.object_type==='architecture.wall'||target?.object_type==='door_window.door'||target?.object_type==='door_window.window'
+    const selectedHit = !!hit && (selectedIds.includes(hit.id) || selectedId === hit.id)
+    const gripPoints = hit ? [[hit.x,hit.y],[hit.x+hit.w/2,hit.y],[hit.x+hit.w,hit.y],[hit.x,hit.y+hit.h/2],[hit.x+hit.w,hit.y+hit.h/2],[hit.x,hit.y+hit.h],[hit.x+hit.w/2,hit.y+hit.h],[hit.x+hit.w,hit.y+hit.h]] : []
+    const nearestGrip = selectedHit ? gripPoints.map((point,index)=>({index,distance:Math.hypot(x-point[0],y-point[1])})).filter(item=>activeElevationGrips(target).includes(item.index)&&item.distance<=14).sort((a,b)=>a.distance-b.distance)[0] : undefined
+    const gripIndex = nearestGrip?.index ?? null
     const panMode=event.button===1
     const view=viewState.current[direction]
     const mode=panMode?'pan':hit?'object':'select'
-    pointerDown.current={id:hit?.id??null,x:event.clientX,y:event.clientY,localX:x,localY:y,verticalIntent:isVerticalShape&&hit&&Math.abs(y-hit.y)<12?'top':'move',mode,panX:view.panX,panY:view.panY,additive:event.shiftKey}
+    const verticalIntent = gripIndex === 1 ? 'top' : gripIndex === 6 ? 'base' : 'move'
+    pointerDown.current={id:hit?.id??null,x:event.clientX,y:event.clientY,localX:x,localY:y,verticalIntent,gripIndex,hit:hit??null,mode,panX:view.panX,panY:view.panY,additive:event.shiftKey}
+    setManipulationPreview(null)
+    lastPreviewValidationRef.current={at:0,valid:true}
     if(mode==='select')setSelectionBox({x1:x,y1:y,x2:x,y2:y})
     else if(mode==='object'&&event.button===0){onSelectionChange?.([hit.id],hit.id);onSelectObject(hit.id)}
     if(event.button===1)event.preventDefault()
@@ -538,6 +575,21 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     }else if(start.mode==='select'){
       const rect=event.currentTarget.getBoundingClientRect()
       setSelectionBox({x1:start.localX,y1:start.localY,x2:event.clientX-rect.left,y2:event.clientY-rect.top})
+    }else if(start.mode==='object'&&start.id&&start.hit&&onBuildManipulation){
+      if(Math.hypot(dx,dy)<=3)return
+      const base=start.hit,grip=start.gripIndex
+      let x=base.x,y=base.y,w=base.w,h=base.h
+      if(grip===1){const bottom=base.y+base.h;y=Math.min(base.y+dy,bottom);h=Math.abs(bottom-(base.y+dy))}
+      else if(grip===6)h=Math.abs(base.y+base.h+dy-base.y)
+      else if(grip===3){const right=base.x+base.w;x=Math.min(base.x+dx,right);w=Math.abs(right-(base.x+dx))}
+      else if(grip===4)w=Math.abs(base.x+base.w+dx-base.x)
+      else{x+=dx;y+=dy}
+      const view=viewTransform.current,horizontal=(dx/view.scale)*(view.reversed?-1:1),deltaWorld:[number,number]=view.isEastWest?[0,horizontal]:[horizontal,0],deltaZ=-dy/view.scale
+      const commands=onBuildManipulation(start.id,deltaWorld,deltaZ,start.verticalIntent,grip??undefined)
+      if(!commands.length){setManipulationPreview(null);return}
+      const now=performance.now(),validation=now-lastPreviewValidationRef.current.at>=50?onPreviewManipulation?.(commands):undefined
+      if(validation)lastPreviewValidationRef.current={at:now,valid:validation.valid}
+      setManipulationPreview({rect:{x,y,w:Math.max(2,w),h:Math.max(2,h)},valid:validation?.valid??lastPreviewValidationRef.current.valid})
     }
   }} onPointerUp={event=>{
     const start=pointerDown.current;pointerDown.current=null;if(!start)return
@@ -556,8 +608,16 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
       onSelectionChange?.(next,primary);onSelectObject(primary)
       return
     }
+    setManipulationPreview(null)
+    if(start.id&&Math.hypot(dx,dy)>3&&onBuildManipulation&&onPreviewManipulation&&onCommitManipulation){
+      const view=viewTransform.current,horizontal=(dx/view.scale)*(view.reversed?-1:1),deltaWorld:[number,number]=view.isEastWest?[0,horizontal]:[horizontal,0],deltaZ=-dy/view.scale
+      const commands=onBuildManipulation(start.id,deltaWorld,deltaZ,start.verticalIntent,start.gripIndex??undefined)
+      if(commands.length){const validation=onPreviewManipulation(commands);if(validation.valid)onCommitManipulation(commands);else onManipulationRejected?.(validation.errors)}
+      onSelectObject(start.id)
+      return
+    }
     if(start.id&&project.objects[start.id]?.object_type!=='roof.system'&&Math.hypot(dx,dy)>3&&onMoveObject){const view=viewTransform.current,horizontal=(dx/view.scale)*(view.reversed?-1:1);onMoveObject(start.id,view.isEastWest?[0,horizontal]:[horizontal,0],-dy/view.scale,start.verticalIntent);onSelectObject(start.id)}
-  }}/>
+  }} onPointerCancel={event=>{pointerDown.current=null;setSelectionBox(null);setManipulationPreview(null);try{event.currentTarget.releasePointerCapture(event.pointerId)}catch{}}}/>
     {selectionBox&&<div aria-hidden="true" style={{position:'absolute',left:Math.min(selectionBox.x1,selectionBox.x2),top:Math.min(selectionBox.y1,selectionBox.y2),width:Math.abs(selectionBox.x2-selectionBox.x1),height:Math.abs(selectionBox.y2-selectionBox.y1),border:'1px solid #0284c7',background:'rgba(2,132,199,.12)',pointerEvents:'none'}}/>}
     <div role="group" aria-label="ควบคุมสเกลรูปด้าน" style={{position:'absolute',bottom:10,right:10,display:'flex',alignItems:'center',gap: 4,padding: 3,border:'1px solid #dbe3ec',borderRadius: 4,background:'rgba(248,250,252,.94)',boxShadow:'0 2px 8px rgba(15,23,42,.08)'}}>
       <button type="button" aria-label="ย่อรูปด้าน" title="ย่อ" style={controlStyle} onClick={()=>zoomBy(1/1.25)}>−</button>

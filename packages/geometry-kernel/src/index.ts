@@ -76,6 +76,97 @@ export function validatePolygonWithVoids(
   return { valid: true }
 }
 
+/** Offset a simple ring outwards with mitered corners; returns null for a degenerate or self-intersecting result. */
+export function offsetPolygonOutward(boundary: readonly Vec2[], distanceMm: number): Vec2[] | null {
+  if (boundary.length < 3 || !Number.isFinite(distanceMm) || distanceMm < 0
+    || boundary.some(point => !Number.isFinite(point[0]) || !Number.isFinite(point[1]))) return null
+  if (distanceMm === 0) {
+    try {
+      const copy = boundary.map(point => [...point] as Vec2)
+      simplePolygon(copy)
+      return copy
+    }
+    catch { return null }
+  }
+  const area = signedArea(boundary)
+  if (Math.abs(area) <= EPS) return null
+  const winding = area > 0 ? 1 : -1
+  const lineAt = (index: number): { point: Vec2; direction: Vec2 } | null => {
+    const start = boundary[index], end = boundary[(index + 1) % boundary.length]
+    const dx = end[0] - start[0], dy = end[1] - start[1], length = Math.hypot(dx, dy)
+    if (!(length > EPS)) return null
+    const outward: Vec2 = [winding * dy / length, -winding * dx / length]
+    return { point: [start[0] + outward[0] * distanceMm, start[1] + outward[1] * distanceMm], direction: [dx, dy] }
+  }
+  const intersect = (first: { point: Vec2; direction: Vec2 }, second: { point: Vec2; direction: Vec2 }): Vec2 | null => {
+    const [rx, ry] = first.direction, [sx, sy] = second.direction
+    const denominator = rx * sy - ry * sx
+    if (Math.abs(denominator) <= EPS) return null
+    const qx = second.point[0] - first.point[0], qy = second.point[1] - first.point[1]
+    const t = (qx * sy - qy * sx) / denominator
+    const point: Vec2 = [first.point[0] + t * rx, first.point[1] + t * ry]
+    return point.every(Number.isFinite) ? point : null
+  }
+  const lines = boundary.map((_, index) => lineAt(index))
+  if (lines.some(line => !line)) return null
+  const expanded = boundary.map((_, index) => intersect(lines[(index - 1 + boundary.length) % boundary.length]!, lines[index]!))
+  if (expanded.some(point => !point)) return null
+  try {
+    const result = expanded as Vec2[]
+    simplePolygon(result.map(point => [...point] as Vec2))
+    if (Math.sign(signedArea(result)) !== Math.sign(area)) return null
+    return result
+  } catch {
+    return null
+  }
+}
+
+/** Triangulate a polygon surface after subtracting contained opening rings. Callers validate containment separately. */
+export function subtractPolygonVoids(boundary: readonly Vec2[], voids: readonly (readonly Vec2[])[] = []): Triangle[] {
+  if (boundary.length < 3 || [...boundary, ...voids.flat()].some(point => !Number.isFinite(point[0]) || !Number.isFinite(point[1]))) return []
+  let pieces: Vec2[][]
+  try {
+    pieces = triangulate(boundary.map(point => [...point] as Vec2), 0).map(triangle => triangle.map(point => [point[0], point[1]] as Vec2))
+  } catch {
+    return []
+  }
+  for (const hole of voids) {
+    let cutters: Triangle[]
+    try { cutters = triangulate(hole.map(point => [...point] as Vec2), 0) }
+    catch { return [] }
+    for (const cutter of cutters) {
+      const clip = cutter.map(point => [point[0], point[1]] as Vec2)
+      const next: Vec2[][] = []
+      for (const piece of pieces) {
+        let remaining = piece
+        for (let edge = 0; edge < clip.length && remaining.length >= 3; edge++) {
+          const a = clip[edge], b = clip[(edge + 1) % clip.length]
+          const dx = b[0] - a[0], dy = b[1] - a[1]
+          // The clip triangle is CCW. Keep its inside as cross >= 0 and emit the outside slice.
+          const inside = clipHalfPlane(remaining, dy, -dx, dx * a[1] - dy * a[0])
+          const outside = clipHalfPlane(remaining, -dy, dx, -dx * a[1] + dy * a[0])
+          if (outside.length >= 3 && Math.abs(signedArea(outside)) > EPS) next.push(outside)
+          remaining = inside
+        }
+        // The intersection remaining after all clip edges is intentionally discarded.
+        void remaining
+      }
+      pieces = next
+      if (!pieces.length) break
+    }
+    if (!pieces.length) break
+  }
+  const triangles: Triangle[] = []
+  for (const piece of pieces) {
+    try {
+      if (Math.abs(signedArea(piece)) > EPS) triangles.push(...triangulate(piece, 0))
+    } catch {
+      // Ignore only a numerically degenerate fragment; valid source rings are checked by the caller.
+    }
+  }
+  return triangles
+}
+
 /**
  * Build 45-degree masonry hatch in wall-local model coordinates, clipped to
  * solid wall runs around hosted openings. The pattern is anchored at the wall
@@ -453,6 +544,62 @@ export function signedArea(points: readonly Vec2[]): number {
     }, 0) / 2
   );
 }
+
+export interface PolygonEdgeGrip {
+  midpoint_mm: Vec2;
+  inward_normal: Vec2;
+}
+
+/** Return a polygon edge's midpoint and unit normal pointing into the ring. */
+export function polygonEdgeGrip(
+  boundary: readonly Vec2[],
+  edgeIndex: number,
+): PolygonEdgeGrip | null {
+  if (boundary.length < 3 || !Number.isInteger(edgeIndex) || edgeIndex < 0 || edgeIndex >= boundary.length) return null;
+  const a = boundary[edgeIndex], b = boundary[(edgeIndex + 1) % boundary.length];
+  const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+  const area = signedArea(boundary);
+  if (!(length > EPS) || Math.abs(area) <= EPS) return null;
+  const winding = area > 0 ? 1 : -1;
+  return {
+    midpoint_mm: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2],
+    inward_normal: [-dy / length * winding, dx / length * winding],
+  };
+}
+
+/** Move one polygon edge parallel to itself; adjacent corners stay on their neighboring edges. */
+export function offsetPolygonEdge(
+  boundary: readonly Vec2[],
+  edgeIndex: number,
+  offsetMm: number,
+): Vec2[] | null {
+  const grip = polygonEdgeGrip(boundary, edgeIndex);
+  if (!grip || !Number.isFinite(offsetMm)) return null;
+  const n = grip.inward_normal;
+  const a = boundary[edgeIndex], b = boundary[(edgeIndex + 1) % boundary.length];
+  const shiftedA: Vec2 = [a[0] + n[0] * offsetMm, a[1] + n[1] * offsetMm];
+  const shiftedB: Vec2 = [b[0] + n[0] * offsetMm, b[1] + n[1] * offsetMm];
+  const previous = boundary[(edgeIndex - 1 + boundary.length) % boundary.length];
+  const next = boundary[(edgeIndex + 2) % boundary.length];
+  const lineIntersection = (p: Vec2, p2: Vec2, q: Vec2, q2: Vec2): Vec2 | null => {
+    const rx = p2[0] - p[0], ry = p2[1] - p[1];
+    const sx = q2[0] - q[0], sy = q2[1] - q[1];
+    const denominator = rx * sy - ry * sx;
+    if (Math.abs(denominator) <= EPS) return null;
+    const qpx = q[0] - p[0], qpy = q[1] - p[1];
+    const t = (qpx * sy - qpy * sx) / denominator;
+    const point: Vec2 = [p[0] + t * rx, p[1] + t * ry];
+    return point.every(Number.isFinite) ? point : null;
+  };
+  const start = lineIntersection(previous, a, shiftedA, shiftedB);
+  const end = lineIntersection(shiftedA, shiftedB, b, next);
+  if (!start || !end || Math.hypot(start[0] - end[0], start[1] - end[1]) <= EPS) return null;
+  const result = boundary.map(point => [point[0], point[1]] as Vec2);
+  result[edgeIndex] = start;
+  result[(edgeIndex + 1) % boundary.length] = end;
+  return result;
+}
+
 export function length3(a: Vec3, b: Vec3): number {
   return Math.hypot(...a.map((v, i) => v - b[i]));
 }

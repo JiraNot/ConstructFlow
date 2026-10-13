@@ -188,7 +188,9 @@ export function domainCommand<T extends object>(
   if (!updated.levels.some((l) => l.id === levelId))
     throw new Error("Missing level " + levelId);
   const hosts = (options.hostFields ?? []).flatMap((k) =>
-    typeof raw[k] === "string" ? [raw[k] as string] : [],
+    typeof raw[k] === "string" && (raw[k] as string).trim()
+      ? [raw[k] as string]
+      : [],
   );
   for (const host of hosts)
     if (!updated.objects[host] || host === id)

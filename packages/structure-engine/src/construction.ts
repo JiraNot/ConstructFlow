@@ -15,6 +15,7 @@ import {
   extrude,
   length3,
   rectangle,
+  validatePolygonWithVoids,
 } from "@constructflow/geometry-kernel";
 import {
   choice,
@@ -43,6 +44,8 @@ export function decodeSlab(
   const voids_mm = Array.isArray(d.voids_mm)
     ? d.voids_mm.map((ring, index) => simplePolygon(list(ring, `voids_mm[${index}]`, (v) => vec2(v, "void point"), 3)))
     : [];
+  const validBoundary = validatePolygonWithVoids(boundary_mm, voids_mm);
+  if (!validBoundary.valid) throw new Error(`Invalid slab boundary and openings: ${validBoundary.reason}`);
   const finish_layers = Array.isArray(d.finish_layers) ? d.finish_layers.map((raw, index) => {
     const layer = record(raw, `finish_layers[${index}]`);
     return {

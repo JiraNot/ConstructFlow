@@ -79,6 +79,7 @@ export interface ConstructionCommandInputs {
   UpdateElectricalFixture: ConstructionInput<ElectricalFixtureModuleData>;
   CreateCircuit: ConstructionInput<CircuitModuleData>;
   UpdateCircuit: ConstructionInput<CircuitModuleData>;
+  AssignFixtureToCircuit: { fixture_id: string; circuit_id?: string | null };
   CreateCabinetRun: ConstructionInput<CabinetModuleData>;
   UpdateCabinetRun: ConstructionInput<CabinetModuleData>;
   CreateLEDRun: ConstructionInput<LEDModuleData>;

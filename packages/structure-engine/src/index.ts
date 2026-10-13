@@ -1,5 +1,5 @@
 import { SmartObject, ColumnModuleData, FoundationModuleData, GridModuleData, BeamModuleData, resolveCatalogType, catalogInstanceOverrides, isColumnObject, isFoundationObject, isGridObject, isBeamObject, resolveColumnVerticalExtent, resolveBeamBaseElevation, type ProjectDocument } from '@constructflow/project-model'
-import { CreateColumnInput, MoveColumnInput, UpdateColumnMarkInput, UpdateColumnVerticalReferenceInput, CreateFoundationInput, CreateGridInput, CreateGridSystemInput, UpdateGridSystemInput, ModifyGridInput, CreateBeamInput, UpdateBeamMarkInput, UpdateBeamDimensionsInput, UpdateBeamEndpointsInput, UpdateBeamVerticalReferenceInput, UpdateColumnDimensionsInput, UpdateFoundationDimensionsInput } from '@constructflow/command-schema'
+import { CreateColumnInput, MoveColumnInput, UpdateColumnMarkInput, UpdateColumnVerticalReferenceInput, CreateFoundationInput, CreateGridInput, CreateGridSystemInput, UpdateGridSystemInput, ModifyGridInput, CreateBeamInput, UpdateBeamMarkInput, UpdateBeamDimensionsInput, UpdateBeamEndpointsInput, UpdateBeamVerticalReferenceInput, UpdateColumnDimensionsInput, UpdateFoundationDimensionsInput, MoveFoundationInput } from '@constructflow/command-schema'
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
 export * from './construction.js'
@@ -947,6 +947,17 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       const levelRefs = [...target.level_refs.filter(reference => reference.role !== 'base_level'), { role: 'base_level' as const, level_id: levelId }]
       updated.objects[target.id] = { ...target, level_refs: levelRefs, module_data: { ...target.module_data, level_id: levelId, base_offset_mm: offset, start_point_mm: start, end_point_mm: end }, updated_at: now }
       return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] }, updatedProject: updated, emittedEnvelope: envelope }
+    }
+
+    case 'MoveFoundation': {
+      const move = input as unknown as MoveFoundationInput
+      const target = updated.objects[move.object_id]
+      if (!target || !isFoundationObject(target)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Foundation UUID ${move.object_id} not found`] }, updatedProject: project }
+      if (!Array.isArray(move.center_mm) || move.center_mm.length !== 3 || !move.center_mm.every(Number.isFinite)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Foundation center must contain finite X/Y/Z millimeters'] }, updatedProject: project }
+      const supportedColumnId = target.module_data.supported_column_id ?? target.host_refs.find(id => isColumnObject(updated.objects[id]))
+      if (supportedColumnId) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['A supported foundation moves with its column'] }, updatedProject: project }
+      updated.objects[move.object_id] = { ...target, updated_at: now, module_data: { ...target.module_data, center_mm: [...move.center_mm] } }
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] }, updatedProject: updated, emittedEnvelope: { ...envelope, input: { ...move, center_mm: [...move.center_mm] } } }
     }
 
     case 'UpdateFoundationDimensions': {

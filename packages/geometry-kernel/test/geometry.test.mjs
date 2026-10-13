@@ -1,6 +1,24 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { clippedGridSegments, clippedStaggeredPlankSegments, polygonDiagonalHatchSegments, polygonInteriorPoint, polygonSectionIntervals, validatePolygonWithVoids, wallMasonryHatchSegments } from '../dist/index.js'
+import { clippedGridSegments, clippedStaggeredPlankSegments, offsetPolygonEdge, offsetPolygonOutward, polygonDiagonalHatchSegments, polygonEdgeGrip, polygonInteriorPoint, polygonSectionIntervals, subtractPolygonVoids, triangleArea, validatePolygonWithVoids, wallMasonryHatchSegments } from '../dist/index.js'
+
+test('offsetPolygonOutward expands a ring uniformly and subtractPolygonVoids removes actual opening triangles', () => {
+  const expanded = offsetPolygonOutward([[0, 0], [10000, 0], [10000, 6000], [0, 6000]], 200)
+  const expected = [[-200, -200], [10200, -200], [10200, 6200], [-200, 6200]]
+  assert.ok(expanded.every((point, index) => Math.hypot(point[0] - expected[index][0], point[1] - expected[index][1]) < 1e-6))
+  const clockwise = offsetPolygonOutward([[0, 0], [0, 6000], [10000, 6000], [10000, 0]], 200)
+  assert.ok(Math.abs(clockwise[0][0] + 200) < 1e-6 && Math.abs(clockwise[0][1] + 200) < 1e-6)
+  assert.ok(clockwise[1][0] < 0 && clockwise[3][0] > 10000, 'offset keeps clockwise edge indices aligned')
+  assert.equal(offsetPolygonOutward([[0, 0], [1000, 0], [1000, 1000], [0, 1000]], Number.NaN), null)
+  const roof = [[0, 0], [10000, 0], [10000, 6000], [0, 6000]]
+  const opening = [[2000, 2000], [4000, 2000], [4000, 4000], [2000, 4000]]
+  const triangles = subtractPolygonVoids(roof, [opening])
+  assert.ok(Math.abs(triangles.reduce((area, triangle) => area + triangleArea(triangle), 0) - 56_000_000) < 1)
+  assert.ok(triangles.every(triangle => {
+    const center = [triangle.reduce((sum, point) => sum + point[0], 0) / 3, triangle.reduce((sum, point) => sum + point[1], 0) / 3]
+    return !(center[0] > 2000 && center[0] < 4000 && center[1] > 2000 && center[1] < 4000)
+  }))
+})
 
 const containsStrictly = (point, ring) => {
   let inside = false
@@ -24,6 +42,19 @@ test('polygonInteriorPoint returns the centroid for convex polygons and an inter
 test('polygonInteriorPoint rejects degenerate and non-finite rings', () => {
   assert.equal(polygonInteriorPoint([[0, 0], [1, 1]]), undefined)
   assert.equal(polygonInteriorPoint([[0, 0], [1, 0], [Number.NaN, 1]]), undefined)
+})
+
+test('slab edge offset moves one straight edge inward and preserves the other boundary runs', () => {
+  const boundary = [[0, 0], [4000, 0], [4000, 3000], [0, 3000]]
+  const grip = polygonEdgeGrip(boundary, 0)
+  assert.deepEqual(grip, { midpoint_mm: [2000, 0], inward_normal: [-0, 1] })
+  assert.deepEqual(offsetPolygonEdge(boundary, 0, 500), [[0, 500], [4000, 500], [4000, 3000], [0, 3000]])
+  assert.deepEqual(offsetPolygonEdge(boundary, 0, -500), [[0, -500], [4000, -500], [4000, 3000], [0, 3000]])
+  assert.equal(offsetPolygonEdge(boundary, 0, Number.NaN), null)
+  assert.equal(offsetPolygonEdge([[0, 0], [1000, 0], [2000, 0]], 0, 100), null)
+  const clockwise = [[0, 3000], [0, 0], [4000, 0], [4000, 3000]]
+  assert.deepEqual(polygonEdgeGrip(clockwise, 0), { midpoint_mm: [0, 1500], inward_normal: [1, 0] })
+  assert.deepEqual(offsetPolygonEdge(clockwise, 0, 500), [[500, 3000], [500, 0], [4000, 0], [4000, 3000]])
 })
 
 test('surface polygon validation accepts concave boundaries and rejects invalid or overlapping voids', () => {

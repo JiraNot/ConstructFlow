@@ -50,8 +50,13 @@ export function decodePipe(
   );
   const nodes_mm = list(d.nodes_mm, "nodes", (v) => vec3(v, "node"), 2),
     start_node_id =
-      typeof d.start_node_id === "string" ? d.start_node_id : undefined,
-    end_node_id = typeof d.end_node_id === "string" ? d.end_node_id : undefined;
+      typeof d.start_node_id === "string" && d.start_node_id.trim()
+        ? d.start_node_id
+        : undefined,
+    end_node_id =
+      typeof d.end_node_id === "string" && d.end_node_id.trim()
+        ? d.end_node_id
+        : undefined;
   let start_invert_mm =
       d.start_invert_mm == null ? null : num(d.start_invert_mm, "start invert"),
     end_invert_mm =
@@ -200,6 +205,74 @@ export function movePipeRouteEndpoint(
     nodes_mm,
     end_invert_mm: nodes_mm[nodes_mm.length - 1][2],
   };
+}
+
+/** Move an interior route node while keeping the route's vertical constraints coherent. */
+export function movePipeRouteNode(
+  route: PipeRouteModuleData,
+  nodeIndex: number,
+  point_mm: [number, number],
+): PipeRouteModuleData {
+  const lastIndex = route.nodes_mm.length - 1;
+  if (route.nodes_mm.length < 2 || !Number.isInteger(nodeIndex) || nodeIndex < 0 || nodeIndex > lastIndex)
+    throw new Error("Pipe route node index is out of range");
+  if (nodeIndex === 0) return movePipeRouteEndpoint(route, "start", point_mm);
+  if (nodeIndex === lastIndex) return movePipeRouteEndpoint(route, "end", point_mm);
+
+  const nodes_mm = route.nodes_mm.map((node) => [...node] as [number, number, number]);
+  nodes_mm[nodeIndex][0] = point_mm[0];
+  nodes_mm[nodeIndex][1] = point_mm[1];
+  for (let index = 1; index < nodes_mm.length; index++)
+    if (length3(nodes_mm[index], nodes_mm[index - 1]) < 1e-7)
+      throw new Error("Pipe route node would create duplicate adjacent nodes");
+
+  if (!["waste", "soil", "rainwater"].includes(route.system))
+    return { ...route, nodes_mm };
+
+  const horizontalSegments = nodes_mm.slice(1).map((node, index) =>
+    Math.hypot(node[0] - nodes_mm[index][0], node[1] - nodes_mm[index][1]),
+  );
+  const horizontalRun = horizontalSegments.reduce((sum, segment) => sum + segment, 0);
+  if (horizontalRun < 1e-7)
+    throw new Error("Gravity route requires horizontal run");
+
+  // Unknown connected inverts are not elevations: preserve the supplied route
+  // profile and let the network report its unknown datum instead of guessing.
+  if (
+    (route.start_node_id && route.start_invert_mm == null) ||
+    (route.end_node_id && route.end_invert_mm == null) ||
+    (route.start_invert_mm == null && route.end_invert_mm == null)
+  )
+    return { ...route, nodes_mm };
+
+  const slope = Math.max(0, route.minimum_slope_ratio ?? 0);
+  const startFixed = route.start_invert_mm != null;
+  const endFixed = route.end_invert_mm != null;
+  const startElevation = route.start_invert_mm ?? nodes_mm[0][2];
+  const endElevation = route.end_invert_mm ?? nodes_mm[lastIndex][2];
+  const distances = [0];
+  for (const segment of horizontalSegments)
+    distances.push(distances[distances.length - 1] + segment);
+
+  if (startFixed && endFixed) {
+    if ((startElevation - endElevation) / horizontalRun < slope - 1e-9)
+      throw new Error("Known endpoint inverts violate the configured minimum slope");
+    for (let index = 0; index < nodes_mm.length; index++)
+      nodes_mm[index][2] = startElevation + ((endElevation - startElevation) * distances[index]) / horizontalRun;
+  } else if (startFixed) {
+    for (let index = 0; index < nodes_mm.length; index++)
+      nodes_mm[index][2] = startElevation - distances[index] * slope;
+  } else if (endFixed) {
+    for (let index = 0; index < nodes_mm.length; index++)
+      nodes_mm[index][2] = endElevation + (horizontalRun - distances[index]) * slope;
+  } else {
+    for (let index = 0; index < nodes_mm.length; index++)
+      nodes_mm[index][2] = startElevation - distances[index] * slope;
+  }
+  for (let index = 1; index < nodes_mm.length; index++)
+    if (length3(nodes_mm[index], nodes_mm[index - 1]) < 1e-7)
+      throw new Error("Pipe route node would create duplicate adjacent nodes");
+  return { ...route, nodes_mm };
 }
 
 export function decodeSeptic(

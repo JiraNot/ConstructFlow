@@ -331,6 +331,12 @@ export interface UpdateFoundationDimensionsInput {
   size_mm: [number, number, number]
 }
 
+/** Move an independent footing in plan while preserving its vertical datum. */
+export interface MoveFoundationInput {
+  object_id: string
+  center_mm: [number, number, number]
+}
+
 export interface AssignInstanceTypeInput {
   object_id: string
   type_id?: string

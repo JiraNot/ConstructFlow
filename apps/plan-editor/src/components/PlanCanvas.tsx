@@ -23,7 +23,9 @@ import {
   DisplayLengthUnit,
 } from '@constructflow/project-model'
 import { projectPointToWallOffsetMm, stairFromRun, type StairPlacementOptions } from '@constructflow/architecture-engine'
-import { movePipeRouteEndpoint } from '@constructflow/drainage-engine'
+import { movePipeRouteEndpoint, movePipeRouteNode } from '@constructflow/drainage-engine'
+import { polygonEdgeGrip, polygonInteriorPoint } from '@constructflow/geometry-kernel'
+import { getEditableRoofRidge, getRoofSeams } from '@constructflow/roof-engine'
 import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
@@ -39,8 +41,10 @@ import {
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
 import { constrainPointToReference, DEFAULT_SNAP_MODES, findNearestLinearReference, inferLinearConstraint, LinearReference, SnapMode, SnapResult, snapPoint, snapToWallHost, WallHostSnapResult, snapOpeningOffsetBimAware, resizeOpeningFromEdge } from '@constructflow/snapping-engine'
-import { renderPlanView, PlacementGhost, UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
+import { renderPlanView, drawDirectManipulationGhost, PlacementGhost, UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import { Maximize2, Pencil, Trash2, ZoomIn, ZoomOut, PlusCircle, Copy } from 'lucide-react'
+import type { CommandRequest } from '@constructflow/command-schema'
+import { buildDirectManipulationCommands, optimisticManipulationProject, type DirectManipulationPreviewResult, type PlanDragGesture } from '../directManipulation.mjs'
 
 const PLACEMENT_DIMENSION_TOOLS = new Set<ToolType>(['column', 'foundation', 'beam', 'wall', 'door', 'window', 'grid', 'gridSystem', 'gridCopy', 'stair', 'slab', 'slabVoid', 'archFloor', 'ceiling', 'roof', 'roomSeparator', 'pipe', 'fixture', 'cabinet', 'moulding'])
 
@@ -103,6 +107,9 @@ interface PlanCanvasProps {
   onUpdateCabinet?: (id: string, changes: Partial<CabinetModuleData>) => void
   onResizeColumn?: (id: string, section_mm: [number, number]) => void
   onResizeFoundation?: (id: string, size_mm: [number, number]) => void
+  onPreviewManipulation?: (commands: CommandRequest[]) => DirectManipulationPreviewResult
+  onCommitManipulation?: (commands: CommandRequest[]) => { status: string; errors?: string[] }
+  onManipulationRejected?: (errors: string[]) => void
   onFlipDoorHanding?: (doorId: string) => void
   onStartCalibrationModal?: (measuredDist_mm: number, point1_mm: [number, number], point2_mm: [number, number]) => void
   onCursorChange: (coords_mm: [number, number], snapKind: string) => void
@@ -185,6 +192,14 @@ function getPlanObjectBounds(object: ProjectDocument['objects'][string]): [numbe
     Math.max(...points.map(point => point[0])) + radius, Math.max(...points.map(point => point[1])) + radius]
 }
 
+function orientedRectangleCorners(center: [number, number], size: [number, number], rotationDeg = 0): [number, number][] {
+  const angle = rotationDeg * Math.PI / 180
+  return [[-size[0]/2,-size[1]/2],[size[0]/2,-size[1]/2],[size[0]/2,size[1]/2],[-size[0]/2,size[1]/2]].map(([x,y]) => [
+    center[0] + x * Math.cos(angle) - y * Math.sin(angle),
+    center[1] + x * Math.sin(angle) + y * Math.cos(angle),
+  ])
+}
+
 function cabinetFootprintPoints(data: CabinetModuleData): [number, number][] {
   const angle = data.rotation_deg * Math.PI / 180
   const frontY = data.countertop_mm > 0 ? -20 : -data.board_mm
@@ -213,6 +228,33 @@ function cabinetRotationFromGrip(data: CabinetModuleData, point: [number, number
   const nextAngle = Math.atan2(dy, dx) - Math.atan2(localY, localX)
   const degrees = ((nextAngle * 180 / Math.PI + 180) % 360 + 360) % 360 - 180
   return Math.round(degrees * 10) / 10
+}
+
+function slabSlopeArrow(boundary: [number, number][], slopeRatio: number, directionDeg: number, zoom: number) {
+  if (boundary.length < 3 || !(slopeRatio > 0)) return null
+  const start = polygonInteriorPoint(boundary) as [number, number] | null
+  if (!start) return null
+  const angle = directionDeg * Math.PI / 180
+  const direction: [number, number] = [Math.cos(angle), Math.sin(angle)]
+  let extent = Number.POSITIVE_INFINITY
+  for (let index = 0; index < boundary.length; index++) {
+    const a = boundary[index], b = boundary[(index + 1) % boundary.length]
+    const sx = b[0] - a[0], sy = b[1] - a[1]
+    const denominator = direction[0] * sy - direction[1] * sx
+    if (Math.abs(denominator) < 1e-8) continue
+    const ax = a[0] - start[0], ay = a[1] - start[1]
+    const distance = (ax * sy - ay * sx) / denominator
+    const alongEdge = (ax * direction[1] - ay * direction[0]) / denominator
+    if (distance > 1e-3 && alongEdge >= -1e-6 && alongEdge <= 1 + 1e-6) extent = Math.min(extent, distance)
+  }
+  const desired = Math.max(220, Math.min(1000, 46 / Math.max(zoom, 0.001)))
+  const length = Number.isFinite(extent) ? Math.min(desired, extent * 0.7) : desired
+  if (!(length > 1)) return null
+  return {
+    start_mm: start,
+    end_mm: [start[0] + direction[0] * length, start[1] + direction[1] * length] as [number, number],
+    label: `${(slopeRatio * 100).toFixed(1)}%`,
+  }
 }
 
 function gridLineEndpoints(grid: { module_data: { orientation: 'vertical' | 'horizontal'; position_mm: number; extent_mm: [number, number]; start_point_mm?: [number, number]; end_point_mm?: [number, number] } }): [[number, number], [number, number]] {
@@ -622,6 +664,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   onUpdateCabinet,
   onResizeColumn,
   onResizeFoundation,
+  onPreviewManipulation,
+  onCommitManipulation,
+  onManipulationRejected,
   onFlipDoorHanding,
   onStartCalibrationModal,
   onCursorChange,
@@ -926,6 +971,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const [isPanning, setIsPanning] = useState(false)
   const [objectContextMenu, setObjectContextMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [selectionBox, setSelectionBox] = useState<{ start: [number, number]; end: [number, number] } | null>(null)
+  const [manipulationPreview, setManipulationPreview] = useState<{ project: ProjectDocument; ids: string[]; valid: boolean } | null>(null)
+  const lastPreviewValidationRef = useRef<{ at: number; valid: boolean }>({ at: 0, valid: true })
   const panStartRef = useRef<[number, number]>([0, 0])
   const selectionStartRef = useRef<[number, number] | null>(null)
   const pointerPositionsRef = useRef(new Map<number, [number, number]>())
@@ -942,15 +989,21 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   // Direct-manipulation state for objects whose geometry can move in plan.
   const [draggingObject, setDraggingObject] = useState<{
     id: string
-    kind: 'column' | 'wall' | 'opening' | 'opening-center' | 'grid' | 'column-corner' | 'foundation-corner' | 'wall-endpoint' | 'beam-endpoint' | 'grid-endpoint' | 'separator-endpoint' | 'pipe-endpoint' | 'moulding-endpoint' | 'cabinet-rotation' | 'opening-edge' | 'polygon-vertex'
+    kind: 'column' | 'wall' | 'opening' | 'opening-center' | 'grid' | 'column-corner' | 'foundation-corner' | 'wall-endpoint' | 'beam-endpoint' | 'grid-endpoint' | 'separator-endpoint' | 'pipe-endpoint' | 'pipe-node' | 'moulding-endpoint' | 'cabinet-rotation' | 'opening-edge' | 'polygon-vertex' | 'slab-edge' | 'slab-slope' | 'roof-ridge' | 'roof-seam' | 'object-move' | 'group-move' | 'stair-width' | 'stair-run'
     startWorldMm: [number, number]
     startScreenPx: [number, number]
     endpointIndex?: number
+    roofSeamEdgeIndices?: [number, number]
+    roofSeamGripMm?: [number, number]
     startPointMm?: [number, number]
     endPointMm?: [number, number]
     boundaryPointsMm?: [number, number][]
+    edgeStartMm?: [number, number]
+    edgeNormalMm?: [number, number]
     centerMm?: [number, number]
     sectionMm?: [number, number]
+    rotationDeg?: number
+    objectIds?: string[]
     openingCenterOffsetMm?: number
     hostStartMm?: [number, number]
     hostEndMm?: [number, number]
@@ -1073,15 +1126,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       const data = object.module_data as unknown as Record<string, unknown>
       if (isColumnObject(object)) {
         const center = object.module_data.location_mm, [w, d] = object.module_data.section_mm
-        for (const [cornerIndex, point] of [[center[0] - w / 2, center[1] - d / 2], [center[0] + w / 2, center[1] - d / 2], [center[0] + w / 2, center[1] + d / 2], [center[0] - w / 2, center[1] + d / 2]].entries()) {
+        const corners = orientedRectangleCorners([center[0], center[1]], [w, d], object.module_data.rotation_deg)
+        for (const [cornerIndex, point] of corners.entries()) {
           const [x, y] = worldToScreen(point as [number, number], viewport)
-          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return { id, kind: 'column-corner' as const, endpointIndex: cornerIndex, centerMm: [center[0], center[1]] as [number, number], sectionMm: [w, d] as [number, number] }
+          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return { id, kind: 'column-corner' as const, endpointIndex: cornerIndex, centerMm: [center[0], center[1]] as [number, number], sectionMm: [w, d] as [number, number], rotationDeg: object.module_data.rotation_deg }
         }
       } else if (isFoundationObject(object)) {
         const center = object.module_data.center_mm, [w, d] = object.module_data.size_mm
-        for (const point of [[center[0] - w / 2, center[1] - d / 2], [center[0] + w / 2, center[1] - d / 2], [center[0] + w / 2, center[1] + d / 2], [center[0] - w / 2, center[1] + d / 2]]) {
+        for (const [cornerIndex, point] of orientedRectangleCorners([center[0], center[1]], [w, d]).entries()) {
           const [x, y] = worldToScreen(point as [number, number], viewport)
-          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return { id, kind: 'foundation-corner' as const, centerMm: [center[0], center[1]] as [number, number], sectionMm: [w, d] as [number, number] }
+          if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return { id, kind: 'foundation-corner' as const, endpointIndex: cornerIndex, centerMm: [center[0], center[1]] as [number, number], sectionMm: [w, d] as [number, number] }
         }
       } else if (isWallObject(object) || isBeamObject(object)) {
         const start = data.start_point_mm as [number, number] | undefined
@@ -1116,14 +1170,29 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       } else if (object.object_type === 'drainage.pipe_route' || object.object_type === 'plumbing.pipe_route') {
         const route = object.module_data as unknown as PipeRouteModuleData
         if (route.nodes_mm.length < 2) continue
-        for (const endpointIndex of [0, route.nodes_mm.length - 1]) {
-          if ((endpointIndex === 0 && route.start_node_id) || (endpointIndex > 0 && route.end_node_id)) continue
+        for (const endpointIndex of route.nodes_mm.map((_, index) => index)) {
+          const isStart = endpointIndex === 0
+          const isEnd = endpointIndex === route.nodes_mm.length - 1
+          if ((isStart && route.start_node_id) || (isEnd && route.end_node_id)) continue
           const point = route.nodes_mm[endpointIndex]
           const [x, y] = worldToScreen([point[0], point[1]], viewport)
           if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
-            id, kind: 'pipe-endpoint' as const, endpointIndex,
+            id, kind: isStart || isEnd ? 'pipe-endpoint' as const : 'pipe-node' as const, endpointIndex,
             pipeRouteData: structuredClone(route),
           }
+        }
+      } else if (object.object_type === 'architecture.stair') {
+        const stair = object.module_data as unknown as StairModuleData
+        const [sx, sy] = stair.start_point_mm, angle = Number(stair.rotation_deg ?? 0) * Math.PI / 180
+        const side = stair.turn_direction === 'left' && stair.stair_type !== 'straight' ? -1 : 1
+        const widthGrip: [number, number] = [sx - Math.sin(angle) * stair.width_mm * side, sy + Math.cos(angle) * stair.width_mm * side]
+        const [wx, wy] = worldToScreen(widthGrip, viewport)
+        if (Math.hypot(screenPoint[0] - wx, screenPoint[1] - wy) <= tolerance) return { id, kind: 'stair-width' as const, endpointIndex: 0 }
+        if (stair.stair_type === 'straight') {
+          const run = Math.max(1, stair.num_risers - 1) * stair.tread_depth_mm
+          const runGrip: [number, number] = [sx + Math.cos(angle) * run, sy + Math.sin(angle) * run]
+          const [rx, ry] = worldToScreen(runGrip, viewport)
+          if (Math.hypot(screenPoint[0] - rx, screenPoint[1] - ry) <= tolerance) return { id, kind: 'stair-run' as const, endpointIndex: 0 }
         }
       } else if (object.object_type === 'decorative.moulding_run') {
         const moulding = object.module_data as unknown as MouldingModuleData
@@ -1189,7 +1258,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         }
       } else if (['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(object.object_type)) {
         const boundary = data.boundary_mm as [number, number][] | undefined
-        if (!boundary) continue
+        if (!boundary || boundary.length < 3) continue
         for (const [vertexIndex, point] of boundary.entries()) {
           const [x, y] = worldToScreen(point, viewport)
           if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
@@ -1197,9 +1266,105 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             boundaryPointsMm: structuredClone(boundary),
           }
         }
+        if (object.object_type === 'structure.slab') {
+          for (const edgeIndex of boundary.map((_, index) => index)) {
+            const grip = polygonEdgeGrip(boundary, edgeIndex)
+            if (!grip) continue
+            const [x, y] = worldToScreen(grip.midpoint_mm, viewport)
+            if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
+              id, kind: 'slab-edge' as const, endpointIndex: edgeIndex,
+              boundaryPointsMm: structuredClone(boundary), edgeStartMm: grip.midpoint_mm,
+              edgeNormalMm: grip.inward_normal,
+            }
+          }
+          const arrow = slabSlopeArrow(boundary, Number(data.slope_ratio ?? 0), Number(data.drain_direction_deg ?? 0), viewport.zoom)
+          if (arrow) {
+            const [x, y] = worldToScreen(arrow.end_mm, viewport)
+            if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
+              id, kind: 'slab-slope' as const, edgeStartMm: arrow.start_mm,
+            }
+          }
+        } else if (object.object_type === 'roof.system') {
+          const roofData = data as unknown as import('@constructflow/project-model').RoofModuleData
+          const editableRidge = getEditableRoofRidge(roofData)
+          for (const seam of getRoofSeams(roofData)) {
+            const [x, y] = worldToScreen(seam.grip_mm, viewport)
+            if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) > tolerance) continue
+            const isEditableRidge = editableRidge && seam.edge_indices[0] === Math.min(...editableRidge.edge_indices) && seam.edge_indices[1] === Math.max(...editableRidge.edge_indices)
+            return {
+              id,
+              kind: isEditableRidge ? 'roof-ridge' as const : 'roof-seam' as const,
+              roofSeamEdgeIndices: seam.edge_indices,
+              roofSeamGripMm: seam.grip_mm,
+            }
+          }
+        }
       }
     }
     return null
+  }
+
+  const buildDragCommands = (drag: PlanDragGesture, rawWorld: [number, number], ctrlKey: boolean): CommandRequest[] => {
+    const snap = ctrlKey
+      ? { point_mm: rawWorld, target_id: undefined }
+      : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, drag.id)
+    let point = ['slab-edge', 'slab-slope', 'roof-ridge', 'roof-seam'].includes(drag.kind) ? rawWorld : snap.point_mm
+    const options: Record<string, unknown> = {}
+
+    if (drag.kind === 'beam-endpoint') {
+      const target = snap.target_id ? planProject.objects[snap.target_id] : undefined
+      if (target && isColumnObject(target)) {
+        point = [target.module_data.location_mm[0], target.module_data.location_mm[1]]
+        options.targetColumnId = target.id
+      }
+    } else if (drag.kind === 'opening-edge' && drag.hostStartMm && drag.hostEndMm && drag.openingCenterOffsetMm !== undefined && drag.openingWidthMm !== undefined) {
+      const edgeOffset = projectPointToWallOffsetMm(rawWorld, drag.hostStartMm, drag.hostEndMm, 1)
+      const hostLength = Math.hypot(drag.hostEndMm[0] - drag.hostStartMm[0], drag.hostEndMm[1] - drag.hostStartMm[1])
+      const resize = edgeOffset === undefined ? null : resizeOpeningFromEdge(edgeOffset, drag.endpointIndex === 0 ? 0 : 1, drag.openingCenterOffsetMm, drag.openingWidthMm, hostLength, { snap: !ctrlKey })
+      if (!resize) return []
+      options.openingResize = resize
+      point = rawWorld
+    } else if ((drag.kind === 'opening' || drag.kind === 'opening-center') && drag.hostStartMm && drag.hostEndMm && drag.openingWidthMm) {
+      const hostLength = Math.hypot(drag.hostEndMm[0] - drag.hostStartMm[0], drag.hostEndMm[1] - drag.hostStartMm[1])
+      const rawOffset = projectPointToWallOffsetMm(rawWorld, drag.hostStartMm, drag.hostEndMm, drag.openingWidthMm)
+      if (rawOffset === undefined) return []
+      let startColumnWidth: number | undefined, endColumnWidth: number | undefined
+      for (const column of Object.values(planProject.objects)) {
+        if (!isColumnObject(column)) continue
+        const [cx, cy] = column.module_data.location_mm
+        const width = Math.max(...column.module_data.section_mm)
+        if (Math.hypot(cx - drag.hostStartMm[0], cy - drag.hostStartMm[1]) <= width) startColumnWidth = width
+        if (Math.hypot(cx - drag.hostEndMm[0], cy - drag.hostEndMm[1]) <= width) endColumnWidth = width
+      }
+      options.openingOffsetMm = ctrlKey ? Math.round(rawOffset) : snapOpeningOffsetBimAware(rawOffset, hostLength, drag.openingWidthMm, {
+        startColumnWidth_mm: startColumnWidth, endColumnWidth_mm: endColumnWidth, minClearance_mm: 100,
+      }).offset_along_wall_mm
+      point = rawWorld
+    } else if (drag.kind === 'pipe-endpoint' && drag.pipeRouteData && drag.endpointIndex !== undefined) {
+      const route = drag.pipeRouteData as unknown as PipeRouteModuleData
+      const endpointIndex = drag.endpointIndex
+      try { drag = { ...drag, pipeRouteData: movePipeRouteEndpoint(route, endpointIndex === 0 ? 'start' : 'end', point) as unknown as Record<string, unknown> } }
+      catch {
+        const candidate = structuredClone(route)
+        candidate.nodes_mm[endpointIndex][0] = point[0]
+        candidate.nodes_mm[endpointIndex][1] = point[1]
+        drag = { ...drag, pipeRouteData: candidate as unknown as Record<string, unknown> }
+      }
+    } else if (drag.kind === 'pipe-node' && drag.pipeRouteData && drag.endpointIndex !== undefined) {
+      const route = drag.pipeRouteData as unknown as PipeRouteModuleData
+      const nodeIndex = drag.endpointIndex
+      try { drag = { ...drag, pipeRouteData: movePipeRouteNode(route, nodeIndex, point) as unknown as Record<string, unknown> } }
+      catch {
+        const candidate = structuredClone(route)
+        candidate.nodes_mm[nodeIndex][0] = point[0]
+        candidate.nodes_mm[nodeIndex][1] = point[1]
+        drag = { ...drag, pipeRouteData: candidate as unknown as Record<string, unknown> }
+      }
+    } else if (drag.kind === 'cabinet-rotation' && drag.cabinetData) {
+      options.cabinetRotationDeg = cabinetRotationFromGrip(drag.cabinetData as unknown as CabinetModuleData, point, viewport.zoom)
+    }
+
+    return buildDirectManipulationCommands(planProject, drag, point, options)
   }
 
   const redraw = useCallback(() => {
@@ -1316,6 +1481,9 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       labelVisibility,
       []
     )
+    if (manipulationPreview) {
+      drawDirectManipulationGhost(ctx, planProject, manipulationPreview.project, manipulationPreview.ids, viewport, manipulationPreview.valid)
+    }
     // 10.6 Coordination overlay — the shared report is drawn here in plan space so the canvas,
     // the inspector panel and the permit sheets quote identical millimetres.
     if (coordination.length) {
@@ -1332,13 +1500,15 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         const object = planProject.objects[id]
         if (!object) continue
         const data = object.module_data as unknown as Record<string, unknown>
-        const points: Array<[number, number, 'linear' | 'opening' | 'opening-center' | 'cabinet-rotation']> = []
+        const points: Array<[number, number, 'linear' | 'opening' | 'opening-center' | 'cabinet-rotation' | 'stair-width' | 'stair-run' | 'slab-edge' | 'slab-slope' | 'pipe-node']> = []
+        let slabArrow: ReturnType<typeof slabSlopeArrow> = null
+        let roofSeams: ReturnType<typeof getRoofSeams> = []
         if (isColumnObject(object)) {
           const [cx, cy] = object.module_data.location_mm, [w, d] = object.module_data.section_mm
-          points.push([cx - w / 2, cy - d / 2, 'linear'], [cx + w / 2, cy - d / 2, 'linear'], [cx + w / 2, cy + d / 2, 'linear'], [cx - w / 2, cy + d / 2, 'linear'])
+          for (const [x, y] of orientedRectangleCorners([cx, cy], [w, d], object.module_data.rotation_deg)) points.push([x, y, 'linear'])
         } else if (isFoundationObject(object)) {
           const [cx, cy] = object.module_data.center_mm, [w, d] = object.module_data.size_mm
-          points.push([cx - w / 2, cy - d / 2, 'linear'], [cx + w / 2, cy - d / 2, 'linear'], [cx + w / 2, cy + d / 2, 'linear'], [cx - w / 2, cy + d / 2, 'linear'])
+          for (const [x, y] of orientedRectangleCorners([cx, cy], [w, d])) points.push([x, y, 'linear'])
         } else if (isWallObject(object) || isBeamObject(object)) {
           const start = data.start_point_mm as [number, number] | undefined, end = data.end_point_mm as [number, number] | undefined
           if (start && end) { points.push([start[0], start[1], 'linear'], [end[0], end[1], 'linear']) }
@@ -1353,6 +1523,8 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           if (route.nodes_mm.length >= 2) {
             if (!route.start_node_id) points.push([route.nodes_mm[0][0], route.nodes_mm[0][1], 'linear'])
             const last = route.nodes_mm.length - 1
+            for (let nodeIndex = 1; nodeIndex < last; nodeIndex++)
+              points.push([route.nodes_mm[nodeIndex][0], route.nodes_mm[nodeIndex][1], 'pipe-node'])
             if (!route.end_node_id) points.push([route.nodes_mm[last][0], route.nodes_mm[last][1], 'linear'])
           }
         } else if (object.object_type === 'decorative.moulding_run') {
@@ -1418,9 +1590,66 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
               }
             }
           }
+        } else if (object.object_type === 'architecture.stair') {
+          const stair = object.module_data as unknown as StairModuleData
+          const [sx, sy] = stair.start_point_mm, angle = Number(stair.rotation_deg ?? 0) * Math.PI / 180
+          const side = stair.turn_direction === 'left' && stair.stair_type !== 'straight' ? -1 : 1
+          points.push([sx - Math.sin(angle) * stair.width_mm * side, sy + Math.cos(angle) * stair.width_mm * side, 'stair-width'])
+          if (stair.stair_type === 'straight') {
+            const run = Math.max(1, stair.num_risers - 1) * stair.tread_depth_mm
+            points.push([sx + Math.cos(angle) * run, sy + Math.sin(angle) * run, 'stair-run'])
+          }
         } else if (['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(object.object_type)) {
           const boundary = data.boundary_mm as [number, number][] | undefined
           boundary?.forEach(point => points.push([point[0], point[1], 'linear']))
+          if (object.object_type === 'structure.slab' && boundary) {
+            for (const edgeIndex of boundary.map((_, index) => index)) {
+              const grip = polygonEdgeGrip(boundary, edgeIndex)
+              if (grip) points.push([grip.midpoint_mm[0], grip.midpoint_mm[1], 'slab-edge'])
+            }
+            const displayObject = manipulationPreview?.ids.includes(id) ? manipulationPreview.project.objects[id] : object
+            const displayData = displayObject?.module_data as unknown as Record<string, unknown> | undefined
+            const displayBoundary = displayData?.boundary_mm as [number, number][] | undefined
+            if (displayData && displayBoundary) slabArrow = slabSlopeArrow(displayBoundary, Number(displayData.slope_ratio ?? 0), Number(displayData.drain_direction_deg ?? 0), viewport.zoom)
+            if (slabArrow) points.push([slabArrow.end_mm[0], slabArrow.end_mm[1], 'slab-slope'])
+          } else if (object.object_type === 'roof.system') {
+            const displayObject = manipulationPreview?.ids.includes(id) ? manipulationPreview.project.objects[id] : object
+            if (displayObject) roofSeams = getRoofSeams(displayObject.module_data as unknown as import('@constructflow/project-model').RoofModuleData)
+          }
+        }
+        if (slabArrow) {
+          const [ax, ay] = worldToScreen(slabArrow.start_mm, viewport), [bx, by] = worldToScreen(slabArrow.end_mm, viewport)
+          const color = manipulationPreview?.ids.includes(id) ? (manipulationPreview.valid ? '#0284c7' : '#dc2626') : '#0f766e'
+          const angle = Math.atan2(by - ay, bx - ax), head = 7
+          ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.8
+          ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - head * Math.cos(angle - Math.PI / 6), by - head * Math.sin(angle - Math.PI / 6)); ctx.lineTo(bx - head * Math.cos(angle + Math.PI / 6), by - head * Math.sin(angle + Math.PI / 6)); ctx.closePath(); ctx.fill()
+          ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'
+          const labelX = (ax + bx) / 2, labelY = (ay + by) / 2 - 4, labelWidth = ctx.measureText(slabArrow.label).width + 7
+          ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.fillRect(labelX - labelWidth / 2, labelY - 12, labelWidth, 14)
+          ctx.fillStyle = color; ctx.fillText(slabArrow.label, labelX, labelY - 1); ctx.restore()
+        }
+        if (roofSeams.length) {
+          const previewColor = manipulationPreview?.ids.includes(id) ? (manipulationPreview.valid ? '#0284c7' : '#dc2626') : null
+          for (const seam of roofSeams) {
+            const [sx, sy] = worldToScreen(seam.start_mm, viewport), [ex, ey] = worldToScreen(seam.end_mm, viewport)
+            const [gx, gy] = worldToScreen(seam.grip_mm, viewport)
+            const color = previewColor ?? (seam.kind === 'valley' ? '#ea580c' : seam.kind === 'hip' ? '#2563eb' : '#0284c7')
+            ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = '#ffffff'; ctx.lineWidth = seam.kind === 'ridge' ? 2 : 1.6
+            ctx.setLineDash(seam.kind === 'ridge' ? [6, 3] : seam.kind === 'valley' ? [2, 3] : [4, 3])
+            ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke(); ctx.setLineDash([])
+            const label = seam.kind === 'ridge' ? 'สัน' : seam.kind === 'valley' ? 'ร่อง' : 'ตะเข้สัน'
+            ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+            const labelWidth = ctx.measureText(label).width + 6
+            ctx.fillStyle = 'rgba(255,255,255,.94)'; ctx.fillRect(gx - labelWidth / 2, gy - 22, labelWidth, 13)
+            ctx.fillStyle = color; ctx.fillText(label, gx, gy - 15.5)
+            if (seam.kind === 'valley') {
+              ctx.beginPath(); ctx.moveTo(gx, gy - 6); ctx.lineTo(gx + 6, gy); ctx.lineTo(gx, gy + 6); ctx.lineTo(gx - 6, gy); ctx.closePath(); ctx.fill(); ctx.stroke()
+            } else {
+              ctx.fillRect(gx - 5, gy - 5, 10, 10); ctx.strokeRect(gx - 5, gy - 5, 10, 10)
+            }
+            ctx.restore()
+          }
         }
         for (const [x, y, kind] of points) {
           const [sx, sy] = worldToScreen([x, y], viewport)
@@ -1441,6 +1670,24 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
             ctx.textAlign = 'center'
             ctx.textBaseline = 'middle'
             ctx.fillText('↻', sx, sy)
+          } else if (kind === 'stair-width' || kind === 'stair-run') {
+            ctx.fillStyle = kind === 'stair-width' ? '#0d9488' : '#7c3aed'
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2
+            ctx.beginPath(); ctx.arc(sx, sy, 7.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+            ctx.fillStyle = '#ffffff'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+            ctx.fillText(kind === 'stair-width' ? 'W' : 'R', sx, sy)
+          } else if (kind === 'slab-edge') {
+            ctx.fillStyle = '#ecfeff'; ctx.strokeStyle = '#0891b2'; ctx.lineWidth = 1.6
+            ctx.fillRect(sx - 4.5, sy - 4.5, 9, 9); ctx.strokeRect(sx - 4.5, sy - 4.5, 9, 9)
+          } else if (kind === 'slab-slope') {
+            ctx.fillStyle = '#ffffff'; ctx.strokeStyle = manipulationPreview?.valid === false ? '#dc2626' : '#0f766e'; ctx.lineWidth = 2
+            ctx.beginPath(); ctx.arc(sx, sy, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+            ctx.fillStyle = ctx.strokeStyle; ctx.beginPath(); ctx.arc(sx, sy, 2, 0, Math.PI * 2); ctx.fill()
+          } else if (kind === 'pipe-node') {
+            ctx.fillStyle = manipulationPreview?.valid === false ? '#fee2e2' : '#ecfeff'
+            ctx.strokeStyle = manipulationPreview?.valid === false ? '#dc2626' : '#0891b2'
+            ctx.lineWidth = 1.7
+            ctx.beginPath(); ctx.moveTo(sx, sy - 6); ctx.lineTo(sx + 6, sy); ctx.lineTo(sx, sy + 6); ctx.lineTo(sx - 6, sy); ctx.closePath(); ctx.fill(); ctx.stroke()
           } else {
             ctx.fillStyle = kind === 'opening' ? '#fff7ed' : '#ffffff'
             ctx.strokeStyle = kind === 'opening' ? '#f97316' : '#087cf0'
@@ -1574,6 +1821,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     coordination,
     coordinationSeverities,
     coordinationFocusSelection,
+    manipulationPreview,
   ])
 
   useEffect(() => {
@@ -1582,6 +1830,34 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
   const redrawRef = useRef(redraw)
   redrawRef.current = redraw
+
+  const previewDragAt = (drag: PlanDragGesture, point: [number, number], ctrlKey: boolean) => {
+    const commands = buildDragCommands(drag, point, ctrlKey)
+    if (!commands.length) { setManipulationPreview(null); return { commands, valid: false } }
+    const optimistic = optimisticManipulationProject(planProject, commands)
+    const now = performance.now()
+    const validation = now - lastPreviewValidationRef.current.at >= 50 ? onPreviewManipulation?.(commands) : undefined
+    if (validation) lastPreviewValidationRef.current = { at: now, valid: validation.valid }
+    const idsFromCommands = commands.map(command => String(command.input.object_id ?? command.input.id ?? '')).filter(Boolean)
+    const relatedIds = new Set(idsFromCommands)
+    for (const command of commands) {
+      const id = String(command.input.object_id ?? command.input.id ?? '')
+      const object = planProject.objects[id]
+      if (command.name === 'MoveWall' || command.name === 'UpdateWallEndpoints') {
+        for (const child of Object.values(planProject.objects)) if ((isDoorObject(child) || isWindowObject(child)) && child.module_data.wall_id === id) relatedIds.add(child.id)
+      }
+      if (command.name === 'MoveColumn' && object) {
+        for (const child of Object.values(planProject.objects)) {
+          if ((isBeamObject(child) && (child.module_data.start_column_id === id || child.module_data.end_column_id === id)) ||
+              (isFoundationObject(child) && (child.module_data.supported_column_id === id || child.host_refs.includes(id)))) relatedIds.add(child.id)
+        }
+      }
+    }
+    const valid = validation?.valid ?? lastPreviewValidationRef.current.valid
+    const ids = validation?.affected_object_ids?.length ? validation.affected_object_ids : [...relatedIds]
+    setManipulationPreview({ project: valid && validation ? validation.project : optimistic, ids, valid })
+    return { commands, valid }
+  }
 
   // Observe the drawing area, including changes from collapsing the inspector.
   // Canvas bitmap dimensions must not contribute to the flex item's minimum size.
@@ -1905,9 +2181,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     if (activeTool === 'select' && !draggingObject) setCandidates(candidates)
     setHoveredId(candidates.includes(hoveredId ?? '') ? hoveredId : candidates[0] ?? null)
 
-    // Redraw during direct manipulation so the pointer feedback remains responsive.
+    // Drag candidates stay outside the project model until a valid release.
     if (draggingObject) {
-      redraw()
+      const moved = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
+      if (moved >= 3) previewDragAt(draggingObject, rawWorld, e.ctrlKey)
+      else setManipulationPreview(null)
     }
   }
 
@@ -2012,12 +2290,18 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           setDraggingObject({ id: editHandle.id, kind: editHandle.kind, endpointIndex: editHandle.endpointIndex,
             startPointMm: editHandle.startPointMm, endPointMm: editHandle.endPointMm,
             boundaryPointsMm: editHandle.boundaryPointsMm,
+            edgeStartMm: editHandle.edgeStartMm,
+            edgeNormalMm: editHandle.edgeNormalMm,
+            roofSeamEdgeIndices: editHandle.roofSeamEdgeIndices,
+            roofSeamGripMm: editHandle.roofSeamGripMm,
             pipeRouteData: editHandle.pipeRouteData, mouldingData: editHandle.mouldingData,
             cabinetData: editHandle.cabinetData,
-            centerMm: editHandle.centerMm, sectionMm: editHandle.sectionMm,
+            centerMm: editHandle.centerMm, sectionMm: editHandle.sectionMm, rotationDeg: editHandle.rotationDeg,
             hostStartMm: editHandle.hostStartMm, hostEndMm: editHandle.hostEndMm,
             openingWidthMm: editHandle.openingWidthMm, openingCenterOffsetMm: editHandle.openingCenterOffsetMm,
             startWorldMm: rawWorld, startScreenPx: [screenX, screenY] })
+          setManipulationPreview(null)
+          lastPreviewValidationRef.current = { at: 0, valid: true }
           e.currentTarget.setPointerCapture(e.pointerId)
         } else {
         const candidates = findCandidates(rawWorld, e.shiftKey)
@@ -2029,8 +2313,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           onSelectionChange?.(next, next.at(-1) ?? null)
           onSelectObject(next.at(-1) ?? null)
         } else if (hitId) {
-          onSelectionChange?.([hitId], hitId)
-          onSelectObject(hitId)
+          const retainGroup = selectedIds.includes(hitId) && selectedIds.length > 1
+          if (!retainGroup) {
+            onSelectionChange?.([hitId], hitId)
+            onSelectObject(hitId)
+          }
         } else {
           selectionStartRef.current = [screenX, screenY]
           selectionAdditiveRef.current = e.shiftKey
@@ -2040,8 +2327,16 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         if (hitId && !e.shiftKey) {
           const object = project.objects[hitId]
           const startScreenPx: [number, number] = [screenX, screenY]
-          if (isColumnObject(object)) {
+          const retainGroup = selectedIds.includes(hitId) && selectedIds.length > 1
+          if (retainGroup) {
+            setDraggingObject({ id: hitId, kind: 'group-move', objectIds: [...selectedIds], startWorldMm: rawWorld, startScreenPx })
+            setManipulationPreview(null)
+            lastPreviewValidationRef.current = { at: 0, valid: true }
+            e.currentTarget.setPointerCapture(e.pointerId)
+          } else if (isColumnObject(object)) {
             setDraggingObject({ id: hitId, kind: 'column', startWorldMm: rawWorld, startScreenPx })
+            setManipulationPreview(null)
+            lastPreviewValidationRef.current = { at: 0, valid: true }
             e.currentTarget.setPointerCapture(e.pointerId)
           } else if (isWallObject(object)) {
             setDraggingObject({
@@ -2050,10 +2345,13 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
               startWorldMm: rawWorld,
               startScreenPx,
             })
+            setManipulationPreview(null)
+            lastPreviewValidationRef.current = { at: 0, valid: true }
             e.currentTarget.setPointerCapture(e.pointerId)
           } else if (isGridObject(object) && !object.module_data.system_id) {
             const [gridStartMm, gridEndMm] = gridLineEndpoints(object)
             setDraggingObject({ id: hitId, kind: 'grid', startWorldMm: rawWorld, startScreenPx, gridStartMm, gridEndMm })
+            setManipulationPreview(null)
             e.currentTarget.setPointerCapture(e.pointerId)
           } else if (isDoorObject(object) || isWindowObject(object)) {
             const host = project.objects[object.module_data.wall_id]
@@ -2068,8 +2366,15 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
                 openingWidthMm: object.module_data.width_mm,
                 openingCenterOffsetMm: object.module_data.offset_along_wall_mm,
               })
+              setManipulationPreview(null)
+              lastPreviewValidationRef.current = { at: 0, valid: true }
               e.currentTarget.setPointerCapture(e.pointerId)
             }
+          } else {
+            setDraggingObject({ id: hitId, kind: 'object-move', startWorldMm: rawWorld, startScreenPx })
+            setManipulationPreview(null)
+            lastPreviewValidationRef.current = { at: 0, valid: true }
+            e.currentTarget.setPointerCapture(e.pointerId)
           }
         }
         }
@@ -2202,7 +2507,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
           else if (activeTool === 'archFloor') onCommitArchitecturalFloor?.(slabBoundary)
           else if (activeTool === 'ceiling') onCommitCeiling?.(slabBoundary)
           else if (activeTool === 'roof') onCommitRoof?.(slabBoundary, { shape: roofShape, slope_deg: roofSlopeDeg, thickness_mm: roofThicknessMm, elevation_offset_mm: roofElevationOffsetMm, material: roofMaterial })
-          else if (selectedId && ['structure.slab', 'architecture.floor', 'architecture.ceiling'].includes(planProject.objects[selectedId]?.object_type ?? '')) onCommitSurfaceVoid(selectedId, slabBoundary)
+          else if (selectedId && ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(planProject.objects[selectedId]?.object_type ?? '')) onCommitSurfaceVoid(selectedId, slabBoundary)
           setSlabBoundary([])
           setDrawLengthMeters(''); setDrawAngleDegrees('')
           clearDimensionOverrides()
@@ -2307,6 +2612,22 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
 
     if (draggingObject) {
       const rect = canvasRef.current?.getBoundingClientRect()
+      if (rect && onPreviewManipulation && onCommitManipulation) {
+        const screenX = e.clientX - rect.left, screenY = e.clientY - rect.top
+        const rawWorld = screenToWorld([screenX, screenY], viewport)
+        const movedPixels = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
+        if (movedPixels >= 3) {
+          const commands = buildDragCommands(draggingObject, rawWorld, e.ctrlKey)
+          if (commands.length) {
+            const validation = onPreviewManipulation(commands)
+            if (validation.valid) onCommitManipulation(commands)
+            else onManipulationRejected?.(validation.errors)
+          }
+        }
+        setDraggingObject(null); setManipulationPreview(null)
+        try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
+        return
+      }
       if (rect) {
         const screenX = e.clientX - rect.left
         const screenY = e.clientY - rect.top
@@ -2359,6 +2680,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
               const endpoint = draggingObject.endpointIndex === 0 ? 'start' : 'end'
               onUpdatePipeRoute?.(draggingObject.id, movePipeRouteEndpoint(route, endpoint, point))
             }
+          } else if (draggingObject.kind === 'pipe-node' && draggingObject.pipeRouteData && draggingObject.endpointIndex !== undefined) {
+            const route = draggingObject.pipeRouteData
+            const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
+            try { onUpdatePipeRoute?.(draggingObject.id, movePipeRouteNode(route, draggingObject.endpointIndex, point)) }
+            catch (error) { onManipulationRejected?.([error instanceof Error ? error.message : String(error)]) }
           } else if (draggingObject.kind === 'moulding-endpoint' && draggingObject.mouldingData && draggingObject.endpointIndex !== undefined) {
             const moulding = draggingObject.mouldingData
             const point = e.ctrlKey ? rawWorld : snapPoint(rawWorld, planProject, viewport, 16, enabledSnapModes, draggingObject.id).point_mm
@@ -2429,6 +2755,17 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
   }
 
+  const handlePointerCancel = (e: React.PointerEvent) => {
+    if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current)
+    longPressTimerRef.current = null; longPressStartRef.current = null
+    pointerPositionsRef.current.delete(e.pointerId)
+    pinchActiveRef.current = false; pinchRef.current = null
+    selectionStartRef.current = null; setSelectionBox(null)
+    eraseActiveRef.current = false; erasedIdsRef.current.clear()
+    setDraggingObject(null); setManipulationPreview(null); setIsPanning(false)
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
+  }
+
   // Mouse wheel zoom
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
@@ -2491,7 +2828,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     else if (activeTool === 'archFloor') onCommitArchitecturalFloor?.(slabBoundary)
     else if (activeTool === 'ceiling') onCommitCeiling?.(slabBoundary)
     else if (activeTool === 'roof') onCommitRoof?.(slabBoundary, { shape: roofShape, slope_deg: roofSlopeDeg, thickness_mm: roofThicknessMm, elevation_offset_mm: roofElevationOffsetMm, material: roofMaterial })
-    else if (activeTool === 'slabVoid' && selectedId && ['structure.slab', 'architecture.floor', 'architecture.ceiling'].includes(planProject.objects[selectedId]?.object_type ?? '')) onCommitSurfaceVoid(selectedId, slabBoundary)
+    else if (activeTool === 'slabVoid' && selectedId && ['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(planProject.objects[selectedId]?.object_type ?? '')) onCommitSurfaceVoid(selectedId, slabBoundary)
     else return false
     setSlabBoundary([])
     clearDimensionOverrides()
@@ -2586,7 +2923,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     activeTool === 'grid' ? `เส้นกริด · ${gridStartPoint ? 'เลือกจุดปลาย · กำหนดระยะ/องศาได้' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด` :
     activeTool === 'gridCopy' ? 'สำเนาเส้นกริด · Shift ล็อกแนวขนาน · Enter วางสำเนา' :
     activeTool === 'gridSystem' ? 'ระบบกริด · กรอกช่วงระยะ แล้วเลือกจุดกำเนิดหรือ Enter วางตรงเคอร์เซอร์' :
-    activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling' || activeTool === 'roof' ? `${activeTool === 'slab' ? 'พื้นโครงสร้าง' : activeTool === 'slabVoid' ? 'ช่องเจาะพื้น' : activeTool === 'archFloor' ? 'พื้นสถาปัตย์' : activeTool === 'ceiling' ? 'ฝ้าเพดาน' : 'หลังคา'} · ${slabBoundary.length ? 'กรอกระยะ/องศาแล้ว Enter เพิ่มจุด' : 'คลิกหรือ Enter จุดแรก'} · Enter บนแปลนปิดรูปเมื่อครบ 3 จุด` :
+    activeTool === 'slab' || activeTool === 'slabVoid' || activeTool === 'archFloor' || activeTool === 'ceiling' || activeTool === 'roof' ? `${activeTool === 'slab' ? 'พื้นโครงสร้าง' : activeTool === 'slabVoid' ? 'ช่องเจาะพื้น/หลังคา' : activeTool === 'archFloor' ? 'พื้นสถาปัตย์' : activeTool === 'ceiling' ? 'ฝ้าเพดาน' : 'หลังคา'} · ${slabBoundary.length ? 'กรอกระยะ/องศาแล้ว Enter เพิ่มจุด' : 'คลิกหรือ Enter จุดแรก'} · Enter บนแปลนปิดรูปเมื่อครบ 3 จุด` :
     activeTool === 'roomSeparator' ? `เส้นแบ่งห้อง · ${roomSeparatorStart ? 'กำหนดระยะ/องศาแล้วเลือกจุดปลาย' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด` :
     activeTool === 'pipe' ? `แนวท่อ ${({ waste: 'น้ำทิ้ง', soil: 'โสโครก', rainwater: 'น้ำฝน', vent: 'อากาศ', cold_water: 'น้ำดีเย็น', hot_water: 'น้ำร้อน' } as const)[pipeSystem]} · ${roomSeparatorStart ? 'เลือกจุดปลายเพื่อสร้างช่วงท่อ' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด` :
     activeTool === 'cabinet' ? `บิลท์อิน · ${roomSeparatorStart ? 'เลือกปลายแนวหน้าตู้เพื่อกำหนดความกว้างและทิศ' : 'เลือกมุมเริ่มแนวหน้าตู้'} · Enter ยืนยันจุด` :
@@ -2597,7 +2934,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     activeTool === 'calibrate' ? 'ปรับสเกลภาพ · เลือกจุดอ้างอิงสองจุด · Enter ยืนยันจุด' : null
   const authoringToolName: Partial<Record<ToolType, string>> = {
     select: 'เลือกวัตถุ', column: 'เสา', foundation: 'ฐานราก', beam: 'คาน', wall: 'ผนัง', door: 'ประตู', window: 'หน้าต่าง',
-    slab: 'พื้นโครงสร้าง', slabVoid: 'ช่องเจาะพื้น', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้าเพดาน', roof: 'หลังคา', roomSeparator: 'เส้นแบ่งห้อง',
+    slab: 'พื้นโครงสร้าง', slabVoid: 'ช่องเจาะพื้น/หลังคา', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้าเพดาน', roof: 'หลังคา', roomSeparator: 'เส้นแบ่งห้อง',
     stair: 'บันได', grid: 'เส้นกริด', gridSystem: 'ระบบกริด', gridCopy: 'คัดลอกกริด', pipe: 'แนวท่อ', fixture: 'อุปกรณ์ไฟฟ้า', cabinet: 'บิลท์อิน', moulding: 'แนวบัว', measure: 'ตลับเมตร', calibrate: 'ปรับสเกลภาพ', erase: 'ลบวัตถุ',
   }
 
@@ -2626,7 +2963,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
         onKeyDown={handleCanvasDimensionKeyDown}
-        onPointerCancel={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         style={{ position: 'absolute', inset: 0, display: 'block', width: '100%', height: '100%', touchAction: 'none' }}
       />
       {objectContextMenu && planProject.objects[objectContextMenu.id] && <div

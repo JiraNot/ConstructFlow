@@ -19,7 +19,7 @@ import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
 import { resolveArchitecturalFloorPatternKind, decodeStair, getStairPlanDrawing } from '@constructflow/architecture-engine'
 import { SnapResult } from '@constructflow/snapping-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
-import { clippedGridSegments, clippedStaggeredPlankSegments, polygonDiagonalHatchSegments, polygonInteriorPoint, wallMasonryHatchSegments , clippedCarpetSegments, clippedTerrazzoSegments} from "@constructflow/geometry-kernel"
+import { clippedGridSegments, clippedStaggeredPlankSegments, offsetPolygonOutward, polygonDiagonalHatchSegments, polygonInteriorPoint, wallMasonryHatchSegments , clippedCarpetSegments, clippedTerrazzoSegments} from "@constructflow/geometry-kernel"
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
 import { getPlanWallLayerBoundaries, getPlanFinishBoundaries, structuralPlasterThickness, getPlanVisibleObjects, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '@constructflow/representation-engine'
 import { beginPlanLabels, queuePlanLabel, flushPlanLabels, planLabelScale } from './planLabels.js'
@@ -416,6 +416,126 @@ export function renderPlanView(
     drawCalibrationOverlay(ctx, calibration, viewport)
   }
   flushPlanLabels(ctx, width, height)
+}
+
+/** Draws a non-destructive drag candidate above the committed model geometry. */
+export function drawDirectManipulationGhost(
+  ctx: CanvasRenderingContext2D,
+  project: ProjectDocument,
+  candidate: ProjectDocument,
+  objectIds: readonly string[],
+  viewport: ViewportState,
+  valid: boolean,
+) {
+  const accent = valid ? '#0284c7' : '#dc2626'
+  const ids = [...new Set(objectIds)]
+  const point2 = (value: unknown): [number, number] => Array.isArray(value)
+    ? [Number(value[0] ?? 0), Number(value[1] ?? 0)]
+    : [0, 0]
+  ctx.save()
+  ctx.globalAlpha = 0.62
+  ctx.strokeStyle = accent
+  ctx.fillStyle = valid ? 'rgba(2,132,199,.17)' : 'rgba(220,38,38,.16)'
+  ctx.lineWidth = 2.5
+  ctx.setLineDash(valid ? [] : [7, 4])
+
+  for (const id of ids) {
+    const object = candidate.objects[id]
+    if (!object || object.status === 'archived') continue
+    if (isWallObject(object)) {
+      drawWall(ctx, object, candidate, viewport, false, false, false)
+    } else if (isColumnObject(object)) {
+      drawColumn(ctx, object, candidate, viewport, false, false, false)
+    } else if (isFoundationObject(object)) {
+      drawFoundation(ctx, object, viewport, false, false, false)
+    } else if (isBeamObject(object)) {
+      drawBeam(ctx, object, candidate, viewport, false, false, 'name', false)
+    } else if (isDoorObject(object)) {
+      drawDoor(ctx, object, candidate, viewport, false, false, false)
+    } else if (isWindowObject(object)) {
+      drawWindow(ctx, object, candidate, viewport, false, false, false)
+    }
+
+    const data = object.module_data as Record<string, unknown>
+    const drawRing = (ring: unknown, close = true, fill = true) => {
+      if (!Array.isArray(ring) || ring.length < 2) return false
+      ctx.beginPath()
+      ring.forEach((raw, index) => {
+        if (!Array.isArray(raw) || !Number.isFinite(Number(raw[0])) || !Number.isFinite(Number(raw[1]))) return
+        const [x, y] = worldToScreen([Number(raw[0]), Number(raw[1])], viewport)
+        if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+      })
+      if (close) ctx.closePath()
+      if (close && fill) ctx.fill('evenodd')
+      ctx.stroke()
+      return true
+    }
+
+    if (isWallObject(object) || isBeamObject(object)) {
+      const start = data.start_point_mm as number[] | undefined, end = data.end_point_mm as number[] | undefined
+      if (start && end) {
+        const [a, b] = [worldToScreen([start[0], start[1]], viewport), worldToScreen([end[0], end[1]], viewport)]
+        ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.strokeStyle = accent
+        ctx.lineWidth = Math.max(3, Number(isWallObject(object) ? data.thickness_mm : (data.section_mm as number[] | undefined)?.[0] ?? 100) * viewport.zoom + 2)
+        ctx.globalAlpha = 0.36; ctx.stroke(); ctx.globalAlpha = 0.9
+        ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke()
+      }
+    } else if (isColumnObject(object) || isFoundationObject(object)) {
+      const center = point2(isColumnObject(object) ? data.location_mm : data.center_mm)
+      const size = point2(isColumnObject(object) ? data.section_mm : data.size_mm)
+      const rotation = Number(isColumnObject(object) ? data.rotation_deg ?? 0 : 0) * Math.PI / 180
+      const ring = [[-size[0]/2,-size[1]/2],[size[0]/2,-size[1]/2],[size[0]/2,size[1]/2],[-size[0]/2,size[1]/2]].map(([x,y]) => [center[0]+x*Math.cos(rotation)-y*Math.sin(rotation),center[1]+x*Math.sin(rotation)+y*Math.cos(rotation)])
+      drawRing(ring)
+    } else if (isDoorObject(object) || isWindowObject(object)) {
+      const host = candidate.objects[String(data.wall_id)]
+      const hostData = host?.module_data as Record<string, unknown> | undefined
+      const start = hostData?.start_point_mm as number[] | undefined, end = hostData?.end_point_mm as number[] | undefined
+      const center = data.location_mm as number[] | undefined
+      const width = Number(data.width_mm ?? 800)
+      if (start && end && center) {
+        const length = Math.hypot(end[0]-start[0],end[1]-start[1])
+        if (length > 0) {
+          const ux=(end[0]-start[0])/length,uy=(end[1]-start[1])/length,nx=-uy,ny=ux
+          const half=width/2,thickness=Number(hostData?.thickness_mm??100)/2
+          const ring=[[-half,-thickness],[half,-thickness],[half,thickness],[-half,thickness]].map(([x,y])=>[center[0]+ux*x+nx*y,center[1]+uy*x+ny*y])
+          drawRing(ring)
+        }
+      }
+    } else if (object.object_type === 'architecture.stair') {
+      const stair = decodeStair(data, candidate)
+      const levelElevation = candidate.levels.find(level => level.id === stair.level_id)?.elevation_mm ?? stair.start_point_mm[2]
+      const drawing = getStairPlanDrawing(stair, levelElevation)
+      for (const path of [...drawing.solid_paths_mm, ...drawing.overhead_paths_mm]) drawRing(path, false, false)
+    } else if (Array.isArray(data.boundary_mm)) {
+      const boundary = object.object_type === 'roof.system'
+        ? offsetPolygonOutward(data.boundary_mm as [number, number][], Number(data.eaves_overhang_mm ?? 0)) ?? data.boundary_mm
+        : data.boundary_mm
+      drawRing(boundary)
+      const voids = data.voids_mm
+      if (Array.isArray(voids)) for (const ring of voids) drawRing(ring, true, false)
+    } else if (object.object_type === 'interior.cabinet_run') {
+      const d = data as unknown as import('@constructflow/project-model').CabinetModuleData
+      const angle = d.rotation_deg * Math.PI / 180
+      const local = [[0, 0], [d.width_mm, 0], [d.width_mm, d.depth_mm], [0, d.depth_mm]]
+      const ring = local.map(([x, y]) => [
+        d.location_mm[0] + x * Math.cos(angle) - y * Math.sin(angle),
+        d.location_mm[1] + x * Math.sin(angle) + y * Math.cos(angle),
+      ])
+      drawRing(ring)
+    } else if (Array.isArray(data.start_point_mm) && Array.isArray(data.end_point_mm)) {
+      drawRing([data.start_point_mm, data.end_point_mm], false)
+    } else {
+      const path = Array.isArray(data.path_mm) ? data.path_mm : Array.isArray(data.nodes_mm) ? data.nodes_mm : null
+      if (path) drawRing(path, false)
+      else if (Array.isArray(data.location_mm)) {
+        const [x, y] = worldToScreen([Number(data.location_mm[0]), Number(data.location_mm[1])], viewport)
+        const size = object.object_type === 'electrical.fixture' ? 9 : 6
+        ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+      }
+    }
+  }
+  ctx.setLineDash([])
+  ctx.restore()
 }
 
 function drawBackgroundCadGrid(

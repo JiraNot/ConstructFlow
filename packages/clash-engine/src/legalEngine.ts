@@ -7,6 +7,7 @@ import {
   type SmartObject,
   resolveCatalogType,
 } from '@constructflow/project-model'
+import { offsetPolygonOutward, simplePolygon, type Vec2 } from '@constructflow/geometry-kernel'
 
 export interface SurveyPeg {
   name: string // e.g. "1ก 1234"
@@ -166,7 +167,7 @@ export interface WallSetbackEvaluationItem {
 export interface EavesSetbackEvaluationItem {
   roof_id: string
   roof_name?: string
-  distance_to_boundary_m: number
+  distance_to_boundary_m?: number
   eaves_overhang_m?: number
   neighbor_consent?: boolean
   has_gutter?: boolean
@@ -336,7 +337,18 @@ export function evaluateThaiBuildingCompliance(inputs: ThaiComplianceInputs): Th
       const roofLabel = eave.roof_name ? `${eave.roof_name} [${eave.roof_id}]` : eave.roof_id
       const minEavesSetback = 0.50
 
-      if (eave.distance_to_boundary_m >= minEavesSetback) {
+      if (typeof eave.distance_to_boundary_m !== 'number' || !Number.isFinite(eave.distance_to_boundary_m)) {
+        findings.push({
+          rule_id: 'TH-MR55-RULE-50-EAVES-DATA',
+          title: `Roof Eaves Setback Needs Survey Data (${roofLabel})`,
+          title_th: `ยังตรวจระยะร่นชายคาไม่ได้ (${roofLabel})`,
+          status: 'insufficient_data',
+          actual: 'ยังไม่มีระยะวัดถึงแนวเขตที่ดิน',
+          required: `>= ${minEavesSetback.toFixed(2)} ม.`,
+          citation: 'กฎกระทรวง ฉบับที่ 55 (พ.ศ. 2543) ข้อ 50',
+          description_th: 'ระบุหลักเขตที่ดินอย่างน้อย 3 จุด หรือกรอกระยะร่นชายคาที่สำรวจแล้ว เพื่อให้ระบบตรวจระยะจริง',
+        })
+      } else if (eave.distance_to_boundary_m >= minEavesSetback) {
         findings.push({
           rule_id: 'TH-MR55-RULE-50-EAVES',
           title: `Roof Eaves Setback (${roofLabel})`,
@@ -459,9 +471,10 @@ export function evaluateThaiBuildingCompliance(inputs: ThaiComplianceInputs): Th
 
   const hasFail = findings.some((f) => f.status === 'fail')
   const hasWarning = findings.some((f) => f.status === 'warning')
+  const hasInsufficientData = findings.some((f) => f.status === 'insufficient_data')
 
   return {
-    overall_status: hasFail ? 'fail' : hasWarning ? 'warning' : 'pass',
+    overall_status: hasFail ? 'fail' : hasWarning ? 'warning' : hasInsufficientData ? 'insufficient_data' : 'pass',
     findings,
   }
 }
@@ -1181,6 +1194,68 @@ export interface ProjectSiteComplianceOptions {
   zoning_inputs?: BmaZoningEvaluationInputs
 }
 
+function pointInParcel(point: Vec2, ring: readonly Vec2[]): boolean {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[j], b = ring[i]
+    const cross = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0])
+    if (Math.abs(cross) <= 1e-9 && point[0] >= Math.min(a[0], b[0]) - 1e-9 && point[0] <= Math.max(a[0], b[0]) + 1e-9
+      && point[1] >= Math.min(a[1], b[1]) - 1e-9 && point[1] <= Math.max(a[1], b[1]) + 1e-9) return true
+    if ((a[1] > point[1]) !== (b[1] > point[1]) && point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside
+  }
+  return inside
+}
+
+function segmentDistance(a: Vec2, b: Vec2, c: Vec2, d: Vec2): number {
+  const cross = (p: Vec2, q: Vec2, r: Vec2) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+  const on = (p: Vec2, q: Vec2, r: Vec2) => Math.abs(cross(p, q, r)) <= 1e-9
+    && r[0] >= Math.min(p[0], q[0]) - 1e-9 && r[0] <= Math.max(p[0], q[0]) + 1e-9
+    && r[1] >= Math.min(p[1], q[1]) - 1e-9 && r[1] <= Math.max(p[1], q[1]) + 1e-9
+  const abC = cross(a, b, c), abD = cross(a, b, d), cdA = cross(c, d, a), cdB = cross(c, d, b)
+  if (((abC > 1e-9 && abD < -1e-9) || (abC < -1e-9 && abD > 1e-9))
+    && ((cdA > 1e-9 && cdB < -1e-9) || (cdA < -1e-9 && cdB > 1e-9))
+    || on(a, b, c) || on(a, b, d) || on(c, d, a) || on(c, d, b)) return 0
+  const pointSegment = (p: Vec2, x: Vec2, y: Vec2) => {
+    const dx = y[0] - x[0], dy = y[1] - x[1], lengthSquared = dx * dx + dy * dy
+    const t = lengthSquared > 0 ? Math.max(0, Math.min(1, ((p[0] - x[0]) * dx + (p[1] - x[1]) * dy) / lengthSquared)) : 0
+    return Math.hypot(p[0] - (x[0] + t * dx), p[1] - (x[1] + t * dy))
+  }
+  return Math.min(pointSegment(a, c, d), pointSegment(b, c, d), pointSegment(c, a, b), pointSegment(d, a, b))
+}
+
+/** Measure the roof's outer eave outline to the surveyed parcel boundary in metres. */
+function measuredRoofSetbackM(roofData: Record<string, unknown>, parcelSource: unknown): number | undefined {
+  if (!Array.isArray(parcelSource) || parcelSource.length < 3 || !Array.isArray(roofData.boundary_mm) || roofData.boundary_mm.length < 3) return undefined
+  const pegs = parcelSource as Array<{ coordinate_m?: unknown }>
+  const parcelRaw = pegs.map(peg => peg.coordinate_m).filter((point): point is [number, number] =>
+    Array.isArray(point) && point.length === 2 && point.every(value => typeof value === 'number' && Number.isFinite(value)))
+  if (parcelRaw.length !== pegs.length) return undefined
+  const boundaryRaw = roofData.boundary_mm as unknown[]
+  const roofRaw = boundaryRaw.filter((point): point is [number, number] =>
+    Array.isArray(point) && point.length === 2 && point.every(value => typeof value === 'number' && Number.isFinite(value)))
+  if (roofRaw.length !== boundaryRaw.length) return undefined
+  const overhang = typeof roofData.eaves_overhang_mm === 'number' && Number.isFinite(roofData.eaves_overhang_mm) ? roofData.eaves_overhang_mm : 0
+  try {
+    const parcel = simplePolygon(parcelRaw)
+    const roofMm = offsetPolygonOutward(simplePolygon(roofRaw), overhang)
+    if (!roofMm) return undefined
+    const roof = roofMm.map(point => [point[0] / 1000, point[1] / 1000] as Vec2)
+    let minimum = Infinity
+    for (let i = 0; i < roof.length; i++) {
+      const a = roof[i], b = roof[(i + 1) % roof.length]
+      for (let j = 0; j < parcel.length; j++) {
+        const distance = segmentDistance(a, b, parcel[j], parcel[(j + 1) % parcel.length])
+        if (distance === 0) return 0
+        minimum = Math.min(minimum, distance)
+      }
+    }
+    if (roof.some(point => !pointInParcel(point, parcel))) return 0
+    return Number.isFinite(minimum) ? minimum : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export interface ProjectSiteComplianceReport {
   overall_status: ComplianceStatus
   building_compliance: ThaiComplianceResult
@@ -1260,12 +1335,13 @@ export function evaluateProjectSiteAndLegalCompliance(
   // Build eaves items from roofs
   const eavesItems: EavesSetbackEvaluationItem[] = roofs.map((r) => {
     const rData = (r.module_data ?? {}) as Record<string, unknown>
-    const distM =
-      typeof rData.distance_to_boundary_m === 'number'
+    const measuredDistance = measuredRoofSetbackM(rData, project.legal_metadata?.boundary_pegs)
+    const distM = measuredDistance
+      ?? (typeof rData.distance_to_boundary_m === 'number' && Number.isFinite(rData.distance_to_boundary_m)
         ? rData.distance_to_boundary_m
-        : typeof rData.eaves_setback_m === 'number'
+        : typeof rData.eaves_setback_m === 'number' && Number.isFinite(rData.eaves_setback_m)
           ? rData.eaves_setback_m
-          : 1.5
+          : undefined)
     const overhangM =
       typeof rData.eaves_overhang_mm === 'number'
         ? rData.eaves_overhang_mm / 1000
@@ -1320,7 +1396,8 @@ export function evaluateProjectSiteAndLegalCompliance(
 
   const hasFail = allFindings.some((f) => f.status === 'fail')
   const hasWarning = allFindings.some((f) => f.status === 'warning')
-  const overallStatus: ComplianceStatus = hasFail ? 'fail' : hasWarning ? 'warning' : 'pass'
+  const hasInsufficientData = allFindings.some((f) => f.status === 'insufficient_data')
+  const overallStatus: ComplianceStatus = hasFail ? 'fail' : hasWarning ? 'warning' : hasInsufficientData ? 'insufficient_data' : 'pass'
 
   return {
     overall_status: overallStatus,

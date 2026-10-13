@@ -62,13 +62,27 @@ export function decodeWater(
     if (length3(nodes_mm[i - 1], nodes_mm[i]) < 1e-7)
       throw new Error("Water route has zero-length segment");
   const source =
-      typeof d.start_node_id === "string" ? d.start_node_id : undefined,
-    destination = typeof d.end_node_id === "string" ? d.end_node_id : undefined;
-  for (const id of [source, destination])
-    if (id && p.objects[id]?.owner_module !== "constructflow.plumbing")
-      throw new Error(
-        "Water endpoint must expose a plumbing source/destination",
-      );
+      typeof d.start_node_id === "string" && d.start_node_id.trim()
+        ? d.start_node_id
+        : undefined,
+    destination =
+      typeof d.end_node_id === "string" && d.end_node_id.trim()
+        ? d.end_node_id
+        : undefined;
+  for (const [id, index, label] of [
+    [source, 0, "source"],
+    [destination, nodes_mm.length - 1, "destination"],
+  ] as const) {
+    if (!id) continue;
+    const host = p.objects[id];
+    if (
+      !host ||
+      host.owner_module !== "constructflow.plumbing" ||
+      host.object_type !== "plumbing.pump_bypass"
+    )
+      throw new Error("Water endpoint must connect to a plumbing source/destination");
+    nodes_mm[index] = vec3(resolvedData(p, host).location_mm, `${label} location`);
+  }
   return {
     ...placement(d, p),
     nodes_mm,
