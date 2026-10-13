@@ -49,6 +49,7 @@ import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { usePlanCanvasPointerCancel } from './usePlanCanvasPointerCancel.js'
 import { PlanCanvasObjectContextMenu } from './PlanCanvasObjectContextMenu.js'
 import { resolvePlanCanvasPointerSnap } from './resolvePlanCanvasPointerSnap.js'
+import { handlePlanCanvasNavigationPointerMove } from './handlePlanCanvasNavigationPointerMove.js'
 import { PlanCanvasDragDimensions, type DragDimensionField, type DragDimensionMode } from './PlanCanvasDragDimensions.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
@@ -849,46 +850,11 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
       canvasRef.current?.focus({ preventScroll: true })
     }
 
-    if (e.pointerType === 'touch' && pointerPositionsRef.current.has(e.pointerId)) {
-      pointerPositionsRef.current.set(e.pointerId, [screenX, screenY])
-      if (pointerPositionsRef.current.size >= 2) {
-        const points = [...pointerPositionsRef.current.values()]
-        const center: [number, number] = [(points[0][0] + points[1][0]) / 2, (points[0][1] + points[1][1]) / 2]
-        const distance = Math.max(1, Math.hypot(points[0][0] - points[1][0], points[0][1] - points[1][1]))
-        const previous = pinchRef.current
-        if (previous) setViewport(value => {
-          const zoomed = zoomAtScreenPoint(value, previous.center, distance / previous.distance)
-          return { ...zoomed, panX: zoomed.panX + center[0] - previous.center[0], panY: zoomed.panY + center[1] - previous.center[1] }
-        })
-        pinchRef.current = { distance, center }
-        return
-      }
-      if (longPressStartRef.current?.pointerId === e.pointerId && Math.hypot(screenX - longPressStartRef.current.point[0], screenY - longPressStartRef.current.point[1]) > 8 && longPressTimerRef.current !== null) {
-        window.clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null
-      }
-    }
-
-    if (selectionStartRef.current) {
-      setSelectionBox({ start: selectionStartRef.current, end: [screenX, screenY] })
-      return
-    }
-
-    if (eraseActiveRef.current) {
-      const point = screenToWorld([screenX, screenY], viewport)
-      for (const id of findCandidates(point, true)) {
-        if (erasedIdsRef.current.has(id)) continue
-        erasedIdsRef.current.add(id)
-      }
-      return
-    }
-
-    if (isPanning) {
-      const dx = screenX - panStartRef.current[0]
-      const dy = screenY - panStartRef.current[1]
-      panStartRef.current = [screenX, screenY]
-      setViewport((v) => ({ ...v, panX: v.panX + dx, panY: v.panY + dy }))
-      return
-    }
+    if (handlePlanCanvasNavigationPointerMove({
+      pointerPositionsRef, pinchRef, longPressStartRef, longPressTimerRef, selectionStartRef,
+      setSelectionBox, eraseActiveRef, erasedIdsRef, isPanning, panStartRef, viewport, setViewport,
+      findCandidates,
+    }, e.pointerId, e.pointerType, [screenX, screenY])) return
 
     const rawWorld = screenToWorld([screenX, screenY], viewport)
 
