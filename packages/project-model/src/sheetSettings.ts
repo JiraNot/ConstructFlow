@@ -24,6 +24,8 @@ export interface SavedSheetSubviewport {
   scale_denominator: number
   center_mm?: [number, number]
   crop_bounds_mm?: [number, number, number, number]
+  /** User-positioned A3 paper frame [x, y, width, height] in millimeters. */
+  paper_frame_mm?: [number, number, number, number]
 }
 export type SheetViewKind = 'plan' | 'rcp' | 'north' | 'south' | 'east' | 'west' | 'section_x' | 'section_y' | 'isometric'
 export interface SavedSheetViewport {
@@ -34,6 +36,8 @@ export interface SavedSheetViewport {
   level_id?: string;
   center_mm?: [number, number];
   crop_bounds_mm?: [number, number, number, number];
+  /** User-positioned A3 paper frame [x, y, width, height] in millimeters. */
+  paper_frame_mm?: [number, number, number, number];
   section_cut_mm?: number;
   /** Per-subview framing for multi-view sheets (for example elevations and RCP). */
   subviews?: SavedSheetSubviewport[]
@@ -76,6 +80,7 @@ export function validateDrawingSettings(
     for (const [key, count] of [
       ["center_mm", 2],
       ["crop_bounds_mm", 4],
+      ["paper_frame_mm", 4],
     ] as const) {
       const a = v[key];
       if (
@@ -89,6 +94,8 @@ export function validateDrawingSettings(
     const c = v.crop_bounds_mm;
     if (c && (c[2] <= c[0] || c[3] <= c[1]))
       throw new Error("Invalid sheet crop");
+    if (v.paper_frame_mm && !isValidA3PaperFrame(v.paper_frame_mm))
+      throw new Error("Invalid sheet paper frame");
     if (v.section_cut_mm !== undefined && !Number.isFinite(v.section_cut_mm))
       throw new Error("Invalid section cut");
     if (v.view_layout !== undefined && (!Array.isArray(v.view_layout) || v.view_layout.length < 1 || v.view_layout.length > 4 || v.view_layout.some(kind => !['plan', 'rcp', 'north', 'south', 'east', 'west', 'section_x', 'section_y', 'isometric'].includes(kind))))
@@ -99,13 +106,14 @@ export function validateDrawingSettings(
       for (const subview of v.subviews) {
         if (!subview || ![20, 25, 50, 100, 200, 500].includes(subview.scale_denominator))
           throw new Error('Invalid sheet subview scale')
-        for (const [key, count] of [['center_mm', 2], ['crop_bounds_mm', 4]] as const) {
+        for (const [key, count] of [['center_mm', 2], ['crop_bounds_mm', 4], ['paper_frame_mm', 4]] as const) {
           const values = subview[key]
           if (values !== undefined && (!Array.isArray(values) || values.length !== count || values.some(value => typeof value !== 'number' || !Number.isFinite(value))))
             throw new Error(`Invalid sheet subview ${key}`)
         }
         const crop = subview.crop_bounds_mm
         if (crop && (crop[2] <= crop[0] || crop[3] <= crop[1])) throw new Error('Invalid sheet subview crop')
+        if (subview.paper_frame_mm && !isValidA3PaperFrame(subview.paper_frame_mm)) throw new Error('Invalid sheet subview paper frame')
       }
     }
     if (v.opening_overrides !== undefined) {
@@ -148,4 +156,11 @@ export function validateDrawingSettings(
       validateDrawingSettings({ viewports: template.viewports });
     }
   }
+}
+
+function isValidA3PaperFrame(frame: readonly number[]): boolean {
+  const [x, y, width, height] = frame
+  return frame.length === 4 && frame.every(Number.isFinite)
+    && x >= 0 && y >= 0 && width >= 40 && height >= 30
+    && x + width <= 420 && y + height <= 297
 }

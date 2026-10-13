@@ -44,6 +44,14 @@ function standardSheetViewLayout(sheetId: string): SheetViewKind[] {
   if (sheetId === 'M-01') return ['isometric'];
   return ['plan'];
 }
+function defaultPaperFrameMm(sheetId: string, viewIndex: number, viewCount: number): [number, number, number, number] {
+  const frame = getPermitViewportPaperFrame(sheetId, viewIndex, viewCount);
+  return [frame.x, frame.y, frame.width, frame.height];
+}
+function paperFrameBounds(frameMm: [number, number, number, number]) {
+  const [x, y, width, height] = frameMm;
+  return { x, y, width, height };
+}
 const sheetViewLabel = (kind: SheetViewKind) => SHEET_VIEW_OPTIONS.find(option => option.value === kind)?.label ?? kind;
 const polygon = [
   [0, 0],
@@ -836,6 +844,9 @@ export function ConstructionWorkbench({
     [sheetPreview, setSheetPreview] = useState("");
   const [sheetViewLayout, setSheetViewLayout] = useState<SheetViewKind[]>(() => standardSheetViewLayout('A-02'));
   const [subviewViewports, setSubviewViewports] = useState<SavedSheetSubviewport[]>([]);
+  const [sheetPaperFrameOverride, setSheetPaperFrameOverride] = useState<[number, number, number, number] | null>(null);
+  const sheetPaperFrame = sheetPaperFrameOverride ?? defaultPaperFrameMm(sheetId, 0, sheetViewLayout.length);
+  const [editViewportFrames, setEditViewportFrames] = useState(false);
   const [newSheetViewKind, setNewSheetViewKind] = useState<SheetViewKind>('north');
   const [sheetLayoutTemplateName, setSheetLayoutTemplateName] = useState("");
   const [selectedSheetLayoutTemplateId, setSelectedSheetLayoutTemplateId] = useState("");
@@ -901,7 +912,14 @@ export function ConstructionWorkbench({
       );
       const viewLayout = saved?.view_layout ?? standardSheetViewLayout(sheetId);
       setSheetViewLayout(viewLayout);
-      setSubviewViewports(viewLayout.slice(1).map((_, index) => saved?.subviews?.[index] ?? { scale_denominator: saved?.scale_denominator ?? Number(selectedSheet?.scale.split(":")[1] ?? 100) }));
+      setSheetPaperFrameOverride(saved?.paper_frame_mm ?? null);
+      setSubviewViewports(viewLayout.slice(1).map((_, index) => {
+        const savedSubview = saved?.subviews?.[index];
+        return {
+          ...savedSubview,
+          scale_denominator: savedSubview?.scale_denominator ?? saved?.scale_denominator ?? Number(selectedSheet?.scale.split(":")[1] ?? 100),
+        };
+      }));
       setSheetPreview(
         selectedSheet?.svg ?? "",
       );
@@ -928,6 +946,7 @@ export function ConstructionWorkbench({
       ...saved,
       scale_denominator: scale,
       view_layout: sheetViewLayout,
+      ...(sheetPaperFrameOverride ? { paper_frame_mm: sheetPaperFrameOverride } : {}),
       ...(subviewViewports.length ? { subviews: subviewViewports } : {}),
       ...((/^(A-02|A-03|S-02|S-03)$/.test(sheetId) || /^(A-02|S-02)-L\d+$/.test(sheetId)) ? { level_id: planLevelId } : {}),
       center_mm,
@@ -953,9 +972,29 @@ export function ConstructionWorkbench({
     if (preview) setSheetPreview(preview.svg);
     return true;
   };
+  const commitSheetViewportPaperFrame = (index: number, frameMm: [number, number, number, number]) => {
+    const current = buildSelectedSheetViewport();
+    let viewport = current;
+    if (index === 0) {
+      viewport = { ...current, paper_frame_mm: frameMm };
+    } else {
+      const subviews = [...(current.subviews ?? [])];
+      while (subviews.length < index) subviews.push({ scale_denominator: scale });
+      subviews[index - 1] = { ...subviews[index - 1], paper_frame_mm: frameMm };
+      viewport = { ...current, subviews };
+    }
+    if (!execute([{ name: "UpdateSheetViewport", input: { sheet_id: sheetId, viewport } }])) return false;
+    if (index === 0) setSheetPaperFrameOverride(frameMm);
+    else setSubviewViewport(index - 1, currentSubview => ({ ...currentSubview, paper_frame_mm: frameMm }));
+    const options = { ...viewportOptions, viewports: { ...viewportOptions.viewports, [sheetId]: viewport } };
+    const preview = compilePermitDrawingSet(project, options).sheets.find(sheet => sheet.id === sheetId);
+    if (preview) setSheetPreview(preview.svg);
+    return true;
+  };
   const buildSelectedSheetViewport = () => ({
     scale_denominator: scale,
     view_layout: sheetViewLayout,
+    ...(sheetPaperFrameOverride ? { paper_frame_mm: sheetPaperFrameOverride } : {}),
     ...(subviewViewports.length ? { subviews: subviewViewports } : {}),
     ...((/^(A-02|A-03|S-02|S-03)$/.test(sheetId) || /^(A-02|S-02)-L\d+$/.test(sheetId)) ? { level_id: planLevelId } : {}),
     ...(project.drawing_settings?.viewports[sheetId]?.opening_overrides ? { opening_overrides: project.drawing_settings.viewports[sheetId].opening_overrides } : {}),
@@ -1370,6 +1409,9 @@ export function ConstructionWorkbench({
               <section aria-label="จัดวาง viewports" style={{ marginTop: 14, borderTop: "1px solid #dbe3ed", paddingTop: 10 }}>
                 <h3>จัดวาง Viewports บนแผ่น</h3>
                 <p>เลือกมุมมอง เพิ่ม/ลบ และเรียงลำดับได้สูงสุด 4 ช่อง กรอบและศูนย์กลางแต่ละช่องบันทึกแยกกัน</p>
+                <button type="button" aria-pressed={editViewportFrames} onClick={() => setEditViewportFrames(value => !value)}>
+                  {editViewportFrames ? 'เสร็จการจัดกรอบ' : 'จัดกรอบ viewport บนแผ่น'}
+                </button>
                 {sheetViewLayout.map((kind, index) => <section key={`${index}-${kind}`} aria-label={`ตั้งค่า viewport ${index + 1}`} style={{ border: '1px solid #dbe3ed', borderRadius: 4, padding: 8, marginTop: 8 }}>
                   <strong>Viewport {index + 1}</strong>
                   <label style={fieldStyle}>มุมมอง
@@ -1384,6 +1426,7 @@ export function ConstructionWorkbench({
                       setScale(promoted.scale_denominator);
                       setCenter(promoted.center_mm ? [promoted.center_mm[0] / 1000, promoted.center_mm[1] / 1000] : [0, 0]);
                       setUseCenter(!!promoted.center_mm);
+                      setSheetPaperFrameOverride(promoted.paper_frame_mm ?? null);
                       setSheetViewLayout(current => current.slice(1));
                       setSubviewViewports(current => current.slice(1));
                     }}>ลบ viewport 1</button>}
@@ -1559,13 +1602,16 @@ export function ConstructionWorkbench({
                 additionalViewports={sheetViewLayout.slice(1).map((_, index) => {
                   const viewport = subviewViewports[index] ?? { scale_denominator: scale };
                   return {
-                    frame: getPermitViewportPaperFrame(sheetId, index + 1, sheetViewLayout.length),
+                    frame: paperFrameBounds(viewport.paper_frame_mm ?? defaultPaperFrameMm(sheetId, index + 1, sheetViewLayout.length)),
                     manualCenter: !!viewport.center_mm,
                     centerMm: viewport.center_mm ?? [0, 0],
                     scaleDenominator: viewport.scale_denominator,
                   };
                 })}
+                paperFrames={[sheetPaperFrame, ...sheetViewLayout.slice(1).map((_, index) => subviewViewports[index]?.paper_frame_mm ?? defaultPaperFrameMm(sheetId, index + 1, sheetViewLayout.length))]}
                 onCommitAdditionalCenter={commitSheetSubviewportCenter}
+                editFrames={editViewportFrames}
+                onCommitPaperFrame={commitSheetViewportPaperFrame}
               />
             </>
           )}

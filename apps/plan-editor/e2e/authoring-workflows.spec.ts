@@ -1172,7 +1172,8 @@ test('sheet composer adds, reorders, compiles, and reloads custom viewports', as
   const previewBounds = await preview.boundingBox()
   if (!previewBounds) throw new Error('Custom sheet preview is not visible')
   const paperPixelsPerMm = previewBounds.width / 420
-  const thirdFrame = { x: 18, y: 150, width: 180, height: 104 }
+  const [thirdX, thirdY, thirdWidth, thirdHeight] = JSON.parse((await preview.getAttribute('data-paper-frames')) ?? '[]')[2]
+  const thirdFrame = { x: thirdX, y: thirdY, width: thirdWidth, height: thirdHeight }
   const thirdFrameCenter = {
     x: previewBounds.x + ((thirdFrame.x + thirdFrame.width / 2) * paperPixelsPerMm),
     y: previewBounds.y + ((thirdFrame.y + thirdFrame.height / 2) * paperPixelsPerMm),
@@ -1185,6 +1186,31 @@ test('sheet composer adds, reorders, compiles, and reloads custom viewports', as
   await page.mouse.up()
   const draggedThirdCenter = [await thirdCenter.nth(0).inputValue(), await thirdCenter.nth(1).inputValue()]
   expect(draggedThirdCenter).not.toEqual(['2', '1.5'])
+  await dialog.getByRole('button', { name: 'จัดกรอบ viewport บนแผ่น' }).click()
+  const thirdPaperFrame = preview.getByTestId('paper-frame-3')
+  const beforeFrameEdit = JSON.parse((await preview.getAttribute('data-paper-frames')) ?? '[]')
+  await thirdPaperFrame.scrollIntoViewIfNeeded()
+  const frameBounds = await thirdPaperFrame.boundingBox()
+  if (!frameBounds) throw new Error('Third viewport paper frame is not visible')
+  await thirdPaperFrame.hover({ position: { x: frameBounds.width / 2, y: frameBounds.height / 2 } })
+  const visibleFrameBounds = await thirdPaperFrame.boundingBox()
+  if (!visibleFrameBounds) throw new Error('Third viewport paper frame is not visible after scrolling')
+  await page.mouse.move(visibleFrameBounds.x + visibleFrameBounds.width / 2, visibleFrameBounds.y + visibleFrameBounds.height / 2)
+  await page.mouse.down()
+  await expect(preview).toHaveAttribute('data-frame-dragging', 'true')
+  await page.mouse.move(visibleFrameBounds.x + visibleFrameBounds.width / 2 + 18, visibleFrameBounds.y + visibleFrameBounds.height / 2 + 12)
+  await page.mouse.up()
+  await expect.poll(async () => JSON.parse((await preview.getAttribute('data-paper-frames')) ?? '[]')[2]).not.toEqual(beforeFrameEdit[2])
+  const afterMove = JSON.parse((await preview.getAttribute('data-paper-frames')) ?? '[]')
+  const resizeHandle = thirdPaperFrame.getByRole('button', { name: 'ปรับขนาดกรอบ viewport 3' })
+  const resizeBounds = await resizeHandle.boundingBox()
+  if (!resizeBounds) throw new Error('Third viewport resize handle is not visible')
+  await page.mouse.move(resizeBounds.x + resizeBounds.width / 2, resizeBounds.y + resizeBounds.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(resizeBounds.x + resizeBounds.width / 2 + 22, resizeBounds.y + resizeBounds.height / 2 + 16)
+  await page.mouse.up()
+  await expect.poll(async () => JSON.parse((await preview.getAttribute('data-paper-frames')) ?? '[]')[2]).not.toEqual(afterMove[2])
+  const savedPaperFrames = JSON.parse((await preview.getAttribute('data-paper-frames')) ?? '[]')
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
 
   await page.getByRole('button', { name: 'ปิดแบบและตาราง' }).click()
@@ -1193,6 +1219,7 @@ test('sheet composer adds, reorders, compiles, and reloads custom viewports', as
   await page.getByRole('button', { name: 'ชุดแบบและตาราง' }).click()
   const restored = page.getByRole('dialog')
   await restored.locator('select').first().selectOption('A-05')
+  await expect(page.getByTestId('sheet-composer-preview')).toHaveAttribute('data-paper-frames', JSON.stringify(savedPaperFrames))
   await expect(restored.getByLabel('ประเภท viewport 2')).toHaveValue('rcp')
   await expect(restored.getByLabel('ประเภท viewport 3')).toHaveValue('west')
   await expect(restored.getByLabel('มาตราส่วน viewport ที่สอง')).toHaveValue('25')

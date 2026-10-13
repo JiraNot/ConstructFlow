@@ -18,12 +18,14 @@ test('drawing settings accept locked associative dimension placements and reject
 })
 
 test('drawing settings preserve independent secondary viewport framing and reject invalid subviews', () => {
-  validateDrawingSettings({ viewports: { 'A-05': { scale_denominator: 100, subviews: [{ scale_denominator: 25, center_mm: [1200, 800], crop_bounds_mm: [0, 0, 5000, 4000] }] } } })
+  validateDrawingSettings({ viewports: { 'A-05': { scale_denominator: 100, paper_frame_mm: [12, 18, 170, 110], subviews: [{ scale_denominator: 25, center_mm: [1200, 800], crop_bounds_mm: [0, 0, 5000, 4000], paper_frame_mm: [210, 18, 190, 110] }] } } })
   validateDrawingSettings({ viewports: { 'A-05': { scale_denominator: 100, view_layout: ['north', 'east', 'rcp', 'isometric'], subviews: [{ scale_denominator: 25 }, { scale_denominator: 50 }, { scale_denominator: 100 }] } } })
   assert.throws(() => validateDrawingSettings({ viewports: { 'A-05': { scale_denominator: 100, view_layout: ['north', 'unsupported'] } } }), /view layout/)
   assert.throws(() => validateDrawingSettings({ viewports: { 'A-05': { scale_denominator: 100, view_layout: ['north', 'east', 'south', 'west', 'rcp'] } } }), /view layout/)
   assert.throws(() => validateDrawingSettings({ viewports: { 'A-05': { scale_denominator: 100, subviews: [{ scale_denominator: 30 }] } } }), /subview scale/)
   assert.throws(() => validateDrawingSettings({ viewports: { 'A-05': { scale_denominator: 100, subviews: [{ scale_denominator: 25, crop_bounds_mm: [0, 0, -1, 1] }] } } }), /subview crop/)
+  assert.throws(() => validateDrawingSettings({ viewports: { 'A-05': { scale_denominator: 100, paper_frame_mm: [410, 10, 40, 100] } } }), /paper frame/)
+  assert.throws(() => validateDrawingSettings({ viewports: { 'A-05': { scale_denominator: 100, subviews: [{ scale_denominator: 25, paper_frame_mm: [10, 10, 20, 100] }] } } }), /paper frame/)
 })
 
 test('door and window defaults include distinct opening styles for the 3D model', () => {

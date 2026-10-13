@@ -74,15 +74,18 @@ test('paired sheet views use and expose independent saved scale and center setti
 test('sheet composer view layouts compile ordered custom views into printable A3 frames', () => {
   const project = createEmptyProjectDocument('CUSTOM-SHEET-VIEWS')
   const viewLayout = ['north', 'rcp', 'isometric', 'plan']
+  const customFrames = [[12, 18, 170, 110], [210, 18, 190, 110], [12, 145, 170, 130], [210, 145, 190, 130]]
   const sheet = compilePermitDrawingSet(project, { viewports: {
     'A-05': {
       scale_denominator: 100,
       view_layout: viewLayout,
-      subviews: [{ scale_denominator: 25 }, { scale_denominator: 50 }, { scale_denominator: 200 }],
+      paper_frame_mm: customFrames[0],
+      subviews: [{ scale_denominator: 25, paper_frame_mm: customFrames[1] }, { scale_denominator: 50, paper_frame_mm: customFrames[2] }, { scale_denominator: 200, paper_frame_mm: customFrames[3] }],
     },
   } }).sheets.find(item => item.id === 'A-05')
   const labels = sheet.primitives.filter(primitive => primitive.kind === 'text').map(primitive => primitive.text)
-  const frames = viewLayout.map((_, index) => getPermitViewportPaperFrame('A-05', index, viewLayout.length))
+  const frames = viewLayout.map((_, index) => getPermitViewportPaperFrame('A-05', index, viewLayout.length,
+    index === 0 ? customFrames[0] : customFrames[index]))
 
   assert.deepEqual(sheet.viewport.view_layout, viewLayout)
   assert.match(sheet.title, /North Elevation.*RCP.*Isometric.*Plan/)
@@ -97,6 +100,7 @@ test('sheet composer view layouts compile ordered custom views into printable A3
   }
   assert.notDeepEqual(frames[0], frames[1])
   assert.notDeepEqual(frames[1], frames[2])
+  assert.deepEqual(frames.map(frame => [frame.x, frame.y, frame.width, frame.height]), customFrames)
 })
 
 test("Phase 6: saved sheet settings control the compiler and invalid coordinate lengths reject", () => {

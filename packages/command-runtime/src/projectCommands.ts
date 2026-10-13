@@ -86,6 +86,7 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       const viewports = Object.fromEntries(Object.entries(template.viewports ?? {}).map(([sheetId, viewport]) => [sheetId, {
         scale_denominator: viewport.scale_denominator,
         ...(viewport.view_layout !== undefined ? { view_layout: [...viewport.view_layout] } : {}),
+        ...(viewport.paper_frame_mm !== undefined ? { paper_frame_mm: [...viewport.paper_frame_mm] as [number, number, number, number] } : {}),
         ...(viewport.subviews !== undefined ? { subviews: structuredClone(viewport.subviews) } : {}),
         ...(viewport.level_id !== undefined ? { level_id: viewport.level_id } : {}),
         ...(viewport.center_mm !== undefined ? { center_mm: [...viewport.center_mm] as [number, number] } : {}),

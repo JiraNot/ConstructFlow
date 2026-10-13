@@ -86,6 +86,7 @@ export type VectorPrimitive =
 export interface SheetViewport {
   scale_denominator: number;
   view_layout?: SheetViewKind[];
+  paper_frame_mm?: [number, number, number, number];
   level_id?: string;
   center_mm?: Vec2;
   crop_bounds_mm?: [number, number, number, number];
@@ -122,7 +123,12 @@ export function getPermitViewportPaperFrame(
   sheetId: PermitSheetId,
   viewIndex: number,
   viewCount: number,
+  paperFrameMm?: [number, number, number, number],
 ): PermitViewportPaperFrame {
+  if (paperFrameMm) {
+    const [x, y, width, height] = paperFrameMm;
+    return { x, y, width, height };
+  }
   if (viewCount >= 3) {
     const column = viewIndex % 2
     const row = Math.floor(viewIndex / 2)
@@ -1696,7 +1702,12 @@ function compilePermitDrawingSetBase(
               }
               return !visibleOpeningIds || !object.object_type.startsWith("door_window.") || visibleOpeningIds.has(object.id);
             });
-          const paperFrame = getPermitViewportPaperFrame(id, viewIndex, viewKinds.length);
+          const paperFrame = getPermitViewportPaperFrame(
+            id,
+            viewIndex,
+            viewKinds.length,
+            viewIndex === 0 ? viewport.paper_frame_mm : sheetViewport.subviews?.[viewIndex - 1]?.paper_frame_mm,
+          );
           const view = {
             x: paperFrame.x,
             y: paperFrame.y,
