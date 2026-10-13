@@ -102,6 +102,79 @@ function polylinePoints(entity) {
   return points
 }
 
+function approximateBulgedPolyline(vertices, closed) {
+  if (vertices.length < 2) return []
+  const points = []
+  const edgeCount = closed ? vertices.length : vertices.length - 1
+  for (let index = 0; index < edgeCount; index += 1) {
+    const start = vertices[index]
+    const end = vertices[(index + 1) % vertices.length]
+    points.push([start[0], start[1]])
+    const bulge = Number(start[2] ?? 0)
+    if (!Number.isFinite(bulge) || Math.abs(bulge) < 1e-9) continue
+    const dx = end[0] - start[0], dy = end[1] - start[1]
+    const chord = Math.hypot(dx, dy)
+    if (chord < 1e-9) continue
+    const sweep = 4 * Math.atan(bulge)
+    const radius = chord * (1 + bulge * bulge) / (4 * Math.abs(bulge))
+    const offset = chord * (1 - bulge * bulge) / (4 * bulge)
+    const centerX = (start[0] + end[0]) / 2 - dy / chord * offset
+    const centerY = (start[1] + end[1]) / 2 + dx / chord * offset
+    const startAngle = Math.atan2(start[1] - centerY, start[0] - centerX)
+    const segments = Math.max(4, Math.ceil(Math.abs(sweep) / (Math.PI / 30)))
+    for (let step = 1; step < segments; step += 1) {
+      const angle = startAngle + sweep * step / segments
+      points.push([centerX + Math.cos(angle) * radius, centerY + Math.sin(angle) * radius])
+    }
+  }
+  if (!closed) points.push(vertices.at(-1).slice(0, 2))
+  return points
+}
+
+function hatchPolylineBoundaries(entity) {
+  const pairs = entity.pairs
+  const paths = []
+  let cursor = 0
+  while (cursor < pairs.length) {
+    while (cursor < pairs.length && pairs[cursor].code !== 92) cursor += 1
+    if (cursor >= pairs.length) break
+    const flags = Number(pairs[cursor]?.value)
+    cursor += 1
+    const nextPath = pairs.findIndex((pair, index) => index >= cursor && pair.code === 92)
+    const pathEnd = nextPath < 0 ? pairs.length : nextPath
+    const pathPairs = pairs.slice(cursor, pathEnd)
+    cursor = pathEnd
+    if (!Number.isFinite(flags) || (flags & 2) === 0) continue
+    const closed = Number(pathPairs.find((pair, index) => index < 2 && pair.code === 73)?.value ?? 0) === 1
+    const countPair = pathPairs.find(pair => pair.code === 93)
+    const count = Math.floor(Number(countPair?.value))
+    if (!Number.isFinite(count) || count < 2 || count > 10000) continue
+    const countIndex = pathPairs.indexOf(countPair)
+    const vertices = []
+    let vertex = null
+    for (const pair of pathPairs.slice(countIndex + 1)) {
+      if (pair.code === 10) {
+        if (vertex && Number.isFinite(vertex[1])) vertices.push(vertex)
+        const x = Number(pair.value)
+        vertex = Number.isFinite(x) ? [x, NaN, 0] : null
+      } else if (pair.code === 20 && vertex) {
+        const y = Number(pair.value)
+        if (Number.isFinite(y)) vertex[1] = y
+      } else if (pair.code === 42 && vertex) {
+        const bulge = Number(pair.value)
+        if (Number.isFinite(bulge)) vertex[2] = bulge
+      }
+      if (vertices.length >= count) break
+    }
+    if (vertex && Number.isFinite(vertex[1]) && vertices.length < count) vertices.push(vertex)
+    if (vertices.length === count) {
+      const points = approximateBulgedPolyline(vertices, closed)
+      if (points.length >= 2) paths.push({ kind: 'polyline', points, closed })
+    }
+  }
+  return paths
+}
+
 function resolveDrawingUnits(pairs) {
   for (let index = 0; index < pairs.length; index += 1) {
     if (pairs[index].code !== 9 || pairs[index].value !== '$INSUNITS') continue
@@ -135,6 +208,10 @@ function shapesForEntity(entity) {
   if (entity.type === 'LWPOLYLINE') {
     const points = polylinePoints(entity)
     return points.length >= 2 ? [{ kind: 'polyline', points, closed: (Number(valueOf(entity, 70) ?? 0) & 1) === 1 }] : null
+  }
+  if (entity.type === 'HATCH') {
+    const boundaries = hatchPolylineBoundaries(entity)
+    return boundaries.length ? boundaries : null
   }
   if (entity.type === 'CIRCLE' || entity.type === 'ARC') {
     const x = numberOf(entity, 10), y = numberOf(entity, 20), radius = numberOf(entity, 40)
@@ -207,7 +284,7 @@ export function importDxfUnderlay(source, { maxImageDimension = 4096 } = {}) {
   let unsupportedEntities = 0
   expandEntities(entities, blocks, IDENTITY, geometry, () => { unsupportedEntities += 1 })
 
-  if (!geometry.length) throw new Error('ไม่พบ LINE, LWPOLYLINE, CIRCLE, ARC หรือ INSERT ที่ใช้เป็น underlay ได้')
+  if (!geometry.length) throw new Error('ไม่พบ LINE, LWPOLYLINE, HATCH, CIRCLE, ARC หรือ INSERT ที่ใช้เป็น underlay ได้')
   const points = geometry.flatMap(shape => shape.points)
   const minX = Math.min(...points.map(point => point[0]))
   const maxX = Math.max(...points.map(point => point[0]))

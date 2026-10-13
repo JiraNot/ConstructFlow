@@ -59,6 +59,22 @@ test('DXF underlay expands block inserts with base point, nonuniform scale, and 
   assert.deepEqual(result.origin_mm.map(Math.round), [9, 22])
 })
 
+test('DXF underlay renders closed HATCH polyline boundaries including bulged arcs', () => {
+  const hatch = [
+    '0', 'HATCH', '91', '1', '92', '2', '72', '1', '73', '1', '93', '3',
+    '10', '0', '20', '0', '42', '1',
+    '10', '100', '20', '0', '42', '0',
+    '10', '100', '20', '100', '42', '0',
+  ].join('\n')
+  const result = importDxfUnderlay(dxf(4, hatch))
+  const svg = decodeURIComponent(result.dataUrl)
+
+  assert.equal(result.imported_entities, 1)
+  assert.equal(result.skipped_entities, 0)
+  assert.match(svg, /<path d="M[^\"]+ Z"/)
+  assert.ok((svg.match(/L/g) ?? []).length > 10, 'bulged arc is approximated by enough line segments for a smooth underlay')
+})
+
 test('DXF underlay import rejects documents without supported model-space geometry', () => {
   assert.throws(() => importDxfUnderlay(dxf(4, ['0', 'TEXT', '10', '0', '20', '0', '1', 'note'].join('\n'))), /ไม่พบ LINE/)
 })

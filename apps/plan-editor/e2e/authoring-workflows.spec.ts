@@ -445,6 +445,7 @@ test('DXF underlay imports unit-scaled vector art and survives project reload', 
     '0', 'SECTION', '2', 'ENTITIES',
     '0', 'LINE', '10', '0', '20', '0', '11', '5000', '21', '0',
     '0', 'LWPOLYLINE', '70', '1', '10', '0', '20', '0', '10', '5000', '20', '0', '10', '5000', '20', '3500', '10', '0', '20', '3500',
+    '0', 'HATCH', '91', '1', '92', '2', '72', '0', '73', '1', '93', '4', '10', '200', '20', '200', '42', '0', '10', '1200', '20', '200', '42', '0', '10', '1200', '20', '900', '42', '0', '10', '200', '20', '900', '42', '0',
     '0', 'ENDSEC', '0', 'EOF',
   ].join('\n')
   await page.locator('input[accept="image/*,.dxf,application/dxf"]').setInputFiles({
@@ -452,7 +453,7 @@ test('DXF underlay imports unit-scaled vector art and survives project reload', 
     mimeType: 'application/dxf',
     buffer: Buffer.from(dxf),
   })
-  await expect(page.locator('.cf-save-status')).toContainText('นำเข้า DXF 2 รายการแล้ว')
+  await expect(page.locator('.cf-save-status')).toContainText('นำเข้า DXF 3 รายการแล้ว')
   await expect(page.locator('.cf-underlay-button')).toContainText('Underlay ON')
   await expect(page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]')).toBeVisible()
   await expect.poll(async () => page.locator('.cf-save-status').innerText()).toContain('กำลังบันทึกในเครื่อง')
