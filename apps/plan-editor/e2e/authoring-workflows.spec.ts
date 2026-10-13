@@ -359,6 +359,30 @@ test('orthographic elevations share zoom and vertical navigation with mirrored h
   await expect(elevation).toHaveAttribute('data-elevation-zoom', northZoom!)
 })
 
+test('DXF underlay imports unit-scaled vector art and survives project reload', async ({ page }) => {
+  await page.goto('/')
+  const dxf = [
+    '0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC',
+    '0', 'SECTION', '2', 'ENTITIES',
+    '0', 'LINE', '10', '0', '20', '0', '11', '5000', '21', '0',
+    '0', 'LWPOLYLINE', '70', '1', '10', '0', '20', '0', '10', '5000', '20', '0', '10', '5000', '20', '3500', '10', '0', '20', '3500',
+    '0', 'ENDSEC', '0', 'EOF',
+  ].join('\n')
+  await page.locator('input[accept="image/*,.dxf,application/dxf"]').setInputFiles({
+    name: 'survey-plan.dxf',
+    mimeType: 'application/dxf',
+    buffer: Buffer.from(dxf),
+  })
+  await expect(page.locator('.cf-save-status')).toContainText('นำเข้า DXF 2 รายการแล้ว')
+  await expect(page.locator('.cf-underlay-button')).toContainText('Underlay ON')
+  await expect(page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]')).toBeVisible()
+  await expect.poll(async () => page.locator('.cf-save-status').innerText()).toContain('กำลังบันทึกในเครื่อง')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
+  await page.reload()
+  await expect(page.locator('.cf-underlay-button')).toContainText('Underlay ON')
+  await expect(page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]')).toBeVisible()
+})
+
 test('Project Browser numeric group move commits once and preserves UUIDs through Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')

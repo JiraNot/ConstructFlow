@@ -54,6 +54,7 @@ import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
 import { getRoofEaveBoundary } from '@constructflow/roof-engine'
 import type { ViewportState } from './viewport/viewportTransform.js'
+import { importDxfUnderlay } from './cad/importDxfUnderlay.mjs'
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
@@ -505,28 +506,38 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     }
   }
 
-  // Upload Underlay Image file
+  // Import image or supported model-space DXF as a calibrated, project-persisted underlay.
   const handleUploadUnderlayImage = (file: File) => {
+    const openUnderlayImage = (dataUrl: string, originMm: [number, number], scaleMmPerPx: number) => {
+      const img = new Image()
+      img.onload = () => {
+        img.dataset.projectSrc = dataUrl
+        hydratedUnderlayRef.current = `${underlayKey}:${dataUrl}`
+        setUnderlay(prev => ({ ...prev, image: img, origin_mm: originMm, scale_mm_per_px: scaleMmPerPx, rotation_deg: 0, visible: true }))
+      }
+      img.onerror = () => setFileFeedback('เปิดไฟล์อ้างอิงไม่สำเร็จ')
+      img.src = dataUrl
+    }
+    if (file.name.toLowerCase().endsWith('.dxf')) {
+      void file.text().then(source => {
+        try {
+          const imported = importDxfUnderlay(source)
+          openUnderlayImage(imported.dataUrl, imported.origin_mm, imported.scale_mm_per_px)
+          const assumedUnits = imported.drawing_units === 'unitless' ? ' · ไม่ระบุหน่วย จึงสมมติเป็นมม.' : ` · หน่วย ${imported.drawing_units}`
+          const skipped = imported.skipped_entities ? ` · ข้าม ${imported.skipped_entities} รายการที่ไม่รองรับ` : ''
+          setFileFeedback(`นำเข้า DXF ${imported.imported_entities} รายการแล้ว${assumedUnits}${skipped} · ปรับเทียบได้ด้วยเครื่องมือไม้บรรทัด`)
+        } catch (error) {
+          setFileFeedback(error instanceof Error ? error.message : 'อ่านไฟล์ DXF ไม่สำเร็จ')
+        }
+      }).catch(() => setFileFeedback('อ่านไฟล์ DXF ไม่สำเร็จ'))
+      return
+    }
     const reader = new FileReader()
     reader.onerror = () => setFileFeedback('อ่านไฟล์ภาพอ้างอิงไม่สำเร็จ')
     reader.onload = () => {
       const dataUrl = String(reader.result ?? '')
       if (!dataUrl.startsWith('data:image/')) { setFileFeedback('ไฟล์ที่เลือกไม่ใช่ภาพที่รองรับ'); return }
-    const img = new Image()
-    img.onload = () => {
-      img.dataset.projectSrc = dataUrl
-      hydratedUnderlayRef.current = `${underlayKey}:${dataUrl}`
-      setUnderlay((prev) => ({
-        ...prev,
-        image: img,
-        origin_mm: [0, 0],
-        scale_mm_per_px: 10,
-        rotation_deg: 0,
-        visible: true,
-      }))
-    }
-      img.onerror = () => setFileFeedback('เปิดภาพอ้างอิงไม่สำเร็จ')
-      img.src = dataUrl
+      openUnderlayImage(dataUrl, [0, 0], 10)
     }
     reader.readAsDataURL(file)
   }
