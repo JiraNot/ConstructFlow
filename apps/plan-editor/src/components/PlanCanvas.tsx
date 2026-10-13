@@ -48,7 +48,7 @@ import { usePlanCanvasPlacementDimensions } from './usePlanCanvasPlacementDimens
 import { usePlanCanvasToolInteraction } from './usePlanCanvasToolInteraction.js'
 import { usePlanCanvasOpeningPlacementDimensions } from './usePlanCanvasOpeningPlacementDimensions.js'
 import { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
-import { usePlanCanvasPointerHandlers } from './usePlanCanvasPointerHandlers.js'
+import { usePlanCanvasPointerInteractions } from './usePlanCanvasPointerInteractions.js'
 import { PlanCanvasSurface } from './PlanCanvasSurface.js'
 import { buildPlanCanvasContextMenu } from './buildPlanCanvasContextMenu.js'
 
@@ -267,9 +267,10 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     })
   }, [drawLengthMeters, drawAngleDegrees, lineConstraintMode, viewport.zoom, displayUnit])
 
-  const { hoveredId, setHoveredId, pickCandidates, setCandidates, findHitObject, findCandidates, cyclePick } = usePlanCanvasPicking({
+  const picking = usePlanCanvasPicking({
     project, planProject, viewport, activeTool, selectedId, onSelectObject, onSelectionChange,
   })
+  const { hoveredId, setHoveredId, pickCandidates, setCandidates, findHitObject, findCandidates, cyclePick } = picking
   const stairPreview = useMemo(() => {
     if (activeTool !== 'stair' || !stairStartPoint || !activeSnap) return null
     try { return stairFromRun(project, stairStartPoint, activeSnap.point_mm, stairOptions) } catch { return null }
@@ -434,81 +435,24 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     applyPlacementDimensions, constrainGridCopyToParallelOffset,
   })
 
-  const { handlePointerMove, handlePointerDown, handlePointerUp } = usePlanCanvasPointerHandlers({
+  const { handlePointerMove, handlePointerDown, handlePointerUp } = usePlanCanvasPointerInteractions({
     canvasRef,
-    pointerMove: {
-      navigation: {
-        pointerPositionsRef, pinchRef, longPressStartRef, longPressTimerRef, selectionStartRef,
-        setSelectionBox, eraseActiveRef, erasedIdsRef, isPanning, panStartRef, viewport, setViewport, findCandidates,
-      },
-      authoring: {
-        activeTool, viewport, draggingObject, hoveredId,
-        resolveSnap: resolvePointerSnap,
-        findCandidates, setActiveWallSnap, setActiveSnap, setTapeMeasure, setCalibrationMousePoint,
-        setCandidates, setHoveredId, setManipulationPreview, onCursorChange, previewDragAt,
-      },
-    },
-    pointerDown: {
-      activeTool,
-      viewport,
-      navigation: {
-      pointerPositionsRef, pinchRef, pinchActiveRef, longPressStartRef, longPressTimerRef,
-      selectionStartRef, panStartRef, setSelectionBox, setDraggingObject, setIsPanning,
-      setObjectContextMenu, findHitObject, onSelectionChange, onSelectObject,
-      },
-      snapping: {
-        resolveSnap: resolvePointerSnap,
-      },
-      selection: {
-      displayUnit, planProject, project, selectedIds, hoveredId, findEditHandle, findCandidates,
-      findHitObject, setCandidates, setHoveredId, setDraggingObject, setManipulationPreview,
-      setResizeDimensionWidth, setResizeDimensionHeight, setResizeDimensionLength,
-      selectionStartRef, selectionAdditiveRef, lastPreviewValidationRef, onSelectionChange, onSelectObject,
-      },
-      placement: {
-      project, planProject, selectedId, displayUnit, viewportZoom: viewport.zoom, placement,
-      settings: { activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, placementReference, doorHanding },
-      callbacks: {
-        onCopyGrid, onCommitColumn, onCommitFoundation, onCommitDoor, onCommitWindow, onCommitFixture,
-        onSelectionChange, onSelectObject, onCommitBeam, onCommitWall, onCommitRoomSeparator, onCommitPipeRoute,
-        onCommitCabinet, onCommitMoulding, onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling,
-        onCommitRoof, onCommitSurfaceVoid, onCommitGrid, onCommitGridSystem, onStartCalibrationModal,
-        onCommitStair, onActivateTool,
-      },
-      operations: { snapPlanWallHost, applyOpeningDistance, resolveReferencePath },
-      interaction: { eraseActiveRef, erasedIdsRef, findCandidates },
-      },
-    },
-    pointerUp: {
-      viewport,
-      isPanning,
-      pointerPositionsRef,
-      pinchRef,
-      pinchActiveRef,
-      longPressTimerRef,
-      longPressStartRef,
-      setIsPanning,
-      selectionStartRef,
-      selectionAdditiveRef,
-      setSelectionBox,
-      project: planProject,
-      selectedIds,
-      onSelectionChange,
-      onSelectObject,
-      eraseActiveRef,
-      erasedIdsRef,
-      onDeleteObjects,
-      draggingObject,
-      manualDragPointRef,
-      buildDragCommands,
-      onPreviewManipulation,
-      onCommitManipulation,
-      onManipulationRejected,
-      setDraggingObject,
-      setDragPreviewPoint,
-      setResizeDimensionWidth,
-      setResizeDimensionHeight,
-      setResizeDimensionLength,
+    activeTool, viewport, setViewport, project, planProject, selectedId, selectedIds, displayUnit,
+    activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
+    placementReference, doorHanding, draggingObject, gridCopySourceId, hoveredId,
+    pointerState, placement, picking, dragDimensions: dragDimensionInput,
+    manipulation: { previewDragAt, lastPreviewValidationRef, buildDragCommands },
+    resizeDimensionWidth: setResizeDimensionWidth,
+    resizeDimensionHeight: setResizeDimensionHeight,
+    resizeDimensionLength: setResizeDimensionLength,
+    resolvePointerSnap, snapPlanWallHost, applyOpeningDistance, resolveReferencePath, findEditHandle,
+    callbacks: {
+      onCopyGrid, onCommitColumn, onCommitFoundation, onCommitDoor, onCommitWindow, onCommitFixture,
+      onSelectionChange, onSelectObject, onCommitBeam, onCommitWall, onCommitRoomSeparator, onCommitPipeRoute,
+      onCommitCabinet, onCommitMoulding, onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling,
+      onCommitRoof, onCommitSurfaceVoid, onCommitGrid, onCommitGridSystem, onStartCalibrationModal,
+      onCommitStair, onActivateTool, onDeleteObjects, onPreviewManipulation, onCommitManipulation,
+      onManipulationRejected, onCursorChange,
     },
   })
   const {
