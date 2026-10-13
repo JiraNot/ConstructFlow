@@ -31,8 +31,15 @@ export interface SavedSheetViewport {
   /** Locked auto-dimension placements keyed by stable source-object references. */
   dimension_overrides?: Record<string, DimensionViewOverride>;
 }
+/** Reusable viewport arrangement. Per-opening and per-dimension drafting overrides stay sheet-specific. */
+export interface SheetLayoutTemplate {
+  id: string;
+  name: string;
+  viewports: Record<string, SavedSheetViewport>;
+}
 export interface DrawingSettings {
   viewports: Record<string, SavedSheetViewport>;
+  layout_templates?: SheetLayoutTemplate[];
   revision?: string;
   author?: string;
 }
@@ -95,4 +102,22 @@ export function validateDrawingSettings(
   for (const key of ["revision", "author"] as const)
     if (settings[key] !== undefined && typeof settings[key] !== "string")
       throw new Error("Invalid drawing " + key);
+  if (settings.layout_templates !== undefined) {
+    if (!Array.isArray(settings.layout_templates)) throw new Error("Invalid sheet layout templates");
+    const ids = new Set<string>();
+    const names = new Set<string>();
+    for (const template of settings.layout_templates) {
+      if (!template || typeof template !== "object" || typeof template.id !== "string" || !template.id.trim() || template.id.length > 100)
+        throw new Error("Sheet layout template requires a valid ID");
+      if (typeof template.name !== "string" || !template.name.trim() || template.name.trim().length > 80)
+        throw new Error("Sheet layout template name must contain 1 to 80 characters");
+      const normalizedName = template.name.trim().toLowerCase();
+      if (ids.has(template.id) || names.has(normalizedName)) throw new Error("Sheet layout template IDs and names must be unique");
+      ids.add(template.id);
+      names.add(normalizedName);
+      if (!template.viewports || typeof template.viewports !== "object" || Array.isArray(template.viewports) || !Object.keys(template.viewports).length)
+        throw new Error("Sheet layout template must contain at least one viewport");
+      validateDrawingSettings({ viewports: template.viewports });
+    }
+  }
 }

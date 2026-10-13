@@ -932,3 +932,34 @@ test('sheet composer drag recenters a viewport through one saved command', async
   await expect(undoneFields.nth(0)).toHaveValue('0')
 })
 
+test('sheet composer saves, applies, undoes, and deletes reusable layout templates', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto('/')
+  await page.locator('.cf-more-menu summary').click()
+  await page.getByRole('button', { name: 'ชุดแบบและตาราง' }).click()
+
+  await page.getByLabel('มาตราส่วน').selectOption('50')
+  await page.getByRole('button', { name: 'อัปเดต Viewport / Preview' }).click()
+  await page.getByLabel('ชื่อ Sheet Layout Template').fill('แปลนบ้าน 1:50')
+  await page.getByRole('button', { name: 'บันทึก Layout Template' }).click()
+  const templates = page.getByLabel('Sheet Layout Template ที่เลือก')
+  await expect(templates.locator('option', { hasText: 'แปลนบ้าน 1:50' })).toHaveCount(1)
+
+  await page.getByLabel('มาตราส่วน').selectOption('200')
+  await page.getByRole('button', { name: 'อัปเดต Viewport / Preview' }).click()
+  await templates.selectOption({ label: 'แปลนบ้าน 1:50' })
+  await page.getByRole('button', { name: 'ใช้ Layout Template' }).click()
+  await expect(page.getByLabel('มาตราส่วน')).toHaveValue('50')
+  await expect(page.locator('pre[aria-live="polite"]')).toContainText('Undo เดียว')
+
+  await page.getByRole('button', { name: 'ปิดแบบและตาราง' }).click()
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await page.locator('.cf-more-menu summary').click()
+  await page.getByRole('button', { name: 'ชุดแบบและตาราง' }).click()
+  await expect(page.getByLabel('มาตราส่วน')).toHaveValue('200')
+  const restoredTemplates = page.getByLabel('Sheet Layout Template ที่เลือก')
+  await restoredTemplates.selectOption({ label: 'แปลนบ้าน 1:50' })
+  await page.getByRole('button', { name: 'ลบ Layout Template' }).click()
+  await expect(restoredTemplates.locator('option', { hasText: 'แปลนบ้าน 1:50' })).toHaveCount(0)
+})
+

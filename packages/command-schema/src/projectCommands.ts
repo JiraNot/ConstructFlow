@@ -1,8 +1,10 @@
 // Project, Level, and Phase Mutation Command Payloads
 
 import { Phase, RemovalPhase, Level } from '@constructflow/project-model'
-import type { CoordinationSettings, ProjectViewTemplate, RainwaterDesignSettings, SavedSheetViewport } from '@constructflow/project-model'
+import type { CoordinationSettings, ProjectViewTemplate, RainwaterDesignSettings, SavedSheetViewport, SheetLayoutTemplate } from '@constructflow/project-model'
 export interface UpdateSheetViewportInput { sheet_id: string; viewport: SavedSheetViewport }
+export interface SaveSheetLayoutTemplateInput { template: SheetLayoutTemplate }
+export interface DeleteSheetLayoutTemplateInput { template_id: string }
 export interface SaveViewTemplateInput { template: ProjectViewTemplate }
 export interface DeleteViewTemplateInput { template_id: string }
 

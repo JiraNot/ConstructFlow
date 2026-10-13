@@ -815,6 +815,8 @@ export function ConstructionWorkbench({
     ]),
     [useCrop, setUseCrop] = useState(false),
     [sheetPreview, setSheetPreview] = useState("");
+  const [sheetLayoutTemplateName, setSheetLayoutTemplateName] = useState("");
+  const [selectedSheetLayoutTemplateId, setSelectedSheetLayoutTemplateId] = useState("");
   const [selectedDimensionId, setSelectedDimensionId] = useState(""),
     [dimensionOffsetMm, setDimensionOffsetMm] = useState<[number, number]>([0, 0]);
   const viewportOptions: PermitOptions = project.drawing_settings ?? EMPTY_PERMIT_OPTIONS;
@@ -910,6 +912,48 @@ export function ConstructionWorkbench({
     const options = { ...viewportOptions, viewports: { ...viewportOptions.viewports, [sheetId]: viewport } };
     setSheetPreview(compilePermitDrawingSet(project, options).sheets.find(sheet => sheet.id === sheetId)!.svg);
     return true;
+  };
+  const buildSelectedSheetViewport = () => ({
+    scale_denominator: scale,
+    ...((/^(A-02|A-03|S-02|S-03)$/.test(sheetId) || /^(A-02|S-02)-L\d+$/.test(sheetId)) ? { level_id: planLevelId } : {}),
+    ...(project.drawing_settings?.viewports[sheetId]?.opening_overrides ? { opening_overrides: project.drawing_settings.viewports[sheetId].opening_overrides } : {}),
+    ...(project.drawing_settings?.viewports[sheetId]?.dimension_overrides ? { dimension_overrides: project.drawing_settings.viewports[sheetId].dimension_overrides } : {}),
+    ...(useCenter ? { center_mm: center.map(value => value * 1000) as [number, number] } : {}),
+    ...(useCrop ? { crop_bounds_mm: crop.map(value => value * 1000) as [number, number, number, number] } : {}),
+  });
+  const sheetLayoutTemplates = project.drawing_settings?.layout_templates ?? [];
+  const saveSheetLayoutTemplate = () => {
+    if (!sheetLayoutTemplateName.trim()) { setFeedback("กรุณาตั้งชื่อ layout template"); return; }
+    const viewports = { ...viewportOptions.viewports, [sheetId]: buildSelectedSheetViewport() };
+    const id = selectedSheetLayoutTemplateId || crypto.randomUUID();
+    const result = execute([{ name: "SaveSheetLayoutTemplate", input: { template: {
+      id,
+      name: sheetLayoutTemplateName,
+      viewports,
+    } } }]);
+    if (result) {
+      setSelectedSheetLayoutTemplateId(id);
+      setFeedback("บันทึก Sheet Layout Template แล้ว · Undo/Redo ได้");
+    }
+  };
+  const applySheetLayoutTemplate = () => {
+    const template = sheetLayoutTemplates.find(item => item.id === selectedSheetLayoutTemplateId);
+    if (!template) { setFeedback("เลือก Sheet Layout Template ก่อน"); return; }
+    const viewportEntries = Object.entries(template.viewports).map(([id, viewport]) => {
+      const existing = viewportOptions.viewports?.[id];
+      return [id, {
+        ...viewport,
+        ...(existing?.opening_overrides ? { opening_overrides: existing.opening_overrides } : {}),
+        ...(existing?.dimension_overrides ? { dimension_overrides: existing.dimension_overrides } : {}),
+      }] as const;
+    });
+    const commands = viewportEntries.map(([id, viewport]) => ({ name: "UpdateSheetViewport", input: { sheet_id: id, viewport } }));
+    if (!commands.length || !execute(commands)) return;
+    const nextViewports = Object.fromEntries(viewportEntries);
+    const options = { ...viewportOptions, viewports: { ...viewportOptions.viewports, ...nextViewports } };
+    const preview = compilePermitDrawingSet(project, options).sheets.find(sheet => sheet.id === sheetId);
+    if (preview) setSheetPreview(preview.svg);
+    setFeedback(`ใช้ layout template “${template.name}” แล้ว · ${commands.length} แผ่นใน Undo เดียว`);
   };
   const download = (bytes: BlobPart, name: string, type: string) => {
     const url = URL.createObjectURL(new Blob([bytes], { type })),
@@ -1312,36 +1356,8 @@ export function ConstructionWorkbench({
               </section>}
               <button
                 onClick={() => {
-                  const options = {
-                    ...viewportOptions,
-                    viewports: {
-                      ...viewportOptions.viewports,
-                      [sheetId]: {
-                        scale_denominator: scale,
-                        ...((/^(A-02|A-03|S-02|S-03)$/.test(sheetId) || /^(A-02|S-02)-L\d+$/.test(sheetId)) ? { level_id: planLevelId } : {}),
-                        ...(project.drawing_settings?.viewports[sheetId]?.opening_overrides ? { opening_overrides: project.drawing_settings.viewports[sheetId].opening_overrides } : {}),
-                        ...(project.drawing_settings?.viewports[sheetId]?.dimension_overrides ? { dimension_overrides: project.drawing_settings.viewports[sheetId].dimension_overrides } : {}),
-                        ...(useCenter
-                          ? {
-                              center_mm: center.map((v) => v * 1000) as [
-                                number,
-                                number,
-                              ],
-                            }
-                          : {}),
-                        ...(useCrop
-                          ? {
-                              crop_bounds_mm: crop.map((v) => v * 1000) as [
-                                number,
-                                number,
-                                number,
-                                number,
-                              ],
-                            }
-                          : {}),
-                      },
-                    },
-                  };
+                  const viewport = buildSelectedSheetViewport();
+                  const options = { ...viewportOptions, viewports: { ...viewportOptions.viewports, [sheetId]: viewport } };
                   try {
                     if (
                       !execute([
@@ -1349,7 +1365,7 @@ export function ConstructionWorkbench({
                           name: "UpdateSheetViewport",
                           input: {
                             sheet_id: sheetId,
-                            viewport: options.viewports![sheetId],
+                            viewport,
                           },
                         },
                       ])
@@ -1367,6 +1383,28 @@ export function ConstructionWorkbench({
               >
                 อัปเดต Viewport / Preview
               </button>
+              <section aria-label="Sheet layout templates" style={{ marginTop: 18, borderTop: "1px solid #dbe3ed", paddingTop: 12 }}>
+                <h3>Sheet Layout Templates</h3>
+                <p>บันทึกและใช้ซ้ำการจัด viewport ของทุกแผ่นที่ตั้งค่าแล้ว; เส้นช่องเปิดและตำแหน่งมิติที่แก้เฉพาะแผ่นจะคงเดิม</p>
+                <label style={fieldStyle}>ชื่อ Template<input aria-label="ชื่อ Sheet Layout Template" value={sheetLayoutTemplateName} onChange={event => setSheetLayoutTemplateName(event.target.value)} maxLength={80} /></label>
+                <button onClick={saveSheetLayoutTemplate}>บันทึก Layout Template</button>
+                <label style={fieldStyle}>Template ที่บันทึกไว้
+                  <select aria-label="Sheet Layout Template ที่เลือก" value={selectedSheetLayoutTemplateId} onChange={event => {
+                    setSelectedSheetLayoutTemplateId(event.target.value);
+                    const selected = sheetLayoutTemplates.find(item => item.id === event.target.value);
+                    if (selected) setSheetLayoutTemplateName(selected.name);
+                  }}>
+                    <option value="">เลือก Template</option>
+                    {sheetLayoutTemplates.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </label>
+                <button disabled={!selectedSheetLayoutTemplateId} onClick={applySheetLayoutTemplate}>ใช้ Layout Template</button>
+                <button disabled={!selectedSheetLayoutTemplateId} onClick={() => {
+                  if (!execute([{ name: "DeleteSheetLayoutTemplate", input: { template_id: selectedSheetLayoutTemplateId } }])) return;
+                  setSelectedSheetLayoutTemplateId("");
+                  setSheetLayoutTemplateName("");
+                }}>ลบ Layout Template</button>
+              </section>
               <button
                 onClick={() =>
                   download(

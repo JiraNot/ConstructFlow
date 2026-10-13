@@ -503,6 +503,31 @@ test("Phase 6: saved viewport scale/crop persist and participate in atomic undo/
   assert.deepEqual(session.project, before);
 });
 
+test("sheet layout templates persist reusable viewport settings and batch-apply with one undo", () => {
+  const session = new ProjectCommandSession(empty());
+  const template = {
+    id: "layout-house",
+    name: "บ้านสองชั้น",
+    viewports: {
+      "A-02": { scale_denominator: 50, level_id: session.project.levels[0].id, center_mm: [5000, 3000] },
+      "S-02": { scale_denominator: 50, level_id: session.project.levels[0].id, crop_bounds_mm: [0, 0, 12000, 9000] },
+    },
+  };
+  const saved = session.execute([{ name: "SaveSheetLayoutTemplate", input: { template } }]);
+  assert.equal(saved.status, "success");
+  assert.deepEqual(deserializeProject(serializeProject(saved.updatedProject)).drawing_settings.layout_templates, [template]);
+  const applied = session.execute(Object.entries(template.viewports).map(([sheet_id, viewport]) => ({
+    name: "UpdateSheetViewport", input: { sheet_id, viewport },
+  })));
+  assert.equal(applied.status, "success");
+  assert.equal(applied.updatedProject.drawing_settings.viewports["A-02"].scale_denominator, 50);
+  assert.deepEqual(session.undo().drawing_settings.viewports, {});
+  assert.deepEqual(session.redo().drawing_settings.viewports["S-02"].crop_bounds_mm, [0, 0, 12000, 9000]);
+  assert.equal(session.execute([{ name: "SaveSheetLayoutTemplate", input: { template: { ...template, id: "duplicate", name: "บ้านสองชั้น" } } }]).status, "failed");
+  assert.equal(session.execute([{ name: "DeleteSheetLayoutTemplate", input: { template_id: template.id } }]).status, "success");
+  assert.equal(session.undo().drawing_settings.layout_templates[0].id, template.id);
+});
+
 test("Phase 4: cyclic unknown-IL gravity network rejects atomically", () => {
   let p = empty();
   const ids = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];

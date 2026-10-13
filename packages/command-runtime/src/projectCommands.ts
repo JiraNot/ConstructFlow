@@ -10,7 +10,7 @@ import {
   validateRainwaterDesignSettings,
   resolveStairVerticalExtent,
 } from '@constructflow/project-model'
-import type { DeleteViewTemplateInput, SaveViewTemplateInput, SetViewVisibilityInput, UpdateCoordinationSettingsInput, UpdateRainwaterDesignInput, UpdateSheetViewportInput } from '@constructflow/command-schema'
+import type { DeleteSheetLayoutTemplateInput, DeleteViewTemplateInput, SaveSheetLayoutTemplateInput, SaveViewTemplateInput, SetViewVisibilityInput, UpdateCoordinationSettingsInput, UpdateRainwaterDesignInput, UpdateSheetViewportInput } from '@constructflow/command-schema'
 
 import {
   CommandHandlerContext,
@@ -68,6 +68,34 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       updated.drawing_settings={...updated.drawing_settings,viewports:{...updated.drawing_settings?.viewports,[sheet_id]:viewport}}
       validateDrawingSettings(updated.drawing_settings)
       return {result:{status:'success',command_id,command_name:commandName,affected_object_ids:[]},updatedProject:updated,emittedEnvelope:envelope}
+    }
+    case 'SaveSheetLayoutTemplate': {
+      const { template } = input as unknown as SaveSheetLayoutTemplateInput
+      if (!template || typeof template !== 'object' || !template.id?.trim() || template.id.length > 100) throw new Error('Sheet layout template requires a valid ID')
+      if (!template.name?.trim() || template.name.trim().length > 80) throw new Error('Sheet layout template name must contain 1 to 80 characters')
+      const settings = updated.drawing_settings ?? { viewports: {} }
+      const current = settings.layout_templates ?? []
+      if (current.some(existing => existing.id !== template.id && existing.name.trim().toLowerCase() === template.name.trim().toLowerCase())) throw new Error('Sheet layout template names must be unique')
+      const viewports = Object.fromEntries(Object.entries(template.viewports ?? {}).map(([sheetId, viewport]) => [sheetId, {
+        scale_denominator: viewport.scale_denominator,
+        ...(viewport.level_id !== undefined ? { level_id: viewport.level_id } : {}),
+        ...(viewport.center_mm !== undefined ? { center_mm: [...viewport.center_mm] as [number, number] } : {}),
+        ...(viewport.crop_bounds_mm !== undefined ? { crop_bounds_mm: [...viewport.crop_bounds_mm] as [number, number, number, number] } : {}),
+        ...(viewport.section_cut_mm !== undefined ? { section_cut_mm: viewport.section_cut_mm } : {}),
+      }]))
+      const next = [...current.filter(existing => existing.id !== template.id), { id: template.id, name: template.name.trim(), viewports }]
+      updated.drawing_settings = { ...settings, layout_templates: next }
+      validateDrawingSettings(updated.drawing_settings)
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] }, updatedProject: updated, emittedEnvelope: envelope }
+    }
+    case 'DeleteSheetLayoutTemplate': {
+      const { template_id } = input as unknown as DeleteSheetLayoutTemplateInput
+      const settings = updated.drawing_settings
+      const current = settings?.layout_templates ?? []
+      if (!current.some(template => template.id === template_id)) throw new Error(`Sheet layout template ${template_id} was not found`)
+      const layout_templates = current.filter(template => template.id !== template_id)
+      if (settings) updated.drawing_settings = { ...settings, ...(layout_templates.length ? { layout_templates } : { layout_templates: undefined }) }
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] }, updatedProject: updated, emittedEnvelope: envelope }
     }
     case 'SaveViewTemplate': {
       const { template } = input as unknown as SaveViewTemplateInput
