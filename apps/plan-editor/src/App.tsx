@@ -42,11 +42,12 @@ import { UnderlayConfig, PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } fr
 import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home } from 'lucide-react'
 import { calculateTakeoff, calculatePhasedBOQ } from '@constructflow/takeoff-engine'
 import { readProjectFile, writeProjectFile, type LocalProjectFileHandle } from './projectFileIO.js'
-import { loadLocalProjectSnapshot, saveLocalProjectSnapshot } from './projectAutosave.js'
+import { saveLocalProjectSnapshot } from './projectAutosave.js'
 import { buildElevationManipulationCommands as buildElevationManipulationCommandsForView } from './elevationManipulationCommands.js'
 import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { usePlanPlacementCommands } from './app/usePlanPlacementCommands.js'
 import { usePropertiesPanelActions } from './app/usePropertiesPanelActions.js'
+import { useLocalProjectPersistence } from './app/useLocalProjectPersistence.js'
 import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
 import { getRoofEaveBoundary } from '@constructflow/roof-engine'
 import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
@@ -128,75 +129,17 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     dispatchCommandBatch,
     previewCommands: previewDirectManipulation,
   } = useProjectSession(() => createDefaultResidentialProjectDocument('CF-UNTITLED', 'Untitled Project'))
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const {
+    projectJson, savedProjectJson, setSavedProjectJson, replacementBaselineJson, setReplacementBaselineJson,
+    localAutosaveReady, localAutosaveState, setLocalAutosaveState, activeProjectFileHandle,
+    activeProjectFileHandleRef, updateActiveProjectFileHandle, fileFeedback, setFileFeedback,
+  } = useLocalProjectPersistence({ project, sessionRef: projectSessionRef, setProjectState, setCommandQueue, setSelectedId })
   const displayUnit: DisplayLengthUnit = project.project.display_unit ?? 'm'
-  const projectJson = useMemo(() => serializeProject(project), [project])
-  const [savedProjectJson, setSavedProjectJson] = useState<string | null>(projectJson)
-  const [replacementBaselineJson, setReplacementBaselineJson] = useState<string | null>(projectJson)
-  const [localAutosaveReady, setLocalAutosaveReady] = useState(false)
-  const [localAutosaveState, setLocalAutosaveState] = useState<'restoring' | 'saving' | 'saved' | 'error'>('restoring')
-  const [activeProjectFileHandle, setActiveProjectFileHandle] = useState<LocalProjectFileHandle | null>(null)
   const [isProjectNameEditing, setIsProjectNameEditing] = useState(false)
   const [projectNameDraft, setProjectNameDraft] = useState(project.project.name)
-  const [fileFeedback, setFileFeedback] = useState('')
   const supportsProjectFileOpen = typeof fileWindow.showOpenFilePicker === 'function'
-  const activeProjectFileHandleRef = useRef<LocalProjectFileHandle | null>(null)
-  const updateActiveProjectFileHandle = (handle: LocalProjectFileHandle | null) => {
-    activeProjectFileHandleRef.current = handle
-    setActiveProjectFileHandle(handle)
-  }
-  useEffect(() => {
-    let active = true
-    void loadLocalProjectSnapshot()
-      .then(snapshot => {
-        if (!active) return
-        if (!snapshot) {
-          return
-        }
-        const restored = deserializeProject(snapshot.projectJson)
-        projectSessionRef.current!.reset(restored)
-        setProjectState(restored)
-        setSavedProjectJson(snapshot.savedProjectJson)
-        setReplacementBaselineJson(snapshot.replacementBaselineJson)
-        updateActiveProjectFileHandle(snapshot.fileHandle ?? null)
-        setCommandQueue([])
-        setSelectedId(null)
-        setFileFeedback(`กู้คืนงานในเครื่องเมื่อ ${new Date(snapshot.savedAt).toLocaleString()}`)
-      })
-      .catch(error => {
-        if (active) {
-          console.error('Unable to restore local ConstructFlow project', error)
-          setLocalAutosaveState('error')
-          setFileFeedback('กู้คืนงานในเครื่องไม่สำเร็จ')
-        }
-      })
-      .finally(() => {
-        if (active) setLocalAutosaveReady(true)
-      })
-    return () => { active = false }
-  }, [])
-  useEffect(() => {
-    if (!localAutosaveReady) return
-    setLocalAutosaveState('saving')
-    let saving = false
-    const persistSnapshot = () => {
-      if (saving) return
-      saving = true
-      void saveLocalProjectSnapshot({ projectJson, savedProjectJson, replacementBaselineJson, fileHandle: activeProjectFileHandle })
-        .then(() => {
-          setLocalAutosaveState('saved')
-        })
-        .catch(error => {
-          console.error('Unable to autosave local ConstructFlow project', error)
-          setLocalAutosaveState('error')
-        })
-    }
-    const timer = window.setTimeout(persistSnapshot, 350)
-    window.addEventListener('pagehide', persistSnapshot)
-    return () => {
-      window.clearTimeout(timer)
-      window.removeEventListener('pagehide', persistSnapshot)
-    }
-  }, [localAutosaveReady, projectJson, savedProjectJson, replacementBaselineJson, activeProjectFileHandle])
   const commitDirectManipulation = dispatchCommandBatch
   const handleManipulationRejected = (errors: string[]) => {
     if (errors.length) setFileFeedback(errors[0])
@@ -298,8 +241,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [workbenchTab,setWorkbenchTab] = useState<'model'|'sheets'>('model')
   const [isTypeManagerOpen, setIsTypeManagerOpen] = useState<boolean>(false)
   const [isConstructionOpen,setIsConstructionOpen]=useState(false)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const {
     alignmentPreview,
     setAlignmentPreview,

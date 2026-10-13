@@ -5,7 +5,7 @@ import { CommandBus, ProjectCommandSession } from '../commands/CommandBus.js'
 
 /**
  * Owns the live semantic document and its transactional command history.
- * Browser persistence, view state and presentation feedback stay with App.
+ * Local snapshot persistence, view state and presentation feedback are owned by their editor-level hooks/components.
  */
 export function useProjectSession(initialProject: ProjectDocument | (() => ProjectDocument)) {
   const [project, setProjectState] = useState<ProjectDocument>(initialProject)
