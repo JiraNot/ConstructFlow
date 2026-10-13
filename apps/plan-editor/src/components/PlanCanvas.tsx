@@ -53,11 +53,10 @@ import { PlanCanvasDragDimensions, type DragDimensionField, type DragDimensionMo
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
 import { buildPlanCanvasDragCommands } from './buildPlanCanvasDragCommands.js'
-import { commitPlanCanvasDragPreview } from './commitPlanCanvasDragPreview.mjs'
 import { handlePlanCanvasPointerDownNavigation } from './handlePlanCanvasPointerDownNavigation.js'
 import { commitPlanCanvasPolygonPoint } from './commitPlanCanvasPolygonPoint.mjs'
 import { findPlanHitObject } from './planHitTesting.mjs'
-import { resolvePlanCanvasBoxSelection } from './resolvePlanCanvasBoxSelection.mjs'
+import { handlePlanCanvasPointerUp } from './handlePlanCanvasPointerUp.js'
 import { drawPlanCanvasSelectionHandles } from './drawPlanCanvasSelectionHandles.js'
 import { drawPlanCanvasToolOverlays } from './drawPlanCanvasToolOverlays.js'
 import { buildPlanPlacementGhost } from './buildPlanPlacementGhost.js'
@@ -1046,82 +1045,41 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   }
 
   // Pointer up
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (e.pointerType === 'touch') {
-      if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current)
-      longPressTimerRef.current = null; longPressStartRef.current = null
-      pointerPositionsRef.current.delete(e.pointerId)
-      if (pinchActiveRef.current) {
-        if (pointerPositionsRef.current.size === 0) { pinchActiveRef.current = false; pinchRef.current = null }
-        else {
-          const point = [...pointerPositionsRef.current.values()][0]
-          pinchRef.current = { distance: 1, center: point }
-        }
-        return
-      }
-    }
-
-    if (isPanning) {
-      setIsPanning(false)
-      try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
-      return
-    }
-
-    if (selectionStartRef.current) {
-      const rect = canvasRef.current?.getBoundingClientRect()
-      if (rect) {
-        const end: [number, number] = [e.clientX - rect.left, e.clientY - rect.top]
-        const start = selectionStartRef.current
-        selectionStartRef.current = null; setSelectionBox(null)
-        if (Math.hypot(end[0] - start[0], end[1] - start[1]) >= 5) {
-          const a = screenToWorld(start, viewport), b = screenToWorld(end, viewport)
-          const box: [number, number, number, number] = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])]
-          const next = resolvePlanCanvasBoxSelection(box, Object.values(planProject.objects).map(object => ({
-            id: object.id,
-            bounds: getPlanObjectBounds(object),
-          })), selectedIds, selectionAdditiveRef.current)
-          onSelectionChange?.(next, next.at(-1) ?? null)
-          onSelectObject(next.at(-1) ?? null)
-        } else if (!selectionAdditiveRef.current) {
-          onSelectionChange?.([], null); onSelectObject(null)
-        }
-      }
-      return
-    }
-
-    if (eraseActiveRef.current) {
-      if (erasedIdsRef.current.size) onDeleteObjects?.([...erasedIdsRef.current])
-      eraseActiveRef.current = false; erasedIdsRef.current.clear()
-      return
-    }
-
-    if (draggingObject) {
-      const rect = canvasRef.current?.getBoundingClientRect()
-      if (rect) {
-        const screenX = e.clientX - rect.left, screenY = e.clientY - rect.top
-        const pointerWorld = screenToWorld([screenX, screenY], viewport)
-        const hasManualDimensions = manualDragPointRef.current !== null
-        const rawWorld = manualDragPointRef.current ?? pointerWorld
-        const movedPixels = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
-        commitPlanCanvasDragPreview({
-          drag: draggingObject,
-          rawWorld,
-          ctrlKey: e.ctrlKey,
-          hasManualDimensions,
-          movedPixels,
-          buildCommands: buildDragCommands,
-          preview: onPreviewManipulation,
-          commit: onCommitManipulation,
-          onRejected: onManipulationRejected,
-        })
-       }
-      manualDragPointRef.current = null
-      setDraggingObject(null); setDragPreviewPoint(null)
-      setResizeDimensionWidth(''); setResizeDimensionHeight(''); setResizeDimensionLength('')
-      try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
-    }
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    handlePlanCanvasPointerUp({
+      event: e,
+      canvas: canvasRef.current,
+      viewport,
+      isPanning,
+      pointerPositionsRef,
+      pinchRef,
+      pinchActiveRef,
+      longPressTimerRef,
+      longPressStartRef,
+      setIsPanning,
+      selectionStartRef,
+      selectionAdditiveRef,
+      setSelectionBox,
+      project: planProject,
+      selectedIds,
+      onSelectionChange,
+      onSelectObject,
+      eraseActiveRef,
+      erasedIdsRef,
+      onDeleteObjects,
+      draggingObject,
+      manualDragPointRef,
+      buildDragCommands,
+      onPreviewManipulation,
+      onCommitManipulation,
+      onManipulationRejected,
+      setDraggingObject,
+      setDragPreviewPoint,
+      setResizeDimensionWidth,
+      setResizeDimensionHeight,
+      setResizeDimensionLength,
+    })
   }
-
   const dimensionHostAxis = activeWallSnap
     ? Math.abs(activeWallSnap.wall_end_mm[0] - activeWallSnap.wall_start_mm[0]) >= Math.abs(activeWallSnap.wall_end_mm[1] - activeWallSnap.wall_start_mm[1]) ? 'x' : 'y'
     : null
