@@ -30,7 +30,7 @@ import {
   worldToScreen,
   zoomAtScreenPoint,
 } from '../viewport/viewportTransform.js'
-import { SnapMode, SnapSpatialIndex, snapPoint, snapToWallHost, type LinearReference, type SnapResult, snapOpeningOffsetBimAware } from '@constructflow/snapping-engine'
+import { type LinearReference, type SnapResult } from '@constructflow/snapping-engine'
 import { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { CommandRequest } from '@constructflow/command-schema'
@@ -59,6 +59,7 @@ import { usePlanCanvasManipulationDimensions } from './usePlanCanvasManipulation
 import { PlanCanvasInteractionOverlays } from './PlanCanvasInteractionOverlays.js'
 import { usePlanCanvasToolInteraction } from './usePlanCanvasToolInteraction.js'
 import { usePlanCanvasOpeningPlacementDimensions } from './usePlanCanvasOpeningPlacementDimensions.js'
+import { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -197,7 +198,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
   const hasInitialFitRef = useRef(false)
   const planVisibleObjects = useMemo(() => getPlanVisibleObjects(project, planDiscipline), [project, planDiscipline])
   const planProject = useMemo(() => getPlanViewProject(project, planVisibleObjects), [project, planVisibleObjects])
-  const snapSpatialIndex = useMemo(() => new SnapSpatialIndex(planProject), [planProject])
 
   const { placementReference, lineConstraintMode, dimensionReferenceMode, doorHanding, snapModes } = preferences
   const setPreference = <K extends keyof PlanCanvasPreferences>(
@@ -225,17 +225,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     tapeMeasure, setTapeMeasure, activeSnap, setActiveSnap, activeWallSnap, setActiveWallSnap,
   } = placement
   const [authoringControlsOpen, setAuthoringControlsOpen] = useState(true)
-  const enabledSnapModes = useMemo(() => new Set(snapModes), [snapModes])
-  const snapPlanPoint = (point: [number, number], distancePx = 16, excludedObjectId?: string) => {
-    const radiusMm = distancePx / Math.max(viewport.zoom, 0.0001)
-    const candidates = snapSpatialIndex.candidateObjectIds(point, radiusMm)
-    return snapPoint(point, planProject, viewport, distancePx, enabledSnapModes, excludedObjectId, candidates)
-  }
-  const snapPlanWallHost = (point: [number, number], openingWidthMm: number) => {
-    const radiusMm = 36 / Math.max(viewport.zoom, 0.0001)
-    const candidates = snapSpatialIndex.candidateObjectIds(point, radiusMm)
-    return snapToWallHost(point, planProject, viewport, openingWidthMm, 36, candidates)
-  }
+  const { snapPlanPoint, snapPlanWallHost } = usePlanCanvasSnapping({ planProject, viewport, snapModes })
 
   const applyPlacementDimensions = (point: [number, number], refs: { refX?: number; refY?: number }, rawPoint: [number, number] = point): [number, number] =>
     applyPlanCanvasPlacementDimensions(point, refs, rawPoint, { dimensionInputX, dimensionInputY, dimensionAnchorX, dimensionAnchorY, displayUnit })
