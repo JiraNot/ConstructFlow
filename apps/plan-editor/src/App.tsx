@@ -1881,7 +1881,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       planDiscipline={mode === 'framing' ? 'framing' : mode === 'roofplan' ? 'roof' : 'architecture'}
     />
     if (mode === 'model3d') return <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
-      <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} coordination={coordinationFindings} />
+      <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} autoFrameSelection={splitViewEnabled} coordination={coordinationFindings} />
     </Suspense>
     return <ElevationCanvas project={viewProject} direction={mode} selectedId={selectedId} selectedIds={selectedIds}
       onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }}
@@ -2076,6 +2076,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                     ] as const).filter(([mode]) => mode !== viewMode).map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
                   </select>
                 </label>}
+                {splitViewEnabled && secondaryViewMode === 'model3d' && <span>3D จะจัดกรอบตามวัตถุที่เลือกในอีกมุมมอง</span>}
               </div>
             </details>
             {viewMode === 'plan' && <button type="button" onClick={handleDetectRooms} title="ค้นหาห้องจากวงผนังปิด">ตรวจจับห้อง</button>}
@@ -2185,7 +2186,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 setSnapKind(kind)
               }}
             /> : viewMode !== 'model3d' ? <ElevationCanvas project={viewProject} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} navigation={elevationNavigation} onNavigationChange={setElevationNavigation} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} onBuildManipulation={viewMode === 'rcp' ? undefined : buildElevationManipulationCommands} onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation} onManipulationRejected={handleManipulationRejected} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
-              <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} coordination={coordinationFindings} />
+              <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} autoFrameSelection={splitViewEnabled} coordination={coordinationFindings} />
             </Suspense>}
             </div>
             {splitViewEnabled && <div className="cf-multiview-pane" data-testid="secondary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1' }}>

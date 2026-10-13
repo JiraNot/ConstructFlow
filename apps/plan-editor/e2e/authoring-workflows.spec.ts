@@ -995,5 +995,8 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   await page.mouse.up({ button: 'middle' })
   await expect(canvases.nth(1)).toHaveAttribute('data-viewport-pan-x', await canvases.first().getAttribute('data-viewport-pan-x') ?? '')
   await expect(canvases.nth(1)).toHaveAttribute('data-viewport-pan-y', await canvases.first().getAttribute('data-viewport-pan-y') ?? '')
+
+  await secondView.selectOption('model3d')
+  await expect(page.getByTestId('secondary-view-pane').getByTestId('model3d-viewport')).toHaveAttribute('data-auto-framed-selection', objectId!)
 })
 

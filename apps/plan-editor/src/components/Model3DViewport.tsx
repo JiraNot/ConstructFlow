@@ -452,11 +452,13 @@ interface Model3DViewportProps {
   onSelectObject: (id: string | null) => void
   selectedId?: string | null
   selectedIds?: readonly string[]
+  /** Reframe the camera when the canonical selection changes in another pane. */
+  autoFrameSelection?: boolean
   /** Coordination findings, drawn as impact volumes so clashes are visible in 3D too. */
   coordination?: readonly CoordinationFinding[]
 }
 
-export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSelectObject, selectedId = null, selectedIds = [], coordination = [] }) => {
+export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSelectObject, selectedId = null, selectedIds = [], autoFrameSelection = false, coordination = [] }) => {
   const hostRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
@@ -468,6 +470,8 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [hasModel, setHasModel] = useState(false)
   const [roofFramingOnly, setRoofFramingOnly] = useState(false)
+  const [autoFramedSelection, setAutoFramedSelection] = useState('')
+  const lastAutoFrameKey = useRef('')
   selectRef.current = onSelectObject
 
   useEffect(() => {
@@ -634,6 +638,16 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
   }
 
   useEffect(() => {
+    if (!autoFrameSelection || !hasModel) return
+    const ids = [...new Set(selectedIds.length ? selectedIds : selectedId ? [selectedId] : [])].sort()
+    const key = ids.join(',')
+    if (key === lastAutoFrameKey.current) return
+    lastAutoFrameKey.current = key
+    if (ids.length && frameObjects(ids)) setAutoFramedSelection(key)
+    else setAutoFramedSelection('')
+  }, [autoFrameSelection, hasModel, selectedId, selectedIds, project])
+
+  useEffect(() => {
     const scene = sceneRef.current
     if (!scene) return
     if (selectionHighlightRef.current) {
@@ -684,7 +698,7 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
     highlightRef.current = group
   }, [coordination, project])
 
-  return <div ref={hostRef} style={{ width: '100%', height: '100%', minHeight: 240, position: 'relative', background: '#080f1e' }}>
+  return <div ref={hostRef} data-testid="model3d-viewport" data-auto-framed-selection={autoFramedSelection} style={{ width: '100%', height: '100%', minHeight: 240, position: 'relative', background: '#080f1e' }}>
     <div style={{ position: 'absolute', left: 12, top: 10, zIndex: 1, color: '#94a3b8', background: 'rgba(8,15,30,0.76)', padding: '4px 6px', borderRadius: 2, fontSize: 11, pointerEvents: 'none' }}>
       ภาพตัวอย่าง 3D · ลากเพื่อหมุน · เลื่อนเพื่อซูม · เลือกวัตถุเพื่อดูคุณสมบัติ
     </div>
