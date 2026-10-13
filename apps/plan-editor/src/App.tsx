@@ -51,6 +51,7 @@ import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
 import { getRoofEaveBoundary } from '@constructflow/roof-engine'
 import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
 import { useReferenceDataImportActions } from './app/useReferenceDataImportActions.js'
+import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcuts.js'
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
@@ -333,95 +334,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     return () => window.removeEventListener('beforeunload', warnBeforeLeaving)
   }, [localAutosaveState])
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (document.querySelector('[role="dialog"]')) return
-      const target = e.target
-      const isTextEditing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
-      const isUndoRedo = (e.ctrlKey || e.metaKey) && ['z', 'y'].includes(e.key.toLowerCase())
-      if (isTextEditing && !isUndoRedo) return
-      // Let native selects use letter keys for option type-ahead and Escape to close.
-      // Global tool shortcuts should not steal those keys while a select has focus.
-      if (target instanceof HTMLSelectElement && !isUndoRedo && !e.ctrlKey && !e.metaKey) return
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault()
-        void handleSaveProject()
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        if (isTextEditing) return
-        e.preventDefault()
-        const session = projectSessionRef.current!
-        if (e.shiftKey) {
-          if (session.canRedo) {
-            setProjectState(session.redo())
-            setCommandQueue([])
-          }
-        } else if (session.canUndo) {
-          setProjectState(session.undo())
-          setCommandQueue([])
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-        if (isTextEditing) return
-        e.preventDefault()
-        const session = projectSessionRef.current!
-        if (session.canRedo) {
-          setProjectState(session.redo())
-          setCommandQueue([])
-        }
-      } else if (e.key === 'Escape') {
-        // PlanCanvas owns the staged Escape contract: cancel the pending step first,
-        // then leave the tool when Escape is pressed again with no pending state.
-        if (viewMode === 'plan') return
-        setActiveTool('select')
-        setSelectedId(null)
-      } else if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'p') {
-        setActiveTool('archFloor')
-      } else if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'c') {
-        setActiveTool('ceiling')
-      } else if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'r') {
-        setActiveTool('roomSeparator')
-      } else if (e.key === 's' || e.key === 'S') {
-        setActiveTool('select')
-      } else if (e.key === 'e' || e.key === 'E') {
-        setActiveTool('erase')
-      } else if (e.key === 'c' || e.key === 'C') {
-        setActiveTool('column')
-      } else if (e.key === 'f' || e.key === 'F') {
-        setActiveTool('foundation')
-      } else if (e.key === 'b' || e.key === 'B') {
-        setActiveTool('beam')
-      } else if (e.key === 'w' || e.key === 'W') {
-        setActiveTool('wall')
-      } else if (e.key === 'd' || e.key === 'D') {
-        setActiveTool('door')
-      } else if (e.key === 'n' || e.key === 'N') {
-        setActiveTool('window')
-      } else if (e.key === 'g' || e.key === 'G') {
-        setActiveTool(e.shiftKey ? 'gridSystem' : 'grid')
-      } else if (e.key === 'm' || e.key === 'M') {
-        setActiveTool('measure')
-      } else if (e.key === 'r' || e.key === 'R') {
-        if (canCalibrateUnderlayRef.current) setActiveTool('calibrate')
-      } else if (e.key === 't' || e.key === 'T') {
-        setActiveTool('stair')
-      } else if (e.key === 'q' || e.key === 'Q') {
-        setActiveTool('roof')
-      } else if (e.key === 'u' || e.key === 'U') {
-        setActiveTool('pipe')
-      } else if (e.key === 'l' || e.key === 'L') {
-        setActiveTool('fixture')
-      } else if (e.key === 'k' || e.key === 'K') {
-        setActiveTool('cabinet')
-      } else if (e.key === 'j' || e.key === 'J') {
-        setActiveTool('moulding')
-      } else if (e.key === 'p' || e.key === 'P') {
-        setActiveTool('slab')
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [])
+  useWorkbenchKeyboardShortcuts({
+    viewMode, setActiveTool, setSelectedId, handleSaveProject, projectSessionRef,
+    setProjectState, setCommandQueue, canCalibrateUnderlayRef,
+  })
 
   const {
     handleCommitColumn,

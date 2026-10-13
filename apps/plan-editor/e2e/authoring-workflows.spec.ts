@@ -449,6 +449,36 @@ test('project file controller opens a .cfproj and saves a downloadable copy with
   expect(downloadedProject.objects[objectId]).toBeTruthy()
 })
 
+test('Ctrl+S writes the latest project snapshot to the active file handle', async ({ page }) => {
+  await page.addInitScript(() => {
+    const target = window as Window & { __shortcutSaveText?: string; showSaveFilePicker?: () => Promise<unknown> }
+    target.showSaveFilePicker = async () => ({
+      name: 'shortcut-save.cfproj',
+      queryPermission: async () => 'granted',
+      createWritable: async () => ({
+        write: async (value: string) => { target.__shortcutSaveText = value },
+        close: async () => undefined,
+      }),
+    })
+  })
+  await page.goto('/')
+  await page.getByLabel('ตัวเลือกบันทึก').click()
+  await page.getByRole('button', { name: 'บันทึกเป็นไฟล์ .cfproj' }).click()
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกไฟล์ Untitled Project.cfproj แล้ว')
+
+  await page.getByRole('button', { name: 'ผนัง' }).click()
+  await clickCanvasFraction(page, 0.30, 0.45)
+  await clickCanvasFraction(page, 0.70, 0.45)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Control+s')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกไฟล์ Untitled Project.cfproj แล้ว')
+
+  const saved = await page.evaluate(() => (window as Window & { __shortcutSaveText?: string }).__shortcutSaveText)
+  expect(saved).toBeTruthy()
+  const project = JSON.parse(saved!) as { objects: Record<string, { object_type: string }> }
+  expect(Object.values(project.objects).filter(object => object.object_type === 'architecture.wall')).toHaveLength(1)
+})
+
 test('mouse and keyboard authoring creates wall, beam, hosted opening, and point objects', async ({ page }) => {
   test.setTimeout(60_000)
   const pageErrors: string[] = []
