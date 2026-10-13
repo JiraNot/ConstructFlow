@@ -69,6 +69,7 @@ import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.j
 import { handlePlanCanvasPlacementPointerDown } from './handlePlanCanvasPlacementPointerDown.js'
 import { usePlanCanvasManipulationPreview } from './usePlanCanvasManipulationPreview.js'
 import { createPlanCanvasPlacementCommitHandlers } from './createPlanCanvasPlacementCommitHandlers.js'
+import { nextDoorHanding, usePlanCanvasGlobalShortcuts } from './usePlanCanvasGlobalShortcuts.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
@@ -404,6 +405,20 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     }
   }
 
+  const selectedDoorId = selectedId && project.objects[selectedId] && isDoorObject(project.objects[selectedId]) ? selectedId : null
+  usePlanCanvasGlobalShortcuts({
+    activeTool,
+    selectedDoorId,
+    draggingObject: Boolean(draggingObject),
+    onFlipDoorHanding,
+    cancelCurrentPlacement,
+    cycleDoorHanding: () => setDoorHanding(current => nextDoorHanding(current)),
+    cyclePlacementReference: () => setPreference('placementReference', current => {
+      const cycle = { centerline: 'left_face', left_face: 'right_face', right_face: 'centerline' } as const
+      return cycle[current]
+    }),
+  })
+
   useEffect(() => {
     if (!activeSnap) return
     const isPolygonTool = isPolygonInteraction(activeTool)
@@ -413,47 +428,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = ({
     const constrained = constrainLineSnap(activeSnap, activeSnap.point_mm, start.point_mm, false, 'reference' in start ? start.reference : undefined)
     if (constrained.point_mm[0] !== activeSnap.point_mm[0] || constrained.point_mm[1] !== activeSnap.point_mm[1]) setActiveSnap(constrained)
   }, [activeTool, activeSnap, wallStartNode, beamStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart, slabBoundary, drawLengthMeters, drawAngleDegrees, constrainLineSnap])
-
-  // Space cycles the active placement reference for linear elements, or door handing.
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (document.querySelector('[role="dialog"]')) return
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
-      if (e.key === 'Tab' && draggingObject) {
-        e.preventDefault()
-        requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.cf-manipulation-dimensions input')?.focus())
-      } else if (e.code === 'Space') {
-        if (activeTool === 'door') {
-          e.preventDefault()
-          setDoorHanding((prev) => {
-            const cycle: Record<DoorHanding, DoorHanding> = {
-              left_in: 'left_out',
-              left_out: 'right_out',
-              right_out: 'right_in',
-              right_in: 'left_in',
-            }
-            return cycle[prev] || 'left_in'
-          })
-        } else if (activeTool === 'wall' || activeTool === 'beam') {
-          e.preventDefault()
-          setPreference('placementReference', (prev) => {
-            const cycle = { centerline: 'left_face', left_face: 'right_face', right_face: 'centerline' } as const
-            return cycle[prev]
-          })
-        } else if (selectedId && project.objects[selectedId] && isDoorObject(project.objects[selectedId])) {
-          e.preventDefault()
-          if (onFlipDoorHanding) {
-            onFlipDoorHanding(selectedId)
-          }
-        }
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        cancelCurrentPlacement()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeTool, selectedId, project.objects, onFlipDoorHanding, onActivateTool, clearPointerDrag, draggingObject, objectContextMenu, stairStartPoint, gridStartPoint, gridCopySourceId, beamStartNode, wallStartNode, roomSeparatorStart, slabBoundary, calibrationP1, tapeMeasure, dimensionInputX, dimensionInputY, drawLengthMeters, drawAngleDegrees, gridSystemError])
 
   const editableSelectionIds = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
   const findEditHandle = (screenPoint: [number, number]) => findPlanCanvasEditHandle({ planProject, editableSelectionIds, viewport, screenPoint, onFlipDoorHanding })
