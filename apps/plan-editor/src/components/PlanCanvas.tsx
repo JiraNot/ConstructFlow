@@ -16,16 +16,14 @@ import { ToolType } from './Toolbar.js'
 import type { ViewportState } from '../viewport/viewportTransform.js'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
-import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
 import { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
-import { usePlanCanvasManipulationInteractions } from './usePlanCanvasManipulationInteractions.js'
 import { usePlanCanvasDrawing } from './usePlanCanvasDrawing.js'
 import { usePlanCanvasPicking } from './usePlanCanvasPicking.js'
 import { usePlanCanvasPointerState } from './usePlanCanvasPointerState.js'
 import { usePlanCanvasToolController } from './usePlanCanvasToolController.js'
 import { usePlanCanvasPlacementController } from './usePlanCanvasPlacementController.js'
+import { usePlanCanvasPointerController } from './usePlanCanvasPointerController.js'
 import { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
-import { usePlanCanvasPointerInteractions } from './usePlanCanvasPointerInteractions.js'
 import { PlanCanvasSurface } from './PlanCanvasSurface.js'
 import { buildPlanCanvasContextMenu } from './buildPlanCanvasContextMenu.js'
 import { usePlanCanvasSurfaceOverlays } from './usePlanCanvasSurfaceOverlays.js'
@@ -194,13 +192,25 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
   } = placementController
   const { handleCanvasDimensionKeyDown } = placementKeyboard
 
-  const findEditHandle = (screenPoint: [number, number]) => findPlanCanvasEditHandle({ planProject, editableSelectionIds, viewport, screenPoint, onFlipDoorHanding })
-
-  const manipulationInteractions = usePlanCanvasManipulationInteractions({
-    containerRef, canvasRef, planProject, viewport, displayUnit, dragDimensions: dragDimensionInput,
-    draggingObject, dragPreviewPoint, manipulationPreview, setDraggingObject, setDragPreviewPoint,
-    setManipulationPreview, snapPlanPoint, onPreviewManipulation, onCommitManipulation, onManipulationRejected,
+  const pointerController = usePlanCanvasPointerController({
+    props,
+    planProject,
+    viewport,
+    setViewport,
+    containerRef,
+    canvasRef,
+    selectedId,
+    selectedIds,
+    editableSelectionIds,
+    pointerState,
+    picking,
+    dragDimensions: dragDimensionInput,
+    placement,
+    placementController,
+    snapPlanPoint,
+    snapPlanWallHost,
   })
+  const { manipulation: manipulationInteractions, pointerInteractions } = pointerController
   const {
     previewDragAt,
     lastPreviewValidationRef,
@@ -214,6 +224,7 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
     updateResizeDimension,
     commitDragDimensions,
   } = manipulationInteractions
+  const { handlePointerMove, handlePointerDown, handlePointerUp } = pointerInteractions
 
   usePlanCanvasDrawing({
     containerRef,
@@ -262,28 +273,6 @@ export const PlanCanvas: React.FC<PlanCanvasProps> = props => {
     slabBoundary,
   })
 
-  const { handlePointerMove, handlePointerDown, handlePointerUp } = usePlanCanvasPointerInteractions({
-    canvasRef,
-    activeTool, viewport, setViewport, project, planProject, selectedId, selectedIds, displayUnit,
-    activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
-    placementReference, doorHanding, draggingObject, gridCopySourceId, hoveredId,
-    pointerState, placement, picking, dragDimensions: dragDimensionInput,
-    manipulation: { previewDragAt, lastPreviewValidationRef, buildDragCommands },
-    resizeDimensionWidth: setResizeDimensionWidth,
-    resizeDimensionHeight: setResizeDimensionHeight,
-    resizeDimensionLength: setResizeDimensionLength,
-    dimensionReferenceMode, snapPlanPoint, resolveLineSnap: constrainLineSnap,
-    applyPlacementDimensions, constrainGridCopyToParallelOffset,
-    snapPlanWallHost, applyOpeningDistance, resolveReferencePath, findEditHandle,
-    callbacks: {
-      onCopyGrid, onCommitColumn, onCommitFoundation, onCommitDoor, onCommitWindow, onCommitFixture,
-      onSelectionChange, onSelectObject, onCommitBeam, onCommitWall, onCommitRoomSeparator, onCommitPipeRoute,
-      onCommitCabinet, onCommitMoulding, onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling,
-      onCommitRoof, onCommitSurfaceVoid, onCommitGrid, onCommitGridSystem, onStartCalibrationModal,
-      onCommitStair, onActivateTool, onDeleteObjects, onPreviewManipulation, onCommitManipulation,
-      onManipulationRejected, onCursorChange,
-    },
-  })
   const containerSize = {
     width: containerRef.current?.clientWidth ?? 800,
     height: containerRef.current?.clientHeight ?? 600,
