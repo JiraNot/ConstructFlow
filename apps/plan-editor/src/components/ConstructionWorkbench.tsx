@@ -6,6 +6,7 @@ import { WorkbenchNumberInput } from "./WorkbenchNumberInput";
 import { formatLengthMm, parseLengthMm, type DisplayLengthUnit } from "@constructflow/project-model";
 import { OpeningPlanSymbolEditor } from "./OpeningPlanSymbolEditor.js";
 import type { OpeningPlanSymbolLine } from "@constructflow/project-model";
+import { SheetViewportComposerPreview } from "./SheetViewportComposerPreview.js";
 import type {
   CommandRequest,
   CommandBatchResult,
@@ -24,6 +25,7 @@ import {
 } from "@constructflow/sheet-engine";
 
 type Payload = Record<string, unknown>;
+const EMPTY_PERMIT_OPTIONS: PermitOptions = Object.freeze({});
 const polygon = [
   [0, 0],
   [4000, 0],
@@ -815,7 +817,7 @@ export function ConstructionWorkbench({
     [sheetPreview, setSheetPreview] = useState("");
   const [selectedDimensionId, setSelectedDimensionId] = useState(""),
     [dimensionOffsetMm, setDimensionOffsetMm] = useState<[number, number]>([0, 0]);
-  const viewportOptions: PermitOptions = project.drawing_settings ?? {};
+  const viewportOptions: PermitOptions = project.drawing_settings ?? EMPTY_PERMIT_OPTIONS;
   const availableSheets = useMemo(
     () => compilePermitDrawingSet(project, viewportOptions).sheets,
     [project, viewportOptions],
@@ -892,6 +894,22 @@ export function ConstructionWorkbench({
       setFeedback(String(e));
       return false;
     }
+  };
+  const commitSheetViewportCenter = (center_mm: [number, number]) => {
+    const saved = project.drawing_settings?.viewports[sheetId] ?? { scale_denominator: scale };
+    const viewport = {
+      ...saved,
+      scale_denominator: scale,
+      ...((/^(A-02|A-03|S-02|S-03)$/.test(sheetId) || /^(A-02|S-02)-L\d+$/.test(sheetId)) ? { level_id: planLevelId } : {}),
+      center_mm,
+      ...(useCrop ? { crop_bounds_mm: crop.map(value => value * 1000) as [number, number, number, number] } : {}),
+    };
+    if (!execute([{ name: "UpdateSheetViewport", input: { sheet_id: sheetId, viewport } }])) return false;
+    setUseCenter(true);
+    setCenter([center_mm[0] / 1000, center_mm[1] / 1000]);
+    const options = { ...viewportOptions, viewports: { ...viewportOptions.viewports, [sheetId]: viewport } };
+    setSheetPreview(compilePermitDrawingSet(project, options).sheets.find(sheet => sheet.id === sheetId)!.svg);
+    return true;
   };
   const download = (bytes: BlobPart, name: string, type: string) => {
     const url = URL.createObjectURL(new Blob([bytes], { type })),
@@ -1384,12 +1402,13 @@ export function ConstructionWorkbench({
               >
                 ดาวน์โหลด Vector PDF
               </button>
-              {sheetPreview && (
-                <div
-                  style={{ background: "white", marginTop: 16 }}
-                  dangerouslySetInnerHTML={{ __html: sheetPreview.replace('width="420mm" height="297mm"','style="width:100%;height:auto;display:block"') }}
-                />
-              )}
+              <SheetViewportComposerPreview
+                svg={sheetPreview}
+                manualCenter={useCenter}
+                centerMm={[center[0] * 1000, center[1] * 1000]}
+                scaleDenominator={scale}
+                onCommitCenter={commitSheetViewportCenter}
+              />
             </>
           )}
         </div>
