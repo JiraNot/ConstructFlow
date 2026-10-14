@@ -195,10 +195,11 @@ test("A-05 and A-06 use a legible residential default scale while preserving exp
   }
   const pdfBytes = await compilePermitPdf(fitted, readFileSync(new URL("../assets/Sarabun-Regular.ttf", import.meta.url)));
   const pdf = await PDFDocument.load(pdfBytes);
-  assert.equal(pdf.getPageCount(), 22, "the house demo adds independent sheets for its remaining storeys");
-  assert.match(pdf.getTitle(), /22-sheet draft$/, "PDF metadata should report the actual compiled sheet count");
-  assert.equal(fitted.sheets.find((sheet) => sheet.id === "A-10").primitives.find((item) => item.kind === "text" && item.at[0] === 372 && item.at[1] === 282)?.text, "10 / 22");
-  assert.equal(fitted.sheets.at(-1).primitives.find((item) => item.kind === "text" && item.at[0] === 372 && item.at[1] === 282)?.text, "22 / 22");
+  assert.ok(fitted.sheets.some((sheet) => /-C\d+$/.test(sheet.id)), "overflow schedules should add continuation sheets");
+  assert.equal(pdf.getPageCount(), fitted.sheets.length, "PDF should include all independent level and schedule continuation sheets");
+  assert.match(pdf.getTitle(), new RegExp(`${fitted.sheets.length}-sheet draft$`), "PDF metadata should report the actual compiled sheet count");
+  assert.equal(fitted.sheets.find((sheet) => sheet.id === "A-10").primitives.find((item) => item.kind === "text" && item.at[0] === 372 && item.at[1] === 282)?.text, `10 / ${fitted.sheets.length}`);
+  assert.equal(fitted.sheets.at(-1).primitives.find((item) => item.kind === "text" && item.at[0] === 372 && item.at[1] === 282)?.text, `${fitted.sheets.length} / ${fitted.sheets.length}`);
 });
 
 test("S-06 blocks an approved issue set when beam BBS source sets are absent", () => {
@@ -719,6 +720,21 @@ test("F04: drawTable paginates extreme overflow onto numbered continuation sheet
     continuation.primitives.some((primitive) => primitive.kind === "text" && primitive.at[0] === 372 && primitive.at[1] === 282),
     "Continuation sheets should include a sheet index field for package numbering",
   );
+});
+
+test("PDF compiler substitutes font-missing status icons without aborting export", async () => {
+  const fontBytes = readFileSync(new URL("../assets/Sarabun-Regular.ttf", import.meta.url));
+  const bytes = await compilePermitPdf({
+    project_id: "FONT-FALLBACK",
+    sheets: [{
+      id: "A-01", title: "Status", scale: "1:100", svg: "", source_object_ids: [],
+      warnings: [], status: "draft", viewport: { scale_denominator: 100 },
+      primitives: [{ kind: "text", at: [18, 38], text: "ไม่ผ่าน ⚠️", size: 3, color: "#0f172a" }],
+    }],
+    warnings: [], issue_ready: false,
+  }, fontBytes);
+  const pdf = await PDFDocument.load(bytes);
+  assert.equal(pdf.getPageCount(), 1);
 });
 
 test("F04: Hidden-line solver and depth occlusion on elevations and section cuts", async () => {

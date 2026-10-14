@@ -17,6 +17,17 @@ const color = (hex: string) => {
   return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 };
 
+/** Replace characters missing from the selected font so one status icon cannot abort a whole PDF export. */
+function textSupportedByFont(text: string, face: ReturnType<typeof fontkit.create>): string {
+  if ("fonts" in face) throw new Error("A standalone TTF font is required");
+  return [...text]
+    .filter((character) => character.codePointAt(0) !== 0xfe0f)
+    .map((character) =>
+      face.glyphForCodePoint(character.codePointAt(0)!).id === 0 ? "!" : character,
+    )
+    .join("");
+}
+
 /** Native browser/Node vector PDF. Full font embedding keeps CID equal to glyph ID.
  * Apply fontkit GPOS offsets explicitly; PDF-LIB drawText does not apply mark offsets.
  */
@@ -79,7 +90,7 @@ export async function compilePermitPdf(
             });
         }
       } else {
-        const run = face.layout(p.text),
+        const run = face.layout(textSupportedByFont(p.text, face)),
           baseSize = p.size * PT,
           advance = run.positions.reduce((s, v) => s + v.xAdvance, 0),
           width = (advance / face.unitsPerEm) * baseSize;
