@@ -2845,21 +2845,38 @@ function compilePermitDrawingSetBase(
                     .map((x) => [x * 2, y * 2] as Vec2))
                   .sort((a, b) => Math.hypot(...a) - Math.hypot(...b));
                 let placed = false;
+                let inViewCount = 0, inRoomCount = 0, labelCollisionCount = 0, stairCollisionCount = 0;
                 for (const [offsetX, offsetY] of offsets) {
                   const anchor: Vec2 = [mapped(center)[0] + offsetX, mapped(center)[1] + offsetY];
                   const candidateWorld: Vec2 = [center[0] + offsetX * viewport.scale_denominator, center[1] - offsetY * viewport.scale_denominator];
                   const box: [number, number, number, number] = [anchor[0] - tagWidth / 2, anchor[1] - tagHeight / 2, anchor[0] + tagWidth / 2, anchor[1] + tagHeight / 2];
                   const inView = box[0] >= view.x && box[2] <= view.x + view.w && box[1] >= view.y && box[3] <= view.y + view.h;
+                  if (inView) inViewCount++;
                   const hitsLabel = planObjectLabelBoxes.some(([left, top, right, bottom]) => box[0] < right + 0.8 && box[2] > left - 0.8 && box[1] < bottom + 0.5 && box[3] > top - 0.5);
                   const hitsStair = planStairFootprintBoxes.some(([left, top, right, bottom]) => box[0] < right + 0.4 && box[2] > left - 0.4 && box[1] < bottom + 0.4 && box[3] > top - 0.4);
-                  if (!inView || !pointInRoom(candidateWorld, ring) || hitsLabel || hitsStair) continue;
+                  if (!inView || !pointInRoom(candidateWorld, ring)) continue;
+                  inRoomCount++;
+                  if (hitsLabel) labelCollisionCount++;
+                  if (hitsStair) stairCollisionCount++;
+                  if (hitsLabel || hitsStair) continue;
                   text([anchor[0] - titleWidth / 2, anchor[1] - 0.3], title, titleSize, boundaryOpen ? "#b91c1c" : colors[getDisplayPhase(room)], titleWidth);
                   if (areaText) text([anchor[0] - areaWidth / 2, anchor[1] + 2.2], areaText, 1.8, "#475569", areaWidth);
                   planObjectLabelBoxes.push(box);
                   placed = true;
                   break;
                 }
-                if (!placed) warnings.push(`${String(d.mark ?? room.id)}: could not place room tag inside its plan boundary`);
+                if (!placed) {
+                  const blockers = [
+                    labelCollisionCount ? "object labels" : "",
+                    stairCollisionCount ? "stair footprints" : "",
+                  ].filter(Boolean).join(" and ");
+                  const reason = !inViewCount
+                    ? "room label is outside the sheet crop"
+                    : !inRoomCount
+                      ? "no candidate anchor lies inside the room"
+                      : `all ${inRoomCount} interior candidates overlap ${blockers || "other annotations"}`;
+                  warnings.push(`${String(d.mark ?? room.id)}: could not place room tag inside its plan boundary (${reason})`);
+                }
               }
             }
           if ((mode === "xy" && id.startsWith("A-") || isElevation && (id === "A-05" || id === "A-06")) && viewport.opening_overrides) {

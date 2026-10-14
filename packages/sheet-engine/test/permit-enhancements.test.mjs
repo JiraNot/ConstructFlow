@@ -434,7 +434,7 @@ test("room-tag search uses open interior space and upper-plan wall-mark diagnost
   const roomTagWarnings = drawingSet.sheets
     .filter((sheet) => ["A-02", "A-03"].includes(sheet.id))
     .flatMap((sheet) => sheet.warnings.filter((warning) => warning.includes("could not place room tag")));
-  assert.deepEqual(roomTagWarnings, ["G05: could not place room tag inside its plan boundary"]);
+  assert.deepEqual(roomTagWarnings, ["G05: could not place room tag inside its plan boundary (all 91 interior candidates overlap object labels)"]);
   const upperPlan = drawingSet.sheets.find((sheet) => sheet.id === "A-03");
   const wallMarkWarnings = upperPlan.warnings.filter((warning) => warning.includes("could not place wall-face marks"));
   assert.ok(wallMarkWarnings.length > 0, "the reference fixture retains its crowded upper-plan annotation case");
