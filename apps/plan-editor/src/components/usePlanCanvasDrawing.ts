@@ -85,6 +85,7 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
       activeWallSnap, doorHanding, stairPreview, stairStartPoint, resolveReferencePath,
     })
     canvas.dataset.wallJunctionPreview = ghost?.wall_junction_preview ? 'true' : 'false'
+    canvas.dataset.wallJunctionTargetCount = String(ghost?.wall_junction_preview?.target_count ?? 0)
     const calibrationOverlay = activeTool === 'calibrate'
       ? { point1_mm: calibrationP1, point2_mm: null, mouse_mm: calibrationMousePoint }
       : null

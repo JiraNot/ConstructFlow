@@ -16,7 +16,7 @@ interface BuildPlanPlacementGhostOptions {
   activeDoorTypeMark: string
   activeWindowTypeMark: string
   beamStartNode: { point_mm: [number, number] } | null
-  wallStartNode: { point_mm: [number, number]; hostWallId?: string } | null
+  wallStartNode: { point_mm: [number, number]; hostWallId?: string; hostWallIds?: string[] } | null
   activeWallSnap: WallHostSnapResult | null
   doorHanding: 'left_in' | 'right_in' | 'left_out' | 'right_out'
   stairPreview: StairModuleData | null
@@ -76,7 +76,7 @@ export function buildPlanPlacementGhost({
         size_mm: [typeDef?.parameters?.thickness_mm || 100, 0],
         mark: activeWallTypeMark,
         wall_junction_preview: buildWallJunctionPreview(
-          planProject, activeSnap, alignedStart, alignedEnd, typeDef?.parameters?.thickness_mm || 100, wallStartNode.hostWallId,
+          planProject, activeSnap, alignedStart, alignedEnd, typeDef?.parameters?.thickness_mm || 100, wallStartNode.hostWallIds ?? wallStartNode.hostWallId,
         ) ?? undefined,
       }
     } else if (activeTool === 'door' && activeWallSnap) {

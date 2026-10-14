@@ -3,7 +3,7 @@ import type { PlacementReference, ProjectDocument } from '@constructflow/project
 import { isColumnObject } from '@constructflow/project-model'
 import type { LinearReference, SnapResult } from '@constructflow/snapping-engine'
 import { findNearestLinearReference } from '@constructflow/snapping-engine'
-import { getSnappedWallId, getWallVerticalReference, type WallVerticalReference } from './PlanCanvasWallReferences.js'
+import { getSnappedWallId, getSnappedWallIds, getWallVerticalReference, type WallVerticalReference } from './PlanCanvasWallReferences.js'
 import type { ToolType } from './Toolbar.js'
 
 type Point = [number, number]
@@ -18,6 +18,7 @@ export interface WallPlacementStart {
   point_mm: Point
   reference?: LinearReference
   hostWallId?: string
+  hostWallIds?: string[]
 }
 
 interface CommitPlanCanvasLinePlacementPointOptions {
@@ -91,13 +92,15 @@ export function commitPlanCanvasLinePlacementPoint({
   }
 
   if (!wallStartNode) {
-    const hostWallId = getSnappedWallId(snap, planProject)
+    const hostWallIds = getSnappedWallIds(snap, planProject)
+    const hostWallId = hostWallIds[0]
     setWallStartNode({
       point_mm: snap.point_mm,
       // A host snap supplies junction and vertical-datum context; it must not
       // constrain the new wall to run parallel with its host.
       reference: hostWallId ? undefined : findNearestLinearReference(planProject, snap.point_mm) ?? undefined,
       hostWallId,
+      hostWallIds,
     })
     setDrawLengthMeters('')
     setDrawAngleDegrees('')
@@ -118,6 +121,7 @@ export function commitPlanCanvasLinePlacementPoint({
     point_mm: snap.point_mm,
     reference: nextHostWallId ? undefined : findNearestLinearReference(planProject, snap.point_mm) ?? undefined,
     hostWallId: nextHostWallId,
+    hostWallIds: getSnappedWallIds(snap, planProject),
   })
   setDrawLengthMeters('')
   setDrawAngleDegrees('')

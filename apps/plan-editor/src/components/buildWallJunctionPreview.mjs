@@ -98,9 +98,11 @@ function distanceToSegment(point, start, end) {
 }
 
 /** Preview the union outline where a pending wall meets walls selected by BIM snapping. */
-export function buildWallJunctionPreview(project, snap, start, end, thicknessMm, startHostWallId) {
+/** @param {string | string[]} [startHostWallIds=[]] */
+export function buildWallJunctionPreview(project, snap, start, end, thicknessMm, startHostWallIds = []) {
   const ids = new Set()
-  if (typeof startHostWallId === 'string') ids.add(startHostWallId)
+  const hostIds = Array.isArray(startHostWallIds) ? startHostWallIds : [startHostWallIds]
+  for (const id of hostIds) if (typeof id === 'string') ids.add(id)
   if (snap?.kind.startsWith('wall_') && typeof snap.target_id === 'string') ids.add(snap.target_id)
   if (snap?.kind === 'intersection' && typeof snap.target_id === 'string') {
     for (const id of snap.target_id.split(':')) ids.add(id)

@@ -102,3 +102,24 @@ test('wall snap rejects a junction that reaches a hosted opening jamb', () => {
     [200, 0], [200, 1000], 100,
   ), null)
 })
+
+test('wall intersection start retains a union preview across multiple differently sized hosts', () => {
+  const project = projectWithWall({
+    'wall-b': {
+      id: 'wall-b', object_type: 'architecture.wall', status: 'active',
+      module_data: { type_id: 'wall-type-2', start_point_mm: [0, -1000, 0], end_point_mm: [0, 1000, 0], thickness_mm: 150, mark: 'W2' },
+    },
+  })
+  project.types.push({ id: 'wall-type-2', object_type: 'architecture.wall', name: 'W2', parameters: { thickness_mm: 150 } })
+  const preview = buildWallJunctionPreview(
+    project,
+    { kind: 'free', point_mm: [1000, 1000], description: 'free cursor' },
+    [0, 0], [1000, 1000], 100, ['wall-a', 'wall-b'],
+  )
+
+  assert.equal(preview?.target_count, 2)
+  assert.deepEqual(preview?.target_marks, ['W1', 'W2'])
+  assert.ok((preview?.segments_mm.length ?? 0) > 0)
+  const keys = (preview?.segments_mm ?? []).map(([start, end]) => [start, end].sort((a, b) => a[0] - b[0] || a[1] - b[1]).flat().join(','))
+  assert.equal(new Set(keys).size, keys.length)
+})

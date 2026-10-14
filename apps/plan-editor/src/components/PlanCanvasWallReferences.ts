@@ -10,9 +10,13 @@ export interface WallVerticalReference {
 }
 
 export function getSnappedWallId(snap: SnapResult | undefined, project: ProjectDocument): string | undefined {
-  if (!snap?.target_id) return undefined
+  return getSnappedWallIds(snap, project)[0]
+}
+
+export function getSnappedWallIds(snap: SnapResult | undefined, project: ProjectDocument): string[] {
+  if (!snap?.target_id) return []
   const ids = snap.kind === 'intersection' ? snap.target_id.split(':') : [snap.target_id]
-  return ids.find(id => {
+  return ids.filter(id => {
     const object = project.objects[id]
     return object ? isWallObject(object) : false
   })

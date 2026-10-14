@@ -29,6 +29,16 @@ async function clickSurveyPoint(page: Page, xMm: number, yMm: number) {
   await canvas(page).click({ position: { x: panX + xMm * zoom, y: panY + yMm * zoom } })
 }
 
+async function moveToSurveyPoint(page: Page, xMm: number, yMm: number) {
+  const viewport = page.locator('.cf-plan-canvas').first()
+  const bounds = await viewport.boundingBox()
+  if (!bounds) throw new Error('Plan canvas is not visible')
+  const panX = Number(await viewport.getAttribute('data-viewport-pan-x'))
+  const panY = Number(await viewport.getAttribute('data-viewport-pan-y'))
+  const zoom = Number(await viewport.getAttribute('data-viewport-zoom'))
+  await page.mouse.move(bounds.x + panX + xMm * zoom, bounds.y + panY + yMm * zoom)
+}
+
 function createSyntheticPlanStressProject(objectCount: number) {
   const project = createEmptyProjectDocument(randomUUID(), `Synthetic plan stress · ${objectCount} walls`)
   const templateId = randomUUID()
@@ -64,6 +74,23 @@ function createSyntheticPlanStressProject(objectCount: number) {
     seeded.objects[id] = wall
   }
   return serializeProject(seeded)
+}
+
+function createWallIntersectionProject() {
+  let project = createEmptyProjectDocument(randomUUID(), 'Wall intersection preview acceptance')
+  const levelId = project.project.active_level_id
+  const horizontal = CommandBus.execute(project, 'CreateWall', {
+    id: randomUUID(), mark: 'X-W1', level_id: levelId,
+    start_point_mm: [-2000, 0], end_point_mm: [2000, 0], thickness_mm: 100, height_mm: 2800,
+  })
+  if (horizontal.result.status !== 'success') throw new Error(`Could not create horizontal host wall: ${horizontal.result.errors?.join(', ')}`)
+  project = horizontal.updatedProject
+  const vertical = CommandBus.execute(project, 'CreateWall', {
+    id: randomUUID(), mark: 'X-W2', level_id: levelId,
+    start_point_mm: [0, -2000], end_point_mm: [0, 2000], thickness_mm: 150, height_mm: 2800,
+  })
+  if (vertical.result.status !== 'success') throw new Error(`Could not create vertical host wall: ${vertical.result.errors?.join(', ')}`)
+  return serializeProject(vertical.updatedProject)
 }
 
 function createSyntheticStraightStairProject() {
@@ -1074,6 +1101,24 @@ test('wall placement previews and commits a clean connected junction', async ({ 
   await expect(walls).toHaveCount(2)
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
+})
+
+test('wall intersection start retains every host in the pending union preview', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
+  await seedLocalProjectSnapshot(page, createWallIntersectionProject())
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+
+  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickSurveyPoint(page, 0, 0)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
+  await moveToSurveyPoint(page, 1000, 1000)
+  await expect(canvas(page)).toHaveAttribute('data-wall-junction-preview', 'true')
+  await expect(canvas(page)).toHaveAttribute('data-wall-junction-target-count', '2')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
 })
 
 test('wall placement previews a T junction when starting from a wall midpoint', async ({ page }) => {
