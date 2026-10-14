@@ -1908,11 +1908,48 @@ test('Project Browser previews align, offset, and mirror, then joins line object
 
   const openEditTools = async () => page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
   const preview = page.getByText('Preview การแปลง')
+  const readLineGeometry = async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return null
+    const project = JSON.parse(raw) as { objects: Record<string, { module_data: { start_point_mm: number[]; end_point_mm: number[] } }> }
+    const lines = ids.map(id => {
+      const data = project.objects[id!]?.module_data
+      return data ? { start: data.start_point_mm, end: data.end_point_mm } : null
+    })
+    return lines.every((line): line is { start: number[]; end: number[] } => line !== null) ? lines : null
+  }
+  await expect.poll(readLineGeometry).not.toBeNull()
+  const originalGeometry = await readLineGeometry()
+  expect(originalGeometry).not.toBeNull()
+  const undo = page.getByRole('button', { name: 'ย้อนกลับ' })
+  const redo = page.getByRole('button', { name: 'ทำซ้ำ' })
+  const commitAndUndoRedo = async (buttonName: string, geometryChanged: (geometry: NonNullable<typeof originalGeometry>) => boolean) => {
+    await openEditTools()
+    await page.getByRole('button', { name: buttonName }).click()
+    await expect(preview).toBeVisible()
+    await page.getByRole('button', { name: 'ยืนยัน · Undo ได้' }).click()
+    await expect.poll(async () => {
+      const geometry = await readLineGeometry()
+      return geometry !== null && geometryChanged(geometry as NonNullable<typeof originalGeometry>)
+    }).toBe(true)
+    const committedGeometry = await readLineGeometry()
+    await undo.click()
+    await expect.poll(readLineGeometry).toEqual(originalGeometry)
+    await redo.click()
+    await expect.poll(readLineGeometry).toEqual(committedGeometry)
+    await undo.click()
+    await expect.poll(readLineGeometry).toEqual(originalGeometry)
+  }
   await openEditTools()
   await page.getByRole('button', { name: 'แสดงตัวอย่างการจัดแนว' }).click()
   await expect(preview).toBeVisible()
   await page.getByRole('button', { name: 'ยกเลิก' }).click()
   await expect(preview).toHaveCount(0)
+
+  await commitAndUndoRedo('แสดงตัวอย่างการจัดแนว', geometry => {
+    const leftEdges = geometry.map(line => Math.min(line.start[0], line.end[0]))
+    return Math.abs(leftEdges[0] - leftEdges[1]) <= 1
+  })
 
   await openEditTools()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Offset' }).click()
@@ -1920,11 +1957,21 @@ test('Project Browser previews align, offset, and mirror, then joins line object
   await page.getByRole('button', { name: 'ยกเลิก' }).click()
   await expect(preview).toHaveCount(0)
 
+  await commitAndUndoRedo('แสดงตัวอย่าง Offset', geometry => {
+    const dx = geometry.map((line, index) => line.start[0] - originalGeometry![index].start[0])
+    const dy = geometry.map((line, index) => line.start[1] - originalGeometry![index].start[1])
+    return Math.hypot(dx[0], dy[0]) > 1 && Math.abs(dx[0] - dx[1]) <= 1 && Math.abs(dy[0] - dy[1]) <= 1
+  })
+
   await openEditTools()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Mirror' }).click()
   await expect(preview).toBeVisible()
   await page.getByRole('button', { name: 'ยกเลิก' }).click()
   await expect(preview).toHaveCount(0)
+
+  await commitAndUndoRedo('แสดงตัวอย่าง Mirror', geometry =>
+    JSON.stringify(geometry) !== JSON.stringify(originalGeometry),
+  )
 
   await openEditTools()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Join' }).click()
@@ -1932,13 +1979,12 @@ test('Project Browser previews align, offset, and mirror, then joins line object
   await page.getByRole('button', { name: 'ยืนยัน · Undo ได้' }).click()
   await expect(walls).toHaveCount(1)
   await expect(page.locator(`li[data-object-id="${ids[0]}"]`)).toBeVisible()
-  const undo = page.getByRole('button', { name: 'ย้อนกลับ' })
   await expect(undo).toBeEnabled()
   await undo.click()
   await expect(walls).toHaveCount(2)
   await expect(page.locator(`li[data-object-id="${ids[0]}"]`)).toBeVisible()
   await expect(page.locator(`li[data-object-id="${ids[1]}"]`)).toBeVisible()
-  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await redo.click()
   await expect(walls).toHaveCount(1)
   await expect(page.locator(`li[data-object-id="${ids[0]}"]`)).toBeVisible()
 })
