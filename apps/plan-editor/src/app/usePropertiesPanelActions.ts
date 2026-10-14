@@ -14,7 +14,6 @@ import {
   type RemovalPhase,
   type StairModuleData,
 } from '@constructflow/project-model'
-import { CommandBus } from '../commands/CommandBus.js'
 import type { PropertiesPanelProps } from '../components/PropertiesPanel.types.js'
 import type { useProjectSession } from './useProjectSession.js'
 
@@ -51,8 +50,6 @@ type PanelActions = Pick<PropertiesPanelProps,
 
 interface UsePropertiesPanelActionsOptions {
   project: ProjectDocument
-  setProject: ProjectSession['setProject']
-  setCommandQueue: ProjectSession['setCommandQueue']
   dispatchCommandBatch: ProjectSession['dispatchCommandBatch']
   setFileFeedback: (message: string) => void
   setSelectedId: (id: string | null) => void
@@ -60,16 +57,11 @@ interface UsePropertiesPanelActionsOptions {
 }
 
 /** Keeps property-edit command construction beside the panel contract, outside App's workbench orchestration. */
-export function usePropertiesPanelActions({ project, setProject, setCommandQueue, dispatchCommandBatch, setFileFeedback, setSelectedId, setSelectedIds }: UsePropertiesPanelActionsOptions): PanelActions {
+export function usePropertiesPanelActions({ project, dispatchCommandBatch, setFileFeedback, setSelectedId, setSelectedIds }: UsePropertiesPanelActionsOptions): PanelActions {
   const applyCommand = (commandName: string, input: Record<string, unknown>) => {
-    const result = CommandBus.execute(project, commandName, input)
-    if (result.result.status === 'success') {
-      setProject(result.updatedProject)
-      if (result.emittedEnvelope) {
-        setCommandQueue(queue => [...queue, result.emittedEnvelope!])
-      }
-    } else if (result.result.errors?.length) {
-      setFileFeedback(result.result.errors.join(' · '))
+    const result = dispatchCommandBatch([{ name: commandName, input }])
+    if (result.status !== 'success' && result.errors?.length) {
+      setFileFeedback(result.errors.join(' · '))
     }
     return result
   }
@@ -199,11 +191,11 @@ export function usePropertiesPanelActions({ project, setProject, setCommandQueue
   }
   const onUpdateColumnVerticalReference: PropertiesPanelProps['onUpdateColumnVerticalReference'] = (objectId, changes) => {
     const result = applyCommand('UpdateColumnVerticalReference', { object_id: objectId, ...changes })
-    if (result.result.status !== 'success' && result.result.errors?.length) window.alert(result.result.errors.join('\n'))
+    if (result.status !== 'success' && result.errors?.length) window.alert(result.errors.join('\n'))
   }
   const onUpdateBeamVerticalReference: PropertiesPanelProps['onUpdateBeamVerticalReference'] = (objectId, changes) => {
     const result = applyCommand('UpdateBeamVerticalReference', { object_id: objectId, ...changes })
-    if (result.result.status !== 'success' && result.result.errors?.length) window.alert(result.result.errors.join('\n'))
+    if (result.status !== 'success' && result.errors?.length) window.alert(result.errors.join('\n'))
   }
   const onUpdateFoundationMark: PropertiesPanelProps['onUpdateFoundationMark'] = (objectId, newMark) => {
     applyCommand('UpdateFoundationMark', { object_id: objectId, mark: newMark })
@@ -213,7 +205,7 @@ export function usePropertiesPanelActions({ project, setProject, setCommandQueue
   }
   const onModifyGrid: PropertiesPanelProps['onModifyGrid'] = (objectId, changes) => {
     const result = applyCommand('ModifyGrid', { object_id: objectId, ...changes })
-    if (result.result.status !== 'success' && result.result.errors?.length) window.alert(result.result.errors.join('\n'))
+    if (result.status !== 'success' && result.errors?.length) window.alert(result.errors.join('\n'))
   }
   const onUpdateGridSystem: PropertiesPanelProps['onUpdateGridSystem'] = (systemId, changes) => {
     const members = Object.values(project.objects).filter(isGridObject)

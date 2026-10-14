@@ -358,7 +358,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setCommandQueue,
     setFileFeedback,
   })
-  const propertiesActions = usePropertiesPanelActions({ project, setProject, setCommandQueue, dispatchCommandBatch, setFileFeedback, setSelectedId, setSelectedIds })
+  const propertiesActions = usePropertiesPanelActions({ project, dispatchCommandBatch, setFileFeedback, setSelectedId, setSelectedIds })
   const handleSetWorkingPhase = (phase: Phase) => {
     const res = CommandBus.execute(project, 'SetWorkingPhase', { phase })
     if (res.result.status === 'success') {
