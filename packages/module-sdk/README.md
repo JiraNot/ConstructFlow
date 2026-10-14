@@ -76,13 +76,25 @@ const result = commandSession.execute([
 // Call unregister() when the host unloads the extension.
 ```
 
-The current host API loads trusted JavaScript in-process; registration checks namespaces,
-capability dependencies and object-type ownership, but this is not a security sandbox or a
-remote package installer. Declarative UI contributions reference a module-owned command and
-its input descriptor. The Plan Editor renders supported string, number, integer, boolean and
-enum fields, requires a second explicit confirmation when the descriptor requests it, and
-dispatches through the shared project command session so normal validation and Undo/Redo apply.
-The contribution schema is framework-neutral; modules do not inject React components into the
+The Plan Editor can load a self-contained ES module bundle with the `.cfe.mjs`
+extension. It reads the file as text first, enforces a 2 MB limit and no runtime
+imports, then shows the source and SHA-256 digest. The user must explicitly trust
+and install each bundle before the host imports and registers it. Modules stay
+active for the current browser session and can be unloaded from the Extensions
+panel. See [`examples/sample-package.cfe.mjs`](./examples/sample-package.cfe.mjs)
+for a bundle that can be imported directly.
+
+Loaded modules are trusted in-process JavaScript, not sandboxed. They can access
+the page's browser capabilities and current project data. The host does not yet
+provide signature verification, a remote package registry, persistent auto-load,
+or permissions isolation. Distribute bundles only through a channel where users
+can verify the publisher and source. Registration checks namespaces, capability
+dependencies and object-type ownership. Declarative UI contributions reference a
+module-owned command and its input descriptor. The Plan Editor renders supported
+string, number, integer, boolean and enum fields, requires a second explicit
+confirmation when the descriptor requests it, and dispatches through the shared
+project command session so normal validation and Undo/Redo apply. The contribution
+schema is framework-neutral; modules do not inject React components into the
 host UI.
 
 ### Object schema migrations

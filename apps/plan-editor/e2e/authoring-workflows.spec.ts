@@ -561,6 +561,49 @@ test('extension UI actions collect schema input, require confirmation, and use t
   }).toBe('extension:approved note (priority 2)')
 })
 
+test('trusted module package import registers a command and runs it through the shared undoable session', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await page.getByRole('tab', { name: 'ส่วนขยาย' }).click()
+  const manager = page.getByRole('region', { name: 'ตัวจัดการแพ็กเกจ extension' })
+  const source = `export default {
+    manifest: { id: 'sample.package', version: '1.0.0', schema_version: 1 },
+    activate({ moduleId }) {
+      const command = moduleId + '.set_project_note'
+      return {
+        commands: { [command]: context => {
+          context.updated.project.description = 'Loaded package note'
+          return { result: { status: 'success', command_id: context.command_id, command_name: context.commandName, affected_object_ids: [] }, updatedProject: context.updated, emittedEnvelope: context.envelope }
+        } },
+        commandDescriptors: [{ name: command, version: 1, owner_module: moduleId, ai_allowed: false, confirmation: 'none', input_schema: { type: 'object', properties: {} } }],
+        ui: [{ id: moduleId + '.actions', title: 'Packaged actions', actions: [{ id: moduleId + '.set_note', label: 'Set package note', command }] }],
+      }
+    },
+  }`
+  await manager.getByLabel('เลือกแพ็กเกจ extension').setInputFiles({
+    name: 'sample-package.cfe.mjs', mimeType: 'text/javascript', buffer: Buffer.from(source),
+  })
+  await expect(manager.getByText('sample-package.cfe.mjs')).toBeVisible()
+  await expect(manager.getByText(/SHA-256:/)).toBeVisible()
+  await expect(manager.getByRole('button', { name: 'เชื่อถือและติดตั้ง' })).toBeDisabled()
+  await manager.getByLabel('เชื่อถือและอนุญาตให้รัน extension').check()
+  await manager.getByRole('button', { name: 'เชื่อถือและติดตั้ง' }).click()
+  await expect(manager.getByText('sample.package@1.0.0', { exact: true })).toBeVisible()
+  const extensions = page.getByRole('region', { name: 'Extension actions' })
+  await extensions.getByRole('button', { name: 'ตรวจสอบและส่งคำสั่ง' }).click()
+  const readDescription = async () => {
+    const raw = await readStoredProjectJson(page)
+    return raw ? (JSON.parse(raw) as { project: { description: string } }).project.description : null
+  }
+  await expect.poll(readDescription).toBe('Loaded package note')
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(readDescription).not.toBe('Loaded package note')
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(readDescription).toBe('Loaded package note')
+  await manager.getByRole('button', { name: 'ถอด sample.package' }).click()
+  await expect(manager.getByText('sample.package@1.0.0', { exact: true })).toHaveCount(0)
+})
+
 test('synthetic 600-wall project supports browser search, persistent selection, cross-view navigation, and reload', async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import type { CommandBatchResult, CommandRequest } from '@constructflow/command-schema'
 import type { ModuleCommandDescriptor, ModuleUIActionContribution, ModuleUIContribution } from '@constructflow/module-sdk'
+import { ExtensionPackageManager } from './ExtensionPackageManager.js'
 
 type InputProperty = { type?: unknown; title?: unknown; description?: unknown; enum?: unknown; default?: unknown }
 
@@ -107,8 +108,9 @@ export interface ModuleExtensionsPanelProps {
 /** Framework-neutral extension action descriptors rendered by the host through its normal command session. */
 export const ModuleExtensionsPanel: React.FC<ModuleExtensionsPanelProps> = ({ contributions, commandDescriptors, onExecute }) => {
   const descriptors = useMemo(() => new Map(commandDescriptors.map(descriptor => [descriptor.name, descriptor])), [commandDescriptors])
-  if (!contributions.length) return <section className="cf-inspector-content"><p>ยังไม่มี extension ที่เพิ่มคำสั่งในแผงนี้</p></section>
   return <section className="cf-inspector-content" aria-label="Extension actions">
+    <ExtensionPackageManager />
+    {!contributions.length && <p>ยังไม่มี extension ที่เพิ่มคำสั่งในแผงนี้</p>}
     {contributions.map(contribution => <section key={contribution.id} aria-label={contribution.title} style={{ marginBottom: 14 }}>
       <h3 style={{ margin: '4px 0', fontSize: 13 }}>{contribution.title}</h3>
       {contribution.description && <p style={{ color: '#64748b', fontSize: 11 }}>{contribution.description}</p>}
