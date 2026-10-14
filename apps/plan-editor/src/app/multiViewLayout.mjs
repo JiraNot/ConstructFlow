@@ -4,8 +4,44 @@ const clampPrimaryPanePercent = value => Number.isFinite(value)
 
 const track = weight => `minmax(0, ${weight}fr)`
 
+export function getMultiViewTrackShares(trackCount, storedShares = [], fallbackFirstShare = 50) {
+  if (!Number.isInteger(trackCount) || trackCount < 1) return []
+  if (storedShares.length === trackCount && storedShares.every(value => Number.isFinite(value) && value > 0)) {
+    const total = storedShares.reduce((sum, value) => sum + value, 0)
+    return storedShares.map(value => Math.round((value / total) * 100_000) / 1_000)
+  }
+  if (trackCount === 1) return [100]
+  const firstShare = Math.max(8, Math.min(92 - (trackCount - 2) * 8, fallbackFirstShare))
+  const remainder = 100 - firstShare
+  return [firstShare, ...Array.from({ length: trackCount - 1 }, () => remainder / (trackCount - 1))]
+}
+
+export function getMultiViewTrackBoundaries(shares) {
+  let position = 0
+  return shares.slice(0, -1).map(share => (position += share))
+}
+
+export function getMultiViewTrackBoundaryRange(shares, boundaryIndex, minTrackShare = 8) {
+  const before = shares.slice(0, boundaryIndex).reduce((sum, share) => sum + share, 0)
+  const pairShare = (shares[boundaryIndex] ?? 0) + (shares[boundaryIndex + 1] ?? 0)
+  return { min: before + minTrackShare, max: before + pairShare - minTrackShare }
+}
+
+export function resizeMultiViewTrackBoundary(shares, boundaryIndex, position, minTrackShare = 8) {
+  if (boundaryIndex < 0 || boundaryIndex >= shares.length - 1 || !Number.isFinite(position)) return shares
+  const range = getMultiViewTrackBoundaryRange(shares, boundaryIndex, minTrackShare)
+  const nextBoundary = Math.max(range.min, Math.min(range.max, position))
+  const before = shares.slice(0, boundaryIndex).reduce((sum, share) => sum + share, 0)
+  const pairShare = shares[boundaryIndex] + shares[boundaryIndex + 1]
+  const firstShare = nextBoundary - before
+  const nextShares = [...shares]
+  nextShares[boundaryIndex] = firstShare
+  nextShares[boundaryIndex + 1] = pairShare - firstShare
+  return nextShares
+}
+
 /** Build CSS grid tracks for the currently supported multiview arrangements. */
-export function buildMultiViewGridTracks(paneCount, layout, primaryPanePercent = 50, customColumnCount = 2) {
+export function buildMultiViewGridTracks(paneCount, layout, primaryPanePercent = 50, customColumnCount = 2, customColumnShares = [], customRowShares = []) {
   if (![2, 3, 4].includes(paneCount) || !['columns', 'rows', 'focus', 'grid', 'custom'].includes(layout)) {
     return { columns: 'minmax(0, 1fr)', rows: 'minmax(0, 1fr)' }
   }
@@ -14,15 +50,11 @@ export function buildMultiViewGridTracks(paneCount, layout, primaryPanePercent =
       ? Math.max(1, Math.min(paneCount, Math.round(customColumnCount)))
       : 2
     const rows = Math.ceil(paneCount / columns)
-    const primary = clampPrimaryPanePercent(primaryPanePercent)
-    const remainder = 100 - primary
+    const columnShares = getMultiViewTrackShares(columns, customColumnShares, primaryPanePercent)
+    const rowShares = getMultiViewTrackShares(rows, customRowShares, columns === 1 ? primaryPanePercent : 100 / rows)
     return {
-      columns: columns === 1
-        ? 'minmax(0, 1fr)'
-        : [primary, ...Array.from({ length: columns - 1 }, () => remainder / (columns - 1))].map(track).join(' '),
-      rows: columns === 1
-        ? [primary, ...Array.from({ length: rows - 1 }, () => remainder / (rows - 1))].map(track).join(' ')
-        : `repeat(${rows}, minmax(0, 1fr))`,
+      columns: columnShares.map(track).join(' '),
+      rows: rowShares.map(track).join(' '),
     }
   }
   const primary = clampPrimaryPanePercent(primaryPanePercent)

@@ -10,6 +10,8 @@ export interface MultiViewPreferences {
   paneCount: SplitViewPaneCount
   layout: SplitViewLayout
   customColumnCount: number
+  customColumnShares: number[]
+  customRowShares: number[]
   paneOrder: SplitViewPaneSlot[]
   primaryPanePercent: number
   secondaryViewMode: EditorViewMode
@@ -25,6 +27,8 @@ const DEFAULT_PREFERENCES: MultiViewPreferences = {
   paneCount: 2,
   layout: 'columns',
   customColumnCount: 2,
+  customColumnShares: [],
+  customRowShares: [],
   paneOrder: PANE_SLOTS,
   primaryPanePercent: 50,
   secondaryViewMode: 'model3d',
@@ -57,6 +61,12 @@ function loadPreferences(projectId: string): MultiViewPreferences {
     const customColumnCount = typeof stored.customColumnCount === 'number' && Number.isFinite(stored.customColumnCount)
       ? Math.max(1, Math.min(paneCount, Math.round(stored.customColumnCount)))
       : DEFAULT_PREFERENCES.customColumnCount
+    const validShares = (value: unknown) => Array.isArray(value) && value.length <= 4
+      && value.every(share => typeof share === 'number' && Number.isFinite(share) && share > 0)
+      ? value as number[]
+      : []
+    const customColumnShares = validShares(stored.customColumnShares)
+    const customRowShares = validShares(stored.customRowShares)
     const storedPaneOrder = Array.isArray(stored.paneOrder)
       ? stored.paneOrder.filter((slot): slot is SplitViewPaneSlot => PANE_SLOTS.includes(slot as SplitViewPaneSlot))
       : []
@@ -66,6 +76,8 @@ function loadPreferences(projectId: string): MultiViewPreferences {
       paneCount,
       layout,
       customColumnCount,
+      customColumnShares,
+      customRowShares,
       paneOrder,
       primaryPanePercent,
       secondaryViewMode: isViewMode(stored.secondaryViewMode) ? stored.secondaryViewMode : DEFAULT_PREFERENCES.secondaryViewMode,

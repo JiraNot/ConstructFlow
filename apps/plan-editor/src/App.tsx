@@ -45,7 +45,7 @@ import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
 import { useReferenceDataImportActions } from './app/useReferenceDataImportActions.js'
 import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcuts.js'
 import { useMultiViewPreferences, type EditorViewMode, type SplitViewLayout, type SplitViewPaneCount, type SplitViewPaneSlot } from './app/useMultiViewPreferences.js'
-import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle, moveMultiViewPane, reorderMultiViewPane } from './app/multiViewLayout.mjs'
+import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle, getMultiViewTrackBoundaryRange, getMultiViewTrackBoundaries, getMultiViewTrackShares, moveMultiViewPane, reorderMultiViewPane, resizeMultiViewTrackBoundary } from './app/multiViewLayout.mjs'
 import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 import { createElevationObjectCommandHandler } from './app/elevationObjectCommands.js'
 import { MultiViewResizeHandle } from './components/MultiViewResizeHandle.js'
@@ -127,8 +127,13 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [viewMode, setViewMode] = useState<EditorViewMode>('plan')
   const [multiViewPreferences, setMultiViewPreferences] = useMultiViewPreferences(project.project.id)
   const { enabled: splitViewEnabled, paneCount: splitViewPaneCount, layout: splitViewLayout,
-    customColumnCount, paneOrder, primaryPanePercent, secondaryViewMode, tertiaryViewMode, fourthViewMode } = multiViewPreferences
-  const splitViewTracks = buildMultiViewGridTracks(splitViewPaneCount, splitViewLayout, primaryPanePercent, customColumnCount)
+    customColumnCount, customColumnShares, customRowShares, paneOrder, primaryPanePercent, secondaryViewMode, tertiaryViewMode, fourthViewMode } = multiViewPreferences
+  const customRowCount = Math.ceil(splitViewPaneCount / customColumnCount)
+  const customColumnTrackShares = getMultiViewTrackShares(customColumnCount, customColumnShares, primaryPanePercent)
+  const customRowTrackShares = getMultiViewTrackShares(customRowCount, customRowShares, customColumnCount === 1 ? primaryPanePercent : 100 / customRowCount)
+  const customColumnBoundaries = getMultiViewTrackBoundaries(customColumnTrackShares)
+  const customRowBoundaries = getMultiViewTrackBoundaries(customRowTrackShares)
+  const splitViewTracks = buildMultiViewGridTracks(splitViewPaneCount, splitViewLayout, primaryPanePercent, customColumnCount, customColumnShares, customRowShares)
   const splitViewGridStyle = splitViewEnabled ? {
     display: 'grid',
     gridTemplateColumns: splitViewTracks.columns,
@@ -157,6 +162,24 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     ...current,
     paneOrder: reorderMultiViewPane(current.paneOrder, source, target, current.paneCount),
   }))
+  const resizePaneTrack = (axis: 'column' | 'row', boundaryIndex: number, position: number) => setMultiViewPreferences(current => {
+    const columns = Math.max(1, Math.min(current.paneCount, Math.round(current.customColumnCount)))
+    const rows = Math.ceil(current.paneCount / columns)
+    const isColumn = axis === 'column'
+    const trackCount = isColumn ? columns : rows
+    const shares = getMultiViewTrackShares(
+      trackCount,
+      isColumn ? current.customColumnShares : current.customRowShares,
+      isColumn || columns === 1 ? current.primaryPanePercent : 100 / rows,
+    )
+    const nextShares = resizeMultiViewTrackBoundary(shares, boundaryIndex, position)
+    const primaryPanePercent = boundaryIndex === 0 && (isColumn || columns === 1)
+      ? Math.max(30, Math.min(70, Math.round(nextShares[0])))
+      : current.primaryPanePercent
+    return isColumn
+      ? { ...current, customColumnShares: nextShares, primaryPanePercent }
+      : { ...current, customRowShares: nextShares, primaryPanePercent }
+  })
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
     if (['beam', 'foundation'].includes(activeTool)) setViewMode('framing')
@@ -813,7 +836,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                     {Array.from({ length: splitViewPaneCount }, (_, index) => index + 1).map(count => <option key={count} value={count}>{count} คอลัมน์</option>)}
                   </select>
                 </label>}
-                {splitViewEnabled && <label>สัดส่วน pane หลัก · {primaryPanePercent}%
+                {splitViewEnabled && splitViewLayout !== 'custom' && <label>สัดส่วน pane หลัก · {primaryPanePercent}%
                   <input aria-label="สัดส่วน pane หลัก" type="range" min={30} max={70} step={1} value={primaryPanePercent}
                     onChange={event => setMultiViewPreferences(current => ({ ...current, primaryPanePercent: Number(event.target.value) }))} />
                 </label>}
@@ -898,11 +921,32 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               >⠿</span>}
               {renderEditorView(paneViewModes[slot], slot !== 'primary')}
             </div>)}
-            {splitViewEnabled && splitViewLayout === 'custom' && <MultiViewResizeHandle
-              orientation={customColumnCount === 1 ? 'horizontal' : 'vertical'}
-              value={primaryPanePercent}
-              onChange={value => setMultiViewPreferences(current => ({ ...current, primaryPanePercent: value }))}
-            />}
+            {splitViewEnabled && splitViewLayout === 'custom' && <>
+              {customColumnBoundaries.map((value, index) => {
+                const range = getMultiViewTrackBoundaryRange(customColumnTrackShares, index)
+                return <MultiViewResizeHandle
+                  key={`column-${index}`}
+                  orientation="vertical"
+                  value={value}
+                  min={range.min}
+                  max={range.max}
+                  label={`ปรับสัดส่วนระหว่างคอลัมน์ ${index + 1} และ ${index + 2}`}
+                  onChange={position => resizePaneTrack('column', index, position)}
+                />
+              })}
+              {customRowBoundaries.map((value, index) => {
+                const range = getMultiViewTrackBoundaryRange(customRowTrackShares, index)
+                return <MultiViewResizeHandle
+                  key={`row-${index}`}
+                  orientation="horizontal"
+                  value={value}
+                  min={range.min}
+                  max={range.max}
+                  label={`ปรับสัดส่วนระหว่างแถว ${index + 1} และ ${index + 2}`}
+                  onChange={position => resizePaneTrack('row', index, position)}
+                />
+              })}
+            </>}
           </div>
 
           {/* Bottom Coordinate Bar */}
