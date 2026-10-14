@@ -121,6 +121,24 @@ test('six-view sheet layouts use compact A3 rows with six distinct default frame
   }
 })
 
+test('eight-view sheet layouts fit distinct default frames within A3 paper', () => {
+  const viewKinds = ['north', 'south', 'east', 'west', 'section_x', 'section_y', 'rcp', 'isometric']
+  const sheet = compilePermitDrawingSet(createEmptyProjectDocument('EIGHT-SHEET-VIEWS'), { viewports: {
+    'A-05': { scale_denominator: 100, view_layout: viewKinds, subviews: viewKinds.slice(1).map(() => ({ scale_denominator: 100 })) },
+  } }).sheets.find(item => item.id === 'A-05')
+  const frames = viewKinds.map((_, index) => getPermitViewportPaperFrame('A-05', index, viewKinds.length))
+
+  assert.deepEqual(sheet.viewport.view_layout, viewKinds)
+  assert.equal(frames.length, 8)
+  assert.equal(new Set(frames.map(frame => `${frame.x},${frame.y}`)).size, 8)
+  for (const frame of frames) {
+    assert.ok(frame.x >= 0 && frame.y >= 0)
+    assert.ok(frame.x + frame.width <= 420)
+    assert.ok(frame.y + frame.height <= 297)
+    assert.ok(frame.height >= 50)
+  }
+})
+
 test("Phase 6: saved sheet settings control the compiler and invalid coordinate lengths reject", () => {
   const p = createEmptyProjectDocument("PDF-PROOF");
   p.drawing_settings = {

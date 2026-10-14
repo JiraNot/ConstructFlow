@@ -1017,7 +1017,7 @@ export function ConstructionWorkbench({
     setSubviewViewports(current => current.filter((_, itemIndex) => itemIndex !== index - 1));
   };
   const addViewport = () => {
-    if (sheetViewLayout.length >= 6) return;
+    if (sheetViewLayout.length >= 8) return;
     setSheetViewLayout(current => [...current, newSheetViewKind]);
     setSubviewViewports(current => [...current, { scale_denominator: scale }]);
   };
@@ -1457,7 +1457,7 @@ export function ConstructionWorkbench({
                     {SHEET_VIEW_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </label>
-                <button type="button" disabled={sheetViewLayout.length >= 6} onClick={addViewport}>เพิ่ม Viewport</button>
+                <button type="button" disabled={sheetViewLayout.length >= 8} onClick={addViewport}>เพิ่ม Viewport</button>
               </section>
               {(/^A-(02|03)(-L\d+)?$/.test(sheetId)) && <section style={{ marginTop: 18, borderTop: "1px solid #dbe3ed", paddingTop: 12 }}>
                 <h3>ตำแหน่งมิติอัตโนมัติ</h3>

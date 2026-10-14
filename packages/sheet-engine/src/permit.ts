@@ -132,7 +132,10 @@ export function getPermitViewportPaperFrame(
   if (viewCount >= 5) {
     const column = viewIndex % 2
     const row = Math.floor(viewIndex / 2)
-    return { x: 18 + column * 195, y: 34 + row * 78, width: 180, height: 70 }
+    const rowCount = Math.ceil(viewCount / 2)
+    const rowGap = 6
+    const frameHeight = Math.min(70, (297 - 34 - 15 - (rowCount - 1) * rowGap) / rowCount)
+    return { x: 18 + column * 195, y: 34 + row * (frameHeight + rowGap), width: 180, height: frameHeight }
   }
   if (viewCount >= 3) {
     const column = viewIndex % 2
