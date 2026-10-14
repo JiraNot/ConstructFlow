@@ -4,6 +4,7 @@ import type { StairPlacementOptions } from '@constructflow/architecture-engine'
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
 import type { ToolType } from './Toolbar.js'
 import type { BeamPlacementStart, WallPlacementStart } from './commitPlanCanvasLinePlacementPoint.js'
+import { reformatPlacementLengthInput } from './reformatPlacementLengthInput.mjs'
 
 type Point = [number, number]
 
@@ -97,9 +98,9 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
     }).join(', ')
     setGridXIntervals(convert(gridXIntervals))
     setGridYIntervals(convert(gridYIntervals))
-    setDimensionInputX(value => value.trim() ? formatLengthMm(parseLengthMm(value, previousUnit) ?? 0, displayUnit) : '')
-    setDimensionInputY(value => value.trim() ? formatLengthMm(parseLengthMm(value, previousUnit) ?? 0, displayUnit) : '')
-    setDrawLengthMeters(value => value.trim() ? formatLengthMm(parseLengthMm(value, previousUnit) ?? 0, displayUnit) : '')
+    setDimensionInputX(value => reformatPlacementLengthInput(value, previousUnit, displayUnit))
+    setDimensionInputY(value => reformatPlacementLengthInput(value, previousUnit, displayUnit))
+    setDrawLengthMeters(value => reformatPlacementLengthInput(value, previousUnit, displayUnit))
     previousDisplayUnit.current = displayUnit
   }, [displayUnit])
 
