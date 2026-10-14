@@ -29,6 +29,24 @@ export type ModuleValidator = (
   project: ProjectDocument,
 ) => readonly ModuleValidationIssue[];
 
+export interface ModuleMigrationContext {
+  project_id: string;
+  object_id: string;
+  object_type: string;
+  from_schema_version: number;
+  to_schema_version: number;
+}
+
+/** Deterministic, object-local schema migration. The host preserves object identity and relationships. */
+export interface ModuleSchemaMigration {
+  from_version: number;
+  to_version: number;
+  migrate: (
+    data: Readonly<Record<string, unknown>>,
+    context: Readonly<ModuleMigrationContext>,
+  ) => Record<string, unknown>;
+}
+
 export interface ModuleCommandDescriptor {
   name: string;
   version: number;
@@ -50,6 +68,7 @@ export interface ModuleContribution {
   commandDescriptors?: readonly ModuleCommandDescriptor[];
   providers?: Readonly<Record<string, DomainProvider>>;
   validators?: Readonly<Record<string, ModuleValidator>>;
+  migrations?: readonly ModuleSchemaMigration[];
 }
 
 export interface ModuleHostApi {
@@ -118,6 +137,17 @@ export class ModuleRegistry {
       for (const [name, validator] of Object.entries(contribution.validators ?? {}))
         if (!name.startsWith(`${manifest.id}.`) || typeof validator !== "function")
           throw new Error(`Validator ${name} must be namespaced under ${manifest.id}.`);
+      const migrationSources = new Set<number>();
+      for (const migration of contribution.migrations ?? []) {
+        if (!Number.isInteger(migration.from_version) || migration.from_version < 1
+          || migration.to_version !== migration.from_version + 1
+          || migration.to_version > manifest.schema_version
+          || typeof migration.migrate !== "function")
+          throw new Error(`Module ${manifest.id} has an invalid schema migration`);
+        if (migrationSources.has(migration.from_version))
+          throw new Error(`Module ${manifest.id} has duplicate migration from schema ${migration.from_version}`);
+        migrationSources.add(migration.from_version);
+      }
       const descriptorNames = new Set<string>();
       for (const descriptor of contribution.commandDescriptors ?? []) {
         if (!descriptor.name.startsWith(`${manifest.id}.`) || !contribution.commands[descriptor.name])
@@ -194,6 +224,47 @@ export class ModuleRegistry {
     return [...this.modules.values()].flatMap(({ contribution }) =>
       Object.values(contribution.validators ?? {}).flatMap((validator) => validator(project)),
     );
+  }
+
+  /** Upgrade extension-owned object data before the host validates and opens a project. */
+  migrateProject(project: ProjectDocument): ProjectDocument {
+    let migrated: ProjectDocument | undefined;
+    for (const [moduleId, { module, contribution }] of this.modules) {
+      const targetVersion = module.manifest.schema_version;
+      const migrations = new Map((contribution.migrations ?? []).map(migration => [migration.from_version, migration]));
+      const sourceObjects = migrated?.objects ?? project.objects;
+      for (const object of Object.values(sourceObjects)) {
+        if (object.owner_module !== moduleId) continue;
+        if (!Number.isInteger(object.schema_version) || object.schema_version < 1)
+          throw new Error(`Object ${object.id} has an invalid schema version for ${moduleId}`);
+        if (object.schema_version > targetVersion)
+          throw new Error(`Object ${object.id} uses newer ${moduleId} schema ${object.schema_version}; host supports ${targetVersion}`);
+        if (object.schema_version === targetVersion) continue;
+
+        let version = object.schema_version;
+        let data = structuredClone(object.module_data) as Record<string, unknown>;
+        while (version < targetVersion) {
+          const migration = migrations.get(version);
+          if (!migration)
+            throw new Error(`Module ${moduleId} is missing migration ${version} → ${version + 1} for object ${object.id}`);
+          const next = migration.migrate(structuredClone(data), Object.freeze({
+            project_id: project.project.id,
+            object_id: object.id,
+            object_type: object.object_type,
+            from_schema_version: version,
+            to_schema_version: migration.to_version,
+          }));
+          if (!next || typeof next !== "object" || Array.isArray(next))
+            throw new Error(`Module ${moduleId} migration ${version} → ${migration.to_version} returned invalid object data`);
+          data = structuredClone(next);
+          version = migration.to_version;
+        }
+
+        migrated ??= structuredClone(project);
+        migrated.objects[object.id] = { ...object, schema_version: version, module_data: data };
+      }
+    }
+    return migrated ?? project;
   }
 
   providers(): ReadonlyArray<{ id: string; provide: DomainProvider }> {

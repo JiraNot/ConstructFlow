@@ -16,6 +16,8 @@ export {
   type ModuleContribution,
   type ModuleHostApi,
   type ModuleManifest,
+  type ModuleMigrationContext,
+  type ModuleSchemaMigration,
   type ModuleValidationIssue,
   type ModuleValidator,
 } from "./registry.js";

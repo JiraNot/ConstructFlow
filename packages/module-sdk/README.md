@@ -68,7 +68,31 @@ const result = commandSession.execute([
 
 The current host API loads trusted JavaScript in-process; registration checks namespaces,
 capability dependencies and object-type ownership, but this is not a security sandbox or a
-remote package installer. UI contributions and migration execution remain host integration work.
+remote package installer. UI contributions remain host integration work.
+
+### Object schema migrations
+
+Modules may contribute deterministic, one-version-at-a-time migrations for their
+owned objects. The host runs `CommandBus.migrateProject(project)` after decoding a
+project and before domain validation or opening it. The SDK clones the input data,
+passes stable project/object identity and source/target versions to each migration,
+updates only `module_data` and `schema_version`, then validates the migrated
+project. UUIDs, ownership, level/host references and relationships are preserved.
+
+```ts
+migrations: [{
+  from_version: 1,
+  to_version: 2,
+  migrate(data) {
+    const { legacy_note, ...rest } = data;
+    return { ...rest, note: legacy_note };
+  },
+}]
+```
+
+Migration functions should be pure and deterministic. The host rejects missing
+steps, invalid output, or objects newer than the registered module schema; the
+original project document is not modified on success or failure.
 
 ## Module responsibilities
 

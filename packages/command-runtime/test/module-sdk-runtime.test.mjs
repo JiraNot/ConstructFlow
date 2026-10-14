@@ -164,3 +164,89 @@ test('extension handlers receive an isolated project and must return attributabl
     unregister()
   }
 })
+
+test('module schema migrations upgrade owned object data before project validation without changing identity', () => {
+  const initial = createDefaultResidentialProjectDocument('sdk-migration-project')
+  const created = CommandBus.execute(initial, 'CreateColumn', {
+    id: crypto.randomUUID(), mark: 'C1', location_mm: [0, 0, 0], section_mm: [200, 200],
+  })
+  assert.equal(created.result.status, 'success')
+  const project = created.updatedProject
+  const object = structuredClone(Object.values(project.objects)[0])
+  const objectId = object.id
+  object.object_type = 'vendor.migrations.annotation'
+  object.owner_module = 'vendor.migrations'
+  object.schema_version = 1
+  object.module_data = { legacy_note: 'permit note' }
+  object.host_refs = []
+  project.objects[object.id] = object
+  const migrationContexts = []
+  const unregister = CommandBus.registerModule({
+    manifest: {
+      id: 'vendor.migrations', version: '1.0.0', schema_version: 3,
+      object_types: ['vendor.migrations.annotation'],
+    },
+    activate: () => ({
+      commands: {},
+      migrations: [
+        {
+          from_version: 1, to_version: 2,
+          migrate: (data, context) => {
+            migrationContexts.push(context)
+            const { legacy_note, ...rest } = data
+            return { ...rest, note: legacy_note }
+          },
+        },
+        {
+          from_version: 2, to_version: 3,
+          migrate: (data, context) => {
+            migrationContexts.push(context)
+            return { ...data, annotation_kind: 'general' }
+          },
+        },
+      ],
+    }),
+  })
+  try {
+    const migrated = CommandBus.migrateProject(project)
+    const upgraded = migrated.objects[objectId]
+    assert.equal(project.objects[objectId].schema_version, 1)
+    assert.deepEqual(project.objects[objectId].module_data, { legacy_note: 'permit note' })
+    assert.equal(upgraded.id, objectId)
+    assert.equal(upgraded.owner_module, 'vendor.migrations')
+    assert.deepEqual(upgraded.host_refs, object.host_refs)
+    assert.equal(upgraded.schema_version, 3)
+    assert.deepEqual(upgraded.module_data, { note: 'permit note', annotation_kind: 'general' })
+    assert.deepEqual(migrationContexts.map(context => [context.from_schema_version, context.to_schema_version]), [[1, 2], [2, 3]])
+    assert.ok(migrationContexts.every(context => context.object_id === objectId && context.project_id === project.project.id))
+  } finally {
+    unregister()
+  }
+})
+
+test('module migration failures reject without mutating the original project', () => {
+  const initial = createDefaultResidentialProjectDocument('sdk-migration-failure-project')
+  const created = CommandBus.execute(initial, 'CreateColumn', {
+    id: crypto.randomUUID(), mark: 'C1', location_mm: [0, 0, 0], section_mm: [200, 200],
+  })
+  assert.equal(created.result.status, 'success')
+  const project = created.updatedProject
+  const object = structuredClone(Object.values(project.objects)[0])
+  object.object_type = 'vendor.incomplete.annotation'
+  object.owner_module = 'vendor.incomplete'
+  object.schema_version = 1
+  object.module_data = { value: 'old' }
+  object.host_refs = []
+  project.objects[object.id] = object
+  const snapshot = structuredClone(project)
+  const unregister = CommandBus.registerModule({
+    manifest: { id: 'vendor.incomplete', version: '1.0.0', schema_version: 2 },
+    activate: () => ({ commands: {} }),
+  })
+  try {
+    assert.throws(() => CommandBus.migrateProject(project), /missing migration 1 → 2/)
+    assert.deepEqual(project, snapshot)
+  } finally {
+    unregister()
+  }
+})

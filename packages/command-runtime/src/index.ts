@@ -34,6 +34,13 @@ export class CommandBus {
     return extensionModules.register(module)
   }
 
+  /** Apply registered extension schema migrations before validating/opening a saved project. */
+  static migrateProject(project: ProjectDocument): ProjectDocument {
+    const migrated = extensionModules.migrateProject(project)
+    validateProjectV2(migrated)
+    return migrated
+  }
+
   static getRegisteredModules() {
     return extensionModules.list()
   }
