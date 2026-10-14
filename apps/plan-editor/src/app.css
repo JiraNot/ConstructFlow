@@ -504,6 +504,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-browser-edit-tools .cf-browser-array { margin-top:6px; }
 .cf-browser-tree { min-height:0; flex:1; overflow:auto; border-top:1px solid #e8edf2; }
 .cf-browser-tree details { border-bottom:1px solid #edf1f5; }
+.cf-browser-virtual-spacer { position:relative; min-width:0; }
+.cf-browser-virtual-family, .cf-browser-virtual-object { position:absolute; left:0; right:0; display:flex; width:100%; min-width:0; align-items:center; border:0; border-bottom:1px solid #edf1f5; background:#fff; }
+.cf-browser-virtual-family { justify-content:space-between; padding:0 4px; color:#526a83; font-size:10px; font-weight:700; text-align:left; cursor:pointer; }
+.cf-browser-virtual-family small { color:#8b9aac; font-size:9px; }
+.cf-browser-virtual-object { gap:3px; border-radius:3px; }
+.cf-browser-virtual-object.is-selected { background:#eaf5ff; }
+.cf-browser-virtual-object .cf-browser-object { padding-left:12px; }
 .cf-browser-tree summary { display:flex; align-items:center; justify-content:space-between; padding:7px 3px; color:#526a83; font-size:10px; font-weight:700; cursor:pointer; }
 .cf-browser-tree summary small { color:#8b9aac; font-size:9px; }
 .cf-browser-tree ul { margin:0; padding:0 0 4px 9px; list-style:none; }

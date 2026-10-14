@@ -386,6 +386,59 @@ test('synthetic 600-wall project supports browser search, persistent selection, 
   })
 })
 
+test('synthetic 4,780-wall project restores, searches, selects, and preserves UUID through reload', async ({ page }) => {
+  test.setTimeout(240_000)
+  const testStartedAt = Date.now()
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await seedLocalProjectSnapshot(page, createSyntheticPlanStressProject(4780))
+  const restoreStartedAt = Date.now()
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 60_000 })
+  const firstRestoreMs = Date.now() - restoreStartedAt
+  console.log(`[browser-stress-stage] ${JSON.stringify({ stage: 'first-restore', elapsed_ms: Date.now() - testStartedAt })}`)
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const browser = page.getByLabel('Project Browser')
+  await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  const tree = browser.locator('.cf-browser-tree')
+  await expect(tree).toHaveAttribute('data-object-count', '4780')
+  const rows = tree.locator('[data-object-id]')
+  await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill('STRESS-4780')
+  await expect(rows).toHaveCount(1)
+  console.log(`[browser-stress-stage] ${JSON.stringify({ stage: 'browser-search', elapsed_ms: Date.now() - testStartedAt })}`)
+  const objectId = await rows.first().getAttribute('data-object-id')
+  expect(objectId).toBeTruthy()
+  await rows.first().locator('.cf-browser-object').click()
+  const primaryPane = page.locator('.cf-multiview-pane').first()
+  await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
+  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', objectId!)
+
+  const savedProjectJson = await readStoredProjectJson(page)
+  expect(savedProjectJson).toBeTruthy()
+  const savedProject = JSON.parse(savedProjectJson!) as { objects: Record<string, unknown> }
+  expect(Object.keys(savedProject.objects)).toHaveLength(4780)
+  expect(savedProject.objects[objectId!]).toBeTruthy()
+  console.log(`[browser-stress-stage] ${JSON.stringify({ stage: 'selected-and-persisted', elapsed_ms: Date.now() - testStartedAt })}`)
+
+  const reloadStartedAt = Date.now()
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 90_000 })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const restoredBrowser = page.getByLabel('Project Browser')
+  await restoredBrowser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  const restoredTree = restoredBrowser.locator('.cf-browser-tree')
+  await expect(restoredTree).toHaveAttribute('data-object-count', '4780')
+  const restoredProjectJson = await readStoredProjectJson(page)
+  expect(restoredProjectJson).toBeTruthy()
+  const restoredProject = JSON.parse(restoredProjectJson!) as { objects: Record<string, unknown> }
+  expect(Object.keys(restoredProject.objects)).toHaveLength(4780)
+  expect(restoredProject.objects[objectId!]).toBeTruthy()
+  const reloadRestoreMs = Date.now() - reloadStartedAt
+  console.log(`[browser-stress] ${JSON.stringify({ object_count: 4780, first_restore_ms: firstRestoreMs, reload_restore_ms: reloadRestoreMs, searched_object_id: objectId, fixture: 'synthetic walls; not a surveyed residential model' })}`)
+})
+
 async function findGripPoints(page: Page, color: 'blue' | 'orange' | 'slab-edge' | 'stair-width' | 'stair-run') {
   const bounds = await canvas(page).boundingBox()
   if (!bounds) throw new Error('Plan canvas is not visible')

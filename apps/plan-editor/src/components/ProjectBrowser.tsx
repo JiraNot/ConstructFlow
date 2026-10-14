@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectDocument, ProjectViewTemplate, SmartObject } from '@constructflow/project-model'
 import { Eye, EyeOff, Search } from 'lucide-react'
 import type { AlignmentMode } from '../app/transformOperations.mjs'
+import { groupProjectBrowserObjects } from './groupProjectBrowserObjects.mjs'
 
 const familyLabels: Record<string, string> = {
   'structure.grid': 'กริด', 'structure.column': 'เสา', 'structure.foundation': 'ฐานราก',
@@ -19,6 +20,13 @@ const objectLabel = (object: SmartObject) => {
   const mark = data.mark ?? data.tag ?? data.name ?? data.type_mark
   return `${familyLabels[object.object_type] ?? object.object_type} · ${String(mark ?? object.id.slice(0, 8))}`
 }
+
+type BrowserTreeRow =
+  | { kind: 'family'; family: string; count: number; index: number }
+  | { kind: 'object'; family: string; object: SmartObject; index: number }
+
+const BROWSER_TREE_ROW_HEIGHT = 28
+const BROWSER_TREE_OVERSCAN = 8
 
 interface ProjectBrowserProps {
   project: ProjectDocument
@@ -64,16 +72,47 @@ export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selecte
   const [mirrorAxis, setMirrorAxis] = useState<'vertical' | 'horizontal'>('vertical')
   const [splitPosition, setSplitPosition] = useState('50')
   const [trimEnd, setTrimEnd] = useState<'start' | 'end'>('start')
+  const browserTreeRef = useRef<HTMLDivElement>(null)
+  const [treeViewport, setTreeViewport] = useState({ scrollTop: 0, height: 320 })
+  const [collapsedFamilies, setCollapsedFamilies] = useState<ReadonlySet<string>>(() => new Set())
   const objects = useMemo(() => Object.values(project.objects)
     .filter(object => scope === 'all' || object.level_refs?.some(reference => reference.level_id === activeLevelId) || !object.level_refs?.length)
     .filter(object => !query.trim() || `${objectLabel(object)} ${object.id}`.toLowerCase().includes(query.trim().toLowerCase()))
     .sort((a, b) => a.object_type.localeCompare(b.object_type) || objectLabel(a).localeCompare(objectLabel(b))),
   [project.objects, activeLevelId, scope, query])
-  const groups = useMemo(() => {
-    const grouped = new Map<string, SmartObject[]>()
-    for (const object of objects) grouped.set(object.object_type, [...(grouped.get(object.object_type) ?? []), object])
-    return [...grouped.entries()]
-  }, [objects])
+  const groups = useMemo(() => groupProjectBrowserObjects(objects), [objects])
+  const virtualizeTree = objects.length > 1000
+  const virtualRows = useMemo<BrowserTreeRow[]>(() => {
+    const rows: BrowserTreeRow[] = []
+    for (const [family, members] of groups) {
+      rows.push({ kind: 'family', family, count: members.length, index: rows.length })
+      if (collapsedFamilies.has(family)) continue
+      for (const object of members) rows.push({ kind: 'object', family, object, index: rows.length })
+    }
+    return rows
+  }, [groups, collapsedFamilies])
+  const visibleVirtualRows = useMemo(() => {
+    const start = Math.max(0, Math.floor(treeViewport.scrollTop / BROWSER_TREE_ROW_HEIGHT) - BROWSER_TREE_OVERSCAN)
+    const end = Math.min(virtualRows.length, Math.ceil((treeViewport.scrollTop + treeViewport.height) / BROWSER_TREE_ROW_HEIGHT) + BROWSER_TREE_OVERSCAN)
+    return virtualRows.slice(start, end)
+  }, [treeViewport, virtualRows])
+
+  useEffect(() => {
+    const element = browserTreeRef.current
+    if (!element) return
+    const measure = () => setTreeViewport(current => ({ scrollTop: element.scrollTop, height: element.clientHeight || current.height }))
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const element = browserTreeRef.current
+    if (!element) return
+    element.scrollTop = 0
+    setTreeViewport(current => ({ ...current, scrollTop: 0 }))
+  }, [query, scope])
 
   return <section className="cf-project-browser" aria-label="Project Browser">
     <div className="cf-browser-toolbar">
@@ -196,9 +235,55 @@ export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selecte
       <strong>Preview การแปลง</strong><small>เส้นโครงสีฟ้าคือ preview · ยืนยันจะบันทึกเป็น Undo รายการเดียว</small>
       <div className="cf-browser-transform-actions"><button type="button" onClick={onCommitAlignment}>ยืนยัน · Undo ได้</button><button type="button" onClick={onCancelAlignment}>ยกเลิก</button></div>
     </div>}
-    <div className="cf-browser-tree" role="tree" aria-label="รายการวัตถุ">
+    <div
+      ref={browserTreeRef}
+      className="cf-browser-tree"
+      role="tree"
+      aria-label="รายการวัตถุ"
+      data-object-count={objects.length}
+      onScroll={event => {
+        const element = event.currentTarget
+        setTreeViewport(current => current.scrollTop === element.scrollTop ? current : { scrollTop: element.scrollTop, height: element.clientHeight })
+      }}
+    >
       {!groups.length && <p className="cf-browser-empty">ไม่พบวัตถุ</p>}
-      {groups.map(([family, members]) => <details key={family} open>
+      {virtualizeTree ? <div className="cf-browser-virtual-spacer" style={{ height: virtualRows.length * BROWSER_TREE_ROW_HEIGHT }}>
+        {visibleVirtualRows.map(row => row.kind === 'family' ? <button
+          key={`family:${row.family}`}
+          type="button"
+          role="treeitem"
+          aria-level={1}
+          aria-expanded={!collapsedFamilies.has(row.family)}
+          className="cf-browser-virtual-family"
+          style={{ top: row.index * BROWSER_TREE_ROW_HEIGHT, height: BROWSER_TREE_ROW_HEIGHT }}
+          onClick={() => setCollapsedFamilies(current => {
+            const next = new Set(current)
+            if (next.has(row.family)) next.delete(row.family)
+            else next.add(row.family)
+            return next
+          })}
+        ><span>{familyLabels[row.family] ?? row.family}</span><small>{row.count}</small></button> : (() => {
+          const object = row.object
+          const hidden = hiddenObjectIds.has(object.id)
+          const selected = selectedIds.includes(object.id)
+          return <div
+            key={object.id}
+            data-object-id={object.id}
+            data-object-type={object.object_type}
+            className={`cf-browser-virtual-object${selected ? ' is-selected' : ''}`}
+            role="none"
+            style={{ top: row.index * BROWSER_TREE_ROW_HEIGHT, height: BROWSER_TREE_ROW_HEIGHT }}
+          >
+            <button type="button" className="cf-browser-object" role="treeitem" aria-level={2} aria-selected={selected} title={`${objectLabel(object)} · ${object.id} · Ctrl/⌘-คลิกเพื่อเลือกหลายชิ้น`} onClick={event => {
+              if (event.ctrlKey || event.metaKey || event.shiftKey) onSelectObjects(selected ? selectedIds.filter(id => id !== object.id) : [...selectedIds, object.id])
+              else onSelectObjects([object.id])
+            }}>
+              <span className={`cf-browser-phase phase-${object.created_phase}`}></span><span>{objectLabel(object).split(' · ').slice(1).join(' · ')}</span>
+            </button>
+            <button type="button" className="cf-browser-visibility" aria-label={`${hidden ? 'แสดง' : 'ซ่อน'} ${objectLabel(object)}`} title={hidden ? 'แสดงวัตถุ' : 'ซ่อนวัตถุ'} onClick={() => onToggleVisibility(object.id)}>{hidden ? <EyeOff size={14} /> : <Eye size={14} />}</button>
+          </div>
+        })())}
+      </div> : groups.map(([family, members]) => <details key={family} open>
         <summary role="treeitem" aria-expanded="true"><span>{familyLabels[family] ?? family}</span><small>{members.length}</small></summary>
         <ul role="group">{members.map(object => {
           const hidden = hiddenObjectIds.has(object.id)

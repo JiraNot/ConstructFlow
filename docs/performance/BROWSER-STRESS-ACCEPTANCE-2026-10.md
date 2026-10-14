@@ -48,6 +48,8 @@ The 600-wall acceptance now samples browser RAF intervals during a middle-button
 
 The latest 2026-10-14 54-test authoring-suite run measured RAF p50/p95 of 17.6/35.3 ms (0 of 45 intervals above 50 ms), and synchronous plan redraw p50/p95 of 9.1/13.9 ms across 21 samples. It measured 170.4/191.1 ms search/select p50/p95 and 1,209.3/1,780.9 ms initial/reload restoration. Three sequential post-change targeted runs measured synchronous plan redraw p50/p95 of 10.8/15.1, 10.1/15.6, and 9.7/17.0 ms. The redraw measurement covers plan render, selection handles and tool overlays; it excludes browser paint/compositing and GPU presentation. These are local synthetic-model observations, not release thresholds or results for an approved residential project.
 
+The synthetic 4,780-wall browser acceptance passed on 2026-10-14. It restored the IndexedDB snapshot, searched and selected a wall by persistent UUID, confirmed the same identity in the plan and Properties, verified all 4,780 objects in the saved snapshot, and reloaded to confirm the object count and UUID remained present. The observed first restore was 53,012 ms and reload restore was 60,886 ms. This is a synthetic stress fixture, and these restore times expose a substantial large-project startup bottleneck; they do not pass a performance budget or establish browser paint time. The acceptance does not include a surveyed residential project.
+
 ## Transform and autosave timings
 
 The latest full-suite observation recorded these single-sample browser timings on the same synthetic 600-wall fixture. `Transform response` ends when the workbench reports the completed numeric move; persistence timings end when IndexedDB contains the expected geometry.
