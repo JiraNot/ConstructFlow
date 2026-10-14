@@ -107,7 +107,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     dispatchCommandBatch,
     previewCommands: previewDirectManipulation,
   } = useProjectSession(() => createDefaultResidentialProjectDocument('CF-UNTITLED', 'Untitled Project'))
-  const { selectedId, selectedIds, setSelectedId, setSelectedIds } = useEditorObjectSelection()
+  const { selectedId, selectedIds, setSelectedId, setSelectedIds, selectObjects } = useEditorObjectSelection()
   const {
     projectJson, savedProjectJson, setSavedProjectJson, replacementBaselineJson, setReplacementBaselineJson,
     localAutosaveReady, localAutosaveState, setLocalAutosaveState, activeProjectFileHandle,
@@ -773,7 +773,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     }
     pasteCountRef.current += 1
     const ids = result.results[0]?.affected_object_ids ?? []
-    if (ids.length) { setSelectedIds(ids); setSelectedId(ids[0]) }
+    if (ids.length) selectObjects(ids, ids[0])
     setFileFeedback(`วางสำเนา ${ids.length} ชิ้นแล้ว · เยื้องจากชุดต้นฉบับ ${distance} มม.`)
   }
 
@@ -1085,7 +1085,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     underlay,
     onSelectObject: setSelectedId,
     onRequestEditProperties: () => { setRightPanelTab('properties'); setInspectorOpen(true) },
-    onSelectionChange: (ids, primary) => { setSelectedIds(ids); setSelectedId(primary) },
+    onSelectionChange: selectObjects,
     onDeleteObjects: handleDeleteObjects,
     onCopyObjects: handleCopyObjects,
     onCommitColumn: handleCommitColumn,
@@ -1133,10 +1133,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       planDiscipline={mode === 'framing' ? 'framing' : mode === 'roofplan' ? 'roof' : 'architecture'}
     />
     if (mode === 'model3d') return <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
-      <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} autoFrameSelection={splitViewEnabled} planNavigation={planAnd3DNavigationLinked ? planNavigationViewport : null} onPlanNavigationChange={planAnd3DNavigationLinked ? setPlanNavigationViewport : undefined} coordination={coordinationFindings} />
+      <Model3DViewport project={viewProject} onSelectObject={id => selectObjects(id ? [id] : [], id)} selectedId={selectedId} selectedIds={selectedIds} autoFrameSelection={splitViewEnabled} planNavigation={planAnd3DNavigationLinked ? planNavigationViewport : null} onPlanNavigationChange={planAnd3DNavigationLinked ? setPlanNavigationViewport : undefined} coordination={coordinationFindings} />
     </Suspense>
     return <ElevationCanvas project={viewProject} direction={mode} selectedId={selectedId} selectedIds={selectedIds}
-      onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }}
+      onSelectObject={setSelectedId} onSelectionChange={selectObjects}
       underlay={underlay} coordination={coordinationFindings} navigation={elevationNavigation} onNavigationChange={setElevationNavigation}
       planNavigation={mode === 'rcp' && planAndRcpNavigationLinked ? planNavigationViewport : null}
       onPlanNavigationChange={mode === 'rcp' && planAndRcpNavigationLinked ? setPlanNavigationViewport : undefined}
@@ -1435,7 +1435,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               underlay={underlay}
               onSelectObject={setSelectedId}
               onRequestEditProperties={() => { setRightPanelTab('properties'); setInspectorOpen(true) }}
-              onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }}
+              onSelectionChange={selectObjects}
               onDeleteObjects={handleDeleteObjects}
               onCopyObjects={handleCopyObjects}
               onCommitColumn={handleCommitColumn}
@@ -1473,8 +1473,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 setCursorCoords_mm(coords)
                 setSnapKind(kind)
               }}
-            /> : viewMode !== 'model3d' ? <ElevationCanvas project={viewProject} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={(ids, primary) => { setSelectedIds(ids); setSelectedId(primary) }} underlay={underlay} coordination={coordinationFindings} navigation={elevationNavigation} onNavigationChange={setElevationNavigation} planNavigation={viewMode === 'rcp' && planAndRcpNavigationLinked ? planNavigationViewport : null} onPlanNavigationChange={viewMode === 'rcp' && planAndRcpNavigationLinked ? setPlanNavigationViewport : undefined} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} onBuildManipulation={viewMode === 'rcp' ? undefined : buildElevationManipulationCommands} onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation} onManipulationRejected={handleManipulationRejected} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
-              <Model3DViewport project={viewProject} onSelectObject={id => { setSelectedIds(id ? [id] : []); setSelectedId(id) }} selectedId={selectedId} selectedIds={selectedIds} autoFrameSelection={splitViewEnabled} planNavigation={planAnd3DNavigationLinked ? planNavigationViewport : null} onPlanNavigationChange={planAnd3DNavigationLinked ? setPlanNavigationViewport : undefined} coordination={coordinationFindings} />
+            /> : viewMode !== 'model3d' ? <ElevationCanvas project={viewProject} direction={viewMode} selectedId={selectedId} selectedIds={selectedIds} onSelectObject={setSelectedId} onSelectionChange={selectObjects} underlay={underlay} coordination={coordinationFindings} navigation={elevationNavigation} onNavigationChange={setElevationNavigation} planNavigation={viewMode === 'rcp' && planAndRcpNavigationLinked ? planNavigationViewport : null} onPlanNavigationChange={viewMode === 'rcp' && planAndRcpNavigationLinked ? setPlanNavigationViewport : undefined} onMoveObject={viewMode === 'rcp' ? undefined : handleMoveElevationObject} onBuildManipulation={viewMode === 'rcp' ? undefined : buildElevationManipulationCommands} onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation} onManipulationRejected={handleManipulationRejected} /> : <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
+              <Model3DViewport project={viewProject} onSelectObject={id => selectObjects(id ? [id] : [], id)} selectedId={selectedId} selectedIds={selectedIds} autoFrameSelection={splitViewEnabled} planNavigation={planAnd3DNavigationLinked ? planNavigationViewport : null} onPlanNavigationChange={planAnd3DNavigationLinked ? setPlanNavigationViewport : undefined} coordination={coordinationFindings} />
             </Suspense>}
             </div>
             {splitViewEnabled && <div className="cf-multiview-pane" data-testid="secondary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1' }}>
@@ -1627,7 +1627,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             report={coordination.report}
             error={coordination.error}
             selectedIds={selectedIds}
-            onSelectObjects={(ids) => { setSelectedIds(ids); setSelectedId(ids[0] ?? null) }}
+            onSelectObjects={ids => selectObjects(ids, ids[0] ?? null)}
             onSubmitSettings={(settings) => dispatchCommandBatch([{ name: 'UpdateCoordinationSettings', input: { settings } }])}
           />}
 
@@ -1659,8 +1659,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 else if (['structure.beam', 'structure.foundation'].includes(object.object_type)) setViewMode('framing')
                 else if (['plan', 'framing', 'roofplan'].includes(viewMode)) setViewMode('plan')
               }
-              setSelectedIds(ids)
-              setSelectedId(ids[0] ?? null)
+              selectObjects(ids, ids[0] ?? null)
               setRightPanelTab('properties')
               setInspectorOpen(true)
             }}

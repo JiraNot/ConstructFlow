@@ -33,6 +33,14 @@ test('multi-selection removes duplicate and empty ids and keeps its primary when
   })
 })
 
+test('multi-selection applies a view-provided primary id in the same transition', () => {
+  const selection = { selectedId: 'wall-1', selectedIds: ['wall-1', 'wall-2'] }
+  assert.deepEqual(selectObjectSet(selection, ['wall-1', 'wall-2'], 'wall-2'), {
+    selectedId: 'wall-2',
+    selectedIds: ['wall-1', 'wall-2'],
+  })
+})
+
 test('multi-selection promotes the first remaining id and clears primary on an empty set', () => {
   assert.deepEqual(selectObjectSet({ selectedId: 'wall-2', selectedIds: ['wall-1', 'wall-2'] }, ['wall-3']), {
     selectedId: 'wall-3',

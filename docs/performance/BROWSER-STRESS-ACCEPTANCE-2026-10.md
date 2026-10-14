@@ -46,7 +46,7 @@ Environment: Windows, Playwright headless Microsoft Edge using the repository's 
 
 The 600-wall acceptance now samples browser RAF intervals during a middle-button pan and wheel zoom. Before memoizing project-derived plan geometry, one targeted run measured RAF p50/p95 of 18.1/176.6 ms, with 21 of 45 intervals above 50 ms. Three sequential post-cache runs measured p50/p95 of 17.9/53.3 ms (4/46 over 50 ms), 18.0/53.2 ms (4/45), and 18.0/52.3 ms (3/46). Search/select samples also dropped from about 324 ms p50 in the pre-cache run to 190–201 ms p50 across sequential post-cache runs. These are synthetic-project observations on one local environment, not release thresholds; the remaining long RAF intervals and the lack of surveyed-project/browser-frame-time evidence keep the performance gate open.
 
-The latest 2026-10-14 53-test authoring-suite run measured RAF p50/p95 of 17.9/18.5 ms (0 of 46 intervals above 50 ms), and synchronous plan redraw p50/p95 of 8.5/12.4 ms across 21 samples. It measured 171.1/179.8 ms search/select p50/p95 and 1,190.3/1,772.9 ms initial/reload restoration. Three sequential post-change targeted runs measured synchronous plan redraw p50/p95 of 10.8/15.1, 10.1/15.6, and 9.7/17.0 ms. The redraw measurement covers plan render, selection handles and tool overlays; it excludes browser paint/compositing and GPU presentation. These are local synthetic-model observations, not release thresholds or results for an approved residential project.
+The latest 2026-10-14 53-test authoring-suite run measured RAF p50/p95 of 17.6/18.3 ms (0 of 45 intervals above 50 ms), and synchronous plan redraw p50/p95 of 8.8/14.2 ms across 21 samples. It measured 167.8/192.1 ms search/select p50/p95 and 1,204.4/1,813.9 ms initial/reload restoration. Three sequential post-change targeted runs measured synchronous plan redraw p50/p95 of 10.8/15.1, 10.1/15.6, and 9.7/17.0 ms. The redraw measurement covers plan render, selection handles and tool overlays; it excludes browser paint/compositing and GPU presentation. These are local synthetic-model observations, not release thresholds or results for an approved residential project.
 
 ## Transform and autosave timings
 
@@ -54,11 +54,11 @@ The latest full-suite observation recorded these single-sample browser timings o
 
 | Measurement | Latest full-suite run |
 | --- | ---: |
-| Transform start to status response | 928.2 ms |
-| Transform start to persisted geometry | 1,464.0 ms |
-| Status response to persisted geometry | 535.8 ms |
-| Undo start to persisted geometry | 1,142.0 ms |
-| Redo start to persisted geometry | 1,138.3 ms |
+| Transform start to status response | 885.6 ms |
+| Transform start to persisted geometry | 1,437.6 ms |
+| Status response to persisted geometry | 552.0 ms |
+| Undo start to persisted geometry | 1,179.6 ms |
+| Redo start to persisted geometry | 1,153.4 ms |
 
 The focused rerun measured 768.4 ms for transform response, 1,328.4 ms from transform start to persistence, 560.0 ms from response to persistence, 1,216.6 ms from Undo start to persistence, and 1,202.6 ms from Redo start to persistence. These are two individual observations, not representative percentiles or release thresholds. Isolated serializer, geometry-kernel and database write durations still need instrumentation.
 

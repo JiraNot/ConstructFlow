@@ -8,9 +8,11 @@ export function selectPrimaryObject(selection, requestedId) {
   return { selectedId: requestedId, selectedIds: [requestedId] }
 }
 
-export function selectObjectSet(selection, requestedIds) {
+export function selectObjectSet(selection, requestedIds, preferredPrimaryId = null) {
   const selectedIds = [...new Set(requestedIds.filter(Boolean))]
-  const selectedId = selection.selectedId && selectedIds.includes(selection.selectedId)
+  const selectedId = preferredPrimaryId && selectedIds.includes(preferredPrimaryId)
+    ? preferredPrimaryId
+    : selection.selectedId && selectedIds.includes(selection.selectedId)
     ? selection.selectedId
     : selectedIds[0] ?? null
   return { selectedId, selectedIds }

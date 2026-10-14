@@ -18,10 +18,15 @@ export function useEditorObjectSelection() {
     ))
   }, [])
 
+  const selectObjects = useCallback((ids: string[], primaryId?: string | null) => {
+    setSelection(current => selectObjectSet(current, ids, primaryId))
+  }, [])
+
   return {
     selectedId: selection.selectedId,
     selectedIds: selection.selectedIds,
     setSelectedId,
     setSelectedIds,
+    selectObjects,
   }
 }
