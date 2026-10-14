@@ -16,7 +16,25 @@ import {
 } from "../dist/index.js";
 import { isWallFacadeForElevation, resolveElevationWallPhaseStyle } from "@constructflow/representation-engine";
 import { clippedStaggeredPlankSegments } from "@constructflow/geometry-kernel";
+import { placeDimensionLabel } from "../dist/dimensionLayout.js";
 import { PDFDocument } from "pdf-lib";
+
+test("automatic plan dimensions move labels off nearby labels and inside view bounds", () => {
+  const base = { min_x: 40, min_y: 10, max_x: 60, max_y: 13 };
+  const placed = placeDimensionLabel(base, [0, 1], [base], { min_x: 0, min_y: 0, max_x: 100, max_y: 30 });
+  assert.equal(placed.has_collision, false);
+  assert.notEqual(placed.offset_mm, 0);
+  assert.ok(placed.box.max_y < 10);
+
+  const locked = placeDimensionLabel(base, [0, 1], [base], { min_x: 0, min_y: 0, max_x: 100, max_y: 30 }, { locked: true });
+  assert.equal(locked.offset_mm, 0);
+  assert.equal(locked.has_collision, true);
+
+  const nearEdge = placeDimensionLabel({ min_x: 40, min_y: 1, max_x: 60, max_y: 4 }, [0, 1], [], { min_x: 0, min_y: 0, max_x: 100, max_y: 10 });
+  assert.equal(nearEdge.has_collision, false);
+  assert.ok(nearEdge.box.min_y >= 0);
+  assert.ok(nearEdge.box.max_y <= 10);
+});
 
 test("A-02 compiles the shared staggered wood-floor pattern with its void clipped out", () => {
   const project = createEmptyProjectDocument("WOOD-FLOOR-PATTERN");
@@ -116,6 +134,19 @@ test("house demo keeps the existing grade datum and places its two finished floo
   assert.ok(columnPlanLabels.includes("4.00 m") && columnPlanLabels.includes("5.00 m"), "column centerlines provide dimension chains when no grid system is modeled");
   const gridAndColumnLabels = compilePermitDrawingSet(house).sheets.find(sheet => sheet.id === "A-02").primitives.filter(item => item.kind === "text").map(item => item.text);
   assert.ok(gridAndColumnLabels.filter(label => label === "4.00 m" || label === "5.00 m").length >= 4, "column rows retain explicit dimension chains when grids are also present");
+  const autoDimensionSheet = compilePermitDrawingSet(house).sheets.find(sheet => sheet.id === "A-02");
+  const dimensionLabels = autoDimensionSheet.primitives.filter(item => item.kind === "text" && item.dimension_id);
+  const boxes = dimensionLabels.map(label => ({
+    min_x: label.at[0], min_y: label.at[1] - 1.3,
+    max_x: label.at[0] + (label.max_width ?? label.text.length * 0.88), max_y: label.at[1] + 0.4,
+  }));
+  for (let index = 0; index < boxes.length; index++) for (let next = index + 1; next < boxes.length; next++) {
+    const a = boxes[index], b = boxes[next];
+    assert.ok(!(a.min_x < b.max_x + 0.8 && a.max_x + 0.8 > b.min_x && a.min_y < b.max_y && a.max_y > b.min_y),
+      `automatic dimensions ${dimensionLabels[index].dimension_id} and ${dimensionLabels[next].dimension_id} should not overlap`);
+  }
+  assert.equal(autoDimensionSheet.warnings.filter(warning => warning.includes("automatic dimension text overlaps")).length, 0,
+    "standard residential A-02 dimensions should fit without collision or viewport warnings");
 });
 
 test("A-02 persists locked dimension placement while keeping opening values model-derived, including angled hosts", () => {

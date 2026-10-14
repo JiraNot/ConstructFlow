@@ -37,6 +37,7 @@ import {
   balanceCircuitsPhase,
 } from "@constructflow/electrical-engine";
 import { evaluateRoomVentilationCompliance } from "@constructflow/clash-engine";
+import { placeDimensionLabel, type DimensionLabelBox } from "./dimensionLayout.js";
 
 export const PERMIT_INDEX = [
   ["A-01", "ผังบริเวณ / Site & project information", 200],
@@ -3280,18 +3281,33 @@ function compilePermitDrawingSetBase(
           }
           if ((id === "A-02" || id === "A-03") && mode === "xy") {
             const dimensionColor = "#475569";
+            const placedDimensionLabelBoxes: DimensionLabelBox[] = [];
             const drawDimension = (dimensionId: string, a: Vec2, b: Vec2, label: string, witnessA?: Vec2, witnessB?: Vec2) => {
               const override = viewport.dimension_overrides?.[dimensionId];
               const delta = override?.locked ? override.offset_mm : [0, 0];
               const baseA = mapped(a), baseB = mapped(b);
-              const pa: Vec2 = [baseA[0] + delta[0], baseA[1] + delta[1]];
-              const pb: Vec2 = [baseB[0] + delta[0], baseB[1] + delta[1]];
-              if (witnessA) path([mapped(witnessA), pa], dimensionColor, 0.1);
-              if (witnessB) path([mapped(witnessB), pb], dimensionColor, 0.1);
+              let pa: Vec2 = [baseA[0] + delta[0], baseA[1] + delta[1]];
+              let pb: Vec2 = [baseB[0] + delta[0], baseB[1] + delta[1]];
               const dx = pb[0] - pa[0], dy = pb[1] - pa[1], length = Math.hypot(dx, dy);
               if (length < 1e-6) return;
               const tangent: Vec2 = [dx / length, dy / length], normal: Vec2 = [-tangent[1], tangent[0]];
               const width = Math.max(5, [...label].length * 0.88), halfGap = width / 2 + 0.8;
+              const baseCenter: Vec2 = [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2];
+              const placement = placeDimensionLabel({
+                min_x: baseCenter[0] - width / 2,
+                min_y: baseCenter[1] - 2.1,
+                max_x: baseCenter[0] + width / 2,
+                max_y: baseCenter[1] + 0.7,
+              }, normal, placedDimensionLabelBoxes, {
+                min_x: view.x + 1, min_y: view.y + 1,
+                max_x: view.x + view.w - 1, max_y: view.y + view.h - 1,
+              }, { locked: override?.locked === true, max_offset_mm: 24, step_mm: 3, gap_mm: 0.8 });
+              placedDimensionLabelBoxes.push(placement.box);
+              if (placement.has_collision) warnings.push(`${label}: automatic dimension text overlaps another dimension or the A-02/A-03 view edge`);
+              pa = [pa[0] + normal[0] * placement.offset_mm, pa[1] + normal[1] * placement.offset_mm];
+              pb = [pb[0] + normal[0] * placement.offset_mm, pb[1] + normal[1] * placement.offset_mm];
+              if (witnessA) path([mapped(witnessA), pa], dimensionColor, 0.1);
+              if (witnessB) path([mapped(witnessB), pb], dimensionColor, 0.1);
               const center: Vec2 = [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2];
               if (length / 2 > halfGap) {
                 path([pa, [center[0] - tangent[0] * halfGap, center[1] - tangent[1] * halfGap]], dimensionColor, 0.14);
