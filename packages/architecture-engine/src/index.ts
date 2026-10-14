@@ -1,5 +1,5 @@
 import { SmartObject, WallModuleData, DoorModuleData, WindowModuleData, DoorHanding, CATALOG_PARAMETER_FIELDS, resolveCatalogType, catalogInstanceOverrides, isWallObject, isDoorObject, isWindowObject, getLevelElevation, resolveOpeningVerticalExtent, resolveWallVerticalExtent, resolveStairVerticalExtent, validateDoorFaceComponents, validateOpeningPlanSymbolLines } from '@constructflow/project-model'
-import { CreateWallInput, MoveWallInput, UpdateWallEndpointsInput, MoveOpeningInput, UpdateWallMarkInput, UpdateWallDimensionsInput, CreateDoorInput, UpdateDoorMarkInput, UpdateDoorDimensionsInput, FlipDoorHandingInput, CreateWindowInput, UpdateWindowMarkInput, UpdateWindowDimensionsInput, UpdateOpeningInstanceParametersInput } from '@constructflow/command-schema'
+import { CreateWallInput, MoveWallInput, UpdateWallEndpointsInput, MoveOpeningInput, RehostOpeningInput, UpdateWallMarkInput, UpdateWallDimensionsInput, CreateDoorInput, UpdateDoorMarkInput, UpdateDoorDimensionsInput, FlipDoorHandingInput, CreateWindowInput, UpdateWindowMarkInput, UpdateWindowDimensionsInput, UpdateOpeningInstanceParametersInput } from '@constructflow/command-schema'
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
 import type { ProjectDocument } from '@constructflow/project-model'
@@ -612,7 +612,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
     case 'MoveOpening': {
       const move = input as unknown as MoveOpeningInput
       const target = updated.objects[move.object_id]
-      if (!target || (!isDoorObject(target) && !isWindowObject(target))) {
+      if (!target || target.status === 'archived' || target.removed_phase || (!isDoorObject(target) && !isWindowObject(target))) {
         return {
           result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Opening UUID ${move.object_id} not found`] },
           updatedProject: project,
@@ -664,6 +664,82 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] },
         updatedProject: updated,
         emittedEnvelope: { ...envelope, input: { ...move } },
+      }
+    }
+
+    case 'RehostOpening': {
+      const rehost = input as unknown as RehostOpeningInput
+      const target = updated.objects[rehost.object_id]
+      if (!target || target.status === 'archived' || target.removed_phase || (!isDoorObject(target) && !isWindowObject(target))) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Opening UUID ${rehost.object_id} not found`] }, updatedProject: project }
+      }
+      const wall = updated.objects[rehost.wall_id]
+      if (!wall || !isWallObject(wall) || wall.status === 'archived' || wall.removed_phase) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Target host wall ${rehost.wall_id} not found or inactive`] }, updatedProject: project }
+      }
+      const openingData = target.module_data
+      const wallData = wall.module_data
+      const openingLevelId = openingData.level_id ?? target.level_refs.find(reference => reference.role === 'base_level')?.level_id
+      const wallLevelId = wallData.level_id ?? wall.level_refs.find(reference => reference.role === 'base_level')?.level_id
+      if (openingLevelId && wallLevelId && openingLevelId !== wallLevelId) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Opening and target wall must be on the same level'] }, updatedProject: project }
+      }
+      const width = positiveCatalogNumber(
+        openingData.instance_overrides?.width_mm
+          ?? openingData.width_mm
+          ?? resolveCatalogType(project, target.object_type, openingData.type_id ?? openingData.mark)?.parameters.width_mm,
+        0,
+      )
+      const dx = wallData.end_point_mm[0] - wallData.start_point_mm[0]
+      const dy = wallData.end_point_mm[1] - wallData.start_point_mm[1]
+      const wallLength = Math.hypot(dx, dy)
+      if (!Number.isFinite(rehost.offset_along_wall_mm) || !Number.isFinite(wallLength) || !width || wallLength <= 0
+        || rehost.offset_along_wall_mm - width / 2 < -1 || rehost.offset_along_wall_mm + width / 2 > wallLength + 1) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Opening ${rehost.object_id} does not fit within target host wall ${wall.id}`] }, updatedProject: project }
+      }
+      const overlaps = Object.values(updated.objects).some(candidate => {
+        const candidateData = candidate.module_data as Record<string, unknown>
+        if (candidate.id === target.id || candidate.status === 'archived' || candidate.removed_phase
+          || (candidate.object_type !== 'door_window.door' && candidate.object_type !== 'door_window.window')
+          || candidateData.wall_id !== wall.id) return false
+        const candidateWidth = positiveCatalogNumber(
+          (candidateData.instance_overrides as Record<string, unknown> | undefined)?.width_mm
+            ?? candidateData.width_mm
+            ?? resolveCatalogType(project, candidate.object_type, typeof candidateData.type_id === 'string' ? candidateData.type_id : typeof candidateData.mark === 'string' ? candidateData.mark : undefined)?.parameters.width_mm,
+          0,
+        )
+        const distance = Math.abs(Number(candidateData.offset_along_wall_mm) - rehost.offset_along_wall_mm)
+        return candidateWidth > 0 && distance < (candidateWidth + width) / 2 - 1
+      })
+      if (overlaps) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Target host location overlaps another opening'] }, updatedProject: project }
+      }
+
+      const oldWallId = openingData.wall_id
+      const ratio = rehost.offset_along_wall_mm / wallLength
+      const location_mm: [number, number, number] = [
+        wallData.start_point_mm[0] + dx * ratio,
+        wallData.start_point_mm[1] + dy * ratio,
+        openingData.location_mm[2] ?? wallData.start_point_mm[2] ?? 0,
+      ]
+      updated.relationships = updated.relationships.filter(relationship => !(
+        (relationship.kind === 'hosted_on' && relationship.source_id === target.id && relationship.target_id === oldWallId)
+        || (relationship.kind === 'hosts' && relationship.source_id === oldWallId && relationship.target_id === target.id)
+      ))
+      updated.relationships.push(
+        { kind: 'hosted_on', source_id: target.id, target_id: wall.id, role: isDoorObject(target) ? 'door_wall_host' : 'window_wall_host' },
+        { kind: 'hosts', source_id: wall.id, target_id: target.id, role: isDoorObject(target) ? 'wall_door_opening' : 'wall_window_opening' },
+      )
+      updated.objects[target.id] = {
+        ...target,
+        host_refs: [wall.id],
+        updated_at: now,
+        module_data: { ...openingData, wall_id: wall.id, offset_along_wall_mm: rehost.offset_along_wall_mm, location_mm },
+      }
+      return {
+        result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] },
+        updatedProject: updated,
+        emittedEnvelope: { ...envelope, input: { ...rehost } },
       }
     }
 

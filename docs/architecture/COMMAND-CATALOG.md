@@ -113,6 +113,7 @@ Extension orchestration follows the same rule. `GenerateOrUpdateArchitectureFrom
 - `GenerateOrUpdateArchitectureFromExtension`
 - `CreateOpening`
 - `ModifyOpening`
+- `RehostOpening` — moves a door/window to a same-level wall, recalculates its plan location and updates both host relationship records while preserving the opening UUID.
 - `MarkUnresolvedOpeningHosts`
 - `ResolveOpeningHost`
 - `GenerateOrUpdateOpeningFromExtension`

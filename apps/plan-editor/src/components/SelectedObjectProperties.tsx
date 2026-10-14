@@ -24,7 +24,7 @@ export const SelectedObjectProperties: React.FC<{
     onUpdateBeamVerticalReference, onUpdateArchitectureSurface, onUpdateSlab, onUpdateRoof, onUpdateRainwaterDesign,
     onUpdatePipeRoute, onUpdateElectricalFixture, onAssignElectricalFixtureToCircuit, onUpdateCabinet, onUpdateMoulding,
     onUpdateStair, onUpdateGridTag, onModifyGrid, onUpdateGridSystem, onUpdateWallFace, onDefineWallFinish,
-    onUpdateWallFinish, onUpdateOpeningVertical, onUpdateOpeningInstanceParameters, onFlipDoorHanding, onUpdatePhase,
+    onUpdateWallFinish, onUpdateOpeningVertical, onRehostOpening, onUpdateOpeningInstanceParameters, onFlipDoorHanding, onUpdatePhase,
     onUpdateRemovalPhase, onAddFoundation, onDeleteObject, onDrawSurfaceVoid, onCreateRoomFinish } = props
   const { selectedObject: selectedObj, column: colObj, foundation: fndObj, beam: beamObj,
     wall: wallObj, door: doorObj, window: winObj, grid: grdObj, slab: slabObj,
@@ -49,7 +49,7 @@ export const SelectedObjectProperties: React.FC<{
         onUpdatePipeRoute={onUpdatePipeRoute} onUpdateElectricalFixture={onUpdateElectricalFixture} onAssignElectricalFixtureToCircuit={onAssignElectricalFixtureToCircuit}
         onUpdateCabinet={onUpdateCabinet} onUpdateMoulding={onUpdateMoulding} />
       <OpeningPropertiesSection project={project} displayUnit={displayUnit} door={doorObj} window={winObj}
-        onUpdateOpeningVertical={onUpdateOpeningVertical} onUpdateOpeningInstanceParameters={onUpdateOpeningInstanceParameters} onFlipDoorHanding={onFlipDoorHanding} onOpenTypeManager={onOpenTypeManager} />
+        onUpdateOpeningVertical={onUpdateOpeningVertical} onRehostOpening={onRehostOpening} onUpdateOpeningInstanceParameters={onUpdateOpeningInstanceParameters} onFlipDoorHanding={onFlipDoorHanding} onOpenTypeManager={onOpenTypeManager} />
       <GridPropertiesSection project={project} grid={grdObj} selectedId={selectedId} displayUnit={displayUnit} onUpdateGridTag={onUpdateGridTag} onModifyGrid={onModifyGrid} onUpdateGridSystem={onUpdateGridSystem} />
       {selectedObj.object_type === 'architecture.stair' && <StairProperties project={project} data={selectedObj.module_data as Record<string, unknown>} unit={displayUnit} onUpdate={changes => onUpdateStair?.(selectedObj.id, changes)} />}
       <SurfacePropertiesSection project={project} displayUnit={displayUnit} slab={slabObj} architectureSurface={architectureSurfaceObj}

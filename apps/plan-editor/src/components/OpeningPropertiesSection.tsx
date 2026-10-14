@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   CATALOG_PARAMETER_FIELDS,
   DoorModuleData,
   ProjectDocument,
   SmartObject,
   WindowModuleData,
+  WallModuleData,
   formatLengthMm,
   resolveCatalogType,
   resolveOpeningVerticalExtent,
@@ -22,6 +23,7 @@ type OpeningPropertiesSectionProps = {
   door: SmartObject<DoorModuleData> | null
   window: SmartObject<WindowModuleData> | null
   onUpdateOpeningVertical: (objectId: string, changes: { sill_height_mm?: number; height_mm?: number; head_level_id?: string; head_offset_mm?: number; vertical_constraint?: 'fixed_height' | 'head_level' }) => void
+  onRehostOpening?: (objectId: string, wallId: string, offsetAlongWallMm: number) => void
   onUpdateOpeningInstanceParameters?: (objectId: string, parameters: Record<string, unknown | null>) => void
   onFlipDoorHanding?: (doorId: string) => void
   onOpenTypeManager: () => void
@@ -29,9 +31,26 @@ type OpeningPropertiesSectionProps = {
 
 const LengthInput: React.FC<{ value: number; unit: DisplayLengthUnit; onChange: (value: number) => void; style?: React.CSSProperties; 'aria-label'?: string }> = ({ value, unit, onChange, style, 'aria-label': ariaLabel }) => <WorkbenchNumberInput value={value} unit={unit} onChange={onChange} style={style} ariaLabel={ariaLabel} />
 
-export const OpeningPropertiesSection: React.FC<OpeningPropertiesSectionProps> = ({ project, displayUnit, door: doorObj, window: winObj, onUpdateOpeningVertical, onUpdateOpeningInstanceParameters, onFlipDoorHanding, onOpenTypeManager }) => {
+export const OpeningPropertiesSection: React.FC<OpeningPropertiesSectionProps> = ({ project, displayUnit, door: doorObj, window: winObj, onUpdateOpeningVertical, onRehostOpening, onUpdateOpeningInstanceParameters, onFlipDoorHanding, onOpenTypeManager }) => {
   const openingObj = doorObj ?? winObj
+  const openingData = openingObj?.module_data as DoorModuleData | WindowModuleData | undefined
+  const currentHostId = openingData?.wall_id ?? ''
+  const openingLevelId = openingData?.level_id ?? openingObj?.level_refs.find(reference => reference.role === 'base_level')?.level_id
+  const hostWalls = useMemo(() => Object.values(project.objects).filter((object): object is SmartObject<WallModuleData> => {
+    if (object.object_type !== 'architecture.wall' || object.status === 'archived' || object.removed_phase) return false
+    const data = object.module_data as WallModuleData
+    return !openingLevelId || data.level_id === openingLevelId || object.level_refs.some(reference => reference.role === 'base_level' && reference.level_id === openingLevelId)
+  },
+  ), [project.objects, openingLevelId])
+  const [targetWallId, setTargetWallId] = useState(currentHostId)
+  const [targetOffsetMm, setTargetOffsetMm] = useState(openingData?.offset_along_wall_mm ?? 0)
+  useEffect(() => {
+    setTargetWallId(currentHostId)
+    setTargetOffsetMm(openingData?.offset_along_wall_mm ?? 0)
+  }, [openingObj?.id, currentHostId, openingData?.offset_along_wall_mm])
   const openingType = openingObj ? resolveCatalogType(project, openingObj.object_type, openingObj.module_data.type_id ?? openingObj.module_data.mark) : undefined
+  const verticalSelectStyle: React.CSSProperties = { width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 5, color: '#24364b' }
+  const currentHost = project.objects[currentHostId]
   const openingParameterFields = openingObj && openingType
     ? (CATALOG_PARAMETER_FIELDS[openingObj.object_type] ?? []).filter(field => openingType.parameters[field] !== undefined)
     : []
@@ -56,11 +75,43 @@ export const OpeningPropertiesSection: React.FC<OpeningPropertiesSectionProps> =
       </div>
     </details>
   ) : null
+  const openingHostEditor = openingObj && onRehostOpening ? (
+    <details className="cf-inspector-section">
+      <summary>ผนัง Host · {currentHost?.object_type === 'architecture.wall' ? (currentHost.module_data as WallModuleData).mark : currentHostId.slice(0, 8)}</summary>
+      <section style={{ display: 'grid', gap: 6, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
+        <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>ผนังปลายทาง
+          <select aria-label="ผนัง Host ปลายทาง" value={targetWallId} onChange={event => {
+            const wallId = event.target.value
+            setTargetWallId(wallId)
+            const wall = project.objects[wallId]
+            if (!wall || wall.object_type !== 'architecture.wall') return
+            const data = wall.module_data as WallModuleData
+            const start = data.start_point_mm, end = data.end_point_mm
+            const dx = end[0] - start[0], dy = end[1] - start[1]
+            const length = Math.hypot(dx, dy)
+            if (length <= 0) return
+            const location = openingData!.location_mm
+            const projected = ((location[0] - start[0]) * dx + (location[1] - start[1]) * dy) / length
+            const width = Number(openingData!.instance_overrides?.width_mm ?? openingData!.width_mm)
+            setTargetOffsetMm(Math.max(width / 2, Math.min(length - width / 2, projected)))
+          }} style={verticalSelectStyle}>
+            {hostWalls.map(wall => <option key={wall.id} value={wall.id}>{wall.module_data.mark} · {wall.id.slice(0, 8)}</option>)}
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: 3, fontSize: 10, color: '#52677d' }}>Offset จากต้นผนัง ({displayUnit})
+          <LengthInput aria-label="ระยะช่องเปิดจากต้นผนังปลายทาง" value={targetOffsetMm} unit={displayUnit} onChange={setTargetOffsetMm} style={verticalSelectStyle} />
+        </label>
+        <button type="button" disabled={!targetWallId} onClick={() => onRehostOpening(openingObj.id, targetWallId, targetOffsetMm)}>
+          เปลี่ยนผนัง Host · Undo ได้
+        </button>
+        <small style={{ color: '#64748b' }}>ระบบตรวจความกว้างช่องเปิด ระดับ และช่องเปิดอื่นบนผนังปลายทางก่อนย้าย</small>
+      </section>
+    </details>
+  ) : null
   const doorVertical = doorObj ? resolveOpeningVerticalExtent(project, doorObj) : undefined
   const windowVertical = winObj ? resolveOpeningVerticalExtent(project, winObj) : undefined
   const doorShape = doorObj ? buildOpeningRepresentationShapeFromObject(project, doorObj) : undefined
   const winShape = winObj ? buildOpeningRepresentationShapeFromObject(project, winObj) : undefined
-  const verticalSelectStyle: React.CSSProperties = { width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 5, color: '#24364b' }
   return (
     <>
       {/* Door Properties */}
@@ -102,6 +153,7 @@ export const OpeningPropertiesSection: React.FC<OpeningPropertiesSectionProps> =
           </div>
 
           {openingInstanceEditor}
+          {openingHostEditor}
           {doorShape && <OpeningElevationThumbnail shape={doorShape} />}
 
           <details className="cf-inspector-section">
@@ -215,6 +267,7 @@ export const OpeningPropertiesSection: React.FC<OpeningPropertiesSectionProps> =
           </div>
 
           {openingInstanceEditor}
+          {openingHostEditor}
           {winShape && <OpeningElevationThumbnail shape={winShape} />}
 
           <details className="cf-inspector-section">

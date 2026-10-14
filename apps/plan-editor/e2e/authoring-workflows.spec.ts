@@ -1996,6 +1996,33 @@ test('Project Browser aligns hosted windows across parallel walls with preview a
   await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
 })
 
+test('Properties rehost a window through the validated command path and preserve its UUID', async ({ page }) => {
+  const fixture = createHostedWindowAlignmentFixture()
+  await page.goto('/')
+  await seedLocalProjectSnapshot(page, fixture.projectJson)
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.locator(`li[data-object-id="${fixture.windowIds[0]}"] .cf-browser-object`).click()
+  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await page.locator('details.cf-inspector-section').filter({ hasText: 'ผนัง Host' }).locator('summary').click()
+  await page.getByRole('combobox', { name: 'ผนัง Host ปลายทาง' }).selectOption(fixture.wallIds[1])
+  await page.getByRole('button', { name: 'เปลี่ยนผนัง Host · Undo ได้' }).click()
+
+  const readHost = async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return null
+    const project = JSON.parse(raw) as { objects: Record<string, { id: string; module_data: { wall_id: string; offset_along_wall_mm: number; location_mm: number[] }; host_refs: string[] }> }
+    const opening = project.objects[fixture.windowIds[0]]
+    return opening ? { id: opening.id, host: opening.module_data.wall_id, offset: opening.module_data.offset_along_wall_mm, location: opening.module_data.location_mm, hostRefs: opening.host_refs } : null
+  }
+  const rehosted = { id: fixture.windowIds[0], host: fixture.wallIds[1], offset: 1500, location: [1500, 3000, 1200], hostRefs: [fixture.wallIds[1]] }
+  await expect.poll(readHost).toEqual(rehosted)
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(readHost).toEqual({ id: fixture.windowIds[0], host: fixture.wallIds[0], offset: 1500, location: [1500, 0, 1200], hostRefs: [fixture.wallIds[0]] })
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(readHost).toEqual(rehosted)
+})
+
 test('Project Browser previews align, offset, and mirror, then joins line objects atomically', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')

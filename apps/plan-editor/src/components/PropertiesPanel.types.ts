@@ -42,6 +42,7 @@ export interface PropertiesPanelProps {
   onDefineWallFinish?: (name: string, parameters: Record<string, unknown>) => void
   onUpdateWallFinish?: (typeId: string, name: string, parameters: Record<string, unknown>) => void
   onUpdateOpeningVertical: (objectId: string, changes: { sill_height_mm?: number; height_mm?: number; head_level_id?: string; head_offset_mm?: number; vertical_constraint?: 'fixed_height' | 'head_level' }) => void
+  onRehostOpening?: (objectId: string, wallId: string, offsetAlongWallMm: number) => void
   onUpdateOpeningInstanceParameters?: (objectId: string, parameters: Record<string, unknown | null>) => void
   onUpdatePhase?: (objectId: string, newPhase: Phase) => void
   onUpdateRemovalPhase?: (objectId: string, removedPhase: RemovalPhase | null) => void

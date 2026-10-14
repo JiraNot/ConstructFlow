@@ -45,6 +45,7 @@ type PanelActions = Pick<PropertiesPanelProps,
   | 'onDefineWallFinish'
   | 'onUpdateWallFinish'
   | 'onUpdateOpeningVertical'
+  | 'onRehostOpening'
   | 'onUpdateOpeningInstanceParameters'
 >
 
@@ -252,6 +253,9 @@ export function usePropertiesPanelActions({ project, dispatchCommandBatch, setFi
   const onUpdateOpeningInstanceParameters: NonNullable<PropertiesPanelProps['onUpdateOpeningInstanceParameters']> = (objectId, parameters) => {
     applyCommand('UpdateOpeningInstanceParameters', { object_id: objectId, parameters })
   }
+  const onRehostOpening: NonNullable<PropertiesPanelProps['onRehostOpening']> = (objectId, wallId, offsetAlongWallMm) => {
+    applyCommand('RehostOpening', { object_id: objectId, wall_id: wallId, offset_along_wall_mm: offsetAlongWallMm })
+  }
 
   return {
     onAssignType,
@@ -283,6 +287,7 @@ export function usePropertiesPanelActions({ project, dispatchCommandBatch, setFi
     onDefineWallFinish,
     onUpdateWallFinish,
     onUpdateOpeningVertical,
+    onRehostOpening,
     onUpdateOpeningInstanceParameters,
   }
 }

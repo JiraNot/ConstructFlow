@@ -93,6 +93,13 @@ export interface MoveOpeningInput {
   offset_along_wall_mm: number
 }
 
+/** Move a hosted opening to another wall while preserving its object identity. */
+export interface RehostOpeningInput {
+  object_id: string
+  wall_id: string
+  offset_along_wall_mm: number
+}
+
 export interface CreateDoorInput {
   /** Immutable unique identity (UUID) */
   id: string
