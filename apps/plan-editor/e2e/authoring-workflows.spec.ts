@@ -3873,7 +3873,7 @@ test('multiview layout and auxiliary views restore for the same project after re
   await expect(page.locator('.cf-viewport-stage')).toHaveAttribute('style', /minmax\(0(?:px)?, 58fr\) minmax\(0(?:px)?, 42fr\)/)
 })
 
-test('two-storey residential demo supports browser review, 3D selection, and autosave reload at 239 objects', async ({ page }) => {
+test('two-storey residential demo preserves browser selection across all views after autosave reload', async ({ page }) => {
   test.setTimeout(90_000)
   const pageErrors: string[] = []
   page.on('pageerror', error => pageErrors.push(error.message))
@@ -3914,11 +3914,19 @@ test('two-storey residential demo supports browser review, 3D selection, and aut
   const restoredObjectRow = restoredBrowser.locator(`li[data-object-id="${objectId}"]`)
   await expect(restoredObjectRow).toHaveCount(1)
   await restoredObjectRow.locator('.cf-browser-object').click()
-  await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', objectId!)
-  await page.getByRole('button', { name: '3D ดูตัวอย่าง', exact: true }).click()
+  const restoredProperties = page.getByTestId('properties-selection')
+  await expect(restoredProperties).toHaveAttribute('data-object-id', objectId!)
+  const restoredViews = ['แปลนพื้น', 'แปลนคาน', 'แปลนหลังคา', 'แปลนฝ้า RCP', 'รูปด้านเหนือ', 'รูปด้านใต้', 'รูปด้านตะวันออก', 'รูปด้านตะวันตก', '3D ดูตัวอย่าง']
+  for (const view of restoredViews) {
+    await page.getByRole('button', { name: view, exact: true }).click()
+    await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
+    await expect(restoredProperties).toHaveAttribute('data-object-id', objectId!)
+    if (view === '3D ดูตัวอย่าง') await expect(page.getByTestId('model3d-viewport')).toBeVisible()
+    else await expect(page.locator('canvas').first()).toBeVisible()
+  }
   const houseModel = page.getByTestId('model3d-viewport')
   await expect(houseModel).toBeVisible()
-  await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', objectId!)
+  await expect(restoredProperties).toHaveAttribute('data-object-id', objectId!)
   await expect(houseModel.getByRole('button', { name: 'ซูมเข้า 3D' })).toBeEnabled()
   const cameraPose = await houseModel.evaluate(element => ({
     x: Number(element.getAttribute('data-camera-target-x')),
