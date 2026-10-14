@@ -135,8 +135,18 @@
 
 ## Remaining production acceptance
 
-Replace the generic reference-house input with a surveyed/approved source when available; do not treat the sample house as field evidence or invent parcel, structural or hydraulic design inputs. The acceptance model still needs verified host openings and junction treatment, wet-area drain/discharge, cabinets/devices/pipe routes and structural coordination. Record missing inputs rather than filling them with assumptions.
+No surveyed and approved client `.cfproj` is available yet. Keep using the reference-house and generated fixtures, but do not treat them as field evidence or invent parcel, structural or hydraulic design inputs. The acceptance model still needs verified host openings and junction treatment, wet-area drain/discharge, cabinets/devices/pipe routes and structural coordination. Record missing inputs rather than filling them with assumptions.
 
 The automated combined verifier currently covers wall edit, undo/redo, serialization, coordination, three generated sheets, takeoff and two BOQ cost centers. Browser acceptance reviews the 239-object reference house in plan and east elevation and verifies selected UUID persistence and renderer presence across all nine views after reload. Pixel checks cover representative column, room, wall, beam, slab, window and roof selections. It does not cover the full supported-family create/move/resize/delete matrix, pixel-level visual review for every family and view, representative 500+ object browser paint-time performance, undo/redo/serialization performance distributions, or visual/native CAD review. The 600-wall fixture records preliminary RAF scheduling intervals and synchronous redraw duration during pan/zoom, not browser paint/compositing. Update each PARTIAL row only when that evidence exists.
+
+## Remaining roadmap work
+
+- **Editing acceptance (UX-01–UX-03):** close the supported-family create/move/resize/delete matrix, verify family-specific placement and temporary-dimension behavior, and exercise transform previews and undo/redo together across representative multi-object edits.
+- **Views and documentation (UX-04, DOC-01, VIEW-01):** coordinated views and Sheet Composer have implemented slices; finish representative save/reopen and visual review across view layouts, templates and sheets.
+- **Libraries and project inputs (LIB-01, IO-01, SITE-01):** expand reusable library coverage and validate underlay/survey workflows against a real surveyed project, including source traceability and calibrated measurements.
+- **Platform extensions (AI-01, EXT-01):** in-app AI authoring and the third-party extension SDK remain future implementation work; both must use the shared command, validation and history paths.
+- **Workbench decomposition:** `PlanCanvas.tsx` and `PropertiesPanel.tsx` are thin entry points with focused modules/components behind them. `App.tsx` remains the 926-line workbench composition boundary and may be split further as independently owned workflows are added.
+
+These are implementation and evidence gaps, not claims that the current editor cannot perform any of the listed workflows. Close each item with focused acceptance evidence before marking the corresponding roadmap area complete.
 
 No permit readiness, legal compliance conclusion, or engineering design approval is claimed by this report.
