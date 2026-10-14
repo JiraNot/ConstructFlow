@@ -8,6 +8,38 @@ import { stairFlightGripPoints } from '../src/components/stairFlightGripPoints.m
 
 const canvas = (page: Page) => page.locator('canvas').first()
 
+async function countBlueSelectionPixels(page: Page) {
+  return canvas(page).evaluate(element => {
+    const context = element.getContext('2d')
+    if (!context) return -1
+    const pixels = context.getImageData(0, 0, element.width, element.height).data
+    let count = 0
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (pixels[index]! <= 10 && pixels[index + 1]! >= 115 && pixels[index + 1]! <= 150 && pixels[index + 2]! >= 175 && pixels[index + 3]! > 0) count += 1
+    }
+    return count
+  })
+}
+
+async function countCyanImagePixels(page: Page, imagePng: Buffer) {
+  return page.evaluate(async encoded => {
+    const image = new Image()
+    image.src = `data:image/png;base64,${encoded}`
+    await image.decode()
+    const scratch = document.createElement('canvas')
+    scratch.width = image.naturalWidth
+    scratch.height = image.naturalHeight
+    const context = scratch.getContext('2d')!
+    context.drawImage(image, 0, 0)
+    const pixels = context.getImageData(0, 0, scratch.width, scratch.height).data
+    let count = 0
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (pixels[index]! >= 35 && pixels[index]! <= 80 && pixels[index + 1]! >= 145 && pixels[index + 1]! <= 225 && pixels[index + 2]! >= 200 && pixels[index + 3]! > 0) count += 1
+    }
+    return count
+  }, imagePng.toString('base64'))
+}
+
 async function clickCanvasFraction(page: Page, x: number, y: number) {
   const bounds = await canvas(page).boundingBox()
   if (!bounds) throw new Error('Plan canvas is not visible')
@@ -4669,7 +4701,7 @@ test('two-storey residential demo preserves browser selection across all views a
   if (!fixtureJson) throw new Error('Could not read the loaded residential fixture')
   const fixtureProject = JSON.parse(fixtureJson) as {
     types: Array<{ id: string; name: string }>
-    objects: Record<string, { module_data: Record<string, unknown> }>
+    objects: Record<string, { object_type: string; module_data: Record<string, unknown> }>
   }
   const initialTypeId = fixtureProject.objects[objectId!]?.module_data.type_id
   const initialTypeName = fixtureProject.types.find(type => type.id === initialTypeId)?.name
@@ -4716,19 +4748,17 @@ test('two-storey residential demo preserves browser selection across all views a
     await page.getByRole('button', { name: view, exact: true }).click()
     await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
     await expect(restoredProperties).toHaveAttribute('data-object-id', objectId!)
-    if (view === '3D ดูตัวอย่าง') await expect(page.getByTestId('model3d-viewport')).toBeVisible()
+    if (view === '3D ดูตัวอย่าง') {
+      const model = page.getByTestId('model3d-viewport')
+      await expect(model).toBeVisible()
+      const webglCanvas = model.locator('canvas').first()
+      await expect(webglCanvas).toBeVisible()
+      const screenshot = await webglCanvas.screenshot()
+      expect(await countCyanImagePixels(page, screenshot), '3D view should paint a cyan selection box around the selected column').toBeGreaterThan(0)
+    }
     else await expect(page.locator('canvas').first()).toBeVisible()
     if (view === 'แปลนพื้น' || view === 'แปลนคาน' || view === 'แปลนหลังคา' || view.startsWith('รูปด้าน')) {
-      const blueSelectionPixels = await canvas(page).evaluate(element => {
-        const context = element.getContext('2d')
-        if (!context) return -1
-        const pixels = context.getImageData(0, 0, element.width, element.height).data
-        let count = 0
-        for (let index = 0; index < pixels.length; index += 4) {
-          if (pixels[index]! <= 10 && pixels[index + 1]! >= 115 && pixels[index + 1]! <= 150 && pixels[index + 2]! >= 175 && pixels[index + 3]! > 0) count += 1
-        }
-        return count
-      })
+      const blueSelectionPixels = await countBlueSelectionPixels(page)
       expect(blueSelectionPixels, `${view} should paint the selected object with its blue selection outline`).toBeGreaterThan(0)
     }
   }
@@ -4743,6 +4773,18 @@ test('two-storey residential demo preserves browser selection across all views a
   }))
   expect(Object.values(cameraPose).every(Number.isFinite)).toBe(true)
   expect(cameraPose.distance).toBeGreaterThan(0)
+
+  const roomId = Object.entries(fixtureProject.objects).find(([, object]) => object.object_type === 'architecture.room')?.[0]
+  expect(roomId).toBeTruthy()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const browserRoom = page.getByLabel('Project Browser')
+  await browserRoom.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  await browserRoom.getByLabel('ค้นหาวัตถุในโครงการ').fill(roomId!)
+  await browserRoom.locator(`li[data-object-id="${roomId}"] .cf-browser-object`).click()
+  await page.getByRole('button', { name: 'แปลนฝ้า RCP', exact: true }).click()
+  await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', roomId!)
+  await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', roomId!)
+  await expect.poll(() => countBlueSelectionPixels(page)).toBeGreaterThan(0)
   expect(pageErrors).toEqual([])
 })
 
