@@ -6,6 +6,8 @@ import {
 import type { DisplayLengthUnit } from '@constructflow/project-model'
 import type { CommandBatchResult, CommandRequest, ExtensionPresetType } from '@constructflow/command-schema'
 import { planExtensionPreset } from '@constructflow/extension-engine'
+import { createAssemblyAsset, importAssemblyAssets, loadAssemblyAssets, saveAssemblyAssets, type AssemblyAsset } from '../app/assemblyAssetLibrary.mjs'
+import { AssemblyAssetLibraryPanel } from './AssemblyAssetLibraryPanel.js'
 import {
   Sparkles,
   Car,
@@ -53,6 +55,10 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
 
   // Terrace specific
   const [terraceElevation_m, setTerraceElevation_m] = useState<number>(0.45)
+  const [assemblyAssets, setAssemblyAssets] = useState<AssemblyAsset[]>(() => loadAssemblyAssets())
+  const [assemblySearch, setAssemblySearch] = useState('')
+  const [assemblyName, setAssemblyName] = useState('')
+  const [assemblyFeedback, setAssemblyFeedback] = useState('')
   const displayUnit: DisplayLengthUnit = project.project.display_unit ?? 'm'
   const unitsPerMeter = 1000 / lengthUnitFactor(displayUnit)
   const fromMeters = (meters: number) => meters * unitsPerMeter
@@ -99,6 +105,59 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : 'ไม่สามารถสร้างส่วนต่อเติมได้')
       return
+    }
+  }
+
+  const currentAssemblyParameters = () => ({
+    posX_m, posY_m, width_m, length_m, carportColumnType,
+    kitchenWallHeight_m, kitchenIncludeDoor, kitchenIncludeWindow,
+    kitchenWallSides, terraceElevation_m,
+  })
+
+  const saveCurrentAssembly = () => {
+    try {
+      const asset = createAssemblyAsset({ name: assemblyName, preset: activePreset, parameters: currentAssemblyParameters() })
+      const next = saveAssemblyAssets([...assemblyAssets, asset])
+      setAssemblyAssets(next)
+      setAssemblyName('')
+      setAssemblyFeedback(`บันทึก “${asset.name}” ในคลังชุดประกอบแล้ว`)
+    } catch (error) {
+      setAssemblyFeedback(`!${error instanceof Error ? error.message : 'บันทึกคลังไม่สำเร็จ'}`)
+    }
+  }
+
+  const applyAssemblyAsset = (asset: AssemblyAsset) => {
+    const values = asset.parameters
+    setActivePreset(asset.preset)
+    setPosX_m(values.posX_m); setPosY_m(values.posY_m)
+    setWidth_m(values.width_m); setLength_m(values.length_m)
+    setCarportColumnType(values.carportColumnType ?? 'SC1')
+    setKitchenWallHeight_m(values.kitchenWallHeight_m ?? 2.8)
+    setKitchenIncludeDoor(values.kitchenIncludeDoor ?? true)
+    setKitchenIncludeWindow(values.kitchenIncludeWindow ?? true)
+    setKitchenWallSides(values.kitchenWallSides ?? 3)
+    setTerraceElevation_m(values.terraceElevation_m ?? 0.45)
+    setAssemblyFeedback(`โหลด “${asset.name}” ลงในฟอร์มแล้ว · ตรวจตำแหน่งและค่าก่อนสร้าง`)
+  }
+
+  const deleteAssemblyAsset = (id: string) => {
+    try {
+      const next = saveAssemblyAssets(assemblyAssets.filter(asset => asset.id !== id))
+      setAssemblyAssets(next)
+      setAssemblyFeedback('ลบชุดประกอบออกจากคลังแล้ว')
+    } catch (error) {
+      setAssemblyFeedback(`!${error instanceof Error ? error.message : 'บันทึกคลังไม่สำเร็จ'}`)
+    }
+  }
+
+  const importAssemblyLibrary = (source: string) => {
+    if (source.startsWith('!')) { setAssemblyFeedback(source); return }
+    try {
+      const next = importAssemblyAssets(source, assemblyAssets)
+      setAssemblyAssets(saveAssemblyAssets(next))
+      setAssemblyFeedback(`นำเข้าชุดประกอบ ${next.length - assemblyAssets.length} รายการแล้ว`)
+    } catch (error) {
+      setAssemblyFeedback(`!${error instanceof Error ? error.message : 'ไฟล์คลังไม่ถูกต้อง'}`)
     }
   }
 
@@ -274,6 +333,12 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
           </div>
         </div>
 
+        <AssemblyAssetLibraryPanel
+          assets={assemblyAssets} search={assemblySearch} name={assemblyName} feedback={assemblyFeedback}
+          onSearchChange={setAssemblySearch} onNameChange={setAssemblyName} onSave={saveCurrentAssembly}
+          onApply={applyAssemblyAsset} onDelete={deleteAssemblyAsset} onImport={importAssemblyLibrary}
+        />
+
         {/* Main Configuration & Blueprint Preview */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 11, padding: 14, overflowY: 'auto' }}>
           {/* Left Column: Form Controls */}
@@ -287,6 +352,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                     <input
                       type="number"
+                      aria-label="ความกว้าง (Width)"
                       step={0.1 * unitsPerMeter}
                       min={1 * unitsPerMeter}
                       max={20 * unitsPerMeter}
@@ -312,6 +378,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                     <input
                       type="number"
+                      aria-label="ความยาว/ลึก (Length)"
                       step={0.1 * unitsPerMeter}
                       min={1 * unitsPerMeter}
                       max={20 * unitsPerMeter}
@@ -339,6 +406,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                     <input
                       type="number"
+                      aria-label="พิกัดจุดเริ่มต้น X"
                       step="0.50"
                       value={fromMeters(posX_m)}
                       onChange={(e) => setPosX_m(toMeters(parseFloat(e.target.value) || 0))}
@@ -362,6 +430,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                     <input
                       type="number"
+                      aria-label="พิกัดจุดเริ่มต้น Y"
                       step="0.50"
                       value={fromMeters(posY_m)}
                       onChange={(e) => setPosY_m(toMeters(parseFloat(e.target.value) || 0))}
@@ -412,6 +481,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <input
                         type="number"
+                        aria-label="ความสูงผนัง (Wall Height)"
                       step={0.1 * unitsPerMeter}
                         min={2 * unitsPerMeter}
                         max={4 * unitsPerMeter}
@@ -461,6 +531,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <input
                         type="number"
+                        aria-label="ระดับความสูงพื้น (Elevation)"
                         step={0.05 * unitsPerMeter}
                         min={0.1 * unitsPerMeter}
                         max={1.5 * unitsPerMeter}

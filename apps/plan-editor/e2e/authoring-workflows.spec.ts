@@ -1903,6 +1903,65 @@ test('extension assembly preset commits as one shared-session Undo/Redo transact
   await expect.poll(readObjectIds).toEqual(committedIds)
 })
 
+test('personal assembly asset library saves, searches, reloads, and applies editable preset parameters', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  const openLibrary = async () => {
+    await page.locator('summary[aria-label="เมนูโครงการ"]').click()
+    await page.getByRole('button', { name: /ส่วนต่อเติมสำเร็จรูป/ }).click()
+    return page.getByRole('region', { name: 'คลังชุดประกอบส่วนตัว' })
+  }
+  let library = await openLibrary()
+  await page.getByText('เทอเรสระเบียงไม้เทียม', { exact: true }).click()
+  await page.getByLabel('ความกว้าง (Width)').fill('3.2')
+  await page.getByLabel('ความยาว/ลึก (Length)').fill('4.4')
+  await page.getByLabel('พิกัดจุดเริ่มต้น X').fill('8')
+  await page.getByLabel('พิกัดจุดเริ่มต้น Y').fill('9')
+  await page.getByLabel('ระดับความสูงพื้น (Elevation)').fill('0.6')
+  await library.getByLabel('ชื่อชุดประกอบที่จะบันทึก').fill('Terrace north')
+  await library.getByRole('button', { name: 'บันทึกชุดนี้' }).click()
+  await expect(library.getByRole('status')).toContainText('บันทึก “Terrace north”')
+  await page.getByRole('button', { name: 'ยกเลิก', exact: true }).click()
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
+  library = await openLibrary()
+  await library.getByLabel('ค้นหาชุดประกอบ').fill('north')
+  const asset = library.getByRole('button', { name: /ใช้ชุดประกอบ Terrace north/ })
+  await expect(asset).toContainText('3.20 × 4.40 m')
+  const downloadPromise = page.waitForEvent('download')
+  await library.getByRole('button', { name: 'ส่งออกคลัง' }).click()
+  const exportedFile = await downloadPromise
+  expect(exportedFile.suggestedFilename()).toBe('constructflow-assemblies.cfassets')
+  const exportedSource = await readFile((await exportedFile.path())!, 'utf8')
+  expect(JSON.parse(exportedSource).format).toBe('constructflow-assembly-assets')
+  await library.getByRole('button', { name: 'ลบชุดประกอบ Terrace north' }).click()
+  await expect(library.getByRole('button', { name: /ใช้ชุดประกอบ Terrace north/ })).toHaveCount(0)
+  await library.getByLabel('นำเข้าคลังชุดประกอบ').setInputFiles({
+    name: 'assemblies.cfassets', mimeType: 'application/json', buffer: Buffer.from(exportedSource),
+  })
+  await expect(library.getByRole('button', { name: /ใช้ชุดประกอบ Terrace north/ })).toBeVisible()
+  await expect(library.getByRole('status')).toContainText('นำเข้าชุดประกอบ 1 รายการแล้ว')
+  await asset.click()
+  await expect(page.getByLabel('ความกว้าง (Width)')).toHaveValue('3.2')
+  await expect(page.getByLabel('ความยาว/ลึก (Length)')).toHaveValue('4.4')
+  await expect(library.getByRole('status')).toContainText('โหลด “Terrace north”')
+  await page.getByRole('button', { name: 'สั่งสร้างส่วนต่อเติมทันที' }).click()
+  await expect.poll(async () => {
+    const saved = await readStoredProjectJson(page)
+    return saved ? Object.keys((JSON.parse(saved) as { objects: Record<string, unknown> }).objects).length : 0
+  }).toBeGreaterThan(5)
+  const raw = await readStoredProjectJson(page)
+  expect(raw).toBeTruthy()
+  const project = JSON.parse(raw!) as { objects: Record<string, { object_type: string; created_phase: string; module_data: Record<string, unknown> }> }
+  const objects = Object.values(project.objects)
+  const savedColumn = objects.find(object => object.object_type === 'structure.column'
+    && object.created_phase === 'new_construction'
+    && Array.isArray(object.module_data.location_mm)
+    && Number((object.module_data.location_mm as number[])[0]) === 8000
+    && Number((object.module_data.location_mm as number[])[1]) === 9000)
+  expect(savedColumn).toBeTruthy()
+})
+
 test('plan, framing, and roof plan share pan and zoom navigation', async ({ page }) => {
   await page.goto('/')
   const planCanvas = page.locator('.cf-plan-canvas')
