@@ -2203,6 +2203,12 @@ export interface PlacementGhost {
   wall_id?: string
   offset_along_wall_mm?: number
   stair?: import('@constructflow/project-model').StairModuleData
+  wall_junction_preview?: {
+    point_mm: [number, number]
+    target_count: number
+    target_marks: string[]
+    segments_mm: Array<[[number, number], [number, number]]>
+  }
 }
 
 function drawPlacementGhost(
@@ -2310,6 +2316,29 @@ function drawPlacementGhost(
     const referenceStart = worldToScreen(ghost.reference_start_mm ?? ghost.location_mm, viewport)
     ctx.arc(referenceStart[0], referenceStart[1], 5, 0, Math.PI * 2)
     ctx.fill()
+
+    if (ghost.wall_junction_preview) {
+      ctx.strokeStyle = '#0d9488'
+      ctx.lineWidth = 2.5
+      ctx.setLineDash([5, 3])
+      ctx.beginPath()
+      for (const [start, end] of ghost.wall_junction_preview.segments_mm) {
+        const [x1, y1] = worldToScreen(start, viewport)
+        const [x2, y2] = worldToScreen(end, viewport)
+        ctx.moveTo(x1, y1)
+        ctx.lineTo(x2, y2)
+      }
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      const [junctionX, junctionY] = worldToScreen(ghost.wall_junction_preview.point_mm, viewport)
+      ctx.fillStyle = '#0d9488'
+      ctx.beginPath()
+      ctx.arc(junctionX, junctionY, 5, 0, Math.PI * 2)
+      ctx.fill()
+      const marks = ghost.wall_junction_preview.target_marks.join(', ')
+      queuePlanLabel(ctx, junctionX, junctionY, `ตัวอย่างรอยต่อ · ${marks}`, '#0d9488', '#0d9488', 22, '#f0fdfa')
+    }
 
     ctx.restore()
     return

@@ -6,7 +6,7 @@ This matrix maps the main model families to their current canvas workflow, edit 
 
 | Family | Canvas workflow | Post-placement editing | Remaining gap / acceptance target |
 | --- | --- | --- | --- |
-| Walls | Two-point draw with face/centerline reference, BIM snaps, live dimensions, and chained multi-segment placement from each committed endpoint | Endpoint grips, move, wall-face and vertical properties | Each segment is independently undoable; browser acceptance covers chain, Escape, Undo and Redo. Representation tests verify no internal seam at a plan T-junction or between coplanar elevation faces. A dedicated junction/cleanup preview and canvas visual review remain open |
+| Walls | Two-point draw with face/centerline reference, BIM snaps, live dimensions, and chained multi-segment placement from each committed endpoint; connected targets show a combined dashed junction outline | Endpoint grips, move, wall-face and vertical properties | Each segment is independently undoable; browser acceptance covers chain, Escape, Undo and Redo, and asserts the visible junction-preview pixels. Representation tests verify no internal seam at a plan T-junction or between coplanar elevation faces. Committed geometry cleanup and broader canvas visual review remain open |
 | Doors and windows | Hosted placement on a wall with width-aware jamb clearance, snap-to-host, and temporary dimensions | Single-sided width grips, host offset, swing, instance parameters, sill/head levels | Add multi-select alignment and explicit host-change workflow; acceptance includes no false wall-clash warning for hosted openings |
 | Structural columns and foundations | Point placement with grid/host snaps | Rotated column and footing corner grips preserve the opposite corner; target W/H inputs update the validated preview and commit dimensions in the active display unit; browser acceptance now covers column and footing resize, with footing Undo/Redo; level and mark properties | Add shape-specific grips and browser acceptance for invalid dimensions and Escape cancellation |
 | Beams | Two-point draw with center/face reference, line constraints, column snap, and chained multi-segment placement from each committed endpoint | Endpoint grips, host columns, vertical datum and drop properties | Numeric chained-span browser acceptance now verifies Escape and independent Undo/Redo. Continuous-beam break/merge editing remains |
@@ -46,7 +46,7 @@ This matrix maps the main model families to their current canvas workflow, edit 
 
 - Elevation preview is currently a translucent candidate bounding rectangle. Family-specific rotated outlines and fully regenerated hosted geometry are shown more accurately in plan; the elevation ghost can be refined to project the candidate representation itself.
 - Elevation multi-selection now builds one flattened preview/commit command batch when any selected member is dragged; hosted doors/windows are omitted from the explicit move list when their host wall is also selected, avoiding a duplicate move. Focused tests cover UUID de-duplication, hosted-opening filtering and batch construction. Browser acceptance selects two columns in Project Browser, drags one in North elevation, verifies both persisted positions change, and confirms one Undo restores both while Redo reapplies the group move. The preview remains a combined candidate bounding rectangle rather than family-specific regenerated outlines.
-- Multi-click pipe routing, fittings, visible circuit paths and conduit geometry remain separate feature work, as do chained wall junction cleanup, continuous-beam break/merge, structural valley framing, and cabinet/MEP type catalogs.
+- Multi-click pipe routing, fittings, visible circuit paths and conduit geometry remain separate feature work, as do committed wall-junction cleanup, continuous-beam break/merge, structural valley framing, and cabinet/MEP type catalogs.
 - The preview uses the existing command validator and geometry services; large-project snap/search performance still needs a measured acceptance run at 5,000+ objects and a spatially indexed snap candidate path.
 
 ## Cross-view acceptance
@@ -62,7 +62,7 @@ This matrix maps the main model families to their current canvas workflow, edit 
 
 1. Add family/type catalogs for roofs, MEP fixtures/routes, cabinetry and moulding profiles, including type-cascade behavior; add structural valley framing and project-specific rainwater design inputs.
 2. Complete family-accurate elevation ghost geometry, cross-view selection feedback, vertical datum badges and focused visual acceptance across plan, framing, elevation, 3D, takeoff and saved-project round trips.
-3. Add chained wall/beam drawing with junction cleanup and continuous-beam break/merge editing.
+3. Extend connected-wall preview into committed junction cleanup, then add continuous-beam break/merge editing.
 
 ## Daily-use UX first slice — 2026-10-13
 

@@ -80,10 +80,11 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
     const drawStartedAt = probe ? performance.now() : 0
 
     const ghost = buildPlanPlacementGhost({
-      activeTool, activeSnap, project, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark,
+      activeTool, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark,
       activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, beamStartNode, wallStartNode,
       activeWallSnap, doorHanding, stairPreview, stairStartPoint, resolveReferencePath,
     })
+    canvas.dataset.wallJunctionPreview = ghost?.wall_junction_preview ? 'true' : 'false'
     const calibrationOverlay = activeTool === 'calibrate'
       ? { point1_mm: calibrationP1, point2_mm: null, mouse_mm: calibrationMousePoint }
       : null

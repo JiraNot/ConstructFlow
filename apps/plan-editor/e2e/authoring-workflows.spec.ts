@@ -799,6 +799,27 @@ test('wall chains commit and undo each segment independently', async ({ page }) 
   await page.keyboard.press('Escape')
 })
 
+test('wall placement previews the combined outline at a chained endpoint', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickCanvasFraction(page, 0.20, 0.42)
+  await clickCanvasFraction(page, 0.40, 0.42)
+  await moveToCanvasFraction(page, 0.10, 0.80)
+  await expect(canvas(page)).toHaveAttribute('data-wall-junction-preview', 'true')
+  const tealPreviewPixels = await canvas(page).evaluate(element => {
+    const data = element.getContext('2d')?.getImageData(0, 0, element.width, element.height).data
+    if (!data) return 0
+    let count = 0
+    for (let index = 0; index < data.length; index += 4) {
+      if (data[index] === 13 && data[index + 1] === 148 && data[index + 2] === 136 && data[index + 3] > 0) count++
+    }
+    return count
+  })
+  expect(tealPreviewPixels).toBeGreaterThan(0)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+})
+
 test('beam chains accept numeric spans and undo each segment independently', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('tab', { name: 'รายการ' }).click()
@@ -2922,8 +2943,7 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   await page.mouse.up({ button: 'middle' })
   await expect.poll(expectPlanAndRcpNavigationToMatch).toBeUndefined()
   const rcpZoomBefore = Number(await rcp.getAttribute('data-elevation-zoom'))
-  await page.mouse.move(rcpBox.x + rcpBox.width / 2, rcpBox.y + rcpBox.height / 2)
-  await page.mouse.wheel(0, -120)
+  await rcp.locator('canvas').dispatchEvent('wheel', { deltaY: -120, bubbles: true, cancelable: true })
   await expect.poll(async () => Number(await rcp.getAttribute('data-elevation-zoom'))).toBeGreaterThan(rcpZoomBefore)
   await expect.poll(expectPlanAndRcpNavigationToMatch).toBeUndefined()
   await page.getByLabel('จัดภาพให้พอดี').click()

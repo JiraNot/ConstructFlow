@@ -2,11 +2,13 @@ import type { ProjectDocument, StairModuleData } from '@constructflow/project-mo
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
 import type { PlacementGhost } from '../rendering/planRenderer.js'
 import type { ToolType } from './Toolbar.js'
+import { buildWallJunctionPreview } from './buildWallJunctionPreview.mjs'
 
 interface BuildPlanPlacementGhostOptions {
   activeTool: ToolType
   activeSnap: SnapResult | null
   project: ProjectDocument
+  planProject: ProjectDocument
   activeColumnTypeMark: string
   activeFoundationTypeMark: string
   activeBeamTypeMark: string
@@ -14,7 +16,7 @@ interface BuildPlanPlacementGhostOptions {
   activeDoorTypeMark: string
   activeWindowTypeMark: string
   beamStartNode: { point_mm: [number, number] } | null
-  wallStartNode: { point_mm: [number, number] } | null
+  wallStartNode: { point_mm: [number, number]; hostWallId?: string } | null
   activeWallSnap: WallHostSnapResult | null
   doorHanding: 'left_in' | 'right_in' | 'left_out' | 'right_out'
   stairPreview: StairModuleData | null
@@ -23,7 +25,7 @@ interface BuildPlanPlacementGhostOptions {
 }
 
 export function buildPlanPlacementGhost({
-  activeTool, activeSnap, project, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark,
+  activeTool, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark,
   activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, beamStartNode, wallStartNode, activeWallSnap,
   doorHanding, stairPreview, stairStartPoint, resolveReferencePath,
 }: BuildPlanPlacementGhostOptions): PlacementGhost | null {
@@ -73,6 +75,9 @@ export function buildPlanPlacementGhost({
         target_location_mm: alignedEnd,
         size_mm: [typeDef?.parameters?.thickness_mm || 100, 0],
         mark: activeWallTypeMark,
+        wall_junction_preview: buildWallJunctionPreview(
+          planProject, activeSnap, alignedStart, alignedEnd, typeDef?.parameters?.thickness_mm || 100, wallStartNode.hostWallId,
+        ) ?? undefined,
       }
     } else if (activeTool === 'door' && activeWallSnap) {
       const typeDef = project.types?.find(
