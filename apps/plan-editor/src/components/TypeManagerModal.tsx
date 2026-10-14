@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { DOOR_FACE_DESIGNS, OPENING_DESIGNS } from "@constructflow/project-model";
+import { DEFAULT_TYPES, DOOR_FACE_DESIGNS, OPENING_DESIGNS } from "@constructflow/project-model";
 import type {
   ProjectDocument,
   TypeDefinition,
@@ -71,6 +71,7 @@ const PERSONAL_CATALOG_FILE_FORMAT = "constructflow-type-library";
 const PERSONAL_CATALOG_FILE_VERSION = 1;
 const PERSONAL_CATALOG_FILE_LIMIT = 2 * 1024 * 1024;
 const PERSONAL_CATALOG_ENTRY_LIMIT = 500;
+const BUNDLED_TYPE_LIBRARY = structuredClone(DEFAULT_TYPES);
 function loadPersonalCatalog(): PersonalCatalogEntry[] {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(PERSONAL_CATALOG_KEY) ?? "[]");
@@ -157,6 +158,7 @@ function loadPreferences(): Preferences {
   }
 }
 const basic: Record<string, string[]> = {
+  "architecture.wall_finish": ["material", "thickness_mm", "description_th"],
   "structure.column": ["section_mm", "plaster_thickness_mm"],
   "structure.beam": ["section_mm", "plaster_thickness_mm", "drop_mm"],
   "structure.foundation": ["size_mm", "foundation_type"],
@@ -177,6 +179,7 @@ const basic: Record<string, string[]> = {
   "door_window.window": ["width_mm", "height_mm", "sill_height_mm", "frame_depth_mm", "frame_face_width_mm", "sash_face_width_mm"],
 };
 const defaults: Record<string, TypeParameters> = {
+  "architecture.wall_finish": { material: "wall_paint", thickness_mm: 2, description_th: "" },
   "structure.column": { section_mm: [200, 200], plaster_thickness_mm: 15 },
   "structure.beam": { section_mm: [200, 400], plaster_thickness_mm: 15, drop_mm: 0 },
   "structure.foundation": {
@@ -396,7 +399,8 @@ function CatalogDialog({
     object_type: entry.object_type,
     parameters: entry.parameters,
   }));
-  const catalogSource = filter === "library" ? personalTypes : project.types;
+  const bundledTypes = BUNDLED_TYPE_LIBRARY.filter(type => type.object_type === family);
+  const catalogSource = filter === "library" ? personalTypes : filter === "standard" ? bundledTypes : project.types;
   const items = catalogSource.filter(
     (t) =>
       filter !== "designs" &&
@@ -474,6 +478,31 @@ function CatalogDialog({
       return;
     }
     const imported = result.updatedProject.types.find((entry) => entry.id === id);
+    if (imported) choose(imported);
+  };
+  const importBundledType = (type: TypeDefinition) => {
+    const existing = project.types.find(entry => entry.object_type === type.object_type
+      && entry.name.toLocaleLowerCase() === type.name.toLocaleLowerCase()
+      && JSON.stringify(entry.parameters) === JSON.stringify(type.parameters));
+    if (existing) {
+      choose(existing);
+      return;
+    }
+    const nameBase = type.name;
+    let name = nameBase;
+    let suffix = 2;
+    while (project.types.some(entry => entry.object_type === type.object_type && entry.name.toLowerCase() === name.toLowerCase()))
+      name = `${nameBase}-${suffix++}`;
+    const id = crypto.randomUUID();
+    const result = onExecute([{
+      name: "DefineStructuralType",
+      input: { id, name, object_type: type.object_type, parameters: structuredClone(type.parameters) },
+    }]);
+    if (result.status !== "success") {
+      setError((result.errors ?? []).join("\n") || "เพิ่มชนิดมาตรฐานไม่สำเร็จ");
+      return;
+    }
+    const imported = result.updatedProject.types.find(entry => entry.id === id);
     if (imported) choose(imported);
   };
   const exportPersonalCatalog = () => {
@@ -1242,6 +1271,7 @@ function CatalogDialog({
                   ["used", "ใช้ในโครงการ"],
                   ["recent", "ล่าสุด"],
                   ["favorites", "รายการโปรด"],
+                  ["standard", `มาตรฐาน ConstructFlow (${bundledTypes.length})`],
                   ["library", `คลังส่วนตัว (${personalCatalog.length})`],
                   ...(family.startsWith("door_window.") ? [["designs", "แบบสำเร็จรูป · เลือกสไตล์"]] : []),
                 ].map(([id, label]) => (
@@ -1294,7 +1324,7 @@ function CatalogDialog({
                       aria-pressed={chosen?.id === type.id}
                       onClick={() => setSelected(type.id)}
                       onDoubleClick={() => {
-                        if (filter !== "library" && canChoose(type)) choose(type);
+                        if (filter !== "library" && filter !== "standard" && canChoose(type)) choose(type);
                       }}
                     >
                       <TypeThumbnail type={type} />
@@ -1366,7 +1396,7 @@ function CatalogDialog({
                 <>
                   <strong>{chosen.name}</strong>
                   <p>
-                    {typeSizeLabel(chosen, displayUnit)} · {filter === "library" ? "ยังไม่ได้นำเข้าโครงการ" : `ใช้ในแบบ ${usage.get(chosen.id) ?? 0} ชิ้น`}
+                    {typeSizeLabel(chosen, displayUnit)} · {filter === "library" ? "ยังไม่ได้นำเข้าโครงการ" : filter === "standard" ? "คลังมาตรฐาน ConstructFlow" : `ใช้ในแบบ ${usage.get(chosen.id) ?? 0} ชิ้น`}
                   </p>
                 </>
               ) : (
@@ -1382,19 +1412,19 @@ function CatalogDialog({
               สร้างจากชนิดนี้
             </button>
             <button
-              disabled={!chosen || filter === "library"}
+              disabled={!chosen || filter === "library" || filter === "standard"}
               className="cf-button cf-button-quiet"
               onClick={() => chosen && openEditor(makeEditor(chosen))}
             >
               <Pencil size={16} />
               แก้ไขชนิด
             </button>
-            {chosen && filter === "library" && (
-              <button className="cf-button cf-button-primary" onClick={() => importPersonalType(chosen)}>
+            {chosen && (filter === "library" || filter === "standard") && (
+              <button className="cf-button cf-button-primary" onClick={() => filter === "standard" ? importBundledType(chosen) : importPersonalType(chosen)}>
                 เพิ่มลงโครงการและเลือก
               </button>
             )}
-            {chosen && filter !== "library" && canChoose(chosen) && (
+            {chosen && filter !== "library" && filter !== "standard" && canChoose(chosen) && (
               <button
                 className="cf-button cf-button-primary"
                 onClick={() => choose(chosen)}

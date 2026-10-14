@@ -1616,6 +1616,31 @@ test('personal type library persists saved types and imports a project copy thro
   await expect(dialog.getByRole('button', { name: 'คลังส่วนตัว (0)' })).toBeVisible()
 })
 
+test('bundled type library searches standard types and adds a missing type through the command bus', async ({ page }) => {
+  const project = createEmptyProjectDocument(randomUUID(), 'Bundled catalog import')
+  project.types = project.types.filter(type => !(type.object_type === 'structure.column' && type.name === 'SC1'))
+  await page.goto('/')
+  await seedLocalProjectSnapshot(page, serializeProject(project))
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง')
+
+  await page.getByTitle('คลังชนิด').click()
+  const dialog = page.getByRole('dialog', { name: 'คลังชนิด' })
+  await dialog.locator('.cf-catalog-categories').getByRole('button', { name: /^เสา/ }).click()
+  await dialog.getByLabel('ค้นหาชนิด').fill('SC1')
+  await dialog.getByRole('button', { name: /มาตรฐาน ConstructFlow/ }).click()
+  await expect(dialog.locator('.cf-type-card')).toHaveCount(1)
+  await expect(dialog.locator('.cf-type-card')).toContainText('SC1')
+  await dialog.getByRole('button', { name: 'เพิ่มลงโครงการและเลือก' }).click()
+  await expect(dialog).toBeHidden()
+  await expect.poll(async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return null
+    const saved = JSON.parse(raw) as { types: { id: string; object_type: string; name: string }[] }
+    return saved.types.some(type => type.object_type === 'structure.column' && type.name === 'SC1')
+  }).toBe(true)
+})
+
 test('plan, framing, and roof plan share pan and zoom navigation', async ({ page }) => {
   await page.goto('/')
   const planCanvas = page.locator('.cf-plan-canvas')

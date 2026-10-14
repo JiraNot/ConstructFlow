@@ -16,6 +16,7 @@ type GlazingMaterial =
   | "tinted_glass";
 
 export const CATALOG_FAMILIES = [
+  ["architecture.wall_finish", "วัสดุผิวผนัง"],
   ["structure.column", "เสา"],
   ["structure.foundation", "ฐานราก"],
   ["structure.beam", "คาน"],
