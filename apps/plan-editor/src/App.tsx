@@ -35,7 +35,7 @@ import { ProjectLegalModal } from './components/ProjectLegalModal.js'
 import { CoordinationPanel } from './components/CoordinationPanel.js'
 import { useCoordinationReport } from './features/coordination/useCoordinationReport.js'
 import type { ProjectLegalMetadata } from '@constructflow/project-model'
-import { UnderlayConfig, PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
+import { PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
 import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home } from 'lucide-react'
 import { calculateTakeoff, calculatePhasedBOQ } from '@constructflow/takeoff-engine'
 import { buildElevationManipulationCommands as buildElevationManipulationCommandsForView } from './elevationManipulationCommands.js'
@@ -53,6 +53,7 @@ import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
 import { useReferenceDataImportActions } from './app/useReferenceDataImportActions.js'
 import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcuts.js'
 import { useMultiViewPreferences, type EditorViewMode, type SplitViewLayout, type SplitViewPaneCount } from './app/useMultiViewPreferences.js'
+import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
@@ -237,55 +238,13 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [cursorCoords_mm, setCursorCoords_mm] = useState<[number, number]>([0, 0])
   const [snapKind, setSnapKind] = useState<string>('Free')
 
-  // Underlay & Calibration State
-  const [underlay, setUnderlay] = useState<UnderlayConfig>({
-    image: null,
-    origin_mm: [0, 0],
-    scale_mm_per_px: 10,
-    opacity: 0.6,
-    visible: true,
-    rotation_deg: 0,
+  const underlaySession = usePlanUnderlaySession({
+    project, viewMode, activeLevelId: project.project.active_level_id,
+    sessionRef: projectSessionRef, setProjectState, setActiveTool,
   })
-  const underlayKey = `${viewMode}:${project.project.active_level_id}`
-  const hydratedUnderlayRef = useRef<string | null>(null)
-  useEffect(() => {
-    const saved = project.underlays?.[underlayKey]
-    if (!saved) {
-      if (hydratedUnderlayRef.current !== underlayKey) {
-        hydratedUnderlayRef.current = underlayKey
-        setUnderlay(current => ({ ...current, image: null }))
-      }
-      return
-    }
-    if (hydratedUnderlayRef.current === `${underlayKey}:${saved.data_url}`) return
-    const image = new Image()
-    image.onload = () => {
-      image.dataset.projectSrc = saved.data_url
-      hydratedUnderlayRef.current = `${underlayKey}:${saved.data_url}`
-      setUnderlay({ image, origin_mm: saved.origin_mm, scale_mm_per_px: saved.scale_mm_per_px, rotation_deg: saved.rotation_deg, opacity: saved.opacity, visible: saved.visible })
-    }
-    image.onerror = () => { hydratedUnderlayRef.current = `${underlayKey}:${saved.data_url}` }
-    image.src = saved.data_url
-  }, [project.underlays, underlayKey])
-  useEffect(() => {
-    const image = underlay.image
-    const dataUrl = image?.dataset.projectSrc
-    if (!image || !dataUrl || !dataUrl.startsWith('data:image/')) return
-    const value = { data_url: dataUrl, origin_mm: underlay.origin_mm, scale_mm_per_px: underlay.scale_mm_per_px, rotation_deg: underlay.rotation_deg ?? 0, opacity: underlay.opacity, visible: underlay.visible }
-    const timer=window.setTimeout(()=>setProjectState(current => {
-      const existing = current.underlays?.[underlayKey]
-      if (existing && JSON.stringify(existing) === JSON.stringify(value)) return current
-      const updated = { ...current, underlays: { ...current.underlays, [underlayKey]: value } }
-      projectSessionRef.current?.commit(updated)
-      return updated
-    }),180)
-    return ()=>window.clearTimeout(timer)
-  }, [underlay, underlayKey])
-  const canCalibrateUnderlayRef = useRef(false)
-  canCalibrateUnderlayRef.current = !!underlay.image && underlay.visible
+  const { underlay, setUnderlay, underlayKey, hydratedUnderlayRef, canCalibrateUnderlayRef, calibrationPointsRef } = underlaySession
   const [calibrationModalOpen, setCalibrationModalOpen] = useState<boolean>(false)
   const [measuredCalibrationDist_mm, setMeasuredCalibrationDist_mm] = useState<number>(4000)
-  const calibrationPointsRef = useRef<{ first: [number, number]; second: [number, number] } | null>(null)
   const [isPresetsModalOpen, setIsPresetsModalOpen] = useState<boolean>(false)
   const [isLegalModalOpen, setIsLegalModalOpen] = useState<boolean>(false)
 
@@ -378,35 +337,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const { handleUploadUnderlayImage, handleImportSiteSurvey } = useReferenceDataImportActions({
     underlayKey, hydratedUnderlayRef, setUnderlay, setFileFeedback, dispatchCommandBatch,
   })
-  const handleClearUnderlay = () => {
-    setUnderlay(current => ({ ...current, image: null }))
-    setProjectState(current => {
-      if (!current.underlays?.[underlayKey]) return current
-      const underlays={...current.underlays};delete underlays[underlayKey]
-      const updated={...current,underlays};projectSessionRef.current?.commit(updated);return updated
-    })
-    hydratedUnderlayRef.current=underlayKey
-  }
-
-  // Apply calibrated 1:1 scale
-  const handleApplyCalibrationScale = (newScale: number, _realDistance_mm: number, axis: 'x' | 'y') => {
-    const points = calibrationPointsRef.current
-    setUnderlay((prev) => ({
-      ...prev,
-      scale_mm_per_px: newScale,
-      ...(points ? (() => {
-        const dx = (points.second[0] - points.first[0]) / prev.scale_mm_per_px
-        const dy = (points.second[1] - points.first[1]) / prev.scale_mm_per_px
-        const rotation = (axis === 'x' ? 0 : Math.PI / 2) - Math.atan2(dy, dx)
-        const cos = Math.cos(rotation), sin = Math.sin(rotation)
-        const px = (points.first[0] - prev.origin_mm[0]) / prev.scale_mm_per_px
-        const py = (points.first[1] - prev.origin_mm[1]) / prev.scale_mm_per_px
-        return { rotation_deg: (prev.rotation_deg ?? 0) + rotation * 180 / Math.PI,
-          origin_mm: [points.first[0] - (px * cos - py * sin) * newScale, points.first[1] - (px * sin + py * cos) * newScale] as [number, number] }
-      })() : {}),
-    }))
-    setActiveTool('select')
-  }
+  const handleClearUnderlay = underlaySession.clearUnderlay
+  const handleApplyCalibrationScale = (newScale: number, _realDistance_mm: number, axis: 'x' | 'y') => underlaySession.applyCalibrationScale(newScale, axis)
 
   // Apply 1-Click Extension Preset (atomic batch of SmartObjects)
   const handleApplyExtensionPreset = (updatedProject: ProjectDocument, envelopes: CommandEnvelope[]) => {
