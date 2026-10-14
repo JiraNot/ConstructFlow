@@ -288,6 +288,19 @@ function hatchEllipsePoints(centerX, centerY, majorX, majorY, ratio, start, end,
   })
 }
 
+function hatchSplinePoints(edgePairs) {
+  const splinePairs = []
+  for (const pair of edgePairs) {
+    if (pair.code === 94) splinePairs.push({ code: 71, value: pair.value })
+    else if (pair.code === 95) splinePairs.push({ code: 72, value: pair.value })
+    else if (pair.code === 96) splinePairs.push({ code: 73, value: pair.value })
+    else if (pair.code === 74) splinePairs.push({ code: 70, value: Number(pair.value) === 1 ? '1' : '0' })
+    else if (pair.code === 42) splinePairs.push({ code: 41, value: pair.value })
+    else if ([10, 20, 40].includes(pair.code)) splinePairs.push(pair)
+  }
+  return splineShape({ pairs: splinePairs })?.points ?? null
+}
+
 function hatchEdgeBoundaries(pathPairs) {
   const countPair = pathPairs.find(pair => pair.code === 93)
   const count = Math.floor(Number(countPair?.value))
@@ -318,6 +331,8 @@ function hatchEdgeBoundaries(pathPairs) {
       edgePoints = hatchArcPoints(value(10), value(20), value(40), value(50), value(51), value(73) !== 0)
     } else if (edgeType === 3) {
       edgePoints = hatchEllipsePoints(value(10), value(20), value(11), value(21), value(40), value(50), value(51), value(73) !== 0)
+    } else if (edgeType === 4) {
+      edgePoints = hatchSplinePoints(edgePairs)
     } else {
       return []
     }

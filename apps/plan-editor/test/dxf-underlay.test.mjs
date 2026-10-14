@@ -114,6 +114,28 @@ test('DXF underlay renders edge-based HATCH elliptical arcs in both loop joins',
   assert.ok((paths[0].match(/L/g) ?? []).length > 35, 'the elliptical edge is sampled smoothly and joins the neighboring line edges')
 })
 
+test('DXF underlay renders rational spline edges in closed HATCH loops', () => {
+  const hatch = [
+    '0', 'HATCH', '91', '1', '92', '1', '93', '4',
+    '72', '1', '10', '0', '20', '0', '11', '100', '21', '0',
+    '72', '4', '94', '2', '73', '1', '74', '0', '95', '6', '96', '3',
+    '40', '0', '40', '0', '40', '0', '40', '1', '40', '1', '40', '1',
+    '10', '100', '20', '0', '42', '1',
+    '10', '150', '20', '50', '42', String(Math.SQRT1_2),
+    '10', '100', '20', '100', '42', '1',
+    '72', '1', '10', '100', '20', '100', '11', '0', '21', '100',
+    '72', '1', '10', '0', '20', '100', '11', '0', '21', '0',
+  ].join('\n')
+  const result = importDxfUnderlay(dxf(4, hatch))
+  const paths = decodeURIComponent(result.dataUrl).match(/<path d="[^"]+"\/>/g) ?? []
+
+  assert.equal(result.imported_entities, 1)
+  assert.equal(result.skipped_entities, 0)
+  assert.equal(paths.length, 1)
+  assert.ok(paths[0].includes(' Z'))
+  assert.ok((paths[0].match(/L/g) ?? []).length >= 20, 'the rational spline edge is sampled smoothly into the hatch loop')
+})
+
 test('DXF underlay renders positive and negative LWPOLYLINE bulges', () => {
   const entities = [
     '0', 'LWPOLYLINE', '70', '1', '10', '0', '20', '0', '42', '1', '10', '100', '20', '0', '10', '100', '20', '100', '10', '0', '20', '100',
