@@ -2374,7 +2374,7 @@ function compilePermitDrawingSetBase(
               placed = true;
               break;
             }
-            if (!placed) warnings.push(`A-02: could not place wall-face marks without overlap (${wall.id})`);
+            if (!placed) warnings.push(`${id}: could not place wall-face marks without overlap (${wall.id})`);
           };
 
           // Joined/coplanar walls frequently contribute the same projected
@@ -2831,7 +2831,10 @@ function compilePermitDrawingSetBase(
                 const areaText = !boundaryOpen && Number.isFinite(area) && area > 0 ? `${(area / 1e6).toFixed(2)} m²` : "";
                 const titleWidth = Math.max(8, title.length * 1.15), areaWidth = Math.max(8, areaText.length * 1.05);
                 const tagWidth = Math.max(titleWidth, areaWidth), tagHeight = areaText ? 6 : 3.8;
-                const offsets: Vec2[] = [[0, 0], [0, 8], [0, -8], [-8, 0], [8, 0], [0, 14], [0, -14], [-12, 8], [12, 8], [-12, -8], [12, -8]];
+                const offsets: Vec2[] = Array.from({ length: 17 }, (_, row) => row - 8)
+                  .flatMap((y) => Array.from({ length: 17 }, (_, column) => column - 8)
+                    .map((x) => [x * 2, y * 2] as Vec2))
+                  .sort((a, b) => Math.hypot(...a) - Math.hypot(...b));
                 let placed = false;
                 for (const [offsetX, offsetY] of offsets) {
                   const anchor: Vec2 = [mapped(center)[0] + offsetX, mapped(center)[1] + offsetY];
