@@ -23,8 +23,9 @@ import { useToolSession } from './app/useToolSession.js'
 import { DEFAULT_PLAN_CANVAS_PREFERENCES, type PlanCanvasPreferences } from './app/planCanvasPreferences.mjs'
 import { ProjectCommandSession } from './commands/CommandBus.js'
 import { Toolbar, ToolType } from './components/Toolbar.js'
-import { PlanCanvas, type PlanCanvasProps } from './components/PlanCanvas.js'
-import { ElevationCanvas, type CoordinatedElevationNavigation } from './components/ElevationCanvas.js'
+import type { PlanCanvasProps } from './components/PlanCanvas.types.js'
+import type { CoordinatedElevationNavigation } from './components/ElevationCanvas.js'
+import { EditorViewRenderer } from './components/EditorViewRenderer.js'
 import { EditorInspector } from './components/EditorInspector.js'
 import { SettingsModal } from './components/SettingsModal.js'
 import { TypeManagerModal } from './components/TypeManagerModal.js'
@@ -35,7 +36,6 @@ import type { ProjectLegalMetadata } from '@constructflow/project-model'
 import { PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
 import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home } from 'lucide-react'
 import { calculateTakeoff, calculatePhasedBOQ } from '@constructflow/takeoff-engine'
-import { buildElevationManipulationCommands as buildElevationManipulationCommandsForView } from './elevationManipulationCommands.js'
 import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { usePlanPlacementCommands } from './app/usePlanPlacementCommands.js'
 import { usePropertiesPanelActions } from './app/usePropertiesPanelActions.js'
@@ -66,7 +66,6 @@ const nextHigherLevelId = (project: ProjectDocument, baseLevelId: string): strin
     .sort((a, b) => a.elevation_mm - b.elevation_mm)[0]?.id ?? '' : ''
 }
 
-const Model3DViewport = lazy(() => import('./components/Model3DViewport.js').then(module => ({ default: module.Model3DViewport })))
 const ConstructionWorkbench=lazy(()=>import('./components/ConstructionWorkbench.js').then(m=>({default:m.ConstructionWorkbench})))
 
 export interface AppProps {
@@ -324,8 +323,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setCommandQueue((q) => [...q, ...envelopes])
   }
 
-  const buildElevationManipulationCommands = (objectId: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move'|'top'|'base', gripIndex?: number): CommandRequest[] =>
-    buildElevationManipulationCommandsForView(project, viewMode, objectId, deltaWorldMm, deltaZMm, verticalIntent, gripIndex)
   const handleMoveElevationObject = (objectId: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move'|'top'|'base') => {
     const object=project.objects[objectId];if(!object)return
     if(isWallObject(object)){
@@ -600,27 +597,17 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       setSnapKind(kind)
     },
   }
-  const renderEditorView = (mode: EditorViewMode, auxiliary = false) => {
-    if (mode === 'plan' || mode === 'framing' || mode === 'roofplan') return <PlanCanvas
-      key={mode}
-      {...planCanvasProps}
-      activeTool={auxiliary ? 'select' : activeTool}
-      toolActivation={auxiliary ? undefined : toolActivation}
-      planDiscipline={mode === 'framing' ? 'framing' : mode === 'roofplan' ? 'roof' : 'architecture'}
-    />
-    if (mode === 'model3d') return <Suspense fallback={<div style={{ padding: 24, color: '#94a3b8' }}>3D renderer is loading…</div>}>
-      <Model3DViewport project={viewProject} onSelectObject={id => selectObjects(id ? [id] : [], id)} selectedId={selectedId} selectedIds={selectedIds} autoFrameSelection={splitViewEnabled} planNavigation={planAnd3DNavigationLinked ? planNavigationViewport : null} onPlanNavigationChange={planAnd3DNavigationLinked ? setPlanNavigationViewport : undefined} coordination={coordinationFindings} />
-    </Suspense>
-    return <ElevationCanvas project={viewProject} direction={mode} selectedId={selectedId} selectedIds={selectedIds}
-      onSelectObject={setSelectedId} onSelectionChange={selectObjects}
-      underlay={underlay} coordination={coordinationFindings} navigation={elevationNavigation} onNavigationChange={setElevationNavigation}
-      planNavigation={mode === 'rcp' && planAndRcpNavigationLinked ? planNavigationViewport : null}
-      onPlanNavigationChange={mode === 'rcp' && planAndRcpNavigationLinked ? setPlanNavigationViewport : undefined}
-      onMoveObject={mode === 'rcp' ? undefined : handleMoveElevationObject}
-      onBuildManipulation={mode === 'rcp' ? undefined : buildElevationManipulationCommands}
-      onPreviewManipulation={previewDirectManipulation} onCommitManipulation={commitDirectManipulation}
-      onManipulationRejected={handleManipulationRejected} />
+  const sharedEditorViewProps = {
+    planCanvasProps, activeTool, toolActivation, project: viewProject, selectedId, selectedIds,
+    onSelectObject: setSelectedId, onSelectionChange: selectObjects, splitViewEnabled,
+    planNavigationViewport, onPlanNavigationViewportChange: setPlanNavigationViewport,
+    elevationNavigation, onElevationNavigationChange: setElevationNavigation,
+    planAnd3DNavigationLinked, planAndRcpNavigationLinked, underlay, coordination: coordinationFindings,
+    onMoveElevationObject: handleMoveElevationObject, previewManipulation: previewDirectManipulation,
+    commitManipulation: commitDirectManipulation, onManipulationRejected: handleManipulationRejected,
   }
+  const renderEditorView = (mode: EditorViewMode, auxiliary = false) =>
+    <EditorViewRenderer mode={mode} auxiliary={auxiliary} {...sharedEditorViewProps} />
 
   if (!localAutosaveReady) return (
     <div role="status" aria-live="polite" style={{ display: 'grid', placeItems: 'center', width: '100vw', height: '100vh', color: '#475569', fontFamily: 'sans-serif' }}>
