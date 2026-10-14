@@ -5,6 +5,7 @@ import type { PlanDiscipline } from '@constructflow/representation-engine'
 import { drawDirectManipulationGhost, renderPlanView, type CalibrationOverlay, type PlanLabelVisibility, type PlacementGhost, type UnderlayConfig } from '../rendering/planRenderer.js'
 import { drawCoordinationPrimitives, planCoordinationOverlay } from '../rendering/coordinationOverlay.js'
 import { worldToScreen, type ViewportState } from '../viewport/viewportTransform.js'
+import { drawElectricalCircuitLogicalLinks, resolveElectricalCircuitLogicalLinks } from '../rendering/electricalCircuitLogicalLinks.js'
 
 interface ManipulationPreview {
   project: ProjectDocument
@@ -43,6 +44,10 @@ export function drawPlanCanvasBaseScene({
 }: PlanCanvasBaseSceneOptions) {
   renderPlanView(ctx, width, height, planProject, viewport, selectedIds, hoveredId, activeSnap, ghost,
     underlay, calibrationOverlay, project, labelMode, labelVisibility, [], planDiscipline)
+
+  const circuitLinks = resolveElectricalCircuitLogicalLinks(project, editableSelectionIds, new Set(Object.keys(planProject.objects)))
+  drawElectricalCircuitLogicalLinks(ctx, circuitLinks, viewport)
+  ctx.canvas.dataset.electricalCircuitLogicalLinkCount = String(circuitLinks.length)
 
   const visibleManipulationPreview = manipulationPreview ?? externalManipulationPreview
   if (visibleManipulationPreview) {

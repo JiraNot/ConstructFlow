@@ -2157,6 +2157,7 @@ test('panel Properties previews phase balance and applies all circuit phases in 
   await page.reload()
   await page.getByRole('tab', { name: 'รายการ' }).click()
   await page.locator(`.cf-browser-tree [data-object-id="${fixture.panelId}"] .cf-browser-object`).click()
+  await expect(canvas(page)).toHaveAttribute('data-electrical-circuit-logical-link-count', '3')
   await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
   const balance = page.getByLabel('สมดุลเฟสวงจรไฟฟ้า')
   await expect(balance).toContainText('จัดสมดุลโหลด 3 เฟส · 3 วงจร')

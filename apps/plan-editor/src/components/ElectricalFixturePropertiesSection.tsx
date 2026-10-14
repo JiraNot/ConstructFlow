@@ -55,6 +55,7 @@ export const ElectricalFixturePropertiesSection: React.FC<Props> = ({ project, d
     </label>
     {data.kind === 'panel' && <>
       <small style={{ color: '#64748b' }}>ตู้ไฟเป็นต้นทางของวงจร จึงกำหนดวงจรให้ตู้ไฟไม่ได้</small>
+      <small style={{ color: '#6d28d9' }}>เมื่อเลือกตู้ไฟในแปลน เส้นประสีม่วงแสดงความสัมพันธ์ของอุปกรณ์ในวงจร ไม่ใช่แนวเดินสายหรือท่อจริง</small>
       <div aria-label="สมดุลเฟสวงจรไฟฟ้า" style={{ display: 'grid', gap: 5, padding: 8, border: '1px solid #dbe4ee', borderRadius: 6, background: '#f8fafc' }}>
         <strong style={{ fontSize: 11, color: '#334155' }}>จัดสมดุลโหลด 3 เฟส · {panelCircuits.length} วงจร</strong>
         {phaseBalance ? <>
