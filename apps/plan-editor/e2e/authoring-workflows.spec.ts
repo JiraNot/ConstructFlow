@@ -4718,7 +4718,7 @@ test('two-storey residential demo preserves browser selection across all views a
     await expect(restoredProperties).toHaveAttribute('data-object-id', objectId!)
     if (view === '3D ดูตัวอย่าง') await expect(page.getByTestId('model3d-viewport')).toBeVisible()
     else await expect(page.locator('canvas').first()).toBeVisible()
-    if (view === 'รูปด้านตะวันออก') {
+    if (view === 'แปลนพื้น' || view === 'แปลนคาน' || view === 'แปลนหลังคา' || view.startsWith('รูปด้าน')) {
       const blueSelectionPixels = await canvas(page).evaluate(element => {
         const context = element.getContext('2d')
         if (!context) return -1
@@ -4729,7 +4729,7 @@ test('two-storey residential demo preserves browser selection across all views a
         }
         return count
       })
-      expect(blueSelectionPixels, 'east elevation should paint the selected object with its blue selection outline').toBeGreaterThan(0)
+      expect(blueSelectionPixels, `${view} should paint the selected object with its blue selection outline`).toBeGreaterThan(0)
     }
   }
   const houseModel = page.getByTestId('model3d-viewport')
