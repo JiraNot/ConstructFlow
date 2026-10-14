@@ -5,9 +5,19 @@ const clampPrimaryPanePercent = value => Number.isFinite(value)
 const track = weight => `minmax(0, ${weight}fr)`
 
 /** Build CSS grid tracks for the currently supported multiview arrangements. */
-export function buildMultiViewGridTracks(paneCount, layout, primaryPanePercent = 50) {
-  if (![2, 3, 4].includes(paneCount) || !['columns', 'rows', 'focus', 'grid'].includes(layout)) {
+export function buildMultiViewGridTracks(paneCount, layout, primaryPanePercent = 50, customColumnCount = 2) {
+  if (![2, 3, 4].includes(paneCount) || !['columns', 'rows', 'focus', 'grid', 'custom'].includes(layout)) {
     return { columns: 'minmax(0, 1fr)', rows: 'minmax(0, 1fr)' }
+  }
+  if (layout === 'custom') {
+    const columns = Number.isFinite(customColumnCount)
+      ? Math.max(1, Math.min(paneCount, Math.round(customColumnCount)))
+      : 2
+    const rows = Math.ceil(paneCount / columns)
+    return {
+      columns: `repeat(${columns}, minmax(0, 1fr))`,
+      rows: `repeat(${rows}, minmax(0, 1fr))`,
+    }
   }
   const primary = clampPrimaryPanePercent(primaryPanePercent)
   const remainder = 100 - primary
@@ -39,4 +49,14 @@ export function buildMultiViewGridTracks(paneCount, layout, primaryPanePercent =
 
 export function buildPrimaryPaneGridStyle(paneCount, layout) {
   return layout === 'focus' && paneCount === 3 ? { gridRow: 'span 2' } : undefined
+}
+
+export function buildMultiViewPaneGridStyle(paneCount, layout, paneIndex, customColumnCount = 2) {
+  if (layout !== 'custom' || ![2, 3, 4].includes(paneCount)) return undefined
+  const columns = Number.isFinite(customColumnCount)
+    ? Math.max(1, Math.min(paneCount, Math.round(customColumnCount)))
+    : 2
+  const remainder = paneCount % columns
+  if (remainder !== 0 && paneIndex >= paneCount - remainder) return { gridColumn: `span ${columns}` }
+  return undefined
 }

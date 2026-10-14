@@ -45,7 +45,7 @@ import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
 import { useReferenceDataImportActions } from './app/useReferenceDataImportActions.js'
 import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcuts.js'
 import { useMultiViewPreferences, type EditorViewMode, type SplitViewLayout, type SplitViewPaneCount } from './app/useMultiViewPreferences.js'
-import { buildMultiViewGridTracks, buildPrimaryPaneGridStyle } from './app/multiViewLayout.mjs'
+import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle } from './app/multiViewLayout.mjs'
 import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 import { createElevationObjectCommandHandler } from './app/elevationObjectCommands.js'
 
@@ -126,8 +126,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [viewMode, setViewMode] = useState<EditorViewMode>('plan')
   const [multiViewPreferences, setMultiViewPreferences] = useMultiViewPreferences(project.project.id)
   const { enabled: splitViewEnabled, paneCount: splitViewPaneCount, layout: splitViewLayout,
-    primaryPanePercent, secondaryViewMode, tertiaryViewMode, fourthViewMode } = multiViewPreferences
-  const splitViewTracks = buildMultiViewGridTracks(splitViewPaneCount, splitViewLayout, primaryPanePercent)
+    customColumnCount, primaryPanePercent, secondaryViewMode, tertiaryViewMode, fourthViewMode } = multiViewPreferences
+  const splitViewTracks = buildMultiViewGridTracks(splitViewPaneCount, splitViewLayout, primaryPanePercent, customColumnCount)
   const splitViewGridStyle = splitViewEnabled ? {
     display: 'grid',
     gridTemplateColumns: splitViewTracks.columns,
@@ -136,6 +136,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     background: '#cbd5e1',
   } : undefined
   const primaryPaneGridStyle = buildPrimaryPaneGridStyle(splitViewPaneCount, splitViewLayout)
+  const paneGridStyle = (paneIndex: number) => buildMultiViewPaneGridStyle(splitViewPaneCount, splitViewLayout, paneIndex, customColumnCount)
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
     if (['beam', 'foundation'].includes(activeTool)) setViewMode('framing')
@@ -771,6 +772,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                     setMultiViewPreferences(current => ({
                       ...current,
                       paneCount: count,
+                      customColumnCount: Math.min(current.customColumnCount, count),
                       layout: count === 4 ? 'grid' : current.layout === 'grid' || (count === 2 && current.layout === 'focus') ? 'columns' : current.layout,
                     }))
                   }}>
@@ -785,9 +787,15 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                     <option value="rows">เรียงบนลงล่าง</option>
                     {splitViewPaneCount === 3 && <option value="focus">1 + 2 · pane หลักใหญ่</option>}
                     {splitViewPaneCount === 4 && <option value="grid">2 × 2</option>}
+                    <option value="custom">กำหนดจำนวนคอลัมน์</option>
                   </select>
                 </label>}
-                {splitViewEnabled && <label>สัดส่วน pane หลัก · {primaryPanePercent}%
+                {splitViewEnabled && splitViewLayout === 'custom' && <label>คอลัมน์ในมุมมอง
+                  <select aria-label="จำนวนคอลัมน์มุมมองหลาย pane" value={customColumnCount} onChange={event => setMultiViewPreferences(current => ({ ...current, customColumnCount: Number(event.target.value) }))}>
+                    {Array.from({ length: splitViewPaneCount }, (_, index) => index + 1).map(count => <option key={count} value={count}>{count} คอลัมน์</option>)}
+                  </select>
+                </label>}
+                {splitViewEnabled && splitViewLayout !== 'custom' && <label>สัดส่วน pane หลัก · {primaryPanePercent}%
                   <input aria-label="สัดส่วน pane หลัก" type="range" min={30} max={70} step={5} value={primaryPanePercent}
                     onChange={event => setMultiViewPreferences(current => ({ ...current, primaryPanePercent: Number(event.target.value) }))} />
                 </label>}
@@ -833,16 +841,16 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
           {/* Interactive Plan Canvas */}
           <div className="cf-viewport-stage" style={splitViewGridStyle}>
-            <div className="cf-multiview-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', ...primaryPaneGridStyle }}>
+            <div className="cf-multiview-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', ...primaryPaneGridStyle, ...paneGridStyle(0) }}>
               {renderEditorView(viewMode)}
             </div>
-            {splitViewEnabled && <div className="cf-multiview-pane" data-testid="secondary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1' }}>
+            {splitViewEnabled && <div className="cf-multiview-pane" data-testid="secondary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1', ...paneGridStyle(1) }}>
               {renderEditorView(secondaryViewMode, true)}
             </div>}
-            {splitViewEnabled && splitViewPaneCount >= 3 && <div className="cf-multiview-pane" data-testid="tertiary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1' }}>
+            {splitViewEnabled && splitViewPaneCount >= 3 && <div className="cf-multiview-pane" data-testid="tertiary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1', ...paneGridStyle(2) }}>
               {renderEditorView(tertiaryViewMode, true)}
             </div>}
-            {splitViewEnabled && splitViewPaneCount === 4 && <div className="cf-multiview-pane" data-testid="fourth-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1' }}>
+            {splitViewEnabled && splitViewPaneCount === 4 && <div className="cf-multiview-pane" data-testid="fourth-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1', ...paneGridStyle(3) }}>
               {renderEditorView(fourthViewMode, true)}
             </div>}
           </div>

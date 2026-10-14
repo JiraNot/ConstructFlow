@@ -1,13 +1,14 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 
 export type EditorViewMode = 'plan' | 'framing' | 'roofplan' | 'north' | 'south' | 'east' | 'west' | 'rcp' | 'model3d'
-export type SplitViewLayout = 'columns' | 'rows' | 'focus' | 'grid'
+export type SplitViewLayout = 'columns' | 'rows' | 'focus' | 'grid' | 'custom'
 export type SplitViewPaneCount = 2 | 3 | 4
 
 export interface MultiViewPreferences {
   enabled: boolean
   paneCount: SplitViewPaneCount
   layout: SplitViewLayout
+  customColumnCount: number
   primaryPanePercent: number
   secondaryViewMode: EditorViewMode
   tertiaryViewMode: EditorViewMode
@@ -15,11 +16,12 @@ export interface MultiViewPreferences {
 }
 
 const VIEW_MODES = new Set<EditorViewMode>(['plan', 'framing', 'roofplan', 'north', 'south', 'east', 'west', 'rcp', 'model3d'])
-const LAYOUTS = new Set<SplitViewLayout>(['columns', 'rows', 'focus', 'grid'])
+const LAYOUTS = new Set<SplitViewLayout>(['columns', 'rows', 'focus', 'grid', 'custom'])
 const DEFAULT_PREFERENCES: MultiViewPreferences = {
   enabled: false,
   paneCount: 2,
   layout: 'columns',
+  customColumnCount: 2,
   primaryPanePercent: 50,
   secondaryViewMode: 'model3d',
   tertiaryViewMode: 'north',
@@ -48,10 +50,14 @@ function loadPreferences(projectId: string): MultiViewPreferences {
     const primaryPanePercent = typeof stored.primaryPanePercent === 'number' && Number.isFinite(stored.primaryPanePercent)
       ? Math.max(30, Math.min(70, Math.round(stored.primaryPanePercent)))
       : DEFAULT_PREFERENCES.primaryPanePercent
+    const customColumnCount = typeof stored.customColumnCount === 'number' && Number.isFinite(stored.customColumnCount)
+      ? Math.max(1, Math.min(paneCount, Math.round(stored.customColumnCount)))
+      : DEFAULT_PREFERENCES.customColumnCount
     return {
       enabled: stored.enabled === true,
       paneCount,
       layout,
+      customColumnCount,
       primaryPanePercent,
       secondaryViewMode: isViewMode(stored.secondaryViewMode) ? stored.secondaryViewMode : DEFAULT_PREFERENCES.secondaryViewMode,
       tertiaryViewMode: isViewMode(stored.tertiaryViewMode) ? stored.tertiaryViewMode : DEFAULT_PREFERENCES.tertiaryViewMode,
