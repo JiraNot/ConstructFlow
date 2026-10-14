@@ -15,7 +15,7 @@ async function countBlueSelectionPixels(page: Page) {
     const pixels = context.getImageData(0, 0, element.width, element.height).data
     let count = 0
     for (let index = 0; index < pixels.length; index += 4) {
-      if (pixels[index]! <= 10 && pixels[index + 1]! >= 115 && pixels[index + 1]! <= 150 && pixels[index + 2]! >= 175 && pixels[index + 3]! > 0) count += 1
+      if (pixels[index]! <= 30 && pixels[index + 1]! >= 105 && pixels[index + 1]! <= 155 && pixels[index + 2]! >= 170 && pixels[index + 3]! > 0) count += 1
     }
     return count
   })
@@ -4774,13 +4774,37 @@ test('two-storey residential demo preserves browser selection across all views a
   expect(Object.values(cameraPose).every(Number.isFinite)).toBe(true)
   expect(cameraPose.distance).toBeGreaterThan(0)
 
-  const roomId = Object.entries(fixtureProject.objects).find(([, object]) => object.object_type === 'architecture.room')?.[0]
-  expect(roomId).toBeTruthy()
   await page.getByRole('tab', { name: 'รายการ' }).click()
   const browserRoom = page.getByLabel('Project Browser')
   await browserRoom.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  const selectFamily = async (objectType: string, view: string) => {
+    const id = Object.entries(fixtureProject.objects).find(([, object]) => object.object_type === objectType)?.[0]
+    expect(id, `reference house should include ${objectType}`).toBeTruthy()
+    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await browserRoom.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+    await browserRoom.getByLabel('ค้นหาวัตถุในโครงการ').fill(id!)
+    const familyRow = browserRoom.locator(`li[data-object-id="${id}"]`)
+    await expect(familyRow).toHaveCount(1, { timeout: 10_000 })
+    await familyRow.locator('.cf-browser-object').click()
+    await page.getByRole('button', { name: view, exact: true }).click()
+    await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', id!)
+    await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', id!)
+    await expect.poll(() => countBlueSelectionPixels(page), `${objectType} should paint a selection grip in ${view}`).toBeGreaterThan(0)
+  }
+  await selectFamily('architecture.wall', 'แปลนพื้น')
+  await selectFamily('structure.beam', 'แปลนคาน')
+  await selectFamily('structure.slab', 'แปลนพื้น')
+  await selectFamily('door_window.window', 'แปลนพื้น')
+  await selectFamily('roof.system', 'แปลนหลังคา')
+
+  const roomId = Object.entries(fixtureProject.objects).find(([, object]) => object.object_type === 'architecture.room')?.[0]
+  expect(roomId).toBeTruthy()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await browserRoom.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   await browserRoom.getByLabel('ค้นหาวัตถุในโครงการ').fill(roomId!)
-  await browserRoom.locator(`li[data-object-id="${roomId}"] .cf-browser-object`).click()
+  const roomRow = browserRoom.locator(`li[data-object-id="${roomId}"]`)
+  await expect(roomRow).toHaveCount(1, { timeout: 10_000 })
+  await roomRow.locator('.cf-browser-object').click()
   await page.getByRole('button', { name: 'แปลนฝ้า RCP', exact: true }).click()
   await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', roomId!)
   await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', roomId!)
