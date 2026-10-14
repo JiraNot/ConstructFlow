@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createEmptyProjectDocument, resolveBeamBaseElevation, resolveColumnVerticalExtent } from '@constructflow/project-model'
+import { createEmptyProjectDocument, deserializeProject, resolveBeamBaseElevation, resolveColumnVerticalExtent, serializeProject } from '@constructflow/project-model'
 import { ProjectCommandSession, CommandBus } from '../dist/index.js'
 
 test('a column uses one base-to-eaves span, follows level edits and supports undo/redo', () => {
@@ -125,4 +125,57 @@ test('deleting a column cascades to hosted foundations and rebar, and detaches c
   assert.equal(redone.objects[c1Id], undefined)
   assert.equal(redone.objects[fId], undefined)
   assert.equal(redone.objects[bId].module_data.start_column_id, undefined)
+})
+
+test('continuous beams keep ordered multi-column supports through edits, deletion, and undo/redo', () => {
+  const project = createEmptyProjectDocument('MULTI-BEAM-SUPPORTS')
+  const session = new ProjectCommandSession(project)
+  const columnIds = ['00000000-0000-4000-8000-000000000051', '00000000-0000-4000-8000-000000000052', '00000000-0000-4000-8000-000000000053', '00000000-0000-4000-8000-000000000054', '00000000-0000-4000-8000-000000000055']
+  const [c0, c1, c2, c3, c4] = columnIds
+  const xs = [0, 2000, 4000, 6000, 8000]
+  const beamId = '00000000-0000-4000-8000-000000000050'
+  const created = session.execute([
+    ...columnIds.map((id, index) => ({ name: 'CreateColumn', input: {
+      id, mark: id, location_mm: [xs[index], 0, 0], section_mm: [200, 200],
+    } })),
+    { name: 'CreateBeam', input: {
+      id: beamId, mark: 'B1', start_point_mm: [0, 0, 0], end_point_mm: [8000, 0, 0],
+      start_column_id: c0, end_column_id: c4, intermediate_support_column_ids: [c3, c1, c2],
+    } },
+  ])
+  assert.equal(created.status, 'success', JSON.stringify(created.errors))
+  let beam = created.updatedProject.objects[beamId]
+  assert.deepEqual(beam.module_data.intermediate_support_column_ids, [c1, c2, c3])
+  assert.equal(beam.module_data.middle_support_column_id, c1)
+  assert.deepEqual(beam.host_refs, columnIds)
+  assert.deepEqual(created.updatedProject.relationships.filter(item => item.source_id === beamId).map(item => item.target_id), columnIds)
+
+  const moved = session.execute([{ name: 'UpdateBeamEndpoints', input: {
+    object_id: beamId, start_point_mm: [0, 0], end_point_mm: [8000, 0],
+  } }])
+  assert.equal(moved.status, 'success', JSON.stringify(moved.errors))
+  beam = moved.updatedProject.objects[beamId]
+  assert.deepEqual(beam.module_data.intermediate_support_column_ids, [c1, c2, c3])
+
+  const roundTrip = deserializeProject(serializeProject(moved.updatedProject))
+  assert.deepEqual(roundTrip.objects[beamId].module_data.intermediate_support_column_ids, [c1, c2, c3])
+  const removed = session.execute([{ name: 'DeleteObject', input: { object_id: c2 } }])
+  assert.equal(removed.status, 'success', JSON.stringify(removed.errors))
+  beam = removed.updatedProject.objects[beamId]
+  assert.deepEqual(beam.module_data.intermediate_support_column_ids, [c1, c3])
+  assert.equal(beam.module_data.middle_support_column_id, c1)
+  assert.equal(beam.host_refs.includes(c2), false)
+  assert.equal(removed.updatedProject.relationships.some(item => item.source_id === beamId && item.target_id === c2), false)
+
+  const undone = session.undo()
+  assert.deepEqual(undone.objects[beamId].module_data.intermediate_support_column_ids, [c1, c2, c3])
+  const redone = session.redo()
+  assert.deepEqual(redone.objects[beamId].module_data.intermediate_support_column_ids, [c1, c3])
+
+  const invalid = CommandBus.execute(redone, 'UpdateBeamEndpoints', {
+    object_id: beamId, start_point_mm: [0, 0], end_point_mm: [8000, 0],
+    intermediate_support_column_ids: [c1, c1],
+  })
+  assert.notEqual(invalid.result.status, 'success')
+  assert.deepEqual(invalid.updatedProject, redone)
 })

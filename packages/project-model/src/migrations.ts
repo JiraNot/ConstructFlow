@@ -315,6 +315,7 @@ export function validateProjectV2(project: ProjectDocument): void {
       eccentric_offset_mm: ['structure.foundation'],
       strap_beam_id: ['structure.foundation'],
       middle_support_column_id: ['structure.beam'],
+      intermediate_support_column_ids: ['structure.beam'],
       beam_system: ['structure.beam'],
       continuity_type: ['structure.beam'],
       skin_rebar_required: ['structure.beam'],
@@ -763,6 +764,19 @@ export function validateProjectV2(project: ProjectDocument): void {
     if (object.object_type === 'structure.beam') {
       for (const columnId of [data.start_column_id, data.end_column_id]) {
         if (columnId !== undefined && (typeof columnId !== 'string' || project.objects[columnId]?.object_type !== 'structure.column')) throw new Error(`Invalid project format: beam ${id} references a missing endpoint column`)
+      }
+      if (data.intermediate_support_column_ids !== undefined) {
+        if (!Array.isArray(data.intermediate_support_column_ids)
+          || data.intermediate_support_column_ids.some(columnId => typeof columnId !== 'string' || project.objects[columnId]?.object_type !== 'structure.column')) {
+          throw new Error(`Invalid project format: beam ${id} has an invalid intermediate support list`)
+        }
+        const supportIds = [...new Set(data.intermediate_support_column_ids as string[])]
+        if (supportIds.length !== data.intermediate_support_column_ids.length
+          || supportIds.some(columnId => !object.host_refs.includes(columnId)
+            || columnId === data.start_column_id || columnId === data.end_column_id)
+          || (data.middle_support_column_id !== undefined && data.middle_support_column_id !== supportIds[0])) {
+          throw new Error(`Invalid project format: beam ${id} has duplicate or unhosted intermediate supports`)
+        }
       }
     }
     if (object.object_type === 'door_window.door' || object.object_type === 'door_window.window') {

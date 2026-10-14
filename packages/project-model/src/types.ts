@@ -118,6 +118,8 @@ export interface BeamModuleData {
   start_column_id?: string // optional connected column UUID
   end_column_id?: string // optional connected column UUID
   middle_support_column_id?: string // optional intermediate/middle support column UUID
+  /** Ordered interior supports for multi-span beams; the legacy middle ID aliases the first. */
+  intermediate_support_column_ids?: string[]
   beam_system?: BeamSystem
   continuity_type?: BeamContinuityType
   skin_rebar_required?: boolean

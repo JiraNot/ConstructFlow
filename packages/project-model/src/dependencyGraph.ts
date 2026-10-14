@@ -94,6 +94,7 @@ export const DEPENDENCY_REFERENCE_FIELDS: readonly ReferenceFieldRule[] = [
   { object_types: ['structure.beam'], field: 'start_column_id', kind: 'supported_by', cascade: 'rehost', role: 'start_support' },
   { object_types: ['structure.beam'], field: 'end_column_id', kind: 'supported_by', cascade: 'rehost', role: 'end_support' },
   { object_types: ['structure.beam'], field: 'middle_support_column_id', kind: 'supported_by', cascade: 'rehost', role: 'middle_support' },
+  { object_types: ['structure.beam'], field: 'intermediate_support_column_ids[]', kind: 'supported_by', cascade: 'rehost', role: 'intermediate_support' },
   { object_types: ['structure.beam'], field: 'strap_beam_id', kind: 'connects_to', cascade: 'inform', role: 'strap_beam' },
   { object_types: ['structure.foundation'], field: 'supported_column_id', kind: 'supports', cascade: 'rehost', role: 'supported_column' },
   { object_types: ['structure.foundation'], field: 'strap_beam_id', kind: 'connects_to', cascade: 'inform', role: 'strap_beam' },

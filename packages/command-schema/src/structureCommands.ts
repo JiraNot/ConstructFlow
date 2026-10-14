@@ -203,6 +203,7 @@ export interface CreateBeamInput {
   start_column_id?: string
   end_column_id?: string
   middle_support_column_id?: string
+  intermediate_support_column_ids?: string[]
   beam_system?: 'simple' | 'continuous' | 'cantilever'
   continuity_type?: 'simple_span' | 'end_span' | 'interior_span' | 'cantilever'
   skin_rebar_required?: boolean
@@ -232,6 +233,7 @@ export interface UpdateBeamEndpointsInput {
   start_column_id?: string | null
   middle_support_column_id?: string | null
   end_column_id?: string | null
+  intermediate_support_column_ids?: string[] | null
   beam_system?: 'simple' | 'continuous' | 'cantilever'
   continuity_type?: 'simple_span' | 'end_span' | 'interior_span' | 'cantilever'
 }

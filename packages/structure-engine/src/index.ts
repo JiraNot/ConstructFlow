@@ -1,4 +1,4 @@
-import { SmartObject, ColumnModuleData, FoundationModuleData, GridModuleData, BeamModuleData, resolveCatalogType, catalogInstanceOverrides, isColumnObject, isFoundationObject, isGridObject, isBeamObject, resolveColumnVerticalExtent, resolveBeamBaseElevation, type ProjectDocument } from '@constructflow/project-model'
+import { SmartObject, ColumnModuleData, FoundationModuleData, GridModuleData, BeamModuleData, resolveCatalogType, catalogInstanceOverrides, getBeamIntermediateSupportColumnIds, isColumnObject, isFoundationObject, isGridObject, isBeamObject, resolveColumnVerticalExtent, resolveBeamBaseElevation, type ProjectDocument } from '@constructflow/project-model'
 import { CreateColumnInput, MoveColumnInput, UpdateColumnMarkInput, UpdateColumnVerticalReferenceInput, CreateFoundationInput, CreateGridInput, CreateGridSystemInput, UpdateGridSystemInput, ModifyGridInput, CreateBeamInput, UpdateBeamMarkInput, UpdateBeamDimensionsInput, UpdateBeamEndpointsInput, UpdateBeamVerticalReferenceInput, UpdateColumnDimensionsInput, UpdateFoundationDimensionsInput, MoveFoundationInput } from '@constructflow/command-schema'
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
@@ -18,6 +18,33 @@ function tuple3(value: unknown, fallback: [number, number, number]): [number, nu
 
 function catalogString(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback
+}
+
+function validateBeamInteriorSupports(project: ProjectDocument, ids: readonly string[], start: readonly number[], end: readonly number[], endpointIds: readonly (string | undefined)[]) {
+  if (![...start.slice(0, 2), ...end.slice(0, 2)].every(Number.isFinite)) return { ids: [], error: 'Beam endpoints must be finite before resolving intermediate supports' }
+  if (new Set(ids).size !== ids.length || ids.some(id => endpointIds.includes(id))) return { ids: [], error: 'Beam support columns must be unique and distinct from endpoint supports' }
+  const dx = end[0] - start[0], dy = end[1] - start[1]
+  const lengthSq = dx * dx + dy * dy, length = Math.sqrt(lengthSq)
+  if (!Number.isFinite(length) || length < 1) return { ids: [], error: 'Beam endpoints must define a usable span' }
+  const projected = ids.map(id => {
+    const column = project.objects[id]
+    if (!column || !isColumnObject(column)) return { id, ratio: Number.NaN, error: `Beam support column ${id} not found` }
+    const point = column.module_data.location_mm
+    const ratio = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSq
+    const nearestX = start[0] + dx * ratio, nearestY = start[1] + dy * ratio
+    const offAxis = Math.hypot(point[0] - nearestX, point[1] - nearestY)
+    if (!Number.isFinite(ratio) || ratio <= 0 || ratio >= 1 || offAxis > 5) {
+      return { id, ratio, error: `Beam support column ${id} must lie inside its span within 5 mm` }
+    }
+    return { id, ratio }
+  })
+  const error = projected.find(item => item.error)?.error
+  if (error) return { ids: [], error }
+  projected.sort((a, b) => a.ratio - b.ratio)
+  for (let index = 1; index < projected.length; index += 1) {
+    if (projected[index].ratio - projected[index - 1].ratio < 1 / length) return { ids: [], error: 'Beam intermediate support columns must occupy distinct positions along the span' }
+  }
+  return { ids: projected.map(item => item.id) }
 }
 
 function gridSystemTag(firstTag: string, index: number): string {
@@ -685,6 +712,11 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       const id = beamInput.id || crypto.randomUUID()
       const mark = beamInput.mark || 'B1'
 
+      if (beamInput.intermediate_support_column_ids !== undefined
+        && (!Array.isArray(beamInput.intermediate_support_column_ids) || beamInput.intermediate_support_column_ids.some(columnId => typeof columnId !== 'string' || !columnId))) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Intermediate beam supports must be a list of column UUIDs'] }, updatedProject: project }
+      }
+
       const typeDef = updated.types.find(
         (t) => t.object_type === 'structure.beam' && (beamInput.type_id ? t.id === beamInput.type_id : t.name.toLowerCase() === mark.toLowerCase())
       )
@@ -700,13 +732,24 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       const start_point_mm: [number, number, number] = [beamInput.start_point_mm[0], beamInput.start_point_mm[1], beamElevation]
       const end_point_mm: [number, number, number] = [beamInput.end_point_mm[0], beamInput.end_point_mm[1], beamElevation]
 
+      if (beamInput.intermediate_support_column_ids !== undefined
+        && (!Array.isArray(beamInput.intermediate_support_column_ids)
+          || new Set(beamInput.intermediate_support_column_ids).size !== beamInput.intermediate_support_column_ids.length)) {
+        return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Intermediate beam supports must be unique column UUIDs'] }, updatedProject: project }
+      }
+      const requestedSupportIds = getBeamIntermediateSupportColumnIds(beamInput)
+      const validatedSupports = validateBeamInteriorSupports(updated, requestedSupportIds, start_point_mm, end_point_mm, [beamInput.start_column_id, beamInput.end_column_id])
+      if (validatedSupports.error) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [validatedSupports.error] }, updatedProject: project }
+      const intermediateSupportIds = validatedSupports.ids
+      const middleSupportId = intermediateSupportIds[0]
+
       const span_mm = Math.round(Math.hypot(
         end_point_mm[0] - start_point_mm[0],
         end_point_mm[1] - start_point_mm[1]
       ))
 
       const isCantileverMark = mark.toLowerCase().startsWith('c-') || mark.toLowerCase().startsWith('cb') || mark.toLowerCase().includes('cantilever')
-      const beam_system = beamInput.beam_system || (beamInput.middle_support_column_id ? 'continuous' : isCantileverMark ? 'cantilever' : 'simple')
+      const beam_system = beamInput.beam_system || (intermediateSupportIds.length ? 'continuous' : isCantileverMark ? 'cantilever' : 'simple')
       const continuity_type = beamInput.continuity_type || (beam_system === 'cantilever' ? 'cantilever' : beam_system === 'continuous' ? 'interior_span' : 'simple_span')
       const skin_rebar_required = beamInput.skin_rebar_required ?? (section_mm[1] >= 500)
 
@@ -718,7 +761,7 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
         created_phase: beamInput.phase || project.project.active_phase,
         removed_phase: null,
         level_refs: [{ role: 'base_level', level_id }],
-        host_refs: [beamInput.start_column_id, beamInput.middle_support_column_id, beamInput.end_column_id].filter(Boolean) as string[],
+        host_refs: [...new Set([beamInput.start_column_id, ...intermediateSupportIds, beamInput.end_column_id].filter((columnId): columnId is string => Boolean(columnId)))],
         connector_refs: [],
         status: 'active',
         module_data: {
@@ -734,7 +777,8 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
           base_offset_mm,
           start_column_id: beamInput.start_column_id,
           end_column_id: beamInput.end_column_id,
-          middle_support_column_id: beamInput.middle_support_column_id,
+          middle_support_column_id: middleSupportId,
+          intermediate_support_column_ids: intermediateSupportIds,
           beam_system,
           continuity_type,
           skin_rebar_required,
@@ -747,27 +791,11 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
 
       updated.objects[id] = smartObject
 
-      if (beamInput.start_column_id) {
+      for (const columnId of [beamInput.start_column_id, ...intermediateSupportIds, beamInput.end_column_id].filter((columnId): columnId is string => Boolean(columnId))) {
         updated.relationships.push({
           kind: 'connects_to',
           source_id: id,
-          target_id: beamInput.start_column_id,
-          role: 'beam_column_connection',
-        })
-      }
-      if (beamInput.middle_support_column_id) {
-        updated.relationships.push({
-          kind: 'connects_to',
-          source_id: id,
-          target_id: beamInput.middle_support_column_id,
-          role: 'beam_column_connection',
-        })
-      }
-      if (beamInput.end_column_id) {
-        updated.relationships.push({
-          kind: 'connects_to',
-          source_id: id,
-          target_id: beamInput.end_column_id,
+          target_id: columnId,
           role: 'beam_column_connection',
         })
       }
@@ -879,22 +907,45 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       const span_mm = Math.round(Math.hypot(ex - sx, ey - sy))
       if (![sx, sy, ex, ey].every(Number.isFinite) || span_mm < 1) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Beam endpoints must define a finite span of at least 1 mm'] }, updatedProject: project }
       const startColumnId = update.start_column_id === undefined ? target.module_data.start_column_id : update.start_column_id ?? undefined
-      const middleSupportColumnId = update.middle_support_column_id === undefined ? target.module_data.middle_support_column_id : update.middle_support_column_id ?? undefined
       const endColumnId = update.end_column_id === undefined ? target.module_data.end_column_id : update.end_column_id ?? undefined
-      for (const id of [startColumnId, middleSupportColumnId, endColumnId]) if (id && !isColumnObject(updated.objects[id])) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Beam support column ${id} not found`] }, updatedProject: project }
       const start: [number, number, number] = [sx, sy, target.module_data.start_point_mm[2] ?? 0]
       const end: [number, number, number] = [ex, ey, target.module_data.end_point_mm[2] ?? 0]
-      const hostRefs = [...new Set([startColumnId, middleSupportColumnId, endColumnId].filter((id): id is string => Boolean(id)))]
+      let requestedSupportIds: string[]
+      if (update.intermediate_support_column_ids !== undefined) {
+        if (!Array.isArray(update.intermediate_support_column_ids)
+          || update.intermediate_support_column_ids.some(columnId => typeof columnId !== 'string' || !columnId)
+          || new Set(update.intermediate_support_column_ids).size !== update.intermediate_support_column_ids.length) {
+          return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Intermediate beam supports must be a list of column UUIDs'] }, updatedProject: project }
+        }
+        requestedSupportIds = getBeamIntermediateSupportColumnIds({
+          intermediate_support_column_ids: update.intermediate_support_column_ids,
+          middle_support_column_id: update.middle_support_column_id ?? undefined,
+        })
+      } else if (update.middle_support_column_id !== undefined) {
+        const existingSupports = getBeamIntermediateSupportColumnIds(target.module_data)
+        requestedSupportIds = existingSupports.filter(id => id !== target.module_data.middle_support_column_id)
+        if (update.middle_support_column_id) requestedSupportIds.unshift(update.middle_support_column_id)
+      } else {
+        requestedSupportIds = getBeamIntermediateSupportColumnIds(target.module_data)
+      }
+      const validatedSupports = validateBeamInteriorSupports(updated, requestedSupportIds, start, end, [startColumnId, endColumnId])
+      if (validatedSupports.error) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [validatedSupports.error] }, updatedProject: project }
+      const intermediateSupportIds = validatedSupports.ids
+      const middleSupportColumnId = intermediateSupportIds[0]
+      const hostRefs = [...new Set([startColumnId, ...intermediateSupportIds, endColumnId].filter((columnId): columnId is string => Boolean(columnId)))]
+      const beamSystem = update.beam_system ?? (intermediateSupportIds.length ? 'continuous' : target.module_data.beam_system === 'continuous' ? 'simple' : target.module_data.beam_system)
+      const continuityType = update.continuity_type ?? (beamSystem === 'continuous' ? target.module_data.continuity_type ?? 'interior_span' : beamSystem === 'simple' ? 'simple_span' : target.module_data.continuity_type)
       updated.objects[target.id] = { ...target, host_refs: hostRefs, module_data: { ...target.module_data, start_point_mm: start, end_point_mm: end, path_mm: [start, end], span_mm,
         ...(startColumnId ? { start_column_id: startColumnId } : { start_column_id: undefined }),
         ...(middleSupportColumnId ? { middle_support_column_id: middleSupportColumnId } : { middle_support_column_id: undefined }),
+        intermediate_support_column_ids: intermediateSupportIds,
         ...(endColumnId ? { end_column_id: endColumnId } : { end_column_id: undefined }),
-        ...(update.beam_system ? { beam_system: update.beam_system } : {}),
-        ...(update.continuity_type ? { continuity_type: update.continuity_type } : {}),
+        ...(beamSystem ? { beam_system: beamSystem } : {}),
+        ...(continuityType ? { continuity_type: continuityType } : {}),
       }, updated_at: now }
       updated.relationships = updated.relationships.filter(relationship => !(relationship.kind === 'connects_to' && relationship.source_id === target.id && relationship.role === 'beam_column_connection'))
       for (const columnId of hostRefs) updated.relationships.push({ kind: 'connects_to', source_id: target.id, target_id: columnId, role: 'beam_column_connection' })
-      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] }, updatedProject: updated, emittedEnvelope: { ...envelope, input: { ...update, start_point_mm: [sx, sy], end_point_mm: [ex, ey], start_column_id: startColumnId ?? null, middle_support_column_id: middleSupportColumnId ?? null, end_column_id: endColumnId ?? null } } }
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] }, updatedProject: updated, emittedEnvelope: { ...envelope, input: { ...update, start_point_mm: [sx, sy], end_point_mm: [ex, ey], start_column_id: startColumnId ?? null, middle_support_column_id: middleSupportColumnId ?? null, intermediate_support_column_ids: intermediateSupportIds, end_column_id: endColumnId ?? null } } }
     }
 
     case 'UpdateColumnDimensions': {
@@ -1046,8 +1097,10 @@ export function reconcileStructureDeletion(updated: ProjectDocument, deletedIds:
       const data = obj.module_data as Record<string, unknown>
       let changed = false
       let startCol = data.start_column_id
-      let middleSupportCol = data.middle_support_column_id
       let endCol = data.end_column_id
+      const oldIntermediateIds = getBeamIntermediateSupportColumnIds(data as Pick<BeamModuleData, 'middle_support_column_id' | 'intermediate_support_column_ids'>)
+      const intermediateIds = oldIntermediateIds.filter(columnId => !deletedSet.has(columnId))
+      if (intermediateIds.length !== oldIntermediateIds.length) changed = true
 
       if (typeof startCol === 'string' && deletedSet.has(startCol)) {
         startCol = undefined
@@ -1055,10 +1108,6 @@ export function reconcileStructureDeletion(updated: ProjectDocument, deletedIds:
       }
       if (typeof endCol === 'string' && deletedSet.has(endCol)) {
         endCol = undefined
-        changed = true
-      }
-      if (typeof middleSupportCol === 'string' && deletedSet.has(middleSupportCol)) {
-        middleSupportCol = undefined
         changed = true
       }
       const newHostRefs = obj.host_refs.filter(h => !deletedSet.has(h))
@@ -1073,8 +1122,10 @@ export function reconcileStructureDeletion(updated: ProjectDocument, deletedIds:
           module_data: {
             ...data,
             start_column_id: startCol,
-            middle_support_column_id: middleSupportCol,
+            middle_support_column_id: intermediateIds[0],
+            intermediate_support_column_ids: intermediateIds,
             end_column_id: endCol,
+            ...(intermediateIds.length ? {} : { beam_system: data.beam_system === 'continuous' ? 'simple' : data.beam_system, continuity_type: data.continuity_type === 'interior_span' ? 'simple_span' : data.continuity_type }),
           },
           updated_at: now,
         }

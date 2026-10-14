@@ -1,6 +1,6 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
-import { formatLengthMm } from '@constructflow/project-model'
-import type { DisplayLengthUnit, ProjectDocument } from '@constructflow/project-model'
+import { formatLengthMm, getBeamIntermediateSupportColumnIds } from '@constructflow/project-model'
+import type { BeamModuleData, DisplayLengthUnit, ProjectDocument } from '@constructflow/project-model'
 import type { CommandBatchResult, CommandRequest } from '@constructflow/command-schema'
 import { CommandBus } from '../commands/CommandBus.js'
 import { buildDirectManipulationCommands } from '../directManipulation.mjs'
@@ -233,21 +233,32 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
       setFileFeedback('Split รองรับผนัง คาน และเส้นแบ่งห้องที่เลือกได้ครั้งละหนึ่งชิ้น'); return
     }
     let splitRatio = ratio
-    if (object.object_type === 'structure.beam' && typeof data.middle_support_column_id === 'string') {
-      const support = project.objects[data.middle_support_column_id]
-      if (!support || support.object_type !== 'structure.column' || !start || !end) {
-        setFileFeedback('คานต่อเนื่องอ้างอิงเสากลางที่ไม่พบหรือใช้ไม่ได้ จึง Split อย่างปลอดภัยไม่ได้'); return
-      }
-      const supportPoint = (support.module_data as Record<string, unknown>).location_mm as PlanPoint | undefined
+    const beamSupportPositions: { id: string; ratio: number }[] = []
+    let splitSupportId: string | null = null
+    if (object.object_type === 'structure.beam' && start && end) {
+      const supportIds = getBeamIntermediateSupportColumnIds(data as Pick<BeamModuleData, 'middle_support_column_id' | 'intermediate_support_column_ids'>)
       const dx = end[0] - start[0], dy = end[1] - start[1], lengthSq = dx * dx + dy * dy
-      if (!supportPoint || lengthSq < 1) { setFileFeedback('ตำแหน่งเสากลางของคานไม่ถูกต้อง'); return }
-      const projected = ((supportPoint[0] - start[0]) * dx + (supportPoint[1] - start[1]) * dy) / lengthSq
-      const closest: PlanPoint = [start[0] + dx * projected, start[1] + dy * projected]
       const length = Math.sqrt(lengthSq)
-      if (!Number.isFinite(ratio) || projected <= 0 || projected >= 1 || planDistance(supportPoint, closest) > 5 || Math.abs(projected - ratio) * length > 5) {
-        setFileFeedback('Split คานต่อเนื่องได้ที่เสากลางเท่านั้น · ปรับเปอร์เซ็นต์ให้ตรงตำแหน่งเสา'); return
+      for (const supportId of supportIds) {
+        const support = project.objects[supportId]
+        const supportPoint = support?.object_type === 'structure.column'
+          ? (support.module_data as Record<string, unknown>).location_mm as PlanPoint | undefined
+          : undefined
+        if (!supportPoint || lengthSq < 1) { setFileFeedback(`คานต่อเนื่องอ้างอิงเสารองรับ ${supportId} ที่ไม่พบหรือใช้ไม่ได้`); return }
+        const projected = ((supportPoint[0] - start[0]) * dx + (supportPoint[1] - start[1]) * dy) / lengthSq
+        const closest: PlanPoint = [start[0] + dx * projected, start[1] + dy * projected]
+        if (projected <= 0 || projected >= 1 || planDistance(supportPoint, closest) > 5) {
+          setFileFeedback(`เสารองรับ ${supportId.slice(0, 8)} อยู่นอกแนวคาน จึง Split อย่างปลอดภัยไม่ได้`); return
+        }
+        beamSupportPositions.push({ id: supportId, ratio: projected })
       }
-      splitRatio = projected
+      beamSupportPositions.sort((a, b) => a.ratio - b.ratio)
+      if (beamSupportPositions.length) {
+        const matches = beamSupportPositions.filter(support => Math.abs(support.ratio - ratio) * length <= 5)
+        if (matches.length !== 1) { setFileFeedback('Split คานต่อเนื่องได้ที่เสารองรับเท่านั้น · ปรับเปอร์เซ็นต์ให้ตรงตำแหน่งเสา'); return }
+        splitSupportId = matches[0].id
+        splitRatio = matches[0].ratio
+      }
     }
     const segments = start && end ? splitLineAtRatio(start, end, splitRatio) : null
     if (!segments) { setFileFeedback('ตำแหน่ง Split ต้องอยู่ภายในเส้น และแต่ละช่วงต้องยาวอย่างน้อย 1 มม.'); return }
@@ -281,10 +292,17 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
       }
       commands.push({ name: 'UpdateWallEndpoints', input: { object_id: objectId, start_point_mm: segments.start, end_point_mm: segments.split } })
     } else if (object.object_type === 'structure.beam') {
-      const middleSupportColumnId = typeof data.middle_support_column_id === 'string' ? data.middle_support_column_id : null
+      const leftSupportIds = splitSupportId ? beamSupportPositions.filter(support => support.ratio < splitRatio).map(support => support.id) : []
+      const rightSupportIds = splitSupportId ? beamSupportPositions.filter(support => support.ratio > splitRatio).map(support => support.id) : []
+      const leftBeamSystem = leftSupportIds.length ? 'continuous' : 'simple'
+      const rightBeamSystem = rightSupportIds.length ? 'continuous' : 'simple'
       commands.push(
-        { name: 'UpdateBeamEndpoints', input: { object_id: objectId, start_point_mm: segments.start, end_point_mm: segments.split, start_column_id: data.start_column_id as string | null ?? null, middle_support_column_id: null, end_column_id: middleSupportColumnId ?? null, beam_system: 'simple', continuity_type: 'simple_span' } },
-        { name: 'UpdateBeamEndpoints', input: { object_id: newId, start_point_mm: segments.split, end_point_mm: segments.end, start_column_id: middleSupportColumnId ?? null, middle_support_column_id: null, end_column_id: data.end_column_id as string | null ?? null, beam_system: 'simple', continuity_type: 'simple_span' } },
+        { name: 'UpdateBeamEndpoints', input: { object_id: objectId, start_point_mm: segments.start, end_point_mm: segments.split, start_column_id: data.start_column_id as string | null ?? null, end_column_id: splitSupportId ?? null,
+          intermediate_support_column_ids: leftSupportIds, middle_support_column_id: leftSupportIds[0] ?? null,
+          beam_system: leftBeamSystem, continuity_type: leftSupportIds.length ? 'interior_span' : 'simple_span' } },
+        { name: 'UpdateBeamEndpoints', input: { object_id: newId, start_point_mm: segments.split, end_point_mm: segments.end, start_column_id: splitSupportId ?? null, end_column_id: data.end_column_id as string | null ?? null,
+          intermediate_support_column_ids: rightSupportIds, middle_support_column_id: rightSupportIds[0] ?? null,
+          beam_system: rightBeamSystem, continuity_type: rightSupportIds.length ? 'interior_span' : 'simple_span' } },
       )
     } else {
       commands.push(
@@ -313,12 +331,9 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
     if (firstData.type_id !== secondData.type_id || first.created_phase !== second.created_phase || JSON.stringify(first.level_refs ?? []) !== JSON.stringify(second.level_refs ?? [])) {
       setFileFeedback('Join ต้องใช้ชนิด เฟส และระดับเดียวกัน'); return
     }
-    if (first.object_type === 'structure.beam' && (firstData.middle_support_column_id || secondData.middle_support_column_id)) {
-      setFileFeedback('Join คานที่มีเสากลางอยู่แล้วไม่ได้ · แบ่งต่อเนื่องได้ครั้งละหนึ่งเสากลาง'); return
-    }
     const normalize = (data: Record<string, unknown>) => {
       const copy = { ...data }
-      for (const key of ['mark', 'start_point_mm', 'end_point_mm', 'length_mm', 'span_mm', 'path_mm', 'start_column_id', 'end_column_id']) delete copy[key]
+      for (const key of ['mark', 'start_point_mm', 'end_point_mm', 'length_mm', 'span_mm', 'path_mm', 'start_column_id', 'middle_support_column_id', 'intermediate_support_column_ids', 'end_column_id', 'beam_system', 'continuity_type']) delete copy[key]
       return copy
     }
     if (JSON.stringify(normalize(firstData)) !== JSON.stringify(normalize(secondData))) {
@@ -347,7 +362,7 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
       }
       projectedOpeningOffsets.set(opening.id, projection.offset)
     }
-    let joinedBeamSupports: { start: string | null; middle: string | null; end: string | null } | null = null
+    let joinedBeamSupports: { start: string | null; middle: string | null; intermediate: string[]; end: string | null } | null = null
     if (first.object_type === 'structure.beam') {
       const firstStart = firstData.start_point_mm as PlanPoint
       const firstEnd = firstData.end_point_mm as PlanPoint
@@ -375,14 +390,38 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
         beamEndpointColumn(firstData, point) ?? beamEndpointColumn(secondData, point)
       const startColumn = outerColumnAt(line.start)
       const endColumn = outerColumnAt(line.end)
-      if ([startColumn, middle, endColumn].some(Boolean)) {
-        for (const id of [startColumn, middle, endColumn]) {
-          if (id && project.objects[id]?.object_type !== 'structure.column') {
-            setFileFeedback(`Join คานอ้างอิงเสารองรับ ${id} ที่ไม่พบ`); return
-          }
+      const interiorIds = [...new Set([
+        ...getBeamIntermediateSupportColumnIds(firstData as Pick<BeamModuleData, 'middle_support_column_id' | 'intermediate_support_column_ids'>),
+        ...(middle ? [middle] : []),
+        ...getBeamIntermediateSupportColumnIds(secondData as Pick<BeamModuleData, 'middle_support_column_id' | 'intermediate_support_column_ids'>),
+      ])]
+      const dx = line.end[0] - line.start[0], dy = line.end[1] - line.start[1]
+      const lengthSq = dx * dx + dy * dy
+      const projectedSupports: { id: string; ratio: number }[] = []
+      for (const id of interiorIds) {
+        const support = project.objects[id]
+        const location = (support?.module_data as Record<string, unknown> | undefined)?.location_mm as PlanPoint | undefined
+        if (support?.object_type !== 'structure.column' || !location || lengthSq < 1) {
+          setFileFeedback(`Join คานอ้างอิงเสารองรับ ${id} ที่ไม่พบหรือใช้ไม่ได้`); return
+        }
+        const ratio = ((location[0] - line.start[0]) * dx + (location[1] - line.start[1]) * dy) / lengthSq
+        const closest: PlanPoint = [line.start[0] + dx * ratio, line.start[1] + dy * ratio]
+        if (!Number.isFinite(ratio) || ratio <= 0 || ratio >= 1 || planDistance(location, closest) > 5) {
+          setFileFeedback(`เสารองรับ ${id.slice(0, 8)} อยู่นอกแนว Join`); return
+        }
+        projectedSupports.push({ id, ratio })
+      }
+      projectedSupports.sort((a, b) => a.ratio - b.ratio)
+      if (projectedSupports.some((support, index) => index > 0 && support.id === projectedSupports[index - 1].id)) {
+        setFileFeedback('Join คานพบเสารองรับซ้ำ'); return
+      }
+      for (const id of [startColumn, endColumn]) {
+        if (id && project.objects[id]?.object_type !== 'structure.column') {
+          setFileFeedback(`Join คานอ้างอิงเสารองรับ ${id} ที่ไม่พบ`); return
         }
       }
-      joinedBeamSupports = { start: startColumn, middle, end: endColumn }
+      const orderedIds = projectedSupports.map(support => support.id)
+      joinedBeamSupports = { start: startColumn, middle: orderedIds[0] ?? null, intermediate: orderedIds, end: endColumn }
     }
     const commands: CommandRequest[] = first.object_type === 'architecture.wall'
       ? [
@@ -399,7 +438,9 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
         ? [
             { name: 'UpdateBeamEndpoints', input: { object_id: first.id, start_point_mm: line.start, end_point_mm: line.end,
               start_column_id: joinedBeamSupports?.start ?? null, middle_support_column_id: joinedBeamSupports?.middle ?? null, end_column_id: joinedBeamSupports?.end ?? null,
-              ...(joinedBeamSupports?.middle ? { beam_system: 'continuous', continuity_type: 'interior_span' } : {}),
+              intermediate_support_column_ids: joinedBeamSupports?.intermediate ?? [],
+              beam_system: joinedBeamSupports?.intermediate.length ? 'continuous' : 'simple',
+              continuity_type: joinedBeamSupports?.intermediate.length ? 'interior_span' : 'simple_span',
             } },
             { name: 'DeleteObject', input: { object_id: second.id } },
           ]

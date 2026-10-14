@@ -130,8 +130,8 @@ function createSlabAndRoofTypeAssignmentProject() {
 function createContinuousBeamSplitJoinFixture() {
   let project = createEmptyProjectDocument(randomUUID(), 'Continuous beam split and join acceptance')
   const levelId = project.project.active_level_id
-  const columnIds = [randomUUID(), randomUUID(), randomUUID()]
-  for (const [index, x] of [0, 4000, 8000].entries()) {
+  const columnIds = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()]
+  for (const [index, x] of [0, 2000, 4000, 6000, 8000].entries()) {
     const result = CommandBus.execute(project, 'CreateColumn', {
       id: columnIds[index], mark: `C${index + 1}`, level_id: levelId,
       location_mm: [x, 0, 0], section_mm: [200, 200],
@@ -145,7 +145,7 @@ function createContinuousBeamSplitJoinFixture() {
   const beam = CommandBus.execute(project, 'CreateBeam', {
     id: beamId, type_id: beamType.id, mark: beamType.name, level_id: levelId,
     start_point_mm: [0, 0, 0], end_point_mm: [8000, 0, 0],
-    start_column_id: columnIds[0], middle_support_column_id: columnIds[1], end_column_id: columnIds[2],
+    start_column_id: columnIds[0], end_column_id: columnIds[4], intermediate_support_column_ids: [columnIds[1], columnIds[2], columnIds[3]],
     beam_system: 'continuous', continuity_type: 'interior_span',
   })
   if (beam.result.status !== 'success') throw new Error(`Could not create continuous-beam fixture: ${beam.result.errors?.join(', ')}`)
@@ -2160,18 +2160,18 @@ test('Project Browser splits a continuous beam at its middle support and rejoins
     if (!raw) return false
     const current = JSON.parse(raw) as { objects: Record<string, { module_data: Record<string, unknown> }> }
     const currentBeams = splitIds.map(id => current.objects[id!])
-    return currentBeams.every(beam => beam && beam.module_data.middle_support_column_id === undefined && beam.module_data.beam_system === 'simple')
+    return currentBeams.every(beam => beam && beam.module_data.beam_system === 'continuous')
   }).toBe(true)
   const splitProjectJson = await readStoredProjectJson(page)
   expect(splitProjectJson).toBeTruthy()
   const splitProject = JSON.parse(splitProjectJson!) as { objects: Record<string, { module_data: Record<string, unknown>; host_refs: string[] }> }
   for (const id of splitIds) {
     const beam = splitProject.objects[id!]
-    expect(beam.module_data.middle_support_column_id).toBeUndefined()
-    expect(beam.module_data.beam_system).toBe('simple')
+    expect(beam.module_data.beam_system).toBe('continuous')
   }
   const splitBeams = splitIds.map(id => splitProject.objects[id!])
-  expect(splitBeams.some(beam => beam.module_data.start_column_id === fixture.columnIds[1] || beam.module_data.end_column_id === fixture.columnIds[1])).toBe(true)
+  expect(splitBeams.some(beam => beam.module_data.start_column_id === fixture.columnIds[2] || beam.module_data.end_column_id === fixture.columnIds[2])).toBe(true)
+  expect(splitBeams.map(beam => beam.module_data.intermediate_support_column_ids).sort((a, b) => String(a?.[0]).localeCompare(String(b?.[0])))).toEqual([[fixture.columnIds[1]], [fixture.columnIds[3]]].sort((a, b) => String(a[0]).localeCompare(String(b[0]))))
 
   await beams.nth(0).locator('.cf-browser-object').click()
   await page.getByRole('tab', { name: 'รายการ' }).click()
@@ -2189,13 +2189,16 @@ test('Project Browser splits a continuous beam at its middle support and rejoins
     if (!raw) return false
     const current = JSON.parse(raw) as { objects: Record<string, { module_data: Record<string, unknown> }> }
     const data = current.objects[fixture.beamId]?.module_data
-    return data?.middle_support_column_id === fixture.columnIds[1] && data.beam_system === 'continuous'
+    return data?.middle_support_column_id === fixture.columnIds[1]
+      && JSON.stringify(data.intermediate_support_column_ids) === JSON.stringify(fixture.columnIds.slice(1, 4))
+      && data.beam_system === 'continuous'
   }).toBe(true)
   const joinedProjectJson = await readStoredProjectJson(page)
   expect(joinedProjectJson).toBeTruthy()
   const joinedProject = JSON.parse(joinedProjectJson!) as { objects: Record<string, { module_data: Record<string, unknown>; host_refs: string[] }> }
   const joinedBeam = joinedProject.objects[fixture.beamId]
   expect(joinedBeam.module_data.middle_support_column_id).toBe(fixture.columnIds[1])
+  expect(joinedBeam.module_data.intermediate_support_column_ids).toEqual(fixture.columnIds.slice(1, 4))
   expect(joinedBeam.module_data.beam_system).toBe('continuous')
   expect(joinedBeam.module_data.continuity_type).toBe('interior_span')
   for (const columnId of fixture.columnIds) expect(joinedBeam.host_refs).toContain(columnId)
@@ -2208,7 +2211,7 @@ test('Project Browser splits a continuous beam at its middle support and rejoins
   const redoneProjectJson = await readStoredProjectJson(page)
   expect(redoneProjectJson).toBeTruthy()
   const redoneProject = JSON.parse(redoneProjectJson!) as { objects: Record<string, { module_data: Record<string, unknown>; host_refs: string[] }> }
-  expect(redoneProject.objects[fixture.beamId].module_data.middle_support_column_id).toBe(fixture.columnIds[1])
+  expect(redoneProject.objects[fixture.beamId].module_data.intermediate_support_column_ids).toEqual(fixture.columnIds.slice(1, 4))
 })
 
 test('Project Browser aligns hosted windows across parallel walls with preview and one-step Undo/Redo', async ({ page }) => {
