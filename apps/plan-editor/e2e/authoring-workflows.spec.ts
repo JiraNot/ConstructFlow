@@ -3891,9 +3891,29 @@ test('two-storey residential demo preserves browser selection across all views a
   const objectId = await browser.locator('li[data-object-type="structure.column"]').first().getAttribute('data-object-id')
   expect(objectId).toBeTruthy()
 
+  const fixtureJson = await readStoredProjectJson(page)
+  if (!fixtureJson) throw new Error('Could not read the loaded residential fixture')
+  const fixtureProject = JSON.parse(fixtureJson) as {
+    types: Array<{ id: string; name: string }>
+    objects: Record<string, { module_data: Record<string, unknown> }>
+  }
+  const initialTypeId = fixtureProject.objects[objectId!]?.module_data.type_id
+  const initialTypeName = fixtureProject.types.find(type => type.id === initialTypeId)?.name
+  expect(initialTypeName).toBeTruthy()
+  const targetTypeName = initialTypeName === 'C1' ? 'C2' : 'C1'
+
   await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill(objectId!)
   await expect(rows).toHaveCount(1)
   await rows.first().locator('.cf-browser-object').click()
+  const fixtureProperties = page.getByTestId('properties-selection')
+  await expect(fixtureProperties).toHaveAttribute('data-object-id', objectId!)
+  await page.getByLabel('ชนิดของชิ้นที่เลือก').selectOption(targetTypeName)
+  await expect(fixtureProperties).toContainText(`Column ${targetTypeName}`)
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(fixtureProperties).toContainText(`Column ${initialTypeName}`)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(fixtureProperties).toContainText(`Column ${targetTypeName}`)
+
   const primaryPane = page.locator('.cf-multiview-pane').first()
   await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
   await page.getByRole('tab', { name: 'รายการ' }).click()
@@ -3916,6 +3936,7 @@ test('two-storey residential demo preserves browser selection across all views a
   await restoredObjectRow.locator('.cf-browser-object').click()
   const restoredProperties = page.getByTestId('properties-selection')
   await expect(restoredProperties).toHaveAttribute('data-object-id', objectId!)
+  await expect(restoredProperties).toContainText(`Column ${targetTypeName}`)
   const restoredViews = ['แปลนพื้น', 'แปลนคาน', 'แปลนหลังคา', 'แปลนฝ้า RCP', 'รูปด้านเหนือ', 'รูปด้านใต้', 'รูปด้านตะวันออก', 'รูปด้านตะวันตก', '3D ดูตัวอย่าง']
   for (const view of restoredViews) {
     await page.getByRole('button', { name: view, exact: true }).click()
