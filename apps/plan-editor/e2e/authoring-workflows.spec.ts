@@ -160,6 +160,19 @@ function createSyntheticUStairProject() {
   return serializeProject(created.updatedProject)
 }
 
+function createSyntheticLStairProject() {
+  const project = createEmptyProjectDocument(randomUUID(), 'Synthetic rotated left L stair flight grip acceptance')
+  const created = CommandBus.execute(project, 'CreateStair', {
+    id: randomUUID(), mark: 'STAIR-L-LEFT-ROTATED', level_id: project.project.active_level_id,
+    stair_type: 'l_shape', structure_type: 'rc_monolithic', start_point_mm: [3000, 3000, 0],
+    rotation_deg: 90, turn_direction: 'left', total_rise_mm: 3000, width_mm: 1000,
+    num_risers: 18, first_flight_risers: 9, tread_depth_mm: 250, landing_depth_mm: 1000,
+    has_handrail: false,
+  })
+  if (created.result.status !== 'success') throw new Error(`Could not create test L stair: ${created.result.errors?.join(', ')}`)
+  return serializeProject(created.updatedProject)
+}
+
 function createCeilingGridProject() {
   const project = createEmptyProjectDocument(randomUUID(), 'Ceiling grid property acceptance')
   const ceilingId = randomUUID()
@@ -3794,6 +3807,67 @@ test('U-stair flight grips set independent target runs and preserve UUID through
   await expect.poll(() => readRun('second')).toBeCloseTo(2000, 0)
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
   await expect.poll(() => readRun('second')).toBeCloseTo(2500, 0)
+})
+
+test('rotated left L-stair flight grips edit each run independently through the browser', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await seedLocalProjectSnapshot(page, createSyntheticLStairProject())
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const stairRow = page.locator('.cf-browser-tree [data-object-type="architecture.stair"]').first()
+  await expect(stairRow).toBeVisible()
+  const stairId = await stairRow.getAttribute('data-object-id')
+  expect(stairId).toBeTruthy()
+  await stairRow.locator('.cf-browser-object').click()
+  const properties = page.getByTestId('properties-selection')
+  await expect(properties).toHaveAttribute('data-object-id', stairId!)
+  await page.getByRole('button', { name: 'จัดแปลนให้อยู่ในหน้าจอ' }).click()
+  for (let zoomOut = 0; zoomOut < 4; zoomOut++) await page.getByRole('button', { name: 'ซูมออก' }).click()
+
+  const readStair = async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) throw new Error('Could not read the rotated L-stair fixture')
+    return (JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }).objects[stairId!]!.module_data
+  }
+  const editRun = async (flight: 'first' | 'second', target: string) => {
+    const grip = stairFlightGripPoints(await readStair() as never).find(item => item.flight === flight)
+    if (!grip) throw new Error(`Missing ${flight} L-stair grip`)
+    const bounds = await canvas(page).boundingBox()
+    if (!bounds) throw new Error('Plan canvas is not visible')
+    const viewport = page.locator('.cf-plan-canvas').first()
+    const panX = Number(await viewport.getAttribute('data-viewport-pan-x'))
+    const panY = Number(await viewport.getAttribute('data-viewport-pan-y'))
+    const zoom = Number(await viewport.getAttribute('data-viewport-zoom'))
+    const x = bounds.x + panX + grip.point[0] * zoom, y = bounds.y + panY + grip.point[1] * zoom
+    const label = flight === 'first' ? 'ความยาวเที่ยวแรกเป้าหมาย (m)' : 'ความยาวเที่ยวกลับเป้าหมาย (m)'
+    const input = page.getByRole('textbox', { name: label })
+    await page.mouse.move(x, y)
+    await page.mouse.down()
+    await page.mouse.move(x + 3, y + 3)
+    await expect(input).toBeVisible()
+    await input.fill(target)
+    await input.press('Enter')
+    await page.mouse.up()
+  }
+  const run = async (flight: 'first' | 'second') => {
+    const data = await readStair()
+    const n = Number(data.num_risers), n1 = Number(data.first_flight_risers)
+    return Math.max(1, (flight === 'first' ? n1 : n - n1) - 1)
+      * Number(flight === 'first' ? data.tread_depth_mm : data.second_tread_depth_mm ?? data.tread_depth_mm)
+  }
+  await editRun('first', '2.4')
+  await expect.poll(() => run('first')).toBeCloseTo(2400, 0)
+  await expect.poll(() => run('second')).toBeCloseTo(2000, 0)
+  await editRun('second', '2.5')
+  await expect.poll(() => run('second')).toBeCloseTo(2500, 0)
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(() => run('second')).toBeCloseTo(2000, 0)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(() => run('second')).toBeCloseTo(2500, 0)
+  await expect(properties).toHaveAttribute('data-object-id', stairId!)
 })
 
 test('hosted opening jamb accepts a target width with UUID-preserving Escape and Undo/Redo', async ({ page }) => {
