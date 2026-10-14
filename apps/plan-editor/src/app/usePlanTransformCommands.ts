@@ -12,6 +12,15 @@ type EditorView = 'plan' | 'framing' | 'roofplan' | 'north' | 'south' | 'east' |
 type PlanPoint = [number, number]
 
 const planDistance = (a: PlanPoint, b: PlanPoint) => Math.hypot(a[0] - b[0], a[1] - b[1])
+const resolveOpeningWidthMm = (project: ProjectDocument, opening: ProjectDocument['objects'][string]) => {
+  const data = opening.module_data as Record<string, unknown>
+  const overrides = data.instance_overrides as Record<string, unknown> | undefined
+  const typeId = typeof data.type_id === 'string' ? data.type_id : undefined
+  const mark = typeof data.mark === 'string' ? data.mark : undefined
+  const type = project.types?.find(candidate => candidate.object_type === opening.object_type
+    && (candidate.id === typeId || (!typeId && candidate.name === mark)))
+  return Number(overrides?.width_mm ?? data.width_mm ?? type?.parameters?.width_mm)
+}
 const beamEndpointColumn = (data: Record<string, unknown>, point: PlanPoint): string | null => {
   const start = data.start_point_mm as PlanPoint | undefined
   const end = data.end_point_mm as PlanPoint | undefined
@@ -232,21 +241,35 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
     }
     const segments = start && end ? splitLineAtRatio(start, end, splitRatio) : null
     if (!segments) { setFileFeedback('ตำแหน่ง Split ต้องอยู่ภายในเส้น และแต่ละช่วงต้องยาวอย่างน้อย 1 มม.'); return }
-    if (object.object_type === 'architecture.wall') {
-      const openings = Object.values(project.objects).filter(candidate =>
-        (candidate.object_type === 'door_window.door' || candidate.object_type === 'door_window.window') &&
-        String((candidate.module_data as Record<string, unknown>).wall_id ?? '') === objectId)
-      if (openings.length) { setFileFeedback('Split ผนังนี้ไม่ได้ขณะมีประตูหรือหน้าต่างเป็น host · ย้ายช่องเปิดไปยังช่วงใหม่ก่อน'); return }
-    }
     const newId = crypto.randomUUID()
     const commands: CommandRequest[] = [
       { name: 'DuplicateObjects', input: { object_ids: [objectId], delta_x_mm: 0, delta_y_mm: 0, id_map: { [objectId]: newId } } },
     ]
     if (object.object_type === 'architecture.wall') {
-      commands.push(
-        { name: 'UpdateWallEndpoints', input: { object_id: objectId, start_point_mm: segments.start, end_point_mm: segments.split } },
-        { name: 'UpdateWallEndpoints', input: { object_id: newId, start_point_mm: segments.split, end_point_mm: segments.end } },
-      )
+      const splitDistance = planDistance(segments.start, segments.split)
+      const openings = Object.values(project.objects).filter(candidate =>
+        candidate.status !== 'archived' && !candidate.removed_phase
+        && (candidate.object_type === 'door_window.door' || candidate.object_type === 'door_window.window')
+        && String((candidate.module_data as Record<string, unknown>).wall_id ?? '') === objectId)
+      const transfers: { objectId: string; offsetMm: number }[] = []
+      for (const opening of openings) {
+        const offset = Number((opening.module_data as Record<string, unknown>).offset_along_wall_mm)
+        const width = resolveOpeningWidthMm(project, opening)
+        if (!Number.isFinite(offset) || !Number.isFinite(width) || width <= 0) {
+          setFileFeedback(`Split ผนังนี้ไม่ได้ · อ่านตำแหน่งหรือความกว้างของช่องเปิด ${opening.id.slice(0, 8)} ไม่ได้`); return
+        }
+        if (offset + width / 2 <= splitDistance + 1) continue
+        if (offset - width / 2 >= splitDistance - 1) {
+          transfers.push({ objectId: opening.id, offsetMm: offset - splitDistance })
+          continue
+        }
+        setFileFeedback(`Split ผ่านช่องเปิด ${opening.id.slice(0, 8)} · ปรับตำแหน่ง Split ให้อยู่ระหว่างช่องเปิด`); return
+      }
+      commands.push({ name: 'UpdateWallEndpoints', input: { object_id: newId, start_point_mm: segments.split, end_point_mm: segments.end } })
+      for (const transfer of transfers) {
+        commands.push({ name: 'RehostOpening', input: { object_id: transfer.objectId, wall_id: newId, offset_along_wall_mm: transfer.offsetMm } })
+      }
+      commands.push({ name: 'UpdateWallEndpoints', input: { object_id: objectId, start_point_mm: segments.start, end_point_mm: segments.split } })
     } else if (object.object_type === 'structure.beam') {
       const middleSupportColumnId = typeof data.middle_support_column_id === 'string' ? data.middle_support_column_id : null
       commands.push(

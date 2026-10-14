@@ -178,6 +178,30 @@ function createHostedWindowAlignmentFixture() {
   return { projectJson: serializeProject(project), wallIds, windowIds }
 }
 
+function createHostedWallSplitFixture(crossingOpening = false) {
+  let project = createEmptyProjectDocument(randomUUID(), 'Hosted wall split transfer')
+  const levelId = project.project.active_level_id
+  const wallId = randomUUID()
+  const wall = CommandBus.execute(project, 'CreateWall', {
+    id: wallId, mark: 'W1', level_id: levelId,
+    start_point_mm: [0, 0, 0], end_point_mm: [6000, 0, 0], thickness_mm: 120, height_mm: 3000,
+  })
+  if (wall.result.status !== 'success') throw new Error(`Could not create hosted split wall: ${wall.result.errors?.join(', ')}`)
+  project = wall.updatedProject
+  const offsets = crossingOpening ? [1500, 3000, 4500] : [1500, 4500]
+  const windowIds = offsets.map(() => randomUUID())
+  for (const [index, offset] of offsets.entries()) {
+    const result = CommandBus.execute(project, 'CreateWindow', {
+      id: windowIds[index], mark: 'W1', wall_id: wallId,
+      location_mm: [offset, 0, 1200], offset_along_wall_mm: offset,
+      width_mm: 900, height_mm: 1200, sill_height_mm: 900, level_id: levelId,
+    })
+    if (result.result.status !== 'success') throw new Error(`Could not create split-test window: ${result.result.errors?.join(', ')}`)
+    project = result.updatedProject
+  }
+  return { projectJson: serializeProject(project), wallId, windowIds }
+}
+
 async function seedLocalProjectSnapshot(page: Page, projectJson: string) {
   await page.evaluate(async json => {
     await new Promise<void>((resolve, reject) => {
@@ -1871,6 +1895,86 @@ test('Project Browser splits an unhosted wall with preview and keeps the origina
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
   await expect(wallRows).toHaveCount(2)
   await expect(page.locator(`li[data-object-id="${originalId}"]`)).toBeVisible()
+})
+
+test('Project Browser splits a hosted wall and transfers openings atomically', async ({ page }) => {
+  test.setTimeout(60_000)
+  const fixture = createHostedWallSplitFixture()
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await seedLocalProjectSnapshot(page, fixture.projectJson)
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const originalRow = page.locator(`li[data-object-id="${fixture.wallId}"]`)
+  await expect(originalRow).toBeVisible()
+  await originalRow.locator('.cf-browser-object').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.getByText('แก้ไขและทำสำเนา · 1 ชิ้น').click()
+  await page.getByRole('button', { name: 'แสดงตัวอย่าง Split' }).click()
+  await expect(page.getByText('Preview การแปลง')).toBeVisible()
+  await page.getByRole('button', { name: 'ยืนยัน · Undo ได้' }).click()
+
+  await expect(page.locator('li[data-object-type="architecture.wall"]')).toHaveCount(2)
+  await expect.poll(async () => {
+    const snapshot = await readStoredProjectJson(page)
+    if (!snapshot) return 0
+    return Object.values(JSON.parse(snapshot).objects).filter((item: any) => item.object_type === 'architecture.wall' && item.status !== 'archived').length
+  }).toBe(2)
+  const raw = await readStoredProjectJson(page)
+  expect(raw).toBeTruthy()
+  const splitProject = JSON.parse(raw!) as { objects: Record<string, { id: string; object_type: string; host_refs: string[]; module_data: Record<string, any> }>; relationships: Array<{ kind: string; source_id: string; target_id: string }> }
+  const originalWall = splitProject.objects[fixture.wallId]
+  const newWall = Object.values(splitProject.objects).find(object => object.object_type === 'architecture.wall' && object.id !== fixture.wallId)
+  expect(newWall).toBeTruthy()
+  const [leftWindowId, rightWindowId] = fixture.windowIds
+  const leftWindow = splitProject.objects[leftWindowId]
+  const rightWindow = splitProject.objects[rightWindowId]
+  expect(leftWindow.module_data.wall_id).toBe(fixture.wallId)
+  expect(leftWindow.module_data.offset_along_wall_mm).toBe(1500)
+  expect(rightWindow.module_data.wall_id).toBe(newWall!.id)
+  expect(rightWindow.module_data.offset_along_wall_mm).toBe(1500)
+  expect(rightWindow.host_refs).toEqual([newWall!.id])
+  expect(splitProject.relationships).toContainEqual({ kind: 'hosted_on', source_id: rightWindowId, target_id: newWall!.id, role: 'window_wall_host' })
+  expect(splitProject.relationships).toContainEqual({ kind: 'hosts', source_id: newWall!.id, target_id: rightWindowId, role: 'wall_window_opening' })
+
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(page.locator('li[data-object-type="architecture.wall"]')).toHaveCount(1)
+  await expect.poll(async () => {
+    const snapshot = await readStoredProjectJson(page)
+    if (!snapshot) return false
+    const current = JSON.parse(snapshot)
+    return current.objects[rightWindowId]?.module_data.wall_id === fixture.wallId
+      && current.objects[rightWindowId]?.module_data.offset_along_wall_mm === 4500
+  }).toBe(true)
+  const undoneRaw = await readStoredProjectJson(page)
+  const undone = JSON.parse(undoneRaw!)
+  expect(undone.objects[rightWindowId].module_data.wall_id).toBe(fixture.wallId)
+  expect(undone.objects[rightWindowId].module_data.offset_along_wall_mm).toBe(4500)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(page.locator('li[data-object-type="architecture.wall"]')).toHaveCount(2)
+})
+
+test('Project Browser rejects a wall split that would cut through a hosted opening', async ({ page }) => {
+  const fixture = createHostedWallSplitFixture(true)
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await seedLocalProjectSnapshot(page, fixture.projectJson)
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const wallRow = page.locator(`li[data-object-id="${fixture.wallId}"]`)
+  await expect(wallRow).toBeVisible()
+  await wallRow.locator('.cf-browser-object').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.getByText('แก้ไขและทำสำเนา · 1 ชิ้น').click()
+  await page.getByRole('button', { name: 'แสดงตัวอย่าง Split' }).click()
+
+  await expect(page.getByText(/Split ผ่านช่องเปิด/)).toBeVisible()
+  await expect(page.getByText('Preview การแปลง')).toHaveCount(0)
+  await expect(page.locator('li[data-object-type="architecture.wall"]')).toHaveCount(1)
+  const raw = await readStoredProjectJson(page)
+  expect(raw).toBeTruthy()
+  const project = JSON.parse(raw!)
+  for (const windowId of fixture.windowIds) expect(project.objects[windowId].module_data.wall_id).toBe(fixture.wallId)
 })
 
 test('Project Browser splits and rejoins an unhosted beam with preview and UUID-preserving undo', async ({ page }) => {
