@@ -774,6 +774,31 @@ test('beam placement clears cancelled steps and repeats through keyboard and mou
   await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
 })
 
+test('wall chains commit and undo each segment independently', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+
+  const walls = page.locator('.cf-browser-tree [data-object-type="architecture.wall"]')
+  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickCanvasFraction(page, 0.22, 0.28)
+  await clickCanvasFraction(page, 0.42, 0.28)
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
+  await clickCanvasFraction(page, 0.42, 0.44)
+  await expect(walls).toHaveCount(2)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(walls).toHaveCount(1)
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(walls).toHaveCount(0)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(walls).toHaveCount(1)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(walls).toHaveCount(2)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+})
+
 test('window placement identifies its wall host and commits with the keyboard', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'ผนัง' }).click()
