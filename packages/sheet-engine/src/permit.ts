@@ -83,6 +83,7 @@ export type VectorPrimitive =
       color: string;
       max_width?: number;
       dimension_id?: string;
+      automatic_offset_mm?: Vec2;
     };
 export interface SheetViewport {
   scale_denominator: number;
@@ -3281,7 +3282,22 @@ function compilePermitDrawingSetBase(
           }
           if ((id === "A-02" || id === "A-03") && mode === "xy") {
             const dimensionColor = "#475569";
-            const placedDimensionLabelBoxes: DimensionLabelBox[] = [];
+            const dimensionViewBounds = {
+              min_x: view.x + 1, min_y: view.y + 1,
+              max_x: view.x + view.w - 1, max_y: view.y + view.h - 1,
+            };
+            const placedDimensionLabelBoxes: DimensionLabelBox[] = primitives.flatMap(primitive => {
+              if (primitive.kind !== "text") return [];
+              const width = Math.min(primitive.max_width ?? Number.POSITIVE_INFINITY, [...primitive.text].length * primitive.size * 0.52);
+              const box = {
+                min_x: primitive.at[0] - 0.5,
+                min_y: primitive.at[1] - primitive.size - 0.3,
+                max_x: primitive.at[0] + width + 0.5,
+                max_y: primitive.at[1] + primitive.size * 0.25 + 0.3,
+              };
+              return box.max_x <= dimensionViewBounds.min_x || box.min_x >= dimensionViewBounds.max_x ||
+                box.max_y <= dimensionViewBounds.min_y || box.min_y >= dimensionViewBounds.max_y ? [] : [box];
+            });
             const drawDimension = (dimensionId: string, a: Vec2, b: Vec2, label: string, witnessA?: Vec2, witnessB?: Vec2) => {
               const override = viewport.dimension_overrides?.[dimensionId];
               const delta = override?.locked ? override.offset_mm : [0, 0];
@@ -3298,10 +3314,8 @@ function compilePermitDrawingSetBase(
                 min_y: baseCenter[1] - 2.1,
                 max_x: baseCenter[0] + width / 2,
                 max_y: baseCenter[1] + 0.7,
-              }, normal, placedDimensionLabelBoxes, {
-                min_x: view.x + 1, min_y: view.y + 1,
-                max_x: view.x + view.w - 1, max_y: view.y + view.h - 1,
-              }, { locked: override?.locked === true, max_offset_mm: 24, step_mm: 3, gap_mm: 0.8 });
+              }, normal, placedDimensionLabelBoxes, dimensionViewBounds,
+              { locked: override?.locked === true, max_offset_mm: 48, step_mm: 3, gap_mm: 0.8 });
               placedDimensionLabelBoxes.push(placement.box);
               if (placement.has_collision) warnings.push(`${label}: automatic dimension text overlaps another dimension or the A-02/A-03 view edge`);
               pa = [pa[0] + normal[0] * placement.offset_mm, pa[1] + normal[1] * placement.offset_mm];
@@ -3319,7 +3333,12 @@ function compilePermitDrawingSetBase(
               ], dimensionColor, 0.18);
               text([center[0] - width / 2, center[1] - 0.8], label, 1.7, dimensionColor, width);
               const labelPrimitive = primitives.at(-1);
-              if (labelPrimitive?.kind === "text") labelPrimitive.dimension_id = dimensionId;
+              if (labelPrimitive?.kind === "text") {
+                labelPrimitive.dimension_id = dimensionId;
+                labelPrimitive.automatic_offset_mm = override?.locked
+                  ? [0, 0]
+                  : [normal[0] * placement.offset_mm, normal[1] * placement.offset_mm];
+              }
             };
             const planPoints = viewObjects.filter(({ object }) => object.object_type !== "structure.grid")
               .flatMap(({ mesh, out }) => [...mesh.flat(), ...((out?.paths ?? []).flat() as Vec3[])])

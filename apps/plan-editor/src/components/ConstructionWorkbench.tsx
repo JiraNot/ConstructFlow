@@ -881,7 +881,11 @@ export function ConstructionWorkbench({
     const saved = selectedDimensionId
       ? project.drawing_settings?.viewports[sheetId]?.dimension_overrides?.[selectedDimensionId]
       : undefined;
-    setDimensionOffsetMm(saved?.offset_mm ?? [0, 0]);
+    const automaticPrimitive = selectedDimensionId
+      ? dimensionLabels.find(primitive => primitive.kind === "text" && primitive.dimension_id === selectedDimensionId)
+      : undefined;
+    const automaticOffset = automaticPrimitive?.kind === "text" ? automaticPrimitive.automatic_offset_mm : undefined;
+    setDimensionOffsetMm(saved?.offset_mm ?? automaticOffset ?? [0, 0]);
   }, [project, selectedDimensionId, sheetId]);
   useEffect(() => {
     if (tab === "sheets") {

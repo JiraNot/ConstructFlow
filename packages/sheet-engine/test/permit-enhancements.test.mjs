@@ -186,7 +186,8 @@ test("A-02 persists locked dimension placement while keeping opening values mode
   const base = compilePermitDrawingSet(house).sheets.find(sheet => sheet.id === "A-02");
   const baseLabel = base.primitives.find(item => item.kind === "text" && item.text === label.text);
   assert.ok(baseLabel);
-  assert.deepEqual(label.at.map((value, index) => Number((value - baseLabel.at[index]).toFixed(5))), [7, -4]);
+  const overrideOffset = label.at.map((value, index) => Number((value - baseLabel.at[index] + (baseLabel.automatic_offset_mm?.[index] ?? 0) - (label.automatic_offset_mm?.[index] ?? 0)).toFixed(5)));
+  assert.deepEqual(overrideOffset, [7, -4]);
   assert.match(label.text, /1\.40×1\.20 m/, "the printed value continues to come from current opening parameters");
 
   const host = house.objects[opening.module_data.wall_id];
