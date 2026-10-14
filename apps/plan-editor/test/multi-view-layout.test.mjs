@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle, moveMultiViewPane } from '../src/app/multiViewLayout.mjs'
+import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle, moveMultiViewPane, reorderMultiViewPane } from '../src/app/multiViewLayout.mjs'
 
 test('multiview proportions customize columns and rows while keeping every pane visible', () => {
   assert.deepEqual(buildMultiViewGridTracks(2, 'columns', 65), {
@@ -48,6 +48,13 @@ test('multiview pane ordering swaps visible slots without dropping hidden slots'
   assert.deepEqual(moveMultiViewPane(order, 'tertiary', -1, 3), ['primary', 'tertiary', 'secondary', 'fourth'])
   assert.deepEqual(moveMultiViewPane(order, 'fourth', -1, 3), order)
   assert.deepEqual(moveMultiViewPane(order, 'primary', -1, 4), order)
+})
+
+test('drag reorder moves a pane to the target slot and preserves hidden slots', () => {
+  const order = ['primary', 'secondary', 'tertiary', 'fourth']
+  assert.deepEqual(reorderMultiViewPane(order, 'fourth', 'secondary', 4), ['primary', 'fourth', 'secondary', 'tertiary'])
+  assert.deepEqual(reorderMultiViewPane(order, 'fourth', 'secondary', 3), order)
+  assert.deepEqual(reorderMultiViewPane(order, 'primary', 'primary', 4), order)
 })
 
 test('invalid multiview options fall back to a single visible cell and clamp the primary ratio', () => {

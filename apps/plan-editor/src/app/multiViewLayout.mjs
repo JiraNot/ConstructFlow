@@ -75,3 +75,13 @@ export function moveMultiViewPane(order, paneSlot, direction, visiblePaneCount =
   ;[nextOrder[currentIndex], nextOrder[nextIndex]] = [nextOrder[nextIndex], nextOrder[currentIndex]]
   return nextOrder
 }
+
+export function reorderMultiViewPane(order, sourceSlot, targetSlot, visiblePaneCount = order.length) {
+  const sourceIndex = order.indexOf(sourceSlot)
+  const targetIndex = order.indexOf(targetSlot)
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex >= visiblePaneCount || targetIndex >= visiblePaneCount || sourceIndex === targetIndex) return order
+  const nextOrder = [...order]
+  nextOrder.splice(sourceIndex, 1)
+  nextOrder.splice(targetIndex, 0, sourceSlot)
+  return nextOrder
+}

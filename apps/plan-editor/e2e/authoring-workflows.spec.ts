@@ -3747,6 +3747,12 @@ test('multiview layout and auxiliary views restore for the same project after re
   await page.getByRole('button', { name: 'เลื่อน pane ลำดับ 4 ขึ้น' }).click()
   const readPaneOrder = () => page.locator('.cf-multiview-pane').evaluateAll(panes => panes.map(pane => pane.getAttribute('data-pane-slot')))
   await expect.poll(readPaneOrder).toEqual(['primary', 'secondary', 'fourth', 'tertiary'])
+  const dropPaneBounds = await page.locator('[data-pane-slot="secondary"]').boundingBox()
+  expect(dropPaneBounds).toBeTruthy()
+  await page.locator('[data-pane-slot="fourth"] .cf-multiview-pane-grip').dragTo(page.locator('[data-pane-slot="secondary"]'), {
+    targetPosition: { x: dropPaneBounds!.width - 30, y: dropPaneBounds!.height - 30 },
+  })
+  await expect.poll(readPaneOrder).toEqual(['primary', 'fourth', 'secondary', 'tertiary'])
   await expect(page.getByLabel('การจัดวางมุมมอง')).toHaveValue('grid')
   const primaryShare = page.getByLabel('สัดส่วน pane หลัก')
   await primaryShare.focus()
@@ -3779,7 +3785,7 @@ test('multiview layout and auxiliary views restore for the same project after re
   await expect(page.getByLabel('มุมมองที่สี่')).toHaveValue('rcp')
   await expect(page.getByLabel('การจัดวางมุมมอง')).toHaveValue('custom')
   await expect(page.getByLabel('จำนวนคอลัมน์มุมมองหลาย pane')).toHaveValue('3')
-  await expect.poll(readPaneOrder).toEqual(['primary', 'secondary', 'fourth', 'tertiary'])
+  await expect.poll(readPaneOrder).toEqual(['primary', 'fourth', 'secondary', 'tertiary'])
   await expect(page.getByLabel('สัดส่วน pane หลัก')).toHaveValue('58')
   await expect(page.locator('[data-testid="tertiary-view-pane"]')).toHaveCSS('grid-column', /span 3/)
   const viewportStage = page.locator('.cf-viewport-stage')

@@ -45,7 +45,7 @@ import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
 import { useReferenceDataImportActions } from './app/useReferenceDataImportActions.js'
 import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcuts.js'
 import { useMultiViewPreferences, type EditorViewMode, type SplitViewLayout, type SplitViewPaneCount, type SplitViewPaneSlot } from './app/useMultiViewPreferences.js'
-import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle, moveMultiViewPane } from './app/multiViewLayout.mjs'
+import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle, moveMultiViewPane, reorderMultiViewPane } from './app/multiViewLayout.mjs'
 import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 import { createElevationObjectCommandHandler } from './app/elevationObjectCommands.js'
 import { MultiViewResizeHandle } from './components/MultiViewResizeHandle.js'
@@ -152,6 +152,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const movePaneSlot = (slot: SplitViewPaneSlot, direction: -1 | 1) => setMultiViewPreferences(current => ({
     ...current,
     paneOrder: moveMultiViewPane(current.paneOrder, slot, direction, current.paneCount),
+  }))
+  const reorderPaneSlots = (source: SplitViewPaneSlot, target: SplitViewPaneSlot) => setMultiViewPreferences(current => ({
+    ...current,
+    paneOrder: reorderMultiViewPane(current.paneOrder, source, target, current.paneCount),
   }))
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
@@ -872,8 +876,28 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               data-testid={slot === 'primary' ? 'primary-view-pane' : `${slot}-view-pane`}
               data-primary-selected-object-id={selectedId ?? ''}
               data-selected-object-ids={selectedIds.join(',')}
+              onDragOver={event => {
+                if (event.dataTransfer.types.includes('text/plain')) event.preventDefault()
+              }}
+              onDrop={event => {
+                event.preventDefault()
+                const sourceSlot = event.dataTransfer.getData('text/plain') as SplitViewPaneSlot
+                if (['primary', 'secondary', 'tertiary', 'fourth'].includes(sourceSlot)) reorderPaneSlots(sourceSlot, slot)
+              }}
               style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', ...(slot === 'primary' ? primaryPaneGridStyle : {}), ...paneGridStyle(index) }}
-            >{renderEditorView(paneViewModes[slot], slot !== 'primary')}</div>)}
+            >
+              {splitViewEnabled && <span
+                className="cf-multiview-pane-grip"
+                draggable
+                aria-hidden="true"
+                title={`ลากเพื่อจัดลำดับ ${paneSlotLabels[slot]}`}
+                onDragStart={event => {
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('text/plain', slot)
+                }}
+              >⠿</span>}
+              {renderEditorView(paneViewModes[slot], slot !== 'primary')}
+            </div>)}
             {splitViewEnabled && splitViewLayout === 'custom' && <MultiViewResizeHandle
               orientation={customColumnCount === 1 ? 'horizontal' : 'vertical'}
               value={primaryPanePercent}
