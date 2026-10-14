@@ -4,8 +4,8 @@ import {
   lengthUnitFactor,
 } from '@constructflow/project-model'
 import type { DisplayLengthUnit } from '@constructflow/project-model'
-import { CommandEnvelope, ExtensionPresetType } from '@constructflow/command-schema'
-import { applyExtensionPreset } from '@constructflow/extension-engine'
+import type { CommandBatchResult, CommandRequest, ExtensionPresetType } from '@constructflow/command-schema'
+import { planExtensionPreset } from '@constructflow/extension-engine'
 import {
   Sparkles,
   Car,
@@ -24,7 +24,7 @@ interface ExtensionPresetsModalProps {
   isOpen: boolean
   onClose: () => void
   project: ProjectDocument
-  onApplyPreset: (updatedProject: ProjectDocument, envelopes: CommandEnvelope[]) => void
+  onApplyPreset: (commands: CommandRequest[]) => CommandBatchResult
 }
 
 export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
@@ -83,18 +83,23 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
   }
 
   const handleGenerate = () => {
-    const response = applyExtensionPreset(project, {
-      preset: activePreset, posX_m, posY_m, width_m, length_m,
-      carportColumnType, kitchenWallHeight_m, kitchenIncludeDoor, kitchenIncludeWindow,
-      kitchenWallSides, terraceElevation_m,
-    })
-    if (response.status !== 'success') {
-      setGenerationError(response.errors?.join('; ') || 'ไม่สามารถสร้างส่วนต่อเติมได้')
+    try {
+      const commands = planExtensionPreset(project, {
+        preset: activePreset, posX_m, posY_m, width_m, length_m,
+        carportColumnType, kitchenWallHeight_m, kitchenIncludeDoor, kitchenIncludeWindow,
+        kitchenWallSides, terraceElevation_m,
+      })
+      const result = onApplyPreset(commands)
+      if (result.status !== 'success') {
+        setGenerationError(result.errors?.join('; ') || 'ไม่สามารถสร้างส่วนต่อเติมได้')
+        return
+      }
+      setGenerationError(null)
+      onClose()
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : 'ไม่สามารถสร้างส่วนต่อเติมได้')
       return
     }
-    setGenerationError(null)
-    onApplyPreset(response.updatedProject, response.emittedEnvelopes)
-    onClose()
   }
 
   return (

@@ -12,7 +12,6 @@ import {
   type DisplayLengthUnit,
   type ProjectViewTemplate,
 } from '@constructflow/project-model'
-import { CommandEnvelope } from '@constructflow/command-schema'
 import { useProjectSession } from './app/useProjectSession.js'
 import { useEditorObjectSelection } from './app/useEditorObjectSelection.js'
 import { useToolSession } from './app/useToolSession.js'
@@ -310,12 +309,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   })
   const handleClearUnderlay = underlaySession.clearUnderlay
   const handleApplyCalibrationScale = (newScale: number, _realDistance_mm: number, axis: 'x' | 'y') => underlaySession.applyCalibrationScale(newScale, axis)
-
-  // Apply 1-Click Extension Preset (atomic batch of SmartObjects)
-  const handleApplyExtensionPreset = (updatedProject: ProjectDocument, envelopes: CommandEnvelope[]) => {
-    setProject(updatedProject)
-    setCommandQueue((q) => [...q, ...envelopes])
-  }
 
   const handleMoveElevationObject = createElevationObjectCommandHandler(project, dispatchCommandBatch, handleMoveColumn)
 
@@ -1006,7 +999,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         isOpen={isPresetsModalOpen}
         onClose={() => setIsPresetsModalOpen(false)}
         project={project}
-        onApplyPreset={handleApplyExtensionPreset}
+        onApplyPreset={dispatchCommandBatch}
       /></Suspense>
 
       {/* Title Deed & Legal Signatories Modal (Permit Issue Set) */}

@@ -1641,6 +1641,31 @@ test('bundled type library searches standard types and adds a missing type throu
   }).toBe(true)
 })
 
+test('extension assembly preset commits as one shared-session Undo/Redo transaction', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  const readObjectIds = async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return null
+    return Object.keys((JSON.parse(raw) as { objects: Record<string, unknown> }).objects)
+  }
+  await expect.poll(readObjectIds).toEqual([])
+
+  await page.locator('summary[aria-label="เมนูโครงการ"]').click()
+  await page.getByRole('button', { name: /ส่วนต่อเติมสำเร็จรูป/ }).click()
+  await expect(page.getByText('สร้างส่วนต่อเติมสำเร็จรูป (Parametric Extension Presets)')).toBeVisible()
+  await page.getByRole('button', { name: 'สั่งสร้างส่วนต่อเติมทันที' }).click()
+  await expect(page.getByText('สร้างส่วนต่อเติมสำเร็จรูป (Parametric Extension Presets)')).toBeHidden()
+  await expect.poll(readObjectIds).not.toEqual([])
+  const committedIds = await readObjectIds()
+  expect(committedIds?.length).toBeGreaterThan(1)
+
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(readObjectIds).toEqual([])
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(readObjectIds).toEqual(committedIds)
+})
+
 test('plan, framing, and roof plan share pan and zoom navigation', async ({ page }) => {
   await page.goto('/')
   const planCanvas = page.locator('.cf-plan-canvas')
