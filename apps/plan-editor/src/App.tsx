@@ -12,12 +12,10 @@ import {
   isWallObject,
   isDoorObject,
   isWindowObject,
-  DoorHanding,
   PlacementReference,
   formatLengthMm,
   type DisplayLengthUnit,
   type ProjectViewTemplate,
-  type StairModuleData,
 } from '@constructflow/project-model'
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
 import { useProjectSession } from './app/useProjectSession.js'
@@ -46,10 +44,10 @@ import { buildElevationManipulationCommands as buildElevationManipulationCommand
 import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { usePlanPlacementCommands } from './app/usePlanPlacementCommands.js'
 import { usePropertiesPanelActions } from './app/usePropertiesPanelActions.js'
+import { usePlanAuthoringCommands } from './app/usePlanAuthoringCommands.js'
+import { useGridAuthoringCommands } from './app/useGridAuthoringCommands.js'
 import { useLocalProjectPersistence } from './app/useLocalProjectPersistence.js'
 import { useProjectFileActions, type ProjectFileAccess } from './app/useProjectFileActions.js'
-import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
-import { getRoofEaveBoundary } from '@constructflow/roof-engine'
 import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
 import { useReferenceDataImportActions } from './app/useReferenceDataImportActions.js'
 import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcuts.js'
@@ -359,6 +357,17 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setFileFeedback,
   })
   const propertiesActions = usePropertiesPanelActions({ project, dispatchCommandBatch, setFileFeedback, setSelectedId, setSelectedIds })
+  const {
+    handleCommitPipeRoute, handleCommitFixture, handleCommitCabinet, handleCommitMoulding,
+    handleCommitArchitecturalFloor, handleCommitCeiling, handleCommitRoomSeparator, handleDetectRooms,
+    handleCreateRoomFinish, handleCommitSurfaceVoid, handleCommitDoor, handleCommitWindow,
+    handleCommitStair, handleFlipDoorHanding,
+  } = usePlanAuthoringCommands({
+    project, activeDoorType, activeWindowType, dispatchCommandBatch, setSelectedId, setSelectedIds, setFileFeedback,
+  })
+  const { handleCommitGrid, handleCopyGrid, handleCommitGridSystem } = useGridAuthoringCommands({
+    project, dispatchCommandBatch, setFileFeedback,
+  })
   const handleSetWorkingPhase = (phase: Phase) => {
     const res = CommandBus.execute(project, 'SetWorkingPhase', { phase })
     if (res.result.status === 'success') {
@@ -418,194 +427,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     ])
   }
 
-  const handleCommitPipeRoute = (start: [number, number], end: [number, number], system: 'waste' | 'soil' | 'rainwater' | 'vent' | 'cold_water' | 'hot_water') => {
-    const level = project.levels.find(item => item.id === project.project.active_level_id)
-    const runMm = Math.hypot(end[0] - start[0], end[1] - start[1])
-    if (!level || runMm < 50) return
-    const gravity = ['waste', 'soil', 'rainwater'].includes(system)
-    const startZ = system === 'rainwater' || system === 'vent'
-      ? level.elevation_mm + Number(level.height_mm ?? 2800)
-      : gravity ? level.elevation_mm - 300 : level.elevation_mm + 2200
-    const endZ = gravity ? startZ - runMm * 0.01 : startZ
-    runArchitectureCommand('CreatePipeRoute', {
-      id: crypto.randomUUID(), mark: ({ waste: 'WST1', soil: 'ST1', rainwater: 'RW1', vent: 'V1', cold_water: 'CW1', hot_water: 'HW1' } as const)[system],
-      level_id: level.id, created_phase: 'new_construction', system,
-      nodes_mm: [[start[0], start[1], startZ], [end[0], end[1], endZ]],
-      diameter_mm: ({ waste: 50, soil: 100, rainwater: 75, vent: 50, cold_water: 20, hot_water: 20 } as const)[system],
-      start_invert_mm: gravity ? startZ : null,
-      end_invert_mm: gravity ? endZ : null, minimum_slope_ratio: gravity ? 0.01 : 0,
-      material: system === 'cold_water' || system === 'hot_water' ? 'PPR' : 'PVC',
-    })
-  }
-  const handleCommitFixture = (point: [number, number], kind: 'light' | 'switch' | 'outlet' | 'panel') => {
-    const level = project.levels.find(item => item.id === project.project.active_level_id)
-    if (!level) return
-    const zOffset = kind === 'light' ? Number(level.height_mm ?? 2800) - 100 : kind === 'panel' ? 1500 : kind === 'outlet' ? 300 : 1100
-    runArchitectureCommand('PlaceElectricalFixture', {
-      id: crypto.randomUUID(), mark: ({ light: 'L1', switch: 'S1', outlet: 'O1', panel: 'DB1' } as const)[kind],
-      level_id: level.id, created_phase: 'new_construction', location_mm: [point[0], point[1], level.elevation_mm + zOffset],
-      kind, watts: kind === 'light' ? 12 : 0, controlled_ids: [], switch_ways: 1, grounded: kind === 'outlet' || kind === 'panel',
-    })
-  }
-  const handleCommitCabinet = (start: [number, number], end: [number, number]) => {
-    const level = project.levels.find(item => item.id === project.project.active_level_id)
-    const width = Math.hypot(end[0] - start[0], end[1] - start[1])
-    if (!level || width < 100) return
-    runArchitectureCommand('CreateCabinetRun', {
-      id: crypto.randomUUID(), mark: 'CB1', level_id: level.id, created_phase: 'new_construction',
-      location_mm: [start[0], start[1], level.elevation_mm], width_mm: width, height_mm: 850, depth_mm: 600,
-      board_mm: 18, back_mm: 6, plinth_mm: 100, rotation_deg: Math.atan2(end[1] - start[1], end[0] - start[0]) * 180 / Math.PI,
-      modules_mm: [width], shelves: 2, drawers: 0, front: 'solid', carcass_material: 'plywood', front_material: 'laminate',
-      back_material: 'plywood', countertop_material: 'quartz', countertop_mm: 30,
-    })
-  }
-  const handleCommitMoulding = (start: [number, number], end: [number, number]) => {
-    const level = project.levels.find(item => item.id === project.project.active_level_id)
-    if (!level || Math.hypot(end[0] - start[0], end[1] - start[1]) < 50) return
-    const z = level.elevation_mm + Number(level.height_mm ?? 2800) - 100
-    runArchitectureCommand('CreateMouldingRun', {
-      id: crypto.randomUUID(), mark: 'SK1', level_id: level.id, created_phase: 'new_construction',
-      path_mm: [[start[0], start[1], z], [end[0], end[1], z]],
-      profile_mm: [[0, 0], [15, 0], [15, 80], [0, 80]], closed: false, miter_limit: 4, material: 'painted_wood',
-    })
-  }
-  const handleCommitArchitecturalFloor = (boundary_mm: [number, number][]) => {
-    const level=project.levels.find(item=>item.id===project.project.active_level_id);if(!level)return
-    runArchitectureCommand('CreateArchitecturalFloor',{id:crypto.randomUUID(),mark:'AF1',level_id:level.id,boundary_mm,elevation_mm:level.elevation_mm,elevation_reference:'level',elevation_offset_mm:0,thickness_mm:50,finish_layers:[{material:'tile',thickness_mm:10,mark:'Tile'}],voids_mm:[],follows_room_boundary:false})
-  }
-  const handleCommitCeiling = (boundary_mm: [number, number][]) => {
-    const level=project.levels.find(item=>item.id===project.project.active_level_id);if(!level)return
-    runArchitectureCommand('CreateCeiling',{id:crypto.randomUUID(),mark:'CL1',level_id:level.id,boundary_mm,elevation_mm:level.elevation_mm+Number(level.height_mm??2800),elevation_reference:'level',elevation_offset_mm:Number(level.height_mm??2800),thickness_mm:12,voids_mm:[],grid_mm:[600,600],follows_room_boundary:false})
-  }
-  const handleCommitRoomSeparator = (start_point_mm: [number,number],end_point_mm: [number,number]) => runArchitectureCommand('CreateRoomSeparator',{id:crypto.randomUUID(),mark:'RS',level_id:project.project.active_level_id,start_point_mm,end_point_mm})
-  const handleDetectRooms = () => runArchitectureCommand('DetectRooms',{level_id:project.project.active_level_id,default_name:'Room'})
-  const handleCreateRoomFinish = (kind: 'floor'|'ceiling', roomId: string) => {
-    const room=project.objects[roomId];if(!room||room.object_type!=='architecture.room')return
-    const data=room.module_data as Record<string,unknown>;if(data.boundary_status==='unclosed'){setFileFeedback('วงผนังห้องยังเปิดอยู่ · ปิดวงและตรวจพื้นที่ก่อนสร้างพื้นหรือฝ้าตามห้อง');return}
-    const level=project.levels.find(item=>item.id===data.level_id);if(!level)return
-    if(kind==='floor')runArchitectureCommand('CreateArchitecturalFloor',{id:crypto.randomUUID(),mark:'AF1',level_id:level.id,room_id:roomId,elevation_mm:level.elevation_mm,elevation_reference:'level',elevation_offset_mm:0,thickness_mm:50,finish_layers:[{material:'tile',thickness_mm:10,mark:'Tile'}],voids_mm:[],follows_room_boundary:true})
-    else runArchitectureCommand('CreateCeiling',{id:crypto.randomUUID(),mark:'CL1',level_id:level.id,room_id:roomId,elevation_mm:level.elevation_mm+Number(level.height_mm??2800),elevation_reference:'level',elevation_offset_mm:Number(level.height_mm??2800),thickness_mm:12,voids_mm:[],grid_mm:[600,600],follows_room_boundary:true})
-  }
-
-  const handleCommitSurfaceVoid = (hostId: string, boundary_mm: [number, number][]) => {
-    const host = project.objects[hostId]
-    if (!host || !['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(host.object_type) || boundary_mm.length < 3) return
-    const data = host.module_data as Record<string, unknown>
-    const boundary = data.boundary_mm as [number, number][] | undefined
-    if (!boundary || boundary.length < 3) return
-    const voids = Array.isArray(data.voids_mm) ? data.voids_mm as [number, number][][] : []
-    let hostBoundary = boundary
-    try {
-      if (host.object_type === 'roof.system')
-        hostBoundary = getRoofEaveBoundary({ boundary_mm: boundary, eaves_overhang_mm: Number(data.eaves_overhang_mm ?? 0) })
-    } catch {
-      setFileFeedback('ขอบเขตชายคาหลังคาไม่ถูกต้อง จึงวาดช่องเจาะไม่ได้')
-      return
-    }
-    const validation = validatePolygonWithVoids(hostBoundary, [...voids, boundary_mm])
-    if (!validation.valid) {
-      setFileFeedback(`ช่องเจาะต้องอยู่ภายในขอบเขตและไม่ทับช่องเดิม: ${validation.reason}`)
-      return
-    }
-    const command = host.object_type === 'structure.slab'
-      ? 'UpdateSlab'
-      : host.object_type === 'architecture.floor' ? 'UpdateArchitecturalFloor'
-        : host.object_type === 'architecture.ceiling' ? 'UpdateCeiling' : 'UpdateRoof'
-    const result = CommandBus.execute(project, command, { ...data, id: hostId, voids_mm: [...voids, boundary_mm] })
-    if (result.result.status === 'success') {
-      setProject(result.updatedProject)
-      setSelectedId(hostId)
-      setFileFeedback('')
-      if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
-    } else if (result.result.errors?.length) setFileFeedback(result.result.errors.join(' · '))
-  }
-
-  // Commit Door creation hosted on wall
-  const handleCommitDoor = (
-    wallId: string,
-    point_mm: [number, number],
-    offset_mm: number,
-    handing: DoorHanding
-  ) => {
-    const doorId = crypto.randomUUID()
-    const activeType = project.types?.find(
-      (t) => t.object_type === 'door_window.door' && t.name.toLowerCase() === activeDoorType.toLowerCase()
-    )
-    const width_mm = activeType?.parameters.width_mm || 800
-    const height_mm = activeType?.parameters.height_mm || 2000
-
-    const res = CommandBus.execute(project, 'CreateDoor', {
-      id: doorId,
-      mark: activeDoorType,
-      wall_id: wallId,
-      offset_along_wall_mm: offset_mm,
-      location_mm: [point_mm[0], point_mm[1], 0],
-      width_mm,
-      height_mm,
-      handing,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      setSelectedId(doorId)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
-  // Commit Window creation hosted on wall
-  const handleCommitWindow = (wallId: string, point_mm: [number, number], offset_mm: number) => {
-    const winId = crypto.randomUUID()
-    const activeType = project.types?.find(
-      (t) => t.object_type === 'door_window.window' && t.name.toLowerCase() === activeWindowType.toLowerCase()
-    )
-    const width_mm = activeType?.parameters.width_mm || 1200
-    const height_mm = activeType?.parameters.height_mm || 1200
-    const sill_height_mm = activeType?.parameters.sill_height_mm || 900
-
-    const res = CommandBus.execute(project, 'CreateWindow', {
-      id: winId,
-      mark: activeWindowType,
-      wall_id: wallId,
-      offset_along_wall_mm: offset_mm,
-      location_mm: [point_mm[0], point_mm[1], 0],
-      width_mm,
-      height_mm,
-      sill_height_mm,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      setSelectedId(winId)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
-  // Commit Stair creation
-  const handleCommitStair = (stair: StairModuleData): boolean => {
-    const stairId = crypto.randomUUID()
-    const res = CommandBus.execute(project, 'CreateStair', {
-      ...stair,
-      id: stairId,
-      created_phase: project.project.active_phase || 'new_construction',
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      setSelectedId(stairId)
-      setSelectedIds([stairId])
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-      return true
-    }
-    if (res.result.errors?.length) setFileFeedback(res.result.errors.join(' · '))
-    return false
-  }
-
-  // Flip Door Handing
-  const handleFlipDoorHanding = (doorId: string) => {
-    const res = CommandBus.execute(project, 'FlipDoorHanding', { object_id: doorId })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
   const syncRenamedActiveType = (type: TypeDefinition, name: string) => {
     const entries: Array<[string,string,(value:string)=>void]> = [
       ['structure.column',activeColumnType,setActiveColumnType], ['structure.foundation',activeFoundationType,setActiveFoundationType],
@@ -629,63 +450,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     if(!tool) return
     const setters:Record<string,(value:string)=>void> = {column:setActiveColumnType,foundation:setActiveFoundationType,beam:setActiveBeamType,wall:setActiveWallType,door:setActiveDoorType,window:setActiveWindowType,slab:setActiveSlabType,roof:setActiveRoofType}
     setters[tool](type.name);setActiveTool(tool)
-  }
-
-  // A reference grid is a single freely angled line defined by two points.
-  const handleCommitGrid = (tag: string, start_mm: [number, number], end_mm: [number, number], sequenceStyle: 'auto' | 'alpha' | 'numeric' = 'auto') => {
-    const dx = end_mm[0] - start_mm[0], dy = end_mm[1] - start_mm[1]
-    const orientation = Math.abs(dx) <= Math.abs(dy) ? 'vertical' : 'horizontal'
-    const position_mm = orientation === 'vertical' ? (start_mm[0] + end_mm[0]) / 2 : (start_mm[1] + end_mm[1]) / 2
-    const extent_mm: [number, number] = orientation === 'vertical'
-      ? [Math.min(start_mm[1], end_mm[1]), Math.max(start_mm[1], end_mm[1])]
-      : [Math.min(start_mm[0], end_mm[0]), Math.max(start_mm[0], end_mm[0])]
-    const res = CommandBus.execute(project, 'CreateGrid', {
-      id: crypto.randomUUID(), tag, orientation, position_mm, extent_mm,
-      start_point_mm: start_mm, end_point_mm: end_mm,
-      sequence_style: sequenceStyle,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
-  const handleCopyGrid = (sourceId: string, start_mm: [number, number], end_mm: [number, number]) => {
-    const source = project.objects[sourceId]
-    if (!source || !isGridObject(source) || source.module_data.system_id) return
-    const dx = end_mm[0] - start_mm[0], dy = end_mm[1] - start_mm[1]
-    const orientation = Math.abs(dx) <= Math.abs(dy) ? 'vertical' : 'horizontal'
-    const position_mm = orientation === 'vertical' ? (start_mm[0] + end_mm[0]) / 2 : (start_mm[1] + end_mm[1]) / 2
-    const extent_mm: [number, number] = orientation === 'vertical' ? [Math.min(start_mm[1], end_mm[1]), Math.max(start_mm[1], end_mm[1])] : [Math.min(start_mm[0], end_mm[0]), Math.max(start_mm[0], end_mm[0])]
-    const res = CommandBus.execute(project, 'CreateGrid', { id: crypto.randomUUID(), tag: source.module_data.tag, orientation, position_mm, extent_mm, start_point_mm: start_mm, end_point_mm: end_mm, sequence_style: source.module_data.sequence_style ?? 'auto', auto_tag: true, bubble_visible: true })
-    if (res.result.status === 'success') { setProject(res.updatedProject); if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!]) }
-  }
-
-  // Place a coordinated pair of axes in one user action. Each axis stores its
-  // own explicit positions so every bay can have a different spacing.
-  const handleCommitGridSystem = (origin_mm: [number, number], xIntervals_mm: number[], yIntervals_mm: number[], xFirstTag: string, yFirstTag: string) => {
-    let updatedProject = project
-    const envelopes: CommandEnvelope[] = []
-    const createAxis = (orientation: 'vertical' | 'horizontal', origin: number, intervals: number[], first_tag: string) => {
-      if (!intervals.length) return
-      const positions_mm = [origin]
-      for (const interval of intervals) positions_mm.push(positions_mm[positions_mm.length - 1]! + interval)
-      const grid_ids = positions_mm.map(() => crypto.randomUUID())
-      const result = CommandBus.execute(updatedProject, 'CreateGridSystem', {
-        id: crypto.randomUUID(), grid_ids, orientation, origin_mm: origin,
-        spacing_mm: intervals[0]!, count: positions_mm.length, positions_mm, first_tag,
-      })
-      if (result.result.status === 'success') {
-        updatedProject = result.updatedProject
-        if (result.emittedEnvelope) envelopes.push(result.emittedEnvelope)
-      }
-    }
-    createAxis('vertical', origin_mm[0], xIntervals_mm, xFirstTag)
-    createAxis('horizontal', origin_mm[1], yIntervals_mm, yFirstTag)
-    if (updatedProject !== project) {
-      setProject(updatedProject)
-      if (envelopes.length) setCommandQueue(queue => [...queue, ...envelopes])
-    }
   }
 
   // Apply 1-Click Extension Preset (atomic batch of SmartObjects)

@@ -854,6 +854,10 @@ test('grid-system placement validates entered lengths and commits both axes', as
   await yIntervals.fill('2.5m')
   await clickCanvasFraction(page, 0.5, 0.5)
   await expect(gridRows).toHaveCount(initialCount + 4)
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(gridRows).toHaveCount(initialCount)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(gridRows).toHaveCount(initialCount + 4)
 })
 
 test('Escape cancels a pending grid-copy destination before leaving the tool', async ({ page }) => {
