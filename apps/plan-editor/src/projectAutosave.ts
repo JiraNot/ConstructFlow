@@ -1,5 +1,6 @@
-import { deserializeProject, serializeProject } from '@constructflow/project-model'
+import { deserializeProject, type ProjectDocument } from '@constructflow/project-model'
 import { validateConstructionProject } from '@constructflow/domain-providers'
+import { CommandBus } from './commands/CommandBus.js'
 import type { LocalProjectFileHandle } from './projectFileIO.js'
 
 const DATABASE_NAME = 'constructflow-local-projects'
@@ -13,6 +14,11 @@ export interface LocalProjectSnapshot {
   replacementBaselineJson: string | null
   fileHandle?: LocalProjectFileHandle | null
   savedAt: number
+}
+
+export interface LoadedLocalProjectSnapshot extends LocalProjectSnapshot {
+  /** The validated parsed document, reused by the editor instead of parsing the same JSON twice. */
+  project: ProjectDocument
 }
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -32,7 +38,7 @@ function openDatabase(): Promise<IDBDatabase> {
   })
 }
 
-export async function loadLocalProjectSnapshot(): Promise<LocalProjectSnapshot | null> {
+export async function loadLocalProjectSnapshot(): Promise<LoadedLocalProjectSnapshot | null> {
   const database = await openDatabase()
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, 'readonly')
@@ -45,10 +51,11 @@ export async function loadLocalProjectSnapshot(): Promise<LocalProjectSnapshot |
       }
       try {
         // Never let an invalid/stale browser snapshot replace the valid current document.
-        const project = deserializeProject(value.projectJson)
+        const project = CommandBus.migrateProject(deserializeProject(value.projectJson))
         validateConstructionProject(project)
         resolve({
-          projectJson: serializeProject(project),
+          projectJson: value.projectJson,
+          project,
           savedProjectJson: typeof value.savedProjectJson === 'string' ? value.savedProjectJson : null,
           replacementBaselineJson: typeof value.replacementBaselineJson === 'string' ? value.replacementBaselineJson : null,
           fileHandle: isProjectFileHandle(value.fileHandle) ? value.fileHandle : null,

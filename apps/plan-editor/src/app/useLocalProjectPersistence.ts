@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { deserializeProject, serializeProject, type ProjectDocument } from '@constructflow/project-model'
+import { serializeProject, type ProjectDocument } from '@constructflow/project-model'
 import type { CommandEnvelope } from '@constructflow/command-schema'
 import { loadLocalProjectSnapshot, saveLocalProjectSnapshot } from '../projectAutosave.js'
 import type { LocalProjectFileHandle } from '../projectFileIO.js'
@@ -38,7 +38,7 @@ export function useLocalProjectPersistence({
     void loadLocalProjectSnapshot()
       .then(snapshot => {
         if (!active || !snapshot) return
-        const restored = deserializeProject(snapshot.projectJson)
+        const restored = snapshot.project
         sessionRef.current!.reset(restored)
         setProjectState(restored)
         setSavedProjectJson(snapshot.savedProjectJson)
