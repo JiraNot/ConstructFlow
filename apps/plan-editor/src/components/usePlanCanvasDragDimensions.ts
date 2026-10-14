@@ -26,7 +26,7 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
     else setMoveY(value)
     if (!drag) return
     const target = resolveDragDimensionTarget(drag.startWorldMm, axis === 'x' ? value : moveX, axis === 'y' ? value : moveY, displayUnit)
-    if (!target) { manualPointRef.current = null; return }
+    if (!target) { manualPointRef.current = [Number.NaN, Number.NaN]; return }
     previewAt(drag, target.point_mm, true, true)
   }
 
@@ -69,7 +69,7 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
         point_mm: [drag.edgeStartMm[0] + drag.edgeNormalMm[0] * distance, drag.edgeStartMm[1] + drag.edgeNormalMm[1] * distance],
       }
     }
-    if (!target) { manualPointRef.current = null; return }
+    if (!target) { manualPointRef.current = [Number.NaN, Number.NaN]; return }
     previewAt(drag, target.point_mm, true, true)
   }
 

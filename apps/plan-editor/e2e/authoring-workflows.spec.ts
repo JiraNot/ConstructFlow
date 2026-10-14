@@ -2745,20 +2745,38 @@ test('column corner grips accept target W/H dimensions and commit through previe
   if (!bounds) throw new Error('Plan canvas is not visible')
   const width = page.getByRole('textbox', { name: 'ขนาดเป้าหมาย W (m)' })
   const height = page.getByRole('textbox', { name: 'ขนาดเป้าหมาย H (m)' })
-  let foundGrip = false
   const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
-  for (const radius of [8, 16, 24]) {
-    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-      await page.mouse.move(center.x + sx * radius, center.y + sy * radius)
-      await page.mouse.down()
-      await page.mouse.move(center.x + sx * radius + 4, center.y + sy * radius + 4)
-      if (await width.isVisible().catch(() => false)) { foundGrip = true; break }
-      await page.keyboard.press('Escape')
-      await page.mouse.up()
+  const beginResize = async () => {
+    let foundGrip = false
+    for (const radius of [8, 16, 24]) {
+      for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        await page.mouse.move(center.x + sx * radius, center.y + sy * radius)
+        await page.mouse.down()
+        await page.mouse.move(center.x + sx * radius + 4, center.y + sy * radius + 4)
+        if (await width.isVisible().catch(() => false)) { foundGrip = true; break }
+        await page.keyboard.press('Escape')
+        await page.mouse.up()
+      }
+      if (foundGrip) break
     }
-    if (foundGrip) break
+    expect(foundGrip).toBe(true)
   }
-  expect(foundGrip).toBe(true)
+
+  await beginResize()
+  await width.fill('0.5')
+  await height.fill('0.35')
+  await height.press('Escape')
+  await page.mouse.up()
+  await expect(page.locator('body')).toContainText('0.200 × 0.200 m')
+
+  await beginResize()
+  await width.fill('0.05')
+  await height.fill('0.35')
+  await height.press('Enter')
+  await page.mouse.up()
+  await expect(page.locator('body')).toContainText('0.200 × 0.200 m')
+
+  await beginResize()
   await width.fill('0.5')
   await height.fill('0.35')
   await height.press('Enter')
@@ -2814,7 +2832,7 @@ test('move drag dimensions preview, cancel with Escape, and commit numeric delta
   await expect(properties).toContainText(expectedPosition)
 })
 
-test('foundation corner grips accept target W/H dimensions and support Undo/Redo', async ({ page }) => {
+test('foundation corner grips cancel with Escape, reject invalid W/H, and support Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
   await page.locator('.cf-tool-button[title^="ฐานราก"]').click()
@@ -2826,20 +2844,38 @@ test('foundation corner grips accept target W/H dimensions and support Undo/Redo
   if (!bounds) throw new Error('Plan canvas is not visible')
   const width = page.getByRole('textbox', { name: 'ขนาดเป้าหมาย W (m)' })
   const height = page.getByRole('textbox', { name: 'ขนาดเป้าหมาย H (m)' })
-  let foundGrip = false
   const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
-  for (const radius of [8, 16, 24, 32, 48, 64, 96, 128]) {
-    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-      await page.mouse.move(center.x + sx * radius, center.y + sy * radius)
-      await page.mouse.down()
-      await page.mouse.move(center.x + sx * radius + 4, center.y + sy * radius + 4)
-      if (await width.isVisible().catch(() => false)) { foundGrip = true; break }
-      await page.keyboard.press('Escape')
-      await page.mouse.up()
+  const beginResize = async () => {
+    let foundGrip = false
+    for (const radius of [8, 16, 24, 32, 48, 64, 96, 128]) {
+      for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        await page.mouse.move(center.x + sx * radius, center.y + sy * radius)
+        await page.mouse.down()
+        await page.mouse.move(center.x + sx * radius + 4, center.y + sy * radius + 4)
+        if (await width.isVisible().catch(() => false)) { foundGrip = true; break }
+        await page.keyboard.press('Escape')
+        await page.mouse.up()
+      }
+      if (foundGrip) break
     }
-    if (foundGrip) break
+    expect(foundGrip).toBe(true)
   }
-  expect(foundGrip).toBe(true)
+
+  await beginResize()
+  await width.fill('1.0')
+  await height.fill('0.7')
+  await height.press('Escape')
+  await page.mouse.up()
+  await expect(page.locator('body')).toContainText('0.800 × 0.800 × 0.300 m')
+
+  await beginResize()
+  await width.fill('0.05')
+  await height.fill('0.7')
+  await height.press('Enter')
+  await page.mouse.up()
+  await expect(page.locator('body')).toContainText('0.800 × 0.800 × 0.300 m')
+
+  await beginResize()
   await width.fill('1.0')
   await height.fill('0.7')
   await height.press('Enter')
