@@ -438,18 +438,29 @@ test('synthetic 4,780-wall project restores, searches, selects, and preserves UU
   const reloadStartedAt = Date.now()
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 90_000 })
+  const reloadReadyAt = Date.now()
   await page.getByRole('tab', { name: 'รายการ' }).click()
   const restoredBrowser = page.getByLabel('Project Browser')
   await restoredBrowser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   const restoredTree = restoredBrowser.locator('.cf-browser-tree')
   await expect(restoredTree).toHaveAttribute('data-object-count', '4780')
+  const browserReadyAt = Date.now()
   const restoredProjectJson = await readStoredProjectJson(page)
   expect(restoredProjectJson).toBeTruthy()
   const restoredProject = JSON.parse(restoredProjectJson!) as { objects: Record<string, unknown> }
   expect(Object.keys(restoredProject.objects)).toHaveLength(4780)
   expect(restoredProject.objects[objectId!]).toBeTruthy()
-  const reloadRestoreMs = Date.now() - reloadStartedAt
-  console.log(`[browser-stress] ${JSON.stringify({ object_count: 4780, first_restore_ms: firstRestoreMs, reload_restore_ms: reloadRestoreMs, searched_object_id: objectId, fixture: 'synthetic walls; not a surveyed residential model' })}`)
+  const verificationCompleteAt = Date.now()
+  console.log(`[browser-stress] ${JSON.stringify({
+    object_count: 4780,
+    first_restore_ms: firstRestoreMs,
+    reload_restore_ms: reloadReadyAt - reloadStartedAt,
+    browser_activation_ms: browserReadyAt - reloadReadyAt,
+    snapshot_read_and_assert_ms: verificationCompleteAt - browserReadyAt,
+    reload_to_verification_ms: verificationCompleteAt - reloadStartedAt,
+    searched_object_id: objectId,
+    fixture: 'synthetic walls; not a surveyed residential model',
+  })}`)
 })
 
 async function findGripPoints(page: Page, color: 'blue' | 'orange' | 'slab-edge' | 'stair-width' | 'stair-run') {
