@@ -2,7 +2,7 @@ import { ProjectDocument, isBeamObject, isColumnObject, isDoorObject, isFoundati
 import { polygonEdgeGrip } from '@constructflow/geometry-kernel'
 import { getEditableRoofRidge, getRoofSeams } from '@constructflow/roof-engine'
 import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
-import { cabinetRotationGripPoint, gridLineEndpoints, orientedRectangleCorners, slabSlopeArrow, stairLandingGripPoint } from './PlanCanvasGeometry.js'
+import { cabinetRotationGripPoint, gridLineEndpoints, orientedRectangleCorners, slabSlopeArrow, stairFlightGripPoints, stairLandingGripPoint } from './PlanCanvasGeometry.js'
 
 interface FindPlanCanvasEditHandleOptions {
   planProject: ProjectDocument
@@ -90,6 +90,10 @@ export function findPlanCanvasEditHandle({ planProject, editableSelectionIds, vi
         const [rx, ry] = worldToScreen(runGrip, viewport)
         if (Math.hypot(screenPoint[0] - rx, screenPoint[1] - ry) <= tolerance) return { id, kind: 'stair-run' as const, endpointIndex: 0, stairData: structuredClone(stair) }
       } else {
+        for (const grip of stairFlightGripPoints(stair)) {
+          const [fx, fy] = worldToScreen(grip.point, viewport)
+          if (Math.hypot(screenPoint[0] - fx, screenPoint[1] - fy) <= tolerance) return { id, kind: grip.flight === 'first' ? 'stair-first-flight' as const : 'stair-second-flight' as const, endpointIndex: 0, stairData: structuredClone(stair) }
+        }
         const landingGrip = stairLandingGripPoint(stair)
         if (landingGrip) {
           const [lx, ly] = worldToScreen(landingGrip, viewport)

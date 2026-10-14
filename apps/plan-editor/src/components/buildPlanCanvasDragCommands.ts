@@ -20,7 +20,7 @@ export function buildPlanCanvasDragCommands({ planProject, drag, rawWorld, ctrlK
   const snap = ctrlKey
     ? { point_mm: rawWorld, target_id: undefined }
     : snapPlanPoint(rawWorld, 16, drag.id)
-  let point = ['slab-edge', 'slab-slope', 'roof-ridge', 'roof-seam', 'stair-landing'].includes(drag.kind) ? rawWorld : snap.point_mm
+  let point = ['slab-edge', 'slab-slope', 'roof-ridge', 'roof-seam', 'stair-landing', 'stair-first-flight', 'stair-second-flight'].includes(drag.kind) ? rawWorld : snap.point_mm
   const options: Record<string, unknown> = {}
 
   if (drag.kind === 'beam-endpoint') {

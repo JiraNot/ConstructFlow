@@ -1,6 +1,7 @@
 import { ProjectDocument, CabinetModuleData, isGridObject } from '@constructflow/project-model'
 import { polygonInteriorPoint } from '@constructflow/geometry-kernel'
 export { stairLandingGripPoint } from './stairLandingGripPoint.mjs'
+export { stairFlightGripPoints } from './stairFlightGripPoints.mjs'
 
 export function getPlanObjectBounds(object: ProjectDocument['objects'][string]): [number, number, number, number] | null {
   if (isGridObject(object)) {

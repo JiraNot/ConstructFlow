@@ -1,5 +1,6 @@
 import { offsetPolygonEdge } from '@constructflow/geometry-kernel'
 import { moveEditableRoofRidge, moveRoofSeam } from '@constructflow/roof-engine'
+import { stairFlightGripPoints } from './components/stairFlightGripPoints.mjs'
 
 const point2 = (point) => [Number(point?.[0] ?? 0), Number(point?.[1] ?? 0)]
 const point3 = (point) => [Number(point?.[0] ?? 0), Number(point?.[1] ?? 0), Number(point?.[2] ?? 0)]
@@ -208,7 +209,7 @@ export function buildDirectManipulationCommands(project, gesture, point, options
     return commands
   }
 
-  if (gesture.kind === 'stair-width' || gesture.kind === 'stair-run' || gesture.kind === 'stair-landing') {
+  if (gesture.kind === 'stair-width' || gesture.kind === 'stair-run' || gesture.kind === 'stair-landing' || gesture.kind === 'stair-first-flight' || gesture.kind === 'stair-second-flight') {
     if (object.object_type !== 'architecture.stair') return []
     const start = point2(data.start_point_mm), angle = Number(data.rotation_deg ?? 0) * Math.PI / 180
     if (gesture.kind === 'stair-width') {
@@ -222,6 +223,20 @@ export function buildDirectManipulationCommands(project, gesture, point, options
       const deltaX = point[0] - gesture.startWorldMm[0], deltaY = point[1] - gesture.startWorldMm[1]
       const nextLandingDepth = landingDepth + deltaX * Math.cos(angle) + deltaY * Math.sin(angle)
       return [fullObjectUpdate(object, 'UpdateStair', { landing_depth_mm: nextLandingDepth })]
+    }
+    if (gesture.kind === 'stair-first-flight' || gesture.kind === 'stair-second-flight') {
+      if (data.stair_type === 'straight') return []
+      const flight = gesture.kind === 'stair-first-flight' ? 'first' : 'second'
+      const grip = stairFlightGripPoints(data).find(item => item.flight === flight)
+      if (!grip) return []
+      const run = grip.run + (point[0] - grip.point[0]) * grip.direction[0] + (point[1] - grip.point[1]) * grip.direction[1]
+      const risers = Number(data.num_risers)
+      const firstRisers = Number(data.first_flight_risers ?? Math.floor(risers / 2))
+      const flightRisers = flight === 'first' ? firstRisers : risers - firstRisers
+      const tread = run / Math.max(1, flightRisers - 1)
+      return [fullObjectUpdate(object, 'UpdateStair', flight === 'first'
+        ? { tread_depth_mm: tread, second_tread_depth_mm: Number(data.second_tread_depth_mm ?? data.tread_depth_mm) }
+        : { second_tread_depth_mm: tread })]
     }
     if (data.stair_type !== 'straight') return []
     const run = Math.max(220 * Math.max(1, Number(data.num_risers) - 1), (point[0] - start[0]) * Math.cos(angle) + (point[1] - start[1]) * Math.sin(angle))

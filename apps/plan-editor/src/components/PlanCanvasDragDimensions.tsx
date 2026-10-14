@@ -1,7 +1,7 @@
 import React from 'react'
 
 export type DragDimensionField = 'x' | 'y' | 'width' | 'height' | 'length' | 'offset'
-export type DragDimensionMode = 'move' | 'rectangle' | 'opening-width' | 'line-length' | 'stair-width' | 'stair-run' | 'stair-landing' | 'edge-offset'
+export type DragDimensionMode = 'move' | 'rectangle' | 'opening-width' | 'line-length' | 'stair-width' | 'stair-run' | 'stair-landing' | 'stair-first-flight' | 'stair-second-flight' | 'edge-offset'
 
 interface PlanCanvasDragDimensionsProps {
   mode: DragDimensionMode
@@ -28,6 +28,10 @@ export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> =
           ? [{ key: 'length', shortLabel: 'R', accessibleLabel: `ความยาวช่วงบันไดเป้าหมาย (${displayUnit})` }]
           : mode === 'stair-landing'
             ? [{ key: 'length', shortLabel: 'L', accessibleLabel: `ความลึกชานพักเป้าหมาย (${displayUnit})` }]
+            : mode === 'stair-first-flight'
+              ? [{ key: 'length', shortLabel: '1', accessibleLabel: `ความยาวเที่ยวแรกเป้าหมาย (${displayUnit})` }]
+              : mode === 'stair-second-flight'
+                ? [{ key: 'length', shortLabel: '2', accessibleLabel: `ความยาวเที่ยวกลับเป้าหมาย (${displayUnit})` }]
           : mode === 'edge-offset'
             ? [{ key: 'offset', shortLabel: 'Δ', accessibleLabel: `ระยะเยื้องขอบพื้น (${displayUnit})` }]
           : mode === 'opening-width'

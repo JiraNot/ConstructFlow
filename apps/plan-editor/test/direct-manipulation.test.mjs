@@ -36,6 +36,24 @@ test('stair grips update parametric width and run while retaining instance prope
   assert.equal(run[0].input.total_rise_mm, 3000)
 })
 
+test('L/U stair flight grips update each tread independently', () => {
+  const project = { objects: {
+    stair: object('stair', 'architecture.stair', {
+      start_point_mm: [3000, 3000, 0], width_mm: 1000, rotation_deg: 0,
+      stair_type: 'u_shape', turn_direction: 'right', num_risers: 18, first_flight_risers: 9,
+      tread_depth_mm: 250, landing_depth_mm: 1000, flight_gap_mm: 100,
+    }),
+  } }
+  const first = buildDirectManipulationCommands(project, { id: 'stair', kind: 'stair-first-flight', startWorldMm: [5000, 3500], startScreenPx: [0, 0] }, [5400, 3500])
+  assert.equal(first[0].name, 'UpdateStair')
+  assert.equal(first[0].input.tread_depth_mm, 300)
+  assert.equal(first[0].input.second_tread_depth_mm, 250)
+  const second = buildDirectManipulationCommands(project, { id: 'stair', kind: 'stair-second-flight', startWorldMm: [3000, 4600], startScreenPx: [0, 0] }, [2500, 4600])
+  assert.equal(second[0].input.second_tread_depth_mm, 312.5)
+  assert.equal(second[0].input.tread_depth_mm, 250)
+  assert.equal(second[0].input.id, 'stair')
+})
+
 test('pipe route bend grip edits only the selected intermediate plan node', () => {
   const route = {
     nodes_mm: [[0, 0, -300], [2000, 0, -320], [4000, 0, -340]],

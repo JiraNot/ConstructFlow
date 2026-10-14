@@ -3,6 +3,7 @@ import { formatLengthMm, parseLengthMm, type DisplayLengthUnit, type ProjectDocu
 import type { PlanDragGesture } from '../directManipulation.mjs'
 import { resolveDragDimensionTarget, resolveLineEndpointLengthTarget, resolveOpeningEdgeWidthTarget, resolveRectangleResizeTarget } from '../app/dragDimensionInput.mjs'
 import { stairLandingGripPoint } from './stairLandingGripPoint.mjs'
+import { stairFlightGripPoints } from './stairFlightGripPoints.mjs'
 
 type PreviewDrag = (drag: PlanDragGesture, point: [number, number], ctrlKey: boolean, manual?: boolean) => { commands: unknown[]; valid: boolean }
 
@@ -73,6 +74,13 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
         const delta = landingDepth - Number(stair.landing_depth_mm ?? stair.width_mm)
         target = { point_mm: [grip[0] + Math.cos(angle) * delta, grip[1] + Math.sin(angle) * delta] }
       }
+    } else if ((drag.kind === 'stair-first-flight' || drag.kind === 'stair-second-flight') && drag.stairData && axis === 'length') {
+      const flight = drag.kind === 'stair-first-flight' ? 'first' : 'second'
+      const grip = stairFlightGripPoints(drag.stairData).find(item => item.flight === flight)
+      const desiredRun = parseLengthMm(value, displayUnit)
+      if (grip && desiredRun !== null && Number.isFinite(desiredRun)) target = {
+        point_mm: [grip.point[0] + grip.direction[0] * (desiredRun - grip.run), grip.point[1] + grip.direction[1] * (desiredRun - grip.run)],
+      }
     } else if (drag.kind === 'slab-edge' && drag.edgeStartMm && drag.edgeNormalMm && axis === 'offset') {
       const distance = parseLengthMm(value, displayUnit)
       if (distance !== null && Number.isFinite(distance)) target = {
@@ -110,6 +118,13 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
       setLength(formatLengthMm(Math.max(1, Number(data.num_risers) - 1) * Number(data.tread_depth_mm), displayUnit))
     } else if (data && drag.kind === 'stair-landing') {
       setLength(formatLengthMm(Number(data.landing_depth_mm ?? data.width_mm), displayUnit))
+    } else if (data && (drag.kind === 'stair-first-flight' || drag.kind === 'stair-second-flight')) {
+      const flight = drag.kind === 'stair-first-flight' ? 'first' : 'second'
+      const risers = Number(data.num_risers)
+      const firstRisers = Number(data.first_flight_risers ?? Math.floor(risers / 2))
+      const flightRisers = flight === 'first' ? firstRisers : risers - firstRisers
+      const tread = flight === 'first' ? Number(data.tread_depth_mm) : Number(data.second_tread_depth_mm ?? data.tread_depth_mm)
+      setLength(formatLengthMm(Math.max(1, flightRisers - 1) * tread, displayUnit))
     } else if (data && drag.kind === 'slab-edge' && drag.edgeStartMm && drag.edgeNormalMm) {
       const dx = point[0] - drag.edgeStartMm[0], dy = point[1] - drag.edgeStartMm[1]
       setOffset(formatLengthMm(dx * drag.edgeNormalMm[0] + dy * drag.edgeNormalMm[1], displayUnit))

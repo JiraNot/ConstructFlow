@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { CommandBus } from '@constructflow/command-runtime'
 import { createEmptyProjectDocument, serializeProject } from '@constructflow/project-model'
 import { getPlanFinishBoundaries } from '@constructflow/representation-engine'
+import { stairFlightGripPoints } from '../src/components/stairFlightGripPoints.mjs'
 
 const canvas = (page: Page) => page.locator('canvas').first()
 
@@ -3733,6 +3734,66 @@ test('U-stair landing grip previews and commits a target depth with UUID-preserv
   await expect.poll(readLandingDepth).toBe(1000)
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
   await expect.poll(readLandingDepth).toBeCloseTo(1500, 1)
+})
+
+test('U-stair flight grips set independent target runs and preserve UUID through Undo/Redo', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await seedLocalProjectSnapshot(page, createSyntheticUStairProject())
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const stairRow = page.locator('.cf-browser-tree [data-object-type="architecture.stair"]').first()
+  await expect(stairRow).toBeVisible()
+  const stairId = await stairRow.getAttribute('data-object-id')
+  expect(stairId).toBeTruthy()
+  await stairRow.locator('.cf-browser-object').click()
+  const properties = page.getByTestId('properties-selection')
+  await expect(properties).toHaveAttribute('data-object-id', stairId!)
+  await page.getByRole('button', { name: 'จัดแปลนให้อยู่ในหน้าจอ' }).click()
+  for (let zoomOut = 0; zoomOut < 4; zoomOut++) await page.getByRole('button', { name: 'ซูมออก' }).click()
+
+  const readStair = async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) throw new Error('Could not read the U-stair fixture')
+    return (JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }).objects[stairId!]!.module_data
+  }
+  const applyFlightRun = async (flight: 'first' | 'second', targetRun: string) => {
+    const data = await readStair()
+    const grip = stairFlightGripPoints(data as never).find(item => item.flight === flight)
+    if (!grip) throw new Error(`Missing ${flight} stair grip`)
+    const bounds = await canvas(page).boundingBox()
+    if (!bounds) throw new Error('Plan canvas is not visible')
+    const viewport = page.locator('.cf-plan-canvas').first()
+    const panX = Number(await viewport.getAttribute('data-viewport-pan-x'))
+    const panY = Number(await viewport.getAttribute('data-viewport-pan-y'))
+    const zoom = Number(await viewport.getAttribute('data-viewport-zoom'))
+    const x = bounds.x + panX + grip.point[0] * zoom, y = bounds.y + panY + grip.point[1] * zoom
+    const label = flight === 'first' ? 'ความยาวเที่ยวแรกเป้าหมาย (m)' : 'ความยาวเที่ยวกลับเป้าหมาย (m)'
+    const input = page.getByRole('textbox', { name: label })
+    await page.mouse.move(x, y)
+    await page.mouse.down()
+    await page.mouse.move(x + 3, y + 3)
+    await expect(input).toBeVisible()
+    await input.fill(targetRun)
+    await input.press('Enter')
+    await page.mouse.up()
+  }
+  const readRun = async (flight: 'first' | 'second') => {
+    const data = await readStair()
+    const n = Number(data.num_risers), n1 = Number(data.first_flight_risers)
+    return Math.max(1, (flight === 'first' ? n1 : n - n1) - 1) * Number(flight === 'first' ? data.tread_depth_mm : data.second_tread_depth_mm ?? data.tread_depth_mm)
+  }
+  await applyFlightRun('first', '2.4')
+  await expect.poll(() => readRun('first')).toBeCloseTo(2400, 0)
+  await applyFlightRun('second', '2.5')
+  await expect.poll(() => readRun('second')).toBeCloseTo(2500, 0)
+  await expect(properties).toHaveAttribute('data-object-id', stairId!)
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(() => readRun('second')).toBeCloseTo(2000, 0)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(() => readRun('second')).toBeCloseTo(2500, 0)
 })
 
 test('hosted opening jamb accepts a target width with UUID-preserving Escape and Undo/Redo', async ({ page }) => {

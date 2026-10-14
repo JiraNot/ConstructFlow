@@ -71,6 +71,10 @@ export function handlePlanCanvasSelectionPointerDown({
       ? formatLengthMm(Math.hypot(editHandle.endPointMm[0] - editHandle.startPointMm[0], editHandle.endPointMm[1] - editHandle.startPointMm[1]), displayUnit)
       : editHandle.kind === 'stair-run' && editHandle.stairData
         ? formatLengthMm(Math.max(1, editHandle.stairData.num_risers - 1) * editHandle.stairData.tread_depth_mm, displayUnit)
+        : (editHandle.kind === 'stair-first-flight' || editHandle.kind === 'stair-second-flight') && editHandle.stairData
+          ? formatLengthMm((editHandle.kind === 'stair-first-flight'
+            ? Math.max(1, (editHandle.stairData.first_flight_risers ?? Math.floor(editHandle.stairData.num_risers / 2)) - 1) * editHandle.stairData.tread_depth_mm
+            : Math.max(1, (editHandle.stairData.num_risers - (editHandle.stairData.first_flight_risers ?? Math.floor(editHandle.stairData.num_risers / 2))) - 1) * (editHandle.stairData.second_tread_depth_mm ?? editHandle.stairData.tread_depth_mm)), displayUnit)
         : '')
     if (editHandle.kind === 'stair-width' && editHandle.stairData) setResizeDimensionWidth(formatLengthMm(editHandle.stairData.width_mm, displayUnit))
     setDraggingObject({ id: editHandle.id, kind: editHandle.kind, endpointIndex: editHandle.endpointIndex,

@@ -15,7 +15,7 @@ import {
 } from '@constructflow/project-model'
 import { polygonEdgeGrip } from '@constructflow/geometry-kernel'
 import { getRoofSeams } from '@constructflow/roof-engine'
-import { cabinetRotationGripPoint, gridLineEndpoints, orientedRectangleCorners, slabSlopeArrow, stairLandingGripPoint } from './PlanCanvasGeometry.js'
+import { cabinetRotationGripPoint, gridLineEndpoints, orientedRectangleCorners, slabSlopeArrow, stairFlightGripPoints, stairLandingGripPoint } from './PlanCanvasGeometry.js'
 import { drawOpeningInspectionDimensions } from './drawPlanCanvasOpeningInspectionDimensions.js'
 import { worldToScreen, type ViewportState } from '../viewport/viewportTransform.js'
 
@@ -40,7 +40,7 @@ export function drawPlanCanvasSelectionHandles(
         const object = planProject.objects[id]
         if (!object) continue
         const data = object.module_data as unknown as Record<string, unknown>
-        const points: Array<[number, number, 'linear' | 'opening' | 'opening-center' | 'cabinet-rotation' | 'stair-width' | 'stair-run' | 'stair-landing' | 'slab-edge' | 'slab-slope' | 'pipe-node']> = []
+        const points: Array<[number, number, 'linear' | 'opening' | 'opening-center' | 'cabinet-rotation' | 'stair-width' | 'stair-run' | 'stair-landing' | 'stair-first-flight' | 'stair-second-flight' | 'slab-edge' | 'slab-slope' | 'pipe-node']> = []
         let slabArrow: ReturnType<typeof slabSlopeArrow> = null
         let roofSeams: ReturnType<typeof getRoofSeams> = []
         if (isColumnObject(object)) {
@@ -132,6 +132,7 @@ export function drawPlanCanvasSelectionHandles(
           }
         } else if (object.object_type === 'architecture.stair') {
           const stair = object.module_data as unknown as StairModuleData
+          for (const grip of stairFlightGripPoints(stair)) points.push([grip.point[0], grip.point[1], grip.flight === 'first' ? 'stair-first-flight' : 'stair-second-flight'])
           const [sx, sy] = stair.start_point_mm, angle = Number(stair.rotation_deg ?? 0) * Math.PI / 180
           const side = stair.turn_direction === 'left' && stair.stair_type !== 'straight' ? -1 : 1
           points.push([sx - Math.sin(angle) * stair.width_mm * side, sy + Math.cos(angle) * stair.width_mm * side, 'stair-width'])
@@ -213,12 +214,12 @@ export function drawPlanCanvasSelectionHandles(
             ctx.textAlign = 'center'
             ctx.textBaseline = 'middle'
             ctx.fillText('↻', sx, sy)
-          } else if (kind === 'stair-width' || kind === 'stair-run' || kind === 'stair-landing') {
-            ctx.fillStyle = kind === 'stair-width' ? '#0d9488' : kind === 'stair-run' ? '#7c3aed' : '#0284c7'
+          } else if (kind === 'stair-width' || kind === 'stair-run' || kind === 'stair-landing' || kind === 'stair-first-flight' || kind === 'stair-second-flight') {
+            ctx.fillStyle = kind === 'stair-width' ? '#0d9488' : kind === 'stair-run' ? '#7c3aed' : kind === 'stair-landing' ? '#0284c7' : '#c2410c'
             ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2
             ctx.beginPath(); ctx.arc(sx, sy, 7.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
             ctx.fillStyle = '#ffffff'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-            ctx.fillText(kind === 'stair-width' ? 'W' : kind === 'stair-run' ? 'R' : 'L', sx, sy)
+            ctx.fillText(kind === 'stair-width' ? 'W' : kind === 'stair-run' ? 'R' : kind === 'stair-landing' ? 'L' : kind === 'stair-first-flight' ? '1' : '2', sx, sy)
           } else if (kind === 'slab-edge') {
             ctx.fillStyle = '#ecfeff'; ctx.strokeStyle = '#0891b2'; ctx.lineWidth = 1.6
             ctx.fillRect(sx - 4.5, sy - 4.5, 9, 9); ctx.strokeRect(sx - 4.5, sy - 4.5, 9, 9)
