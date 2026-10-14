@@ -3619,6 +3619,40 @@ test('sheet composer supports eight views in compact A3 frames and reloads the l
   await expect(page.getByTestId('sheet-composer-preview')).toHaveAttribute('data-paper-frames', JSON.stringify(frames))
 })
 
+test('selection from an auxiliary plan-family pane updates every pane and Properties', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickCanvasFraction(page, 0.5, 0.48)
+  await page.keyboard.press('Escape')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const row = page.locator('li[data-object-type="structure.column"]').first()
+  await expect(row).toBeVisible()
+  const objectId = await row.getAttribute('data-object-id')
+  expect(objectId).toBeTruthy()
+  await row.locator('.cf-browser-object').click()
+  await page.getByRole('button', { name: 'แปลนพื้น', exact: true }).click()
+  await page.getByLabel('แบ่งมุมมอง').click()
+  await page.getByLabel('แสดงหลายมุมมอง').check()
+  const secondView = page.getByLabel('มุมมองที่สอง')
+  await expect(secondView).toBeVisible()
+  await secondView.selectOption('framing')
+  await page.getByLabel('แบ่งมุมมอง').click()
+  await page.keyboard.press('Escape')
+
+  const projectJson = await readStoredProjectJson(page)
+  if (!projectJson) throw new Error('Could not read the placed column from the saved project')
+  const savedProject = JSON.parse(projectJson) as { objects: Record<string, { module_data: { location_mm?: number[] } }> }
+  const columnPoint = savedProject.objects[objectId!]?.module_data.location_mm
+  if (!columnPoint || columnPoint.length < 2) throw new Error('The selected column has no plan location')
+  const secondaryCanvas = page.locator('.cf-plan-canvas').nth(1)
+  const [panX, panY, zoom] = await Promise.all(['data-viewport-pan-x', 'data-viewport-pan-y', 'data-viewport-zoom']
+    .map(async name => Number(await secondaryCanvas.getAttribute(name))))
+  await secondaryCanvas.locator('canvas').first().click({ position: { x: panX + columnPoint[0]! * zoom, y: panY + columnPoint[1]! * zoom } })
+
+  for (const pane of await page.locator('.cf-multiview-pane').all()) await expect(pane).toHaveAttribute('data-primary-selected-object-id', objectId!)
+  await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', objectId!)
+})
+
 test('split workbench keeps selection identity and plan navigation coordinated', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
