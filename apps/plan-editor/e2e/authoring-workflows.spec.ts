@@ -3619,6 +3619,25 @@ test('sheet composer supports eight views in compact A3 frames and reloads the l
   await expect(page.getByTestId('sheet-composer-preview')).toHaveAttribute('data-paper-frames', JSON.stringify(frames))
 })
 
+test('residential fixture compiles an A3 sheet preview in Sheet Composer', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto('/')
+  await page.locator('.cf-more-menu summary').click()
+  await page.getByRole('button', { name: 'เปิดแบบบ้านเดโม 2 ชั้น' }).click()
+  await expect(page.locator('.cf-save-status')).toContainText('เปิดแบบบ้านเดโม 2 ชั้นแล้ว')
+  await page.locator('.cf-more-menu summary').click()
+  await page.getByRole('button', { name: 'ชุดแบบและตาราง' }).click()
+
+  const dialog = page.getByRole('dialog')
+  await dialog.locator('select').first().selectOption('A-02')
+  await dialog.getByRole('button', { name: 'อัปเดต Viewport / Preview' }).click()
+  const preview = page.getByTestId('sheet-composer-preview')
+  await preview.scrollIntoViewIfNeeded()
+  await expect(preview.locator('svg')).toBeVisible()
+  expect(await preview.locator('svg path, svg text, svg line, svg rect, svg polyline, svg polygon').count()).toBeGreaterThan(20)
+  await preview.screenshot({ path: 'test-results/residential-fixture-sheet-A-02.png' })
+})
+
 test('selection from an auxiliary plan-family pane updates every pane and Properties', async ({ page }) => {
   await page.goto('/')
   await page.locator('.cf-tool-button[title^="เสา"]').click()
