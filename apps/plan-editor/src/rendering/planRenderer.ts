@@ -119,6 +119,8 @@ function openingValue(project: ProjectDocument, object: SmartObject, field: stri
 
 export interface UnderlayConfig {
   image: HTMLImageElement | null
+  source_file?: string
+  scale_source?: 'declared_units' | 'assumed_units' | 'calibrated'
   origin_mm: [number, number]
   scale_mm_per_px: number
   opacity: number

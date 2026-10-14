@@ -1,7 +1,7 @@
 // Project, Level, and Phase Mutation Command Payloads
 
 import { Phase, RemovalPhase, Level } from '@constructflow/project-model'
-import type { CoordinationSettings, ProjectViewTemplate, RainwaterDesignSettings, SavedSheetViewport, SheetLayoutTemplate, SiteSurvey } from '@constructflow/project-model'
+import type { CoordinationSettings, ProjectSourceReference, ProjectViewTemplate, RainwaterDesignSettings, SavedSheetViewport, SheetLayoutTemplate, SiteSurvey } from '@constructflow/project-model'
 export interface UpdateSheetViewportInput { sheet_id: string; viewport: SavedSheetViewport }
 export interface SaveSheetLayoutTemplateInput { template: SheetLayoutTemplate }
 export interface DeleteSheetLayoutTemplateInput { template_id: string }
@@ -26,6 +26,8 @@ export interface UpdateRainwaterDesignInput {
   settings: RainwaterDesignSettings
 }
 export interface UpdateSiteSurveyInput { survey: SiteSurvey }
+/** Replace source links for a group of model objects as one atomic mutation. */
+export interface UpdateObjectSourceReferencesInput { object_ids: string[]; source_refs: ProjectSourceReference[] }
 
 export interface CreateProjectInput {
   id: string

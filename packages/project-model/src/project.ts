@@ -195,6 +195,8 @@ export interface ProjectViewTemplate {
 
 export interface ProjectUnderlay {
   data_url: string
+  source_file?: string
+  scale_source?: 'declared_units' | 'assumed_units' | 'calibrated'
   origin_mm: [number, number]
   scale_mm_per_px: number
   rotation_deg: number

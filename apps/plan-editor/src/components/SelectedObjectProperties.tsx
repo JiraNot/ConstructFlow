@@ -10,6 +10,7 @@ import { OpeningPropertiesSection } from './OpeningPropertiesSection.js'
 import { RoomPropertiesSection } from './RoomPropertiesSection.js'
 import { GridPropertiesSection } from './GridPropertiesSection.js'
 import { ObjectLifecycleProperties } from './ObjectLifecycleProperties.js'
+import { SourceReferencesProperties } from './SourceReferencesProperties.js'
 import { ObjectSelectionHeader } from './ObjectSelectionHeader.js'
 import { resolvePropertiesSelection } from './propertiesSelection.js'
 import type { PropertiesPanelProps } from './PropertiesPanel.types.js'
@@ -55,6 +56,7 @@ export const SelectedObjectProperties: React.FC<{
       <SurfacePropertiesSection project={project} displayUnit={displayUnit} slab={slabObj} architectureSurface={architectureSurfaceObj}
         onUpdateSlab={onUpdateSlab} onUpdateArchitectureSurface={onUpdateArchitectureSurface} onDrawSurfaceVoid={onDrawSurfaceVoid} onOpenTypeManager={onOpenTypeManager} />
       <RoomPropertiesSection project={project} room={roomObj} onCreateRoomFinish={onCreateRoomFinish} />
+      <SourceReferencesProperties project={project} object={selectedObj} onUpdate={props.onUpdateSourceReferences ?? (() => {})} />
       <ObjectLifecycleProperties object={selectedObj} project={project} displayUnit={displayUnit} hostedFoundation={hostedFoundation}
         onUpdatePhase={onUpdatePhase} onUpdateRemovalPhase={onUpdateRemovalPhase} onAddFoundation={onAddFoundation} onDeleteObject={onDeleteObject} />
     </div>

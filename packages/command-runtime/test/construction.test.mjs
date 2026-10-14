@@ -585,6 +585,38 @@ test('site survey observations retain measured versus assumed provenance through
   assert.deepEqual(session.project.site_survey, survey);
 });
 
+test('model objects keep traceable survey and underlay sources through undo, redo, and serialization', () => {
+  const project = empty();
+  project.underlays = { 'plan:level-ground': { data_url: 'data:image/svg+xml;base64,PHN2Zy8+', origin_mm: [0, 0], scale_mm_per_px: 1, rotation_deg: 0, opacity: 1, visible: true } };
+  const session = new ProjectCommandSession(project);
+  const wallId = crypto.randomUUID();
+  const created = session.execute([{ name: 'CreateWall', input: { id: wallId, mark: 'W1', start_point_mm: [0, 0], end_point_mm: [4000, 0], thickness_mm: 100, height_mm: 2800 } }]);
+  assert.equal(created.status, 'success');
+  const survey = {
+    id: 'survey-lot-9', name: 'Lot 9', source_file: 'lot9.csv', coordinate_system: 'local-grid-01', imported_at: '2026-10-14T00:00:00.000Z',
+    points: [
+      { id: 'P1', name: 'North west', x_mm: 0, y_mm: 0, source_status: 'measured', source_reference: 'Station A · field book 12' },
+      { id: 'P2', name: 'North east', x_mm: 10000, y_mm: 0, source_status: 'assumed', source_reference: 'Deed sketch estimate' },
+      { id: 'P3', name: 'South east', x_mm: 10000, y_mm: 8000, source_status: 'measured', source_reference: 'Station C · field book 12' },
+    ],
+    boundaries: [{ id: 'LOT-9', name: 'Parcel', point_ids: ['P1', 'P2', 'P3'] }],
+  };
+  assert.equal(session.execute([{ name: 'UpdateSiteSurvey', input: { survey } }]).status, 'success');
+  const source_refs = [
+    { kind: 'site_survey_point', source_id: 'P1' },
+    { kind: 'site_survey_boundary', source_id: 'LOT-9' },
+    { kind: 'underlay', source_id: 'plan:level-ground' },
+  ];
+  assert.equal(session.execute([{ name: 'UpdateObjectSourceReferences', input: { object_ids: [wallId], source_refs } }]).status, 'success');
+  assert.deepEqual(session.project.objects[wallId].source_refs, source_refs);
+  assert.deepEqual(deserializeProject(serializeProject(session.project)).objects[wallId].source_refs, source_refs);
+  assert.equal(session.undo().objects[wallId].source_refs, undefined);
+  assert.deepEqual(session.redo().objects[wallId].source_refs, source_refs);
+  const invalid = session.execute([{ name: 'UpdateObjectSourceReferences', input: { object_ids: [wallId], source_refs: [{ kind: 'site_survey_point', source_id: 'MISSING' }] } }]);
+  assert.equal(invalid.status, 'failed');
+  assert.deepEqual(session.project.objects[wallId].source_refs, source_refs);
+});
+
 test("Phase 4: cyclic unknown-IL gravity network rejects atomically", () => {
   let p = empty();
   const ids = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];

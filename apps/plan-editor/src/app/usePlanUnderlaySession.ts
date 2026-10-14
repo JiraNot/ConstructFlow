@@ -48,7 +48,7 @@ export function usePlanUnderlaySession({
       if (!isCurrent) return
       image.dataset.projectSrc = saved.data_url
       hydratedUnderlayRef.current = `${underlayKey}:${saved.data_url}`
-      setUnderlay({ image, origin_mm: saved.origin_mm, scale_mm_per_px: saved.scale_mm_per_px, rotation_deg: saved.rotation_deg, opacity: saved.opacity, visible: saved.visible })
+      setUnderlay({ image, source_file: saved.source_file, scale_source: saved.scale_source, origin_mm: saved.origin_mm, scale_mm_per_px: saved.scale_mm_per_px, rotation_deg: saved.rotation_deg, opacity: saved.opacity, visible: saved.visible })
     }
     image.onerror = () => { if (isCurrent) hydratedUnderlayRef.current = `${underlayKey}:${saved.data_url}` }
     image.src = saved.data_url
@@ -63,7 +63,7 @@ export function usePlanUnderlaySession({
     const image = underlay.image
     const dataUrl = image?.dataset.projectSrc
     if (!image || !dataUrl || !dataUrl.startsWith('data:image/')) return
-    const value = { data_url: dataUrl, origin_mm: underlay.origin_mm, scale_mm_per_px: underlay.scale_mm_per_px, rotation_deg: underlay.rotation_deg ?? 0, opacity: underlay.opacity, visible: underlay.visible }
+    const value = { data_url: dataUrl, ...(underlay.source_file ? { source_file: underlay.source_file } : {}), ...(underlay.scale_source ? { scale_source: underlay.scale_source } : {}), origin_mm: underlay.origin_mm, scale_mm_per_px: underlay.scale_mm_per_px, rotation_deg: underlay.rotation_deg ?? 0, opacity: underlay.opacity, visible: underlay.visible }
     const timer = window.setTimeout(() => setProjectState(current => {
       const existing = current.underlays?.[underlayKey]
       if (existing && JSON.stringify(existing) === JSON.stringify(value)) return current
@@ -91,6 +91,7 @@ export function usePlanUnderlaySession({
     const points = calibrationPointsRef.current
     setUnderlay(previous => ({
       ...previous,
+      scale_source: 'calibrated',
       scale_mm_per_px: newScale,
       ...(points ? (() => {
         const dx = (points.second[0] - points.first[0]) / previous.scale_mm_per_px

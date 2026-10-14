@@ -18,12 +18,12 @@ export function useReferenceDataImportActions({
   underlayKey, hydratedUnderlayRef, setUnderlay, setFileFeedback, dispatchCommandBatch,
 }: UseReferenceDataImportActionsOptions) {
   const handleUploadUnderlayImage = (file: File) => {
-    const openUnderlayImage = (dataUrl: string, originMm: [number, number], scaleMmPerPx: number) => {
+    const openUnderlayImage = (dataUrl: string, originMm: [number, number], scaleMmPerPx: number, scaleSource: 'declared_units' | 'assumed_units' = 'assumed_units') => {
       const image = new Image()
       image.onload = () => {
         image.dataset.projectSrc = dataUrl
         hydratedUnderlayRef.current = `${underlayKey}:${dataUrl}`
-        setUnderlay(current => ({ ...current, image, origin_mm: originMm, scale_mm_per_px: scaleMmPerPx, rotation_deg: 0, visible: true }))
+        setUnderlay(current => ({ ...current, image, source_file: file.name, scale_source: scaleSource, origin_mm: originMm, scale_mm_per_px: scaleMmPerPx, rotation_deg: 0, visible: true }))
       }
       image.onerror = () => setFileFeedback('เปิดไฟล์อ้างอิงไม่สำเร็จ')
       image.src = dataUrl
@@ -33,7 +33,7 @@ export function useReferenceDataImportActions({
       void file.text().then(source => {
         try {
           const imported = importDxfUnderlay(source)
-          openUnderlayImage(imported.dataUrl, imported.origin_mm, imported.scale_mm_per_px)
+          openUnderlayImage(imported.dataUrl, imported.origin_mm, imported.scale_mm_per_px, ['unitless', 'unknown'].includes(imported.drawing_units) ? 'assumed_units' : 'declared_units')
           const assumedUnits = imported.drawing_units === 'unitless' ? ' · ไม่ระบุหน่วย จึงสมมติเป็นมม.' : ` · หน่วย ${imported.drawing_units}`
           const skipped = imported.skipped_entities ? ` · ข้าม ${imported.skipped_entities} รายการที่ไม่รองรับ` : ''
           setFileFeedback(`นำเข้า DXF ${imported.imported_entities} รายการแล้ว${assumedUnits}${skipped} · ปรับเทียบได้ด้วยเครื่องมือไม้บรรทัด`)
@@ -46,7 +46,7 @@ export function useReferenceDataImportActions({
 
     if (file.name.toLowerCase().endsWith('.dwg')) {
       void importDwgUnderlay(file).then(imported => {
-        openUnderlayImage(imported.dataUrl, imported.origin_mm, imported.scale_mm_per_px)
+        openUnderlayImage(imported.dataUrl, imported.origin_mm, imported.scale_mm_per_px, ['unitless', 'unknown'].includes(imported.drawing_units) ? 'assumed_units' : 'declared_units')
         const assumedUnits = imported.drawing_units === 'unitless' ? ' · ไม่ระบุหน่วย กรุณาปรับเทียบด้วยระยะที่ทราบ' : ` · หน่วย ${imported.drawing_units}`
         const skipped = imported.skipped_entities ? ` · มี ${imported.skipped_entities} entity ที่ parser ไม่รู้จัก` : ''
         setFileFeedback(`นำเข้า DWG ${imported.imported_entities} รายการเป็น underlay แล้ว${assumedUnits}${skipped} · ตรวจสเกลด้วยเครื่องมือไม้บรรทัด`)

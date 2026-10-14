@@ -11,6 +11,7 @@ import {
   resolveSlabElevation,
   type Phase,
   type ProjectDocument,
+  type ProjectSourceReference,
   type RemovalPhase,
   type StairModuleData,
 } from '@constructflow/project-model'
@@ -22,6 +23,7 @@ type PanelActions = Pick<PropertiesPanelProps,
   | 'onAssignType'
   | 'onAssignTypeMany'
   | 'onUpdatePhase'
+  | 'onUpdateSourceReferences'
   | 'onUpdateRemovalPhase'
   | 'onUpdateLevelMany'
   | 'onUpdateColumnMark'
@@ -104,6 +106,9 @@ export function usePropertiesPanelActions({ project, dispatchCommandBatch, setFi
   }
   const onUpdateRemovalPhase: NonNullable<PropertiesPanelProps['onUpdateRemovalPhase']> = (objectId, removedPhase: RemovalPhase | null) => {
     applyCommand('UpdateObjectPhase', { object_id: objectId, removed_phase: removedPhase })
+  }
+  const onUpdateSourceReferences: NonNullable<PropertiesPanelProps['onUpdateSourceReferences']> = (objectId, sourceRefs: ProjectSourceReference[]) => {
+    applyCommand('UpdateObjectSourceReferences', { object_ids: [objectId], source_refs: sourceRefs })
   }
 
   const onUpdateRoof: NonNullable<PropertiesPanelProps['onUpdateRoof']> = (objectId, changes) => {
@@ -262,6 +267,7 @@ export function usePropertiesPanelActions({ project, dispatchCommandBatch, setFi
     onAssignType,
     onAssignTypeMany,
     onUpdatePhase,
+    onUpdateSourceReferences,
     onUpdateRemovalPhase,
     onUpdateLevelMany,
     onUpdateColumnMark,

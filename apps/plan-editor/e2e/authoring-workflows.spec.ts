@@ -2244,9 +2244,10 @@ test('DXF underlay imports, calibrates from two points, and preserves scale thro
 
   const importedJson = await readStoredProjectJson(page)
   expect(importedJson).toBeTruthy()
-  const importedProject = JSON.parse(importedJson!) as { underlays: Record<string, { scale_mm_per_px: number }> }
+  const importedProject = JSON.parse(importedJson!) as { underlays: Record<string, { scale_mm_per_px: number; source_file?: string; scale_source?: string }> }
   const underlayKey = Object.keys(importedProject.underlays)[0]
   expect(underlayKey).toBeTruthy()
+  expect(importedProject.underlays[underlayKey!]).toMatchObject({ source_file: 'survey-plan.dxf', scale_source: 'declared_units' })
   const importedScale = importedProject.underlays[underlayKey!].scale_mm_per_px
 
   await page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]').click()
@@ -2272,9 +2273,10 @@ test('DXF underlay imports, calibrates from two points, and preserves scale thro
 
   const calibratedJson = await readStoredProjectJson(page)
   expect(calibratedJson).toBeTruthy()
-  const calibratedProject = JSON.parse(calibratedJson!) as { underlays: Record<string, { scale_mm_per_px: number; rotation_deg: number }> }
+  const calibratedProject = JSON.parse(calibratedJson!) as { underlays: Record<string, { scale_mm_per_px: number; rotation_deg: number; source_file?: string; scale_source?: string }> }
   const calibratedUnderlay = calibratedProject.underlays[underlayKey!]
   expect(calibratedUnderlay.scale_mm_per_px).not.toBe(importedScale)
+  expect(calibratedUnderlay).toMatchObject({ source_file: 'survey-plan.dxf', scale_source: 'calibrated' })
 
   await page.reload()
   await expect(page.locator('.cf-underlay-button')).toContainText('Underlay ON')
@@ -2375,6 +2377,65 @@ test('site survey CSV preserves measured and assumed points through project relo
   await expect(selectedSurveyPoint).toContainText('Deed sketch estimate')
   await page.locator('.cf-more-menu summary').click()
   await expect(page.getByRole('status').filter({ hasText: 'Survey · client-site-survey · 2 วัดจริง / 1 สมมติ' })).toBeVisible()
+})
+
+test('model objects retain links to measured survey boundaries and calibrated underlays', async ({ page }) => {
+  let project = createEmptyProjectDocument(randomUUID(), 'Source traceability acceptance')
+  const wallId = randomUUID()
+  const wall = CommandBus.execute(project, 'CreateWall', {
+    id: wallId, mark: 'W-SOURCE', level_id: project.project.active_level_id,
+    start_point_mm: [0, 0], end_point_mm: [4000, 0], thickness_mm: 100, height_mm: 2800,
+  })
+  if (wall.result.status !== 'success') throw new Error(`Could not create source traceability wall: ${wall.result.errors?.join(', ')}`)
+  project = wall.updatedProject
+  project.site_survey = {
+    id: 'survey-source-trace', name: 'Source trace', source_file: 'source-trace.csv', coordinate_system: 'local-grid-01', imported_at: new Date().toISOString(),
+    points: [
+      { id: 'P1', name: 'Measured north west', x_mm: 0, y_mm: 0, source_status: 'measured', source_reference: 'Field book station A' },
+      { id: 'P2', name: 'Assumed north east', x_mm: 10000, y_mm: 0, source_status: 'assumed', source_reference: 'Deed sketch estimate' },
+      { id: 'P3', name: 'Measured south east', x_mm: 10000, y_mm: 8000, source_status: 'measured', source_reference: 'Field book station C' },
+    ],
+    boundaries: [{ id: 'LOT-9', name: 'Parcel LOT-9', point_ids: ['P1', 'P2', 'P3'] }],
+  }
+  project.underlays = {
+    [`plan:${project.project.active_level_id}`]: { data_url: 'data:image/svg+xml;base64,PHN2Zy8+', source_file: 'site-plan.dxf', scale_source: 'calibrated', origin_mm: [0, 0], scale_mm_per_px: 2, rotation_deg: 0, opacity: 0.5, visible: true },
+  }
+  await page.goto('/')
+  await seedLocalProjectSnapshot(page, serializeProject(project))
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.locator(`.cf-browser-tree [data-object-id="${wallId}"] .cf-browser-object`).click()
+  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  const sources = page.getByRole('region', { name: 'แหล่งข้อมูลอ้างอิง' })
+  const chooseAndLink = async (key: string) => {
+    await sources.getByRole('combobox', { name: 'เลือกแหล่งข้อมูลต้นทาง' }).selectOption(key)
+    await sources.getByRole('button', { name: 'เชื่อม' }).click()
+  }
+  await chooseAndLink('site_survey_boundary:LOT-9')
+  await expect(sources).toContainText('แนวเขต Parcel LOT-9 · มีทั้งวัดจริงและสมมติ')
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(sources).toContainText('ยังไม่ได้เชื่อมกับข้อมูลสำรวจหรือแบบอ้างอิง')
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await chooseAndLink(`underlay:plan:${project.project.active_level_id}`)
+  await expect(sources).toContainText('แบบอ้างอิง site-plan.dxf · ปรับเทียบแล้ว')
+
+  const readSources = async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const saved = JSON.parse(json) as { objects: Record<string, { source_refs?: Array<{ kind: string; source_id: string; label?: string }> }>; underlays: Record<string, { source_file?: string; scale_source?: string }> }
+    return { refs: saved.objects[wallId]?.source_refs ?? [], underlay: saved.underlays[`plan:${project.project.active_level_id}`] }
+  }
+  await expect.poll(readSources).toMatchObject({ underlay: { source_file: 'site-plan.dxf', scale_source: 'calibrated' } })
+  await expect.poll(readSources).toMatchObject({ refs: expect.arrayContaining([
+    expect.objectContaining({ kind: 'site_survey_boundary', source_id: 'LOT-9', label: expect.stringContaining('มีทั้งวัดจริงและสมมติ') }),
+    expect.objectContaining({ kind: 'underlay', source_id: `plan:${project.project.active_level_id}`, label: expect.stringContaining('site-plan.dxf') }),
+  ]) })
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.locator(`.cf-browser-tree [data-object-id="${wallId}"] .cf-browser-object`).click()
+  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await expect(page.getByRole('region', { name: 'แหล่งข้อมูลอ้างอิง' })).toContainText('แนวเขต Parcel LOT-9 · มีทั้งวัดจริงและสมมติ')
+  await expect(page.getByRole('region', { name: 'แหล่งข้อมูลอ้างอิง' })).toContainText('แบบอ้างอิง site-plan.dxf · ปรับเทียบแล้ว')
 })
 
 test('Project Browser deletes a multi-selection atomically with one Undo and Redo', async ({ page }) => {

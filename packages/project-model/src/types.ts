@@ -8,6 +8,14 @@ export type PileSystem = 'micro_pile_i18' | 'micro_pile_i22' | 'spun_micro_pile_
 
 export type SmartObjectStatus = 'active' | 'warning' | 'invalid' | 'archived'
 
+/** Persistent provenance link from a model object to an imported project input. */
+export interface ProjectSourceReference {
+  kind: 'site_survey_point' | 'site_survey_boundary' | 'underlay'
+  source_id: string
+  /** Human-readable snapshot retained if the imported source is later detached. */
+  label?: string
+}
+
 export interface Level {
   id: string
   name: string

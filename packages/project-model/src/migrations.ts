@@ -219,6 +219,7 @@ export function validateProjectV2(project: ProjectDocument): void {
     if (!project.underlays || typeof project.underlays !== 'object' || Array.isArray(project.underlays)) throw new Error('Invalid project format: underlays must be a keyed map')
     for (const [key, underlay] of Object.entries(project.underlays)) {
       if (!key || !underlay || typeof underlay.data_url !== 'string' || !underlay.data_url.startsWith('data:image/')) throw new Error(`Invalid project format: underlay ${key} must contain an embedded image`)
+      if ((underlay.source_file !== undefined && (typeof underlay.source_file !== 'string' || !underlay.source_file.trim())) || (underlay.scale_source !== undefined && !['declared_units', 'assumed_units', 'calibrated'].includes(underlay.scale_source))) throw new Error(`Invalid project format: underlay ${key} has invalid source metadata`)
       if (!Array.isArray(underlay.origin_mm) || underlay.origin_mm.length !== 2 || underlay.origin_mm.some(value => !Number.isFinite(value))) throw new Error(`Invalid project format: underlay ${key} has invalid origin`)
       if (!Number.isFinite(underlay.scale_mm_per_px) || underlay.scale_mm_per_px <= 0 || !Number.isFinite(underlay.rotation_deg) || !Number.isFinite(underlay.opacity) || underlay.opacity < 0 || underlay.opacity > 1 || typeof underlay.visible !== 'boolean') throw new Error(`Invalid project format: underlay ${key} has invalid transform or visibility`)
     }
@@ -575,6 +576,16 @@ export function validateProjectV2(project: ProjectDocument): void {
     smartObjectIds.add(normalizedId)
     if (!PHASES.has(object.created_phase)) throw new Error(`Invalid project format: object ${id} has an unknown created phase`)
     if (object.removed_phase !== null && object.removed_phase !== 'demolition') throw new Error(`Invalid project format: object ${id} has an unsupported removed phase`)
+    if (object.source_refs !== undefined) {
+      if (!Array.isArray(object.source_refs) || object.source_refs.length > 100) throw new Error(`Invalid project format: object ${id} has invalid source references`)
+      const sourceKeys = new Set<string>()
+      for (const source of object.source_refs) {
+        if (!source || !['site_survey_point', 'site_survey_boundary', 'underlay'].includes(source.kind) || typeof source.source_id !== 'string' || !source.source_id.trim() || (source.label !== undefined && (typeof source.label !== 'string' || !source.label.trim() || source.label.length > 1000))) throw new Error(`Invalid project format: object ${id} has a malformed source reference`)
+        const sourceKey = `${source.kind}:${source.source_id}`
+        if (sourceKeys.has(sourceKey)) throw new Error(`Invalid project format: object ${id} has duplicate source references`)
+        sourceKeys.add(sourceKey)
+      }
+    }
     const moduleData = object.module_data as Record<string, unknown>
     validateFamilyParameters(moduleData, object.object_type, `object ${id}`)
     const validateWallFinishRefs = (values: Record<string, unknown>, owner: string) => {

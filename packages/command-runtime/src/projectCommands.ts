@@ -11,7 +11,7 @@ import {
   validateSiteSurvey,
   resolveStairVerticalExtent,
 } from '@constructflow/project-model'
-import type { DeleteSheetLayoutTemplateInput, DeleteViewTemplateInput, SaveSheetLayoutTemplateInput, SaveViewTemplateInput, SetViewVisibilityInput, UpdateCoordinationSettingsInput, UpdateRainwaterDesignInput, UpdateSheetViewportInput, UpdateSiteSurveyInput } from '@constructflow/command-schema'
+import type { DeleteSheetLayoutTemplateInput, DeleteViewTemplateInput, SaveSheetLayoutTemplateInput, SaveViewTemplateInput, SetViewVisibilityInput, UpdateCoordinationSettingsInput, UpdateObjectSourceReferencesInput, UpdateRainwaterDesignInput, UpdateSheetViewportInput, UpdateSiteSurveyInput } from '@constructflow/command-schema'
 
 import {
   CommandHandlerContext,
@@ -69,6 +69,35 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       validateSiteSurvey(survey)
       updated.site_survey = structuredClone(survey)
       return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] }, updatedProject: updated, emittedEnvelope: envelope }
+    }
+    case 'UpdateObjectSourceReferences': {
+      const { object_ids, source_refs } = input as unknown as UpdateObjectSourceReferencesInput
+      if (!Array.isArray(object_ids) || object_ids.length === 0 || object_ids.some(id => typeof id !== 'string' || !updated.objects[id]) || new Set(object_ids).size !== object_ids.length) {
+        throw new Error('Source references require a non-empty list of unique existing objects')
+      }
+      if (!Array.isArray(source_refs) || source_refs.length > 100) throw new Error('An object may reference at most 100 project sources')
+      const validPointIds = new Set(updated.site_survey?.points.map(point => point.id) ?? [])
+      const validBoundaryIds = new Set(updated.site_survey?.boundaries.map(boundary => boundary.id) ?? [])
+      const validUnderlayIds = new Set(Object.keys(updated.underlays ?? {}))
+      const keys = new Set<string>()
+      for (const source of source_refs) {
+        if (!source || typeof source.source_id !== 'string' || !source.source_id.trim() || !['site_survey_point', 'site_survey_boundary', 'underlay'].includes(source.kind)) {
+          throw new Error('Project source reference is malformed')
+        }
+        const key = `${source.kind}:${source.source_id}`
+        if (keys.has(key)) throw new Error('Project source references must be unique')
+        keys.add(key)
+        const exists = source.kind === 'site_survey_point' ? validPointIds.has(source.source_id)
+          : source.kind === 'site_survey_boundary' ? validBoundaryIds.has(source.source_id)
+            : validUnderlayIds.has(source.source_id)
+        if (!exists) throw new Error(`Project source ${key} does not exist`)
+      }
+      for (const id of object_ids) {
+        const object = updated.objects[id]!
+        if (source_refs.length) object.source_refs = structuredClone(source_refs)
+        else delete object.source_refs
+      }
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [...object_ids] }, updatedProject: updated, emittedEnvelope: envelope }
     }
     case 'UpdateSheetViewport': {
       const {sheet_id,viewport}=input as unknown as UpdateSheetViewportInput

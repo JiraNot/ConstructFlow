@@ -10,6 +10,7 @@ import type {
   ElectricalFixtureModuleData,
   CabinetModuleData,
   MouldingModuleData,
+  ProjectSourceReference,
 } from '@constructflow/project-model'
 
 export interface PropertiesPanelProps {
@@ -46,6 +47,7 @@ export interface PropertiesPanelProps {
   onRehostOpening?: (objectId: string, wallId: string, offsetAlongWallMm: number) => void
   onUpdateOpeningInstanceParameters?: (objectId: string, parameters: Record<string, unknown | null>) => void
   onUpdatePhase?: (objectId: string, newPhase: Phase) => void
+  onUpdateSourceReferences?: (objectId: string, sourceRefs: ProjectSourceReference[]) => void
   onUpdateRemovalPhase?: (objectId: string, removedPhase: RemovalPhase | null) => void
   onFlipDoorHanding?: (doorId: string) => void
   onOpenTypeManager: () => void

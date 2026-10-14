@@ -16,6 +16,7 @@ import {
   SlabModuleData,RebarModuleData,RoofModuleData,MouldingModuleData,PanelLayoutModuleData,PipeRouteModuleData,ManholeModuleData,SepticModuleData,PumpBypassModuleData,BathroomModuleData,ElectricalFixtureModuleData,CircuitModuleData,LEDModuleData,CabinetModuleData,
   StairModuleData, RailingModuleData,
   RoomModuleData, RoomSeparatorModuleData, ArchitecturalFloorModuleData, CeilingModuleData,
+  ProjectSourceReference,
 } from './types.js'
 
 export type KnownModuleData =
@@ -67,6 +68,9 @@ export interface SmartObject<TData extends object = KnownModuleData> {
 
   /** Optional revision metadata */
   revision_meta?: Record<string, unknown>
+
+  /** Optional links to the survey records or reference drawing used to author this object. */
+  source_refs?: ProjectSourceReference[]
 
   /** ISO 8601 creation timestamp */
   created_at: string
