@@ -152,6 +152,32 @@ function createContinuousBeamSplitJoinFixture() {
   return { projectJson: serializeProject(beam.updatedProject), beamId, columnIds }
 }
 
+function createHostedWindowAlignmentFixture() {
+  let project = createEmptyProjectDocument(randomUUID(), 'Hosted window alignment')
+  const levelId = project.project.active_level_id
+  const wallIds = [randomUUID(), randomUUID()]
+  for (const [index, y] of [0, 3000].entries()) {
+    const wall = CommandBus.execute(project, 'CreateWall', {
+      id: wallIds[index], mark: 'W1', level_id: levelId,
+      start_point_mm: [0, y, 0], end_point_mm: [6000, y, 0], thickness_mm: 120, height_mm: 3000,
+    })
+    if (wall.result.status !== 'success') throw new Error(`Could not create opening-alignment wall: ${wall.result.errors?.join(', ')}`)
+    project = wall.updatedProject
+  }
+  const windowIds = [randomUUID(), randomUUID()]
+  for (const [index, offset] of [1500, 4000].entries()) {
+    const y = index * 3000
+    const result = CommandBus.execute(project, 'CreateWindow', {
+      id: windowIds[index], mark: 'W1', wall_id: wallIds[index],
+      location_mm: [offset, y, 1200], offset_along_wall_mm: offset,
+      width_mm: 900, height_mm: 1200, sill_height_mm: 900, level_id: levelId,
+    })
+    if (result.result.status !== 'success') throw new Error(`Could not create hosted window: ${result.result.errors?.join(', ')}`)
+    project = result.updatedProject
+  }
+  return { projectJson: serializeProject(project), wallIds, windowIds }
+}
+
 async function seedLocalProjectSnapshot(page: Page, projectJson: string) {
   await page.evaluate(async json => {
     await new Promise<void>((resolve, reject) => {
@@ -1931,6 +1957,43 @@ test('Project Browser splits a continuous beam at its middle support and rejoins
   expect(redoneProjectJson).toBeTruthy()
   const redoneProject = JSON.parse(redoneProjectJson!) as { objects: Record<string, { module_data: Record<string, unknown>; host_refs: string[] }> }
   expect(redoneProject.objects[fixture.beamId].module_data.middle_support_column_id).toBe(fixture.columnIds[1])
+})
+
+test('Project Browser aligns hosted windows across parallel walls with preview and one-step Undo/Redo', async ({ page }) => {
+  const fixture = createHostedWindowAlignmentFixture()
+  await page.goto('/')
+  await seedLocalProjectSnapshot(page, fixture.projectJson)
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+
+  const rows = fixture.windowIds.map(id => page.locator(`li[data-object-id="${id}"]`))
+  await rows[0].locator('.cf-browser-object').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await rows[1].locator('.cf-browser-object').click({ modifiers: ['Control'] })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
+  await page.getByRole('combobox', { name: 'แนวจัดวัตถุที่เลือก' }).selectOption('center-x')
+  await page.getByRole('button', { name: 'แสดงตัวอย่างการจัดแนว' }).click()
+  await expect(page.getByText('Preview การแปลง')).toBeVisible()
+
+  const readWindowState = async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return null
+    const project = JSON.parse(raw) as { objects: Record<string, { module_data: { wall_id: string; offset_along_wall_mm: number } }> }
+    return fixture.windowIds.map(id => {
+      const data = project.objects[id]?.module_data
+      return data ? { host: data.wall_id, offset: data.offset_along_wall_mm } : null
+    })
+  }
+  const original = await readWindowState()
+  expect(original).toEqual([{ host: fixture.wallIds[0], offset: 1500 }, { host: fixture.wallIds[1], offset: 4000 }])
+  await page.getByRole('button', { name: 'ยืนยัน · Undo ได้' }).click()
+  await expect.poll(readWindowState).toEqual([{ host: fixture.wallIds[0], offset: 1500 }, { host: fixture.wallIds[1], offset: 1500 }])
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(readWindowState).toEqual(original)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(readWindowState).toEqual([{ host: fixture.wallIds[0], offset: 1500 }, { host: fixture.wallIds[1], offset: 1500 }])
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
 })
 
 test('Project Browser previews align, offset, and mirror, then joins line objects atomically', async ({ page }) => {
