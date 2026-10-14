@@ -71,9 +71,10 @@ export function usePlanCanvasManipulationDimensions({
   const openingWidth = draggingObject?.kind === 'opening-edge'
   const stairWidth = draggingObject?.kind === 'stair-width'
   const stairRun = draggingObject?.kind === 'stair-run'
+  const stairLanding = draggingObject?.kind === 'stair-landing'
   const slabEdgeOffset = draggingObject?.kind === 'slab-edge'
   const lineLength = draggingObject?.kind === 'wall-endpoint' || draggingObject?.kind === 'beam-endpoint' || draggingObject?.kind === 'grid-endpoint' || draggingObject?.kind === 'separator-endpoint' || draggingObject?.kind === 'pipe-endpoint' || draggingObject?.kind === 'moulding-endpoint'
-  const mode: DragDimensionMode = rectangle ? 'rectangle' : openingWidth ? 'opening-width' : stairWidth ? 'stair-width' : stairRun ? 'stair-run' : slabEdgeOffset ? 'edge-offset' : lineLength ? 'line-length' : 'move'
+  const mode: DragDimensionMode = rectangle ? 'rectangle' : openingWidth ? 'opening-width' : stairWidth ? 'stair-width' : stairRun ? 'stair-run' : stairLanding ? 'stair-landing' : slabEdgeOffset ? 'edge-offset' : lineLength ? 'line-length' : 'move'
   const readout = slabEdgeOffset
     ? `ระยะขอบ ${dragDimensions.offset || '0'} ${displayUnit}`
     : dimensions?.length !== null && dimensions?.length !== undefined

@@ -147,6 +147,18 @@ function createSyntheticStraightStairProject() {
   return serializeProject(created.updatedProject)
 }
 
+function createSyntheticUStairProject() {
+  const project = createEmptyProjectDocument(randomUUID(), 'Synthetic U stair landing grip acceptance')
+  const created = CommandBus.execute(project, 'CreateStair', {
+    id: randomUUID(), mark: 'STAIR-U-01', level_id: project.project.active_level_id,
+    stair_type: 'u_shape', structure_type: 'rc_monolithic', start_point_mm: [3000, 3000, 0],
+    total_rise_mm: 3000, width_mm: 1000, num_risers: 18, first_flight_risers: 9,
+    tread_depth_mm: 250, landing_depth_mm: 1000, flight_gap_mm: 100, has_handrail: false,
+  })
+  if (created.result.status !== 'success') throw new Error(`Could not create test U stair: ${created.result.errors?.join(', ')}`)
+  return serializeProject(created.updatedProject)
+}
+
 function createCeilingGridProject() {
   const project = createEmptyProjectDocument(randomUUID(), 'Ceiling grid property acceptance')
   const ceilingId = randomUUID()
@@ -3660,6 +3672,67 @@ test('stair width and straight-flight run accept target dimensions with UUID-pre
     return Math.max(1, Number(data?.num_risers) - 1) * Number(data?.tread_depth_mm)
   }).toBeCloseTo(5000, 0)
   await expect(properties).toHaveAttribute('data-object-id', stairId!)
+})
+
+test('U-stair landing grip previews and commits a target depth with UUID-preserving Undo/Redo', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await seedLocalProjectSnapshot(page, createSyntheticUStairProject())
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const stairRow = page.locator('.cf-browser-tree [data-object-type="architecture.stair"]').first()
+  await expect(stairRow).toBeVisible()
+  const stairId = await stairRow.getAttribute('data-object-id')
+  expect(stairId).toBeTruthy()
+  await stairRow.locator('.cf-browser-object').click()
+  const properties = page.getByTestId('properties-selection')
+  await expect(properties).toHaveAttribute('data-object-id', stairId!)
+  await page.getByRole('button', { name: 'จัดแปลนให้อยู่ในหน้าจอ' }).click()
+  for (let zoomOut = 0; zoomOut < 4; zoomOut++) await page.getByRole('button', { name: 'ซูมออก' }).click()
+
+  const json = await readStoredProjectJson(page)
+  if (!json) throw new Error('Could not read the U-stair fixture')
+  const project = JSON.parse(json) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+  const data = project.objects[stairId!]!.module_data
+  const [sx, sy] = data.start_point_mm as number[]
+  const width = Number(data.width_mm), depth = Number(data.landing_depth_mm)
+  const firstRisers = Number(data.first_flight_risers)
+  const run = Math.max(1, firstRisers - 1) * Number(data.tread_depth_mm)
+  const localX = run + depth
+  const localY = width * 2 + Number(data.flight_gap_mm ?? 100)
+  const angle = Number(data.rotation_deg ?? 0) * Math.PI / 180
+  const gripWorld: [number, number] = [sx + localX * Math.cos(angle) - localY * Math.sin(angle), sy + localX * Math.sin(angle) + localY * Math.cos(angle)]
+  const bounds = await canvas(page).boundingBox()
+  if (!bounds) throw new Error('Plan canvas is not visible')
+  const viewport = page.locator('.cf-plan-canvas').first()
+  const panX = Number(await viewport.getAttribute('data-viewport-pan-x'))
+  const panY = Number(await viewport.getAttribute('data-viewport-pan-y'))
+  const zoom = Number(await viewport.getAttribute('data-viewport-zoom'))
+  const x = bounds.x + panX + gripWorld[0] * zoom, y = bounds.y + panY + gripWorld[1] * zoom
+  const input = page.getByRole('textbox', { name: 'ความลึกชานพักเป้าหมาย (m)' })
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x + 3, y + 3)
+  await expect(input).toBeVisible()
+  await expect(input).toHaveAttribute('aria-label', 'ความลึกชานพักเป้าหมาย (m)')
+  await input.fill('1.5')
+  await input.press('Enter')
+  await page.mouse.up()
+
+  const readLandingDepth = async () => {
+    const saved = await readStoredProjectJson(page)
+    if (!saved) return null
+    const parsed = JSON.parse(saved) as { objects: Record<string, { module_data: { landing_depth_mm?: number } }> }
+    return parsed.objects[stairId!]?.module_data.landing_depth_mm
+  }
+  await expect.poll(readLandingDepth).toBeCloseTo(1500, 1)
+  await expect(properties).toHaveAttribute('data-object-id', stairId!)
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(readLandingDepth).toBe(1000)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(readLandingDepth).toBeCloseTo(1500, 1)
 })
 
 test('hosted opening jamb accepts a target width with UUID-preserving Escape and Undo/Redo', async ({ page }) => {

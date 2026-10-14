@@ -15,7 +15,7 @@ import {
 } from '@constructflow/project-model'
 import { polygonEdgeGrip } from '@constructflow/geometry-kernel'
 import { getRoofSeams } from '@constructflow/roof-engine'
-import { cabinetRotationGripPoint, gridLineEndpoints, orientedRectangleCorners, slabSlopeArrow } from './PlanCanvasGeometry.js'
+import { cabinetRotationGripPoint, gridLineEndpoints, orientedRectangleCorners, slabSlopeArrow, stairLandingGripPoint } from './PlanCanvasGeometry.js'
 import { drawOpeningInspectionDimensions } from './drawPlanCanvasOpeningInspectionDimensions.js'
 import { worldToScreen, type ViewportState } from '../viewport/viewportTransform.js'
 
@@ -40,7 +40,7 @@ export function drawPlanCanvasSelectionHandles(
         const object = planProject.objects[id]
         if (!object) continue
         const data = object.module_data as unknown as Record<string, unknown>
-        const points: Array<[number, number, 'linear' | 'opening' | 'opening-center' | 'cabinet-rotation' | 'stair-width' | 'stair-run' | 'slab-edge' | 'slab-slope' | 'pipe-node']> = []
+        const points: Array<[number, number, 'linear' | 'opening' | 'opening-center' | 'cabinet-rotation' | 'stair-width' | 'stair-run' | 'stair-landing' | 'slab-edge' | 'slab-slope' | 'pipe-node']> = []
         let slabArrow: ReturnType<typeof slabSlopeArrow> = null
         let roofSeams: ReturnType<typeof getRoofSeams> = []
         if (isColumnObject(object)) {
@@ -138,6 +138,9 @@ export function drawPlanCanvasSelectionHandles(
           if (stair.stair_type === 'straight') {
             const run = Math.max(1, stair.num_risers - 1) * stair.tread_depth_mm
             points.push([sx + Math.cos(angle) * run, sy + Math.sin(angle) * run, 'stair-run'])
+          } else {
+            const landingGrip = stairLandingGripPoint(stair)
+            if (landingGrip) points.push([landingGrip[0], landingGrip[1], 'stair-landing'])
           }
         } else if (['structure.slab', 'architecture.floor', 'architecture.ceiling', 'roof.system'].includes(object.object_type)) {
           const boundary = data.boundary_mm as [number, number][] | undefined
@@ -210,12 +213,12 @@ export function drawPlanCanvasSelectionHandles(
             ctx.textAlign = 'center'
             ctx.textBaseline = 'middle'
             ctx.fillText('↻', sx, sy)
-          } else if (kind === 'stair-width' || kind === 'stair-run') {
-            ctx.fillStyle = kind === 'stair-width' ? '#0d9488' : '#7c3aed'
+          } else if (kind === 'stair-width' || kind === 'stair-run' || kind === 'stair-landing') {
+            ctx.fillStyle = kind === 'stair-width' ? '#0d9488' : kind === 'stair-run' ? '#7c3aed' : '#0284c7'
             ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2
             ctx.beginPath(); ctx.arc(sx, sy, 7.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
             ctx.fillStyle = '#ffffff'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-            ctx.fillText(kind === 'stair-width' ? 'W' : 'R', sx, sy)
+            ctx.fillText(kind === 'stair-width' ? 'W' : kind === 'stair-run' ? 'R' : 'L', sx, sy)
           } else if (kind === 'slab-edge') {
             ctx.fillStyle = '#ecfeff'; ctx.strokeStyle = '#0891b2'; ctx.lineWidth = 1.6
             ctx.fillRect(sx - 4.5, sy - 4.5, 9, 9); ctx.strokeRect(sx - 4.5, sy - 4.5, 9, 9)

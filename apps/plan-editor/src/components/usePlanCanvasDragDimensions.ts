@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { formatLengthMm, parseLengthMm, type DisplayLengthUnit, type ProjectDocument } from '@constructflow/project-model'
 import type { PlanDragGesture } from '../directManipulation.mjs'
 import { resolveDragDimensionTarget, resolveLineEndpointLengthTarget, resolveOpeningEdgeWidthTarget, resolveRectangleResizeTarget } from '../app/dragDimensionInput.mjs'
+import { stairLandingGripPoint } from './stairLandingGripPoint.mjs'
 
 type PreviewDrag = (drag: PlanDragGesture, point: [number, number], ctrlKey: boolean, manual?: boolean) => { commands: unknown[]; valid: boolean }
 
@@ -63,6 +64,15 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
       const run = Math.max(1, stair.num_risers - 1) * stair.tread_depth_mm
       const grip: [number, number] = [sx + Math.cos(angle) * run, sy + Math.sin(angle) * run]
       target = resolveLineEndpointLengthTarget([sx, sy], grip, 1, value, displayUnit)
+    } else if (drag.kind === 'stair-landing' && drag.stairData && axis === 'length') {
+      const stair = drag.stairData
+      const landingDepth = parseLengthMm(value, displayUnit)
+      const grip = stairLandingGripPoint(stair)
+      if (landingDepth !== null && Number.isFinite(landingDepth) && grip) {
+        const angle = Number(stair.rotation_deg ?? 0) * Math.PI / 180
+        const delta = landingDepth - Number(stair.landing_depth_mm ?? stair.width_mm)
+        target = { point_mm: [grip[0] + Math.cos(angle) * delta, grip[1] + Math.sin(angle) * delta] }
+      }
     } else if (drag.kind === 'slab-edge' && drag.edgeStartMm && drag.edgeNormalMm && axis === 'offset') {
       const distance = parseLengthMm(value, displayUnit)
       if (distance !== null && Number.isFinite(distance)) target = {
@@ -98,6 +108,8 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
       setWidth(formatLengthMm(Number(data.width_mm), displayUnit))
     } else if (data && drag.kind === 'stair-run') {
       setLength(formatLengthMm(Math.max(1, Number(data.num_risers) - 1) * Number(data.tread_depth_mm), displayUnit))
+    } else if (data && drag.kind === 'stair-landing') {
+      setLength(formatLengthMm(Number(data.landing_depth_mm ?? data.width_mm), displayUnit))
     } else if (data && drag.kind === 'slab-edge' && drag.edgeStartMm && drag.edgeNormalMm) {
       const dx = point[0] - drag.edgeStartMm[0], dy = point[1] - drag.edgeStartMm[1]
       setOffset(formatLengthMm(dx * drag.edgeNormalMm[0] + dy * drag.edgeNormalMm[1], displayUnit))

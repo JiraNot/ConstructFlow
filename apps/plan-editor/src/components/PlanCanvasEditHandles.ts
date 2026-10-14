@@ -2,7 +2,7 @@ import { ProjectDocument, isBeamObject, isColumnObject, isDoorObject, isFoundati
 import { polygonEdgeGrip } from '@constructflow/geometry-kernel'
 import { getEditableRoofRidge, getRoofSeams } from '@constructflow/roof-engine'
 import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
-import { cabinetRotationGripPoint, gridLineEndpoints, orientedRectangleCorners, slabSlopeArrow } from './PlanCanvasGeometry.js'
+import { cabinetRotationGripPoint, gridLineEndpoints, orientedRectangleCorners, slabSlopeArrow, stairLandingGripPoint } from './PlanCanvasGeometry.js'
 
 interface FindPlanCanvasEditHandleOptions {
   planProject: ProjectDocument
@@ -89,6 +89,12 @@ export function findPlanCanvasEditHandle({ planProject, editableSelectionIds, vi
         const runGrip: [number, number] = [sx + Math.cos(angle) * run, sy + Math.sin(angle) * run]
         const [rx, ry] = worldToScreen(runGrip, viewport)
         if (Math.hypot(screenPoint[0] - rx, screenPoint[1] - ry) <= tolerance) return { id, kind: 'stair-run' as const, endpointIndex: 0, stairData: structuredClone(stair) }
+      } else {
+        const landingGrip = stairLandingGripPoint(stair)
+        if (landingGrip) {
+          const [lx, ly] = worldToScreen(landingGrip, viewport)
+          if (Math.hypot(screenPoint[0] - lx, screenPoint[1] - ly) <= tolerance) return { id, kind: 'stair-landing' as const, endpointIndex: 0, stairData: structuredClone(stair) }
+        }
       }
     } else if (object.object_type === 'decorative.moulding_run') {
       const moulding = object.module_data as unknown as MouldingModuleData

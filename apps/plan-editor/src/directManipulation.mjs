@@ -208,13 +208,20 @@ export function buildDirectManipulationCommands(project, gesture, point, options
     return commands
   }
 
-  if (gesture.kind === 'stair-width' || gesture.kind === 'stair-run') {
+  if (gesture.kind === 'stair-width' || gesture.kind === 'stair-run' || gesture.kind === 'stair-landing') {
     if (object.object_type !== 'architecture.stair') return []
     const start = point2(data.start_point_mm), angle = Number(data.rotation_deg ?? 0) * Math.PI / 180
     if (gesture.kind === 'stair-width') {
       const side = data.turn_direction === 'left' && data.stair_type !== 'straight' ? -1 : 1
       const width = Math.max(600, (point[0] - start[0]) * -Math.sin(angle) * side + (point[1] - start[1]) * Math.cos(angle) * side)
       return [fullObjectUpdate(object, 'UpdateStair', { width_mm: width })]
+    }
+    if (gesture.kind === 'stair-landing') {
+      if (data.stair_type === 'straight') return []
+      const landingDepth = Number(data.landing_depth_mm ?? data.width_mm)
+      const deltaX = point[0] - gesture.startWorldMm[0], deltaY = point[1] - gesture.startWorldMm[1]
+      const nextLandingDepth = landingDepth + deltaX * Math.cos(angle) + deltaY * Math.sin(angle)
+      return [fullObjectUpdate(object, 'UpdateStair', { landing_depth_mm: nextLandingDepth })]
     }
     if (data.stair_type !== 'straight') return []
     const run = Math.max(220 * Math.max(1, Number(data.num_risers) - 1), (point[0] - start[0]) * Math.cos(angle) + (point[1] - start[1]) * Math.sin(angle))
