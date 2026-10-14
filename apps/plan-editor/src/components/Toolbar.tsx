@@ -232,7 +232,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,.dxf,application/dxf"
+          accept="image/*,.dxf,application/dxf,.dwg,application/acad,application/x-acad"
           style={{ display: 'none' }}
           onChange={(e) => {
             const file = e.target.files?.[0]
@@ -246,7 +246,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             className="cf-underlay-button"
             onClick={() => fileInputRef.current?.click()}
-            title="นำเข้าภาพหรือไฟล์ DXF เป็น Underlay แล้วปรับเทียบสเกลได้"
+            title="นำเข้าภาพหรือไฟล์ DWG/DXF เป็น Underlay แล้วปรับเทียบสเกลได้"
             style={{
               display: 'flex',
               alignItems: 'center',

@@ -29,6 +29,7 @@
     "@constructflow/sheet-engine": "file:../../packages/sheet-engine",
     "@constructflow/snapping-engine": "file:../../packages/snapping-engine",
     "@constructflow/takeoff-engine": "file:../../packages/takeoff-engine",
+    "@mlightcad/libredwg-web": "0.7.14",
     "constructflow-standalone": "file:../..",
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",

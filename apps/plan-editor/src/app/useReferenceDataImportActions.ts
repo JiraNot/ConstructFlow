@@ -2,6 +2,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { UnderlayConfig } from '../rendering/planRenderer.js'
 import type { useProjectSession } from './useProjectSession.js'
 import { importDxfUnderlay } from '../cad/importDxfUnderlay.mjs'
+import { importDwgUnderlay } from '../cad/importDwgUnderlay.js'
 import { importSiteSurveyCsv } from '../cad/importSiteSurveyCsv.mjs'
 
 interface UseReferenceDataImportActionsOptions {
@@ -40,6 +41,16 @@ export function useReferenceDataImportActions({
           setFileFeedback(error instanceof Error ? error.message : 'อ่านไฟล์ DXF ไม่สำเร็จ')
         }
       }).catch(() => setFileFeedback('อ่านไฟล์ DXF ไม่สำเร็จ'))
+      return
+    }
+
+    if (file.name.toLowerCase().endsWith('.dwg')) {
+      void importDwgUnderlay(file).then(imported => {
+        openUnderlayImage(imported.dataUrl, imported.origin_mm, imported.scale_mm_per_px)
+        const assumedUnits = imported.drawing_units === 'unitless' ? ' · ไม่ระบุหน่วย กรุณาปรับเทียบด้วยระยะที่ทราบ' : ` · หน่วย ${imported.drawing_units}`
+        const skipped = imported.skipped_entities ? ` · มี ${imported.skipped_entities} entity ที่ parser ไม่รู้จัก` : ''
+        setFileFeedback(`นำเข้า DWG ${imported.imported_entities} รายการเป็น underlay แล้ว${assumedUnits}${skipped} · ตรวจสเกลด้วยเครื่องมือไม้บรรทัด`)
+      }).catch(error => setFileFeedback(error instanceof Error ? error.message : 'อ่านไฟล์ DWG ไม่สำเร็จ'))
       return
     }
 

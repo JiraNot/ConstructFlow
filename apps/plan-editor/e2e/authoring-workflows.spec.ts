@@ -1871,6 +1871,42 @@ test('DXF underlay imports, calibrates from two points, and preserves scale thro
   expect(reopenedProject.underlays[underlayKey!]).toEqual(calibratedUnderlay)
 })
 
+test('DWG underlay decodes in the LibreDWG worker and persists after project reload', async ({ page }) => {
+  await page.goto('/')
+  const fixture = await readFile(new URL('./fixtures/libredwg-sample-2000.dwg', import.meta.url))
+  await page.locator('input[accept*=".dwg"]').setInputFiles({
+    name: 'libredwg-sample-2000.dwg',
+    mimeType: 'image/vnd.dwg',
+    buffer: fixture,
+  })
+  await expect(page.locator('.cf-underlay-button')).toContainText('Underlay ON', { timeout: 30_000 })
+  await expect(page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]')).toBeVisible()
+  await expect.poll(async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return false
+    return Object.keys((JSON.parse(json) as { underlays?: Record<string, unknown> }).underlays ?? {}).length > 0
+  }).toBe(true)
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
+
+  const storedJson = await readStoredProjectJson(page)
+  expect(storedJson).toBeTruthy()
+  const project = JSON.parse(storedJson!) as { underlays: Record<string, { data_url: string; origin_mm: number[]; scale_mm_per_px: number }> }
+  const key = Object.keys(project.underlays)[0]
+  expect(key).toBeTruthy()
+  const underlay = project.underlays[key!]
+  expect(underlay.data_url).toMatch(/^data:image\/svg\+xml/)
+  expect(decodeURIComponent(underlay.data_url)).toMatch(/<path/)
+  expect(underlay.origin_mm.every(Number.isFinite)).toBe(true)
+  expect(underlay.scale_mm_per_px).toBeGreaterThan(0)
+
+  await page.reload()
+  await expect(page.locator('.cf-underlay-button')).toContainText('Underlay ON')
+  const reopenedJson = await readStoredProjectJson(page)
+  expect(reopenedJson).toBeTruthy()
+  const reopened = JSON.parse(reopenedJson!) as { underlays: Record<string, unknown> }
+  expect(reopened.underlays[key!]).toEqual(underlay)
+})
+
 test('site survey CSV preserves measured and assumed points through project reload', async ({ page }) => {
   await page.goto('/')
   const csv = [
