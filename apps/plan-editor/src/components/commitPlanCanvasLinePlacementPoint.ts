@@ -91,7 +91,14 @@ export function commitPlanCanvasLinePlacementPoint({
   }
 
   if (!wallStartNode) {
-    setWallStartNode({ point_mm: snap.point_mm, reference: findNearestLinearReference(planProject, snap.point_mm) ?? undefined, hostWallId: getSnappedWallId(snap, planProject) })
+    const hostWallId = getSnappedWallId(snap, planProject)
+    setWallStartNode({
+      point_mm: snap.point_mm,
+      // A host snap supplies junction and vertical-datum context; it must not
+      // constrain the new wall to run parallel with its host.
+      reference: hostWallId ? undefined : findNearestLinearReference(planProject, snap.point_mm) ?? undefined,
+      hostWallId,
+    })
     setDrawLengthMeters('')
     setDrawAngleDegrees('')
     clearDimensionOverrides()
@@ -106,7 +113,12 @@ export function commitPlanCanvasLinePlacementPoint({
     const verticalReference = getWallVerticalReference(planProject, wallStartNode.hostWallId ?? endHostWallId)
     onCommitWall(start, end, placementReference, verticalReference)
   }
-  setWallStartNode({ point_mm: snap.point_mm, reference: findNearestLinearReference(planProject, snap.point_mm) ?? undefined, hostWallId: getSnappedWallId(snap, planProject) })
+  const nextHostWallId = getSnappedWallId(snap, planProject)
+  setWallStartNode({
+    point_mm: snap.point_mm,
+    reference: nextHostWallId ? undefined : findNearestLinearReference(planProject, snap.point_mm) ?? undefined,
+    hostWallId: nextHostWallId,
+  })
   setDrawLengthMeters('')
   setDrawAngleDegrees('')
   clearDimensionOverrides()

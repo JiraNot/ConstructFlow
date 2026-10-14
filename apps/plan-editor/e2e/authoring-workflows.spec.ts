@@ -921,6 +921,44 @@ test('wall placement previews and commits a clean connected junction', async ({ 
   await page.keyboard.press('Escape')
 })
 
+test('wall placement previews a T junction when starting from a wall midpoint', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const walls = page.locator('.cf-browser-tree [data-object-type="architecture.wall"]')
+  const planCanvas = canvas(page)
+
+  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickCanvasFraction(page, 0.20, 0.42)
+  await clickCanvasFraction(page, 0.40, 0.42)
+  await expect(walls).toHaveCount(1)
+
+  // Start a fresh segment instead of continuing from the previous endpoint.
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
+  await expect.poll(async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return false
+    return Object.values(JSON.parse(raw).objects).some((object: any) => object.object_type === 'architecture.wall' && object.status !== 'archived')
+  }).toBe(true)
+  const raw = await readStoredProjectJson(page)
+  if (!raw) throw new Error('Expected the first wall to be saved')
+  const project = JSON.parse(raw)
+  const firstWall = Object.values(project.objects).find((object: any) => object.object_type === 'architecture.wall' && object.status !== 'archived') as any
+  const [wallStart, wallEnd] = [firstWall.module_data.start_point_mm, firstWall.module_data.end_point_mm]
+  const midpoint: [number, number] = [(wallStart[0] + wallEnd[0]) / 2, (wallStart[1] + wallEnd[1]) / 2]
+  await clickSurveyPoint(page, midpoint[0], midpoint[1])
+  await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
+  await moveToCanvasFraction(page, 0.30, 0.62)
+  await expect(planCanvas).toHaveAttribute('data-wall-junction-preview', 'true')
+
+  await clickCanvasFraction(page, 0.30, 0.62)
+  await expect(walls).toHaveCount(2)
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(walls).toHaveCount(1)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(walls).toHaveCount(2)
+})
+
 test('beam chains accept numeric spans and undo each segment independently', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('tab', { name: 'รายการ' }).click()
