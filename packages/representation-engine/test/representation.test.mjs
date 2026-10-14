@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { createEmptyProjectDocument, deserializeProject } from '../../project-model/dist/index.js'
-import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getOpeningPlanLinework, getPlanFinishBoundaries, getPlanViewProject, getPlanVisibleObjects, getRepresentationTriangles, getVisibleElevationMeshEdges, isWallFacadeForElevation, resolveCeilingGridStyle, resolveElevationWallPhaseStyle, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '../dist/index.js'
+import { buildProjectRepresentations3D, getElevationFinishSurfaces, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getOpeningPlanLinework, getPlanFinishBoundaries, getPlanViewProject, getPlanVisibleObjects, getRepresentationTriangles, getVisibleElevationMeshEdges, isWallFacadeForElevation, resolveCeilingGridStyle, resolveElevationWallPhaseStyle, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '../dist/index.js'
 
 const fixture = deserializeProject(await readFile(new URL('../../../examples/kitchen-extension-proof.cfproj', import.meta.url), 'utf8'))
 
@@ -275,6 +275,53 @@ test('layered wall representations keep masonry core and both plaster faces dist
   wall.module_data = { ...wall.module_data, plaster_inside_thickness_mm: 5, plaster_outside_thickness_mm: 15 }
   const asymmetric = buildProjectRepresentations3D(project).objects.find(object => object.object_id === wall.id)
   assert.deepEqual(asymmetric.shape.layers.map(layer => layer.offset_mm), [5, 57.5, -52.5])
+})
+
+test('T-junction and coplanar chained walls keep finished plan and elevation faces continuous', () => {
+  const project = structuredClone(fixture)
+  const template = structuredClone(Object.values(project.objects).find(object => object.object_type === 'architecture.wall'))
+  assert.ok(template)
+  const wallType = project.types.find(type => type.id === template.module_data.type_id)
+  wallType.parameters = {
+    ...wallType.parameters,
+    thickness_mm: 120,
+    height_mm: 3000,
+    plaster_inside_thickness_mm: 10,
+    plaster_outside_thickness_mm: 10,
+    plaster_inside_material: 'cement_plaster',
+    plaster_outside_material: 'cement_plaster',
+  }
+  const wallIds = [
+    '10000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000002',
+    '10000000-0000-4000-8000-000000000003',
+  ]
+  const wallSpans = [[[0, 0], [1000, 0]], [[1000, 0], [2000, 0]], [[1000, 0], [1000, 1000]]]
+  wallIds.forEach((id, index) => {
+    const wall = structuredClone(template)
+    wall.id = id
+    wall.module_data = {
+      ...wall.module_data,
+      start_point_mm: wallSpans[index][0],
+      end_point_mm: wallSpans[index][1],
+      level_id: project.project.active_level_id,
+      thickness_mm: 120,
+      height_mm: 3000,
+      plaster_inside_thickness_mm: 10,
+      plaster_outside_thickness_mm: 10,
+      plaster_inside_material: 'cement_plaster',
+      plaster_outside_material: 'cement_plaster',
+    }
+    project.objects[id] = wall
+  })
+
+  const planEdges = getPlanFinishBoundaries(project).flatMap(boundary => boundary.segments_mm)
+  assert.ok(planEdges.length > 0)
+  assert.ok(!planEdges.some(([a, b]) => a[0] === 1000 && b[0] === 1000), 'plan finish must not draw a seam at the chained wall joint')
+
+  const elevationEdges = getElevationFinishSurfaces(project, 'north').flatMap(surface => surface.edges_mm)
+  assert.ok(elevationEdges.length > 0)
+  assert.ok(!elevationEdges.some(([a, b]) => a[0] === 1000 && b[0] === 1000), 'coplanar plaster faces must not draw a vertical elevation seam at the joint')
 })
 
 test('3D representations can be restricted to the active plan floor', () => {
