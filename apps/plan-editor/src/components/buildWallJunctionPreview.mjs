@@ -1,6 +1,6 @@
 import { polygonUnionBoundary } from '@constructflow/geometry-kernel'
 
-const openingsByProject = new WeakMap()
+const openingIntervalsByProject = new WeakMap()
 const wallEndpointsByProject = new WeakMap()
 
 function endpointCell(point) {
@@ -26,17 +26,43 @@ function wallFootprint(project, wall) {
   }
 }
 
-function getOpeningHosts(project) {
-  let hosts = openingsByProject.get(project)
-  if (hosts) return hosts
-  hosts = new Set()
+function getOpeningIntervalsByWall(project) {
+  let intervals = openingIntervalsByProject.get(project)
+  if (intervals) return intervals
+  intervals = new Map()
   for (const object of Object.values(project.objects)) {
     if (object.status === 'archived' || !['door_window.door', 'door_window.window'].includes(object.object_type)) continue
-    const hostId = object.module_data?.wall_id
-    if (typeof hostId === 'string') hosts.add(hostId)
+    const data = object.module_data
+    const hostId = data?.wall_id
+    const wall = project.objects[hostId]
+    if (typeof hostId !== 'string' || wall?.object_type !== 'architecture.wall') continue
+    const footprint = wallFootprint(project, wall)
+    if (!footprint) continue
+    const width = Number(data.width_mm)
+    const wallDx = footprint.end[0] - footprint.start[0], wallDy = footprint.end[1] - footprint.start[1]
+    const wallLength = Math.hypot(wallDx, wallDy)
+    const locationDx = Number(data.location_mm?.[0]) - footprint.start[0]
+    const locationDy = Number(data.location_mm?.[1]) - footprint.start[1]
+    const offset = Number.isFinite(Number(data.offset_along_wall_mm))
+      ? Number(data.offset_along_wall_mm)
+      : (locationDx * wallDx + locationDy * wallDy) / wallLength
+    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(offset)) continue
+    const openings = intervals.get(hostId) ?? []
+    openings.push([offset - width / 2, offset + width / 2])
+    intervals.set(hostId, openings)
   }
-  openingsByProject.set(project, hosts)
-  return hosts
+  openingIntervalsByProject.set(project, intervals)
+  return intervals
+}
+
+function junctionOverlapsOpening(wall, point, openingIntervals, candidateThickness) {
+  if (!openingIntervals?.length) return false
+  const dx = wall.end[0] - wall.start[0], dy = wall.end[1] - wall.start[1]
+  const length = Math.hypot(dx, dy)
+  if (length < 1) return true
+  const along = ((point[0] - wall.start[0]) * dx + (point[1] - wall.start[1]) * dy) / length
+  const halfJunction = candidateThickness / 2 + 2
+  return openingIntervals.some(([start, end]) => along + halfJunction >= start && along - halfJunction <= end)
 }
 
 function getWallEndpointIndex(project) {
@@ -83,18 +109,22 @@ export function buildWallJunctionPreview(project, snap, start, end, thicknessMm,
   for (const point of [start, end]) addNearbyEndpointWalls(ids, endpointIndex, point)
   if (!ids.size) return null
 
-  const openingHosts = getOpeningHosts(project)
+  const openingIntervals = getOpeningIntervalsByWall(project)
   const candidate = { start, end, thickness: Number(thicknessMm) }
   if (!Number.isFinite(candidate.thickness) || candidate.thickness <= 0) return null
   const connected = []
   for (const id of ids) {
     const wall = project.objects[id]
-    if (!wall || wall.status === 'archived' || wall.object_type !== 'architecture.wall' || openingHosts.has(id)) continue
+    if (!wall || wall.status === 'archived' || wall.object_type !== 'architecture.wall') continue
     const footprint = wallFootprint(project, wall)
     if (!footprint) continue
     const threshold = (candidate.thickness + footprint.thickness) / 2 + 2
-    const touches = [start, end].some(point => distanceToSegment(point, footprint.start, footprint.end) <= threshold)
-    if (touches || snap?.target_id === id || snap?.target_id?.split(':').includes(id)) connected.push({ id, ...footprint })
+    const contactPoint = [start, end].find(point => distanceToSegment(point, footprint.start, footprint.end) <= threshold)
+    const snappedToWall = snap?.target_id === id || snap?.target_id?.split(':').includes(id)
+    if (!contactPoint && !snappedToWall) continue
+    const junctionPoint = contactPoint ?? snap.point_mm
+    if (junctionOverlapsOpening(footprint, junctionPoint, openingIntervals.get(id), candidate.thickness)) continue
+    connected.push({ id, ...footprint })
   }
   if (!connected.length) return null
 

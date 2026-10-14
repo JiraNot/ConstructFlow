@@ -61,7 +61,7 @@ test('a free cursor still previews a chain connected to a committed wall endpoin
 test('wall snap does not preview across a hosted opening or an unrelated free point', () => {
   const opening = {
     id: 'door-a', object_type: 'door_window.door', status: 'active',
-    module_data: { wall_id: 'wall-a' },
+    module_data: { wall_id: 'wall-a', offset_along_wall_mm: 1000, width_mm: 900 },
   }
   const project = projectWithWall({ 'door-a': opening })
   assert.equal(buildWallJunctionPreview(
@@ -73,5 +73,32 @@ test('wall snap does not preview across a hosted opening or an unrelated free po
     projectWithWall(),
     { kind: 'free', point_mm: [0, 0], description: 'free' },
     [0, 0], [0, 1000], 100,
+  ), null)
+})
+
+test('wall snap previews a clear junction on a wall that has a distant opening', () => {
+  const opening = {
+    id: 'window-a', object_type: 'door_window.window', status: 'active',
+    module_data: { wall_id: 'wall-a', offset_along_wall_mm: 1650, width_mm: 500 },
+  }
+  const preview = buildWallJunctionPreview(
+    projectWithWall({ 'window-a': opening }),
+    { kind: 'wall_midpoint', target_id: 'wall-a', point_mm: [0, 0], description: 'wall midpoint' },
+    [0, 0], [0, 1000], 100,
+  )
+
+  assert.equal(preview?.target_count, 1)
+  assert.deepEqual(preview?.target_marks, ['W1'])
+})
+
+test('wall snap rejects a junction that reaches a hosted opening jamb', () => {
+  const opening = {
+    id: 'door-a', object_type: 'door_window.door', status: 'active',
+    module_data: { wall_id: 'wall-a', offset_along_wall_mm: 1200, width_mm: 600 },
+  }
+  assert.equal(buildWallJunctionPreview(
+    projectWithWall({ 'door-a': opening }),
+    { kind: 'wall_midpoint', target_id: 'wall-a', point_mm: [200, 0], description: 'wall midpoint' },
+    [200, 0], [200, 1000], 100,
   ), null)
 })
