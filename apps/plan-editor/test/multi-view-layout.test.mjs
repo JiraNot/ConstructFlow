@@ -28,14 +28,18 @@ test('focus and four-pane layouts apply the saved primary proportion and preserv
 
 test('custom multiview grids support variable columns and span an incomplete final row', () => {
   assert.deepEqual(buildMultiViewGridTracks(4, 'custom', 50, 3), {
-    columns: 'repeat(3, minmax(0, 1fr))',
+    columns: 'minmax(0, 50fr) minmax(0, 25fr) minmax(0, 25fr)',
     rows: 'repeat(2, minmax(0, 1fr))',
   })
   assert.equal(buildMultiViewPaneGridStyle(4, 'custom', 2, 3), undefined)
   assert.deepEqual(buildMultiViewPaneGridStyle(4, 'custom', 3, 3), { gridColumn: 'span 3' })
   assert.deepEqual(buildMultiViewGridTracks(3, 'custom', 50, 99), {
-    columns: 'repeat(3, minmax(0, 1fr))',
+    columns: 'minmax(0, 50fr) minmax(0, 25fr) minmax(0, 25fr)',
     rows: 'repeat(1, minmax(0, 1fr))',
+  })
+  assert.deepEqual(buildMultiViewGridTracks(3, 'custom', 60, 1), {
+    columns: 'minmax(0, 1fr)',
+    rows: 'minmax(0, 60fr) minmax(0, 20fr) minmax(0, 20fr)',
   })
 })
 

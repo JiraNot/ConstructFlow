@@ -14,9 +14,15 @@ export function buildMultiViewGridTracks(paneCount, layout, primaryPanePercent =
       ? Math.max(1, Math.min(paneCount, Math.round(customColumnCount)))
       : 2
     const rows = Math.ceil(paneCount / columns)
+    const primary = clampPrimaryPanePercent(primaryPanePercent)
+    const remainder = 100 - primary
     return {
-      columns: `repeat(${columns}, minmax(0, 1fr))`,
-      rows: `repeat(${rows}, minmax(0, 1fr))`,
+      columns: columns === 1
+        ? 'minmax(0, 1fr)'
+        : [primary, ...Array.from({ length: columns - 1 }, () => remainder / (columns - 1))].map(track).join(' '),
+      rows: columns === 1
+        ? [primary, ...Array.from({ length: rows - 1 }, () => remainder / (rows - 1))].map(track).join(' ')
+        : `repeat(${rows}, minmax(0, 1fr))`,
     }
   }
   const primary = clampPrimaryPanePercent(primaryPanePercent)

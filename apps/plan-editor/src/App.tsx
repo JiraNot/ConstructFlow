@@ -795,7 +795,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                     {Array.from({ length: splitViewPaneCount }, (_, index) => index + 1).map(count => <option key={count} value={count}>{count} คอลัมน์</option>)}
                   </select>
                 </label>}
-                {splitViewEnabled && splitViewLayout !== 'custom' && <label>สัดส่วน pane หลัก · {primaryPanePercent}%
+                {splitViewEnabled && <label>สัดส่วน pane หลัก · {primaryPanePercent}%
                   <input aria-label="สัดส่วน pane หลัก" type="range" min={30} max={70} step={5} value={primaryPanePercent}
                     onChange={event => setMultiViewPreferences(current => ({ ...current, primaryPanePercent: Number(event.target.value) }))} />
                 </label>}

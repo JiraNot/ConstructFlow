@@ -3753,7 +3753,7 @@ test('multiview layout and auxiliary views restore for the same project after re
 
   await page.getByLabel('การจัดวางมุมมอง').selectOption('custom')
   await page.getByLabel('จำนวนคอลัมน์มุมมองหลาย pane').selectOption('3')
-  await expect(page.locator('.cf-viewport-stage')).toHaveCSS('grid-template-columns', /\S+\s+\S+\s+\S+/)
+  await expect(page.locator('.cf-viewport-stage')).toHaveAttribute('style', /minmax\(0(?:px)?, 70fr\) minmax\(0(?:px)?, 15fr\) minmax\(0(?:px)?, 15fr\)/)
   await expect(page.locator('[data-testid="fourth-view-pane"]')).toHaveCSS('grid-column', /span 3/)
 
   await page.reload()
@@ -3765,7 +3765,7 @@ test('multiview layout and auxiliary views restore for the same project after re
   await expect(page.getByLabel('มุมมองที่สี่')).toHaveValue('rcp')
   await expect(page.getByLabel('การจัดวางมุมมอง')).toHaveValue('custom')
   await expect(page.getByLabel('จำนวนคอลัมน์มุมมองหลาย pane')).toHaveValue('3')
-  await expect(page.getByLabel('สัดส่วน pane หลัก')).toHaveCount(0)
+  await expect(page.getByLabel('สัดส่วน pane หลัก')).toHaveValue('70')
   await expect(page.locator('[data-testid="fourth-view-pane"]')).toHaveCSS('grid-column', /span 3/)
   const viewportStage = page.locator('.cf-viewport-stage')
   const gridTracks = await viewportStage.evaluate(element => ({
@@ -3774,7 +3774,6 @@ test('multiview layout and auxiliary views restore for the same project after re
   }))
   expect(gridTracks).toEqual({ columns: 3, rows: 2 })
   await page.getByLabel('การจัดวางมุมมอง').selectOption('grid')
-  await expect(page.getByLabel('สัดส่วน pane หลัก')).toHaveValue('70')
   await expect(page.locator('.cf-viewport-stage')).toHaveAttribute('style', /minmax\(0(?:px)?, 70fr\) minmax\(0(?:px)?, 30fr\)/)
 })
 
