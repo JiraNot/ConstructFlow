@@ -427,10 +427,14 @@ test("A-02 wall-face and object marks do not collide on the house demo", () => {
 test("room-tag search uses open interior space and upper-plan wall-mark diagnostics identify A-03", () => {
   const project = deserializeProject(readFileSync(new URL("../../../examples/constructflow-reference-house-2storey.cfproj", import.meta.url), "utf8"));
   const drawingSet = compilePermitDrawingSet(project);
-  const resolvedRoomMarks = ["G06", "G10", "U01", "U02", "U03", "U05", "U06", "U07"];
+  const resolvedRoomMarks = ["G06", "G10", "U01", "U02", "U03", "U04", "U05", "U06", "U07", "U09"];
   for (const sheet of drawingSet.sheets.filter((candidate) => ["A-02", "A-03"].includes(candidate.id)))
     for (const mark of resolvedRoomMarks)
       assert.ok(!sheet.warnings.some((warning) => warning.startsWith(`${mark}: could not place room tag`)), `${mark} finds an available interior tag position on ${sheet.id}`);
+  const roomTagWarnings = drawingSet.sheets
+    .filter((sheet) => ["A-02", "A-03"].includes(sheet.id))
+    .flatMap((sheet) => sheet.warnings.filter((warning) => warning.includes("could not place room tag")));
+  assert.deepEqual(roomTagWarnings, ["G05: could not place room tag inside its plan boundary"]);
   const upperPlan = drawingSet.sheets.find((sheet) => sheet.id === "A-03");
   const wallMarkWarnings = upperPlan.warnings.filter((warning) => warning.includes("could not place wall-face marks"));
   assert.ok(wallMarkWarnings.length > 0, "the reference fixture retains its crowded upper-plan annotation case");

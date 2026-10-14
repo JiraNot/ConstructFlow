@@ -2829,7 +2829,16 @@ function compilePermitDrawingSetBase(
                 const title = [number, name, boundaryOpen ? "วงผนังเปิด" : ""].filter(Boolean).join("  ");
                 const area = Number(d.area_mm2);
                 const areaText = !boundaryOpen && Number.isFinite(area) && area > 0 ? `${(area / 1e6).toFixed(2)} m²` : "";
-                const titleWidth = Math.max(8, title.length * 1.15), areaWidth = Math.max(8, areaText.length * 1.05);
+                const titleGlyphCount = [...title].filter((character) => !/\p{M}/u.test(character)).length;
+                const naturalTitleWidth = Math.max(8, titleGlyphCount * 1.15);
+                const roomBounds = ring.reduce(([minX, minY, maxX, maxY], point) => [
+                  Math.min(minX, point[0]), Math.min(minY, point[1]),
+                  Math.max(maxX, point[0]), Math.max(maxY, point[1]),
+                ] as [number, number, number, number], [Infinity, Infinity, -Infinity, -Infinity]);
+                const roomPaperWidth = (roomBounds[2] - roomBounds[0]) / viewport.scale_denominator;
+                const titleWidth = Math.max(8, Math.min(naturalTitleWidth, roomPaperWidth * 0.7));
+                const titleSize = naturalTitleWidth > titleWidth ? Math.max(1.5, 2.2 * titleWidth / naturalTitleWidth) : 2.2;
+                const areaWidth = Math.max(8, areaText.length * 1.05);
                 const tagWidth = Math.max(titleWidth, areaWidth), tagHeight = areaText ? 6 : 3.8;
                 const offsets: Vec2[] = Array.from({ length: 17 }, (_, row) => row - 8)
                   .flatMap((y) => Array.from({ length: 17 }, (_, column) => column - 8)
@@ -2844,7 +2853,7 @@ function compilePermitDrawingSetBase(
                   const hitsLabel = planObjectLabelBoxes.some(([left, top, right, bottom]) => box[0] < right + 0.8 && box[2] > left - 0.8 && box[1] < bottom + 0.5 && box[3] > top - 0.5);
                   const hitsStair = planStairFootprintBoxes.some(([left, top, right, bottom]) => box[0] < right + 0.4 && box[2] > left - 0.4 && box[1] < bottom + 0.4 && box[3] > top - 0.4);
                   if (!inView || !pointInRoom(candidateWorld, ring) || hitsLabel || hitsStair) continue;
-                  text([anchor[0] - titleWidth / 2, anchor[1] - 0.3], title, 2.2, boundaryOpen ? "#b91c1c" : colors[getDisplayPhase(room)], titleWidth);
+                  text([anchor[0] - titleWidth / 2, anchor[1] - 0.3], title, titleSize, boundaryOpen ? "#b91c1c" : colors[getDisplayPhase(room)], titleWidth);
                   if (areaText) text([anchor[0] - areaWidth / 2, anchor[1] + 2.2], areaText, 1.8, "#475569", areaWidth);
                   planObjectLabelBoxes.push(box);
                   placed = true;
