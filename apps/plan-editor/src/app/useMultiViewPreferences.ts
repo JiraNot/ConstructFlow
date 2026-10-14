@@ -8,6 +8,7 @@ export interface MultiViewPreferences {
   enabled: boolean
   paneCount: SplitViewPaneCount
   layout: SplitViewLayout
+  primaryPanePercent: number
   secondaryViewMode: EditorViewMode
   tertiaryViewMode: EditorViewMode
   fourthViewMode: EditorViewMode
@@ -19,6 +20,7 @@ const DEFAULT_PREFERENCES: MultiViewPreferences = {
   enabled: false,
   paneCount: 2,
   layout: 'columns',
+  primaryPanePercent: 50,
   secondaryViewMode: 'model3d',
   tertiaryViewMode: 'north',
   fourthViewMode: 'east',
@@ -43,10 +45,14 @@ function loadPreferences(projectId: string): MultiViewPreferences {
     const paneCount: SplitViewPaneCount = stored.paneCount === 3 || stored.paneCount === 4 ? stored.paneCount : 2
     let layout = LAYOUTS.has(stored.layout as SplitViewLayout) ? stored.layout as SplitViewLayout : 'columns'
     if ((layout === 'focus' && paneCount !== 3) || (layout === 'grid' && paneCount !== 4)) layout = 'columns'
+    const primaryPanePercent = typeof stored.primaryPanePercent === 'number' && Number.isFinite(stored.primaryPanePercent)
+      ? Math.max(30, Math.min(70, Math.round(stored.primaryPanePercent)))
+      : DEFAULT_PREFERENCES.primaryPanePercent
     return {
       enabled: stored.enabled === true,
       paneCount,
       layout,
+      primaryPanePercent,
       secondaryViewMode: isViewMode(stored.secondaryViewMode) ? stored.secondaryViewMode : DEFAULT_PREFERENCES.secondaryViewMode,
       tertiaryViewMode: isViewMode(stored.tertiaryViewMode) ? stored.tertiaryViewMode : DEFAULT_PREFERENCES.tertiaryViewMode,
       fourthViewMode: isViewMode(stored.fourthViewMode) ? stored.fourthViewMode : DEFAULT_PREFERENCES.fourthViewMode,

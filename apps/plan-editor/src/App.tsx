@@ -50,6 +50,7 @@ import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
 import { useReferenceDataImportActions } from './app/useReferenceDataImportActions.js'
 import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcuts.js'
 import { useMultiViewPreferences, type EditorViewMode, type SplitViewLayout, type SplitViewPaneCount } from './app/useMultiViewPreferences.js'
+import { buildMultiViewGridTracks, buildPrimaryPaneGridStyle } from './app/multiViewLayout.mjs'
 import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
@@ -129,27 +130,16 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [viewMode, setViewMode] = useState<EditorViewMode>('plan')
   const [multiViewPreferences, setMultiViewPreferences] = useMultiViewPreferences(project.project.id)
   const { enabled: splitViewEnabled, paneCount: splitViewPaneCount, layout: splitViewLayout,
-    secondaryViewMode, tertiaryViewMode, fourthViewMode } = multiViewPreferences
+    primaryPanePercent, secondaryViewMode, tertiaryViewMode, fourthViewMode } = multiViewPreferences
+  const splitViewTracks = buildMultiViewGridTracks(splitViewPaneCount, splitViewLayout, primaryPanePercent)
   const splitViewGridStyle = splitViewEnabled ? {
     display: 'grid',
-    gridTemplateColumns: splitViewLayout === 'rows'
-      ? 'minmax(0, 1fr)'
-      : splitViewLayout === 'grid' && splitViewPaneCount === 4
-        ? 'repeat(2, minmax(0, 1fr))'
-      : splitViewLayout === 'focus' && splitViewPaneCount === 3
-        ? 'minmax(0, 2fr) minmax(0, 1fr)'
-        : `repeat(${splitViewPaneCount}, minmax(0, 1fr))`,
-    gridTemplateRows: splitViewLayout === 'rows'
-      ? `repeat(${splitViewPaneCount}, minmax(0, 1fr))`
-      : splitViewLayout === 'grid' && splitViewPaneCount === 4
-        ? 'repeat(2, minmax(0, 1fr))'
-      : splitViewLayout === 'focus' && splitViewPaneCount === 3
-        ? 'repeat(2, minmax(0, 1fr))'
-        : 'minmax(0, 1fr)',
+    gridTemplateColumns: splitViewTracks.columns,
+    gridTemplateRows: splitViewTracks.rows,
     gap: 1,
     background: '#cbd5e1',
   } : undefined
-  const primaryPaneGridStyle = splitViewLayout === 'focus' && splitViewPaneCount === 3 ? { gridRow: 'span 2' } : undefined
+  const primaryPaneGridStyle = buildPrimaryPaneGridStyle(splitViewPaneCount, splitViewLayout)
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
     if (['beam', 'foundation'].includes(activeTool)) setViewMode('framing')
@@ -816,6 +806,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                     {splitViewPaneCount === 3 && <option value="focus">1 + 2 · pane หลักใหญ่</option>}
                     {splitViewPaneCount === 4 && <option value="grid">2 × 2</option>}
                   </select>
+                </label>}
+                {splitViewEnabled && <label>สัดส่วน pane หลัก · {primaryPanePercent}%
+                  <input aria-label="สัดส่วน pane หลัก" type="range" min={30} max={70} step={5} value={primaryPanePercent}
+                    onChange={event => setMultiViewPreferences(current => ({ ...current, primaryPanePercent: Number(event.target.value) }))} />
                 </label>}
                 {splitViewEnabled && splitViewPaneCount >= 3 && <label>มุมมองที่สาม
                   <select aria-label="มุมมองที่สาม" value={tertiaryViewMode} onChange={event => setMultiViewPreferences(current => ({ ...current, tertiaryViewMode: event.target.value as EditorViewMode }))}>

@@ -3621,6 +3621,11 @@ test('multiview layout and auxiliary views restore for the same project after re
   await page.getByLabel('มุมมองที่สาม').selectOption('north')
   await page.getByLabel('มุมมองที่สี่').selectOption('rcp')
   await expect(page.getByLabel('การจัดวางมุมมอง')).toHaveValue('grid')
+  const primaryShare = page.getByLabel('สัดส่วน pane หลัก')
+  await primaryShare.focus()
+  await primaryShare.press('End')
+  await expect(primaryShare).toHaveValue('70')
+  await expect(page.locator('.cf-viewport-stage')).toHaveAttribute('style', /minmax\(0(?:px)?, 70fr\) minmax\(0(?:px)?, 30fr\)/)
 
   await page.reload()
   await page.getByLabel('แบ่งมุมมอง').click()
@@ -3630,6 +3635,8 @@ test('multiview layout and auxiliary views restore for the same project after re
   await expect(page.getByLabel('มุมมองที่สาม')).toHaveValue('north')
   await expect(page.getByLabel('มุมมองที่สี่')).toHaveValue('rcp')
   await expect(page.getByLabel('การจัดวางมุมมอง')).toHaveValue('grid')
+  await expect(page.getByLabel('สัดส่วน pane หลัก')).toHaveValue('70')
+  await expect(page.locator('.cf-viewport-stage')).toHaveAttribute('style', /minmax\(0(?:px)?, 70fr\) minmax\(0(?:px)?, 30fr\)/)
   const viewportStage = page.locator('.cf-viewport-stage')
   const gridTracks = await viewportStage.evaluate(element => ({
     columns: getComputedStyle(element).gridTemplateColumns.split(' ').length,
