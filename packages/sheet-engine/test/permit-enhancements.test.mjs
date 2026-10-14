@@ -678,7 +678,7 @@ test("F04: drawTable handles overflow with multi-column auto-balance and header 
   );
 });
 
-test("F04: drawTable handles extreme overflow (>70 rows) with continuation banner and warning", () => {
+test("F04: drawTable paginates extreme overflow onto numbered continuation sheets", () => {
   const p = createEmptyProjectDocument("MASSIVE-TABLE", "อาคารทดสอบตารางยาวมาก");
 
   // Add 80 objects to exceed 2-column sheet capacity
@@ -700,14 +700,25 @@ test("F04: drawTable handles extreme overflow (>70 rows) with continuation banne
   const s05 = set.sheets.find((s) => s.id === "S-05");
   assert.ok(s05);
 
-  // Check for continuation banner or secondary sheet warning
-  const hasOverflowWarning = s05.warnings.some((w) => w.includes("Schedule overflow"));
-  assert.ok(hasOverflowWarning, "Extreme table (>70 rows) should emit schedule overflow warning");
-
-  const hasContinuationText = s05.primitives.some(
-    (pr) => pr.kind === "text" && pr.text.includes("ตารางมีต่อในเอกสารแนบ"),
+  const continuation = set.sheets.find((sheet) => sheet.id === "S-05-C1");
+  assert.ok(continuation, "Overflow rows should be rendered on a secondary continuation sheet");
+  assert.ok(
+    continuation.primitives.some((primitive) => primitive.kind === "text" && primitive.text.includes("Mark / Type (ต่อ)")),
+    "The continuation sheet should repeat the table header",
   );
-  assert.ok(hasContinuationText, "Should render continuation banner on the sheet");
+  assert.ok(
+    continuation.primitives.some((primitive) => primitive.kind === "text" && primitive.text === "C80"),
+    "The final schedule row should appear on a continuation sheet",
+  );
+  assert.equal(
+    s05.warnings.some((warning) => warning.includes("Schedule overflow")),
+    false,
+    "A successfully generated continuation sheet should not leave an overflow warning",
+  );
+  assert.ok(
+    continuation.primitives.some((primitive) => primitive.kind === "text" && primitive.at[0] === 372 && primitive.at[1] === 282),
+    "Continuation sheets should include a sheet index field for package numbering",
+  );
 });
 
 test("F04: Hidden-line solver and depth occlusion on elevations and section cuts", async () => {

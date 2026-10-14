@@ -208,6 +208,7 @@ function compilePermitDrawingSetBase(
   const all = Object.values(project.objects),
     ground = levels[0]?.id,
     upper = levels[1]?.id;
+  const continuationSheets: PermitSheet[] = [];
   const belongs = (o: SmartObject, id: string | undefined) =>
     !!id &&
     (data(o).level_id === id ||
@@ -657,32 +658,96 @@ function compilePermitDrawingSetBase(
         }
 
         if (dataIndex < dataRows.length) {
-          const remaining = dataRows.length - dataIndex;
-          const lastX = at[0] + (colIndex - 1) * (effectiveTotalW + colGap);
-          const bannerY = at[1] + effectiveMaxRows * effectiveRowH + 2;
-          path(
-            [
-              [lastX, bannerY],
-              [lastX + effectiveTotalW, bannerY],
-              [lastX + effectiveTotalW, bannerY + 6],
-              [lastX, bannerY + 6],
-            ],
-            "#f59e0b",
-            0.2,
-            undefined,
-            true,
-            "#fffbeb",
-          );
-          text(
-            [lastX + 2, bannerY + 4.2],
-            `--- ตารางมีต่อในเอกสารแนบประกอบแบบ (ตารางต่ออีก ${remaining} รายการ) ---`,
-            2.1,
-            "#b45309",
-            effectiveTotalW - 4,
-          );
-          warnings.push(
-            `Schedule overflow: ${remaining} rows require secondary continuation sheet`,
-          );
+          const pageCapacity = 25;
+          let continuationIndex = 1;
+          while (dataIndex < dataRows.length) {
+            const continuationId = `${id}-C${continuationIndex++}`;
+            const continuationPrimitives: VectorPrimitive[] = [];
+            const addText = (
+              at: Vec2,
+              value: string,
+              size = 2.6,
+              color = "#0f172a",
+              max_width?: number,
+            ) =>
+              continuationPrimitives.push({ kind: "text", at, text: value, size, color, max_width });
+            const addPath = (
+              points: Vec2[],
+              color: string,
+              width: number,
+              fill?: string,
+            ) =>
+              continuationPrimitives.push({ kind: "path", points, color, width, closed: true, fill });
+            addPath([[7, 7], [413, 7], [413, 290], [7, 290]], "#0f172a", 0.35);
+            addText([14, 22], `${displayTitle} · ตารางต่อ ${continuationIndex - 1}`, 4.2);
+            addText(
+              [14, 29],
+              `Continuation of ${id} · ${project.project.name}`,
+              2.6,
+              "#475569",
+            );
+            addPath([[7, 265], [413, 265], [413, 290], [7, 290]], "#0f172a", 0.25);
+            addText([14, 278], `ConstructFlow · ${options.author ?? "ผู้จัดทำแบบ"} · Rev ${options.revision ?? "0"}`, 2.6);
+            addText([372, 270], continuationId, 7);
+            addText([372, 282], "", 3);
+
+            const continuationRows = dataRows.slice(dataIndex, dataIndex + pageCapacity);
+            const continuationWidths = effectiveWidths;
+            const continuationRowH = Math.min(effectiveRowH, 6.5);
+            let y = 38;
+            let x = 18;
+            const repeatedHeader = headerRow.map((cell, index) =>
+              index === 0 && cell ? `${cell} (ต่อ)` : cell,
+            );
+            for (const row of [repeatedHeader, ...continuationRows]) {
+              x = 18;
+              row.forEach((cell, index) => {
+                const width = continuationWidths[index] ?? 30;
+                const isHeader = row === repeatedHeader;
+                addPath(
+                  [
+                    [x, y],
+                    [x + width, y],
+                    [x + width, y + continuationRowH],
+                    [x, y + continuationRowH],
+                  ],
+                  isHeader ? "#64748b" : "#cbd5e1",
+                  isHeader ? 0.25 : 0.15,
+                  isHeader ? "#f1f5f9" : undefined,
+                );
+                addText(
+                  [x + 1.5, y + continuationRowH * 0.67],
+                  cell,
+                  2.2,
+                  "#0f172a",
+                  width - 3,
+                );
+                x += width;
+              });
+              y += continuationRowH;
+            }
+            dataIndex += continuationRows.length;
+            const remainingRows = dataRows.length - dataIndex;
+            if (remainingRows > 0)
+              addText(
+                [18, 232],
+                `ตารางต่อใน ${id}-C${continuationIndex}`,
+                2.3,
+                "#b45309",
+              );
+            const continuationWarnings = remainingRows > 0 ? [`Schedule continues on ${id}-C${continuationIndex}`] : [];
+            continuationSheets.push({
+              id: continuationId,
+              title: `${displayTitle} · ตารางต่อ ${continuationIndex - 1}`,
+              scale: `1:${viewport.scale_denominator}`,
+              primitives: continuationPrimitives,
+              svg: primitivesToSvg(continuationPrimitives),
+              source_object_ids: [...sourceIds],
+              warnings: continuationWarnings,
+              status: "draft",
+              viewport,
+            });
+          }
         }
       };
       if (tableSheet) {
@@ -4096,8 +4161,10 @@ function compilePermitDrawingSetBase(
 
   return {
     project_id: project.project.id,
-    sheets,
-    warnings: sheets.flatMap((s) => s.warnings.map((w) => `${s.id}: ${w}`)),
+    sheets: [...sheets, ...continuationSheets],
+    warnings: [...sheets, ...continuationSheets].flatMap((s) =>
+      s.warnings.map((w) => `${s.id}: ${w}`),
+    ),
     issue_ready,
   };
 }
