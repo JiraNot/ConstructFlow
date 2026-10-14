@@ -2513,6 +2513,18 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   expect(primaryTracks).toBe(2)
   expect(await panes.first().evaluate(element => getComputedStyle(element).gridRowStart)).toBe('span 2')
 
+  await page.getByLabel('จำนวนมุมมอง').selectOption('4')
+  await page.getByLabel('มุมมองที่สี่').selectOption('west')
+  await expect(page.locator('.cf-multiview-pane')).toHaveCount(3)
+  await expect(page.getByTestId('fourth-view-pane')).toHaveAttribute('data-primary-selected-object-id', objectId!)
+  for (const pane of await page.locator('.cf-multiview-pane').all()) await expect(pane).toHaveAttribute('data-primary-selected-object-id', objectId!)
+  const gridTracks = await viewportStage.evaluate(element => ({
+    columns: getComputedStyle(element).gridTemplateColumns.split(' ').length,
+    rows: getComputedStyle(element).gridTemplateRows.split(' ').length,
+  }))
+  expect(gridTracks).toEqual({ columns: 2, rows: 2 })
+  await page.getByLabel('จำนวนมุมมอง').selectOption('3')
+
   await secondView.selectOption('model3d')
   await page.getByLabel('แบ่งมุมมอง').click()
   const model3d = page.getByTestId('secondary-view-pane').getByTestId('model3d-viewport')

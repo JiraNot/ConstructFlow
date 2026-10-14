@@ -56,7 +56,7 @@ import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcu
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
 type EditorViewMode = 'plan' | 'framing' | 'roofplan' | ElevationDirection | 'model3d'
-type SplitViewLayout = 'columns' | 'rows' | 'focus'
+type SplitViewLayout = 'columns' | 'rows' | 'focus' | 'grid'
 const EDITOR_VIEW_OPTIONS: readonly [EditorViewMode, string][] = [
   ['plan', 'แปลนพื้น'], ['framing', 'แปลนคาน'], ['roofplan', 'แปลนหลังคา'], ['north', 'รูปด้านเหนือ'],
   ['south', 'รูปด้านใต้'], ['east', 'รูปด้านตะวันออก'], ['west', 'รูปด้านตะวันตก'], ['rcp', 'แปลนฝ้า RCP'], ['model3d', '3D ดูตัวอย่าง'],
@@ -152,19 +152,24 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [elevationNavigation, setElevationNavigation] = useState<CoordinatedElevationNavigation>({ zoom: 1, panY: 0, panXNorthSouth: 0, panXEastWest: 0 })
   const [viewMode, setViewMode] = useState<EditorViewMode>('plan')
   const [splitViewEnabled, setSplitViewEnabled] = useState(false)
-  const [splitViewPaneCount, setSplitViewPaneCount] = useState<2 | 3>(2)
+  const [splitViewPaneCount, setSplitViewPaneCount] = useState<2 | 3 | 4>(2)
   const [splitViewLayout, setSplitViewLayout] = useState<SplitViewLayout>('columns')
   const [secondaryViewMode, setSecondaryViewMode] = useState<EditorViewMode>('model3d')
   const [tertiaryViewMode, setTertiaryViewMode] = useState<EditorViewMode>('north')
+  const [fourthViewMode, setFourthViewMode] = useState<EditorViewMode>('east')
   const splitViewGridStyle = splitViewEnabled ? {
     display: 'grid',
     gridTemplateColumns: splitViewLayout === 'rows'
       ? 'minmax(0, 1fr)'
+      : splitViewLayout === 'grid' && splitViewPaneCount === 4
+        ? 'repeat(2, minmax(0, 1fr))'
       : splitViewLayout === 'focus' && splitViewPaneCount === 3
         ? 'minmax(0, 2fr) minmax(0, 1fr)'
         : `repeat(${splitViewPaneCount}, minmax(0, 1fr))`,
     gridTemplateRows: splitViewLayout === 'rows'
       ? `repeat(${splitViewPaneCount}, minmax(0, 1fr))`
+      : splitViewLayout === 'grid' && splitViewPaneCount === 4
+        ? 'repeat(2, minmax(0, 1fr))'
       : splitViewLayout === 'focus' && splitViewPaneCount === 3
         ? 'repeat(2, minmax(0, 1fr))'
         : 'minmax(0, 1fr)',
@@ -179,7 +184,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     else if (['stair', 'wall', 'door', 'window', 'archFloor', 'slab', 'ceiling', 'roomSeparator', 'pipe', 'fixture', 'cabinet', 'moulding'].includes(activeTool)) setViewMode('plan')
   }, [activeTool])
   const paneModes = splitViewEnabled
-    ? [viewMode, secondaryViewMode, ...(splitViewPaneCount === 3 ? [tertiaryViewMode] : [])]
+    ? [viewMode, secondaryViewMode, ...(splitViewPaneCount >= 3 ? [tertiaryViewMode] : []), ...(splitViewPaneCount >= 4 ? [fourthViewMode] : [])]
     : []
   const planAnd3DNavigationLinked = paneModes.some(mode => mode === 'plan' || mode === 'framing' || mode === 'roofplan')
     && paneModes.includes('model3d')
@@ -1337,12 +1342,15 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 </label>}
                 {splitViewEnabled && <label>จำนวนมุมมอง
                   <select aria-label="จำนวนมุมมอง" value={splitViewPaneCount} onChange={event => {
-                    const count = Number(event.target.value) as 2 | 3
+                    const count = Number(event.target.value) as 2 | 3 | 4
                     setSplitViewPaneCount(count)
                     if (count === 2 && splitViewLayout === 'focus') setSplitViewLayout('columns')
+                    if (count === 4) setSplitViewLayout('grid')
+                    if (count !== 4 && splitViewLayout === 'grid') setSplitViewLayout('columns')
                   }}>
                     <option value={2}>2 มุมมอง</option>
                     <option value={3}>3 มุมมอง</option>
+                    <option value={4}>4 มุมมอง</option>
                   </select>
                 </label>}
                 {splitViewEnabled && <label>การจัดวาง
@@ -1350,10 +1358,16 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                     <option value="columns">เรียงซ้ายไปขวา</option>
                     <option value="rows">เรียงบนลงล่าง</option>
                     {splitViewPaneCount === 3 && <option value="focus">1 + 2 · pane หลักใหญ่</option>}
+                    {splitViewPaneCount === 4 && <option value="grid">2 × 2</option>}
                   </select>
                 </label>}
                 {splitViewEnabled && splitViewPaneCount === 3 && <label>มุมมองที่สาม
                   <select aria-label="มุมมองที่สาม" value={tertiaryViewMode} onChange={event => setTertiaryViewMode(event.target.value as EditorViewMode)}>
+                    {EDITOR_VIEW_OPTIONS.map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
+                  </select>
+                </label>}
+                {splitViewEnabled && splitViewPaneCount === 4 && <label>มุมมองที่สี่
+                  <select aria-label="มุมมองที่สี่" value={fourthViewMode} onChange={event => setFourthViewMode(event.target.value as EditorViewMode)}>
                     {EDITOR_VIEW_OPTIONS.map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
                   </select>
                 </label>}
@@ -1475,6 +1489,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             </div>}
             {splitViewEnabled && splitViewPaneCount === 3 && <div className="cf-multiview-pane" data-testid="tertiary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1' }}>
               {renderEditorView(tertiaryViewMode, true)}
+            </div>}
+            {splitViewEnabled && splitViewPaneCount === 4 && <div className="cf-multiview-pane" data-testid="fourth-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1' }}>
+              {renderEditorView(fourthViewMode, true)}
             </div>}
           </div>
 
