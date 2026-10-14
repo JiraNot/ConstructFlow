@@ -1048,6 +1048,24 @@ test('point placement accepts numeric X/Y dimensions by mouse and keyboard', asy
   await expect(columns).toHaveCount(initialCount + 3)
 })
 
+test('changing project units preserves incomplete placement dimensions and converts valid lengths', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickCanvasFraction(page, 0.65, 0.72)
+  await moveToCanvasFraction(page, 0.67, 0.70)
+
+  const xInput = page.getByRole('textbox', { name: /ระยะจากแนวอ้างอิง X/ })
+  await expect(xInput).toBeVisible()
+  await xInput.fill('0.75')
+  await page.getByRole('combobox', { name: 'หน่วยความยาวของโครงการ' }).selectOption('mm')
+  await expect(xInput).toHaveValue('750')
+
+  await xInput.fill('-')
+  await page.getByRole('combobox', { name: 'หน่วยความยาวของโครงการ' }).selectOption('m')
+  await expect(xInput).toHaveValue('-')
+  await page.keyboard.press('Escape')
+})
+
 test('repeat last tool resets an active wall session and starts another wall', async ({ page }) => {
   await page.goto('/')
   await page.locator('.cf-tool-button[title^="ผนัง"]').click()
