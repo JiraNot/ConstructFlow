@@ -1821,6 +1821,83 @@ test('slab edge grip accepts a numeric offset with preview cancellation and UUID
   await expect(properties).toHaveAttribute('data-object-id', slabId!)
 })
 
+test('slab vertex accepts numeric ΔX/ΔY with preview, Escape, commit, and UUID-preserving Undo/Redo', async ({ page }) => {
+  test.setTimeout(60_000)
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="พื้น ("]').click()
+  await clickCanvasFraction(page, 0.25, 0.25)
+  await clickCanvasFraction(page, 0.70, 0.25)
+  await clickCanvasFraction(page, 0.70, 0.70)
+  await canvas(page).focus()
+  await page.keyboard.press('Enter')
+  await page.locator('.cf-tool-button[title^="เลือก"]').click()
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const slabRow = page.locator('li[data-object-type="structure.slab"]').first()
+  await expect(slabRow).toBeVisible()
+  const slabId = await slabRow.getAttribute('data-object-id')
+  expect(slabId).toBeTruthy()
+  await slabRow.locator('.cf-browser-object').click()
+  const properties = page.getByTestId('properties-selection')
+  await expect(properties).toHaveAttribute('data-object-id', slabId!)
+
+  const readBoundary = async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const project = JSON.parse(json)
+    return project.objects[slabId!]?.module_data.boundary_mm as [number, number][] | undefined
+  }
+  await expect.poll(readBoundary).toBeTruthy()
+  const originalBoundary = structuredClone((await readBoundary())!)
+  const viewport = page.locator('.cf-plan-canvas').first()
+  const bounds = await viewport.boundingBox()
+  if (!bounds) throw new Error('Plan viewport is not visible')
+  const panX = Number(await viewport.getAttribute('data-viewport-pan-x'))
+  const panY = Number(await viewport.getAttribute('data-viewport-pan-y'))
+  const zoom = Number(await viewport.getAttribute('data-viewport-zoom'))
+  const vertex = originalBoundary[0]
+  const grip = { x: bounds.x + panX + vertex[0] * zoom, y: bounds.y + panY + vertex[1] * zoom }
+  const deltaX = page.getByRole('textbox', { name: 'ระยะย้ายแกน X (m)' })
+  const deltaY = page.getByRole('textbox', { name: 'ระยะย้ายแกน Y (m)' })
+  const beginVertexEdit = async () => {
+    await page.mouse.move(grip.x, grip.y)
+    await page.mouse.down()
+    await page.mouse.move(grip.x + 4, grip.y + 4)
+    await expect(deltaX).toBeVisible()
+  }
+
+  await beginVertexEdit()
+  await deltaX.fill('0.2')
+  await deltaY.fill('0.1')
+  await expect.poll(readBoundary).toEqual(originalBoundary)
+  await deltaY.press('Escape')
+  await page.mouse.up()
+  await expect(properties).toHaveAttribute('data-object-id', slabId!)
+  await expect.poll(readBoundary).toEqual(originalBoundary)
+
+  await beginVertexEdit()
+  await deltaX.fill('0.2')
+  await deltaY.fill('0.1')
+  await deltaY.press('Enter')
+  await page.mouse.up()
+  const editedBoundary = structuredClone(originalBoundary)
+  editedBoundary[0] = [vertex[0] + 200, vertex[1] + 100]
+  const boundaryMatchesEdited = async () => {
+    const boundary = await readBoundary()
+    return Boolean(boundary && boundary.length === editedBoundary.length && boundary.every((point, index) =>
+      Math.hypot(point[0] - editedBoundary[index][0], point[1] - editedBoundary[index][1]) < 1))
+  }
+  await expect.poll(boundaryMatchesEdited).toBe(true)
+  await expect(properties).toHaveAttribute('data-object-id', slabId!)
+
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(readBoundary).toEqual(originalBoundary)
+  await expect(properties).toHaveAttribute('data-object-id', slabId!)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(boundaryMatchesEdited).toBe(true)
+  await expect(properties).toHaveAttribute('data-object-id', slabId!)
+})
+
 test('wall endpoint grip accepts target length and commits the validated edit', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')

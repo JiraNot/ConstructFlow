@@ -130,6 +130,22 @@ test('slab edge and drainage grips preview type-safe geometry edits from the ori
   assert.equal(project.objects.slab.module_data.drain_direction_deg, 0, 'preview leaves the source project untouched')
 })
 
+test('polygon vertex manipulation changes one boundary point and preserves the object identity', () => {
+  const boundary = [[0, 0], [4000, 0], [4000, 3000], [0, 3000]]
+  const project = { objects: {
+    slab: object('slab', 'structure.slab', { boundary_mm: boundary, voids_mm: [], thickness_mm: 150 }),
+  } }
+  const commands = buildDirectManipulationCommands(project, {
+    id: 'slab', kind: 'polygon-vertex', endpointIndex: 0,
+    startWorldMm: boundary[0], startScreenPx: [0, 0], boundaryPointsMm: boundary,
+  }, [200, 100])
+  assert.equal(commands[0].name, 'UpdateSlab')
+  assert.equal(commands[0].input.id, 'slab')
+  const preview = optimisticManipulationProject(project, commands).objects.slab.module_data.boundary_mm
+  assert.deepEqual(preview, [[200, 100], ...boundary.slice(1)])
+  assert.deepEqual(project.objects.slab.module_data.boundary_mm, boundary, 'preview leaves the source boundary untouched')
+})
+
 test('roof ridge grip updates the opposing gable pitches while retaining the existing peak datum', () => {
   const project = { objects: {
     roof: object('roof', 'roof.system', {
