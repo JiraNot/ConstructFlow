@@ -851,7 +851,7 @@ test('Project Browser selection and type edits preserve one object identity acro
   await expect(properties).toContainText('Column C2')
 
   // The browser row and Properties panel keep the same canonical UUID as the app changes views.
-  const views = ['แปลนพื้น', 'แปลนคาน', 'รูปด้านเหนือ', 'รูปด้านใต้', 'รูปด้านตะวันออก', 'รูปด้านตะวันตก', '3D ดูตัวอย่าง']
+  const views = ['แปลนพื้น', 'แปลนคาน', 'แปลนหลังคา', 'แปลนฝ้า RCP', 'รูปด้านเหนือ', 'รูปด้านใต้', 'รูปด้านตะวันออก', 'รูปด้านตะวันตก', '3D ดูตัวอย่าง']
   for (const view of views) {
     await page.getByRole('button', { name: view, exact: true }).click()
     await expect(properties).toHaveAttribute('data-object-id', canonicalId!)
