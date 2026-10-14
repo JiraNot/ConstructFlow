@@ -125,10 +125,24 @@ export function getElevationFinishSurfaces(project: ProjectDocument, direction: 
 
 export interface PlanFinishBoundary { phase: Phase; segments_mm: Array<[Vec2, Vec2]> }
 
+function indexHostedOpenings(objects: readonly SmartObject[]): Map<string, SmartObject[]> {
+  const byWall = new Map<string, SmartObject[]>()
+  for (const object of objects) {
+    if (object.status === 'archived' || (object.object_type !== 'door_window.door' && object.object_type !== 'door_window.window')) continue
+    const wallId = (object.module_data as Record<string, unknown>).wall_id
+    if (typeof wallId !== 'string') continue
+    const hosted = byWall.get(wallId) ?? []
+    hosted.push(object)
+    byWall.set(wallId, hosted)
+  }
+  return byWall
+}
+
 /** Masonry/finish interfaces in plan; hosted apertures and column finishes interrupt these lines. */
 export function getPlanWallLayerBoundaries(project: ProjectDocument, ids?: ReadonlySet<string>): PlanFinishBoundary[] {
   const objects = Object.values(project.objects).filter(o => o.status !== 'archived' && (ids ? ids.has(o.id) :
     !(o.module_data as Record<string, unknown>).level_id || (o.module_data as Record<string, unknown>).level_id === project.project.active_level_id))
+  const openingsByWall = indexHostedOpenings(objects)
   const columns = objects.filter(o => o.object_type === 'structure.column').flatMap(o => {
     const d = o.module_data as Record<string, unknown>, p = d.location_mm as number[], s = value(project, o, 'section_mm') as number[]
     if (!p || !s) return []
@@ -144,7 +158,7 @@ export function getPlanWallLayerBoundaries(project: ProjectDocument, ids?: Reado
     if (!length || inside + outside <= 0) continue
     const ux = (b[0] - a[0]) / length, uy = (b[1] - a[1]) / length, half = Number(value(project, o, 'thickness_mm')) / 2, sign = d.interior_side === 'right' ? -1 : 1
     const world = (x: number, y: number): Vec2 => [a[0] + ux * x - uy * y, a[1] + uy * x + ux * y]
-    const apertures = objects.filter(item => (item.object_type === 'door_window.door' || item.object_type === 'door_window.window') && (item.module_data as Record<string, unknown>).wall_id === o.id).map(item => {
+    const apertures = (openingsByWall.get(o.id) ?? []).map(item => {
       const v = item.module_data as Record<string, unknown>, x = Number(v.offset_along_wall_mm), w = Number(value(project, item, 'width_mm')) / 2
       return [world(x - w, -half - 1), world(x + w, -half - 1), world(x + w, half + 1), world(x - w, half + 1)]
     })
@@ -156,6 +170,7 @@ export function getPlanWallLayerBoundaries(project: ProjectDocument, ids?: Reado
 /** Finished plan outline wraps projecting columns rather than running plaster through their core. */
 export function getPlanFinishBoundaries(project: ProjectDocument, ids?: ReadonlySet<string>): PlanFinishBoundary[] {
   const groups = new Map<Phase, Vec2[][]>()
+  const openingsByWall = indexHostedOpenings(Object.values(project.objects))
   for (const o of Object.values(project.objects)) {
     if (o.status === 'archived' || (ids && !ids.has(o.id))) continue
     const d = o.module_data as Record<string, unknown>
@@ -168,7 +183,7 @@ export function getPlanFinishBoundaries(project: ProjectDocument, ids?: Readonly
       if (!length) continue
       const ux = (b[0] - a[0]) / length, uy = (b[1] - a[1]) / length
       // Plan apertures are processed against the host UUID, independently of elevation clipping.
-      const openings = Object.values(project.objects).filter(item => item.status !== 'archived' && (item.object_type === 'door_window.door' || item.object_type === 'door_window.window') && (item.module_data as Record<string, unknown>).wall_id === o.id)
+      const openings = (openingsByWall.get(o.id) ?? [])
         .map(item => { const v = item.module_data as Record<string, unknown>, x = Number(v.offset_along_wall_mm), w = Number(value(project, item, 'width_mm')); return [x - w / 2, x + w / 2] })
       const xs = [...new Set([0, length, ...openings.flat().filter(x => x > 0 && x < length)])].sort((x, y) => x - y)
       for (let i = 1; i < xs.length; i++) {

@@ -13,3 +13,10 @@ test('union preserves opening loops and a line is clipped against a projecting c
   assert.equal(length(edges),1600)
   assert.deepEqual(segmentOutsidePolygons([[0,50],[300,50]], [rectangle(100,0,200,100)]), [[[0,50],[100,50]],[[200,50],[300,50]]])
 })
+test('union preserves independent boundaries in a large sparse model', () => {
+  const count = 4780
+  const polygons = Array.from({ length: count }, (_, index) => rectangle(index * 1200, 0, index * 1200 + 1000, 3000))
+  const edges = polygonUnionBoundary(polygons)
+  assert.equal(edges.length, count * 4)
+  assert.equal(length(edges), count * 8000)
+})

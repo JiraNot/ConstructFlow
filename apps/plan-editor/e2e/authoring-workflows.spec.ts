@@ -436,9 +436,29 @@ test('synthetic 4,780-wall project restores, searches, selects, and preserves UU
   console.log(`[browser-stress-stage] ${JSON.stringify({ stage: 'selected-and-persisted', elapsed_ms: Date.now() - testStartedAt })}`)
 
   const reloadStartedAt = Date.now()
+  const profiler = process.env.CF_PROFILE_LARGE_RESTORE === '1'
+    ? await page.context().newCDPSession(page)
+    : null
+  if (profiler) {
+    await profiler.send('Profiler.enable')
+    await profiler.send('Profiler.start')
+  }
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 90_000 })
   const reloadReadyAt = Date.now()
+  if (profiler) {
+    const profile = await profiler.send('Profiler.stop')
+    const nodes = new Map(profile.profile.nodes.map((node: { id: number; callFrame: { functionName: string; url: string } }) => [node.id, node.callFrame]))
+    const totals = new Map<string, number>()
+    profile.profile.samples.forEach((nodeId: number, index: number) => {
+      const frame = nodes.get(nodeId)
+      if (!frame) return
+      const key = `${frame.functionName || '(anonymous)'} · ${frame.url.split('/').slice(-2).join('/')}`
+      totals.set(key, (totals.get(key) ?? 0) + (profile.profile.timeDeltas[index] ?? 0))
+    })
+    console.log(`[browser-restore-cpu-profile] ${JSON.stringify([...totals].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([frame, microseconds]) => ({ frame, milliseconds: Math.round(microseconds / 1000) })))}`)
+    await profiler.detach()
+  }
   await page.getByRole('tab', { name: 'รายการ' }).click()
   const restoredBrowser = page.getByLabel('Project Browser')
   await restoredBrowser.getByRole('button', { name: 'ทั้งโครงการ' }).click()

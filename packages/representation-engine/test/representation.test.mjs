@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { createEmptyProjectDocument, deserializeProject } from '../../project-model/dist/index.js'
-import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getOpeningPlanLinework, getPlanViewProject, getPlanVisibleObjects, getRepresentationTriangles, getVisibleElevationMeshEdges, isWallFacadeForElevation, resolveCeilingGridStyle, resolveElevationWallPhaseStyle, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '../dist/index.js'
+import { buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getOpeningPlanLinework, getPlanFinishBoundaries, getPlanViewProject, getPlanVisibleObjects, getRepresentationTriangles, getVisibleElevationMeshEdges, isWallFacadeForElevation, resolveCeilingGridStyle, resolveElevationWallPhaseStyle, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '../dist/index.js'
 
 const fixture = deserializeProject(await readFile(new URL('../../../examples/kitchen-extension-proof.cfproj', import.meta.url), 'utf8'))
 
@@ -27,6 +27,29 @@ test('reflected ceiling grid styling stays light for existing and new work and f
   assert.deepEqual(resolveCeilingGridStyle('existing'), { stroke: '#cbd5e1', dash: [] })
   assert.deepEqual(resolveCeilingGridStyle('new_construction'), { stroke: '#94a3b8', dash: [] })
   assert.deepEqual(resolveCeilingGridStyle('demolition'), { stroke: '#ef4444', dash: [6, 3] })
+})
+
+test('plan finish boundaries scale to a sparse 4,780-wall project', () => {
+  const project = structuredClone(fixture)
+  const template = Object.values(project.objects).find(object => object.object_type === 'architecture.wall')
+  assert.ok(template)
+  const original = structuredClone(template)
+  const data = original.module_data
+  const [startX, startY] = data.start_point_mm
+  const [endX, endY] = data.end_point_mm
+  for (let index = 0; index < 4780; index++) {
+    const id = `00000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`
+    const column = index % 100, row = Math.floor(index / 100)
+    const dx = column * 30000, dy = row * 30000
+    project.objects[id] = {
+      ...structuredClone(original),
+      id,
+      module_data: { ...structuredClone(data), start_point_mm: [startX + dx, startY + dy], end_point_mm: [endX + dx, endY + dy] },
+    }
+  }
+  const boundaries = getPlanFinishBoundaries(project)
+  assert.ok(boundaries.length > 0)
+  assert.ok(boundaries.reduce((count, boundary) => count + boundary.segments_mm.length, 0) >= 4780 * 4)
 })
 
 test('3D representations are deterministic and keep phase and supported interactions', () => {
