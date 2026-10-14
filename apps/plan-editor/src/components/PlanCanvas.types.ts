@@ -6,7 +6,7 @@ import type { CommandRequest } from '@constructflow/command-schema'
 import type { CoordinatedPlanViewport } from '../viewport/viewportTransform.js'
 import type { DirectManipulationPreviewResult } from '../directManipulation.mjs'
 import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
-import type { WallVerticalReference } from './PlanCanvasGeometry.js'
+import type { WallVerticalReference } from './PlanCanvasWallReferences.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument

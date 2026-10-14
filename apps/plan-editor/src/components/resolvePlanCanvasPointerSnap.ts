@@ -4,7 +4,8 @@ import type { ToolType } from './Toolbar.js'
 import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import { resolvePlanCanvasLineSnap } from '../app/placementLineSnap.mjs'
 import { usesPlacementDimensions } from '../app/toolInteractionRegistry.mjs'
-import { findTemporaryDimensionRefs, gridLineEndpoints } from './PlanCanvasGeometry.js'
+import { gridLineEndpoints } from './PlanCanvasGeometry.js'
+import { findTemporaryDimensionRefs } from './PlanCanvasTemporaryDimensions.js'
 import { isGridObject } from '@constructflow/project-model'
 
 type Point = [number, number]

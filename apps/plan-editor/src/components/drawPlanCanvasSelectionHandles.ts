@@ -15,13 +15,8 @@ import {
 } from '@constructflow/project-model'
 import { polygonEdgeGrip } from '@constructflow/geometry-kernel'
 import { getRoofSeams } from '@constructflow/roof-engine'
-import {
-  cabinetRotationGripPoint,
-  drawOpeningInspectionDimensions,
-  gridLineEndpoints,
-  orientedRectangleCorners,
-  slabSlopeArrow,
-} from './PlanCanvasGeometry.js'
+import { cabinetRotationGripPoint, gridLineEndpoints, orientedRectangleCorners, slabSlopeArrow } from './PlanCanvasGeometry.js'
+import { drawOpeningInspectionDimensions } from './drawPlanCanvasOpeningInspectionDimensions.js'
 import { worldToScreen, type ViewportState } from '../viewport/viewportTransform.js'
 
 interface SelectionManipulationPreview {

@@ -3,7 +3,7 @@ import type { PlacementReference, ProjectDocument } from '@constructflow/project
 import { isColumnObject } from '@constructflow/project-model'
 import type { LinearReference, SnapResult } from '@constructflow/snapping-engine'
 import { findNearestLinearReference } from '@constructflow/snapping-engine'
-import { getSnappedWallId, getWallVerticalReference, type WallVerticalReference } from './PlanCanvasGeometry.js'
+import { getSnappedWallId, getWallVerticalReference, type WallVerticalReference } from './PlanCanvasWallReferences.js'
 import type { ToolType } from './Toolbar.js'
 
 type Point = [number, number]

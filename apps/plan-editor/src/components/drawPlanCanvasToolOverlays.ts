@@ -5,13 +5,8 @@ import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-eng
 import type { ToolType } from './Toolbar.js'
 import type { ViewportState } from '../viewport/viewportTransform.js'
 import { worldToScreen } from '../viewport/viewportTransform.js'
-import {
-  drawTapeMeasure,
-  drawTemporaryDimensions,
-  gridLineEndpoints,
-  openingDimensionPoint,
-  openingDimensionRefs,
-} from './PlanCanvasGeometry.js'
+import { gridLineEndpoints } from './PlanCanvasGeometry.js'
+import { drawTapeMeasure, drawTemporaryDimensions, openingDimensionPoint, openingDimensionRefs } from './PlanCanvasTemporaryDimensions.js'
 import { usesPlacementDimensions } from '../app/toolInteractionRegistry.mjs'
 
 interface PlanCanvasToolOverlayOptions {

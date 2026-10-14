@@ -6,7 +6,8 @@ import { worldToScreen } from '../viewport/viewportTransform.js'
 import type { ToolType } from './Toolbar.js'
 import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import { usesPlacementDimensions } from '../app/toolInteractionRegistry.mjs'
-import { findTemporaryDimensionRefs, gridLineEndpoints, openingDimensionPoint, openingDimensionRefs } from './PlanCanvasGeometry.js'
+import { gridLineEndpoints } from './PlanCanvasGeometry.js'
+import { findTemporaryDimensionRefs, openingDimensionPoint, openingDimensionRefs } from './PlanCanvasTemporaryDimensions.js'
 
 interface UsePlanCanvasPlacementDimensionsOptions {
   project: ProjectDocument

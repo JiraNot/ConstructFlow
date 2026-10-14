@@ -4,7 +4,7 @@ import { parseLengthMm, type DisplayLengthUnit, type ProjectDocument } from '@co
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
 import { usesPlacementDimensions } from '../app/toolInteractionRegistry.mjs'
 import { applyPlanCanvasPlacementDimensions } from './planCanvasPlacementConstraints.mjs'
-import { findTemporaryDimensionRefs, openingDimensionRefs } from './PlanCanvasGeometry.js'
+import { findTemporaryDimensionRefs, openingDimensionRefs } from './PlanCanvasTemporaryDimensions.js'
 import type { ToolType } from './Toolbar.js'
 
 type Point = [number, number]
