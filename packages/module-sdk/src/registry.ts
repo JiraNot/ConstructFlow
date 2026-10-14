@@ -104,6 +104,67 @@ interface RegisteredModule {
   contribution: ModuleContribution;
 }
 
+type JsonSchema = Record<string, unknown>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateSchemaValue(value: unknown, schema: JsonSchema, path: string): string[] {
+  const errors: string[] = [];
+  const type = schema.type;
+  const enumValues = schema.enum;
+  if (enumValues !== undefined) {
+    if (!Array.isArray(enumValues) || !enumValues.some(candidate => Object.is(candidate, value)))
+      return [`${path} must match one of the declared enum values`];
+  }
+
+  if (type === "string") {
+    if (typeof value !== "string") return [`${path} must be a string`];
+    if (typeof schema.minLength === "number" && value.length < schema.minLength) errors.push(`${path} is shorter than minLength`);
+    if (typeof schema.maxLength === "number" && value.length > schema.maxLength) errors.push(`${path} is longer than maxLength`);
+  } else if (type === "number" || type === "integer") {
+    if (typeof value !== "number" || !Number.isFinite(value)) return [`${path} must be a finite number`];
+    if (type === "integer" && !Number.isInteger(value)) errors.push(`${path} must be an integer`);
+    if (typeof schema.minimum === "number" && value < schema.minimum) errors.push(`${path} must be at least ${schema.minimum}`);
+    if (typeof schema.maximum === "number" && value > schema.maximum) errors.push(`${path} must be at most ${schema.maximum}`);
+    if (typeof schema.exclusiveMinimum === "number" && value <= schema.exclusiveMinimum) errors.push(`${path} must be greater than ${schema.exclusiveMinimum}`);
+    if (typeof schema.exclusiveMaximum === "number" && value >= schema.exclusiveMaximum) errors.push(`${path} must be less than ${schema.exclusiveMaximum}`);
+  } else if (type === "boolean") {
+    if (typeof value !== "boolean") return [`${path} must be a boolean`];
+  } else if (type === "array") {
+    if (!Array.isArray(value)) return [`${path} must be an array`];
+    if (typeof schema.minItems === "number" && value.length < schema.minItems) errors.push(`${path} has too few items`);
+    if (typeof schema.maxItems === "number" && value.length > schema.maxItems) errors.push(`${path} has too many items`);
+    if (isRecord(schema.items)) value.forEach((entry, index) => errors.push(...validateSchemaValue(entry, schema.items as JsonSchema, `${path}[${index}]`)));
+  } else if (type === "object") {
+    if (!isRecord(value)) return [`${path} must be an object`];
+    const properties = isRecord(schema.properties) ? schema.properties : {};
+    const required = Array.isArray(schema.required) ? schema.required.filter((name): name is string => typeof name === "string") : [];
+    for (const name of required) if (!Object.prototype.hasOwnProperty.call(value, name)) errors.push(`${path}.${name} is required`);
+    for (const [name, entry] of Object.entries(value)) {
+      const propertySchema = properties[name];
+      if (propertySchema === undefined) {
+        if (schema.additionalProperties === false) errors.push(`${path}.${name} is not allowed`);
+      } else if (isRecord(propertySchema)) {
+        errors.push(...validateSchemaValue(entry, propertySchema, `${path}.${name}`));
+      }
+    }
+  } else if (type === "null") {
+    if (value !== null) return [`${path} must be null`];
+  } else if (type !== undefined) {
+    return [`${path} uses unsupported schema type ${String(type)}`];
+  } else if (enumValues === undefined) {
+    return [`${path} has no supported schema type`];
+  }
+  return errors;
+}
+
+function validateCommandInput(descriptor: ModuleCommandDescriptor, input: Record<string, unknown>): string[] {
+  const schema = descriptor.input_schema as unknown as JsonSchema;
+  return validateSchemaValue(input, schema, "input");
+}
+
 /** Runtime registry shared by hosts that load trusted ConstructFlow modules. */
 export class ModuleRegistry {
   private readonly modules = new Map<string, RegisteredModule>();
@@ -264,6 +325,20 @@ export class ModuleRegistry {
     for (const { contribution } of this.modules.values()) {
       const handler = contribution.commands[context.commandName];
       if (!handler) continue;
+      const descriptor = contribution.commandDescriptors?.find(candidate => candidate.name === context.commandName);
+      if (descriptor) {
+        const errors = validateCommandInput(descriptor, context.input);
+        if (errors.length) return {
+          result: {
+            status: "rejected",
+            command_id: context.command_id,
+            command_name: context.commandName,
+            affected_object_ids: [],
+            errors,
+          },
+          updatedProject: context.project,
+        };
+      }
       const response = handler({
         ...context,
         project: structuredClone(context.project),

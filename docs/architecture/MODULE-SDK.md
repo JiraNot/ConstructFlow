@@ -94,6 +94,8 @@ Each command registration includes:
 - AI exposure/confirmation metadata;
 - events produced.
 
+When a command has a descriptor, the host validates its input against the declared JSON Schema subset before invoking extension code. Invalid input is rejected through the normal CommandBus result path, including calls that do not originate in the host-rendered extension form.
+
 Duplicate name+version registration is rejected unless an explicit override/dev policy exists.
 
 ## Event registration

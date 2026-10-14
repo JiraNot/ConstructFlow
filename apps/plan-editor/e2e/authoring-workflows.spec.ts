@@ -350,6 +350,7 @@ test('extension UI actions collect schema input, require confirmation, and use t
   const extension = page.getByRole('region', { name: 'Sample extension actions' })
   await expect(extension).toBeVisible()
   await page.getByLabel('Project note').fill('extension:approved note')
+  await page.getByLabel('Priority').selectOption('2')
   await page.getByRole('button', { name: 'ตรวจสอบและส่งคำสั่ง' }).click()
   await expect(extension.getByRole('status')).toContainText('ตรวจสอบค่าที่กรอก')
   await expect(page.getByLabel('Project note')).toBeDisabled()
@@ -359,7 +360,7 @@ test('extension UI actions collect schema input, require confirmation, and use t
     const raw = await readStoredProjectJson(page)
     if (!raw) return null
     return JSON.parse(raw).project.description
-  }).toBe('extension:approved note')
+  }).toBe('extension:approved note (priority 2)')
 
   await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
   await expect.poll(async () => {
@@ -372,7 +373,7 @@ test('extension UI actions collect schema input, require confirmation, and use t
     const raw = await readStoredProjectJson(page)
     if (!raw) return null
     return JSON.parse(raw).project.description
-  }).toBe('extension:approved note')
+  }).toBe('extension:approved note (priority 2)')
 })
 
 test('synthetic 600-wall project supports browser search, persistent selection, cross-view navigation, and reload', async ({ page }) => {

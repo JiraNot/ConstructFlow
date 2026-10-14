@@ -33,7 +33,13 @@ function ExtensionAction({ action, descriptor, onExecute }: {
     const input: Record<string, unknown> = {}
     for (const [name, property] of Object.entries(properties)) {
       const value = values[name]
-      if (property.type === 'number' || property.type === 'integer') {
+      if (Array.isArray(property.enum)) {
+        if (!property.enum.some(candidate => Object.is(candidate, value))) {
+          if (required.has(name)) { setFeedback(`${String(property.title ?? name)} ต้องเลือกค่าที่รองรับ`); return }
+          continue
+        }
+        input[name] = value
+      } else if (property.type === 'number' || property.type === 'integer') {
         if (value === '' || value === undefined) {
           if (required.has(name)) { setFeedback(`${String(property.title ?? name)} ต้องระบุค่า`); return }
           continue

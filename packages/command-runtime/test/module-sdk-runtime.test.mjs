@@ -162,6 +162,70 @@ test('extensions can require the host-provided ConstructFlow Core capability', (
   }
 })
 
+test('module command descriptors validate host input before extension handlers run', () => {
+  let handlerRuns = 0
+  const unregister = CommandBus.registerModule({
+    manifest: { id: 'vendor.validated', version: '1.0.0', schema_version: 1 },
+    activate: () => ({
+      commands: {
+        'vendor.validated.run': context => {
+          handlerRuns += 1
+          context.updated.project.description = `${context.input.mode}:${context.input.count}`
+          return {
+            result: { status: 'success', command_id: context.command_id, command_name: context.commandName, affected_object_ids: [] },
+            updatedProject: context.updated,
+            emittedEnvelope: context.envelope,
+          }
+        },
+      },
+      commandDescriptors: [{
+        name: 'vendor.validated.run', version: 1, owner_module: 'vendor.validated',
+        ai_allowed: true, confirmation: 'none',
+        input_schema: {
+          type: 'object',
+          required: ['count', 'mode'],
+          additionalProperties: false,
+          properties: {
+            count: { type: 'integer', minimum: 1, maximum: 3 },
+            mode: { type: 'string', enum: ['safe', 'fast'] },
+            enabled: { type: 'boolean' },
+            settings: {
+              type: 'object', required: ['tag'], additionalProperties: false,
+              properties: { tag: { type: 'string', minLength: 2 } },
+            },
+            points: { type: 'array', minItems: 2, items: { type: 'number', minimum: 0 } },
+          },
+        },
+      }],
+    }),
+  })
+  try {
+    const project = createDefaultResidentialProjectDocument('sdk-input-validation')
+    for (const input of [
+      { count: 1.5, mode: 'safe' },
+      { count: 4, mode: 'safe' },
+      { count: 2, mode: 'unsafe' },
+      { count: 2, mode: 'safe', extra: true },
+      { count: 2, mode: 'safe', settings: { tag: 'x' } },
+      { count: 2, mode: 'safe', points: [1] },
+    ]) {
+      const rejected = CommandBus.execute(project, 'vendor.validated.run', input, 'ai')
+      assert.equal(rejected.result.status, 'rejected')
+      assert.deepEqual(rejected.updatedProject, project)
+    }
+    assert.equal(handlerRuns, 0, 'invalid descriptor input never reaches extension code')
+
+    const valid = CommandBus.execute(project, 'vendor.validated.run', {
+      count: 2, mode: 'fast', enabled: true, settings: { tag: 'OK' }, points: [0, 1],
+    }, 'ai')
+    assert.equal(valid.result.status, 'success')
+    assert.equal(valid.updatedProject.project.description, 'fast:2')
+    assert.equal(handlerRuns, 1)
+  } finally {
+    unregister()
+  }
+})
+
 test('module UI contributions require owned command descriptors and namespaced ids', () => {
   assert.throws(() => CommandBus.registerModule(testModule({
     ui: [{ id: 'unscoped.panel', title: 'Bad panel', actions: [] }],
