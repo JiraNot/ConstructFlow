@@ -1532,6 +1532,34 @@ test('placement type choices are applied to created slabs and roofs', async ({ p
   }).toEqual([expectedSlabTypeId, expectedRoofTypeId])
 })
 
+test('plan canvas marquee selection keeps the same object UUIDs in Properties and Project Browser', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickCanvasFraction(page, 0.38, 0.64)
+  await clickCanvasFraction(page, 0.62, 0.64)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+
+  const planCanvas = page.locator('.cf-plan-canvas').first()
+  const bounds = await planCanvas.boundingBox()
+  if (!bounds) throw new Error('Plan canvas is not visible')
+  await page.mouse.move(bounds.x + bounds.width * 0.28, bounds.y + bounds.height * 0.52)
+  await page.mouse.down()
+  await page.mouse.move(bounds.x + bounds.width * 0.72, bounds.y + bounds.height * 0.76, { steps: 6 })
+  await page.mouse.up()
+
+  const properties = page.getByTestId('properties-multi-selection')
+  await expect(properties).toContainText('เลือก 2 ชิ้น')
+  const selectedIds = (await properties.getAttribute('data-object-ids'))?.split(',') ?? []
+  expect(selectedIds).toHaveLength(2)
+  expect(new Set(selectedIds).size).toBe(2)
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const selectedBrowserIds = await page.locator('.cf-browser-tree [data-object-id].is-selected').evaluateAll(elements =>
+    elements.map(element => element.getAttribute('data-object-id')).filter((id): id is string => Boolean(id)))
+  expect(new Set(selectedBrowserIds)).toEqual(new Set(selectedIds))
+})
+
 test('selected slabs and roofs can change catalog type from Properties', async ({ page }) => {
   await page.goto('/')
   await seedLocalProjectSnapshot(page, createSlabAndRoofTypeAssignmentProject())

@@ -31,7 +31,8 @@ export const MultiSelectionProperties: React.FC<MultiSelectionPropertiesProps> =
 }) => {
   const objectIds = selectedObjects.map(object => object.id)
   const typeLabel = family ? familyLabels[family] ?? family : ''
-  return <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+  return <div data-testid="properties-multi-selection" data-object-ids={objectIds.join(',')}
+    style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
     <div style={{ position: 'sticky', top: 0, zIndex: 3, background: '#fff', borderBottom: '1px solid #dce4ed', paddingTop: 4, paddingBottom: 10 }}>
       <div style={{ fontSize: 15, fontWeight: 700, color: '#24364b' }}>เลือก {selectedObjects.length} ชิ้น</div>
       <div style={{ fontSize: 11, color: '#53657b', marginTop: 4 }}>
