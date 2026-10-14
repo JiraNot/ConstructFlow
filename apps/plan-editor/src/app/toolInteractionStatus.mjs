@@ -61,9 +61,12 @@ export function resolveToolInteractionStatus(tool, state = {}) {
     case 'measure': instruction = 'ตลับเมตร · เลือกจุดเริ่มและจุดปลาย · Enter ยืนยันจุด'; break
     case 'calibrate': instruction = 'ปรับสเกลภาพ · เลือกจุดอ้างอิงสองจุด · Enter ยืนยันจุด'; break
   }
+  const snapConstraint = state.snapCount === undefined
+    ? 'Snap ตามการตั้งค่า'
+    : state.snapCount === 0 ? 'วางอิสระ' : `Snap เปิด ${state.snapCount} ประเภท`
   const constraint = ['wall', 'beam'].includes(tool)
-    ? `${state.lineConstraintLabel ?? 'อัตโนมัติ: ขนาน/ตั้งฉาก'} · แนวอ้างอิง${state.placementReferenceLabel ?? 'กึ่งกลาง'}`
-    : state.snapCount === 0 ? 'วางอิสระ' : `Snap เปิด ${state.snapCount ?? 0} ประเภท`
+    ? `${state.lineConstraintLabel ?? 'อัตโนมัติ: ขนาน/ตั้งฉาก'} · แนวอ้างอิง${state.placementReferenceLabel ?? 'กึ่งกลาง'} · ${snapConstraint}`
+    : snapConstraint
   const snapFeedback = state.activeSnap?.description ?? null
   return { tool, step, stepLabel: stepText[step] ?? step, instruction, constraint, snapFeedback }
 }

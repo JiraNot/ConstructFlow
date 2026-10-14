@@ -49,9 +49,9 @@ test('placement status reports the current authoring step, constraints, and keyb
   assert.equal(wallStart.step, 'start-point')
   assert.equal(wallEnd.step, 'end-point')
   assert.match(wallEnd.instruction, /วาดช่วงและต่อแนว/)
-  assert.equal(wallEnd.constraint, 'ขนาน · แนวอ้างอิงชิดซ้าย')
+  assert.equal(wallEnd.constraint, 'ขนาน · แนวอ้างอิงชิดซ้าย · Snap เปิด 4 ประเภท')
   assert.equal(beamEnd.step, 'end-point')
-  assert.equal(beamEnd.constraint, 'อิสระ · แนวอ้างอิงกึ่งกลาง')
+  assert.equal(beamEnd.constraint, 'อิสระ · แนวอ้างอิงกึ่งกลาง · Snap ตามการตั้งค่า')
   assert.equal(door.step, 'find-host-wall')
   assert.match(door.instruction, /เลื่อนหาแนวผนัง/)
   assert.equal(doorOnWall.step, 'position-on-host')
@@ -61,6 +61,20 @@ test('placement status reports the current authoring step, constraints, and keyb
   assert.equal(point.snapFeedback, null)
   assert.equal(snappedPoint.snapFeedback, 'ปลายผนัง W1')
   assert.equal(polygon.step, 'add-vertex')
+})
+
+test('every toolbar tool exposes a readable step, instruction, and snap constraint', () => {
+  for (const tool of toolbarTools) {
+    const status = resolveToolInteractionStatus(tool)
+    assert.ok(status, `${tool} should expose interaction status`)
+    assert.equal(status.tool, tool)
+    assert.ok(status.stepLabel.trim(), `${tool} should expose a step label`)
+    assert.ok(status.instruction.trim(), `${tool} should expose an instruction`)
+    assert.ok(status.constraint.trim(), `${tool} should expose its snap or placement constraint`)
+    assert.equal(status.snapFeedback, null)
+  }
+  assert.equal(resolveToolInteractionStatus('column').constraint, 'Snap ตามการตั้งค่า')
+  assert.equal(resolveToolInteractionStatus('column', { snapCount: 0 }).constraint, 'วางอิสระ')
 })
 
 test('Escape cancels a pending step first, exits an idle tool, and clears selection consistently', () => {
