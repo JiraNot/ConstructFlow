@@ -147,6 +147,21 @@ test('module registration enforces capabilities and command namespaces', () => {
   }
 })
 
+test('extensions can require the host-provided ConstructFlow Core capability', () => {
+  const unregister = CommandBus.registerModule({
+    manifest: {
+      id: 'vendor.coreclient', version: '1.0.0', schema_version: 1,
+      requires: ['constructflow.core'],
+    },
+    activate: () => ({ commands: {} }),
+  })
+  try {
+    assert.ok(CommandBus.getRegisteredModules().some(entry => entry.id === 'vendor.coreclient'))
+  } finally {
+    unregister()
+  }
+})
+
 test('module UI contributions require owned command descriptors and namespaced ids', () => {
   assert.throws(() => CommandBus.registerModule(testModule({
     ui: [{ id: 'unscoped.panel', title: 'Bad panel', actions: [] }],

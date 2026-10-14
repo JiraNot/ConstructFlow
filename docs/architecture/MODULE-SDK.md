@@ -55,6 +55,8 @@ Failure before activation must roll back partial registration.
 
 Modules publish named, versioned public capabilities rather than concrete private classes.
 
+The host provides `constructflow.core` by default, so extensions can declare it in `requires` without depending on a separately registered module. Hosts may construct a `ModuleRegistry` with an explicit capability list when embedding the SDK in a different runtime.
+
 Examples:
 
 - `wall.host_surface@1`

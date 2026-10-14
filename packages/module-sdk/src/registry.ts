@@ -109,6 +109,11 @@ export class ModuleRegistry {
   private readonly modules = new Map<string, RegisteredModule>();
   private revision = 0;
   private readonly listeners = new Set<() => void>();
+  private readonly hostCapabilities: ReadonlySet<string>;
+
+  constructor(hostCapabilities: readonly string[] = ["constructflow.core"]) {
+    this.hostCapabilities = new Set(hostCapabilities);
+  }
 
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -136,7 +141,10 @@ export class ModuleRegistry {
       throw new Error(`Module ${manifest.id} is already registered`);
 
     const capabilities = new Set(
-      [...this.modules.values()].flatMap(({ module: active }) => active.manifest.provides ?? []),
+      [
+        ...this.hostCapabilities,
+        ...[...this.modules.values()].flatMap(({ module: active }) => active.manifest.provides ?? []),
+      ],
     );
     for (const required of manifest.requires ?? [])
       if (!capabilities.has(required))
