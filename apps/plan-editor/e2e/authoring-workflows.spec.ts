@@ -399,12 +399,12 @@ test('synthetic 600-wall project supports browser search, persistent selection, 
   })
 })
 
-test('synthetic 4,780-wall project restores, searches, selects, and preserves UUID through reload', async ({ page }) => {
+test('synthetic 5,000-wall project restores, searches, selects, and preserves UUID through reload', async ({ page }) => {
   test.setTimeout(240_000)
   const testStartedAt = Date.now()
   await page.goto('/')
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
-  await seedLocalProjectSnapshot(page, createSyntheticPlanStressProject(4780))
+  await seedLocalProjectSnapshot(page, createSyntheticPlanStressProject(5000))
   const restoreStartedAt = Date.now()
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 60_000 })
@@ -415,9 +415,9 @@ test('synthetic 4,780-wall project restores, searches, selects, and preserves UU
   const browser = page.getByLabel('Project Browser')
   await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   const tree = browser.locator('.cf-browser-tree')
-  await expect(tree).toHaveAttribute('data-object-count', '4780')
+  await expect(tree).toHaveAttribute('data-object-count', '5000')
   const rows = tree.locator('[data-object-id]')
-  await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill('STRESS-4780')
+  await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill('STRESS-5000')
   await expect(rows).toHaveCount(1)
   console.log(`[browser-stress-stage] ${JSON.stringify({ stage: 'browser-search', elapsed_ms: Date.now() - testStartedAt })}`)
   const objectId = await rows.first().getAttribute('data-object-id')
@@ -431,7 +431,7 @@ test('synthetic 4,780-wall project restores, searches, selects, and preserves UU
   const savedProjectJson = await readStoredProjectJson(page)
   expect(savedProjectJson).toBeTruthy()
   const savedProject = JSON.parse(savedProjectJson!) as { objects: Record<string, unknown> }
-  expect(Object.keys(savedProject.objects)).toHaveLength(4780)
+  expect(Object.keys(savedProject.objects)).toHaveLength(5000)
   expect(savedProject.objects[objectId!]).toBeTruthy()
   console.log(`[browser-stress-stage] ${JSON.stringify({ stage: 'selected-and-persisted', elapsed_ms: Date.now() - testStartedAt })}`)
 
@@ -463,16 +463,16 @@ test('synthetic 4,780-wall project restores, searches, selects, and preserves UU
   const restoredBrowser = page.getByLabel('Project Browser')
   await restoredBrowser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   const restoredTree = restoredBrowser.locator('.cf-browser-tree')
-  await expect(restoredTree).toHaveAttribute('data-object-count', '4780')
+  await expect(restoredTree).toHaveAttribute('data-object-count', '5000')
   const browserReadyAt = Date.now()
   const restoredProjectJson = await readStoredProjectJson(page)
   expect(restoredProjectJson).toBeTruthy()
   const restoredProject = JSON.parse(restoredProjectJson!) as { objects: Record<string, unknown> }
-  expect(Object.keys(restoredProject.objects)).toHaveLength(4780)
+  expect(Object.keys(restoredProject.objects)).toHaveLength(5000)
   expect(restoredProject.objects[objectId!]).toBeTruthy()
   const verificationCompleteAt = Date.now()
   console.log(`[browser-stress] ${JSON.stringify({
-    object_count: 4780,
+    object_count: 5000,
     first_restore_ms: firstRestoreMs,
     reload_restore_ms: reloadReadyAt - reloadStartedAt,
     browser_activation_ms: browserReadyAt - reloadReadyAt,
