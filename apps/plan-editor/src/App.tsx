@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import {
   ProjectDocument,
-  TypeDefinition,
   createDefaultResidentialProjectDocument,
   deserializeProject,
   serializeProject,
@@ -30,7 +29,6 @@ import { PropertiesPanel } from './components/PropertiesPanel.js'
 import { ProjectBrowser } from './components/ProjectBrowser.js'
 import { AICommandPanel } from './components/AICommandPanel.js'
 import { SettingsModal } from './components/SettingsModal.js'
-import { TOOL_FAMILIES } from './components/catalogPresentation.js'
 import { TypeManagerModal } from './components/TypeManagerModal.js'
 import { UnderlayCalibrationModal } from './components/UnderlayCalibrationModal.js'
 import { ProjectLegalModal } from './components/ProjectLegalModal.js'
@@ -47,6 +45,7 @@ import { usePropertiesPanelActions } from './app/usePropertiesPanelActions.js'
 import { usePlanAuthoringCommands } from './app/usePlanAuthoringCommands.js'
 import { useGridAuthoringCommands } from './app/useGridAuthoringCommands.js'
 import { useProjectBrowserCommands } from './app/useProjectBrowserCommands.js'
+import { useTypeCatalogSession } from './app/useTypeCatalogSession.js'
 import { useLocalProjectPersistence } from './app/useLocalProjectPersistence.js'
 import { useProjectFileActions, type ProjectFileAccess } from './app/useProjectFileActions.js'
 import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
@@ -190,42 +189,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination' | 'ai'>('properties')
   const coordination = useCoordinationReport(project, true)
   const coordinationFindings = coordination.report?.findings ?? []
-  const [activeColumnType, setActiveColumnType] = useState<string>('C1')
-  const [activeColumnTopLevelId, setActiveColumnTopLevelId] = useState<string>(() => nextHigherLevelId(project, project.project.active_level_id))
-  const [activeFoundationType, setActiveFoundationType] = useState<string>('F1')
-  const [activeBeamType, setActiveBeamType] = useState<string>('B1')
-  const [activeWallType, setActiveWallType] = useState<string>('AAC 100 mm')
-  const [activeDoorType, setActiveDoorType] = useState<string>('D1')
-  const [activeWindowType, setActiveWindowType] = useState<string>('W1')
-  const [activeSlabType, setActiveSlabType] = useState<string>('GS')
-  const [activeRoofType, setActiveRoofType] = useState<string>('RF1')
-  const previousTypesRef = useRef(project.types)
-  useEffect(() => {
-    const entries: Array<[string, string, (value: string) => void]> = [
-      ['structure.column', activeColumnType, setActiveColumnType],
-      ['structure.foundation', activeFoundationType, setActiveFoundationType],
-      ['structure.beam', activeBeamType, setActiveBeamType],
-      ['architecture.wall', activeWallType, setActiveWallType],
-      ['door_window.door', activeDoorType, setActiveDoorType],
-      ['door_window.window', activeWindowType, setActiveWindowType],
-      ['structure.slab', activeSlabType, setActiveSlabType],
-      ['roof.system', activeRoofType, setActiveRoofType],
-    ]
-    for (const [family, name, setName] of entries) {
-      if (project.types.some(type => type.object_type === family && type.name === name)) continue
-      const previous = previousTypesRef.current.find(type => type.object_type === family && type.name === name)
-      const next = project.types.find(type => type.id === previous?.id)
-        ?? project.types.find(type => type.object_type === family)
-      if (next) setName(next.name)
-    }
-    previousTypesRef.current = project.types
-  }, [project.types])
-
-  const [catalogContext,setCatalogContext] = useState<{family?:string;typeId?:string;edit?:boolean;intent:'draw'|'assign'}>({intent:'draw'})
   const [isSettingsOpen,setIsSettingsOpen] = useState(false)
   const [inspectorOpen,setInspectorOpen] = useState(() => window.innerWidth > 900)
   const [workbenchTab,setWorkbenchTab] = useState<'model'|'sheets'>('model')
-  const [isTypeManagerOpen, setIsTypeManagerOpen] = useState<boolean>(false)
   const [isConstructionOpen,setIsConstructionOpen]=useState(false)
   const {
     alignmentPreview,
@@ -344,6 +310,32 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setProjectState, setCommandQueue, canCalibrateUnderlayRef,
   })
 
+  const propertiesActions = usePropertiesPanelActions({ project, dispatchCommandBatch, setFileFeedback, setSelectedId, setSelectedIds })
+  const typeCatalog = useTypeCatalogSession({
+    project, activeTool, setActiveTool, selectedId, onAssignType: propertiesActions.onAssignType,
+  })
+  const {
+    activeTypeMarks, isTypeManagerOpen, setIsTypeManagerOpen, catalogContext,
+    openCatalog, chooseCatalogType, syncRenamedActiveType,
+  } = typeCatalog
+  const activeColumnType = activeTypeMarks.column!
+  const activeFoundationType = activeTypeMarks.foundation!
+  const activeBeamType = activeTypeMarks.beam!
+  const activeWallType = activeTypeMarks.wall!
+  const activeDoorType = activeTypeMarks.door!
+  const activeWindowType = activeTypeMarks.window!
+  const activeSlabType = activeTypeMarks.slab!
+  const activeRoofType = activeTypeMarks.roof!
+  const setActiveColumnType = (value: string) => typeCatalog.setActiveTypeMark('column', value)
+  const setActiveFoundationType = (value: string) => typeCatalog.setActiveTypeMark('foundation', value)
+  const setActiveBeamType = (value: string) => typeCatalog.setActiveTypeMark('beam', value)
+  const setActiveWallType = (value: string) => typeCatalog.setActiveTypeMark('wall', value)
+  const setActiveDoorType = (value: string) => typeCatalog.setActiveTypeMark('door', value)
+  const setActiveWindowType = (value: string) => typeCatalog.setActiveTypeMark('window', value)
+  const setActiveSlabType = (value: string) => typeCatalog.setActiveTypeMark('slab', value)
+  const setActiveRoofType = (value: string) => typeCatalog.setActiveTypeMark('roof', value)
+  const [activeColumnTopLevelId, setActiveColumnTopLevelId] = useState<string>(() => nextHigherLevelId(project, project.project.active_level_id))
+
   const {
     handleCommitColumn,
     handleCommitFoundation,
@@ -366,7 +358,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setCommandQueue,
     setFileFeedback,
   })
-  const propertiesActions = usePropertiesPanelActions({ project, dispatchCommandBatch, setFileFeedback, setSelectedId, setSelectedIds })
   const {
     handleCommitPipeRoute, handleCommitFixture, handleCommitCabinet, handleCommitMoulding,
     handleCommitArchitecturalFloor, handleCommitCeiling, handleCommitRoomSeparator, handleDetectRooms,
@@ -435,31 +426,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       { name: 'UpdateLevel', input: { id: 'GF', height_mm } },
       { name: 'UpdateLevel', input: { id: 'L2', elevation_mm: height_mm } },
     ])
-  }
-
-  const syncRenamedActiveType = (type: TypeDefinition, name: string) => {
-    const entries: Array<[string,string,(value:string)=>void]> = [
-      ['structure.column',activeColumnType,setActiveColumnType], ['structure.foundation',activeFoundationType,setActiveFoundationType],
-      ['structure.beam',activeBeamType,setActiveBeamType], ['architecture.wall',activeWallType,setActiveWallType],
-      ['door_window.door',activeDoorType,setActiveDoorType], ['door_window.window',activeWindowType,setActiveWindowType], ['structure.slab',activeSlabType,setActiveSlabType], ['roof.system',activeRoofType,setActiveRoofType],
-    ]
-    for(const [family,value,setValue] of entries) if(family===type.object_type && value===type.name) setValue(name)
-  }
-  const openCatalog = (edit=false, fromSelection=false, familyOverride?:string) => {
-    const object = fromSelection && selectedId ? project.objects[selectedId] : null
-    const family = familyOverride ?? object?.object_type ?? TOOL_FAMILIES[activeTool] ?? 'structure.column'
-    const marks:Record<string,string> = {column:activeColumnType,foundation:activeFoundationType,beam:activeBeamType,wall:activeWallType,door:activeDoorType,window:activeWindowType,slab:activeSlabType,roof:activeRoofType}
-    const data = object?.module_data as Record<string,unknown> | undefined
-    const type = project.types.find(t=>t.object_type===family && (data ? t.id===data.type_id || t.name===data.mark : t.name===marks[activeTool]))
-    setCatalogContext({family,typeId:type?.id,edit,intent:object?'assign':'draw'})
-    setIsTypeManagerOpen(true)
-  }
-  const chooseCatalogType = (type:TypeDefinition) => {
-    if(catalogContext.intent==='assign' && selectedId) { propertiesActions.onAssignType(selectedId,type.id); return }
-    const tool = Object.entries(TOOL_FAMILIES).find(([,family])=>family===type.object_type)?.[0] as ToolType | undefined
-    if(!tool) return
-    const setters:Record<string,(value:string)=>void> = {column:setActiveColumnType,foundation:setActiveFoundationType,beam:setActiveBeamType,wall:setActiveWallType,door:setActiveDoorType,window:setActiveWindowType,slab:setActiveSlabType,roof:setActiveRoofType}
-    setters[tool](type.name);setActiveTool(tool)
   }
 
   // Apply 1-Click Extension Preset (atomic batch of SmartObjects)
