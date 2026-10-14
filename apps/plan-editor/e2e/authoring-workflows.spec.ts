@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { CommandBus } from '@constructflow/command-runtime'
 import { createEmptyProjectDocument, serializeProject } from '@constructflow/project-model'
+import { getPlanFinishBoundaries } from '@constructflow/representation-engine'
 
 const canvas = (page: Page) => page.locator('canvas').first()
 
@@ -824,11 +825,14 @@ test('wall chains commit and undo each segment independently', async ({ page }) 
   await page.keyboard.press('Escape')
 })
 
-test('wall placement previews the combined outline at a chained endpoint', async ({ page }) => {
+test('wall placement previews and commits a clean connected junction', async ({ page }) => {
   await page.goto('/')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const walls = page.locator('.cf-browser-tree [data-object-type="architecture.wall"]')
   await page.locator('.cf-tool-button[title^="ผนัง"]').click()
   await clickCanvasFraction(page, 0.20, 0.42)
   await clickCanvasFraction(page, 0.40, 0.42)
+  await expect(walls).toHaveCount(1)
   await moveToCanvasFraction(page, 0.10, 0.80)
   await expect(canvas(page)).toHaveAttribute('data-wall-junction-preview', 'true')
   const tealPreviewPixels = await canvas(page).evaluate(element => {
@@ -841,6 +845,52 @@ test('wall placement previews the combined outline at a chained endpoint', async
     return count
   })
   expect(tealPreviewPixels).toBeGreaterThan(0)
+  await clickCanvasFraction(page, 0.10, 0.80)
+  await expect(walls).toHaveCount(2)
+
+  await expect.poll(async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return false
+    const project = JSON.parse(raw)
+    const committedWalls = Object.values(project.objects).filter((object: any) => object.object_type === 'architecture.wall' && object.status !== 'archived')
+    if (committedWalls.length !== 2) return false
+
+    const combinedSegments = getPlanFinishBoundaries(project).flatMap(boundary => boundary.segments_mm)
+    const footprints = committedWalls.map((wall: any) => {
+      const data = wall.module_data
+      const start = data.start_point_mm, end = data.end_point_mm
+      const length = Math.hypot(end[0] - start[0], end[1] - start[1])
+      const halfThickness = Number(data.thickness_mm ?? 120) / 2
+      const nx = -(end[1] - start[1]) / length * halfThickness
+      const ny = (end[0] - start[0]) / length * halfThickness
+      return [[start[0] + nx, start[1] + ny], [end[0] + nx, end[1] + ny], [end[0] - nx, end[1] - ny], [start[0] - nx, start[1] - ny]]
+    })
+    const pointInside = (point: number[], ring: number[][]) => {
+      let inside = false
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i], [xj, yj] = ring[j]
+        if ((yi > point[1]) !== (yj > point[1]) && point[0] < (xj - xi) * (point[1] - yi) / (yj - yi) + xi) inside = !inside
+      }
+      return inside
+    }
+    const interiorSeams = combinedSegments.filter(([a, b]) => {
+      const midpoint = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+      return footprints.every(ring => pointInside(midpoint, ring))
+    })
+    const segmentKeys = combinedSegments.map(([a, b]) => [a, b].sort((left, right) => left[0] - right[0] || left[1] - right[1]).flat().join(','))
+    const stats = {
+      combinedSegmentCount: combinedSegments.length,
+      uniqueSegmentCount: new Set(segmentKeys).size,
+      interiorSeamCount: interiorSeams.length,
+      wallSpans: committedWalls.map((wall: any) => [wall.module_data.start_point_mm, wall.module_data.end_point_mm]),
+    }
+    return interiorSeams.length === 0 && new Set(segmentKeys).size === segmentKeys.length ? 'clean' : JSON.stringify(stats)
+  }).toBe('clean')
+
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(walls).toHaveCount(1)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(walls).toHaveCount(2)
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
 })
