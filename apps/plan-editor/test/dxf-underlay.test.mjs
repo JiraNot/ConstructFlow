@@ -96,6 +96,24 @@ test('DXF underlay renders closed edge-based HATCH loops with line and circular 
   assert.ok((paths[0].match(/L/g) ?? []).length > 30, 'the arc is sampled smoothly between line edges')
 })
 
+test('DXF underlay renders edge-based HATCH elliptical arcs in both loop joins', () => {
+  const hatch = [
+    '0', 'HATCH', '91', '1', '92', '1', '93', '4',
+    '72', '1', '10', '0', '20', '0', '11', '100', '21', '0',
+    '72', '3', '10', '100', '20', '50', '11', '50', '21', '0', '40', '1', '50', String(Math.PI * 1.5), '51', String(Math.PI * 0.5), '73', '1',
+    '72', '1', '10', '100', '20', '100', '11', '0', '21', '100',
+    '72', '1', '10', '0', '20', '100', '11', '0', '21', '0',
+  ].join('\n')
+  const result = importDxfUnderlay(dxf(4, hatch))
+  const paths = decodeURIComponent(result.dataUrl).match(/<path d="[^"]+"\/>/g) ?? []
+
+  assert.equal(result.imported_entities, 1)
+  assert.equal(result.skipped_entities, 0)
+  assert.equal(paths.length, 1)
+  assert.ok(paths[0].includes(' Z'))
+  assert.ok((paths[0].match(/L/g) ?? []).length > 35, 'the elliptical edge is sampled smoothly and joins the neighboring line edges')
+})
+
 test('DXF underlay renders positive and negative LWPOLYLINE bulges', () => {
   const entities = [
     '0', 'LWPOLYLINE', '70', '1', '10', '0', '20', '0', '42', '1', '10', '100', '20', '0', '10', '100', '20', '100', '10', '0', '20', '100',

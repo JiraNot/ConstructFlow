@@ -273,6 +273,21 @@ function hatchArcPoints(centerX, centerY, radius, startDegrees, endDegrees, coun
   })
 }
 
+function hatchEllipsePoints(centerX, centerY, majorX, majorY, ratio, start, end, counterClockwise) {
+  if (![centerX, centerY, majorX, majorY, ratio, start, end].every(Number.isFinite) || ratio <= 0 || Math.hypot(majorX, majorY) < 1e-9) return null
+  const fullEllipse = Math.abs(end - start) >= Math.PI * 2 - 1e-8
+  const direction = counterClockwise ? 1 : -1
+  let sweep = ((end - start) * direction % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2)
+  if (fullEllipse) sweep = Math.PI * 2
+  if (sweep < 1e-8) return null
+  const segments = Math.max(8, Math.min(720, Math.ceil(sweep / (Math.PI / 36))))
+  return Array.from({ length: segments + 1 }, (_, index) => {
+    const angle = start + direction * sweep * index / segments
+    const majorFactor = Math.cos(angle), minorFactor = Math.sin(angle) * ratio
+    return [centerX + majorX * majorFactor - majorY * minorFactor, centerY + majorY * majorFactor + majorX * minorFactor]
+  })
+}
+
 function hatchEdgeBoundaries(pathPairs) {
   const countPair = pathPairs.find(pair => pair.code === 93)
   const count = Math.floor(Number(countPair?.value))
@@ -301,6 +316,8 @@ function hatchEdgeBoundaries(pathPairs) {
       edgePoints = [startX, startY, endX, endY].every(Number.isFinite) ? [[startX, startY], [endX, endY]] : null
     } else if (edgeType === 2) {
       edgePoints = hatchArcPoints(value(10), value(20), value(40), value(50), value(51), value(73) !== 0)
+    } else if (edgeType === 3) {
+      edgePoints = hatchEllipsePoints(value(10), value(20), value(11), value(21), value(40), value(50), value(51), value(73) !== 0)
     } else {
       return []
     }
