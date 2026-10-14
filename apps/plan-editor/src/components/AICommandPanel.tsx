@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useSyncExternalStore } from "react";
 import type { ProjectDocument } from "@constructflow/project-model";
 import type { CommandRequest } from "@constructflow/command-schema";
 import { AlertTriangle, Bot, Check, LoaderCircle, Play, RefreshCw } from "lucide-react";
 import { buildAIProjectContext, getAICommandDescriptors } from "../ai/aiCommandCatalog.js";
+import { CommandBus } from "../commands/CommandBus.js";
 
 interface PreviewResult {
   valid: boolean;
@@ -39,7 +40,12 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const descriptors = useMemo(getAICommandDescriptors, []);
+  const moduleRevision = useSyncExternalStore(
+    listener => CommandBus.subscribeToModules(listener),
+    () => CommandBus.getModuleRegistryRevision(),
+    () => 0,
+  );
+  const descriptors = useMemo(getAICommandDescriptors, [moduleRevision]);
 
   const generate = async () => {
     if (!prompt.trim()) {

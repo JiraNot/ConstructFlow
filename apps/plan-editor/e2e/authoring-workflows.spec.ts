@@ -339,6 +339,43 @@ test('AI proposal is previewed, validated, committed through CommandBus, and und
   await expect(browser.locator('li[data-object-id]')).toHaveCount(0)
 })
 
+test('AI panel refreshes extension command descriptors registered while the panel is open', async ({ page }) => {
+  let descriptorNames: string[] = []
+  await page.route('http://localhost:8000/api/ai/plan', async route => {
+    const payload = route.request().postDataJSON() as { command_descriptors?: { name: string }[] }
+    descriptorNames = payload.command_descriptors?.map(descriptor => descriptor.name) ?? []
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        summary: 'ตั้งบันทึกจาก extension',
+        questions: [],
+        commands: [{ name: 'sample.ui-fixture.set_note', input: { description: 'extension:from_ai', priority: 2 } }],
+      }),
+    })
+  })
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'AI' }).click()
+  await page.evaluate(async () => {
+    const fixture = await import('/src/testing/moduleUiFixture.ts')
+    fixture.registerModuleUIFixture()
+  })
+  await page.getByLabel('Gateway token').fill('test-token')
+  await page.getByLabel('คำขอผู้ช่วย AI').fill('ตั้งบันทึกจาก extension')
+  await page.getByRole('button', { name: 'สร้างแผนคำสั่ง' }).click()
+  const plan = page.getByLabel('แผนคำสั่ง AI')
+  await expect(plan).toContainText('sample.ui-fixture.set_note')
+  expect(descriptorNames).toContain('sample.ui-fixture.set_note')
+  await expect(plan.getByRole('status')).toContainText('ผ่าน validation')
+  await plan.getByRole('button', { name: 'ยืนยันและใช้ผ่าน CommandBus' }).click()
+  await expect(page.locator('.cf-ai-notice')).toContainText('ใช้แผน AI แล้ว')
+  await expect.poll(async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return null
+    return JSON.parse(raw).project.description
+  }).toBe('extension:from_ai (priority 2)')
+})
+
 test('extension UI actions collect schema input, require confirmation, and use the shared undoable command session', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('tab', { name: 'ส่วนขยาย' }).click()

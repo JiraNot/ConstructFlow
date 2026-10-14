@@ -17,7 +17,7 @@ const fixture: ConstructFlowModule = {
     },
     commandDescriptors: [{
       name: 'sample.ui-fixture.set_note', version: 1, owner_module: moduleId,
-      ai_allowed: false, confirmation: 'required',
+      ai_allowed: true, confirmation: 'required',
       input_schema: {
         type: 'object',
         properties: {
