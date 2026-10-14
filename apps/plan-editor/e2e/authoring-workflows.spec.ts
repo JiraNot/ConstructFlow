@@ -1897,6 +1897,26 @@ test('ceiling grid spacing edits through Properties and is undoable', async ({ p
   await expect.poll(readGrid).toEqual([300, 600])
 })
 
+test('workbench export actions download takeoff and BOQ CSV files', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'ปริมาณ' }).click()
+
+  const takeoffDownloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Net CSV' }).click()
+  const takeoffDownload = await takeoffDownloadPromise
+  expect(takeoffDownload.suggestedFilename()).toMatch(/-takeoff\.csv$/)
+  const takeoffCsv = (await readFile((await takeoffDownload.path())!)).toString('utf8')
+  expect(takeoffCsv).toContain('"Cost center","Phase","Mark","Object type","Material","Quantity","Unit","Waste %","Gross Quantity","Formula"')
+
+  const boqDownloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'BOQ (฿)' }).click()
+  const boqDownload = await boqDownloadPromise
+  expect(boqDownload.suggestedFilename()).toMatch(/-boq-thailand\.csv$/)
+  const boqCsv = (await readFile((await boqDownload.path())!)).toString('utf8')
+  expect(boqCsv).toContain('"หมวดงาน / Cost Center"')
+  expect(boqCsv).toContain('"ยอดรวมค่าก่อสร้างสุทธิ (Grand Total THB)"')
+})
+
 test('DXF underlay imports, calibrates from two points, and preserves scale through project reload', async ({ page }) => {
   await page.goto('/')
   const dxf = [

@@ -47,6 +47,7 @@ import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcu
 import { type EditorViewMode, type SplitViewLayout, type SplitViewPaneCount, type SplitViewPaneSlot } from './app/useMultiViewPreferences.js'
 import { getMultiViewTrackBoundaryRange } from './app/multiViewLayout.mjs'
 import { useWorkbenchMultiViewLayout } from './app/useWorkbenchMultiViewLayout.js'
+import { useWorkbenchExportActions } from './app/useWorkbenchExportActions.js'
 import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 import { createElevationObjectCommandHandler } from './app/elevationObjectCommands.js'
 import { MultiViewResizeHandle } from './components/MultiViewResizeHandle.js'
@@ -299,87 +300,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
   const handleMoveElevationObject = createElevationObjectCommandHandler(project, dispatchCommandBatch, handleMoveColumn)
 
-  const handleExportTakeoff = () => {
-    const escape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
-    const rows = [
-      ['Cost center', 'Phase', 'Mark', 'Object type', 'Material', 'Quantity', 'Unit', 'Waste %', 'Gross Quantity', 'Formula'],
-      ...takeoff.lines.map((line) => [
-        line.cost_center, line.phase, line.mark, line.object_type, line.material ?? '',
-        line.quantity.toFixed(3), line.unit, `${line.waste_percent ?? 0}%`,
-        (line.gross_quantity ?? line.quantity).toFixed(3), line.formula,
-      ]),
-    ]
-    const csv = `\uFEFF${rows.map((row) => row.map(escape).join(',')).join('\r\n')}`
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `${project.project.id || 'project'}-takeoff.csv`
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handleExportBOQ = () => {
-    const escape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
-    const rows = [
-      ['หมวดงาน / Cost Center', 'สถานะ / Phase', 'สัญลักษณ์ / Mark', 'ประเภทวัตถุ', 'วัสดุ', 'ปริมาณสุทธิ', 'หน่วย', 'เผื่อเศษ (%)', 'ปริมาณรวมเศษ', 'ราคาวัสดุ/หน่วย (บาท)', 'รวมค่าวัสดุ (บาท)', 'ค่าแรง/หน่วย (บาท)', 'รวมค่าแรง (บาท)', 'รวมต้นทุนตรง (บาท)', 'สูตรคำนวณ'],
-    ]
-    for (const [, cc] of Object.entries(boq.cost_centers)) {
-      for (const item of cc.items) {
-        rows.push([
-          cc.cost_center_label_th, item.phase, item.mark, item.object_type, item.material ?? '',
-          item.net_quantity.toFixed(3), item.unit, `${item.waste_percent}%`, item.gross_quantity.toFixed(3),
-          item.unit_material_cost_thb.toFixed(2), item.total_material_cost_thb.toFixed(2),
-          item.unit_labor_cost_thb.toFixed(2), item.total_labor_cost_thb.toFixed(2),
-          item.total_direct_cost_thb.toFixed(2), item.formula,
-        ])
-      }
-    }
-    rows.push([])
-    rows.push(['--- หมวดงานเตรียมการและงานชั่วคราว (Preliminaries) ---', '', '', '', '', '', '', '', '', '', '', '', '', '', ''])
-    for (const pre of boq.preliminaries.items) {
-      rows.push([
-        'งานเตรียมการและงานชั่วคราว', 'new_construction', pre.code, pre.category, pre.description,
-        pre.quantity.toFixed(2), pre.unit, '0%', pre.quantity.toFixed(2),
-        pre.rate_thb.toFixed(2), pre.amount_thb.toFixed(2), '0.00', '0.00', pre.amount_thb.toFixed(2), pre.notes,
-      ])
-    }
-    rows.push([])
-    rows.push(['--- สรุปประมาณการค่างานทั้งโครงการ (BOQ Summary) ---', '', '', '', '', '', '', '', '', '', '', '', '', '', ''])
-    rows.push(['สรุปต้นทุนตรงค่าวัสดุ (Direct Material)', '', '', '', '', '', '', '', '', '', boq.total_direct_material_thb.toFixed(2), '', '', '', ''])
-    rows.push(['สรุปต้นทุนตรงค่าแรง (Direct Labor)', '', '', '', '', '', '', '', '', '', '', '', boq.total_direct_labor_thb.toFixed(2), '', ''])
-    rows.push(['รวมต้นทุนตรงค่างาน (Direct Cost)', '', '', '', '', '', '', '', '', '', '', '', '', boq.total_direct_cost_thb.toFixed(2), ''])
-    rows.push(['รวมงานเตรียมการและงานชั่วคราว (Preliminaries)', '', '', '', '', '', '', '', '', '', '', '', '', boq.preliminaries_cost_thb.toFixed(2), ''])
-    rows.push(['รวมต้นทุนตรงรวมงานเตรียมการ', '', '', '', '', '', '', '', '', '', '', '', '', boq.total_direct_with_preliminaries_thb.toFixed(2), ''])
-    rows.push([`Factor F (งานอาคาร กรมบัญชีกลาง - กำไร ดอกเบี้ย ภาษี 7%)`, '', '', '', '', '', '', '', '', '', '', '', '', boq.factor_f.factor_f.toFixed(4), ''])
-    rows.push(['ยอดรวมค่าก่อสร้างสุทธิ (Grand Total THB)', '', '', '', '', '', '', '', '', '', '', '', '', boq.grand_total_thb.toFixed(2), ''])
-
-    const csv = `\uFEFF${rows.map((row) => row.map(escape).join(',')).join('\r\n')}`
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `${project.project.id || 'project'}-boq-thailand.csv`
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handleExportDrawingSet = async () => {
-    try {
-      const { renderPermitDrawingSetHtml } = await import('@constructflow/sheet-engine')
-      const html = renderPermitDrawingSetHtml(project)
-      const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
-      const preview = window.open(url, '_blank')
-      if (!preview) {
-        const anchor = document.createElement('a')
-        anchor.href = url
-        anchor.download = `${project.project.id || 'project'}-A02-S01-A08.html`
-        anchor.click()
-      }
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-    } catch (error) {
-      setFileFeedback(`ส่งออกชุดแบบไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-
   const handleStartKitchenProof = async () => {
     if (!confirmReplaceUnsavedProject()) return
     try {
@@ -400,38 +320,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       setViewMode('plan')
     } catch (error) {
       window.alert(`โหลดโครงการตัวอย่างครัวไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-
-  const handleExportDxf = async () => {
-    try {
-      const { exportProjectToDxf } = await import('@constructflow/cad-adapter')
-      const result = exportProjectToDxf(project, { projectName: project.project.name, architectName: project.legal_metadata?.signatories?.architect_name, engineerLicense: project.legal_metadata?.signatories?.structural_engineer_license_no })
-      const url = URL.createObjectURL(new Blob([result.dxfContent], { type: 'application/dxf' }))
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = `${project.project.id || 'ConstructFlow'}_20Layouts.dxf`
-      anchor.click()
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-      setFileFeedback('ส่งออก DXF 20 แผ่นแล้ว')
-    } catch (error) {
-      setFileFeedback(`ส่งออก DXF ไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-
-  const handleExportIfc = async () => {
-    try {
-      const { exportProjectToIfc } = await import('@constructflow/bim-adapter')
-      const result = exportProjectToIfc(project, { projectName: project.project.name, authorName: project.legal_metadata?.signatories?.architect_name })
-      const url = URL.createObjectURL(new Blob([result.ifcContent], { type: 'application/x-step' }))
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = `${project.project.id || 'ConstructFlow'}.ifc`
-      anchor.click()
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-      setFileFeedback('ส่งออก IFC 4.3 แล้ว')
-    } catch (error) {
-      setFileFeedback(`ส่งออก IFC ไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -477,6 +365,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   // Counts & Schedule breakdown
   const takeoff = useMemo(() => calculateTakeoff(project), [project])
   const boq = useMemo(() => calculatePhasedBOQ(project), [project])
+  const {
+    handleExportTakeoff, handleExportBOQ, handleExportDrawingSet, handleExportDxf, handleExportIfc,
+  } = useWorkbenchExportActions(project, takeoff, boq, setFileFeedback)
 
   const planCanvasProps: Omit<PlanCanvasProps, 'planDiscipline'> = {
     project: viewProject,
