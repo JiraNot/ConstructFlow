@@ -993,6 +993,56 @@ test('placement type choices are applied to created columns, foundations, beams,
   await expect(properties).toContainText('Window W2')
 })
 
+test('placement type choices are applied to created slabs and roofs', async ({ page }) => {
+  await page.goto('/')
+  const properties = page.getByTestId('properties-selection')
+  await expect.poll(async () => readStoredProjectJson(page)).toBeTruthy()
+  const initialJson = await readStoredProjectJson(page)
+  if (!initialJson) throw new Error('Project catalog was not persisted')
+  const initialProject = JSON.parse(initialJson) as { types: Array<{ id: string; name: string }> }
+  const expectedSlabTypeId = initialProject.types.find(type => type.name === 'S1')?.id
+  const expectedRoofTypeId = initialProject.types.find(type => type.name === 'RF-TIMBER')?.id
+  expect(expectedSlabTypeId).toBeTruthy()
+  expect(expectedRoofTypeId).toBeTruthy()
+
+  await page.locator('.cf-tool-button[title^="พื้น ("]').click()
+  const slabType = page.getByLabel('ชนิดพื้น')
+  await expect(slabType).toBeVisible()
+  await slabType.selectOption('S1')
+  await clickCanvasFraction(page, 0.22, 0.22)
+  await clickCanvasFraction(page, 0.42, 0.22)
+  await clickCanvasFraction(page, 0.42, 0.42)
+  await canvas(page).focus()
+  await page.keyboard.press('Enter')
+  await expect(properties).toHaveAttribute('data-object-type', 'structure.slab')
+  const slabId = await properties.getAttribute('data-object-id')
+  expect(slabId).toBeTruthy()
+
+  await page.locator('.cf-tool-button[title^="หลังคา"]').click()
+  const roofType = page.getByLabel('ชนิดระบบหลังคา')
+  await expect(roofType).toBeVisible()
+  await roofType.selectOption('RF-TIMBER')
+  await clickCanvasFraction(page, 0.58, 0.22)
+  await clickCanvasFraction(page, 0.78, 0.22)
+  await clickCanvasFraction(page, 0.78, 0.42)
+  await clickCanvasFraction(page, 0.58, 0.42)
+  await canvas(page).focus()
+  await page.keyboard.press('Enter')
+  await expect(properties).toHaveAttribute('data-object-type', 'roof.system')
+  const roofId = await properties.getAttribute('data-object-id')
+  expect(roofId).toBeTruthy()
+
+  await expect.poll(async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const project = JSON.parse(json) as {
+      types: Array<{ id: string; name: string }>
+      objects: Record<string, { module_data: Record<string, unknown> }>
+    }
+    return [project.objects[slabId!]?.module_data.type_id, project.objects[roofId!]?.module_data.type_id]
+  }).toEqual([expectedSlabTypeId, expectedRoofTypeId])
+})
+
 test('selected slabs and roofs can change catalog type from Properties', async ({ page }) => {
   await page.goto('/')
   await seedLocalProjectSnapshot(page, createSlabAndRoofTypeAssignmentProject())
