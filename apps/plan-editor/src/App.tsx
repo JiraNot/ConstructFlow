@@ -21,6 +21,7 @@ import {
 } from '@constructflow/project-model'
 import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
 import { useProjectSession } from './app/useProjectSession.js'
+import { useEditorObjectSelection } from './app/useEditorObjectSelection.js'
 import { useToolSession } from './app/useToolSession.js'
 import { DEFAULT_PLAN_CANVAS_PREFERENCES, type PlanCanvasPreferences } from './app/planCanvasPreferences.mjs'
 import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
@@ -106,8 +107,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     dispatchCommandBatch,
     previewCommands: previewDirectManipulation,
   } = useProjectSession(() => createDefaultResidentialProjectDocument('CF-UNTITLED', 'Untitled Project'))
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const { selectedId, selectedIds, setSelectedId, setSelectedIds } = useEditorObjectSelection()
   const {
     projectJson, savedProjectJson, setSavedProjectJson, replacementBaselineJson, setReplacementBaselineJson,
     localAutosaveReady, localAutosaveState, setLocalAutosaveState, activeProjectFileHandle,
@@ -259,10 +259,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }, [project, hiddenObjectIds])
   const copiedObjectIdsRef = useRef<string[]>([])
   const pasteCountRef = useRef(0)
-  useEffect(() => {
-    if (selectedId && !selectedIds.includes(selectedId)) setSelectedIds([selectedId])
-    else if (!selectedId && selectedIds.length) setSelectedIds([])
-  }, [selectedId])
   const [cursorCoords_mm, setCursorCoords_mm] = useState<[number, number]>([0, 0])
   const [snapKind, setSnapKind] = useState<string>('Free')
 
