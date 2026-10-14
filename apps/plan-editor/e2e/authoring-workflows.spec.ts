@@ -999,6 +999,23 @@ test('placement type picker applies the chosen catalog type to the created objec
   await expect(properties).toContainText('Column C2')
 })
 
+test('contextual type picker searches catalog types by name and then places the result', async ({ page }) => {
+  await page.goto('/')
+  await page.locator('.cf-tool-button[title^="เสา"]').click()
+
+  const search = page.getByLabel('ค้นหาในคลังชนิด เสา')
+  const picker = page.getByLabel('ชนิดเสา', { exact: true })
+  await expect(search).toBeVisible()
+  await search.fill('C2')
+  await expect(picker.locator('option').filter({ hasText: 'C2' })).toHaveCount(1)
+  await picker.selectOption('C2')
+  await page.locator('.cf-authoring-controls-toggle').click()
+  await clickCanvasFraction(page, 0.82, 0.71)
+
+  await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-type', 'structure.column')
+  await expect(page.getByTestId('properties-selection')).toContainText('Column C2')
+})
+
 test('in-context placement type pickers cover structural, wall, and hosted-opening families', async ({ page }) => {
   await page.goto('/')
   const cases = [
