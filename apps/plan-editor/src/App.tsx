@@ -44,8 +44,9 @@ import { useProjectFileActions, type ProjectFileAccess } from './app/useProjectF
 import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
 import { useReferenceDataImportActions } from './app/useReferenceDataImportActions.js'
 import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcuts.js'
-import { useMultiViewPreferences, type EditorViewMode, type SplitViewLayout, type SplitViewPaneCount, type SplitViewPaneSlot } from './app/useMultiViewPreferences.js'
-import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle, getMultiViewTrackBoundaryRange, getMultiViewTrackBoundaries, getMultiViewTrackShares, moveMultiViewPane, reorderMultiViewPane, resizeMultiViewTrackBoundary } from './app/multiViewLayout.mjs'
+import { type EditorViewMode, type SplitViewLayout, type SplitViewPaneCount, type SplitViewPaneSlot } from './app/useMultiViewPreferences.js'
+import { getMultiViewTrackBoundaryRange } from './app/multiViewLayout.mjs'
+import { useWorkbenchMultiViewLayout } from './app/useWorkbenchMultiViewLayout.js'
 import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 import { createElevationObjectCommandHandler } from './app/elevationObjectCommands.js'
 import { MultiViewResizeHandle } from './components/MultiViewResizeHandle.js'
@@ -124,73 +125,17 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [planCanvasPreferences, setPlanCanvasPreferences] = useState<PlanCanvasPreferences>(DEFAULT_PLAN_CANVAS_PREFERENCES)
   const [planNavigationViewport, setPlanNavigationViewport] = useState<CoordinatedPlanViewport | null>(null)
   const [elevationNavigation, setElevationNavigation] = useState<CoordinatedElevationNavigation>({ zoom: 1, panY: 0, panXNorthSouth: 0, panXEastWest: 0 })
-  const [viewMode, setViewMode] = useState<EditorViewMode>('plan')
-  const [multiViewPreferences, setMultiViewPreferences] = useMultiViewPreferences(project.project.id)
-  const { enabled: splitViewEnabled, paneCount: splitViewPaneCount, layout: splitViewLayout,
-    customColumnCount, customColumnShares, customRowShares, paneOrder, primaryPanePercent, secondaryViewMode, tertiaryViewMode, fourthViewMode } = multiViewPreferences
-  const customRowCount = Math.ceil(splitViewPaneCount / customColumnCount)
-  const customColumnTrackShares = getMultiViewTrackShares(customColumnCount, customColumnShares, primaryPanePercent)
-  const customRowTrackShares = getMultiViewTrackShares(customRowCount, customRowShares, customColumnCount === 1 ? primaryPanePercent : 100 / customRowCount)
-  const customColumnBoundaries = getMultiViewTrackBoundaries(customColumnTrackShares)
-  const customRowBoundaries = getMultiViewTrackBoundaries(customRowTrackShares)
-  const splitViewTracks = buildMultiViewGridTracks(splitViewPaneCount, splitViewLayout, primaryPanePercent, customColumnCount, customColumnShares, customRowShares)
-  const splitViewGridStyle = splitViewEnabled ? {
-    display: 'grid',
-    gridTemplateColumns: splitViewTracks.columns,
-    gridTemplateRows: splitViewTracks.rows,
-    gap: 1,
-    background: '#cbd5e1',
-  } : undefined
-  const primaryPaneGridStyle = buildPrimaryPaneGridStyle(splitViewPaneCount, splitViewLayout)
-  const paneGridStyle = (paneIndex: number) => buildMultiViewPaneGridStyle(splitViewPaneCount, splitViewLayout, paneIndex, customColumnCount)
-  const paneViewModes: Record<SplitViewPaneSlot, EditorViewMode> = {
-    primary: viewMode,
-    secondary: secondaryViewMode,
-    tertiary: tertiaryViewMode,
-    fourth: fourthViewMode,
-  }
-  const visiblePaneSlots = splitViewEnabled ? paneOrder.slice(0, splitViewPaneCount) : ['primary' as const]
-  const orderedPaneSlots = visiblePaneSlots
-  const paneSlotLabels: Record<SplitViewPaneSlot, string> = {
-    primary: 'มุมมองหลัก', secondary: 'มุมมองที่สอง', tertiary: 'มุมมองที่สาม', fourth: 'มุมมองที่สี่',
-  }
-  const movePaneSlot = (slot: SplitViewPaneSlot, direction: -1 | 1) => setMultiViewPreferences(current => ({
-    ...current,
-    paneOrder: moveMultiViewPane(current.paneOrder, slot, direction, current.paneCount),
-  }))
-  const reorderPaneSlots = (source: SplitViewPaneSlot, target: SplitViewPaneSlot) => setMultiViewPreferences(current => ({
-    ...current,
-    paneOrder: reorderMultiViewPane(current.paneOrder, source, target, current.paneCount),
-  }))
-  const resizePaneTrack = (axis: 'column' | 'row', boundaryIndex: number, position: number) => setMultiViewPreferences(current => {
-    const columns = Math.max(1, Math.min(current.paneCount, Math.round(current.customColumnCount)))
-    const rows = Math.ceil(current.paneCount / columns)
-    const isColumn = axis === 'column'
-    const trackCount = isColumn ? columns : rows
-    const shares = getMultiViewTrackShares(
-      trackCount,
-      isColumn ? current.customColumnShares : current.customRowShares,
-      isColumn || columns === 1 ? current.primaryPanePercent : 100 / rows,
-    )
-    const nextShares = resizeMultiViewTrackBoundary(shares, boundaryIndex, position)
-    const primaryPanePercent = boundaryIndex === 0 && (isColumn || columns === 1)
-      ? Math.max(30, Math.min(70, Math.round(nextShares[0])))
-      : current.primaryPanePercent
-    return isColumn
-      ? { ...current, customColumnShares: nextShares, primaryPanePercent }
-      : { ...current, customRowShares: nextShares, primaryPanePercent }
-  })
-  // Drawing a structural member opens the matching plan so the new object is visible.
-  useEffect(() => {
-    if (['beam', 'foundation'].includes(activeTool)) setViewMode('framing')
-    else if (activeTool === 'roof') setViewMode('roofplan')
-    else if (['stair', 'wall', 'door', 'window', 'archFloor', 'slab', 'ceiling', 'roomSeparator', 'pipe', 'fixture', 'cabinet', 'moulding'].includes(activeTool)) setViewMode('plan')
-  }, [activeTool])
-  const paneModes = splitViewEnabled ? orderedPaneSlots.map(slot => paneViewModes[slot]) : []
-  const planAnd3DNavigationLinked = paneModes.some(mode => mode === 'plan' || mode === 'framing' || mode === 'roofplan')
-    && paneModes.includes('model3d')
-  const planAndRcpNavigationLinked = paneModes.some(mode => mode === 'plan' || mode === 'framing' || mode === 'roofplan')
-    && paneModes.includes('rcp')
+  const multiView = useWorkbenchMultiViewLayout(project.project.id, activeTool)
+  const {
+    viewMode, setViewMode, multiViewPreferences, setMultiViewPreferences,
+    splitViewEnabled, splitViewPaneCount, splitViewLayout, customColumnCount,
+    customColumnTrackShares, customRowTrackShares, customColumnBoundaries, customRowBoundaries,
+    primaryPanePercent, secondaryViewMode, tertiaryViewMode, fourthViewMode,
+    splitViewGridStyle, primaryPaneGridStyle, paneGridStyle, paneViewModes,
+    visiblePaneSlots, orderedPaneSlots, paneModes, paneSlotLabels,
+    movePaneSlot, reorderPaneSlots, resizePaneTrack,
+    planAnd3DNavigationLinked, planAndRcpNavigationLinked,
+  } = multiView
   const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
   const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
   const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination' | 'ai' | 'extensions'>('properties')
