@@ -4,7 +4,7 @@ import { createDefaultResidentialProjectDocument } from '@constructflow/project-
 import { CommandBus, ProjectCommandSession } from '../dist/index.js'
 
 function testModule(overrides = {}) {
-  const { manifest: manifestOverrides, commands: commandOverrides, ...moduleOverrides } = overrides
+  const { manifest: manifestOverrides, commands: commandOverrides, ui: uiOverrides, ...moduleOverrides } = overrides
   return {
     manifest: {
       id: 'vendor.notes',
@@ -42,6 +42,12 @@ function testModule(overrides = {}) {
           input_schema: { type: 'object', properties: { description: { type: 'string' } } },
           preconditions_summary: 'Project is open',
         }],
+      ui: uiOverrides ?? [{
+        id: 'vendor.notes.project_tools',
+        title: 'Project tools',
+        description: 'Extension actions validated by the host',
+        actions: [{ id: 'vendor.notes.set_description_action', label: 'Set project description', command: 'vendor.notes.set_description' }],
+      }],
         validators: {
           'vendor.notes.description_check': project => project.project.description?.startsWith('extension:')
             ? []
@@ -75,6 +81,12 @@ test('registered extension commands share CommandBus validation, atomic batches,
     assert.ok(CommandBus.getRegisteredModules().some(entry => entry.id === 'vendor.notes'))
     assert.equal(CommandBus.getModuleProviders().some(provider => provider.id === 'vendor.notes.quantities'), true)
     assert.deepEqual(CommandBus.getAICommandDescriptors().map(descriptor => descriptor.name), ['vendor.notes.set_description'])
+    assert.deepEqual(CommandBus.getModuleUIContributions(), [{
+      id: 'vendor.notes.project_tools',
+      title: 'Project tools',
+      description: 'Extension actions validated by the host',
+      actions: [{ id: 'vendor.notes.set_description_action', label: 'Set project description', command: 'vendor.notes.set_description' }],
+    }])
     const project = createDefaultResidentialProjectDocument('sdk-runtime-project')
     const session = new ProjectCommandSession(project)
 
@@ -133,6 +145,40 @@ test('module registration enforces capabilities and command namespaces', () => {
     unregisterClient()
     unregisterHost()
   }
+})
+
+test('module UI contributions require owned command descriptors and namespaced ids', () => {
+  assert.throws(() => CommandBus.registerModule(testModule({
+    ui: [{ id: 'unscoped.panel', title: 'Bad panel', actions: [] }],
+  })), /must be namespaced/)
+  assert.throws(() => CommandBus.registerModule(testModule({
+    ui: [{ id: 'vendor.notes.panel', title: 'Bad action', actions: [{ id: 'vendor.notes.run', label: 'Run', command: 'vendor.notes.missing' }] }],
+  })), /must reference a command with a descriptor/)
+  const unregister = CommandBus.registerModule(testModule())
+  try {
+    const contribution = CommandBus.getModuleUIContributions()[0]
+    assert.equal(contribution.id, 'vendor.notes.project_tools')
+    contribution.actions[0].label = 'tampered outside host'
+    assert.equal(CommandBus.getModuleUIContributions()[0].actions[0].label, 'Set project description')
+  } finally {
+    unregister()
+  }
+})
+
+test('extension registry publishes registration changes for live host UI updates', () => {
+  const initialRevision = CommandBus.getModuleRegistryRevision()
+  let notifications = 0
+  const unsubscribe = CommandBus.subscribeToModules(() => { notifications += 1 })
+  const unregister = CommandBus.registerModule(testModule())
+  try {
+    assert.equal(CommandBus.getModuleRegistryRevision(), initialRevision + 1)
+    assert.equal(notifications, 1)
+  } finally {
+    unregister()
+    unsubscribe()
+  }
+  assert.equal(CommandBus.getModuleRegistryRevision(), initialRevision + 2)
+  assert.equal(notifications, 2)
 })
 
 test('extension handlers receive an isolated project and must return attributable envelopes', () => {

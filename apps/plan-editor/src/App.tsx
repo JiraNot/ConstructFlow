@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useSyncExternalStore, lazy, Suspense } from 'react'
 import {
   ProjectDocument,
   createDefaultResidentialProjectDocument,
@@ -21,7 +21,7 @@ import { useProjectSession } from './app/useProjectSession.js'
 import { useEditorObjectSelection } from './app/useEditorObjectSelection.js'
 import { useToolSession } from './app/useToolSession.js'
 import { DEFAULT_PLAN_CANVAS_PREFERENCES, type PlanCanvasPreferences } from './app/planCanvasPreferences.mjs'
-import { ProjectCommandSession } from './commands/CommandBus.js'
+import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
 import { Toolbar, ToolType } from './components/Toolbar.js'
 import type { PlanCanvasProps } from './components/PlanCanvas.types.js'
 import type { CoordinatedElevationNavigation } from './components/ElevationCanvas.js'
@@ -155,7 +155,14 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     && paneModes.includes('rcp')
   const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
   const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
-  const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination' | 'ai'>('properties')
+  const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination' | 'ai' | 'extensions'>('properties')
+  const moduleRegistryRevision = useSyncExternalStore(
+    listener => CommandBus.subscribeToModules(listener),
+    () => CommandBus.getModuleRegistryRevision(),
+    () => 0,
+  )
+  const moduleUIContributions = useMemo(() => CommandBus.getModuleUIContributions(), [moduleRegistryRevision])
+  const moduleCommandDescriptors = useMemo(() => CommandBus.getModuleCommandDescriptors(), [moduleRegistryRevision])
   const coordination = useCoordinationReport(project, true)
   const coordinationFindings = coordination.report?.findings ?? []
   const [isSettingsOpen,setIsSettingsOpen] = useState(false)
@@ -938,6 +945,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             selectedIds,
             onPreview: commands => previewDirectManipulation(commands, 'ai'),
             onExecute: (commands, actor) => dispatchCommandBatch(commands, actor),
+          }}
+          extensions={{
+            contributions: moduleUIContributions,
+            commandDescriptors: moduleCommandDescriptors,
+            onExecute: command => dispatchCommandBatch([command]),
           }}
           browser={{
             project,

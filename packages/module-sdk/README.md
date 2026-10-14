@@ -54,6 +54,16 @@ const module: ConstructFlowModule = {
         },
         preconditions_summary: "An editable project is open",
       }],
+      ui: [{
+        id: "acme.annotations.project_actions",
+        title: "Annotation tools",
+        actions: [{
+          id: "acme.annotations.set_note_action",
+          label: "Set project note",
+          command: "acme.annotations.set_project_note",
+          description: "Update the permit note on this project.",
+        }],
+      }],
     };
   },
 };
@@ -68,7 +78,12 @@ const result = commandSession.execute([
 
 The current host API loads trusted JavaScript in-process; registration checks namespaces,
 capability dependencies and object-type ownership, but this is not a security sandbox or a
-remote package installer. UI contributions remain host integration work.
+remote package installer. Declarative UI contributions reference a module-owned command and
+its input descriptor. The Plan Editor renders supported string, number, integer, boolean and
+enum fields, requires a second explicit confirmation when the descriptor requests it, and
+dispatches through the shared project command session so normal validation and Undo/Redo apply.
+The contribution schema is framework-neutral; modules do not inject React components into the
+host UI.
 
 ### Object schema migrations
 

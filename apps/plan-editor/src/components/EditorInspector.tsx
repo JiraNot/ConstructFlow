@@ -4,8 +4,9 @@ import { PropertiesPanel } from './PropertiesPanel.js'
 import { ProjectBrowser } from './ProjectBrowser.js'
 import { CoordinationPanel } from './CoordinationPanel.js'
 import { AICommandPanel } from './AICommandPanel.js'
+import { ModuleExtensionsPanel } from './ModuleExtensionsPanel.js'
 
-type InspectorTab = 'properties' | 'quantities' | 'objects' | 'ai' | 'coordination'
+type InspectorTab = 'properties' | 'quantities' | 'objects' | 'ai' | 'extensions' | 'coordination'
 
 const headerActionStyle: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 5, background: '#1e293b', color: '#e2e8f0',
@@ -31,13 +32,14 @@ interface EditorInspectorProps {
   onExportBOQ: () => void
   coordination: ComponentProps<typeof CoordinationPanel>
   ai: ComponentProps<typeof AICommandPanel>
+  extensions: ComponentProps<typeof ModuleExtensionsPanel>
   browser: ComponentProps<typeof ProjectBrowser>
 }
 
 /** Right-side editor panels. App owns project/session orchestration; this component owns panel presentation. */
 export const EditorInspector: React.FC<EditorInspectorProps> = ({
   activeTab, onActiveTabChange, selectedId, selectedIds, properties, takeoff, boq,
-  onOpenConstruction, onExportTakeoff, onExportBOQ, coordination, ai, browser,
+  onOpenConstruction, onExportTakeoff, onExportBOQ, coordination, ai, extensions, browser,
 }) => (
   <aside className="cf-inspector">
     <div className="cf-inspector-heading">
@@ -48,6 +50,7 @@ export const EditorInspector: React.FC<EditorInspectorProps> = ({
       <button type="button" role="tab" aria-selected={activeTab === 'quantities'} className={activeTab === 'quantities' ? 'is-active' : ''} onClick={() => onActiveTabChange('quantities')}>ปริมาณ</button>
       <button type="button" role="tab" aria-selected={activeTab === 'objects'} className={activeTab === 'objects' ? 'is-active' : ''} onClick={() => onActiveTabChange('objects')}>รายการ</button>
       <button type="button" role="tab" aria-selected={activeTab === 'ai'} className={activeTab === 'ai' ? 'is-active' : ''} onClick={() => onActiveTabChange('ai')} title="วางแผนคำสั่งด้วย AI แล้วตรวจสอบก่อนใช้">AI</button>
+      <button type="button" role="tab" aria-selected={activeTab === 'extensions'} className={activeTab === 'extensions' ? 'is-active' : ''} onClick={() => onActiveTabChange('extensions')} title="เรียกใช้คำสั่งจาก extension ผ่าน CommandBus">ส่วนขยาย</button>
       <button type="button" role="tab" aria-selected={activeTab === 'coordination'} className={activeTab === 'coordination' ? 'is-active' : ''} onClick={() => onActiveTabChange('coordination')} title="ตรวจสอบระยะชนและความสัมพันธ์ระหว่างระบบ" style={{ position: 'relative' }}>
         ตรวจระยะ
         {coordination.report && coordination.report.summary.by_severity.hard > 0
@@ -101,6 +104,7 @@ export const EditorInspector: React.FC<EditorInspectorProps> = ({
 
     {activeTab === 'coordination' && <CoordinationPanel {...coordination} />}
     {activeTab === 'ai' && <AICommandPanel {...ai} />}
+    {activeTab === 'extensions' && <ModuleExtensionsPanel {...extensions} />}
     {activeTab === 'objects' && <ProjectBrowser {...browser} />}
   </aside>
 )

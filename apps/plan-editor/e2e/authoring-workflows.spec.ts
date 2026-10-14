@@ -339,6 +339,42 @@ test('AI proposal is previewed, validated, committed through CommandBus, and und
   await expect(browser.locator('li[data-object-id]')).toHaveCount(0)
 })
 
+test('extension UI actions collect schema input, require confirmation, and use the shared undoable command session', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'ส่วนขยาย' }).click()
+  await expect(page.getByText('ยังไม่มี extension ที่เพิ่มคำสั่งในแผงนี้')).toBeVisible()
+  await page.evaluate(async () => {
+    const fixture = await import('/src/testing/moduleUiFixture.ts')
+    fixture.registerModuleUIFixture()
+  })
+  const extension = page.getByRole('region', { name: 'Sample extension actions' })
+  await expect(extension).toBeVisible()
+  await page.getByLabel('Project note').fill('extension:approved note')
+  await page.getByRole('button', { name: 'ตรวจสอบและส่งคำสั่ง' }).click()
+  await expect(extension.getByRole('status')).toContainText('ตรวจสอบค่าที่กรอก')
+  await expect(page.getByLabel('Project note')).toBeDisabled()
+  await page.getByRole('button', { name: 'ยืนยันและส่งคำสั่ง' }).click()
+  await expect(extension.getByRole('status')).toContainText('คำสั่งสำเร็จ')
+  await expect.poll(async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return null
+    return JSON.parse(raw).project.description
+  }).toBe('extension:approved note')
+
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return null
+    return JSON.parse(raw).project.description
+  }).toBeUndefined()
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return null
+    return JSON.parse(raw).project.description
+  }).toBe('extension:approved note')
+})
+
 test('synthetic 600-wall project supports browser search, persistent selection, cross-view navigation, and reload', async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')

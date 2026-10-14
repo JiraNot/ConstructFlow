@@ -45,12 +45,29 @@ export class CommandBus {
     return extensionModules.list()
   }
 
+  static subscribeToModules(listener: () => void) {
+    return extensionModules.subscribe(listener)
+  }
+
+  static getModuleRegistryRevision() {
+    return extensionModules.getRevision()
+  }
+
   static getModuleProviders() {
     return extensionModules.providers()
   }
 
+  static getModuleCommandDescriptors() {
+    return extensionModules.commandDescriptors()
+  }
+
   static getAICommandDescriptors() {
     return extensionModules.aiCommandDescriptors()
+  }
+
+  /** Declarative extension actions that the editor can render without loading plugin UI code. */
+  static getModuleUIContributions() {
+    return extensionModules.uiContributions()
   }
 
   static execute(

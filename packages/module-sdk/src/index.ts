@@ -14,6 +14,8 @@ export {
   type ModuleCommandHandler,
   type ModuleCommandDescriptor,
   type ModuleContribution,
+  type ModuleUIActionContribution,
+  type ModuleUIContribution,
   type ModuleHostApi,
   type ModuleManifest,
   type ModuleMigrationContext,

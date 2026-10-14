@@ -62,6 +62,22 @@ export interface ModuleCommandDescriptor {
   preconditions_summary?: string;
 }
 
+/** Declarative action surfaced by the host; execution still goes through its command session. */
+export interface ModuleUIActionContribution {
+  id: string;
+  label: string;
+  command: string;
+  description?: string;
+}
+
+/** Host-renderable command group that does not depend on React or another UI framework. */
+export interface ModuleUIContribution {
+  id: string;
+  title: string;
+  description?: string;
+  actions: readonly ModuleUIActionContribution[];
+}
+
 export interface ModuleContribution {
   /** Keys must be namespaced below `${manifest.id}.`. */
   commands: Readonly<Record<string, ModuleCommandHandler>>;
@@ -69,6 +85,7 @@ export interface ModuleContribution {
   providers?: Readonly<Record<string, DomainProvider>>;
   validators?: Readonly<Record<string, ModuleValidator>>;
   migrations?: readonly ModuleSchemaMigration[];
+  ui?: readonly ModuleUIContribution[];
 }
 
 export interface ModuleHostApi {
@@ -90,6 +107,22 @@ interface RegisteredModule {
 /** Runtime registry shared by hosts that load trusted ConstructFlow modules. */
 export class ModuleRegistry {
   private readonly modules = new Map<string, RegisteredModule>();
+  private revision = 0;
+  private readonly listeners = new Set<() => void>();
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  getRevision(): number {
+    return this.revision;
+  }
+
+  private publishChange() {
+    this.revision += 1;
+    for (const listener of this.listeners) listener();
+  }
 
   register(module: ConstructFlowModule): () => void {
     const manifest = module.manifest;
@@ -164,12 +197,33 @@ export class ModuleRegistry {
         if (!descriptor.input_schema || descriptor.input_schema.type !== "object" || !descriptor.input_schema.properties || typeof descriptor.input_schema.properties !== "object")
           throw new Error(`Command descriptor ${descriptor.name} requires an object input schema`);
       }
+      const uiIds = new Set<string>()
+      for (const ui of contribution.ui ?? []) {
+        if (!ui.id.startsWith(`${manifest.id}.`) || ui.id.length === manifest.id.length + 1)
+          throw new Error(`UI contribution ${ui.id} must be namespaced under ${manifest.id}.`)
+        if (uiIds.has(ui.id)) throw new Error(`Duplicate UI contribution ${ui.id}`)
+        uiIds.add(ui.id)
+        if (typeof ui.title !== 'string' || !ui.title.trim() || !Array.isArray(ui.actions))
+          throw new Error(`UI contribution ${ui.id} requires a title and action list`)
+        const actionIds = new Set<string>()
+        for (const action of ui.actions) {
+          if (!action.id.startsWith(`${manifest.id}.`) || action.id.length === manifest.id.length + 1)
+            throw new Error(`UI action ${action.id} must be namespaced under ${manifest.id}.`)
+          if (actionIds.has(action.id)) throw new Error(`Duplicate UI action ${action.id}`)
+          actionIds.add(action.id)
+          if (typeof action.label !== 'string' || !action.label.trim())
+            throw new Error(`UI action ${action.id} requires a label`)
+          if (!contribution.commands[action.command] || !descriptorNames.has(action.command))
+            throw new Error(`UI action ${action.id} must reference a command with a descriptor owned by ${manifest.id}.`)
+        }
+      }
     } catch (error) {
       module.deactivate?.();
       throw error;
     }
 
     this.modules.set(manifest.id, { module, contribution });
+    this.publishChange();
     let active = true;
     return () => {
       if (!active) return;
@@ -193,7 +247,9 @@ export class ModuleRegistry {
       }
     }
     entry.module.deactivate?.();
-    return this.modules.delete(moduleId);
+    const removed = this.modules.delete(moduleId);
+    if (removed) this.publishChange();
+    return removed;
   }
 
   execute(context: CommandHandlerContext): CommandBusResult | undefined {
@@ -284,6 +340,10 @@ export class ModuleRegistry {
 
   aiCommandDescriptors(): ReadonlyArray<ModuleCommandDescriptor> {
     return this.commandDescriptors().filter((descriptor) => descriptor.ai_allowed);
+  }
+
+  uiContributions(): ReadonlyArray<ModuleUIContribution> {
+    return structuredClone([...this.modules.values()].flatMap(({ contribution }) => [...(contribution.ui ?? [])]));
   }
 
   list(): ReadonlyArray<ModuleManifest> {
