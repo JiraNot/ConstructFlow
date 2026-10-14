@@ -3755,6 +3755,17 @@ test('multiview layout and auxiliary views restore for the same project after re
   await page.getByLabel('จำนวนคอลัมน์มุมมองหลาย pane').selectOption('3')
   await expect(page.locator('.cf-viewport-stage')).toHaveAttribute('style', /minmax\(0(?:px)?, 70fr\) minmax\(0(?:px)?, 15fr\) minmax\(0(?:px)?, 15fr\)/)
   await expect(page.locator('[data-testid="fourth-view-pane"]')).toHaveCSS('grid-column', /span 3/)
+  const resizeHandle = page.getByRole('separator', { name: 'ปรับขนาดมุมมองหลัก' })
+  await resizeHandle.focus()
+  await resizeHandle.press('ArrowLeft')
+  await expect(page.getByLabel('สัดส่วน pane หลัก')).toHaveValue('68')
+  const stageBounds = await page.locator('.cf-viewport-stage').boundingBox()
+  expect(stageBounds).toBeTruthy()
+  await page.mouse.move(stageBounds!.x + stageBounds!.width * 0.68, stageBounds!.y + stageBounds!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(stageBounds!.x + stageBounds!.width * 0.58, stageBounds!.y + stageBounds!.height / 2, { steps: 4 })
+  await page.mouse.up()
+  await expect(page.getByLabel('สัดส่วน pane หลัก')).toHaveValue('58')
 
   await page.reload()
   await page.getByLabel('แบ่งมุมมอง').click()
@@ -3765,7 +3776,7 @@ test('multiview layout and auxiliary views restore for the same project after re
   await expect(page.getByLabel('มุมมองที่สี่')).toHaveValue('rcp')
   await expect(page.getByLabel('การจัดวางมุมมอง')).toHaveValue('custom')
   await expect(page.getByLabel('จำนวนคอลัมน์มุมมองหลาย pane')).toHaveValue('3')
-  await expect(page.getByLabel('สัดส่วน pane หลัก')).toHaveValue('70')
+  await expect(page.getByLabel('สัดส่วน pane หลัก')).toHaveValue('58')
   await expect(page.locator('[data-testid="fourth-view-pane"]')).toHaveCSS('grid-column', /span 3/)
   const viewportStage = page.locator('.cf-viewport-stage')
   const gridTracks = await viewportStage.evaluate(element => ({
@@ -3774,7 +3785,7 @@ test('multiview layout and auxiliary views restore for the same project after re
   }))
   expect(gridTracks).toEqual({ columns: 3, rows: 2 })
   await page.getByLabel('การจัดวางมุมมอง').selectOption('grid')
-  await expect(page.locator('.cf-viewport-stage')).toHaveAttribute('style', /minmax\(0(?:px)?, 70fr\) minmax\(0(?:px)?, 30fr\)/)
+  await expect(page.locator('.cf-viewport-stage')).toHaveAttribute('style', /minmax\(0(?:px)?, 58fr\) minmax\(0(?:px)?, 42fr\)/)
 })
 
 test('two-storey residential demo supports browser review, 3D selection, and autosave reload at 239 objects', async ({ page }) => {

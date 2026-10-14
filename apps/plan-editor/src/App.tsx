@@ -48,6 +48,7 @@ import { useMultiViewPreferences, type EditorViewMode, type SplitViewLayout, typ
 import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle } from './app/multiViewLayout.mjs'
 import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 import { createElevationObjectCommandHandler } from './app/elevationObjectCommands.js'
+import { MultiViewResizeHandle } from './components/MultiViewResizeHandle.js'
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
@@ -796,7 +797,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                   </select>
                 </label>}
                 {splitViewEnabled && <label>สัดส่วน pane หลัก · {primaryPanePercent}%
-                  <input aria-label="สัดส่วน pane หลัก" type="range" min={30} max={70} step={5} value={primaryPanePercent}
+                  <input aria-label="สัดส่วน pane หลัก" type="range" min={30} max={70} step={1} value={primaryPanePercent}
                     onChange={event => setMultiViewPreferences(current => ({ ...current, primaryPanePercent: Number(event.target.value) }))} />
                 </label>}
                 {splitViewEnabled && splitViewPaneCount >= 3 && <label>มุมมองที่สาม
@@ -853,6 +854,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             {splitViewEnabled && splitViewPaneCount === 4 && <div className="cf-multiview-pane" data-testid="fourth-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1', ...paneGridStyle(3) }}>
               {renderEditorView(fourthViewMode, true)}
             </div>}
+            {splitViewEnabled && splitViewLayout === 'custom' && <MultiViewResizeHandle
+              orientation={customColumnCount === 1 ? 'horizontal' : 'vertical'}
+              value={primaryPanePercent}
+              onChange={value => setMultiViewPreferences(current => ({ ...current, primaryPanePercent: value }))}
+            />}
           </div>
 
           {/* Bottom Coordinate Bar */}
