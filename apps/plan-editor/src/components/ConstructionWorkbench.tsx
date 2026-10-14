@@ -682,24 +682,22 @@ function Field({
                   }
                 />
               ) : (
-                <input
-                  style={inputStyle}
-                  type={typeof v === "number" && mm ? "text" : typeof v === "number" ? "number" : "text"}
-                  inputMode={typeof v === "number" && mm ? "decimal" : undefined}
-                  value={typeof v === "number" ? (mm ? formatLengthMm(v, displayUnit) : v) : String(v)}
-                  step="any"
-                  onChange={(e) =>
-                    onChange(
-                      value.map((p, k) =>
-                        k === i
-                          ? typeof v === "number"
-                            ? mm ? parseLengthMm(e.target.value, displayUnit) ?? 0 : Number(e.target.value)
-                            : e.target.value
-                          : p,
-                      ),
-                    )
-                  }
-                />
+                typeof v === "number" && mm ? (
+                  <WorkbenchNumberInput
+                    style={inputStyle}
+                    value={v}
+                    unit={displayUnit}
+                    onChange={next => onChange(value.map((item, index) => index === i ? next : item))}
+                  />
+                ) : (
+                  <input
+                    style={inputStyle}
+                    type={typeof v === "number" ? "number" : "text"}
+                    value={typeof v === "number" ? v : String(v)}
+                    step="any"
+                    onChange={(e) => onChange(value.map((p, k) => k === i ? typeof v === "number" ? Number(e.target.value) : e.target.value : p))}
+                  />
+                )
               )}
             </div>
             <button

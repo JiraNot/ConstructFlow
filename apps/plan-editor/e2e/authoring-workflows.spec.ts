@@ -1746,6 +1746,31 @@ test('selected slabs and roofs can change catalog type from Properties', async (
   await expect(picker).toHaveValue('RF1')
 })
 
+test('type dimension drafts reject incomplete lengths without writing zero', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTitle('คลังชนิด').click()
+  const dialog = page.getByRole('dialog', { name: 'คลังชนิด' })
+  await dialog.getByRole('button', { name: /^เสา/ }).click()
+  await dialog.getByLabel('ค้นหาชนิด').fill('C1')
+  await dialog.getByRole('button', { name: /เลือก C1/ }).click()
+  await dialog.getByRole('button', { name: 'แก้ไขชนิด' }).click()
+
+  const editorDialog = page.getByRole('dialog', { name: 'แก้ไขชนิด C1' })
+  const widthInput = editorDialog.getByRole('textbox', { name: 'กว้าง (m)' })
+  await expect(widthInput).toHaveAttribute('aria-invalid', 'false')
+  await widthInput.fill('-')
+  await expect(widthInput).toHaveAttribute('aria-invalid', 'true')
+  await editorDialog.getByRole('button', { name: 'บันทึกชนิด' }).click()
+
+  await expect(editorDialog).toBeHidden()
+  await expect.poll(async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return null
+    const saved = JSON.parse(raw) as { types: { name: string; object_type: string; parameters: { section_mm?: number[] } }[] }
+    return saved.types.find(type => type.object_type === 'structure.column' && type.name === 'C1')?.parameters.section_mm
+  }).toEqual([200, 200])
+})
+
 test('personal type library persists saved types and imports a project copy through the command bus', async ({ page }) => {
   await page.goto('/')
   await page.getByTitle('คลังชนิด').click()

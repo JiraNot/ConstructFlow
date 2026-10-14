@@ -1,5 +1,6 @@
 import React from "react";
-import { formatLengthMm, parseLengthMm, type DisplayLengthUnit } from "@constructflow/project-model";
+import type { DisplayLengthUnit } from "@constructflow/project-model";
+import { WorkbenchNumberInput } from "./WorkbenchNumberInput.js";
 const labels: Record<string, string> = {
   mark: "รหัส / ชื่อ",
   finish_layers: "ชั้นวัสดุปูพื้น",
@@ -287,20 +288,22 @@ export function CatalogField({
           ))}
         </select>
       ) : (
-        <input
-          aria-label={label}
-          type={typeof value === "number" && isLength ? "text" : typeof value === "number" ? "number" : "text"}
-          inputMode={typeof value === "number" && isLength ? "decimal" : undefined}
-          step="any"
-          value={value == null ? "" : typeof value === 'number' && isLength ? formatLengthMm(value, displayUnit) : String(value)}
-          onChange={(e) =>
-            onChange(
-              typeof value === "number"
-                ? isLength ? parseLengthMm(e.target.value, displayUnit) ?? 0 : Number(e.target.value)
-                : e.target.value,
-            )
-          }
-        />
+        typeof value === "number" && isLength ? (
+          <WorkbenchNumberInput
+            ariaLabel={label}
+            value={value}
+            unit={displayUnit}
+            onChange={onChange}
+          />
+        ) : (
+          <input
+            aria-label={label}
+            type={typeof value === "number" ? "number" : "text"}
+            step="any"
+            value={value == null ? "" : String(value)}
+            onChange={(e) => onChange(typeof value === "number" ? Number(e.target.value) : e.target.value)}
+          />
+        )
       )}
     </label>
     {customWallSystem && <label className="cf-field"><span>ชื่อระบบผนัง</span><input aria-label="ชื่อระบบผนัง" value={value === "custom" ? "" : String(value ?? "")} placeholder="เช่น โครงไม้ + แผ่นไฟเบอร์ซีเมนต์" onChange={e => onChange(e.target.value || "custom")} /></label>}
