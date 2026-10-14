@@ -21,7 +21,7 @@ import { useProjectSession } from './app/useProjectSession.js'
 import { useEditorObjectSelection } from './app/useEditorObjectSelection.js'
 import { useToolSession } from './app/useToolSession.js'
 import { DEFAULT_PLAN_CANVAS_PREFERENCES, type PlanCanvasPreferences } from './app/planCanvasPreferences.mjs'
-import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
+import { ProjectCommandSession } from './commands/CommandBus.js'
 import { Toolbar, ToolType } from './components/Toolbar.js'
 import { PlanCanvas, type PlanCanvasProps } from './components/PlanCanvas.js'
 import { ElevationCanvas, type CoordinatedElevationNavigation } from './components/ElevationCanvas.js'
@@ -46,6 +46,7 @@ import { usePlanAuthoringCommands } from './app/usePlanAuthoringCommands.js'
 import { useGridAuthoringCommands } from './app/useGridAuthoringCommands.js'
 import { useProjectBrowserCommands } from './app/useProjectBrowserCommands.js'
 import { useTypeCatalogSession } from './app/useTypeCatalogSession.js'
+import { useProjectContextCommands } from './app/useProjectContextCommands.js'
 import { useLocalProjectPersistence } from './app/useLocalProjectPersistence.js'
 import { useProjectFileActions, type ProjectFileAccess } from './app/useProjectFileActions.js'
 import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
@@ -335,6 +336,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const setActiveSlabType = (value: string) => typeCatalog.setActiveTypeMark('slab', value)
   const setActiveRoofType = (value: string) => typeCatalog.setActiveTypeMark('roof', value)
   const [activeColumnTopLevelId, setActiveColumnTopLevelId] = useState<string>(() => nextHigherLevelId(project, project.project.active_level_id))
+  const {
+    handleSetWorkingPhase, handleSetWorkingLevel, handleUpdateStoryHeight, handleMoveColumn,
+  } = useProjectContextCommands({
+    project, dispatchCommandBatch, nextHigherLevelId, setActiveColumnTopLevelId, setFileFeedback,
+  })
 
   const {
     handleCommitColumn,
@@ -369,24 +375,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const { handleCommitGrid, handleCopyGrid, handleCommitGridSystem } = useGridAuthoringCommands({
     project, dispatchCommandBatch, setFileFeedback,
   })
-  const handleSetWorkingPhase = (phase: Phase) => {
-    const res = CommandBus.execute(project, 'SetWorkingPhase', { phase })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
-  const handleSetWorkingLevel = (levelId: string) => {
-    if (project.project.active_level_id === levelId) return
-    const res = CommandBus.execute(project, 'SetWorkingLevel', { level_id: levelId })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      setActiveColumnTopLevelId(nextHigherLevelId(res.updatedProject, levelId))
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-    }
-  }
-
   const { handleUploadUnderlayImage, handleImportSiteSurvey } = useReferenceDataImportActions({
     underlayKey, hydratedUnderlayRef, setUnderlay, setFileFeedback, dispatchCommandBatch,
   })
@@ -420,32 +408,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setActiveTool('select')
   }
 
-  // Update floor-to-floor storey height
-  const handleUpdateStoryHeight = (height_mm: number) => {
-    dispatchCommandBatch([
-      { name: 'UpdateLevel', input: { id: 'GF', height_mm } },
-      { name: 'UpdateLevel', input: { id: 'L2', elevation_mm: height_mm } },
-    ])
-  }
-
   // Apply 1-Click Extension Preset (atomic batch of SmartObjects)
   const handleApplyExtensionPreset = (updatedProject: ProjectDocument, envelopes: CommandEnvelope[]) => {
     setProject(updatedProject)
     setCommandQueue((q) => [...q, ...envelopes])
-  }
-
-  // Move Column handler (UUID stays identical!)
-  const handleMoveColumn = (objectId: string, newLocation_mm: [number, number]): boolean => {
-    const res = CommandBus.execute(project, 'MoveColumn', {
-      object_id: objectId,
-      location_mm: newLocation_mm,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
-      if (res.emittedEnvelope) setCommandQueue((q) => [...q, res.emittedEnvelope!])
-      return true
-    }
-    return false
   }
 
   const buildElevationManipulationCommands = (objectId: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move'|'top'|'base', gripIndex?: number): CommandRequest[] =>
