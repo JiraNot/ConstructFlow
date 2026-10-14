@@ -41,6 +41,7 @@ export function usePlanCanvasManipulationPreview({
 
     const commandIds = commands.map(command => String(command.input.object_id ?? command.input.id ?? '')).filter(Boolean)
     const relatedIds = new Set(commandIds)
+    const changedRoomIds = new Set<string>()
     for (const command of commands) {
       const id = String(command.input.object_id ?? command.input.id ?? '')
       const object = planProject.objects[id]
@@ -58,8 +59,38 @@ export function usePlanCanvasManipulationPreview({
     }
 
     const valid = validation?.valid ?? lastPreviewValidationRef.current.valid
-    const ids = validation?.affected_object_ids?.length ? validation.affected_object_ids : [...relatedIds]
-    setManipulationPreview({ project: valid && validation ? validation.project : optimistic, ids, valid })
+    if (valid && validation && commands.some(command => command.name === 'MoveWall' || command.name === 'UpdateWallEndpoints')) {
+      const linkedSurfacesByRoom = new Map<string, Array<{ id: string; before: Record<string, unknown>; next: Record<string, unknown> }>>()
+      for (const [id, candidate] of Object.entries(validation.project.objects)) {
+        const before = planProject.objects[id]
+        if (!before) continue
+        const beforeData = before?.module_data as Record<string, unknown> | undefined
+        const nextData = candidate.module_data as Record<string, unknown>
+        if (candidate.object_type === 'architecture.room') {
+          if (JSON.stringify(beforeData?.boundary_mm) !== JSON.stringify(nextData.boundary_mm)
+            || beforeData?.boundary_status !== nextData.boundary_status || beforeData?.area_mm2 !== nextData.area_mm2) {
+            changedRoomIds.add(id)
+          }
+        } else if (candidate.object_type === 'architecture.floor' || candidate.object_type === 'architecture.ceiling') {
+          const roomId = typeof nextData.room_id === 'string' ? nextData.room_id : ''
+          if (!roomId) continue
+          const linked = linkedSurfacesByRoom.get(roomId) ?? []
+          linked.push({ id, before: beforeData ?? {}, next: nextData })
+          linkedSurfacesByRoom.set(roomId, linked)
+        }
+      }
+      for (const roomId of changedRoomIds) {
+        relatedIds.add(roomId)
+        for (const surface of linkedSurfacesByRoom.get(roomId) ?? []) {
+          if (JSON.stringify(surface.before.boundary_mm) !== JSON.stringify(surface.next.boundary_mm)
+            || surface.before.room_boundary_status !== surface.next.room_boundary_status) relatedIds.add(surface.id)
+        }
+      }
+    }
+
+    const ids = new Set(validation?.affected_object_ids?.length ? validation.affected_object_ids : [...relatedIds])
+    for (const id of relatedIds) ids.add(id)
+    setManipulationPreview({ project: valid && validation ? validation.project : optimistic, ids: [...ids], valid })
     return { commands, valid }
   }
 

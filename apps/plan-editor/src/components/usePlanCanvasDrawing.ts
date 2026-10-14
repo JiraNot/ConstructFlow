@@ -86,6 +86,9 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
     })
     canvas.dataset.wallJunctionPreview = ghost?.wall_junction_preview ? 'true' : 'false'
     canvas.dataset.wallJunctionTargetCount = String(ghost?.wall_junction_preview?.target_count ?? 0)
+    const visibleManipulationPreview = manipulationPreview ?? externalManipulationPreview
+    canvas.dataset.manipulationPreviewObjectIds = visibleManipulationPreview?.ids.join(' ') ?? ''
+    canvas.dataset.manipulationPreviewValid = visibleManipulationPreview ? String(visibleManipulationPreview.valid) : ''
     const calibrationOverlay = activeTool === 'calibrate'
       ? { point1_mm: calibrationP1, point2_mm: null, mouse_mm: calibrationMousePoint }
       : null

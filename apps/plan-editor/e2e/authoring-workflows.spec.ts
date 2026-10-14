@@ -132,6 +132,50 @@ function createCeilingGridProject() {
   return { projectJson: serializeProject(created.updatedProject), ceilingId }
 }
 
+function createLinkedRoomPreviewProject() {
+  let project = createEmptyProjectDocument(randomUUID(), 'Linked room manipulation preview')
+  const levelId = project.project.active_level_id
+  const edges = [
+    [[0, 0, 0], [4000, 0, 0]], [[4000, 0, 0], [4000, 3000, 0]],
+    [[4000, 3000, 0], [0, 3000, 0]], [[0, 3000, 0], [0, 0, 0]],
+  ]
+  const wallIds: string[] = []
+  for (const [index, [start_point_mm, end_point_mm]] of edges.entries()) {
+    const id = randomUUID()
+    const created = CommandBus.execute(project, 'CreateWall', {
+      id, mark: `W${index + 1}`, start_point_mm, end_point_mm,
+      thickness_mm: 100, height_mm: 2800, level_id: levelId,
+    })
+    if (created.result.status !== 'success') throw new Error(`Could not create preview room wall: ${created.result.errors?.join(', ')}`)
+    project = created.updatedProject
+    wallIds.push(id)
+  }
+  const detected = CommandBus.execute(project, 'DetectRooms', { level_id: levelId })
+  if (detected.result.status !== 'success') throw new Error(`Could not detect preview room: ${detected.result.errors?.join(', ')}`)
+  project = detected.updatedProject
+  const room = Object.values(project.objects).find(object => object.object_type === 'architecture.room')
+  if (!room) throw new Error('Preview room was not created')
+  const floorId = randomUUID(), ceilingId = randomUUID()
+  const floor = CommandBus.execute(project, 'CreateArchitecturalFloor', {
+    id: floorId, mark: 'AF1', room_id: room.id, level_id: levelId,
+    elevation_mm: 0, elevation_offset_mm: 0, thickness_mm: 50, voids_mm: [], finish_layers: [],
+  })
+  if (floor.result.status !== 'success') throw new Error(`Could not create linked floor: ${floor.result.errors?.join(', ')}`)
+  project = floor.updatedProject
+  const ceiling = CommandBus.execute(project, 'CreateCeiling', {
+    id: ceilingId, mark: 'CL1', room_id: room.id, level_id: levelId,
+    elevation_mm: 2600, elevation_offset_mm: 0, thickness_mm: 12, voids_mm: [], grid_mm: [600, 600],
+  })
+  if (ceiling.result.status !== 'success') throw new Error(`Could not create linked ceiling: ${ceiling.result.errors?.join(', ')}`)
+  return {
+    projectJson: serializeProject(ceiling.updatedProject),
+    wallIds,
+    roomId: room.id,
+    floorId,
+    ceilingId,
+  }
+}
+
 function createMultiObjectDeleteProject() {
   let project = createEmptyProjectDocument(randomUUID(), 'Atomic browser delete acceptance')
   for (const [index, y] of [0, 3000].entries()) {
@@ -1895,6 +1939,59 @@ test('ceiling grid spacing edits through Properties and is undoable', async ({ p
   await expect.poll(readGrid).toEqual([600, 600])
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
   await expect.poll(readGrid).toEqual([300, 600])
+})
+
+test('wall drag preview includes the linked room, floor, and ceiling before commit', async ({ page }) => {
+  test.setTimeout(60_000)
+  const fixture = createLinkedRoomPreviewProject()
+  await page.goto('/')
+  await seedLocalProjectSnapshot(page, fixture.projectJson)
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+
+  const rows = page.locator('.cf-browser-tree [data-object-type="architecture.wall"]')
+  await expect(rows).toHaveCount(4)
+  for (let index = 0; index < fixture.wallIds.length; index++) {
+    await rows.nth(index).locator('.cf-browser-object').click(index === 0 ? {} : { modifiers: ['Control'] })
+    if (index < fixture.wallIds.length - 1) await page.getByRole('tab', { name: 'รายการ' }).click()
+  }
+  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await expect(page.locator('.cf-inspector-content')).toContainText('เลือก 4 ชิ้น')
+
+  const plan = page.locator('.cf-plan-canvas').first()
+  const canvasElement = canvas(page)
+  const bounds = await canvasElement.boundingBox()
+  if (!bounds) throw new Error('Plan canvas is not visible')
+  const panX = Number(await plan.getAttribute('data-viewport-pan-x'))
+  const panY = Number(await plan.getAttribute('data-viewport-pan-y'))
+  const zoom = Number(await plan.getAttribute('data-viewport-zoom'))
+  const start = { x: bounds.x + panX + 2000 * zoom, y: bounds.y + panY }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down()
+  await page.mouse.move(start.x + 28, start.y + 19, { steps: 4 })
+  await page.waitForTimeout(75)
+  await page.mouse.move(start.x + 29, start.y + 20)
+
+  const previewIds = async () => (await canvasElement.getAttribute('data-manipulation-preview-object-ids'))?.split(' ') ?? []
+  await expect(canvasElement).toHaveAttribute('data-manipulation-preview-valid', 'true')
+  await expect.poll(previewIds).toEqual(expect.arrayContaining([fixture.roomId, fixture.floorId, fixture.ceilingId]))
+  const beforeCommit = JSON.parse((await readStoredProjectJson(page))!) as { objects: Record<string, { module_data: { boundary_mm?: number[][] } }> }
+  const originalRoomBoundary = beforeCommit.objects[fixture.roomId]!.module_data.boundary_mm
+  await page.mouse.up()
+  const readUpdatedBoundaries = async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const saved = JSON.parse(json) as { objects: Record<string, { module_data: { boundary_mm?: number[][] } }> }
+    return {
+      room: saved.objects[fixture.roomId]?.module_data.boundary_mm,
+      floor: saved.objects[fixture.floorId]?.module_data.boundary_mm,
+      ceiling: saved.objects[fixture.ceilingId]?.module_data.boundary_mm,
+    }
+  }
+  await expect.poll(readUpdatedBoundaries).not.toEqual({ room: originalRoomBoundary, floor: originalRoomBoundary, ceiling: originalRoomBoundary })
+  const committed = await readUpdatedBoundaries()
+  expect(committed?.room).toEqual(committed?.floor)
+  expect(committed?.room).toEqual(committed?.ceiling)
 })
 
 test('workbench export actions download takeoff and BOQ CSV files', async ({ page }) => {
