@@ -21,6 +21,16 @@ const resolveOpeningWidthMm = (project: ProjectDocument, opening: ProjectDocumen
     && (candidate.id === typeId || (!typeId && candidate.name === mark)))
   return Number(overrides?.width_mm ?? data.width_mm ?? type?.parameters?.width_mm)
 }
+const projectOpeningOffset = (opening: ProjectDocument['objects'][string], start: PlanPoint, end: PlanPoint) => {
+  const point = (opening.module_data as Record<string, unknown>).location_mm as PlanPoint | undefined
+  if (!point || !point.every(Number.isFinite)) return null
+  const dx = end[0] - start[0], dy = end[1] - start[1]
+  const length = Math.hypot(dx, dy)
+  if (length < 1) return null
+  const offset = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length
+  const projected: PlanPoint = [start[0] + dx * offset / length, start[1] + dy * offset / length]
+  return { offset, offAxisMm: planDistance(point, projected) }
+}
 const beamEndpointColumn = (data: Record<string, unknown>, point: PlanPoint): string | null => {
   const start = data.start_point_mm as PlanPoint | undefined
   const end = data.end_point_mm as PlanPoint | undefined
@@ -303,12 +313,6 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
     if (firstData.type_id !== secondData.type_id || first.created_phase !== second.created_phase || JSON.stringify(first.level_refs ?? []) !== JSON.stringify(second.level_refs ?? [])) {
       setFileFeedback('Join ต้องใช้ชนิด เฟส และระดับเดียวกัน'); return
     }
-    if (first.object_type === 'architecture.wall') {
-      const hostedOpenings = Object.values(project.objects).filter(candidate =>
-        (candidate.object_type === 'door_window.door' || candidate.object_type === 'door_window.window') &&
-        ids.includes(String((candidate.module_data as Record<string, unknown>).wall_id ?? '')))
-      if (hostedOpenings.length) { setFileFeedback('Join ผนังที่มีประตูหรือหน้าต่างไม่ได้ · ต้องย้าย host ของช่องเปิดก่อน'); return }
-    }
     if (first.object_type === 'structure.beam' && (firstData.middle_support_column_id || secondData.middle_support_column_id)) {
       setFileFeedback('Join คานที่มีเสากลางอยู่แล้วไม่ได้ · แบ่งต่อเนื่องได้ครั้งละหนึ่งเสากลาง'); return
     }
@@ -325,6 +329,24 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
       secondData.start_point_mm as [number, number], secondData.end_point_mm as [number, number],
     )
     if (!line) { setFileFeedback('Join ต้องเป็นเส้นตรงแนวเดียวกันที่ปลายแตะกัน'); return }
+    const hostedOpenings = first.object_type === 'architecture.wall'
+      ? Object.values(project.objects).filter(candidate =>
+          (candidate.object_type === 'door_window.door' || candidate.object_type === 'door_window.window')
+          && ids.includes(String((candidate.module_data as Record<string, unknown>).wall_id ?? '')))
+      : []
+    if (hostedOpenings.some(opening => opening.status === 'archived' || opening.removed_phase)) {
+      setFileFeedback('Join ผนังนี้ไม่ได้ · มีช่องเปิดที่เก็บเป็นประวัติ ต้องจัดการ host ของรายการที่เก็บไว้ก่อน'); return
+    }
+    const projectedOpeningOffsets = new Map<string, number>()
+    for (const opening of hostedOpenings) {
+      const projection = projectOpeningOffset(opening, line.start, line.end)
+      const width = resolveOpeningWidthMm(project, opening)
+      if (!projection || projection.offAxisMm > 5 || !Number.isFinite(width) || width <= 0
+        || projection.offset - width / 2 < -1 || projection.offset + width / 2 > planDistance(line.start, line.end) + 1) {
+        setFileFeedback(`Join ผนังไม่ได้ · คำนวณตำแหน่งช่องเปิด ${opening.id.slice(0, 8)} บนแนวใหม่ไม่ผ่าน`); return
+      }
+      projectedOpeningOffsets.set(opening.id, projection.offset)
+    }
     let joinedBeamSupports: { start: string | null; middle: string | null; end: string | null } | null = null
     if (first.object_type === 'structure.beam') {
       const firstStart = firstData.start_point_mm as PlanPoint
@@ -365,6 +387,12 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
     const commands: CommandRequest[] = first.object_type === 'architecture.wall'
       ? [
           { name: 'UpdateWallEndpoints', input: { object_id: first.id, start_point_mm: line.start, end_point_mm: line.end } },
+          ...hostedOpenings.map(opening => {
+            const offset = projectedOpeningOffsets.get(opening.id)!
+            return (opening.module_data as Record<string, unknown>).wall_id === first.id
+              ? { name: 'MoveOpening', input: { object_id: opening.id, offset_along_wall_mm: offset } }
+              : { name: 'RehostOpening', input: { object_id: opening.id, wall_id: first.id, offset_along_wall_mm: offset } }
+          }),
           { name: 'DeleteObject', input: { object_id: second.id } },
         ]
       : first.object_type === 'structure.beam'

@@ -202,6 +202,38 @@ function createHostedWallSplitFixture(crossingOpening = false) {
   return { projectJson: serializeProject(project), wallId, windowIds }
 }
 
+function createHostedWallJoinFixture() {
+  let project = createEmptyProjectDocument(randomUUID(), 'Hosted wall join')
+  const levelId = project.project.active_level_id
+  const wallIds = [randomUUID(), randomUUID()]
+  const spans = [
+    { start: [3000, 0, 0], end: [0, 0, 0] },
+    { start: [3000, 0, 0], end: [6000, 0, 0] },
+  ]
+  for (const [index, span] of spans.entries()) {
+    const result = CommandBus.execute(project, 'CreateWall', {
+      id: wallIds[index], mark: 'W1', level_id: levelId,
+      start_point_mm: span.start, end_point_mm: span.end, thickness_mm: 120, height_mm: 3000,
+    })
+    if (result.result.status !== 'success') throw new Error(`Could not create hosted join wall: ${result.result.errors?.join(', ')}`)
+    project = result.updatedProject
+  }
+  const windowIds = [randomUUID(), randomUUID()]
+  const openings = [
+    { wall: wallIds[0], offset: 1000, location: [2000, 0, 1200] },
+    { wall: wallIds[1], offset: 1000, location: [4000, 0, 1200] },
+  ]
+  for (const [index, opening] of openings.entries()) {
+    const result = CommandBus.execute(project, 'CreateWindow', {
+      id: windowIds[index], mark: 'W1', wall_id: opening.wall, location_mm: opening.location,
+      offset_along_wall_mm: opening.offset, width_mm: 900, height_mm: 1200, sill_height_mm: 900, level_id: levelId,
+    })
+    if (result.result.status !== 'success') throw new Error(`Could not create hosted join window: ${result.result.errors?.join(', ')}`)
+    project = result.updatedProject
+  }
+  return { projectJson: serializeProject(project), wallIds, windowIds }
+}
+
 async function seedLocalProjectSnapshot(page: Page, projectJson: string) {
   await page.evaluate(async json => {
     await new Promise<void>((resolve, reject) => {
@@ -1975,6 +2007,59 @@ test('Project Browser rejects a wall split that would cut through a hosted openi
   expect(raw).toBeTruthy()
   const project = JSON.parse(raw!)
   for (const windowId of fixture.windowIds) expect(project.objects[windowId].module_data.wall_id).toBe(fixture.wallId)
+})
+
+test('Project Browser joins hosted walls and keeps openings at their world positions', async ({ page }) => {
+  test.setTimeout(60_000)
+  const fixture = createHostedWallJoinFixture()
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await seedLocalProjectSnapshot(page, fixture.projectJson)
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const firstRow = page.locator(`li[data-object-id="${fixture.wallIds[0]}"]`)
+  const secondRow = page.locator(`li[data-object-id="${fixture.wallIds[1]}"]`)
+  await expect(firstRow).toBeVisible()
+  await firstRow.locator('.cf-browser-object').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await secondRow.locator('.cf-browser-object').click({ modifiers: ['Control'] })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
+  await page.getByRole('button', { name: 'แสดงตัวอย่าง Join' }).click()
+  await expect(page.getByText('Preview การแปลง')).toBeVisible()
+  await page.getByRole('button', { name: 'ยืนยัน · Undo ได้' }).click()
+  await expect(page.locator('li[data-object-type="architecture.wall"]')).toHaveCount(1)
+  await expect.poll(async () => {
+    const snapshot = await readStoredProjectJson(page)
+    if (!snapshot) return 0
+    return Object.values(JSON.parse(snapshot).objects).filter((item: any) => item.object_type === 'architecture.wall' && item.status !== 'archived').length
+  }).toBe(1)
+
+  const raw = await readStoredProjectJson(page)
+  expect(raw).toBeTruthy()
+  const joined = JSON.parse(raw!) as { objects: Record<string, { id: string; host_refs: string[]; module_data: Record<string, unknown> }>; relationships: Array<{ kind: string; source_id: string; target_id: string }> }
+  expect(joined.objects[fixture.wallIds[0]]).toBeTruthy()
+  expect(joined.objects[fixture.wallIds[1]]).toBeUndefined()
+  expect(joined.objects[fixture.windowIds[0]].module_data.wall_id).toBe(fixture.wallIds[0])
+  expect(joined.objects[fixture.windowIds[0]].module_data.offset_along_wall_mm).toBe(2000)
+  expect(joined.objects[fixture.windowIds[0]].module_data.location_mm).toEqual([2000, 0, 1200])
+  expect(joined.objects[fixture.windowIds[1]].module_data.wall_id).toBe(fixture.wallIds[0])
+  expect(joined.objects[fixture.windowIds[1]].module_data.offset_along_wall_mm).toBe(4000)
+  expect(joined.objects[fixture.windowIds[1]].module_data.location_mm).toEqual([4000, 0, 1200])
+  expect(joined.objects[fixture.windowIds[1]].host_refs).toEqual([fixture.wallIds[0]])
+  expect(joined.relationships).toContainEqual({ kind: 'hosted_on', source_id: fixture.windowIds[1], target_id: fixture.wallIds[0], role: 'window_wall_host' })
+  expect(joined.relationships).toContainEqual({ kind: 'hosts', source_id: fixture.wallIds[0], target_id: fixture.windowIds[1], role: 'wall_window_opening' })
+
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(page.locator('li[data-object-type="architecture.wall"]')).toHaveCount(2)
+  await expect.poll(async () => {
+    const snapshot = await readStoredProjectJson(page)
+    if (!snapshot) return false
+    const restored = JSON.parse(snapshot)
+    return restored.objects[fixture.windowIds[1]]?.module_data.wall_id === fixture.wallIds[1]
+  }).toBe(true)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(page.locator('li[data-object-type="architecture.wall"]')).toHaveCount(1)
 })
 
 test('Project Browser splits and rejoins an unhosted beam with preview and UUID-preserving undo', async ({ page }) => {
