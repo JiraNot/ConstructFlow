@@ -102,15 +102,15 @@ The state categories are coherent, but they are co-located with hundreds of per-
 
 These are source-level candidates, not measured latency claims:
 
-1. `snapping-engine` iterates `Object.values(project.objects)` for snap candidate discovery. PlanCanvas invokes `snapPoint` in pointer-move and drag paths, making candidate lookup a whole-document scan at interaction frequency.
+1. Plan snap discovery now uses a per-plan-snapshot `SnapSpatialIndex` as a broad phase before exact geometric projection and ranking. Measure index construction, query, and exact-check costs separately across larger and denser models.
 2. PlanCanvas memoizes `getPlanVisibleObjects` and `getPlanViewProject`, but both recompute for each new project reference. Rendering and helper paths also scan objects for temporary dimensions, selection, host targets and family-specific geometry.
-3. App computes six category counts and six type-count reductions directly during render; `calculateTakeoff` and `calculatePhasedBOQ` are memoized only by the whole project reference, so every committed model update invalidates both.
+3. App's object summary now uses one `countProjectObjects` pass memoized by semantic project identity. `calculateTakeoff` and `calculatePhasedBOQ` are still memoized by the whole project reference, so every committed model update invalidates both.
 4. `useCoordinationReport` memoizes `runCoordination` by project reference. Each project update invalidates it when coordination review is enabled.
 5. Model3DViewport rebuilds all project representations and meshes when its project-dependent scene effect runs. This is correctly deferred until the lazy viewport is mounted but is not incremental by object.
 6. ConstructionWorkbench memoizes available sheets but invokes complete drawing-set compilation in sheet preview/export handlers; repeated viewport edits can compile the whole set for one preview.
 7. ElevationCanvas builds/retrieves visible representations and scans project objects in its drawing effect; behavior and cost across a 5,000-object project are not measured here.
 
-The first baseline should isolate each operation at 500/1,000/5,000 objects before deciding which cache/index gives the most value. Interactive preview must remain lighter than committed output generation.
+The editor benchmark now measures summary, plan projection/hit-testing, snap index/query, coordination, takeoff, phased BOQ, and drawing-set compilation on the 21/239/260-object fixtures. Synthetic 478/956/4,780-object fixtures currently cover summary, plan projection/hit-testing, and snap index/query only. Extend the larger-model matrix to representation, coordination, quantity, drawing, history and browser frame time before drawing release conclusions. Interactive preview must remain lighter than committed output generation.
 
 ## Cross-cutting findings and constraints
 
