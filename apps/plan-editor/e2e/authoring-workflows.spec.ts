@@ -2515,7 +2515,7 @@ test('split workbench keeps selection identity and plan navigation coordinated',
 
   await page.getByLabel('จำนวนมุมมอง').selectOption('4')
   await page.getByLabel('มุมมองที่สี่').selectOption('west')
-  await expect(page.locator('.cf-multiview-pane')).toHaveCount(3)
+  await expect(page.locator('.cf-multiview-pane')).toHaveCount(4)
   await expect(page.getByTestId('fourth-view-pane')).toHaveAttribute('data-primary-selected-object-id', objectId!)
   for (const pane of await page.locator('.cf-multiview-pane').all()) await expect(pane).toHaveAttribute('data-primary-selected-object-id', objectId!)
   const gridTracks = await viewportStage.evaluate(element => ({
@@ -2602,6 +2602,32 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   await expect.poll(expectPlanAndRcpNavigationToMatch).toBeUndefined()
   await page.getByLabel('จัดภาพให้พอดี').click()
   await expect.poll(expectPlanAndRcpNavigationToMatch).toBeUndefined()
+})
+
+test('multiview layout and auxiliary views restore for the same project after reload', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('แบ่งมุมมอง').click()
+  await page.getByLabel('แสดงหลายมุมมอง').check()
+  await page.getByLabel('มุมมองที่สอง').selectOption('framing')
+  await page.getByLabel('จำนวนมุมมอง').selectOption('4')
+  await page.getByLabel('มุมมองที่สาม').selectOption('north')
+  await page.getByLabel('มุมมองที่สี่').selectOption('rcp')
+  await expect(page.getByLabel('การจัดวางมุมมอง')).toHaveValue('grid')
+
+  await page.reload()
+  await page.getByLabel('แบ่งมุมมอง').click()
+  await expect(page.getByLabel('แสดงหลายมุมมอง')).toBeChecked()
+  await expect(page.getByLabel('มุมมองที่สอง')).toHaveValue('framing')
+  await expect(page.getByLabel('จำนวนมุมมอง')).toHaveValue('4')
+  await expect(page.getByLabel('มุมมองที่สาม')).toHaveValue('north')
+  await expect(page.getByLabel('มุมมองที่สี่')).toHaveValue('rcp')
+  await expect(page.getByLabel('การจัดวางมุมมอง')).toHaveValue('grid')
+  const viewportStage = page.locator('.cf-viewport-stage')
+  const gridTracks = await viewportStage.evaluate(element => ({
+    columns: getComputedStyle(element).gridTemplateColumns.split(' ').length,
+    rows: getComputedStyle(element).gridTemplateRows.split(' ').length,
+  }))
+  expect(gridTracks).toEqual({ columns: 2, rows: 2 })
 })
 
 test('two-storey residential demo supports browser review, 3D selection, and autosave reload at 239 objects', async ({ page }) => {
