@@ -114,6 +114,24 @@ function createSyntheticStraightStairProject() {
   return serializeProject(created.updatedProject)
 }
 
+function createCeilingGridProject() {
+  const project = createEmptyProjectDocument(randomUUID(), 'Ceiling grid property acceptance')
+  const ceilingId = randomUUID()
+  const created = CommandBus.execute(project, 'CreateCeiling', {
+    id: ceilingId,
+    mark: 'CL-GRID',
+    level_id: project.project.active_level_id,
+    boundary_mm: [[0, 0], [4000, 0], [4000, 3000], [0, 3000]],
+    elevation_mm: 2600,
+    elevation_offset_mm: 2600,
+    thickness_mm: 12,
+    voids_mm: [],
+    grid_mm: [600, 600],
+  })
+  if (created.result.status !== 'success') throw new Error(`Could not create ceiling grid fixture: ${created.result.errors?.join(', ')}`)
+  return { projectJson: serializeProject(created.updatedProject), ceilingId }
+}
+
 function createMultiObjectDeleteProject() {
   let project = createEmptyProjectDocument(randomUUID(), 'Atomic browser delete acceptance')
   for (const [index, y] of [0, 3000].entries()) {
@@ -1847,6 +1865,36 @@ test('dragging one selected elevation member moves the selected group in one edi
   expect(await readPosition(second)).toBe(secondAfter)
   await page.getByRole('tab', { name: 'รายการ' }).click()
   await expect(rows).toHaveCount(2)
+})
+
+test('ceiling grid spacing edits through Properties and is undoable', async ({ page }) => {
+  const fixture = createCeilingGridProject()
+  await page.goto('/')
+  await seedLocalProjectSnapshot(page, fixture.projectJson)
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const ceilingRow = page.locator(`.cf-browser-tree [data-object-id="${fixture.ceilingId}"]`)
+  await expect(ceilingRow).toBeVisible()
+  await ceilingRow.locator('.cf-browser-object').click()
+
+  const gridX = page.getByRole('textbox', { name: 'ระยะกริดฝ้า X (m)' })
+  const gridY = page.getByRole('textbox', { name: 'ระยะกริดฝ้า Y (m)' })
+  await expect(gridX).toHaveValue('0.600')
+  await expect(gridY).toHaveValue('0.600')
+  await gridX.fill('0.3')
+  await gridX.blur()
+
+  const readGrid = async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const stored = JSON.parse(json) as { objects: Record<string, { module_data: { grid_mm?: number[] } }> }
+    return stored.objects[fixture.ceilingId]?.module_data.grid_mm ?? null
+  }
+  await expect.poll(readGrid).toEqual([300, 600])
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(readGrid).toEqual([600, 600])
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(readGrid).toEqual([300, 600])
 })
 
 test('DXF underlay imports, calibrates from two points, and preserves scale through project reload', async ({ page }) => {
