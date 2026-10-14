@@ -226,6 +226,53 @@ test('module command descriptors validate host input before extension handlers r
   }
 })
 
+test('AI cannot execute extension commands without an explicit AI-enabled descriptor', () => {
+  let handlerRuns = 0
+  const module = {
+    manifest: { id: 'vendor.aipolicy', version: '1.0.0', schema_version: 1 },
+    activate: () => ({
+      commands: {
+        'vendor.aipolicy.human-only': context => {
+          handlerRuns += 1
+          return {
+            result: { status: 'success', command_id: context.command_id, command_name: context.commandName, affected_object_ids: [] },
+            updatedProject: context.updated,
+            emittedEnvelope: context.envelope,
+          }
+        },
+        'vendor.aipolicy.undocumented': context => {
+          handlerRuns += 1
+          return {
+            result: { status: 'success', command_id: context.command_id, command_name: context.commandName, affected_object_ids: [] },
+            updatedProject: context.updated,
+            emittedEnvelope: context.envelope,
+          }
+        },
+      },
+      commandDescriptors: [{
+        name: 'vendor.aipolicy.human-only', version: 1, owner_module: 'vendor.aipolicy',
+        ai_allowed: false, confirmation: 'none', input_schema: { type: 'object', properties: {} },
+      }],
+    }),
+  }
+  const unregister = CommandBus.registerModule(module)
+  try {
+    const project = createDefaultResidentialProjectDocument('sdk-ai-policy')
+    for (const command of ['vendor.aipolicy.human-only', 'vendor.aipolicy.undocumented']) {
+      const rejected = CommandBus.execute(project, command, {}, 'ai')
+      assert.equal(rejected.result.status, 'rejected')
+      assert.match(rejected.result.errors[0], /AI is not authorized/)
+      assert.deepEqual(rejected.updatedProject, project)
+    }
+    assert.equal(handlerRuns, 0)
+    const human = CommandBus.execute(project, 'vendor.aipolicy.human-only', {}, 'human')
+    assert.equal(human.result.status, 'success')
+    assert.equal(handlerRuns, 1)
+  } finally {
+    unregister()
+  }
+})
+
 test('module UI contributions require owned command descriptors and namespaced ids', () => {
   assert.throws(() => CommandBus.registerModule(testModule({
     ui: [{ id: 'unscoped.panel', title: 'Bad panel', actions: [] }],

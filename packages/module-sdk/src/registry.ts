@@ -326,6 +326,16 @@ export class ModuleRegistry {
       const handler = contribution.commands[context.commandName];
       if (!handler) continue;
       const descriptor = contribution.commandDescriptors?.find(candidate => candidate.name === context.commandName);
+      if (context.envelope.actor.kind === "ai" && (!descriptor || !descriptor.ai_allowed)) return {
+        result: {
+          status: "rejected",
+          command_id: context.command_id,
+          command_name: context.commandName,
+          affected_object_ids: [],
+          errors: [`AI is not authorized to execute extension command ${context.commandName}`],
+        },
+        updatedProject: context.project,
+      };
       if (descriptor) {
         const errors = validateCommandInput(descriptor, context.input);
         if (errors.length) return {

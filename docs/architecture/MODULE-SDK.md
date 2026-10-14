@@ -96,6 +96,8 @@ Each command registration includes:
 
 When a command has a descriptor, the host validates its input against the declared JSON Schema subset before invoking extension code. Invalid input is rejected through the normal CommandBus result path, including calls that do not originate in the host-rendered extension form.
 
+AI actors may execute an extension command only when that command has a descriptor with `ai_allowed: true`. Commands without a descriptor remain available to human/extension callers but are not implicitly exposed to AI.
+
 Duplicate name+version registration is rejected unless an explicit override/dev policy exists.
 
 ## Event registration
