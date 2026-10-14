@@ -75,6 +75,27 @@ test('DXF underlay renders closed HATCH polyline boundaries including bulged arc
   assert.ok((svg.match(/L/g) ?? []).length > 10, 'bulged arc is approximated by enough line segments for a smooth underlay')
 })
 
+test('DXF underlay renders closed edge-based HATCH loops with line and circular arc edges', () => {
+  const entities = [
+    '0', 'HATCH', '91', '1', '92', '1', '93', '4',
+    '72', '1', '10', '0', '20', '0', '11', '100', '21', '0',
+    '72', '2', '10', '100', '20', '50', '40', '50', '50', '270', '51', '90', '73', '1',
+    '72', '1', '10', '100', '20', '100', '11', '0', '21', '100',
+    '72', '1', '10', '0', '20', '100', '11', '0', '21', '0',
+    '0', 'HATCH', '91', '1', '92', '1', '93', '2',
+    '72', '1', '10', '200', '20', '0', '11', '300', '21', '0',
+  ].join('\n')
+  const result = importDxfUnderlay(dxf(4, entities))
+  const svg = decodeURIComponent(result.dataUrl)
+  const paths = svg.match(/<path d="[^"]+"\/>/g) ?? []
+
+  assert.equal(result.imported_entities, 1)
+  assert.equal(result.skipped_entities, 1, 'incomplete edge loops are skipped and counted')
+  assert.equal(paths.length, 1)
+  assert.ok(paths[0].includes(' Z'), 'the edge boundary is closed')
+  assert.ok((paths[0].match(/L/g) ?? []).length > 30, 'the arc is sampled smoothly between line edges')
+})
+
 test('DXF underlay renders positive and negative LWPOLYLINE bulges', () => {
   const entities = [
     '0', 'LWPOLYLINE', '70', '1', '10', '0', '20', '0', '42', '1', '10', '100', '20', '0', '10', '100', '20', '100', '10', '0', '20', '100',

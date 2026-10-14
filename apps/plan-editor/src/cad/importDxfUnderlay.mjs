@@ -259,6 +259,83 @@ function hatchPolylineBoundaries(entity) {
   return paths
 }
 
+function hatchArcPoints(centerX, centerY, radius, startDegrees, endDegrees, counterClockwise) {
+  if (![centerX, centerY, radius, startDegrees, endDegrees].every(Number.isFinite) || radius <= 0) return null
+  const fullCircle = Math.abs(endDegrees - startDegrees) >= 360 - 1e-8
+  const direction = counterClockwise ? 1 : -1
+  let sweep = ((endDegrees - startDegrees) * direction % 360 + 360) % 360
+  if (fullCircle) sweep = 360
+  if (sweep < 1e-8) return null
+  const segments = Math.max(4, Math.min(720, Math.ceil(sweep / 5)))
+  return Array.from({ length: segments + 1 }, (_, index) => {
+    const angle = (startDegrees + direction * sweep * index / segments) * Math.PI / 180
+    return [centerX + Math.cos(angle) * radius, centerY + Math.sin(angle) * radius]
+  })
+}
+
+function hatchEdgeBoundaries(pathPairs) {
+  const countPair = pathPairs.find(pair => pair.code === 93)
+  const count = Math.floor(Number(countPair?.value))
+  if (!Number.isFinite(count) || count < 1 || count > 10000) return []
+  const countIndex = pathPairs.indexOf(countPair)
+  const edgeStarts = []
+  for (let index = countIndex + 1; index < pathPairs.length; index += 1) {
+    if (pathPairs[index].code === 72) edgeStarts.push(index)
+  }
+  if (edgeStarts.length !== count) return []
+
+  const points = []
+  for (let edgeIndex = 0; edgeIndex < edgeStarts.length; edgeIndex += 1) {
+    const edgeStart = edgeStarts[edgeIndex]
+    const edgeEnd = edgeStarts[edgeIndex + 1] ?? pathPairs.length
+    const edgeType = Number(pathPairs[edgeStart].value)
+    const edgePairs = pathPairs.slice(edgeStart + 1, edgeEnd)
+    const value = code => {
+      const pair = edgePairs.find(candidate => candidate.code === code)
+      const parsed = pair ? Number(pair.value) : NaN
+      return Number.isFinite(parsed) ? parsed : null
+    }
+    let edgePoints
+    if (edgeType === 1) {
+      const startX = value(10), startY = value(20), endX = value(11), endY = value(21)
+      edgePoints = [startX, startY, endX, endY].every(Number.isFinite) ? [[startX, startY], [endX, endY]] : null
+    } else if (edgeType === 2) {
+      edgePoints = hatchArcPoints(value(10), value(20), value(40), value(50), value(51), value(73) !== 0)
+    } else {
+      return []
+    }
+    if (!edgePoints?.length) return []
+    for (const point of edgePoints) {
+      const previous = points.at(-1)
+      if (!previous || Math.hypot(point[0] - previous[0], point[1] - previous[1]) > 1e-8) points.push(point)
+    }
+  }
+  if (points.length < 3) return []
+  const first = points[0], last = points.at(-1)
+  if (Math.hypot(first[0] - last[0], first[1] - last[1]) <= 1e-8) points.pop()
+  return points.length >= 3 ? [{ kind: 'polyline', points, closed: true }] : []
+}
+
+function hatchBoundaries(entity) {
+  const pairs = entity.pairs
+  const paths = []
+  let cursor = 0
+  while (cursor < pairs.length) {
+    while (cursor < pairs.length && pairs[cursor].code !== 92) cursor += 1
+    if (cursor >= pairs.length) break
+    const flags = Number(pairs[cursor]?.value)
+    cursor += 1
+    const nextPath = pairs.findIndex((pair, index) => index >= cursor && pair.code === 92)
+    const pathEnd = nextPath < 0 ? pairs.length : nextPath
+    const pathPairs = pairs.slice(cursor, pathEnd)
+    cursor = pathEnd
+    if (!Number.isFinite(flags)) continue
+    const boundaries = (flags & 2) !== 0 ? hatchPolylineBoundaries({ pairs: [{ code: 92, value: String(flags) }, ...pathPairs] }) : hatchEdgeBoundaries(pathPairs)
+    paths.push(...boundaries)
+  }
+  return paths
+}
+
 function resolveDrawingUnits(pairs) {
   for (let index = 0; index < pairs.length; index += 1) {
     if (pairs[index].code !== 9 || pairs[index].value !== '$INSUNITS') continue
@@ -307,7 +384,7 @@ function shapesForEntity(entity) {
     return [{ kind: 'polyline', points: approximateBulgedPolyline(vertices, closed), closed }]
   }
   if (entity.type === 'HATCH') {
-    const boundaries = hatchPolylineBoundaries(entity)
+    const boundaries = hatchBoundaries(entity)
     return boundaries.length ? boundaries : null
   }
   if (entity.type === 'SPLINE') {
