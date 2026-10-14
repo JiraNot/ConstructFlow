@@ -86,6 +86,19 @@ function createSyntheticStraightStairProject() {
   return serializeProject(created.updatedProject)
 }
 
+function createMultiObjectDeleteProject() {
+  let project = createEmptyProjectDocument(randomUUID(), 'Atomic browser delete acceptance')
+  for (const [index, y] of [0, 3000].entries()) {
+    const result = CommandBus.execute(project, 'CreateWall', {
+      id: randomUUID(), mark: `DELETE-${index + 1}`, level_id: project.project.active_level_id,
+      start_point_mm: [0, y], end_point_mm: [4000, y], thickness_mm: 100, height_mm: 2800,
+    })
+    if (result.result.status !== 'success') throw new Error(`Could not create delete-test wall: ${result.result.errors?.join(', ')}`)
+    project = result.updatedProject
+  }
+  return serializeProject(project)
+}
+
 function createSlabAndRoofTypeAssignmentProject() {
   let project = createEmptyProjectDocument(randomUUID(), 'Surface type assignment acceptance')
   const levelId = project.project.active_level_id
@@ -1389,6 +1402,31 @@ test('site survey CSV preserves measured and assumed points through project relo
   await expect(selectedSurveyPoint).toContainText('Deed sketch estimate')
   await page.locator('.cf-more-menu summary').click()
   await expect(page.getByRole('status').filter({ hasText: 'Survey · client-site-survey · 2 วัดจริง / 1 สมมติ' })).toBeVisible()
+})
+
+test('Project Browser deletes a multi-selection atomically with one Undo and Redo', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
+  await seedLocalProjectSnapshot(page, createMultiObjectDeleteProject())
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+
+  const browser = page.getByLabel('Project Browser')
+  await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  const rows = browser.locator('.cf-browser-tree [data-object-type="architecture.wall"]')
+  await expect(rows).toHaveCount(2)
+  await rows.nth(0).locator('.cf-browser-object').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await rows.nth(1).locator('.cf-browser-object').click({ modifiers: ['Control'] })
+
+  await page.keyboard.press('Delete')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await expect(rows).toHaveCount(0)
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(rows).toHaveCount(2)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(rows).toHaveCount(0)
 })
 
 test('Project Browser numeric group move commits once and preserves UUIDs through Undo/Redo', async ({ page }) => {

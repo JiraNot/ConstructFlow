@@ -46,6 +46,7 @@ import { usePlanPlacementCommands } from './app/usePlanPlacementCommands.js'
 import { usePropertiesPanelActions } from './app/usePropertiesPanelActions.js'
 import { usePlanAuthoringCommands } from './app/usePlanAuthoringCommands.js'
 import { useGridAuthoringCommands } from './app/useGridAuthoringCommands.js'
+import { useProjectBrowserCommands } from './app/useProjectBrowserCommands.js'
 import { useLocalProjectPersistence } from './app/useLocalProjectPersistence.js'
 import { useProjectFileActions, type ProjectFileAccess } from './app/useProjectFileActions.js'
 import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
@@ -251,12 +252,21 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   })
   const activeVisibilityScopeId = `${viewMode}:${project.project.active_level_id}`
   const hiddenObjectIds = useMemo(() => new Set(project.view_settings?.hidden_object_ids_by_scope[activeVisibilityScopeId] ?? []), [project.view_settings, activeVisibilityScopeId])
+  const {
+    handleDeleteObjects, handleDeleteObject, handleCopyObjects, handlePasteObjects,
+    handleToggleObjectVisibility, handleShowAllObjects, handleSaveViewTemplate,
+    handleApplyViewTemplate, handleDeleteViewTemplate,
+  } = useProjectBrowserCommands({
+    project, selectedId, selectedIds, dispatchCommandBatch, setSelectedId, setSelectedIds, selectObjects,
+    visibilityScope: { id: activeVisibilityScopeId, hiddenObjectIds },
+    setActiveLevelType: levelId => setActiveColumnTopLevelId(nextHigherLevelId(project, levelId)),
+    activeViewId: viewMode, setActiveViewId: setViewMode,
+    clearTransformPreview: () => setAlignmentPreview(null), setFileFeedback,
+  })
   const viewProject = useMemo(() => {
     if (!hiddenObjectIds.size) return project
     return { ...project, objects: Object.fromEntries(Object.entries(project.objects).filter(([id]) => !hiddenObjectIds.has(id))) }
   }, [project, hiddenObjectIds])
-  const copiedObjectIdsRef = useRef<string[]>([])
-  const pasteCountRef = useRef(0)
   const [cursorCoords_mm, setCursorCoords_mm] = useState<[number, number]>([0, 0])
   const [snapKind, setSnapKind] = useState<string>('Free')
 
@@ -492,146 +502,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     }
     if(isColumnObject(object)&&Math.hypot(...deltaWorldMm)>0.1){const [x,y]=object.module_data.location_mm;handleMoveColumn(objectId,[x+deltaWorldMm[0],y+deltaWorldMm[1]])}
   }
-
-  // Delete objects under a drag eraser or multi-selection; hosted dependents are removed by the normal object command.
-  const handleDeleteObjects = (objectIds: string[]) => {
-    let current = project
-    const envelopes: CommandEnvelope[] = []
-    let failureReason: string | null = null
-    for (const objectId of [...new Set(objectIds)]) {
-      if (!current.objects[objectId]) continue
-      const result = CommandBus.execute(current, 'DeleteObject', { object_id: objectId })
-      if (result.result.status !== 'success') {
-        failureReason = result.result.errors?.[0] ?? 'ลบชิ้นงานไม่สำเร็จ'
-        continue
-      }
-      current = result.updatedProject
-      if (result.emittedEnvelope) envelopes.push(result.emittedEnvelope)
-    }
-    if (current !== project) {
-      setProject(current); setSelectedId(null); setSelectedIds([])
-      setCommandQueue(queue => [...queue, ...envelopes])
-    } else if (failureReason) {
-      setFileFeedback(failureReason)
-    }
-  }
-  const handleDeleteObject = (objectId: string) => handleDeleteObjects([objectId])
-
-  const handleCopyObjects = (objectIds: string[]) => {
-    const ids = [...new Set(objectIds)].filter(id => Boolean(project.objects[id]))
-    if (!ids.length) return
-    copiedObjectIdsRef.current = ids
-    pasteCountRef.current = 0
-    setFileFeedback(`คัดลอก ${ids.length} ชิ้นแล้ว · Ctrl+V เพื่อวาง`)
-  }
-
-  const handlePasteObjects = () => {
-    const objectIds = copiedObjectIdsRef.current.filter(id => Boolean(project.objects[id]))
-    if (!objectIds.length) return
-    const id_map = Object.fromEntries(objectIds.map(id => [id, crypto.randomUUID()]))
-    const distance = 500 * (pasteCountRef.current + 1)
-    const result = dispatchCommandBatch([{ name: 'DuplicateObjects', input: { object_ids: objectIds, delta_x_mm: distance, delta_y_mm: 0, id_map } }])
-    if (result.status !== 'success') {
-      setFileFeedback(result.errors?.[0] ?? 'คัดลอกวัตถุไม่สำเร็จ')
-      return
-    }
-    pasteCountRef.current += 1
-    const ids = result.results[0]?.affected_object_ids ?? []
-    if (ids.length) selectObjects(ids, ids[0])
-    setFileFeedback(`วางสำเนา ${ids.length} ชิ้นแล้ว · เยื้องจากชุดต้นฉบับ ${distance} มม.`)
-  }
-
-  const handleToggleObjectVisibility = (objectId: string) => {
-    const next = new Set(hiddenObjectIds)
-    if (next.has(objectId)) next.delete(objectId)
-    else next.add(objectId)
-    const result = dispatchCommandBatch([{ name: 'SetViewVisibility', input: {
-      scope_id: activeVisibilityScopeId,
-      hidden_object_ids: [...next],
-    } }])
-    if (result.status === 'success' && !hiddenObjectIds.has(objectId)) {
-      setSelectedIds(current => current.filter(id => id !== objectId))
-      setSelectedId(current => current === objectId ? null : current)
-    }
-  }
-
-  const handleShowAllObjects = () => {
-    if (!hiddenObjectIds.size) return
-    dispatchCommandBatch([{ name: 'SetViewVisibility', input: {
-      scope_id: activeVisibilityScopeId,
-      hidden_object_ids: [],
-    } }])
-  }
-
-  const handleSaveViewTemplate = (name: string): boolean => {
-    const result = dispatchCommandBatch([{ name: 'SaveViewTemplate', input: { template: {
-      id: crypto.randomUUID(),
-      name,
-      view_id: viewMode,
-      level_id: project.project.active_level_id,
-      hidden_object_ids: [...hiddenObjectIds],
-    } } }])
-    if (result.status !== 'success') setFileFeedback((result.errors ?? []).join('\n'))
-    return result.status === 'success'
-  }
-
-  const handleApplyViewTemplate = (template: ProjectViewTemplate): boolean => {
-    const commands: CommandRequest[] = []
-    if (project.project.active_level_id !== template.level_id) commands.push({ name: 'SetWorkingLevel', input: { level_id: template.level_id } })
-    commands.push({ name: 'SetViewVisibility', input: {
-      scope_id: `${template.view_id}:${template.level_id}`,
-      hidden_object_ids: template.hidden_object_ids,
-    } })
-    const result = dispatchCommandBatch(commands)
-    if (result.status !== 'success') {
-      setFileFeedback((result.errors ?? []).join('\n'))
-      return false
-    }
-    if (project.project.active_level_id !== template.level_id) setActiveColumnTopLevelId(nextHigherLevelId(result.updatedProject, template.level_id))
-    setViewMode(template.view_id)
-    setAlignmentPreview(null)
-    return true
-  }
-
-  const handleDeleteViewTemplate = (templateId: string): boolean => {
-    const result = dispatchCommandBatch([{ name: 'DeleteViewTemplate', input: { template_id: templateId } }])
-    if (result.status !== 'success') setFileFeedback((result.errors ?? []).join('\n'))
-    return result.status === 'success'
-  }
-
-  useEffect(() => {
-    const isEditingText = (target: EventTarget | null) => target instanceof HTMLElement
-      && (target.isContentEditable || Boolean(target.closest('input, textarea, select, [contenteditable="true"]')))
-    const handleClipboardShortcuts = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || isEditingText(event.target) || document.querySelector('[role="dialog"]')) return
-      if (event.key.toLowerCase() === 'c') {
-        const ids = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
-        if (!ids.length) return
-        event.preventDefault()
-        handleCopyObjects(ids)
-      } else if (event.key.toLowerCase() === 'v' && copiedObjectIdsRef.current.length) {
-        event.preventDefault()
-        handlePasteObjects()
-      }
-    }
-    window.addEventListener('keydown', handleClipboardShortcuts)
-    return () => window.removeEventListener('keydown', handleClipboardShortcuts)
-  }, [selectedId, selectedIds, project])
-
-  // Delete the selected object from the plan without intercepting text editing.
-  useEffect(() => {
-    const handleDeleteShortcut = (e: KeyboardEvent) => {
-      if (e.key !== 'Delete' && e.key !== 'Backspace') return
-      if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('[role="dialog"]')) return
-      const target = e.target
-      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable="true"]'))) return
-      if (!selectedId && selectedIds.length === 0) return
-      e.preventDefault()
-      handleDeleteObjects(selectedIds.length ? selectedIds : selectedId ? [selectedId] : [])
-    }
-    window.addEventListener('keydown', handleDeleteShortcut)
-    return () => window.removeEventListener('keydown', handleDeleteShortcut)
-  }, [selectedId, selectedIds, project, handleDeleteObject])
 
   const handleExportTakeoff = () => {
     const escape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
