@@ -103,3 +103,45 @@ test('beam endpoint edits recompute span and detach a moved endpoint from its ol
   assert.equal(updated.updatedProject.objects[beamId].module_data.span_mm, Math.round(Math.hypot(3500, 500)))
   assert.equal(updated.updatedProject.objects[beamId].module_data.end_column_id, undefined)
 })
+
+test('continuous beam endpoint edits keep the middle support in references and undo history', () => {
+  let project = createEmptyProjectDocument(crypto.randomUUID())
+  const levelId = project.project.active_level_id
+  const columnIds = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()]
+  for (const [index, x] of [0, 4000, 8000].entries()) {
+    const result = CommandBus.execute(project, 'CreateColumn', {
+      id: columnIds[index], mark: `C${index + 1}`, level_id: levelId,
+      location_mm: [x, 0, 0], section_mm: [200, 200],
+    })
+    assert.equal(result.result.status, 'success')
+    project = result.updatedProject
+  }
+  const beamId = crypto.randomUUID()
+  const created = CommandBus.execute(project, 'CreateBeam', {
+    id: beamId, mark: 'B1', level_id: levelId,
+    start_point_mm: [0, 0, 0], end_point_mm: [8000, 0, 0],
+    start_column_id: columnIds[0], middle_support_column_id: columnIds[1], end_column_id: columnIds[2],
+    beam_system: 'continuous', continuity_type: 'interior_span',
+  })
+  assert.equal(created.result.status, 'success')
+  const session = new ProjectCommandSession(created.updatedProject)
+  const continuous = session.project
+  const detached = session.execute([{ name: 'UpdateBeamEndpoints', input: {
+    object_id: beamId, start_point_mm: [0, 0], end_point_mm: [8000, 0],
+    start_column_id: columnIds[0], middle_support_column_id: null, end_column_id: columnIds[2],
+    beam_system: 'simple', continuity_type: 'simple_span',
+  } }])
+  assert.equal(detached.status, 'success')
+  assert.equal(session.project.objects[beamId].module_data.middle_support_column_id, undefined)
+  assert.deepEqual(session.project.objects[beamId].host_refs, [columnIds[0], columnIds[2]])
+  assert.deepEqual(session.undo(), continuous)
+  assert.deepEqual(session.project.objects[beamId].host_refs, columnIds)
+  assert.equal(session.project.relationships.filter(rel => rel.source_id === beamId && rel.role === 'beam_column_connection').length, 3)
+  assert.deepEqual(session.redo(), detached.updatedProject)
+  assert.deepEqual(session.project.objects[beamId].host_refs, [columnIds[0], columnIds[2]])
+  const deletedSupport = CommandBus.execute(session.project, 'DeleteObject', { object_id: columnIds[1] })
+  assert.equal(deletedSupport.result.status, 'success')
+  assert.equal(deletedSupport.updatedProject.objects[beamId].module_data.middle_support_column_id, undefined)
+  assert.ok(!deletedSupport.updatedProject.objects[beamId].host_refs.includes(columnIds[1]))
+  assert.ok(!deletedSupport.updatedProject.relationships.some(rel => rel.source_id === beamId && rel.target_id === columnIds[1]))
+})

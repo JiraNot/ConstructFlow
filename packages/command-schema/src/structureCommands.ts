@@ -230,7 +230,10 @@ export interface UpdateBeamEndpointsInput {
   start_point_mm: [number, number]
   end_point_mm: [number, number]
   start_column_id?: string | null
+  middle_support_column_id?: string | null
   end_column_id?: string | null
+  beam_system?: 'simple' | 'continuous' | 'cantilever'
+  continuity_type?: 'simple_span' | 'end_span' | 'interior_span' | 'cantilever'
 }
 
 export interface UpdateBeamVerticalReferenceInput {

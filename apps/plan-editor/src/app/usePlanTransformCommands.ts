@@ -9,6 +9,16 @@ import { computeAlignmentDelta, computeOffsetDelta, joinLineSegments, reflectPla
 
 type TransformPreview = { project: ProjectDocument; ids: string[]; commands: CommandRequest[]; sourceIds: string[]; description: string }
 type EditorView = 'plan' | 'framing' | 'roofplan' | 'north' | 'south' | 'east' | 'west' | 'rcp' | 'model3d'
+type PlanPoint = [number, number]
+
+const planDistance = (a: PlanPoint, b: PlanPoint) => Math.hypot(a[0] - b[0], a[1] - b[1])
+const beamEndpointColumn = (data: Record<string, unknown>, point: PlanPoint): string | null => {
+  const start = data.start_point_mm as PlanPoint | undefined
+  const end = data.end_point_mm as PlanPoint | undefined
+  if (start && planDistance(start, point) <= 1) return typeof data.start_column_id === 'string' ? data.start_column_id : null
+  if (end && planDistance(end, point) <= 1) return typeof data.end_column_id === 'string' ? data.end_column_id : null
+  return null
+}
 
 interface UsePlanTransformCommandsOptions {
   project: ProjectDocument
@@ -200,11 +210,28 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
     const data = object.module_data as Record<string, unknown>
     const start = data.start_point_mm as [number, number] | undefined
     const end = data.end_point_mm as [number, number] | undefined
-    const segments = start && end ? splitLineAtRatio(start, end, ratio) : null
-    if (!segments) { setFileFeedback('ตำแหน่ง Split ต้องอยู่ภายในเส้น และแต่ละช่วงต้องยาวอย่างน้อย 1 มม.'); return }
     if (!['architecture.wall', 'structure.beam', 'architecture.room_separator'].includes(object.object_type)) {
       setFileFeedback('Split รองรับผนัง คาน และเส้นแบ่งห้องที่เลือกได้ครั้งละหนึ่งชิ้น'); return
     }
+    let splitRatio = ratio
+    if (object.object_type === 'structure.beam' && typeof data.middle_support_column_id === 'string') {
+      const support = project.objects[data.middle_support_column_id]
+      if (!support || support.object_type !== 'structure.column' || !start || !end) {
+        setFileFeedback('คานต่อเนื่องอ้างอิงเสากลางที่ไม่พบหรือใช้ไม่ได้ จึง Split อย่างปลอดภัยไม่ได้'); return
+      }
+      const supportPoint = (support.module_data as Record<string, unknown>).location_mm as PlanPoint | undefined
+      const dx = end[0] - start[0], dy = end[1] - start[1], lengthSq = dx * dx + dy * dy
+      if (!supportPoint || lengthSq < 1) { setFileFeedback('ตำแหน่งเสากลางของคานไม่ถูกต้อง'); return }
+      const projected = ((supportPoint[0] - start[0]) * dx + (supportPoint[1] - start[1]) * dy) / lengthSq
+      const closest: PlanPoint = [start[0] + dx * projected, start[1] + dy * projected]
+      const length = Math.sqrt(lengthSq)
+      if (!Number.isFinite(ratio) || projected <= 0 || projected >= 1 || planDistance(supportPoint, closest) > 5 || Math.abs(projected - ratio) * length > 5) {
+        setFileFeedback('Split คานต่อเนื่องได้ที่เสากลางเท่านั้น · ปรับเปอร์เซ็นต์ให้ตรงตำแหน่งเสา'); return
+      }
+      splitRatio = projected
+    }
+    const segments = start && end ? splitLineAtRatio(start, end, splitRatio) : null
+    if (!segments) { setFileFeedback('ตำแหน่ง Split ต้องอยู่ภายในเส้น และแต่ละช่วงต้องยาวอย่างน้อย 1 มม.'); return }
     if (object.object_type === 'architecture.wall') {
       const openings = Object.values(project.objects).filter(candidate =>
         (candidate.object_type === 'door_window.door' || candidate.object_type === 'door_window.window') &&
@@ -221,9 +248,10 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
         { name: 'UpdateWallEndpoints', input: { object_id: newId, start_point_mm: segments.split, end_point_mm: segments.end } },
       )
     } else if (object.object_type === 'structure.beam') {
+      const middleSupportColumnId = typeof data.middle_support_column_id === 'string' ? data.middle_support_column_id : null
       commands.push(
-        { name: 'UpdateBeamEndpoints', input: { object_id: objectId, start_point_mm: segments.start, end_point_mm: segments.split, start_column_id: data.start_column_id as string | null ?? null, end_column_id: null } },
-        { name: 'UpdateBeamEndpoints', input: { object_id: newId, start_point_mm: segments.split, end_point_mm: segments.end, start_column_id: null, end_column_id: data.end_column_id as string | null ?? null } },
+        { name: 'UpdateBeamEndpoints', input: { object_id: objectId, start_point_mm: segments.start, end_point_mm: segments.split, start_column_id: data.start_column_id as string | null ?? null, middle_support_column_id: null, end_column_id: middleSupportColumnId ?? null, beam_system: 'simple', continuity_type: 'simple_span' } },
+        { name: 'UpdateBeamEndpoints', input: { object_id: newId, start_point_mm: segments.split, end_point_mm: segments.end, start_column_id: middleSupportColumnId ?? null, middle_support_column_id: null, end_column_id: data.end_column_id as string | null ?? null, beam_system: 'simple', continuity_type: 'simple_span' } },
       )
     } else {
       commands.push(
@@ -258,8 +286,8 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
         ids.includes(String((candidate.module_data as Record<string, unknown>).wall_id ?? '')))
       if (hostedOpenings.length) { setFileFeedback('Join ผนังที่มีประตูหรือหน้าต่างไม่ได้ · ต้องย้าย host ของช่องเปิดก่อน'); return }
     }
-    if (first.object_type === 'structure.beam' && [firstData.start_column_id, firstData.end_column_id, secondData.start_column_id, secondData.end_column_id].some(Boolean)) {
-      setFileFeedback('Join คานที่เชื่อมกับเสาไม่ได้ · ต้องจัดการจุดรองรับกลางก่อน'); return
+    if (first.object_type === 'structure.beam' && (firstData.middle_support_column_id || secondData.middle_support_column_id)) {
+      setFileFeedback('Join คานที่มีเสากลางอยู่แล้วไม่ได้ · แบ่งต่อเนื่องได้ครั้งละหนึ่งเสากลาง'); return
     }
     const normalize = (data: Record<string, unknown>) => {
       const copy = { ...data }
@@ -274,6 +302,43 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
       secondData.start_point_mm as [number, number], secondData.end_point_mm as [number, number],
     )
     if (!line) { setFileFeedback('Join ต้องเป็นเส้นตรงแนวเดียวกันที่ปลายแตะกัน'); return }
+    let joinedBeamSupports: { start: string | null; middle: string | null; end: string | null } | null = null
+    if (first.object_type === 'structure.beam') {
+      const firstStart = firstData.start_point_mm as PlanPoint
+      const firstEnd = firstData.end_point_mm as PlanPoint
+      const secondStart = secondData.start_point_mm as PlanPoint
+      const secondEnd = secondData.end_point_mm as PlanPoint
+      const sharedPairs = [
+        [firstStart, secondStart], [firstStart, secondEnd], [firstEnd, secondStart], [firstEnd, secondEnd],
+      ].filter(([a, b]) => planDistance(a as PlanPoint, b as PlanPoint) <= 1) as [PlanPoint, PlanPoint][]
+      if (sharedPairs.length !== 1) { setFileFeedback('Join คานต้องมีจุดต่อร่วมที่กำหนดได้แน่นอน'); return }
+      const [firstJoint, secondJoint] = sharedPairs[0]
+      const firstJointColumn = beamEndpointColumn(firstData, firstJoint)
+      const secondJointColumn = beamEndpointColumn(secondData, secondJoint)
+      if (firstJointColumn !== secondJointColumn) {
+        setFileFeedback('Join คานที่รองรับด้วยเสาได้เมื่อทั้งสองช่วงอ้างอิงเสากลางต้นเดียวกัน'); return
+      }
+      const middle = firstJointColumn
+      if (middle) {
+        const support = project.objects[middle]
+        const location = (support?.module_data as Record<string, unknown> | undefined)?.location_mm as PlanPoint | undefined
+        if (!location || planDistance(location, firstJoint) > 5) {
+          setFileFeedback('จุดต่อของคานต้องอยู่กึ่งกลางเสารองรับเดียวกันภายในระยะ 5 มม.'); return
+        }
+      }
+      const outerColumnAt = (point: PlanPoint): string | null =>
+        beamEndpointColumn(firstData, point) ?? beamEndpointColumn(secondData, point)
+      const startColumn = outerColumnAt(line.start)
+      const endColumn = outerColumnAt(line.end)
+      if ([startColumn, middle, endColumn].some(Boolean)) {
+        for (const id of [startColumn, middle, endColumn]) {
+          if (id && project.objects[id]?.object_type !== 'structure.column') {
+            setFileFeedback(`Join คานอ้างอิงเสารองรับ ${id} ที่ไม่พบ`); return
+          }
+        }
+      }
+      joinedBeamSupports = { start: startColumn, middle, end: endColumn }
+    }
     const commands: CommandRequest[] = first.object_type === 'architecture.wall'
       ? [
           { name: 'UpdateWallEndpoints', input: { object_id: first.id, start_point_mm: line.start, end_point_mm: line.end } },
@@ -281,7 +346,10 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
         ]
       : first.object_type === 'structure.beam'
         ? [
-            { name: 'UpdateBeamEndpoints', input: { object_id: first.id, start_point_mm: line.start, end_point_mm: line.end, start_column_id: null, end_column_id: null } },
+            { name: 'UpdateBeamEndpoints', input: { object_id: first.id, start_point_mm: line.start, end_point_mm: line.end,
+              start_column_id: joinedBeamSupports?.start ?? null, middle_support_column_id: joinedBeamSupports?.middle ?? null, end_column_id: joinedBeamSupports?.end ?? null,
+              ...(joinedBeamSupports?.middle ? { beam_system: 'continuous', continuity_type: 'interior_span' } : {}),
+            } },
             { name: 'DeleteObject', input: { object_id: second.id } },
           ]
         : [

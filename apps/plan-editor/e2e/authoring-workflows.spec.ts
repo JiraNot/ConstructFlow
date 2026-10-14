@@ -126,6 +126,31 @@ function createSlabAndRoofTypeAssignmentProject() {
   return serializeProject(roof.updatedProject)
 }
 
+function createContinuousBeamSplitJoinFixture() {
+  let project = createEmptyProjectDocument(randomUUID(), 'Continuous beam split and join acceptance')
+  const levelId = project.project.active_level_id
+  const columnIds = [randomUUID(), randomUUID(), randomUUID()]
+  for (const [index, x] of [0, 4000, 8000].entries()) {
+    const result = CommandBus.execute(project, 'CreateColumn', {
+      id: columnIds[index], mark: `C${index + 1}`, level_id: levelId,
+      location_mm: [x, 0, 0], section_mm: [200, 200],
+    })
+    if (result.result.status !== 'success') throw new Error(`Could not create continuous-beam support: ${result.result.errors?.join(', ')}`)
+    project = result.updatedProject
+  }
+  const beamType = project.types.find(type => type.object_type === 'structure.beam' && type.name === 'B1')
+  if (!beamType) throw new Error('Default B1 beam type is required for continuous-beam acceptance')
+  const beamId = randomUUID()
+  const beam = CommandBus.execute(project, 'CreateBeam', {
+    id: beamId, type_id: beamType.id, mark: beamType.name, level_id: levelId,
+    start_point_mm: [0, 0, 0], end_point_mm: [8000, 0, 0],
+    start_column_id: columnIds[0], middle_support_column_id: columnIds[1], end_column_id: columnIds[2],
+    beam_system: 'continuous', continuity_type: 'interior_span',
+  })
+  if (beam.result.status !== 'success') throw new Error(`Could not create continuous-beam fixture: ${beam.result.errors?.join(', ')}`)
+  return { projectJson: serializeProject(beam.updatedProject), beamId, columnIds }
+}
+
 async function seedLocalProjectSnapshot(page: Page, projectJson: string) {
   await page.evaluate(async json => {
     await new Promise<void>((resolve, reject) => {
@@ -1778,6 +1803,84 @@ test('Project Browser splits and rejoins an unhosted beam with preview and UUID-
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
   await expect(beams).toHaveCount(1)
   await expect(page.locator(`li[data-object-id="${originalId}"]`)).toBeVisible()
+})
+
+test('Project Browser splits a continuous beam at its middle support and rejoins it atomically', async ({ page }) => {
+  test.setTimeout(60_000)
+  const fixture = createContinuousBeamSplitJoinFixture()
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await seedLocalProjectSnapshot(page, fixture.projectJson)
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
+
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const beams = page.locator('li[data-object-type="structure.beam"]')
+  await expect(beams).toHaveCount(1)
+  await page.locator(`li[data-object-id="${fixture.beamId}"] .cf-browser-object`).click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.getByText('แก้ไขและทำสำเนา · 1 ชิ้น').click()
+  await page.getByRole('button', { name: 'แสดงตัวอย่าง Split' }).click()
+  await expect(page.getByText('Preview การแปลง')).toBeVisible()
+  await page.getByRole('button', { name: 'ยืนยัน · Undo ได้' }).click()
+
+  await expect(beams).toHaveCount(2)
+  const splitIds = await beams.evaluateAll(rows => rows.map(row => row.getAttribute('data-object-id')))
+  expect(splitIds).toContain(fixture.beamId)
+  await expect.poll(async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return false
+    const current = JSON.parse(raw) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+    const currentBeams = splitIds.map(id => current.objects[id!])
+    return currentBeams.every(beam => beam && beam.module_data.middle_support_column_id === undefined && beam.module_data.beam_system === 'simple')
+  }).toBe(true)
+  const splitProjectJson = await readStoredProjectJson(page)
+  expect(splitProjectJson).toBeTruthy()
+  const splitProject = JSON.parse(splitProjectJson!) as { objects: Record<string, { module_data: Record<string, unknown>; host_refs: string[] }> }
+  for (const id of splitIds) {
+    const beam = splitProject.objects[id!]
+    expect(beam.module_data.middle_support_column_id).toBeUndefined()
+    expect(beam.module_data.beam_system).toBe('simple')
+  }
+  const splitBeams = splitIds.map(id => splitProject.objects[id!])
+  expect(splitBeams.some(beam => beam.module_data.start_column_id === fixture.columnIds[1] || beam.module_data.end_column_id === fixture.columnIds[1])).toBe(true)
+
+  await beams.nth(0).locator('.cf-browser-object').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await beams.nth(1).locator('.cf-browser-object').click({ modifiers: ['Control'] })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
+  await page.getByRole('button', { name: 'แสดงตัวอย่าง Join' }).click()
+  await expect(page.getByText('Preview การแปลง')).toBeVisible()
+  await page.getByRole('button', { name: 'ยืนยัน · Undo ได้' }).click()
+
+  await expect(beams).toHaveCount(1)
+  await expect(page.locator(`li[data-object-id="${fixture.beamId}"]`)).toBeVisible()
+  await expect.poll(async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return false
+    const current = JSON.parse(raw) as { objects: Record<string, { module_data: Record<string, unknown> }> }
+    const data = current.objects[fixture.beamId]?.module_data
+    return data?.middle_support_column_id === fixture.columnIds[1] && data.beam_system === 'continuous'
+  }).toBe(true)
+  const joinedProjectJson = await readStoredProjectJson(page)
+  expect(joinedProjectJson).toBeTruthy()
+  const joinedProject = JSON.parse(joinedProjectJson!) as { objects: Record<string, { module_data: Record<string, unknown>; host_refs: string[] }> }
+  const joinedBeam = joinedProject.objects[fixture.beamId]
+  expect(joinedBeam.module_data.middle_support_column_id).toBe(fixture.columnIds[1])
+  expect(joinedBeam.module_data.beam_system).toBe('continuous')
+  expect(joinedBeam.module_data.continuity_type).toBe('interior_span')
+  for (const columnId of fixture.columnIds) expect(joinedBeam.host_refs).toContain(columnId)
+
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect(beams).toHaveCount(2)
+  for (const id of splitIds) await expect(page.locator(`li[data-object-id="${id}"]`)).toBeVisible()
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect(beams).toHaveCount(1)
+  const redoneProjectJson = await readStoredProjectJson(page)
+  expect(redoneProjectJson).toBeTruthy()
+  const redoneProject = JSON.parse(redoneProjectJson!) as { objects: Record<string, { module_data: Record<string, unknown>; host_refs: string[] }> }
+  expect(redoneProject.objects[fixture.beamId].module_data.middle_support_column_id).toBe(fixture.columnIds[1])
 })
 
 test('Project Browser previews align, offset, and mirror, then joins line objects atomically', async ({ page }) => {

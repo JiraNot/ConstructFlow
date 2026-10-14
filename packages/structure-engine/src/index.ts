@@ -879,18 +879,22 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       const span_mm = Math.round(Math.hypot(ex - sx, ey - sy))
       if (![sx, sy, ex, ey].every(Number.isFinite) || span_mm < 1) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Beam endpoints must define a finite span of at least 1 mm'] }, updatedProject: project }
       const startColumnId = update.start_column_id === undefined ? target.module_data.start_column_id : update.start_column_id ?? undefined
+      const middleSupportColumnId = update.middle_support_column_id === undefined ? target.module_data.middle_support_column_id : update.middle_support_column_id ?? undefined
       const endColumnId = update.end_column_id === undefined ? target.module_data.end_column_id : update.end_column_id ?? undefined
-      for (const id of [startColumnId, endColumnId]) if (id && !isColumnObject(updated.objects[id])) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Beam endpoint column ${id} not found`] }, updatedProject: project }
+      for (const id of [startColumnId, middleSupportColumnId, endColumnId]) if (id && !isColumnObject(updated.objects[id])) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Beam support column ${id} not found`] }, updatedProject: project }
       const start: [number, number, number] = [sx, sy, target.module_data.start_point_mm[2] ?? 0]
       const end: [number, number, number] = [ex, ey, target.module_data.end_point_mm[2] ?? 0]
-      const hostRefs = [...new Set([startColumnId, endColumnId].filter((id): id is string => Boolean(id)))]
+      const hostRefs = [...new Set([startColumnId, middleSupportColumnId, endColumnId].filter((id): id is string => Boolean(id)))]
       updated.objects[target.id] = { ...target, host_refs: hostRefs, module_data: { ...target.module_data, start_point_mm: start, end_point_mm: end, path_mm: [start, end], span_mm,
         ...(startColumnId ? { start_column_id: startColumnId } : { start_column_id: undefined }),
+        ...(middleSupportColumnId ? { middle_support_column_id: middleSupportColumnId } : { middle_support_column_id: undefined }),
         ...(endColumnId ? { end_column_id: endColumnId } : { end_column_id: undefined }),
+        ...(update.beam_system ? { beam_system: update.beam_system } : {}),
+        ...(update.continuity_type ? { continuity_type: update.continuity_type } : {}),
       }, updated_at: now }
       updated.relationships = updated.relationships.filter(relationship => !(relationship.kind === 'connects_to' && relationship.source_id === target.id && relationship.role === 'beam_column_connection'))
       for (const columnId of hostRefs) updated.relationships.push({ kind: 'connects_to', source_id: target.id, target_id: columnId, role: 'beam_column_connection' })
-      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] }, updatedProject: updated, emittedEnvelope: { ...envelope, input: { ...update, start_point_mm: [sx, sy], end_point_mm: [ex, ey], start_column_id: startColumnId ?? null, end_column_id: endColumnId ?? null } } }
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [target.id], updated_object_ids: [target.id] }, updatedProject: updated, emittedEnvelope: { ...envelope, input: { ...update, start_point_mm: [sx, sy], end_point_mm: [ex, ey], start_column_id: startColumnId ?? null, middle_support_column_id: middleSupportColumnId ?? null, end_column_id: endColumnId ?? null } } }
     }
 
     case 'UpdateColumnDimensions': {
@@ -1042,6 +1046,7 @@ export function reconcileStructureDeletion(updated: ProjectDocument, deletedIds:
       const data = obj.module_data as Record<string, unknown>
       let changed = false
       let startCol = data.start_column_id
+      let middleSupportCol = data.middle_support_column_id
       let endCol = data.end_column_id
 
       if (typeof startCol === 'string' && deletedSet.has(startCol)) {
@@ -1050,6 +1055,10 @@ export function reconcileStructureDeletion(updated: ProjectDocument, deletedIds:
       }
       if (typeof endCol === 'string' && deletedSet.has(endCol)) {
         endCol = undefined
+        changed = true
+      }
+      if (typeof middleSupportCol === 'string' && deletedSet.has(middleSupportCol)) {
+        middleSupportCol = undefined
         changed = true
       }
       const newHostRefs = obj.host_refs.filter(h => !deletedSet.has(h))
@@ -1064,6 +1073,7 @@ export function reconcileStructureDeletion(updated: ProjectDocument, deletedIds:
           module_data: {
             ...data,
             start_column_id: startCol,
+            middle_support_column_id: middleSupportCol,
             end_column_id: endCol,
           },
           updated_at: now,
