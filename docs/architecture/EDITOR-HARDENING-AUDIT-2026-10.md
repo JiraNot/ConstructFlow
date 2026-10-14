@@ -72,13 +72,13 @@ The state categories are coherent, but they are co-located with hundreds of per-
 
 ## Callback and command flow
 
-`App.tsx` builds most `Create*`, `Update*`, move/resize, delete, type assignment and phase commands. It passes a large callback surface into `PlanCanvas` and `PropertiesPanel`; many props correspond one-to-one with domain families. The app shell also constructs inline closures while rendering the canvas and inspector. This makes it difficult to see a family's full interaction contract in one place and increases the cost of adding or changing a family.
+`App.tsx` still owns cross-workbench state and several object command handlers. It now delegates project session/history, property actions, plan placement/transforms, file persistence, reference-data imports, and workbench shortcuts to focused hooks. Some per-family command construction and a broad typed callback surface remain in the app shell, so a compact editor-session facade is a useful next step.
 
-`PlanCanvas` receives dozens of callbacks plus active type/tool/view context. It owns pointer-to-intent interpretation, while `App.tsx` owns many command payloads and `CommandBus` invocation. `PropertiesPanel` dispatches via callbacks to the same root handlers. `ConstructionWorkbench` has its own command-batch interface. The shared semantic command boundary exists, but it is not yet presented through a small typed editor-session facade.
+`PlanCanvas` receives a broad callback surface plus active type/tool/view context, but its implementation is now a thin entry point over a controller graph and focused interaction/rendering modules. `App.tsx` still owns some command payloads and shared `CommandBus` orchestration. `PropertiesPanel` dispatches through dedicated property action hooks, while `ConstructionWorkbench` retains its own command-batch interface. The shared semantic command boundary exists, but the cross-workbench contract is not yet presented through a small typed editor-session facade.
 
 ## Interaction responsibilities and duplication
 
-- **Plan:** `PlanCanvas` owns pan/zoom transforms, pick ranking/cycling, click/marquee and multi-selection behavior, snap and hosted-opening snaps, placement state, dynamic dimensions/constraints, drawing lifecycle, context menu, family-specific grips and preview ghosts. `rendering/planRenderer.ts` owns most plan primitives and labels, but the component still contains substantial family-specific geometry and gesture logic.
+- **Plan:** PlanCanvas delegates pan/zoom, pick ranking/cycling, click/marquee selection, snapping, placement state, dynamic dimensions/constraints, pointer lifecycle, drawing, overlays, context menus, family grips and preview ghosts to focused hooks and modules. `rendering/planRenderer.ts` owns most plan primitives and labels. The remaining architectural question is ownership consistency across view families, not a monolithic canvas component.
 - **Elevation:** `ElevationCanvas` separately owns per-direction viewport state, selection box and pointer state. It builds visible representations, handles elevation-space hit/box selection and communicates candidate deltas through the App-provided manipulation callbacks. `App.tsx` separately implements `buildElevationManipulationCommands` and vertical-intent mapping.
 - **Shared manipulation:** `directManipulation.mjs` is already a reusable command builder/preview utility and is used by PlanCanvas. Elevation uses a separate manipulation entry path. Both preserve candidate preview and command commit semantics, but gesture contracts and family capability routing are not unified.
 - **Tool sessions:** PlanCanvas currently stores tool-specific state for beams, walls, room separators, slab polygons, roof options, pipe system, fixture kind, stair options and temporary dimensions. Lifecycle policy is consequently embedded in the canvas event branches rather than registered per tool/family.
@@ -87,7 +87,7 @@ The state categories are coherent, but they are co-located with hundreds of per-
 
 ## Inspector responsibilities
 
-`PropertiesPanel` resolves the current and bulk selection, type compatibility, common level and phase actions, then renders a large conditional family tree for structure, walls/openings, floors/ceilings/slabs, roofs and rainwater, MEP, cabinetry, mouldings, rooms and grids. The component contains UI-level derived presentation logic and property form transformations. Engineering resolution helpers and legal/ventilation evaluators are imported from domain packages, which is the correct ownership direction, but the registry/editor decomposition described in the sprint request is not present yet.
+`PropertiesPanel` is now a small empty/multi/single-selection dispatcher. `propertiesSelection.ts` resolves selection context; dedicated structure, wall, opening, roof, systems, surface, room, grid, stair and lifecycle sections render the family forms; and `usePropertiesPanelActions` groups property mutations. There is no family-editor registry yet, and the app still supplies the cross-workbench project and feedback context. Engineering resolution helpers and legal/ventilation evaluators remain in domain packages.
 
 ## Project, rendering, and mutation boundaries
 
@@ -157,10 +157,12 @@ After the baseline audit, the existing standalone suite passed before applicatio
 - App's object-summary counts now use one `countProjectObjects` pass memoized on the semantic project reference instead of thirteen per-render whole-project scans; the obsolete type-count reductions were unused and removed. This reduces work during cursor/status-only App rerenders without introducing stale counts after model edits.
 - The active roadmap already labels Pillar 6 as candidate detection with incomplete MEP clearance coverage, so no roadmap status correction was needed in this slice.
 
-| Editor file | Before | After current slice |
+| Editor file at initial hardening-slice checkpoint | Before | After that checkpoint |
 | --- | ---: | ---: |
 | `App.tsx` | 2,372 lines / 153,578 bytes | 2,310 lines / 150,815 bytes |
 | `PlanCanvas.tsx` | 3,045 lines / 200,627 bytes | 3,056 lines / 200,774 bytes |
 | `PropertiesPanel.tsx` | 1,783 lines / 147,890 bytes | 1,783 lines / 147,890 bytes |
 
-This slice does not yet decompose PlanCanvas or PropertiesPanel, consolidate plan/elevation interaction providers, or establish the full 500/1,000/5,000-object matrix for project, representation, coordination, quantity, drawing and history operations. Those remain the next architectural and acceptance work.
+At the time of this initial hardening slice, PlanCanvas and PropertiesPanel had not yet been decomposed, plan/elevation interaction providers were separate, and the full 500/1,000/5,000-object matrix was not established. The current implementation has since split PlanCanvas into a thin entry point, controller graph, surface renderer, and focused placement, pointer, selection, viewport, drawing, rendering, and dimension modules. PropertiesPanel is now a thin empty/multi/single-selection dispatcher; selected-object fields, family sections, selection resolution, type selection, and property command actions live in dedicated components and hooks. See the current state recorded in `docs/acceptance/RESIDENTIAL-PRODUCTION-ACCEPTANCE-2026-10.md`.
+
+The editor separation is substantially complete at the component boundary, but the shell still coordinates cross-workbench project/session state and command callbacks in `App.tsx`; plan/elevation manipulation providers and some keyboard ownership also remain distributed. The broader performance matrix is only partial: synthetic tiled fixtures cover 478/956/4,780 objects for summary, plan projection/hit-testing, and snap index/query, while the browser stress acceptance uses a synthetic 600-wall project. Representation, coordination, quantity, drawing, history, browser-frame-time, and real surveyed-project evidence at those scales remain open.
