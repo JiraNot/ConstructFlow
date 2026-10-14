@@ -23,6 +23,7 @@ import {
   type ConvexSolid,
 } from './exactContact.js'
 import type { SpatialBounds, Vec3 } from './spatial.js'
+import { RTree } from './spatialIndex.js'
 import {
   buildCoordinationModel,
   type CoordinationModel,
@@ -239,6 +240,13 @@ function intersectBounds(a: SpatialBounds, b: SpatialBounds): SpatialBounds {
   return {
     min: [0, 1, 2].map(axis => Math.max(a.min[axis], b.min[axis])) as Vec3,
     max: [0, 1, 2].map(axis => Math.min(a.max[axis], b.max[axis])) as Vec3,
+  }
+}
+
+function expandBounds(bounds: SpatialBounds, distance: number): SpatialBounds {
+  return {
+    min: bounds.min.map(value => value - distance) as Vec3,
+    max: bounds.max.map(value => value + distance) as Vec3,
   }
 }
 
@@ -533,11 +541,16 @@ export function runCoordination(project: ProjectDocument, options: CoordinationO
     const candidatesB = coordinationModel.proxies.filter(proxy => matchesSubject(proxy, rule.subject_b, 'primary'))
     if (!candidatesA.length || !candidatesB.length) continue
     const reach = maxReach(rule, slack)
+    const candidateOrder = new Map(candidatesB.map((proxy, index) => [proxy.object_id, index]))
+    const candidateTree = new RTree(candidatesB.map(proxy => ({ bounds: proxy.bounds, value: proxy })))
 
-    // Broad phase: bounds sweep over the candidate cross-product.
+    // Broad phase: query conservative proxy bounds before running pair-level relationship and exact-solid checks.
     for (const proxyA of candidatesA) {
       const entriesA = solidsA === 'door_swing' ? swingEntriesByProxy.get(proxyA.object_id) ?? [] : entriesByProxy.get(proxyA.object_id) ?? []
-      for (const proxyB of candidatesB) {
+      const nearbyCandidatesB = candidateTree.search(expandBounds(proxyA.bounds, reach))
+        .map(entry => entry.value)
+        .sort((left, right) => candidateOrder.get(left.object_id)! - candidateOrder.get(right.object_id)!)
+      for (const proxyB of nearbyCandidatesB) {
         if (proxyA.object_id === proxyB.object_id) continue
         const entriesB = entriesByProxy.get(proxyB.object_id) ?? []
         if (!entriesB.length) continue

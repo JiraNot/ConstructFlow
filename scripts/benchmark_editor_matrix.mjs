@@ -95,7 +95,9 @@ for (const { name, project, stress = false } of fixtures) {
       takeoff: () => calculateTakeoff(project),
       phased_boq: () => calculatePhasedBOQ(project),
       drawing_set_compile: () => compileInitialDrawingSet(project),
-    } : {}),
+    } : {
+      coordination: () => runCoordination(project),
+    }),
   }
   for (const [task, execute] of Object.entries(tasks)) {
     matrix.push({ fixture: name, object_count: objects.length, task, ...benchmark(execute) })
@@ -126,7 +128,7 @@ const markdown = [
   '| Fixture | Objects | Operation | p50 ms | p95 ms |', '| --- | ---: | --- | ---: | ---: |',
   ...matrix.map(row => `| ${row.fixture} | ${row.object_count} | ${taskLabels[row.task] ?? row.task} | ${row.p50_ms.toFixed(3)} | ${row.p95_ms.toFixed(3)} |`), '',
   `Raw measurements: [EDITOR-PERFORMANCE-MATRIX-2026-10.json](./EDITOR-PERFORMANCE-MATRIX-2026-10.json).`,
-  'This matrix covers 21-object kitchen, 239-object two-storey house, 260-object combined renovation fixture, and synthetic 478/956/4,780-object geometry tiles for object summary, plan projection/hit-testing, and snap-index/query paths. Synthetic stress fixtures are not residential acceptance models. Stress rows omit coordination, takeoff, BOQ, and drawing compilation to avoid implying those whole-project engines are performance-qualified at that scale. Browser frame time, marquee selection, undo/redo, load/schema validation, and serialization still require separate evidence.', '',
+  'This matrix covers 21-object kitchen, 239-object two-storey house, 260-object combined renovation fixture, and synthetic 478/956/4,780-object geometry tiles. Synthetic stress fixtures are not residential acceptance models. Stress rows measure object summary, plan projection/hit-testing, snap-index/query, and the coordination engine; takeoff, BOQ, and drawing compilation remain unmeasured at that scale. Browser frame time, marquee selection, undo/redo, load/schema validation, and serialization still require separate evidence.', '',
 ].join('\n')
 fs.writeFileSync(new URL('../docs/performance/EDITOR-PERFORMANCE-MATRIX-2026-10.md', import.meta.url), markdown)
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`)

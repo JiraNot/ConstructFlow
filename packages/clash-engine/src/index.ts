@@ -1,8 +1,11 @@
 import { resolveBeamBaseElevation, resolveCatalogType, resolveColumnVerticalExtent, type ProjectDocument, type SmartObject } from '@constructflow/project-model'
 import { constructionOutputs } from '@constructflow/domain-providers'
 import type { SpatialBounds, Vec3 } from './spatial.js'
+import { RTree } from './spatialIndex.js'
 
 export * from './spatial.js'
+export { RTree } from './spatialIndex.js'
+export type { SpatialEntry } from './spatialIndex.js'
 
 export interface SpatialObjectBounds {
   object_id: string
@@ -34,17 +37,6 @@ export type SpatialInteractionKind = 'intentional_connection' | 'boundary_contac
 export interface SpatialInteraction extends SpatialCandidatePair {
   kind: SpatialInteractionKind
   overlap_mm: Vec3
-}
-
-export interface SpatialEntry<T> {
-  bounds: SpatialBounds
-  value: T
-}
-
-interface RTreeNode<T> {
-  leaf: boolean
-  bounds: SpatialBounds
-  children: Array<RTreeNode<T> | SpatialEntry<T>>
 }
 
 type Data = Record<string, unknown>
@@ -178,71 +170,6 @@ function overlaps(a: SpatialBounds, b: SpatialBounds): boolean {
   return a.min[0] <= b.max[0] && a.max[0] >= b.min[0]
     && a.min[1] <= b.max[1] && a.max[1] >= b.min[1]
     && a.min[2] <= b.max[2] && a.max[2] >= b.min[2]
-}
-
-function unionBounds(bounds: SpatialBounds[]): SpatialBounds {
-  return {
-    min: [0, 1, 2].map(axis => Math.min(...bounds.map(item => item.min[axis]))) as Vec3,
-    max: [0, 1, 2].map(axis => Math.max(...bounds.map(item => item.max[axis]))) as Vec3,
-  }
-}
-
-function centerOnAxis(bounds: SpatialBounds, axis: number): number {
-  return (bounds.min[axis] + bounds.max[axis]) / 2
-}
-
-/** A packed 3D R-tree optimized for rebuilding an index from a project snapshot. */
-export class RTree<T> {
-  private readonly root: RTreeNode<T> | null
-  readonly size: number
-
-  constructor(entries: Array<SpatialEntry<T>>, readonly maxEntries = 8) {
-    if (!Number.isInteger(maxEntries) || maxEntries < 4) throw new Error('R-tree maxEntries must be an integer of at least 4')
-    for (const [index, entry] of entries.entries()) assertValidBounds(entry?.bounds, `R-tree entry ${index}`)
-    this.size = entries.length
-    if (!entries.length) {
-      this.root = null
-      return
-    }
-    let axis = 0
-    let level: RTreeNode<T>[] = []
-    const sortedEntries = [...entries].sort((a, b) => centerOnAxis(a.bounds, axis) - centerOnAxis(b.bounds, axis))
-    for (let i = 0; i < sortedEntries.length; i += maxEntries) {
-      const children = sortedEntries.slice(i, i + maxEntries)
-      level.push({ leaf: true, bounds: unionBounds(children.map(entry => entry.bounds)), children })
-    }
-    axis = 1
-    while (level.length > maxEntries) {
-      const sortedNodes = level.sort((a, b) => centerOnAxis(a.bounds, axis) - centerOnAxis(b.bounds, axis))
-      const parentLevel: RTreeNode<T>[] = []
-      for (let i = 0; i < sortedNodes.length; i += maxEntries) {
-        const children = sortedNodes.slice(i, i + maxEntries)
-        parentLevel.push({ leaf: false, bounds: unionBounds(children.map(node => node.bounds)), children })
-      }
-      level = parentLevel
-      axis = (axis + 1) % 3
-    }
-    this.root = level.length === 1
-      ? level[0]
-      : { leaf: false, bounds: unionBounds(level.map(node => node.bounds)), children: level }
-  }
-
-  search(bounds: SpatialBounds): Array<SpatialEntry<T>> {
-    assertValidBounds(bounds, 'R-tree query bounds')
-    if (!this.root) return []
-    const found: Array<SpatialEntry<T>> = []
-    const stack: RTreeNode<T>[] = [this.root]
-    while (stack.length) {
-      const node = stack.pop()!
-      if (!overlaps(node.bounds, bounds)) continue
-      if (node.leaf) {
-        for (const child of node.children as Array<SpatialEntry<T>>) if (overlaps(child.bounds, bounds)) found.push(child)
-      } else {
-        for (const child of node.children as Array<RTreeNode<T>>) if (overlaps(child.bounds, bounds)) stack.push(child)
-      }
-    }
-    return found
-  }
 }
 
 /** Create conservative AABBs for currently supported structural and wall objects. */
