@@ -1,5 +1,6 @@
 import React from 'react'
 import type { ProjectDocument, SmartObject, DisplayLengthUnit, ElectricalFixtureModuleData, CircuitModuleData } from '@constructflow/project-model'
+import { balanceCircuitsPhase } from '@constructflow/electrical-engine'
 import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
 
 type Props = {
@@ -8,11 +9,12 @@ type Props = {
   object: SmartObject | null
   onUpdate?: (objectId: string, changes: Partial<ElectricalFixtureModuleData>) => void
   onAssignToCircuit?: (fixtureId: string, circuitId: string | null) => void
+  onApplyPhaseBalance?: (assignments: Record<string, 'Phase A' | 'Phase B' | 'Phase C'>) => void
 }
 
 const LengthInput: React.FC<{ value: number; unit: DisplayLengthUnit; onChange: (value: number) => void; 'aria-label'?: string }> = ({ value, unit, onChange, 'aria-label': ariaLabel }) => <WorkbenchNumberInput value={value} unit={unit} onChange={onChange} ariaLabel={ariaLabel} />
 
-export const ElectricalFixturePropertiesSection: React.FC<Props> = ({ project, displayUnit, object, onUpdate, onAssignToCircuit }) => {
+export const ElectricalFixturePropertiesSection: React.FC<Props> = ({ project, displayUnit, object, onUpdate, onAssignToCircuit, onApplyPhaseBalance }) => {
   if (!object) return null
   const data = object.module_data as unknown as ElectricalFixtureModuleData
   const update = (changes: Partial<ElectricalFixtureModuleData>) => onUpdate?.(object.id, changes)
@@ -20,6 +22,16 @@ export const ElectricalFixturePropertiesSection: React.FC<Props> = ({ project, d
   const inferredCircuitId = circuits.find(circuit => (circuit.module_data as unknown as CircuitModuleData).device_ids.includes(object.id))?.id
   const assignedCircuitId = data.circuit_id ?? inferredCircuitId ?? ''
   const circuitExists = circuits.some(circuit => circuit.id === assignedCircuitId)
+  const panelCircuits = data.kind === 'panel' ? circuits.filter(circuit => (circuit.module_data as unknown as CircuitModuleData).panel_id === object.id) : []
+  const phaseBalance = panelCircuits.length ? balanceCircuitsPhase(panelCircuits.map(circuit => {
+    const circuitData = circuit.module_data as unknown as CircuitModuleData
+    const watts = circuitData.device_ids.reduce((sum, id) => {
+      const device = project.objects[id]
+      if (!device || device.removed_phase !== null) return sum
+      return sum + Number((device.module_data as unknown as ElectricalFixtureModuleData).watts || 0)
+    }, 0)
+    return { id: circuit.id, watts }
+  })) : null
   const lights = Object.values(project.objects).filter(candidate => candidate.object_type === 'electrical.fixture' && candidate.removed_phase === null && (candidate.module_data as unknown as ElectricalFixtureModuleData).kind === 'light')
   return <div style={{ display: 'grid', gap: 7 }}>
     <strong style={{ fontSize: 12, color: '#334155' }}>อุปกรณ์ไฟฟ้า · {data.mark}</strong>
@@ -41,7 +53,31 @@ export const ElectricalFixturePropertiesSection: React.FC<Props> = ({ project, d
         })}
       </select>
     </label>
-    {data.kind === 'panel' && <small style={{ color: '#64748b' }}>ตู้ไฟเป็นต้นทางของวงจร จึงกำหนดวงจรให้ตู้ไฟไม่ได้</small>}
+    {data.kind === 'panel' && <>
+      <small style={{ color: '#64748b' }}>ตู้ไฟเป็นต้นทางของวงจร จึงกำหนดวงจรให้ตู้ไฟไม่ได้</small>
+      <div aria-label="สมดุลเฟสวงจรไฟฟ้า" style={{ display: 'grid', gap: 5, padding: 8, border: '1px solid #dbe4ee', borderRadius: 6, background: '#f8fafc' }}>
+        <strong style={{ fontSize: 11, color: '#334155' }}>จัดสมดุลโหลด 3 เฟส · {panelCircuits.length} วงจร</strong>
+        {phaseBalance ? <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, fontSize: 10, color: '#475569' }}>
+            <span>เฟส A · {phaseBalance.phase_a_watts} W</span><span>เฟส B · {phaseBalance.phase_b_watts} W</span><span>เฟส C · {phaseBalance.phase_c_watts} W</span>
+          </div>
+          <div style={{ display: 'grid', gap: 2, fontSize: 10, color: '#64748b' }}>
+            {panelCircuits.map(circuit => {
+              const circuitData = circuit.module_data as unknown as CircuitModuleData
+              const mark = String((circuit.module_data as Record<string, unknown>).mark ?? circuit.id)
+              const watts = circuitData.device_ids.reduce((sum, id) => {
+                const device = project.objects[id]
+                return sum + (device && device.removed_phase === null ? Number((device.module_data as unknown as ElectricalFixtureModuleData).watts || 0) : 0)
+              }, 0)
+              return <span key={circuit.id}>{mark} · {phaseBalance.assignments[circuit.id]} · {watts} W</span>
+            })}
+          </div>
+          <small style={{ color: phaseBalance.is_balanced ? '#15803d' : '#b45309' }}>โหลดไม่สมดุลสูงสุด {phaseBalance.max_unbalance_pct}% · {phaseBalance.is_balanced ? 'อยู่ในเกณฑ์ 15%' : 'เกินเกณฑ์ 15%'}</small>
+          {panelCircuits.some(circuit => (circuit.module_data as unknown as CircuitModuleData).phase_assignment !== phaseBalance.assignments[circuit.id]) &&
+            <button type="button" onClick={() => onApplyPhaseBalance?.(phaseBalance.assignments)} style={{ justifySelf: 'start' }}>ใช้การจัดเฟสนี้</button>}
+        </> : <small style={{ color: '#64748b' }}>ยังไม่มีวงจรในตู้ไฟนี้</small>}
+      </div>
+    </>}
     <label className="cf-property-row">กำลังไฟฟ้า (W)
       <input aria-label="กำลังไฟฟ้าของอุปกรณ์ (วัตต์)" type="number" min="0" step="1" value={data.watts} onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value) && value >= 0) update({ watts: value }) }} />
     </label>

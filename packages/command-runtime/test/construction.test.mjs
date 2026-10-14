@@ -319,6 +319,33 @@ test("Electrical circuit assignment updates fixture and circuit in one validated
   assert.match(panelAssignment.result.errors[0], /panel/i);
 });
 
+test("Electrical phase balancing is stored in one undoable circuit update transaction", () => {
+  let p = empty();
+  const panelId = crypto.randomUUID();
+  p = execute(p, "PlaceElectricalFixture", {
+    id: panelId, mark: "DB1", location_mm: [0, 0, 1800], kind: "panel", watts: 0,
+    controlled_ids: [], switch_ways: 1, grounded: true,
+  });
+  const ids = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+  for (const [index, id] of ids.entries()) p = execute(p, "CreateCircuit", {
+    id, mark: `CKT${index + 1}`, panel_id: panelId, device_ids: [], voltage: 230,
+    breaker_a: 16, allowable_current_a: 20, cable_mm2: 2.5,
+  });
+  const session = new ProjectCommandSession(p);
+  const phases = ["Phase A", "Phase B", "Phase C"];
+  const result = session.execute(ids.map((id, index) => ({
+    name: "UpdateCircuit",
+    input: { ...p.objects[id].module_data, id, phase_assignment: phases[index] },
+  })));
+  assert.equal(result.status, "success", JSON.stringify(result.errors));
+  ids.forEach((id, index) => assert.equal(result.updatedProject.objects[id].module_data.phase_assignment, phases[index]));
+  const undone = session.undo();
+  ids.forEach(id => assert.equal(undone.objects[id].module_data.phase_assignment, undefined));
+  const redone = session.redo();
+  ids.forEach((id, index) => assert.equal(redone.objects[id].module_data.phase_assignment, phases[index]));
+  assert.deepEqual(deserializeProject(serializeProject(redone)), redone);
+});
+
 test("Electrical circuit assignment rolls back when connected load exceeds the breaker", () => {
   let p = empty();
   const panelId = crypto.randomUUID();

@@ -103,7 +103,7 @@ SketchUp/LayOut integration has separate adapter acceptance gates. Those gates d
 - **Phasing Awareness for Renovation:** Continue domain-wide lifecycle coverage for Existing (บ้านเดิม), Demolition (ส่วนรื้อถอน), and New Construction (ส่วนสร้างใหม่); existing standalone evidence is tracked in `STATUS.md`. New masonry hatch now uses shared model-space vectors in Canvas, A-02/A-03 compilers, and DXF ModelSpace, while existing walls stay white poche; native CAD plot and print-scale acceptance remain open.
 - [x] **Image Underlay & Point-to-Point Calibration:** PNG/JPG/WebP import, project-embedded transforms by view/level, and real-distance calibration are implemented in the Plan Editor.
 - [x] **Wall junction level inheritance:** app-created walls touching an existing wall inherit its base/top level constraint and offsets; unconnected walls default to the next storey datum. Browser interaction and complex junction acceptance remain tracked in `STATUS.md`.
-- [ ] **DWG Underlay & AI Vision:** direct 2D DWG underlay and AI recognition of plan content remain open; these are separate from image calibration.
+- [x] **DWG Underlay:** direct 2D DWG underlay uses GPL-3.0 LibreDWG WebAssembly in a dedicated worker, with unit handling, existing scale calibration and project persistence. AI recognition of plan content remains open; see the supported-format and client-file gaps in `docs/acceptance/RESIDENTIAL-PRODUCTION-ACCEPTANCE-2026-10.md`.
 - [x] **Floor-to-floor elevation setup:** configurable level datums and storey intervals are implemented; production workflow acceptance remains tracked with R0/R1.
 - [ ] **Auto-Dimensioning Engine:** A-02/A-03 compile grid-spacing, overall-envelope, column-row, and hosted-opening dimensions (including angled hosts) into shared PDF/DXF vectors. Per-sheet placement offsets can be locked in the sheet editor while numeric values remain model-derived. Remaining: automated collision/viewport-fit resolution across varied plan densities and broader visual/native CAD acceptance.
 
@@ -414,7 +414,7 @@ Preserve and deepen:
 - [x] general/dedicated outlets with grounding
 - [x] panelboard / consumer unit (MDB/CU)
 - [x] circuit load calculation & วสท. breaker/wire sizing (`recommendEITBreakerAndWire`)
-- [x] 3-phase balancing (`balanceCircuitsPhase` with unbalance < 15%)
+- [x] 3-phase balancing (`balanceCircuitsPhase` with unbalance < 15%); panel Properties previews circuit allocations and applies all phase changes as one undoable transaction.
 - [x] schedules & Single Line Diagram (Sheet E-02)
 
 Exit criteria:

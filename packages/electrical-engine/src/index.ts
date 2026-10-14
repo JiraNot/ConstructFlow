@@ -97,7 +97,12 @@ export function decodeCircuit(
     breaker_a,
     allowable_current_a,
     cable_mm2: positive(d.cable_mm2, "cable size"),
+    ...(d.phase_assignment === "Phase A" || d.phase_assignment === "Phase B" || d.phase_assignment === "Phase C"
+      ? { phase_assignment: d.phase_assignment }
+      : {}),
   };
+  if (d.phase_assignment !== undefined && !["Phase A", "Phase B", "Phase C"].includes(String(d.phase_assignment)))
+    throw new Error("phase_assignment must be Phase A, Phase B, or Phase C");
   const load = device_ids
     .filter((id) => p.objects[id].removed_phase === null)
     .reduce(

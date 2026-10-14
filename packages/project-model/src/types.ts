@@ -409,6 +409,7 @@ export interface ElectricalFixtureModuleData extends CatalogPlacement {
 }
 export interface CircuitModuleData extends CatalogPlacement {
   panel_id:string
+  phase_assignment?:'Phase A'|'Phase B'|'Phase C'
   voltage:number
   breaker_a:number
   cable_mm2:number

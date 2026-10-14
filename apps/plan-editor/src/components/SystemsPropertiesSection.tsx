@@ -23,6 +23,7 @@ type SystemsPropertiesSectionProps = {
   onUpdatePipeRoute?: (objectId: string, changes: Partial<PipeRouteModuleData>) => void
   onUpdateElectricalFixture?: (objectId: string, changes: Partial<ElectricalFixtureModuleData>) => void
   onAssignElectricalFixtureToCircuit?: (fixtureId: string, circuitId: string | null) => void
+  onApplyElectricalPhaseBalance?: (assignments: Record<string, 'Phase A' | 'Phase B' | 'Phase C'>) => void
   onUpdateCabinet?: (objectId: string, changes: Partial<CabinetModuleData>) => void
   onUpdateMoulding?: (objectId: string, changes: Partial<MouldingModuleData>) => void
 }
@@ -30,7 +31,7 @@ type SystemsPropertiesSectionProps = {
 export const SystemsPropertiesSection: React.FC<SystemsPropertiesSectionProps> = props => <>
   <PipeRoutePropertiesSection project={props.project} displayUnit={props.displayUnit} object={props.pipeObj} onUpdate={props.onUpdatePipeRoute} />
   <ElectricalFixturePropertiesSection project={props.project} displayUnit={props.displayUnit} object={props.fixtureObj}
-    onUpdate={props.onUpdateElectricalFixture} onAssignToCircuit={props.onAssignElectricalFixtureToCircuit} />
+    onUpdate={props.onUpdateElectricalFixture} onAssignToCircuit={props.onAssignElectricalFixtureToCircuit} onApplyPhaseBalance={props.onApplyElectricalPhaseBalance} />
   <CabinetPropertiesSection object={props.cabinetObj} displayUnit={props.displayUnit} onUpdate={props.onUpdateCabinet} />
   <MouldingPropertiesSection object={props.mouldingObj} displayUnit={props.displayUnit} onUpdate={props.onUpdateMoulding} />
 </>

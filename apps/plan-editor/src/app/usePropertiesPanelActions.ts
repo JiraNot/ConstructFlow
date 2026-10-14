@@ -34,6 +34,7 @@ type PanelActions = Pick<PropertiesPanelProps,
   | 'onUpdatePipeRoute'
   | 'onUpdateElectricalFixture'
   | 'onAssignElectricalFixtureToCircuit'
+  | 'onApplyElectricalPhaseBalance'
   | 'onUpdateCabinet'
   | 'onUpdateMoulding'
   | 'onUpdateStair'
@@ -275,6 +276,17 @@ export function usePropertiesPanelActions({ project, dispatchCommandBatch, setFi
     onAssignElectricalFixtureToCircuit: (fixtureId, circuitId) => {
       const result = dispatchCommandBatch([{ name: 'AssignFixtureToCircuit', input: { fixture_id: fixtureId, circuit_id: circuitId } }])
       if (result.status !== 'success') setFileFeedback(result.errors?.[0] ?? 'กำหนดวงจรให้กับอุปกรณ์ไฟฟ้าไม่สำเร็จ')
+    },
+    onApplyElectricalPhaseBalance: assignments => {
+      const commands = Object.entries(assignments).flatMap(([circuitId, phase_assignment]) => {
+        const circuit = project.objects[circuitId]
+        if (!circuit || circuit.object_type !== 'electrical.circuit' || circuit.removed_phase !== null) return []
+        return [{ name: 'UpdateCircuit', input: { ...(circuit.module_data as Record<string, unknown>), id: circuitId, phase_assignment } }]
+      })
+      if (!commands.length) return
+      const result = dispatchCommandBatch(commands)
+      if (result.status !== 'success') setFileFeedback(result.errors?.[0] ?? 'กำหนดเฟสวงจรไฟฟ้าไม่สำเร็จ')
+      else setFileFeedback(`กำหนดเฟสให้ ${commands.length} วงจรแล้ว`)
     },
     onUpdateCabinet: (objectId, changes) => updateDomainObject(objectId, 'UpdateCabinetRun', changes),
     onUpdateMoulding: (objectId, changes) => updateDomainObject(objectId, 'UpdateMouldingRun', changes),

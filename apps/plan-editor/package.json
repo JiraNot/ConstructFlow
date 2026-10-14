@@ -20,6 +20,7 @@
     "@constructflow/constraint-engine": "file:../../packages/constraint-engine",
     "@constructflow/domain-providers": "file:../../packages/domain-providers",
     "@constructflow/drainage-engine": "file:../../packages/drainage-engine",
+    "@constructflow/electrical-engine": "file:../../packages/electrical-engine",
     "@constructflow/extension-engine": "file:../../packages/extension-engine",
     "@constructflow/geometry-kernel": "file:../../packages/geometry-kernel",
     "@constructflow/module-sdk": "file:../../packages/module-sdk",

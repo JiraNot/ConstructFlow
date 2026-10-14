@@ -31,6 +31,7 @@ export interface PropertiesPanelProps {
   onUpdatePipeRoute?: (objectId: string, changes: Partial<PipeRouteModuleData>) => void
   onUpdateElectricalFixture?: (objectId: string, changes: Partial<ElectricalFixtureModuleData>) => void
   onAssignElectricalFixtureToCircuit?: (fixtureId: string, circuitId: string | null) => void
+  onApplyElectricalPhaseBalance?: (assignments: Record<string, 'Phase A' | 'Phase B' | 'Phase C'>) => void
   onUpdateCabinet?: (objectId: string, changes: Partial<CabinetModuleData>) => void
   onUpdateMoulding?: (objectId: string, changes: Partial<MouldingModuleData>) => void
   onUpdateStair?: (objectId: string, changes: Partial<StairModuleData>) => void

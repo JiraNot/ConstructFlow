@@ -76,6 +76,39 @@ function createSyntheticPlanStressProject(objectCount: number) {
   return serializeProject(seeded)
 }
 
+function createElectricalPhaseBalanceProject() {
+  let project = createEmptyProjectDocument(randomUUID(), 'Electrical phase balance acceptance')
+  const panelId = randomUUID()
+  const panel = CommandBus.execute(project, 'PlaceElectricalFixture', {
+    id: panelId, mark: 'DB1', location_mm: [0, 0, 1800], kind: 'panel', watts: 0,
+    controlled_ids: [], switch_ways: 1, grounded: true,
+  })
+  if (panel.result.status !== 'success') throw new Error('Could not create the panel fixture')
+  project = panel.updatedProject
+  const circuitIds: string[] = []
+  for (const [index, watts] of [300, 200, 100].entries()) {
+    const circuitId = randomUUID()
+    const createdCircuit = CommandBus.execute(project, 'CreateCircuit', {
+      id: circuitId, mark: `CKT${index + 1}`, panel_id: panelId, device_ids: [], voltage: 230,
+      breaker_a: 16, allowable_current_a: 20, cable_mm2: 2.5,
+    })
+    if (createdCircuit.result.status !== 'success') throw new Error(`Could not create CKT${index + 1}`)
+    project = createdCircuit.updatedProject
+    const deviceId = randomUUID()
+    const createdDevice = CommandBus.execute(project, 'PlaceElectricalFixture', {
+      id: deviceId, mark: `L${index + 1}`, location_mm: [1000 + index * 500, 1000, 2700], kind: 'light', watts,
+      controlled_ids: [], switch_ways: 1, grounded: false,
+    })
+    if (createdDevice.result.status !== 'success') throw new Error(`Could not create L${index + 1}`)
+    project = createdDevice.updatedProject
+    const assigned = CommandBus.execute(project, 'AssignFixtureToCircuit', { fixture_id: deviceId, circuit_id: circuitId })
+    if (assigned.result.status !== 'success') throw new Error(`Could not assign L${index + 1}`)
+    project = assigned.updatedProject
+    circuitIds.push(circuitId)
+  }
+  return { projectJson: serializeProject(project), panelId, circuitIds }
+}
+
 function createWallIntersectionProject() {
   let project = createEmptyProjectDocument(randomUUID(), 'Wall intersection preview acceptance')
   const levelId = project.project.active_level_id
@@ -2115,6 +2148,31 @@ test('DWG underlay decodes in the LibreDWG worker and persists after project rel
   expect(reopenedJson).toBeTruthy()
   const reopened = JSON.parse(reopenedJson!) as { underlays: Record<string, unknown> }
   expect(reopened.underlays[key!]).toEqual(underlay)
+})
+
+test('panel Properties previews phase balance and applies all circuit phases in one undo', async ({ page }) => {
+  const fixture = createElectricalPhaseBalanceProject()
+  await page.goto('/')
+  await seedLocalProjectSnapshot(page, fixture.projectJson)
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.locator(`.cf-browser-tree [data-object-id="${fixture.panelId}"] .cf-browser-object`).click()
+  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  const balance = page.getByLabel('สมดุลเฟสวงจรไฟฟ้า')
+  await expect(balance).toContainText('จัดสมดุลโหลด 3 เฟส · 3 วงจร')
+  await expect(balance).toContainText('เฟส A · 300 W')
+  await expect(balance).toContainText('CKT1 · Phase A · 300 W')
+  await page.getByRole('button', { name: 'ใช้การจัดเฟสนี้' }).click()
+
+  const readAssignments = async () => {
+    const json = await readStoredProjectJson(page)
+    if (!json) return null
+    const objects = (JSON.parse(json) as { objects: Record<string, { module_data: { phase_assignment?: string } }> }).objects
+    return fixture.circuitIds.map(id => objects[id]?.module_data.phase_assignment ?? null)
+  }
+  await expect.poll(readAssignments).toEqual(['Phase A', 'Phase B', 'Phase C'])
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(readAssignments).toEqual([null, null, null])
 })
 
 test('site survey CSV preserves measured and assumed points through project reload', async ({ page }) => {

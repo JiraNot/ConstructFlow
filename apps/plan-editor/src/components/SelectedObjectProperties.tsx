@@ -22,7 +22,7 @@ export const SelectedObjectProperties: React.FC<{
 }> = ({ props, selection }) => {
   const { project, displayUnit, selectedId, onAssignType, onOpenTypeManager, onUpdateColumnVerticalReference,
     onUpdateBeamVerticalReference, onUpdateArchitectureSurface, onUpdateSlab, onUpdateRoof, onUpdateRainwaterDesign,
-    onUpdatePipeRoute, onUpdateElectricalFixture, onAssignElectricalFixtureToCircuit, onUpdateCabinet, onUpdateMoulding,
+    onUpdatePipeRoute, onUpdateElectricalFixture, onAssignElectricalFixtureToCircuit, onApplyElectricalPhaseBalance, onUpdateCabinet, onUpdateMoulding,
     onUpdateStair, onUpdateGridTag, onModifyGrid, onUpdateGridSystem, onUpdateWallFace, onDefineWallFinish,
     onUpdateWallFinish, onUpdateOpeningVertical, onRehostOpening, onUpdateOpeningInstanceParameters, onFlipDoorHanding, onUpdatePhase,
     onUpdateRemovalPhase, onAddFoundation, onDeleteObject, onDrawSurfaceVoid, onCreateRoomFinish } = props
@@ -46,7 +46,7 @@ export const SelectedObjectProperties: React.FC<{
       {roofObj && <RoofPropertiesSection roof={roofObj} project={project} displayUnit={displayUnit} onUpdateRoof={onUpdateRoof}
         onUpdateRainwaterDesign={onUpdateRainwaterDesign} onDrawSurfaceVoid={onDrawSurfaceVoid} />}
       <SystemsPropertiesSection project={project} displayUnit={displayUnit} pipeObj={pipeObj} fixtureObj={fixtureObj} cabinetObj={cabinetObj} mouldingObj={mouldingObj}
-        onUpdatePipeRoute={onUpdatePipeRoute} onUpdateElectricalFixture={onUpdateElectricalFixture} onAssignElectricalFixtureToCircuit={onAssignElectricalFixtureToCircuit}
+        onUpdatePipeRoute={onUpdatePipeRoute} onUpdateElectricalFixture={onUpdateElectricalFixture} onAssignElectricalFixtureToCircuit={onAssignElectricalFixtureToCircuit} onApplyElectricalPhaseBalance={onApplyElectricalPhaseBalance}
         onUpdateCabinet={onUpdateCabinet} onUpdateMoulding={onUpdateMoulding} />
       <OpeningPropertiesSection project={project} displayUnit={displayUnit} door={doorObj} window={winObj}
         onUpdateOpeningVertical={onUpdateOpeningVertical} onRehostOpening={onRehostOpening} onUpdateOpeningInstanceParameters={onUpdateOpeningInstanceParameters} onFlipDoorHanding={onFlipDoorHanding} onOpenTypeManager={onOpenTypeManager} />
