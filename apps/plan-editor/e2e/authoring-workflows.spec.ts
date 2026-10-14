@@ -1817,7 +1817,7 @@ test('DXF underlay imports, calibrates from two points, and preserves scale thro
     '0', 'ELLIPSE', '10', '2500', '20', '1750', '11', '600', '21', '0', '40', '0.5', '41', '0', '42', String(Math.PI * 2),
     '0', 'ENDSEC', '0', 'EOF',
   ].join('\n')
-  await page.locator('input[accept="image/*,.dxf,application/dxf"]').setInputFiles({
+  await page.locator('input[accept^="image/*,.dxf,application/dxf"]').setInputFiles({
     name: 'survey-plan.dxf',
     mimeType: 'application/dxf',
     buffer: Buffer.from(dxf),
