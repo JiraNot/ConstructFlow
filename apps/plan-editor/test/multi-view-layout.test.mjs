@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle } from '../src/app/multiViewLayout.mjs'
+import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle, moveMultiViewPane } from '../src/app/multiViewLayout.mjs'
 
 test('multiview proportions customize columns and rows while keeping every pane visible', () => {
   assert.deepEqual(buildMultiViewGridTracks(2, 'columns', 65), {
@@ -41,6 +41,13 @@ test('custom multiview grids support variable columns and span an incomplete fin
     columns: 'minmax(0, 1fr)',
     rows: 'minmax(0, 60fr) minmax(0, 20fr) minmax(0, 20fr)',
   })
+})
+
+test('multiview pane ordering swaps visible slots without dropping hidden slots', () => {
+  const order = ['primary', 'secondary', 'tertiary', 'fourth']
+  assert.deepEqual(moveMultiViewPane(order, 'tertiary', -1, 3), ['primary', 'tertiary', 'secondary', 'fourth'])
+  assert.deepEqual(moveMultiViewPane(order, 'fourth', -1, 3), order)
+  assert.deepEqual(moveMultiViewPane(order, 'primary', -1, 4), order)
 })
 
 test('invalid multiview options fall back to a single visible cell and clamp the primary ratio', () => {

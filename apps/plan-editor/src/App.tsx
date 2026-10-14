@@ -44,8 +44,8 @@ import { useProjectFileActions, type ProjectFileAccess } from './app/useProjectF
 import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
 import { useReferenceDataImportActions } from './app/useReferenceDataImportActions.js'
 import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcuts.js'
-import { useMultiViewPreferences, type EditorViewMode, type SplitViewLayout, type SplitViewPaneCount } from './app/useMultiViewPreferences.js'
-import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle } from './app/multiViewLayout.mjs'
+import { useMultiViewPreferences, type EditorViewMode, type SplitViewLayout, type SplitViewPaneCount, type SplitViewPaneSlot } from './app/useMultiViewPreferences.js'
+import { buildMultiViewGridTracks, buildMultiViewPaneGridStyle, buildPrimaryPaneGridStyle, moveMultiViewPane } from './app/multiViewLayout.mjs'
 import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 import { createElevationObjectCommandHandler } from './app/elevationObjectCommands.js'
 import { MultiViewResizeHandle } from './components/MultiViewResizeHandle.js'
@@ -127,7 +127,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [viewMode, setViewMode] = useState<EditorViewMode>('plan')
   const [multiViewPreferences, setMultiViewPreferences] = useMultiViewPreferences(project.project.id)
   const { enabled: splitViewEnabled, paneCount: splitViewPaneCount, layout: splitViewLayout,
-    customColumnCount, primaryPanePercent, secondaryViewMode, tertiaryViewMode, fourthViewMode } = multiViewPreferences
+    customColumnCount, paneOrder, primaryPanePercent, secondaryViewMode, tertiaryViewMode, fourthViewMode } = multiViewPreferences
   const splitViewTracks = buildMultiViewGridTracks(splitViewPaneCount, splitViewLayout, primaryPanePercent, customColumnCount)
   const splitViewGridStyle = splitViewEnabled ? {
     display: 'grid',
@@ -138,15 +138,28 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   } : undefined
   const primaryPaneGridStyle = buildPrimaryPaneGridStyle(splitViewPaneCount, splitViewLayout)
   const paneGridStyle = (paneIndex: number) => buildMultiViewPaneGridStyle(splitViewPaneCount, splitViewLayout, paneIndex, customColumnCount)
+  const paneViewModes: Record<SplitViewPaneSlot, EditorViewMode> = {
+    primary: viewMode,
+    secondary: secondaryViewMode,
+    tertiary: tertiaryViewMode,
+    fourth: fourthViewMode,
+  }
+  const visiblePaneSlots = splitViewEnabled ? paneOrder.slice(0, splitViewPaneCount) : ['primary' as const]
+  const orderedPaneSlots = visiblePaneSlots
+  const paneSlotLabels: Record<SplitViewPaneSlot, string> = {
+    primary: 'มุมมองหลัก', secondary: 'มุมมองที่สอง', tertiary: 'มุมมองที่สาม', fourth: 'มุมมองที่สี่',
+  }
+  const movePaneSlot = (slot: SplitViewPaneSlot, direction: -1 | 1) => setMultiViewPreferences(current => ({
+    ...current,
+    paneOrder: moveMultiViewPane(current.paneOrder, slot, direction, current.paneCount),
+  }))
   // Drawing a structural member opens the matching plan so the new object is visible.
   useEffect(() => {
     if (['beam', 'foundation'].includes(activeTool)) setViewMode('framing')
     else if (activeTool === 'roof') setViewMode('roofplan')
     else if (['stair', 'wall', 'door', 'window', 'archFloor', 'slab', 'ceiling', 'roomSeparator', 'pipe', 'fixture', 'cabinet', 'moulding'].includes(activeTool)) setViewMode('plan')
   }, [activeTool])
-  const paneModes = splitViewEnabled
-    ? [viewMode, secondaryViewMode, ...(splitViewPaneCount >= 3 ? [tertiaryViewMode] : []), ...(splitViewPaneCount >= 4 ? [fourthViewMode] : [])]
-    : []
+  const paneModes = splitViewEnabled ? orderedPaneSlots.map(slot => paneViewModes[slot]) : []
   const planAnd3DNavigationLinked = paneModes.some(mode => mode === 'plan' || mode === 'framing' || mode === 'roofplan')
     && paneModes.includes('model3d')
   const planAndRcpNavigationLinked = paneModes.some(mode => mode === 'plan' || mode === 'framing' || mode === 'roofplan')
@@ -810,6 +823,16 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                     {EDITOR_VIEW_OPTIONS.map(([mode, label]) => <option key={mode} value={mode}>{label}</option>)}
                   </select>
                 </label>}
+                {splitViewEnabled && <div className="cf-multiview-order" role="group" aria-label="ลำดับ pane">
+                  <strong>ลำดับ pane</strong>
+                  {visiblePaneSlots.map((slot, index) => <div key={slot} className="cf-multiview-order-row">
+                    <span>{index + 1}. {paneSlotLabels[slot]}</span>
+                    <div>
+                      <button type="button" aria-label={`เลื่อน pane ลำดับ ${index + 1} ขึ้น`} disabled={index === 0} onClick={() => movePaneSlot(slot, -1)}>↑</button>
+                      <button type="button" aria-label={`เลื่อน pane ลำดับ ${index + 1} ลง`} disabled={index === visiblePaneSlots.length - 1} onClick={() => movePaneSlot(slot, 1)}>↓</button>
+                    </div>
+                  </div>)}
+                </div>}
                 {splitViewEnabled && paneModes.includes('model3d') && <span>3D จัดกรอบตามวัตถุที่เลือก · เมื่อต่อกับแปลน การเลื่อนและซูมจะประสานกันสองทาง</span>}
               </div>
             </details>
@@ -842,18 +865,15 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
           {/* Interactive Plan Canvas */}
           <div className="cf-viewport-stage" style={splitViewGridStyle}>
-            <div className="cf-multiview-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', ...primaryPaneGridStyle, ...paneGridStyle(0) }}>
-              {renderEditorView(viewMode)}
-            </div>
-            {splitViewEnabled && <div className="cf-multiview-pane" data-testid="secondary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1', ...paneGridStyle(1) }}>
-              {renderEditorView(secondaryViewMode, true)}
-            </div>}
-            {splitViewEnabled && splitViewPaneCount >= 3 && <div className="cf-multiview-pane" data-testid="tertiary-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1', ...paneGridStyle(2) }}>
-              {renderEditorView(tertiaryViewMode, true)}
-            </div>}
-            {splitViewEnabled && splitViewPaneCount === 4 && <div className="cf-multiview-pane" data-testid="fourth-view-pane" data-primary-selected-object-id={selectedId ?? ''} data-selected-object-ids={selectedIds.join(',')} style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', borderLeft: '1px solid #cbd5e1', ...paneGridStyle(3) }}>
-              {renderEditorView(fourthViewMode, true)}
-            </div>}
+            {orderedPaneSlots.map((slot, index) => <div
+              key={slot}
+              className="cf-multiview-pane"
+              data-pane-slot={slot}
+              data-testid={slot === 'primary' ? 'primary-view-pane' : `${slot}-view-pane`}
+              data-primary-selected-object-id={selectedId ?? ''}
+              data-selected-object-ids={selectedIds.join(',')}
+              style={{ width: '100%', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative', ...(slot === 'primary' ? primaryPaneGridStyle : {}), ...paneGridStyle(index) }}
+            >{renderEditorView(paneViewModes[slot], slot !== 'primary')}</div>)}
             {splitViewEnabled && splitViewLayout === 'custom' && <MultiViewResizeHandle
               orientation={customColumnCount === 1 ? 'horizontal' : 'vertical'}
               value={primaryPanePercent}

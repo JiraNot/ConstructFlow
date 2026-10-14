@@ -66,3 +66,12 @@ export function buildMultiViewPaneGridStyle(paneCount, layout, paneIndex, custom
   if (remainder !== 0 && paneIndex >= paneCount - remainder) return { gridColumn: `span ${columns}` }
   return undefined
 }
+
+export function moveMultiViewPane(order, paneSlot, direction, visiblePaneCount = order.length) {
+  const currentIndex = order.indexOf(paneSlot)
+  const nextIndex = currentIndex + Math.sign(direction)
+  if (currentIndex < 0 || currentIndex >= visiblePaneCount || nextIndex < 0 || nextIndex >= visiblePaneCount) return order
+  const nextOrder = [...order]
+  ;[nextOrder[currentIndex], nextOrder[nextIndex]] = [nextOrder[nextIndex], nextOrder[currentIndex]]
+  return nextOrder
+}
