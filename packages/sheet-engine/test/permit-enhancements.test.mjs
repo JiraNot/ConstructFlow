@@ -146,19 +146,32 @@ test("house demo keeps the existing grade datum and places its two finished floo
   assert.ok(columnPlanLabels.includes("4.00 m") && columnPlanLabels.includes("5.00 m"), "column centerlines provide dimension chains when no grid system is modeled");
   const gridAndColumnLabels = compilePermitDrawingSet(house).sheets.find(sheet => sheet.id === "A-02").primitives.filter(item => item.kind === "text").map(item => item.text);
   assert.ok(gridAndColumnLabels.filter(label => label === "4.00 m" || label === "5.00 m").length >= 4, "column rows retain explicit dimension chains when grids are also present");
-  const autoDimensionSheet = compilePermitDrawingSet(house).sheets.find(sheet => sheet.id === "A-02");
-  const dimensionLabels = autoDimensionSheet.primitives.filter(item => item.kind === "text" && item.dimension_id);
-  const boxes = dimensionLabels.map(label => ({
-    min_x: label.at[0], min_y: label.at[1] - 1.3,
-    max_x: label.at[0] + (label.max_width ?? label.text.length * 0.88), max_y: label.at[1] + 0.4,
-  }));
-  for (let index = 0; index < boxes.length; index++) for (let next = index + 1; next < boxes.length; next++) {
-    const a = boxes[index], b = boxes[next];
-    assert.ok(!(a.min_x < b.max_x + 0.8 && a.max_x + 0.8 > b.min_x && a.min_y < b.max_y && a.max_y > b.min_y),
-      `automatic dimensions ${dimensionLabels[index].dimension_id} and ${dimensionLabels[next].dimension_id} should not overlap`);
-  }
-  assert.equal(autoDimensionSheet.warnings.filter(warning => warning.includes("automatic dimension text overlaps")).length, 0,
-    "standard residential A-02 dimensions should fit without collision or viewport warnings");
+  const assertDimensionsFit = sheet => {
+    const labels = sheet.primitives.filter(item => item.kind === "text" && item.dimension_id);
+    const boxes = labels.map(label => ({
+      min_x: label.at[0], min_y: label.at[1] - 1.3,
+      max_x: label.at[0] + (label.max_width ?? label.text.length * 0.88), max_y: label.at[1] + 0.4,
+    }));
+    for (let index = 0; index < boxes.length; index++) for (let next = index + 1; next < boxes.length; next++) {
+      const a = boxes[index], b = boxes[next];
+      assert.ok(!(a.min_x < b.max_x + 0.8 && a.max_x + 0.8 > b.min_x && a.min_y < b.max_y && a.max_y > b.min_y),
+        `${sheet.id} automatic dimensions ${labels[index].dimension_id} and ${labels[next].dimension_id} should not overlap`);
+    }
+    assert.equal(sheet.warnings.filter(warning => warning.includes("automatic dimension text overlaps")).length, 0,
+      `${sheet.id} dimensions should fit without collision or viewport warnings`);
+  };
+  const autoDimensionSet = compilePermitDrawingSet(house);
+  assertDimensionsFit(autoDimensionSet.sheets.find(sheet => sheet.id === "A-02"));
+  assertDimensionsFit(autoDimensionSet.sheets.find(sheet => sheet.id === "A-03"));
+
+  const denseColumns = structuredClone(house);
+  const groundColumns = Object.values(denseColumns.objects).filter(object => object.object_type === "structure.column" && object.module_data.level_id === "GF");
+  groundColumns.forEach((column, index) => {
+    const data = column.module_data;
+    data.location_mm = [3000 + index * 100, 2000, data.location_mm[2]];
+  });
+  const denseSheet = compilePermitDrawingSet(denseColumns).sheets.find(sheet => sheet.id === "A-02");
+  assertDimensionsFit(denseSheet);
 });
 
 test("A-02 persists locked dimension placement while keeping opening values model-derived, including angled hosts", () => {
