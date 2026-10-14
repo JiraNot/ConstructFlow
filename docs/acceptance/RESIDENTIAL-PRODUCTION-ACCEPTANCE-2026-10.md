@@ -1,11 +1,12 @@
 # Residential Production Acceptance — 2026-10
 
-**Review date:** 2026-10-13  
+**Review date:** 2026-10-14
 **Status:** PARTIAL — a combined 260-object renovation-extension acceptance now runs from the two-storey reference-house fixture, but that fixture is not a surveyed/approved client project and does not provide visual or native CAD acceptance.
 
 ## Evidence used
 
 - `examples/constructflow-reference-house-2storey.cfproj` is validated by `verify:house-demo`: datums, storey-specific plans/framing, hosted openings, stairs, level/layer/slope edits, Undo/Redo, save/reopen, representations and supported clash checks.
+- Project-input confirmation (2026-10-14): no surveyed and approved client `.cfproj` is available for acceptance. Continue using the reference-house and generated fixtures, and keep field verification, survey provenance and permit/engineering review explicitly open until a real project is provided.
 - `verify:kitchen` checks the kitchen extension vertical slice through model, phase, takeoff, serialization and A-02/S-01/A-08 output.
 - `verify:renovation-integration` reclassifies the 239-object reference house as existing, records one explicit demolition, generates a 21-object kitchen adjacent to its east facade, then checks UUIDs, save/reopen, takeoff and two BOQ cost centers, coordination determinism, A-02/S-01/A-08 and edit/undo/redo. The fixture is generated for verification and is not a field-verified project.
 - `npm run bench:editor` records p50/p95 engine timings for object summary, plan projection/hit testing, snap index/query, coordination, takeoff, phased BOQ and drawing-set compilation on the 21/239/260-object project fixtures. Synthetic tiled fixtures at 478/956/4,780 objects additionally measure summary, plan projection/hit-testing and snap index/query only; they are not residential acceptance projects and do not measure browser frame time. See `docs/performance/EDITOR-PERFORMANCE-MATRIX-2026-10.md`.
