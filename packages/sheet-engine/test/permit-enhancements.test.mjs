@@ -34,6 +34,18 @@ test("automatic plan dimensions move labels off nearby labels and inside view bo
   assert.equal(nearEdge.has_collision, false);
   assert.ok(nearEdge.box.min_y >= 0);
   assert.ok(nearEdge.box.max_y <= 10);
+
+  const crowdedBounds = { min_x: 0, min_y: 0, max_x: 100, max_y: 30 };
+  const denseLabels = [];
+  for (let index = 0; index < 4; index++) {
+    const placement = placeDimensionLabel(base, [0, 1], denseLabels, crowdedBounds);
+    assert.equal(placement.has_collision, false, `dimension ${index + 1} should find a free annotation lane`);
+    assert.ok(denseLabels.every(other => !(placement.box.min_x < other.max_x + 0.8 && placement.box.max_x + 0.8 > other.min_x && placement.box.min_y < other.max_y && placement.box.max_y > other.min_y)));
+    denseLabels.push(placement.box);
+  }
+
+  const saturated = placeDimensionLabel(base, [0, 1], [{ min_x: 0, min_y: 0, max_x: 100, max_y: 30 }], crowdedBounds, { locked: true });
+  assert.equal(saturated.has_collision, true, "a locked label with no available position should report collision instead of moving");
 });
 
 test("A-02 compiles the shared staggered wood-floor pattern with its void clipped out", () => {
