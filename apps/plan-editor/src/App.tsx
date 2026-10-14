@@ -7,16 +7,12 @@ import {
   Phase,
   RemovalPhase,
   isGridObject,
-  isColumnObject,
-  isWallObject,
-  isDoorObject,
-  isWindowObject,
   PlacementReference,
   formatLengthMm,
   type DisplayLengthUnit,
   type ProjectViewTemplate,
 } from '@constructflow/project-model'
-import { CommandEnvelope, CommandRequest } from '@constructflow/command-schema'
+import { CommandEnvelope } from '@constructflow/command-schema'
 import { useProjectSession } from './app/useProjectSession.js'
 import { useEditorObjectSelection } from './app/useEditorObjectSelection.js'
 import { useToolSession } from './app/useToolSession.js'
@@ -52,6 +48,7 @@ import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcu
 import { useMultiViewPreferences, type EditorViewMode, type SplitViewLayout, type SplitViewPaneCount } from './app/useMultiViewPreferences.js'
 import { buildMultiViewGridTracks, buildPrimaryPaneGridStyle } from './app/multiViewLayout.mjs'
 import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
+import { createElevationObjectCommandHandler } from './app/elevationObjectCommands.js'
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
@@ -320,24 +317,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setCommandQueue((q) => [...q, ...envelopes])
   }
 
-  const handleMoveElevationObject = (objectId: string, deltaWorldMm: [number,number], deltaZMm: number, verticalIntent: 'move'|'top'|'base') => {
-    const object=project.objects[objectId];if(!object)return
-    if(isWallObject(object)){
-      const commands:CommandRequest[]=[]
-      if(Math.hypot(...deltaWorldMm)>0.1)commands.push({name:'MoveWall',input:{object_id:objectId,delta_mm:deltaWorldMm}})
-      if(Math.abs(deltaZMm)>0.1){const d=object.module_data;const topEdit=verticalIntent==='top';commands.push({name:'UpdateWallDimensions',input:{object_id:objectId,thickness_mm:d.thickness_mm,...(topEdit?(d.vertical_constraint==='top_level'?{top_level_id:d.top_level_id,top_offset_mm:Number(d.top_offset_mm??0)+deltaZMm,vertical_constraint:'top_level'}:{height_mm:Math.max(100,Number(d.height_mm)+deltaZMm),vertical_constraint:'fixed_height'}):(d.vertical_constraint==='top_level'?{top_level_id:d.top_level_id,base_offset_mm:Number(d.base_offset_mm??0)+deltaZMm,top_offset_mm:Number(d.top_offset_mm??0)+deltaZMm,vertical_constraint:'top_level'}:{height_mm:d.height_mm,base_offset_mm:Number(d.base_offset_mm??0)+deltaZMm,vertical_constraint:'fixed_height'}))}})}
-      if(commands.length)dispatchCommandBatch(commands)
-      return
-    }
-    if(isDoorObject(object)||isWindowObject(object)){
-      const commands:CommandRequest[]=[]
-      if(Math.hypot(...deltaWorldMm)>0.1){const wall=project.objects[object.module_data.wall_id];if(isWallObject(wall)){const a=wall.module_data.start_point_mm,b=wall.module_data.end_point_mm,length=Math.hypot(b[0]-a[0],b[1]-a[1]);if(length>0){const along=(deltaWorldMm[0]*(b[0]-a[0])+deltaWorldMm[1]*(b[1]-a[1]))/length;commands.push({name:'MoveOpening',input:{object_id:objectId,offset_along_wall_mm:object.module_data.offset_along_wall_mm+along}})}}}
-      if(Math.abs(deltaZMm)>0.1){const d=object.module_data;const vertical=verticalIntent==='top'?(d.vertical_constraint==='head_level'?{head_level_id:d.head_level_id,head_offset_mm:Number(d.head_offset_mm??0)+deltaZMm,vertical_constraint:'head_level'}:{height_mm:Math.max(100,d.height_mm+deltaZMm),vertical_constraint:'fixed_height'}):{sill_height_mm:Math.max(0,Number(d.sill_height_mm??0)+deltaZMm)};commands.push({name:isDoorObject(object)?'UpdateDoorDimensions':'UpdateWindowDimensions',input:{object_id:objectId,width_mm:d.width_mm,height_mm:d.height_mm,...vertical}})}
-      if(commands.length)dispatchCommandBatch(commands)
-      return
-    }
-    if(isColumnObject(object)&&Math.hypot(...deltaWorldMm)>0.1){const [x,y]=object.module_data.location_mm;handleMoveColumn(objectId,[x+deltaWorldMm[0],y+deltaWorldMm[1]])}
-  }
+  const handleMoveElevationObject = createElevationObjectCommandHandler(project, dispatchCommandBatch, handleMoveColumn)
 
   const handleExportTakeoff = () => {
     const escape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`
