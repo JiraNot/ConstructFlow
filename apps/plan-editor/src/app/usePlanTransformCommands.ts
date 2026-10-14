@@ -436,18 +436,34 @@ export function usePlanTransformCommands({ project, selectedIds, displayUnit, di
       ? trimLineAtIntersection(targetStart, targetFinish, cutterStart, cutterFinish, removeEnd)
       : null
     if (!trimmed) { setFileFeedback('Trim ต้องตัดกันภายในช่วงของเส้นทั้งสอง และตัดให้เหลือเส้นที่ยาวกว่า 1 มม.'); return }
+    const hostedOpeningOffsets = new Map<string, number>()
     if (target.object_type === 'architecture.wall') {
-      const hasHostedOpenings = Object.values(project.objects).some(candidate =>
+      const hostedOpenings = Object.values(project.objects).filter(candidate =>
         (candidate.object_type === 'door_window.door' || candidate.object_type === 'door_window.window') &&
         String((candidate.module_data as Record<string, unknown>).wall_id ?? '') === target.id)
-      if (hasHostedOpenings) { setFileFeedback('Trim ผนังที่มีประตูหรือหน้าต่างเป็น host ไม่ได้ · ย้ายช่องเปิดก่อน'); return }
+      for (const opening of hostedOpenings) {
+        if (opening.status === 'archived' || opening.removed_phase) {
+          setFileFeedback('Trim ผนังนี้ไม่ได้ · มีช่องเปิดที่เก็บเป็นประวัติ'); return
+        }
+        const projection = projectOpeningOffset(opening, trimmed.start, trimmed.end)
+        const width = resolveOpeningWidthMm(project, opening)
+        const length = planDistance(trimmed.start, trimmed.end)
+        if (!projection || projection.offAxisMm > 5 || !Number.isFinite(width) || width <= 0
+          || projection.offset - width / 2 < -1 || projection.offset + width / 2 > length + 1) {
+          setFileFeedback(`Trim ผ่านช่องเปิด ${opening.id.slice(0, 8)} · ปรับแนวตัดให้อยู่พ้นช่องเปิด`); return
+        }
+        hostedOpeningOffsets.set(opening.id, projection.offset)
+      }
     }
     if (target.object_type === 'structure.beam') {
       const support = removeEnd === 'start' ? targetData.start_column_id : targetData.end_column_id
       if (support) { setFileFeedback('Trim ปลายคานที่เชื่อมกับเสาไม่ได้ · จัดการจุดรองรับก่อน'); return }
     }
     const commands: CommandRequest[] = target.object_type === 'architecture.wall'
-      ? [{ name: 'UpdateWallEndpoints', input: { object_id: target.id, start_point_mm: trimmed.start, end_point_mm: trimmed.end } }]
+      ? [
+          ...[...hostedOpeningOffsets].map(([openingId, offset]) => ({ name: 'MoveOpening', input: { object_id: openingId, offset_along_wall_mm: offset } })),
+          { name: 'UpdateWallEndpoints', input: { object_id: target.id, start_point_mm: trimmed.start, end_point_mm: trimmed.end } },
+        ]
       : target.object_type === 'structure.beam'
         ? [{ name: 'UpdateBeamEndpoints', input: { object_id: target.id, start_point_mm: trimmed.start, end_point_mm: trimmed.end, start_column_id: targetData.start_column_id as string | null ?? null, end_column_id: targetData.end_column_id as string | null ?? null } }]
         : [{ name: 'UpdateRoomSeparator', input: { ...targetData, id: target.id, start_point_mm: trimmed.start, end_point_mm: trimmed.end } }]

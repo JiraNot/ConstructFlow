@@ -234,6 +234,31 @@ function createHostedWallJoinFixture() {
   return { projectJson: serializeProject(project), wallIds, windowIds }
 }
 
+function createHostedWallTrimFixture(windowOffset = 3500) {
+  let project = createEmptyProjectDocument(randomUUID(), 'Hosted wall trim')
+  const levelId = project.project.active_level_id
+  const wallId = randomUUID(), cutterId = randomUUID(), windowId = randomUUID()
+  const wall = CommandBus.execute(project, 'CreateWall', {
+    id: wallId, mark: 'W1', level_id: levelId,
+    start_point_mm: [0, 0, 0], end_point_mm: [6000, 0, 0], thickness_mm: 120, height_mm: 3000,
+  })
+  if (wall.result.status !== 'success') throw new Error(`Could not create trim target wall: ${wall.result.errors?.join(', ')}`)
+  project = wall.updatedProject
+  const cutter = CommandBus.execute(project, 'CreateWall', {
+    id: cutterId, mark: 'W1', level_id: levelId,
+    start_point_mm: [1000, -1500, 0], end_point_mm: [1000, 1500, 0], thickness_mm: 120, height_mm: 3000,
+  })
+  if (cutter.result.status !== 'success') throw new Error(`Could not create trim cutter wall: ${cutter.result.errors?.join(', ')}`)
+  project = cutter.updatedProject
+  const window = CommandBus.execute(project, 'CreateWindow', {
+    id: windowId, mark: 'W1', wall_id: wallId,
+    location_mm: [windowOffset, 0, 1200], offset_along_wall_mm: windowOffset,
+    width_mm: 900, height_mm: 1200, sill_height_mm: 900, level_id: levelId,
+  })
+  if (window.result.status !== 'success') throw new Error(`Could not create trim-test window: ${window.result.errors?.join(', ')}`)
+  return { projectJson: serializeProject(window.updatedProject), wallId, cutterId, windowId }
+}
+
 async function seedLocalProjectSnapshot(page: Page, projectJson: string) {
   await page.evaluate(async json => {
     await new Promise<void>((resolve, reject) => {
@@ -2398,6 +2423,78 @@ test('Project Browser trims a selected line at a second line preview and preserv
   await expect(page.getByRole('button', { name: 'ทำซ้ำ' })).toBeEnabled()
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
   await expect(page.locator(`li[data-object-id="${targetId}"]`)).toBeVisible()
+})
+
+test('Project Browser trims a wall while retaining hosted openings and their world positions', async ({ page }) => {
+  test.setTimeout(60_000)
+  const fixture = createHostedWallTrimFixture()
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await seedLocalProjectSnapshot(page, fixture.projectJson)
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const targetRow = page.locator(`li[data-object-id="${fixture.wallId}"]`)
+  const cutterRow = page.locator(`li[data-object-id="${fixture.cutterId}"]`)
+  await expect(targetRow).toBeVisible()
+  await targetRow.locator('.cf-browser-object').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await cutterRow.locator('.cf-browser-object').click({ modifiers: ['Control'] })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
+  await page.getByRole('button', { name: 'แสดงตัวอย่าง Trim' }).click()
+  await expect(page.getByText('Preview การแปลง')).toBeVisible()
+  await page.getByRole('button', { name: 'ยืนยัน · Undo ได้' }).click()
+  await expect.poll(async () => {
+    const snapshot = await readStoredProjectJson(page)
+    if (!snapshot) return false
+    const current = JSON.parse(snapshot)
+    const wall = current.objects[fixture.wallId]
+    const window = current.objects[fixture.windowId]
+    return wall?.module_data.start_point_mm?.[0] === 1000
+      && window?.module_data.offset_along_wall_mm === 2500
+      && window?.module_data.location_mm?.[0] === 3500
+  }).toBe(true)
+
+  const raw = await readStoredProjectJson(page)
+  const trimmed = JSON.parse(raw!) as { objects: Record<string, { module_data: Record<string, any> }> }
+  expect(trimmed.objects[fixture.windowId].module_data.wall_id).toBe(fixture.wallId)
+  expect(trimmed.objects[fixture.windowId].module_data.location_mm).toEqual([3500, 0, 1200])
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(async () => {
+    const snapshot = await readStoredProjectJson(page)
+    if (!snapshot) return false
+    const restored = JSON.parse(snapshot)
+    return restored.objects[fixture.windowId]?.module_data.offset_along_wall_mm === 3500
+  }).toBe(true)
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(async () => {
+    const snapshot = await readStoredProjectJson(page)
+    if (!snapshot) return false
+    return JSON.parse(snapshot).objects[fixture.windowId]?.module_data.offset_along_wall_mm === 2500
+  }).toBe(true)
+})
+
+test('Project Browser rejects trimming a wall through a hosted opening', async ({ page }) => {
+  const fixture = createHostedWallTrimFixture(700)
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
+  await seedLocalProjectSnapshot(page, fixture.projectJson)
+  await page.reload()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const targetRow = page.locator(`li[data-object-id="${fixture.wallId}"]`)
+  const cutterRow = page.locator(`li[data-object-id="${fixture.cutterId}"]`)
+  await targetRow.locator('.cf-browser-object').click()
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await cutterRow.locator('.cf-browser-object').click({ modifiers: ['Control'] })
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
+  await page.getByRole('button', { name: 'แสดงตัวอย่าง Trim' }).click()
+  await expect(page.getByText(/Trim ผ่านช่องเปิด/)).toBeVisible()
+  await expect(page.getByText('Preview การแปลง')).toHaveCount(0)
+  const raw = await readStoredProjectJson(page)
+  const unchanged = JSON.parse(raw!)
+  expect(unchanged.objects[fixture.wallId].module_data.start_point_mm).toEqual([0, 0, 0])
+  expect(unchanged.objects[fixture.windowId].module_data.offset_along_wall_mm).toBe(700)
 })
 
 test('column corner grips accept target W/H dimensions and commit through preview', async ({ page }) => {
