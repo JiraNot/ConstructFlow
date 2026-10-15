@@ -47,6 +47,13 @@ device on the same private Wi-Fi/LAN:
 npm run dev:standalone -- --install
 ```
 
+## Deploy with Coolify
+
+Use the repository root and [`compose.yaml`](compose.yaml) as a Docker Compose application,
+then route the assigned domain to the `web` service on port `80`. To enable the optional
+production AI gateway, configure the secrets and exact public origin described in
+[the Coolify deployment guide](docs/deployment/coolify.md) and enable the `ai` profile.
+
 After dependencies are installed, use `npm run dev:standalone` for later starts, or run
 `npm run dev` from `apps/plan-editor`. Run `scripts/enable_lan_dev_firewall.ps1` once as
 Administrator on the host PC, while connected to the home Wi-Fi, so Windows allows TCP port 5183
