@@ -8,6 +8,46 @@ import { stairFlightGripPoints } from '../src/components/stairFlightGripPoints.m
 
 const canvas = (page: Page) => page.locator('canvas').first()
 
+async function selectEditorView(page: Page, label: string) {
+  const viewButton = page.getByRole('button', { name: label, exact: true })
+  if (!(await viewButton.isVisible())) {
+    await page.locator('.cf-current-view').click()
+  }
+  await viewButton.click()
+}
+
+const toolGroupForPrefix = (prefix: string) => {
+  if (/^(เสา|ฐานราก|พื้น \()/.test(prefix)) return 'โครงสร้าง'
+  if (/^(พื้นสถาปัตย์|ฝ้า|หลังคา|บิลท์อิน|แนวบัว|เส้นแบ่งห้อง|บันได)/.test(prefix)) return 'สถาปัตย์'
+  if (/^(แนวท่อ|อุปกรณ์ไฟฟ้า)/.test(prefix)) return 'ระบบ'
+  if (/^(ยางลบ|ลบ|เส้นกริด|ระบบ Grid Line|ตลับเมตร|ปรับสเกลภาพ)/.test(prefix)) return 'เขียนแบบ/สำรวจ'
+  return null
+}
+
+async function openToolGroup(page: Page, prefix: string) {
+  const group = toolGroupForPrefix(prefix)
+  if (!group) return
+  const details = page.locator('.cf-tool-group').filter({ has: page.getByText(group, { exact: true }) })
+  if (!(await details.locator('.cf-tool-button').first().isVisible())) await details.locator('summary').click()
+}
+
+async function clickTool(page: Page, prefix: string) {
+  await openToolGroup(page, prefix)
+  await page.locator(`.cf-tool-button[title^="${prefix}"]`).first().click()
+}
+
+async function selectInspectorTab(page: Page, label: string) {
+  const group = ['คุณสมบัติ'].includes(label) ? 'แก้ไข' : ['รายการ', 'ปริมาณ'].includes(label) ? 'โครงการ' : 'เครื่องมือ'
+  await page.getByRole('tab', { name: group, exact: true }).click()
+  await page.getByRole('tab', { name: label, exact: true }).click()
+}
+
+async function toggleMultiViewMenu(page: Page) {
+  const menu = page.getByLabel('แบ่งมุมมอง')
+  if (!(await menu.isVisible())) await page.locator('.cf-current-view').click()
+  await menu.click()
+}
+
 async function capturePaintTrace(page: Page, run: () => Promise<void>) {
   const session = await page.context().newCDPSession(page)
   let resolveTrace!: (event: { stream?: string }) => void
@@ -552,7 +592,7 @@ test('AI proposal is previewed, validated, committed through CommandBus, and und
     })
   })
   await page.goto('/')
-  await page.getByRole('tab', { name: 'AI' }).click()
+  await selectInspectorTab(page, 'AI')
   await page.getByLabel('Gateway token').fill('test-token')
   await page.getByLabel('คำขอผู้ช่วย AI').fill('เพิ่มผนังทดสอบ')
   await page.getByRole('button', { name: 'สร้างแผนคำสั่ง' }).click()
@@ -567,7 +607,7 @@ test('AI proposal is previewed, validated, committed through CommandBus, and und
   await expect(page.locator('.cf-ai-notice')).toContainText('ใช้แผน AI แล้ว')
   await expect(page.getByRole('button', { name: 'ย้อนกลับ' })).toBeEnabled()
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const browser = page.getByLabel('Project Browser')
   await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill('AI-W1')
@@ -592,7 +632,7 @@ test('AI panel refreshes extension command descriptors registered while the pane
     })
   })
   await page.goto('/')
-  await page.getByRole('tab', { name: 'AI' }).click()
+  await selectInspectorTab(page, 'AI')
   await page.evaluate(async () => {
     const fixture = await import('/src/testing/moduleUiFixture.ts')
     fixture.registerModuleUIFixture()
@@ -615,7 +655,7 @@ test('AI panel refreshes extension command descriptors registered while the pane
 
 test('extension UI actions collect schema input, require confirmation, and use the shared undoable command session', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('tab', { name: 'ส่วนขยาย' }).click()
+  await selectInspectorTab(page, 'ส่วนขยาย')
   await expect(page.getByText('ยังไม่มี extension ที่เพิ่มคำสั่งในแผงนี้')).toBeVisible()
   await page.evaluate(async () => {
     const fixture = await import('/src/testing/moduleUiFixture.ts')
@@ -654,7 +694,7 @@ test('sandboxed module package import runs commands through the shared undoable 
   await page.goto('/')
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true)
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
-  await page.getByRole('tab', { name: 'ส่วนขยาย' }).click()
+  await selectInspectorTab(page, 'ส่วนขยาย')
   const manager = page.getByRole('region', { name: 'ตัวจัดการแพ็กเกจ extension' })
   const source = `export default {
     manifest: { id: 'sample.package', version: '1.0.0', schema_version: 1 },
@@ -710,7 +750,7 @@ test('synthetic 600-wall project supports browser search, persistent selection, 
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
   const firstRestoreMs = await page.evaluate(() => performance.now())
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const browser = page.getByLabel('Project Browser')
   await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   const rows = browser.locator('li[data-object-id]')
@@ -719,7 +759,7 @@ test('synthetic 600-wall project supports browser search, persistent selection, 
   const searchSelectSamplesMs: number[] = []
   let selectedObjectId: string | null = null
   for (const mark of ['STRESS-0001', 'STRESS-0300', 'STRESS-0600']) {
-    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await selectInspectorTab(page, 'รายการ')
     await page.evaluate(() => {
       performance.clearMarks('stress-search-select-start')
       performance.clearMarks('stress-search-select-end')
@@ -790,14 +830,14 @@ test('synthetic 600-wall project supports browser search, persistent selection, 
   const sortedFrameIntervalsMs = [...navigationFrameIntervalsMs].sort((left, right) => left - right)
   const sortedPlanRedrawDurationsMs = [...planRedrawDurationsMs].sort((left, right) => left - right)
 
-  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await selectInspectorTab(page, 'คุณสมบัติ')
   await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', objectId!)
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill('')
   await browser.getByRole('button', { name: 'ตะวันออก' }).click()
   await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill('STRESS-0600')
   await expect(rows).toHaveCount(1)
   await rows.first().locator('.cf-browser-object').click()
@@ -809,7 +849,7 @@ test('synthetic 600-wall project supports browser search, persistent selection, 
   const initialStart = [...initialWall.module_data.start_point_mm as number[]]
   const initialEnd = [...initialWall.module_data.end_point_mm as number[]]
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 1 ชิ้น').click()
   await page.getByRole('spinbutton', { name: 'ระยะย้ายแกน X เมตร' }).fill('0.125')
   await page.getByRole('spinbutton', { name: 'ระยะย้ายแกน Y เมตร' }).fill('-0.05')
@@ -856,7 +896,7 @@ test('synthetic 600-wall project supports browser search, persistent selection, 
 
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const restoredBrowser = page.getByLabel('Project Browser')
   await restoredBrowser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   await expect(restoredBrowser.locator('li[data-object-id]')).toHaveCount(600, { timeout: 30_000 })
@@ -911,7 +951,7 @@ test('synthetic 5,000-wall project restores, searches, selects, and preserves UU
   const firstRestoreMs = Date.now() - restoreStartedAt
   console.log(`[browser-stress-stage] ${JSON.stringify({ stage: 'first-restore', elapsed_ms: Date.now() - testStartedAt })}`)
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const browser = page.getByLabel('Project Browser')
   await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   const tree = browser.locator('.cf-browser-tree')
@@ -925,7 +965,7 @@ test('synthetic 5,000-wall project restores, searches, selects, and preserves UU
   await rows.first().locator('.cf-browser-object').click()
   const primaryPane = page.locator('.cf-multiview-pane').first()
   await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
-  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await selectInspectorTab(page, 'คุณสมบัติ')
   await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', objectId!)
 
   const savedProjectJson = await readStoredProjectJson(page)
@@ -961,7 +1001,7 @@ test('synthetic 5,000-wall project restores, searches, selects, and preserves UU
     console.log(`[browser-restore-cpu-profile] ${JSON.stringify([...totals].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([frame, microseconds]) => ({ frame, milliseconds: Math.round(microseconds / 1000) })))}`)
     await profiler.detach()
   }
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const restoredBrowser = page.getByLabel('Project Browser')
   await restoredBrowser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   const restoredTree = restoredBrowser.locator('.cf-browser-tree')
@@ -1058,7 +1098,7 @@ test('project file controller opens a .cfproj and saves a downloadable copy with
     buffer: Buffer.from(serializeProject(created.updatedProject)),
   })
   await expect(page.getByRole('button', { name: 'แก้ชื่อโครงการ: File Controller Acceptance' })).toBeVisible()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const objectRow = page.locator(`li[data-object-id="${objectId}"]`)
   await expect(objectRow).toBeVisible()
   await page.getByRole('button', { name: 'บันทึก', exact: true }).click()
@@ -1144,7 +1184,7 @@ test('mouse and keyboard authoring creates wall, beam, hosted opening, and point
   await page.keyboard.press('Escape')
 
   // Draw a beam with two mouse points.
-  await page.locator('.cf-tool-button[title^="คาน"]').click()
+  await clickTool(page, 'คาน')
   await clickCanvasFraction(page, 0.30, 0.27)
   await clickCanvasFraction(page, 0.43, 0.27)
   await expect(page.locator('body')).toContainText('SPAN LENGTH')
@@ -1152,7 +1192,7 @@ test('mouse and keyboard authoring creates wall, beam, hosted opening, and point
   await page.keyboard.press('Escape')
 
   // Start a second beam with the mouse, enter a numeric length, and commit with Enter.
-  await page.locator('.cf-tool-button[title^="คาน"]').click()
+  await clickTool(page, 'คาน')
   await clickCanvasFraction(page, 0.33, 0.63)
   await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
   const lengthInput = page.getByRole('textbox', { name: /ความยาวช่วงที่วาด/ })
@@ -1161,7 +1201,7 @@ test('mouse and keyboard authoring creates wall, beam, hosted opening, and point
   await expect(page.locator('body')).toContainText('SPAN LENGTH')
 
   // Place a column with the mouse, then place another with Enter at the canvas cursor.
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.65, 0.72)
   await expect(page.locator('body')).toContainText('structure.column')
   await moveToCanvasFraction(page, 0.78, 0.72)
@@ -1170,14 +1210,14 @@ test('mouse and keyboard authoring creates wall, beam, hosted opening, and point
   await expect(page.locator('body')).toContainText('structure.column')
 
   // Find the newly drawn wall through the live hosted-snap feedback, then place a door.
-  await page.locator('.cf-tool-button[title^="ประตู"]').click()
+  await clickTool(page, 'ประตู')
   await moveToCanvasFraction(page, 0.50, 0.45)
   await expect(page.getByTestId('snap-feedback')).toContainText(/Snap:\s*(?:On Wall|Wall|ผนัง|Host)/i)
   await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'position-on-host')
   await expect(page.locator('[data-tool-step]')).toContainText(/Snap:\s*(?:On Wall|Wall|ผนัง|Host)/i)
   await clickCanvasFraction(page, 0.50, 0.45)
   await expect(page.locator('[data-tool-step]')).toContainText('กำหนดตำแหน่งบนผนัง')
-  await expect(page.locator('body')).toContainText('Door D1')
+  await expect(page.locator('body')).toContainText('ประตู D1')
   await expect(page.locator('body')).toContainText('Offset along wall:')
 
   // Commit another door from the keyboard at a distinct point on that same wall.
@@ -1185,18 +1225,18 @@ test('mouse and keyboard authoring creates wall, beam, hosted opening, and point
   await expect(page.getByTestId('snap-feedback')).toContainText(/Snap:\s*On Wall[^\n]*\([\d.]+m\)/i)
   await canvasElement.focus()
   await page.keyboard.press('Enter')
-  await expect(page.locator('body')).toContainText('Door D1')
+  await expect(page.locator('body')).toContainText('ประตู D1')
   await expect(page.locator('body')).toContainText('Offset along wall:')
   expect(pageErrors).toEqual([])
 })
 
 test('point placement accepts numeric X/Y dimensions by mouse and keyboard', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const columns = page.locator('.cf-browser-tree [data-object-type="structure.column"]')
   const initialCount = await columns.count()
 
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.65, 0.72)
   await expect(columns).toHaveCount(initialCount + 1)
 
@@ -1224,7 +1264,7 @@ test('point placement accepts numeric X/Y dimensions by mouse and keyboard', asy
 
 test('changing project units preserves incomplete placement dimensions and converts valid lengths', async ({ page }) => {
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.65, 0.72)
   await moveToCanvasFraction(page, 0.67, 0.70)
 
@@ -1242,7 +1282,7 @@ test('changing project units preserves incomplete placement dimensions and conve
 
 test('repeat last tool resets an active wall session and starts another wall', async ({ page }) => {
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickTool(page, 'ผนัง')
   await clickCanvasFraction(page, 0.22, 0.28)
   await clickCanvasFraction(page, 0.42, 0.28)
   await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
@@ -1254,17 +1294,17 @@ test('repeat last tool resets an active wall session and starts another wall', a
   await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
   await clickCanvasFraction(page, 0.42, 0.62)
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await expect(page.locator('li[data-object-type="architecture.wall"]')).toHaveCount(2)
 })
 
 test('beam placement clears cancelled steps and repeats through keyboard and mouse', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const beams = page.locator('.cf-browser-tree [data-object-type="structure.beam"]')
   const initialCount = await beams.count()
 
-  await page.locator('.cf-tool-button[title^="คาน"]').click()
+  await clickTool(page, 'คาน')
   await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
   await clickCanvasFraction(page, 0.24, 0.30)
   await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
@@ -1297,10 +1337,10 @@ test('beam placement clears cancelled steps and repeats through keyboard and mou
 
 test('wall chains commit and undo each segment independently', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
 
   const walls = page.locator('.cf-browser-tree [data-object-type="architecture.wall"]')
-  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickTool(page, 'ผนัง')
   await clickCanvasFraction(page, 0.22, 0.28)
   await clickCanvasFraction(page, 0.42, 0.28)
   await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
@@ -1322,9 +1362,9 @@ test('wall chains commit and undo each segment independently', async ({ page }) 
 
 test('wall placement previews and commits a clean connected junction', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const walls = page.locator('.cf-browser-tree [data-object-type="architecture.wall"]')
-  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickTool(page, 'ผนัง')
   await clickCanvasFraction(page, 0.20, 0.42)
   await clickCanvasFraction(page, 0.40, 0.42)
   await expect(walls).toHaveCount(1)
@@ -1396,9 +1436,9 @@ test('wall intersection start retains every host in the pending union preview', 
   await seedLocalProjectSnapshot(page, createWallIntersectionProject())
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
 
-  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickTool(page, 'ผนัง')
   await clickSurveyPoint(page, 0, 0)
   await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
   await moveToSurveyPoint(page, 1000, -1000)
@@ -1410,11 +1450,11 @@ test('wall intersection start retains every host in the pending union preview', 
 
 test('wall placement previews a T junction when starting from a wall midpoint', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const walls = page.locator('.cf-browser-tree [data-object-type="architecture.wall"]')
   const planCanvas = canvas(page)
 
-  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickTool(page, 'ผนัง')
   await clickCanvasFraction(page, 0.20, 0.42)
   await clickCanvasFraction(page, 0.40, 0.42)
   await expect(walls).toHaveCount(1)
@@ -1448,9 +1488,9 @@ test('wall placement previews a T junction when starting from a wall midpoint', 
 
 test('beam chains accept numeric spans and undo each segment independently', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const beams = page.locator('.cf-browser-tree [data-object-type="structure.beam"]')
-  await page.locator('.cf-tool-button[title^="คาน"]').click()
+  await clickTool(page, 'คาน')
   await clickCanvasFraction(page, 0.25, 0.62)
 
   const length = page.getByRole('textbox', { name: /ความยาวช่วงที่วาด/ })
@@ -1486,14 +1526,14 @@ test('window placement identifies its wall host and commits with the keyboard', 
   await page.keyboard.press('Escape')
 
   const canvasElement = canvas(page)
-  await page.locator('.cf-tool-button[title^="หน้าต่าง"]').click()
+  await clickTool(page, 'หน้าต่าง')
   await moveToCanvasFraction(page, 0.50, 0.45)
   await expect(page.getByTestId('snap-feedback')).toContainText(/Snap:\s*On Wall/i)
   await expect(page.locator('[data-tool-step]')).toContainText('กำหนดตำแหน่งบนผนัง')
   await canvasElement.focus()
   await page.keyboard.press('Enter')
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await expect(page.locator('.cf-browser-tree [data-object-type="door_window.window"]')).toHaveCount(1)
   await expect(page.locator('[data-tool-step]')).toContainText('กำหนดตำแหน่งบนผนัง')
   await page.keyboard.press('Escape')
@@ -1502,17 +1542,17 @@ test('window placement identifies its wall host and commits with the keyboard', 
 
 test('hosted opening and point tools cancel cleanly and repeat through mouse and keyboard', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const doors = page.locator('.cf-browser-tree [data-object-type="door_window.door"]')
   const columns = page.locator('.cf-browser-tree [data-object-type="structure.column"]')
   const initialDoorCount = await doors.count()
   const initialColumnCount = await columns.count()
 
-  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickTool(page, 'ผนัง')
   await clickCanvasFraction(page, 0.20, 0.45)
   await clickCanvasFraction(page, 0.80, 0.45)
 
-  await page.locator('.cf-tool-button[title^="ประตู"]').click()
+  await clickTool(page, 'ประตู')
   await moveToCanvasFraction(page, 0.50, 0.45)
   await expect(page.getByTestId('snap-feedback')).toContainText(/Snap:/i)
   await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'position-on-host')
@@ -1535,7 +1575,7 @@ test('hosted opening and point tools cancel cleanly and repeat through mouse and
   await clickCanvasFraction(page, 0.64, 0.45)
   await expect(doors).toHaveCount(initialDoorCount + 2)
 
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await moveToCanvasFraction(page, 0.72, 0.70)
   await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'position')
   await page.keyboard.press('Escape')
@@ -1557,7 +1597,7 @@ test('pipe and moulding tools report pending endpoints and Escape cancels drafts
     { tool: 'แนวท่อ', family: 'drainage.pipe_route', prompt: 'แนวท่อ น้ำทิ้ง' },
     { tool: 'แนวบัว', family: 'decorative.moulding_run', prompt: 'แนวบัว' },
   ]) {
-    await page.locator(`.cf-tool-button[title^="${workflow.tool}"]`).click()
+    await clickTool(page, workflow.tool)
     await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'start-point')
     await expect(page.locator('[data-tool-step]')).toContainText(workflow.prompt)
     await clickCanvasFraction(page, 0.32, 0.48)
@@ -1573,24 +1613,24 @@ test('pipe and moulding tools report pending endpoints and Escape cancels drafts
 test('polygon placement commits a slab boundary through the shared placement session', async ({ page }) => {
   await page.goto('/')
   const canvasElement = canvas(page)
-  await page.locator('.cf-tool-button[title^="พื้น ("]').click()
+  await clickTool(page, 'พื้น (')
   await clickCanvasFraction(page, 0.25, 0.25)
   await clickCanvasFraction(page, 0.70, 0.25)
   await clickCanvasFraction(page, 0.70, 0.70)
   await canvasElement.focus()
   await page.keyboard.press('Enter')
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await expect(page.locator('li[data-object-type="structure.slab"]')).toHaveCount(1)
 })
 
 test('grid-system placement validates entered lengths and commits both axes', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const gridRows = page.locator('li[data-object-type="structure.grid"]')
   const initialCount = await gridRows.count()
 
-  await page.locator('.cf-tool-button[title^="ระบบ Grid Line"]').click()
+  await clickTool(page, 'ระบบ Grid Line')
   const xIntervals = page.getByLabel(/ระยะช่วงแนวตั้งของระบบกริด/)
   const yIntervals = page.getByLabel(/ระยะช่วงแนวนอนของระบบกริด/)
   await xIntervals.fill('0')
@@ -1610,10 +1650,10 @@ test('grid-system placement validates entered lengths and commits both axes', as
 test('Escape cancels a pending grid-copy destination before leaving the tool', async ({ page }) => {
   await page.goto('/')
   const canvasElement = canvas(page)
-  await page.locator('.cf-tool-button[title^="เส้นกริด"]').click()
+  await clickTool(page, 'เส้นกริด')
   await clickCanvasFraction(page, 0.30, 0.45)
   await clickCanvasFraction(page, 0.70, 0.45)
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const gridRow = page.locator('li[data-object-type="structure.grid"]').first()
   await expect(gridRow).toBeVisible()
   await page.keyboard.press('Escape')
@@ -1634,35 +1674,35 @@ test('Project Browser selection and type edits preserve one object identity acro
   test.setTimeout(60_000)
   await page.goto('/')
   const canvasElement = canvas(page)
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.63, 0.68)
-  await expect(page.locator('body')).toContainText('Column C1')
+  await expect(page.locator('body')).toContainText('เสา C1')
 
-  await page.getByRole('button', { name: 'รูปด้านเหนือ' }).click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectEditorView(page, 'รูปด้านเหนือ')
+  await selectInspectorTab(page, 'รายการ')
   const objectRow = page.locator('li[data-object-type="structure.column"]').first()
   await expect(objectRow).toBeVisible()
   const canonicalId = await objectRow.getAttribute('data-object-id')
   expect(canonicalId).toBeTruthy()
   await objectRow.locator('.cf-browser-object').click()
-  await expect(page.getByRole('tab', { name: 'คุณสมบัติ' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: 'แก้ไข' })).toHaveAttribute('aria-selected', 'true')
 
   const properties = page.getByTestId('properties-selection')
   await expect(properties).toHaveAttribute('data-object-id', canonicalId!)
-  await expect(properties).toContainText('Column C1')
+  await expect(properties).toContainText('เสา C1')
   await page.getByLabel('ชนิดของชิ้นที่เลือก').selectOption('C2')
   await expect(properties).toHaveAttribute('data-object-id', canonicalId!)
-  await expect(properties).toContainText('Column C2')
+  await expect(properties).toContainText('เสา C2')
 
   // The browser row and Properties panel keep the same canonical UUID as the app changes views.
   const views = ['แปลนพื้น', 'แปลนคาน', 'แปลนหลังคา', 'แปลนฝ้า RCP', 'รูปด้านเหนือ', 'รูปด้านใต้', 'รูปด้านตะวันออก', 'รูปด้านตะวันตก', '3D ดูตัวอย่าง']
   for (const view of views) {
-    await page.getByRole('button', { name: view, exact: true }).click()
+    await selectEditorView(page, view)
     await expect(properties).toHaveAttribute('data-object-id', canonicalId!)
-    await expect(properties).toContainText('Column C2')
+    await expect(properties).toContainText('เสา C2')
   }
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const sameRow = page.locator(`li[data-object-id="${canonicalId}"]`)
   await expect(sameRow.locator('.cf-browser-object')).toHaveAttribute('aria-selected', 'true')
   await expect(sameRow.locator('.cf-browser-object')).toContainText('C2')
@@ -1671,21 +1711,21 @@ test('Project Browser selection and type edits preserve one object identity acro
 test('multi-selection type changes commit as one undoable Properties action', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.31, 0.63)
   await clickCanvasFraction(page, 0.69, 0.63)
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
 
   const rows = page.locator('.cf-browser-tree [data-object-type="structure.column"]')
   await expect(rows).toHaveCount(2)
   const ids = await rows.evaluateAll(elements => elements.map(element => element.getAttribute('data-object-id')).filter((id): id is string => Boolean(id)))
   expect(ids).toHaveLength(2)
   await rows.nth(0).locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await rows.nth(1).locator('.cf-browser-object').click({ modifiers: ['Control'] })
-  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await selectInspectorTab(page, 'คุณสมบัติ')
   await expect(page.locator('.cf-inspector-content')).toContainText('เลือก 2 ชิ้น')
 
   await expect.poll(async () => readStoredProjectJson(page)).toBeTruthy()
@@ -1721,7 +1761,7 @@ test('multi-selection type changes commit as one undoable Properties action', as
 
 test('placement type picker applies the chosen catalog type to the created object', async ({ page }) => {
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
 
   const placementType = page.getByLabel('ชนิดเสา')
   await expect(placementType).toBeVisible()
@@ -1730,12 +1770,12 @@ test('placement type picker applies the chosen catalog type to the created objec
 
   const properties = page.getByTestId('properties-selection')
   await expect(properties).toHaveAttribute('data-object-type', 'structure.column')
-  await expect(properties).toContainText('Column C2')
+  await expect(properties).toContainText('เสา C2')
 })
 
 test('contextual type picker searches catalog types by name and then places the result', async ({ page }) => {
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
 
   const search = page.getByLabel('ค้นหาในคลังชนิด เสา')
   const picker = page.getByLabel('ชนิดเสา', { exact: true })
@@ -1747,7 +1787,7 @@ test('contextual type picker searches catalog types by name and then places the 
   await clickCanvasFraction(page, 0.82, 0.71)
 
   await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-type', 'structure.column')
-  await expect(page.getByTestId('properties-selection')).toContainText('Column C2')
+  await expect(page.getByTestId('properties-selection')).toContainText('เสา C2')
 })
 
 test('in-context placement type pickers cover structural, wall, and hosted-opening families', async ({ page }) => {
@@ -1761,7 +1801,7 @@ test('in-context placement type pickers cover structural, wall, and hosted-openi
     { tool: 'หน้าต่าง', label: 'ชนิดหน้าต่าง', typeName: 'W2' },
   ]
   for (const { tool, label, typeName } of cases) {
-    await page.locator(`.cf-tool-button[title^="${tool}"]`).click()
+    await clickTool(page, tool)
     const picker = page.getByLabel(label)
     await expect(picker).toBeVisible()
     await picker.selectOption(typeName)
@@ -1773,27 +1813,27 @@ test('placement type choices are applied to created columns, foundations, beams,
   await page.goto('/')
   const properties = page.getByTestId('properties-selection')
 
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await page.getByLabel('ชนิดเสา').selectOption('C2')
   await clickCanvasFraction(page, 0.24, 0.72)
   await expect(properties).toHaveAttribute('data-object-type', 'structure.column')
-  await expect(properties).toContainText('Column C2')
+  await expect(properties).toContainText('เสา C2')
 
-  await page.locator('.cf-tool-button[title^="ฐานราก"]').click()
+  await clickTool(page, 'ฐานราก')
   await page.getByLabel('ชนิดฐานราก').selectOption('F2')
   await clickCanvasFraction(page, 0.24, 0.72)
   await expect(properties).toHaveAttribute('data-object-type', 'structure.foundation')
-  await expect(properties).toContainText('Footing F2')
+  await expect(properties).toContainText('ฐานราก F2')
 
-  await page.locator('.cf-tool-button[title^="คาน"]').click()
+  await clickTool(page, 'คาน')
   await page.getByLabel('ชนิดคาน').selectOption('B2')
   await clickCanvasFraction(page, 0.22, 0.26)
   await clickCanvasFraction(page, 0.78, 0.26)
   await page.keyboard.press('Escape')
   await expect(properties).toHaveAttribute('data-object-type', 'structure.beam')
-  await expect(properties).toContainText('Beam B2')
+  await expect(properties).toContainText('คาน B2')
 
-  await page.locator('.cf-tool-button[title^="ผนัง"]').click()
+  await clickTool(page, 'ผนัง')
   await page.getByLabel('ชนิดผนัง').selectOption('AAC 150 mm')
   await clickCanvasFraction(page, 0.18, 0.45)
   await clickCanvasFraction(page, 0.82, 0.45)
@@ -1801,17 +1841,17 @@ test('placement type choices are applied to created columns, foundations, beams,
   await expect(properties).toHaveAttribute('data-object-type', 'architecture.wall')
   await expect(properties).toContainText('AAC 150 mm')
 
-  await page.locator('.cf-tool-button[title^="ประตู"]').click()
+  await clickTool(page, 'ประตู')
   await page.getByLabel('ชนิดประตู').selectOption('D2')
   await clickCanvasFraction(page, 0.34, 0.45)
   await expect(properties).toHaveAttribute('data-object-type', 'door_window.door')
-  await expect(properties).toContainText('Door D2')
+  await expect(properties).toContainText('ประตู D2')
 
-  await page.locator('.cf-tool-button[title^="หน้าต่าง"]').click()
+  await clickTool(page, 'หน้าต่าง')
   await page.getByLabel('ชนิดหน้าต่าง').selectOption('W2')
   await clickCanvasFraction(page, 0.70, 0.45)
   await expect(properties).toHaveAttribute('data-object-type', 'door_window.window')
-  await expect(properties).toContainText('Window W2')
+  await expect(properties).toContainText('หน้าต่าง W2')
 })
 
 test('placement type choices are applied to created slabs and roofs', async ({ page }) => {
@@ -1826,7 +1866,7 @@ test('placement type choices are applied to created slabs and roofs', async ({ p
   expect(expectedSlabTypeId).toBeTruthy()
   expect(expectedRoofTypeId).toBeTruthy()
 
-  await page.locator('.cf-tool-button[title^="พื้น ("]').click()
+  await clickTool(page, 'พื้น (')
   const slabType = page.getByLabel('ชนิดพื้น')
   await expect(slabType).toBeVisible()
   await slabType.selectOption('S1')
@@ -1839,7 +1879,7 @@ test('placement type choices are applied to created slabs and roofs', async ({ p
   const slabId = await properties.getAttribute('data-object-id')
   expect(slabId).toBeTruthy()
 
-  await page.locator('.cf-tool-button[title^="หลังคา"]').click()
+  await clickTool(page, 'หลังคา')
   const roofType = page.getByLabel('ชนิดระบบหลังคา')
   await expect(roofType).toBeVisible()
   await roofType.selectOption('RF-TIMBER')
@@ -1866,7 +1906,7 @@ test('placement type choices are applied to created slabs and roofs', async ({ p
 
 test('plan canvas marquee selection keeps the same object UUIDs in Properties and Project Browser', async ({ page }) => {
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.38, 0.64)
   await clickCanvasFraction(page, 0.62, 0.64)
   await page.keyboard.press('Escape')
@@ -1886,7 +1926,7 @@ test('plan canvas marquee selection keeps the same object UUIDs in Properties an
   expect(selectedIds).toHaveLength(2)
   expect(new Set(selectedIds).size).toBe(2)
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const selectedBrowserIds = await page.locator('.cf-browser-tree [data-object-id].is-selected').evaluateAll(elements =>
     elements.map(element => element.getAttribute('data-object-id')).filter((id): id is string => Boolean(id)))
   expect(new Set(selectedBrowserIds)).toEqual(new Set(selectedIds))
@@ -1896,7 +1936,7 @@ test('selected slabs and roofs can change catalog type from Properties', async (
   await page.goto('/')
   await seedLocalProjectSnapshot(page, createSlabAndRoofTypeAssignmentProject())
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const properties = page.getByTestId('properties-selection')
   const picker = page.getByLabel('ชนิดของชิ้นที่เลือก')
 
@@ -1907,7 +1947,7 @@ test('selected slabs and roofs can change catalog type from Properties', async (
   await picker.selectOption('S1')
   await expect(picker).toHaveValue('S1')
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const roofRow = page.locator('li[data-object-type="roof.system"] .cf-browser-object')
   await page.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   await roofRow.click()
@@ -1990,7 +2030,7 @@ test('personal type library persists saved types and imports a project copy thro
   await dialog.getByRole('button', { name: 'เพิ่มลงโครงการและเลือก' }).click()
   await expect(dialog).toBeHidden()
 
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   const placementType = page.getByLabel('ชนิดเสา')
   await expect(placementType.locator('option').filter({ hasText: 'C1-2' })).toHaveCount(1)
 
@@ -2127,20 +2167,20 @@ test('plan, framing, and roof plan share pan and zoom navigation', async ({ page
   const zoom = await planCanvas.getAttribute('data-viewport-zoom')
   expect(panX).not.toBeNull()
   expect(panY).not.toBeNull()
-  await page.getByRole('button', { name: 'แปลนคาน', exact: true }).click()
+  await selectEditorView(page, 'แปลนคาน')
   await expect(page.locator('.cf-plan-canvas')).toHaveAttribute('data-viewport-pan-x', panX!)
   await expect(page.locator('.cf-plan-canvas')).toHaveAttribute('data-viewport-pan-y', panY!)
   await expect(page.locator('.cf-plan-canvas')).toHaveAttribute('data-viewport-zoom', zoom!)
 
   await page.locator('.cf-plan-canvas').getByRole('button', { name: 'ซูมเข้า' }).click()
   const framingZoom = await page.locator('.cf-plan-canvas').getAttribute('data-viewport-zoom')
-  await page.getByRole('button', { name: 'แปลนหลังคา', exact: true }).click()
+  await selectEditorView(page, 'แปลนหลังคา')
   await expect(page.locator('.cf-plan-canvas')).toHaveAttribute('data-viewport-zoom', framingZoom!)
 })
 
 test('orthographic elevations share zoom and vertical navigation with mirrored horizontal pans', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'รูปด้านเหนือ', exact: true }).click()
+  await selectEditorView(page, 'รูปด้านเหนือ')
   let elevation = page.getByTestId('elevation-canvas')
   const canvasElement = elevation.locator('canvas')
   const bounds = await canvasElement.boundingBox()
@@ -2155,13 +2195,13 @@ test('orthographic elevations share zoom and vertical navigation with mirrored h
   const northZoom = await elevation.getAttribute('data-elevation-zoom')
   expect(northPanX).not.toBe(0)
 
-  await page.getByRole('button', { name: 'รูปด้านใต้', exact: true }).click()
+  await selectEditorView(page, 'รูปด้านใต้')
   elevation = page.getByTestId('elevation-canvas')
   await expect(elevation).toHaveAttribute('data-elevation-pan-x', String(-northPanX))
   await expect(elevation).toHaveAttribute('data-elevation-pan-y', northPanY!)
   await expect(elevation).toHaveAttribute('data-elevation-zoom', northZoom!)
 
-  await page.getByRole('button', { name: 'รูปด้านตะวันออก', exact: true }).click()
+  await selectEditorView(page, 'รูปด้านตะวันออก')
   elevation = page.getByTestId('elevation-canvas')
   await expect(elevation).toHaveAttribute('data-elevation-pan-y', northPanY!)
   await expect(elevation).toHaveAttribute('data-elevation-zoom', northZoom!)
@@ -2172,14 +2212,14 @@ test('dragging one selected elevation member moves the selected group in one edi
   await page.getByRole('button', { name: 'เสา' }).click()
   await clickCanvasFraction(page, 0.34, 0.56)
   await clickCanvasFraction(page, 0.66, 0.56)
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const rows = page.locator('.cf-browser-tree li[data-object-type="structure.column"]')
   await expect(rows).toHaveCount(2)
   const first = rows.nth(0).locator('.cf-browser-object')
   const second = rows.nth(1).locator('.cf-browser-object')
   const properties = page.getByTestId('properties-selection')
   const readPosition = async (row: ReturnType<typeof rows.nth>) => {
-    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await selectInspectorTab(page, 'รายการ')
     await row.click()
     await expect(properties).toBeVisible()
     return properties.innerText().then(text => text.match(/ตำแหน่ง:\s*\(([^)]+)\)/)?.[1] ?? '')
@@ -2188,15 +2228,15 @@ test('dragging one selected elevation member moves the selected group in one edi
   const secondBefore = await readPosition(second)
   expect(firstBefore).not.toBe('')
   expect(secondBefore).not.toBe('')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await first.click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await second.click({ modifiers: ['Control'] })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await expect(first).toHaveAttribute('aria-selected', 'true')
   await expect(second).toHaveAttribute('aria-selected', 'true')
 
-  await page.getByRole('button', { name: 'รูปด้านเหนือ', exact: true }).click()
+  await selectEditorView(page, 'รูปด้านเหนือ')
   const elevation = page.getByTestId('elevation-canvas')
   const bounds = await elevation.locator('canvas').boundingBox()
   if (!bounds) throw new Error('North elevation canvas is not visible')
@@ -2216,7 +2256,7 @@ test('dragging one selected elevation member moves the selected group in one edi
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
   expect(await readPosition(first)).toBe(firstAfter)
   expect(await readPosition(second)).toBe(secondAfter)
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await expect(rows).toHaveCount(2)
 })
 
@@ -2225,7 +2265,7 @@ test('ceiling grid spacing edits through Properties and is undoable', async ({ p
   await page.goto('/')
   await seedLocalProjectSnapshot(page, fixture.projectJson)
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const ceilingRow = page.locator(`.cf-browser-tree [data-object-id="${fixture.ceilingId}"]`)
   await expect(ceilingRow).toBeVisible()
   await ceilingRow.locator('.cf-browser-object').click()
@@ -2256,15 +2296,15 @@ test('wall drag preview includes the linked room, floor, and ceiling before comm
   await page.goto('/')
   await seedLocalProjectSnapshot(page, fixture.projectJson)
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
 
   const rows = page.locator('.cf-browser-tree [data-object-type="architecture.wall"]')
   await expect(rows).toHaveCount(4)
   for (let index = 0; index < fixture.wallIds.length; index++) {
     await rows.nth(index).locator('.cf-browser-object').click(index === 0 ? {} : { modifiers: ['Control'] })
-    if (index < fixture.wallIds.length - 1) await page.getByRole('tab', { name: 'รายการ' }).click()
+    if (index < fixture.wallIds.length - 1) await selectInspectorTab(page, 'รายการ')
   }
-  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await selectInspectorTab(page, 'คุณสมบัติ')
   await expect(page.locator('.cf-inspector-content')).toContainText('เลือก 4 ชิ้น')
 
   const plan = page.locator('.cf-plan-canvas').first()
@@ -2305,7 +2345,7 @@ test('wall drag preview includes the linked room, floor, and ceiling before comm
 
 test('workbench export actions download takeoff and BOQ CSV files', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('tab', { name: 'ปริมาณ' }).click()
+  await selectInspectorTab(page, 'ปริมาณ')
 
   const takeoffDownloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Net CSV' }).click()
@@ -2343,6 +2383,7 @@ test('DXF underlay imports, calibrates from two points, and preserves scale thro
   })
   await expect(page.locator('.cf-save-status')).toContainText('นำเข้า DXF 6 รายการแล้ว')
   await expect(page.locator('.cf-underlay-button')).toContainText('Underlay ON')
+  await openToolGroup(page, 'ปรับสเกลภาพ')
   await expect(page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]')).toBeVisible()
   await expect.poll(async () => page.locator('.cf-save-status').innerText()).toContain('กำลังบันทึกในเครื่อง')
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
@@ -2355,7 +2396,7 @@ test('DXF underlay imports, calibrates from two points, and preserves scale thro
   expect(importedProject.underlays[underlayKey!]).toMatchObject({ source_file: 'survey-plan.dxf', scale_source: 'declared_units' })
   const importedScale = importedProject.underlays[underlayKey!].scale_mm_per_px
 
-  await page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]').click()
+  await clickTool(page, 'ปรับสเกลภาพ')
   await clickCanvasFraction(page, 0.25, 0.55)
   await clickCanvasFraction(page, 0.75, 0.55)
   const calibration = page.locator('.cf-legacy-dialog')
@@ -2385,6 +2426,7 @@ test('DXF underlay imports, calibrates from two points, and preserves scale thro
 
   await page.reload()
   await expect(page.locator('.cf-underlay-button')).toContainText('Underlay ON')
+  await openToolGroup(page, 'ปรับสเกลภาพ')
   await expect(page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]')).toBeVisible()
   const reopenedJson = await readStoredProjectJson(page)
   expect(reopenedJson).toBeTruthy()
@@ -2401,6 +2443,7 @@ test('DWG underlay decodes in the LibreDWG worker and persists after project rel
     buffer: fixture,
   })
   await expect(page.locator('.cf-underlay-button')).toContainText('Underlay ON', { timeout: 30_000 })
+  await openToolGroup(page, 'ปรับสเกลภาพ')
   await expect(page.locator('.cf-tool-button[title^="ปรับสเกลภาพ"]')).toBeVisible()
   await expect.poll(async () => {
     const json = await readStoredProjectJson(page)
@@ -2433,10 +2476,10 @@ test('panel Properties previews phase balance and applies all circuit phases in 
   await page.goto('/')
   await seedLocalProjectSnapshot(page, fixture.projectJson)
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.locator(`.cf-browser-tree [data-object-id="${fixture.panelId}"] .cf-browser-object`).click()
   await expect(canvas(page)).toHaveAttribute('data-electrical-circuit-logical-link-count', '3')
-  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await selectInspectorTab(page, 'คุณสมบัติ')
   const balance = page.getByLabel('สมดุลเฟสวงจรไฟฟ้า')
   await expect(balance).toContainText('จัดสมดุลโหลด 3 เฟส · 3 วงจร')
   await expect(balance).toContainText('เฟส A · 300 W')
@@ -2508,9 +2551,9 @@ test('model objects retain links to measured survey boundaries and calibrated un
   await page.goto('/')
   await seedLocalProjectSnapshot(page, serializeProject(project))
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.locator(`.cf-browser-tree [data-object-id="${wallId}"] .cf-browser-object`).click()
-  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await selectInspectorTab(page, 'คุณสมบัติ')
   const sources = page.getByRole('region', { name: 'แหล่งข้อมูลอ้างอิง' })
   const chooseAndLink = async (key: string) => {
     await sources.getByRole('combobox', { name: 'เลือกแหล่งข้อมูลต้นทาง' }).selectOption(key)
@@ -2536,9 +2579,9 @@ test('model objects retain links to measured survey boundaries and calibrated un
     expect.objectContaining({ kind: 'underlay', source_id: `plan:${project.project.active_level_id}`, label: expect.stringContaining('site-plan.dxf') }),
   ]) })
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.locator(`.cf-browser-tree [data-object-id="${wallId}"] .cf-browser-object`).click()
-  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await selectInspectorTab(page, 'คุณสมบัติ')
   await expect(page.getByRole('region', { name: 'แหล่งข้อมูลอ้างอิง' })).toContainText('แนวเขต Parcel LOT-9 · มีทั้งวัดจริงและสมมติ')
   await expect(page.getByRole('region', { name: 'แหล่งข้อมูลอ้างอิง' })).toContainText('แบบอ้างอิง site-plan.dxf · ปรับเทียบแล้ว')
 })
@@ -2549,18 +2592,18 @@ test('Project Browser deletes a multi-selection atomically with one Undo and Red
   await seedLocalProjectSnapshot(page, createMultiObjectDeleteProject())
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
 
   const browser = page.getByLabel('Project Browser')
   await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   const rows = browser.locator('.cf-browser-tree [data-object-type="architecture.wall"]')
   await expect(rows).toHaveCount(2)
   await rows.nth(0).locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await rows.nth(1).locator('.cf-browser-object').click({ modifiers: ['Control'] })
 
   await page.keyboard.press('Delete')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await expect(rows).toHaveCount(0)
   await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
   await expect(rows).toHaveCount(2)
@@ -2588,23 +2631,23 @@ test('Project Browser deletes every reference-house object family with one undoa
   await seedLocalProjectSnapshot(page, fixture)
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const browser = page.getByLabel('Project Browser')
   await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   for (const [index, id] of ids.entries()) {
     // Selecting an object switches the detail panel back to Properties; reopen the browser for the next family.
-    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await selectInspectorTab(page, 'รายการ')
     await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
     const row = browser.locator(`[data-object-id="${id}"]`)
     await expect(row).toHaveCount(1)
     await row.locator('.cf-browser-object').click(index ? { modifiers: ['Control'] } : undefined)
   }
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   await expect(browser.locator('[data-object-id].is-selected')).toHaveCount(ids.length)
 
   await page.keyboard.press('Delete')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const readPresentIds = async () => {
     const raw = await readStoredProjectJson(page)
     if (!raw) return null
@@ -2624,12 +2667,12 @@ test('Project Browser deletes every reference-house object family with one undoa
 test('Project Browser numeric group move commits once and preserves UUIDs through Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.30, 0.45)
   await clickCanvasFraction(page, 0.70, 0.45)
   await page.keyboard.press('Escape')
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const rows = page.locator('li[data-object-type="structure.column"]')
   await expect(rows).toHaveCount(2)
   const ids = await rows.evaluateAll(elements => elements.map(element => element.getAttribute('data-object-id')))
@@ -2637,7 +2680,7 @@ test('Project Browser numeric group move commits once and preserves UUIDs throug
   expect(ids[1]).toBeTruthy()
 
   const readPosition = async (id: string) => {
-    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await selectInspectorTab(page, 'รายการ')
     await page.locator('li[data-object-id="' + id + '"] .cf-browser-object').click()
     const text = await page.getByTestId('properties-selection').innerText()
     const position = text.match(/ตำแหน่ง:\s*\n?([^\n]+)/)?.[1]
@@ -2646,11 +2689,11 @@ test('Project Browser numeric group move commits once and preserves UUIDs throug
   }
   const before = [await readPosition(ids[0]!), await readPosition(ids[1]!)]
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.locator('li[data-object-id="' + ids[0] + '"] .cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.locator('li[data-object-id="' + ids[1] + '"] .cf-browser-object').click({ modifiers: ['Control'] })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
   await page.getByRole('spinbutton', { name: 'ระยะย้ายแกน X เมตร' }).fill('1')
   await page.getByRole('spinbutton', { name: 'ระยะย้ายแกน Y เมตร' }).fill('0.5')
@@ -2666,24 +2709,24 @@ test('Project Browser numeric group move commits once and preserves UUIDs throug
   await expect(page.getByRole('button', { name: 'ทำซ้ำ' })).toBeDisabled()
   const after = [await readPosition(ids[0]!), await readPosition(ids[1]!)]
   expect(after).not.toEqual(before)
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   for (const id of ids) await expect(page.locator(`li[data-object-id="${id}"]`)).toBeVisible()
 })
 
 test('Project Browser array previews before one atomic commit and supports Undo/Redo', async ({ page }) => {
   test.setTimeout(90_000)
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.50, 0.45)
   await page.keyboard.press('Escape')
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const rows = page.locator('li[data-object-type="structure.column"]')
   await expect(rows).toHaveCount(1)
   const sourceId = await rows.first().getAttribute('data-object-id')
   expect(sourceId).toBeTruthy()
   await rows.first().locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 1 ชิ้น').click()
   await page.getByRole('spinbutton', { name: 'จำนวนสำเนาในอาร์เรย์' }).fill('2')
   await page.getByRole('spinbutton', { name: 'ระยะอาร์เรย์แกน X เมตร' }).fill('1')
@@ -2693,12 +2736,12 @@ test('Project Browser array previews before one atomic commit and supports Undo/
   await expect(page.getByRole('status')).toContainText('Preview อาร์เรย์ 2 ชิ้นใน 2 ชุดแล้ว')
   await expect(rows).toHaveCount(1)
   await page.getByRole('button', { name: 'ยืนยัน · Undo ได้' }).click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await expect(rows).toHaveCount(3)
   await expect(page.locator(`li[data-object-id="${sourceId}"]`)).toBeVisible()
 
   await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await expect(rows).toHaveCount(1)
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
   await expect(rows).toHaveCount(3)
@@ -2713,7 +2756,7 @@ test('Project Browser visibility persists per view and level after autosave and 
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const row = page.locator('li[data-object-type="architecture.wall"]').first()
   await expect(row).toBeVisible()
   await row.locator('.cf-browser-visibility').click()
@@ -2721,16 +2764,16 @@ test('Project Browser visibility persists per view and level after autosave and 
   await expect(page.getByRole('status').filter({ hasText: 'บันทึกในเครื่องแล้ว' })).toBeVisible()
 
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const restoredRow = page.locator('li[data-object-type="architecture.wall"]').first()
   await expect(restoredRow.locator('.cf-browser-visibility')).toHaveAttribute('title', 'แสดงวัตถุ')
 
-  await page.getByRole('button', { name: 'รูปด้านเหนือ' }).click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectEditorView(page, 'รูปด้านเหนือ')
+  await selectInspectorTab(page, 'รายการ')
   await expect(page.locator('li[data-object-type="architecture.wall"] .cf-browser-visibility').first()).toHaveAttribute('title', 'ซ่อนวัตถุ')
 
-  await page.getByRole('button', { name: 'แปลนพื้น', exact: true }).click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectEditorView(page, 'แปลนพื้น')
+  await selectInspectorTab(page, 'รายการ')
   await expect(page.locator('li[data-object-type="architecture.wall"] .cf-browser-visibility').first()).toHaveAttribute('title', 'แสดงวัตถุ')
   await page.getByRole('button', { name: 'แสดงทั้งหมด' }).click()
   await expect(page.locator('li[data-object-type="architecture.wall"] .cf-browser-visibility').first()).toHaveAttribute('title', 'ซ่อนวัตถุ')
@@ -2738,9 +2781,9 @@ test('Project Browser visibility persists per view and level after autosave and 
 
 test('Project Browser saves and applies persistent view templates', async ({ page }) => {
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.61, 0.64)
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const column = page.locator('li[data-object-type="structure.column"]').first()
   await expect(column).toBeVisible()
   await column.locator('.cf-browser-visibility').click()
@@ -2752,7 +2795,7 @@ test('Project Browser saves and applies persistent view templates', async ({ pag
   await expect(template).toContainText('Presentation plan')
   const savedLevel = await page.locator('.cf-browser-levels button.is-active').textContent()
 
-  await page.getByRole('button', { name: 'รูปด้านเหนือ' }).click()
+  await selectEditorView(page, 'รูปด้านเหนือ')
   await expect(page.locator('.cf-browser-views button.is-active')).toHaveText('เหนือ')
   if (await page.locator('.cf-browser-levels button').count() > 1) await page.locator('.cf-browser-levels button').last().click()
   await page.getByRole('button', { name: 'ใช้แม่แบบ Presentation plan' }).click()
@@ -2773,13 +2816,13 @@ test('Project Browser splits an unhosted wall with preview and keeps the origina
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const originalRow = page.locator('li[data-object-type="architecture.wall"]').first()
   await expect(originalRow).toBeVisible()
   const originalId = await originalRow.getAttribute('data-object-id')
   expect(originalId).toBeTruthy()
   await originalRow.locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 1 ชิ้น').click()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Split' }).click()
   await expect(page.getByText('Preview การแปลง')).toBeVisible()
@@ -2808,11 +2851,11 @@ test('Project Browser splits a hosted wall and transfers openings atomically', a
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
   await seedLocalProjectSnapshot(page, fixture.projectJson)
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const originalRow = page.locator(`li[data-object-id="${fixture.wallId}"]`)
   await expect(originalRow).toBeVisible()
   await originalRow.locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 1 ชิ้น').click()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Split' }).click()
   await expect(page.getByText('Preview การแปลง')).toBeVisible()
@@ -2864,11 +2907,11 @@ test('Project Browser rejects a wall split that would cut through a hosted openi
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
   await seedLocalProjectSnapshot(page, fixture.projectJson)
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const wallRow = page.locator(`li[data-object-id="${fixture.wallId}"]`)
   await expect(wallRow).toBeVisible()
   await wallRow.locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 1 ชิ้น').click()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Split' }).click()
 
@@ -2888,14 +2931,14 @@ test('Project Browser joins hosted walls and keeps openings at their world posit
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
   await seedLocalProjectSnapshot(page, fixture.projectJson)
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const firstRow = page.locator(`li[data-object-id="${fixture.wallIds[0]}"]`)
   const secondRow = page.locator(`li[data-object-id="${fixture.wallIds[1]}"]`)
   await expect(firstRow).toBeVisible()
   await firstRow.locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await secondRow.locator('.cf-browser-object').click({ modifiers: ['Control'] })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Join' }).click()
   await expect(page.getByText('Preview การแปลง')).toBeVisible()
@@ -2937,19 +2980,19 @@ test('Project Browser joins hosted walls and keeps openings at their world posit
 test('Project Browser splits and rejoins an unhosted beam with preview and UUID-preserving undo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="คาน"]').click()
+  await clickTool(page, 'คาน')
   await clickCanvasFraction(page, 0.28, 0.52)
   await clickCanvasFraction(page, 0.72, 0.52)
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const beams = page.locator('li[data-object-type="structure.beam"]')
   await expect(beams).toHaveCount(1)
   const originalId = await beams.first().getAttribute('data-object-id')
   expect(originalId).toBeTruthy()
   await beams.first().locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 1 ชิ้น').click()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Split' }).click()
   await expect(page.getByText('Preview การแปลง')).toBeVisible()
@@ -2962,9 +3005,9 @@ test('Project Browser splits and rejoins an unhosted beam with preview and UUID-
   expect(splitIds).toContain(originalId)
 
   await beams.nth(0).locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await beams.nth(1).locator('.cf-browser-object').click({ modifiers: ['Control'] })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Join' }).click()
   await expect(page.getByText('Preview การแปลง')).toBeVisible()
@@ -2989,11 +3032,11 @@ test('Project Browser splits a continuous beam at its middle support and rejoins
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const beams = page.locator('li[data-object-type="structure.beam"]')
   await expect(beams).toHaveCount(1)
   await page.locator(`li[data-object-id="${fixture.beamId}"] .cf-browser-object`).click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 1 ชิ้น').click()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Split' }).click()
   await expect(page.getByText('Preview การแปลง')).toBeVisible()
@@ -3021,9 +3064,9 @@ test('Project Browser splits a continuous beam at its middle support and rejoins
   expect(splitBeams.map(beam => beam.module_data.intermediate_support_column_ids).sort((a, b) => String(a?.[0]).localeCompare(String(b?.[0])))).toEqual([[fixture.columnIds[1]], [fixture.columnIds[3]]].sort((a, b) => String(a[0]).localeCompare(String(b[0]))))
 
   await beams.nth(0).locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await beams.nth(1).locator('.cf-browser-object').click({ modifiers: ['Control'] })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Join' }).click()
   await expect(page.getByText('Preview การแปลง')).toBeVisible()
@@ -3066,13 +3109,13 @@ test('Project Browser aligns hosted windows across parallel walls with preview a
   await page.goto('/')
   await seedLocalProjectSnapshot(page, fixture.projectJson)
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
 
   const rows = fixture.windowIds.map(id => page.locator(`li[data-object-id="${id}"]`))
   await rows[0].locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await rows[1].locator('.cf-browser-object').click({ modifiers: ['Control'] })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
   await page.getByRole('combobox', { name: 'แนวจัดวัตถุที่เลือก' }).selectOption('center-x')
   await page.getByRole('button', { name: 'แสดงตัวอย่างการจัดแนว' }).click()
@@ -3103,9 +3146,9 @@ test('Properties rehost a window through the validated command path and preserve
   await page.goto('/')
   await seedLocalProjectSnapshot(page, fixture.projectJson)
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.locator(`li[data-object-id="${fixture.windowIds[0]}"] .cf-browser-object`).click()
-  await page.getByRole('tab', { name: 'คุณสมบัติ' }).click()
+  await selectInspectorTab(page, 'คุณสมบัติ')
   await page.locator('details.cf-inspector-section').filter({ hasText: 'ผนัง Host' }).locator('summary').click()
   await page.getByRole('combobox', { name: 'ผนัง Host ปลายทาง' }).selectOption(fixture.wallIds[1])
   await page.getByRole('button', { name: 'เปลี่ยนผนัง Host · Undo ได้' }).click()
@@ -3137,16 +3180,16 @@ test('Project Browser previews align, offset, and mirror, then joins line object
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const walls = page.locator('li[data-object-type="architecture.wall"]')
   await expect(walls).toHaveCount(2)
   const ids = await walls.evaluateAll(rows => rows.map(row => row.getAttribute('data-object-id')))
   expect(ids[0]).toBeTruthy()
   expect(ids[1]).toBeTruthy()
   await walls.nth(0).locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await walls.nth(1).locator('.cf-browser-object').click({ modifiers: ['Control'] })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
 
   const openEditTools = async () => page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
   const preview = page.getByText('Preview การแปลง')
@@ -3244,7 +3287,7 @@ test('Project Browser trims a selected line at a second line preview and preserv
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const rows = page.locator('li[data-object-type="architecture.wall"]')
   await expect(rows).toHaveCount(2)
   const targetId = await rows.nth(0).getAttribute('data-object-id')
@@ -3252,9 +3295,9 @@ test('Project Browser trims a selected line at a second line preview and preserv
   expect(targetId).toBeTruthy()
   expect(cutterId).toBeTruthy()
   await rows.nth(0).locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await rows.nth(1).locator('.cf-browser-object').click({ modifiers: ['Control'] })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Trim' }).click()
   await expect(page.getByText('Preview การแปลง')).toBeVisible()
@@ -3282,14 +3325,14 @@ test('Project Browser trims a wall while retaining hosted openings and their wor
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
   await seedLocalProjectSnapshot(page, fixture.projectJson)
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const targetRow = page.locator(`li[data-object-id="${fixture.wallId}"]`)
   const cutterRow = page.locator(`li[data-object-id="${fixture.cutterId}"]`)
   await expect(targetRow).toBeVisible()
   await targetRow.locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await cutterRow.locator('.cf-browser-object').click({ modifiers: ['Control'] })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Trim' }).click()
   await expect(page.getByText('Preview การแปลง')).toBeVisible()
@@ -3330,13 +3373,13 @@ test('Project Browser rejects trimming a wall through a hosted opening', async (
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
   await seedLocalProjectSnapshot(page, fixture.projectJson)
   await page.reload()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const targetRow = page.locator(`li[data-object-id="${fixture.wallId}"]`)
   const cutterRow = page.locator(`li[data-object-id="${fixture.cutterId}"]`)
   await targetRow.locator('.cf-browser-object').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await cutterRow.locator('.cf-browser-object').click({ modifiers: ['Control'] })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.getByText('แก้ไขและทำสำเนา · 2 ชิ้น').click()
   await page.getByRole('button', { name: 'แสดงตัวอย่าง Trim' }).click()
   await expect(page.getByText(/Trim ผ่านช่องเปิด/)).toBeVisible()
@@ -3350,10 +3393,10 @@ test('Project Browser rejects trimming a wall through a hosted opening', async (
 test('column corner grips accept target W/H dimensions and commit through preview', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.50, 0.50)
   await expect(page.locator('body')).toContainText('structure.column')
-  await page.locator('.cf-tool-button[title^="เลือก"]').click()
+  await clickTool(page, 'เลือก')
 
   const bounds = await canvas(page).boundingBox()
   if (!bounds) throw new Error('Plan canvas is not visible')
@@ -3401,9 +3444,9 @@ test('column corner grips accept target W/H dimensions and commit through previe
 test('move drag dimensions preview, cancel with Escape, and commit numeric deltas with Enter', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.50, 0.50)
-  await page.locator('.cf-tool-button[title^="เลือก"]').click()
+  await clickTool(page, 'เลือก')
   await clickCanvasFraction(page, 0.50, 0.50)
 
   const properties = page.getByTestId('properties-selection')
@@ -3449,10 +3492,10 @@ test('move drag dimensions preview, cancel with Escape, and commit numeric delta
 test('foundation corner grips cancel with Escape, reject invalid W/H, and support Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="ฐานราก"]').click()
+  await clickTool(page, 'ฐานราก')
   await clickCanvasFraction(page, 0.50, 0.50)
   await expect(page.locator('body')).toContainText('structure.foundation')
-  await page.locator('.cf-tool-button[title^="เลือก"]').click()
+  await clickTool(page, 'เลือก')
 
   const bounds = await canvas(page).boundingBox()
   if (!bounds) throw new Error('Plan canvas is not visible')
@@ -3499,7 +3542,7 @@ test('foundation corner grips cancel with Escape, reject invalid W/H, and suppor
   await expect(undoButton).toBeEnabled()
   await undoButton.click()
   await expect(page.getByRole('button', { name: 'ทำซ้ำ' })).toBeEnabled()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.locator('li[data-object-type="structure.foundation"] .cf-browser-object').click()
   await expect(page.locator('body')).toContainText('0.800 × 0.800 × 0.300 m')
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
@@ -3509,15 +3552,15 @@ test('foundation corner grips cancel with Escape, reject invalid W/H, and suppor
 test('slab edge grip accepts a numeric offset with preview cancellation and UUID-preserving Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="พื้น ("]').click()
+  await clickTool(page, 'พื้น (')
   await clickCanvasFraction(page, 0.25, 0.25)
   await clickCanvasFraction(page, 0.70, 0.25)
   await clickCanvasFraction(page, 0.70, 0.70)
   await canvas(page).focus()
   await page.keyboard.press('Enter')
 
-  await page.locator('.cf-tool-button[title^="เลือก"]').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await clickTool(page, 'เลือก')
+  await selectInspectorTab(page, 'รายการ')
   const slabRow = page.locator('li[data-object-type="structure.slab"]').first()
   await expect(slabRow).toBeVisible()
   const slabId = await slabRow.getAttribute('data-object-id')
@@ -3589,15 +3632,15 @@ test('slab edge grip accepts a numeric offset with preview cancellation and UUID
 test('slab vertex accepts numeric ΔX/ΔY with preview, Escape, commit, and UUID-preserving Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="พื้น ("]').click()
+  await clickTool(page, 'พื้น (')
   await clickCanvasFraction(page, 0.25, 0.25)
   await clickCanvasFraction(page, 0.70, 0.25)
   await clickCanvasFraction(page, 0.70, 0.70)
   await canvas(page).focus()
   await page.keyboard.press('Enter')
-  await page.locator('.cf-tool-button[title^="เลือก"]').click()
+  await clickTool(page, 'เลือก')
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const slabRow = page.locator('li[data-object-type="structure.slab"]').first()
   await expect(slabRow).toBeVisible()
   const slabId = await slabRow.getAttribute('data-object-id')
@@ -3671,7 +3714,7 @@ test('wall endpoint grip accepts target length and commits the validated edit', 
   await clickCanvasFraction(page, 0.75, 0.45)
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
-  await page.locator('.cf-tool-button[title^="เลือก"]').click()
+  await clickTool(page, 'เลือก')
 
   const bounds = await canvas(page).boundingBox()
   if (!bounds) throw new Error('Plan canvas is not visible')
@@ -3698,13 +3741,13 @@ test('wall endpoint grip accepts target length and commits the validated edit', 
 test('beam endpoint grip accepts target span and preserves its UUID through Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="คาน"]').click()
+  await clickTool(page, 'คาน')
   await clickCanvasFraction(page, 0.25, 0.40)
   await clickCanvasFraction(page, 0.75, 0.40)
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
-  await page.locator('.cf-tool-button[title^="เลือก"]').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await clickTool(page, 'เลือก')
+  await selectInspectorTab(page, 'รายการ')
 
   const beamRow = page.locator('.cf-browser-tree [data-object-type="structure.beam"]').first()
   await expect(beamRow).toBeVisible()
@@ -3738,13 +3781,13 @@ test('beam endpoint grip accepts target span and preserves its UUID through Undo
   await expect(properties).toContainText('3.000 m')
 
   await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.locator(`li[data-object-id="${beamId}"] .cf-browser-object`).click()
   await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', beamId!)
   await expect(page.getByTestId('properties-selection')).toContainText(`${initialSpan} m`)
 
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.locator(`li[data-object-id="${beamId}"] .cf-browser-object`).click()
   await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', beamId!)
   await expect(page.getByTestId('properties-selection')).toContainText('3.000 m')
@@ -3753,13 +3796,13 @@ test('beam endpoint grip accepts target span and preserves its UUID through Undo
 test('room-separator endpoint exposes a temporary target length and keeps identity through Undo/Redo', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เส้นแบ่งห้อง"]').click()
+  await clickTool(page, 'เส้นแบ่งห้อง')
   await clickCanvasFraction(page, 0.25, 0.50)
   await clickCanvasFraction(page, 0.75, 0.50)
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
-  await page.locator('.cf-tool-button[title^="เลือก"]').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await clickTool(page, 'เลือก')
+  await selectInspectorTab(page, 'รายการ')
 
   const separator = page.locator('.cf-browser-tree [data-object-type="architecture.room_separator"]').first()
   await expect(separator).toBeVisible()
@@ -3807,7 +3850,7 @@ test('room-separator endpoint exposes a temporary target length and keeps identi
   }).toBeCloseTo(2500, 0)
 
   await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.locator(`li[data-object-id="${separatorId}"] .cf-browser-object`).click()
   await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', separatorId!)
   await expect.poll(async () => {
@@ -3829,7 +3872,7 @@ test('room-separator endpoint exposes a temporary target length and keeps identi
   )).toBeCloseTo(originalLength, 0)
 
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await page.locator(`li[data-object-id="${separatorId}"] .cf-browser-object`).click()
   await expect.poll(async () => {
     const json = await readStoredProjectJson(page)
@@ -3857,13 +3900,13 @@ for (const workflow of [
   test(`${workflow.name} endpoint accepts target length and preserves UUID through Undo/Redo`, async ({ page }) => {
     test.setTimeout(60_000)
     await page.goto('/')
-    await page.locator(`.cf-tool-button[title^="${workflow.tool}"]`).click()
+    await clickTool(page, workflow.tool)
     await clickCanvasFraction(page, 0.25, 0.46)
     await clickCanvasFraction(page, 0.75, 0.46)
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
-    await page.locator('.cf-tool-button[title^="เลือก"]').click()
-    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await clickTool(page, 'เลือก')
+    await selectInspectorTab(page, 'รายการ')
 
     const row = page.locator(`.cf-browser-tree [data-object-type="${workflow.family}"]`).last()
     await expect(row).toBeVisible()
@@ -3909,13 +3952,13 @@ for (const workflow of [
     await expect.poll(getSegmentLength).toBeCloseTo(3000, 0)
 
     await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
-    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await selectInspectorTab(page, 'รายการ')
     await page.locator(`li[data-object-id="${objectId}"] .cf-browser-object`).click()
     await expect(properties).toHaveAttribute('data-object-id', objectId!)
     await expect.poll(getSegmentLength).toBeCloseTo(originalLength!, 0)
 
     await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
-    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await selectInspectorTab(page, 'รายการ')
     await page.locator(`li[data-object-id="${objectId}"] .cf-browser-object`).click()
     await expect(properties).toHaveAttribute('data-object-id', objectId!)
     await expect.poll(getSegmentLength).toBeCloseTo(3000, 0)
@@ -3929,7 +3972,7 @@ test('stair width and straight-flight run accept target dimensions with UUID-pre
   await seedLocalProjectSnapshot(page, createSyntheticStraightStairProject())
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const stairRow = page.locator('.cf-browser-tree [data-object-type="architecture.stair"]').first()
   await expect(stairRow).toBeVisible()
   const stairId = await stairRow.getAttribute('data-object-id')
@@ -4016,7 +4059,7 @@ test('U-stair landing grip previews and commits a target depth with UUID-preserv
   await seedLocalProjectSnapshot(page, createSyntheticUStairProject())
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const stairRow = page.locator('.cf-browser-tree [data-object-type="architecture.stair"]').first()
   await expect(stairRow).toBeVisible()
   const stairId = await stairRow.getAttribute('data-object-id')
@@ -4077,7 +4120,7 @@ test('U-stair flight grips set independent target runs and preserve UUID through
   await seedLocalProjectSnapshot(page, createSyntheticUStairProject())
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const stairRow = page.locator('.cf-browser-tree [data-object-type="architecture.stair"]').first()
   await expect(stairRow).toBeVisible()
   const stairId = await stairRow.getAttribute('data-object-id')
@@ -4137,7 +4180,7 @@ test('rotated left L-stair flight grips edit each run independently through the 
   await seedLocalProjectSnapshot(page, createSyntheticLStairProject())
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const stairRow = page.locator('.cf-browser-tree [data-object-type="architecture.stair"]').first()
   await expect(stairRow).toBeVisible()
   const stairId = await stairRow.getAttribute('data-object-id')
@@ -4200,7 +4243,7 @@ test('hosted opening jamb accepts a target width with UUID-preserving Escape and
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')
 
-  await page.locator('.cf-tool-button[title^="ประตู"]').click()
+  await clickTool(page, 'ประตู')
   const bounds = await canvas(page).boundingBox()
   if (!bounds) throw new Error('Plan canvas is not visible')
   let hostedPoint: { x: number; y: number } | null = null
@@ -4214,10 +4257,10 @@ test('hosted opening jamb accepts a target width with UUID-preserving Escape and
   }
   expect(hostedPoint).not.toBeNull()
   await page.mouse.click(hostedPoint!.x, hostedPoint!.y)
-  await expect(page.locator('body')).toContainText('Door D1')
+  await expect(page.locator('body')).toContainText('ประตู D1')
   await page.keyboard.press('Escape')
-  await page.locator('.cf-tool-button[title^="เลือก"]').click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await clickTool(page, 'เลือก')
+  await selectInspectorTab(page, 'รายการ')
   const doorRow = page.locator('li[data-object-type="door_window.door"]').first()
   await expect(doorRow).toBeVisible()
   const doorId = await doorRow.getAttribute('data-object-id')
@@ -4553,22 +4596,22 @@ test('residential fixture compiles an A3 sheet preview in Sheet Composer', async
 
 test('selection from an auxiliary plan-family pane updates every pane and Properties', async ({ page }) => {
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.5, 0.48)
   await page.keyboard.press('Escape')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const row = page.locator('li[data-object-type="structure.column"]').first()
   await expect(row).toBeVisible()
   const objectId = await row.getAttribute('data-object-id')
   expect(objectId).toBeTruthy()
   await row.locator('.cf-browser-object').click()
-  await page.getByRole('button', { name: 'แปลนพื้น', exact: true }).click()
-  await page.getByLabel('แบ่งมุมมอง').click()
+  await selectEditorView(page, 'แปลนพื้น')
+  await toggleMultiViewMenu(page)
   await page.getByLabel('แสดงหลายมุมมอง').check()
   const secondView = page.getByLabel('มุมมองที่สอง')
   await expect(secondView).toBeVisible()
   await secondView.selectOption('framing')
-  await page.getByLabel('แบ่งมุมมอง').click()
+  await toggleMultiViewMenu(page)
   await page.keyboard.press('Escape')
 
   const projectJson = await readStoredProjectJson(page)
@@ -4588,17 +4631,17 @@ test('selection from an auxiliary plan-family pane updates every pane and Proper
 test('split workbench keeps selection identity and plan navigation coordinated', async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto('/')
-  await page.locator('.cf-tool-button[title^="เสา"]').click()
+  await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.5, 0.48)
   await page.keyboard.press('Escape')
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const row = page.locator('li[data-object-type="structure.column"]').first()
   await expect(row).toBeVisible()
   const objectId = await row.getAttribute('data-object-id')
   expect(objectId).toBeTruthy()
   await row.locator('.cf-browser-object').click()
-  await page.getByRole('button', { name: 'แปลนพื้น', exact: true }).click()
-  await page.getByLabel('แบ่งมุมมอง').click()
+  await selectEditorView(page, 'แปลนพื้น')
+  await toggleMultiViewMenu(page)
   await page.getByLabel('แสดงหลายมุมมอง').check()
   const secondView = page.getByLabel('มุมมองที่สอง')
   await expect(secondView).toBeVisible()
@@ -4653,7 +4696,7 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   await page.getByLabel('จำนวนมุมมอง').selectOption('3')
 
   await secondView.selectOption('model3d')
-  await page.getByLabel('แบ่งมุมมอง').click()
+  await toggleMultiViewMenu(page)
   const model3d = page.getByTestId('secondary-view-pane').getByTestId('model3d-viewport')
   await expect(model3d).toHaveAttribute('data-auto-framed-selection', objectId!)
   const planCanvas = canvases.first()
@@ -4699,7 +4742,7 @@ test('split workbench keeps selection identity and plan navigation coordinated',
   await expect.poll(() => model3d.getAttribute('data-camera-target-x')).not.toBe(cameraTargetBeforeOrbitPan)
   await expect.poll(expectPlanAnd3DCenterToMatch).toBeUndefined()
 
-  await page.getByLabel('แบ่งมุมมอง').click()
+  await toggleMultiViewMenu(page)
   await thirdView.selectOption('rcp')
   const rcp = page.getByTestId('tertiary-view-pane').getByTestId('elevation-canvas')
   await expect(rcp).toHaveAttribute('data-elevation-direction', 'rcp')
@@ -4736,7 +4779,7 @@ test('split workbench keeps selection identity and plan navigation coordinated',
 
 test('multiview layout and auxiliary views restore for the same project after reload', async ({ page }) => {
   await page.goto('/')
-  await page.getByLabel('แบ่งมุมมอง').click()
+  await toggleMultiViewMenu(page)
   await page.getByLabel('แสดงหลายมุมมอง').check()
   await page.getByLabel('มุมมองที่สอง').selectOption('framing')
   await page.getByLabel('จำนวนมุมมอง').selectOption('4')
@@ -4785,7 +4828,7 @@ test('multiview layout and auxiliary views restore for the same project after re
   await expect(firstRowHandle).toHaveAttribute('aria-valuenow', '52')
 
   await page.reload()
-  await page.getByLabel('แบ่งมุมมอง').click()
+  await toggleMultiViewMenu(page)
   await expect(page.getByLabel('แสดงหลายมุมมอง')).toBeChecked()
   await expect(page.getByLabel('มุมมองที่สอง')).toHaveValue('framing')
   await expect(page.getByLabel('จำนวนมุมมอง')).toHaveValue('4')
@@ -4819,7 +4862,7 @@ test('two-storey residential demo preserves browser selection across plan, ceili
   await expect(page.locator('.cf-save-status')).toContainText('เปิดแบบบ้านเดโม 2 ชั้นแล้ว')
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
 
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const browser = page.getByLabel('Project Browser')
   await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   const rows = browser.locator('li[data-object-id]')
@@ -4852,7 +4895,7 @@ test('two-storey residential demo preserves browser selection across plan, ceili
 
   const primaryPane = page.locator('.cf-multiview-pane').first()
   await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const activeBrowser = page.getByLabel('Project Browser')
   await activeBrowser.getByLabel('ค้นหาวัตถุในโครงการ').fill('')
   await activeBrowser.getByRole('button', { name: 'ตะวันออก' }).click()
@@ -4862,7 +4905,7 @@ test('two-storey residential demo preserves browser selection across plan, ceili
 
   await page.reload()
   await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 30_000 })
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   const restoredBrowser = page.getByLabel('Project Browser')
   await restoredBrowser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   await expect(restoredBrowser.locator('li[data-object-id]')).toHaveCount(239, { timeout: 30_000 })
@@ -4875,7 +4918,7 @@ test('two-storey residential demo preserves browser selection across plan, ceili
   await expect(restoredProperties).toContainText(`Column ${targetTypeName}`)
   const restoredViews = ['แปลนพื้น', 'แปลนคาน', 'แปลนหลังคา', 'แปลนฝ้า RCP', 'รูปด้านเหนือ', 'รูปด้านใต้', 'รูปด้านตะวันออก', 'รูปด้านตะวันตก']
   for (const view of restoredViews) {
-    await page.getByRole('button', { name: view, exact: true }).click()
+    await selectEditorView(page, view)
     await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
     await expect(restoredProperties).toHaveAttribute('data-object-id', objectId!)
     await expect(page.locator('canvas').first()).toBeVisible()
@@ -4885,20 +4928,20 @@ test('two-storey residential demo preserves browser selection across plan, ceili
     }
   }
   // 3D selection and camera coordination are covered on a compact fixture by the split-workbench acceptance.
-  await page.getByRole('button', { name: 'แปลนพื้น', exact: true }).click()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectEditorView(page, 'แปลนพื้น')
+  await selectInspectorTab(page, 'รายการ')
   const browserRoom = page.getByLabel('Project Browser')
   await browserRoom.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   const selectFamily = async (objectType: string, view: string) => {
     const id = Object.entries(fixtureProject.objects).find(([, object]) => object.object_type === objectType)?.[0]
     expect(id, `reference house should include ${objectType}`).toBeTruthy()
-    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await selectInspectorTab(page, 'รายการ')
     await browserRoom.getByRole('button', { name: 'ทั้งโครงการ' }).click()
     await browserRoom.getByLabel('ค้นหาวัตถุในโครงการ').fill(id!)
     const familyRow = browserRoom.locator(`li[data-object-id="${id}"]`)
     await expect(familyRow).toHaveCount(1, { timeout: 10_000 })
     await familyRow.locator('.cf-browser-object').click()
-    await page.getByRole('button', { name: view, exact: true }).click()
+    await selectEditorView(page, view)
     await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', id!)
     await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', id!)
     await expect.poll(() => countBlueSelectionPixels(page), `${objectType} should paint a selection grip in ${view}`).toBeGreaterThan(0)
@@ -4911,16 +4954,69 @@ test('two-storey residential demo preserves browser selection across plan, ceili
 
   const roomId = Object.entries(fixtureProject.objects).find(([, object]) => object.object_type === 'architecture.room')?.[0]
   expect(roomId).toBeTruthy()
-  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await selectInspectorTab(page, 'รายการ')
   await browserRoom.getByRole('button', { name: 'ทั้งโครงการ' }).click()
   await browserRoom.getByLabel('ค้นหาวัตถุในโครงการ').fill(roomId!)
   const roomRow = browserRoom.locator(`li[data-object-id="${roomId}"]`)
   await expect(roomRow).toHaveCount(1, { timeout: 10_000 })
   await roomRow.locator('.cf-browser-object').click()
-  await page.getByRole('button', { name: 'แปลนฝ้า RCP', exact: true }).click()
+  await selectEditorView(page, 'แปลนฝ้า RCP')
   await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', roomId!)
   await expect(page.getByTestId('properties-selection')).toHaveAttribute('data-object-id', roomId!)
   await expect.poll(() => countBlueSelectionPixels(page)).toBeGreaterThan(0)
   expect(pageErrors).toEqual([])
 })
 
+
+test('mobile workbench keeps tools labeled, inspector grouped, and modal keyboard flow contained', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'เลือก', exact: true })).toBeVisible()
+  await page.getByText('โครงสร้าง', { exact: true }).click()
+  await expect(page.getByRole('button', { name: 'เสา (C)' })).toBeVisible()
+  await page.locator('.cf-more-menu > summary').click()
+  await page.getByRole('button', { name: 'แสดงแผงข้อมูล' }).click()
+  await page.getByRole('tab', { name: 'โครงการ', exact: true }).click()
+  await expect(page.getByRole('tab', { name: 'รายการ', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'ปิดแผงข้อมูล' }).click()
+  await page.locator('.cf-more-menu > summary').click()
+  const settingsButton = page.getByRole('button', { name: /ตั้งค่า · ชั้น/ })
+  await settingsButton.click()
+  const dialog = page.getByRole('dialog', { name: /ตั้งค่า/ })
+  await expect(dialog).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(page.locator('.cf-more-menu summary')).toBeFocused()
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+  expect(overflow).toBeLessThanOrEqual(1)
+})
+
+test('legacy project and extension modals use mobile frame, Escape, and focus restoration', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await page.locator('.cf-more-menu > summary').click()
+  await page.getByRole('button', { name: 'โฉนดและผู้เซ็นแบบ' }).click()
+  const legalDialog = page.getByRole('dialog', { name: 'ข้อมูลโฉนดและผู้เกี่ยวข้อง' })
+  await expect(legalDialog).toBeVisible()
+  const legalBounds = await legalDialog.boundingBox()
+  expect(legalBounds?.width).toBe(390)
+  expect(legalBounds?.height).toBe(844)
+  await page.keyboard.press('Escape')
+  await expect(legalDialog).toBeHidden()
+  await expect(page.locator('.cf-more-menu > summary')).toBeFocused()
+
+  await page.locator('.cf-more-menu > summary').click()
+  await page.getByRole('button', { name: /ส่วนต่อเติมสำเร็จรูป/ }).click()
+  const extensionDialog = page.getByRole('dialog', { name: 'สร้างส่วนต่อเติม' })
+  await expect(extensionDialog).toBeVisible()
+  const extensionBounds = await extensionDialog.boundingBox()
+  expect(extensionBounds?.width).toBe(390)
+  expect(extensionBounds?.height).toBe(844)
+  const scrollableContent = await extensionDialog.evaluate(dialog =>
+    dialog.scrollHeight > dialog.clientHeight || [...dialog.querySelectorAll<HTMLElement>('*')].some(element => element.scrollHeight > element.clientHeight + 2 && getComputedStyle(element).overflowY !== 'visible'),
+  )
+  expect(scrollableContent).toBeTruthy()
+  await page.keyboard.press('Escape')
+  await expect(extensionDialog).toBeHidden()
+  await expect(page.locator('.cf-more-menu > summary')).toBeFocused()
+})

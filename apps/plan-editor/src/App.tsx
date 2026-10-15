@@ -27,7 +27,7 @@ import { ProjectLegalModal } from './components/ProjectLegalModal.js'
 import { useCoordinationReport } from './features/coordination/useCoordinationReport.js'
 import type { ProjectLegalMetadata } from '@constructflow/project-model'
 import { PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
-import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home } from 'lucide-react'
+import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home, Compass } from 'lucide-react'
 import { calculateTakeoff, calculatePhasedBOQ } from '@constructflow/takeoff-engine'
 import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { usePlanPlacementCommands } from './app/usePlanPlacementCommands.js'
@@ -50,6 +50,7 @@ import { useWorkbenchExportActions } from './app/useWorkbenchExportActions.js'
 import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 import { createElevationObjectCommandHandler } from './app/elevationObjectCommands.js'
 import { MultiViewResizeHandle } from './components/MultiViewResizeHandle.js'
+import { ViewModePicker } from './components/ViewModePicker.js'
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
@@ -579,13 +580,17 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
         {/* Center Canvas Area */}
         <main className="cf-canvas-shell">
-          <div className="cf-view-switch">
-            {([
-              ['plan', 'แปลนพื้น'], ['framing', 'แปลนคาน'], ['roofplan', 'แปลนหลังคา'], ['north', 'รูปด้านเหนือ'], ['south', 'รูปด้านใต้'],
-              ['east', 'รูปด้านตะวันออก'], ['west', 'รูปด้านตะวันตก'], ['rcp', 'แปลนฝ้า RCP'], ['model3d', '3D ดูตัวอย่าง'],
-            ] as const).map(([mode, label]) => (
-              <button key={mode} type="button" title={['plan', 'framing', 'roofplan'].includes(mode) ? 'แปลนพื้น แปลนคาน และแปลนหลังคาใช้ตำแหน่งและระดับซูมร่วมกัน' : ['north', 'south', 'east', 'west'].includes(mode) ? 'รูปด้านใช้ระดับซูมและตำแหน่งแนวดิ่งร่วมกัน; แนวนอนเชื่อมตามแกนฉาย' : undefined} onClick={() => setViewMode(mode)} className={viewMode === mode ? 'is-active' : ''}>{label}</button>
-            ))}
+          <details className="cf-view-switch-shell" onClick={event => {
+            if ((event.target as HTMLElement).closest('.cf-view-switch button')) event.currentTarget.open = false
+          }}>
+            <summary className="cf-current-view" aria-label={`มุมมองปัจจุบัน: ${EDITOR_VIEW_OPTIONS.find(([mode]) => mode === viewMode)?.[1] ?? viewMode}`} title="เลือกมุมมอง">
+              <Compass size={15} aria-hidden="true" />
+              <span>{EDITOR_VIEW_OPTIONS.find(([mode]) => mode === viewMode)?.[1] ?? viewMode}</span>
+              <ChevronDown size={13} aria-hidden="true" />
+            </summary>
+            <div className="cf-view-switch-popover">
+            <ViewModePicker viewMode={viewMode} onChange={setViewMode} />
+            <div className="cf-view-utilities">
             <details className="cf-multiview-menu">
               <summary aria-label="แบ่งมุมมอง" aria-pressed={splitViewEnabled} title="เปิดมุมมองหลาย pane พร้อมกัน">▥</summary>
               <div className="cf-multiview-popover" role="group" aria-label="ตั้งค่ามุมมองหลาย pane">
@@ -651,7 +656,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 {splitViewEnabled && paneModes.includes('model3d') && <span>3D จัดกรอบตามวัตถุที่เลือก · เมื่อต่อกับแปลน การเลื่อนและซูมจะประสานกันสองทาง</span>}
               </div>
             </details>
-            {viewMode === 'plan' && <button type="button" onClick={handleDetectRooms} title="ค้นหาห้องจากวงผนังปิด">ตรวจจับห้อง</button>}
+            {viewMode === 'plan' && <button className="cf-view-icon-action" type="button" aria-label="ตรวจจับห้อง" onClick={handleDetectRooms} title="ค้นหาห้องจากวงผนังปิด">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4zM4 12h7V4m0 8v8m0-8h9" /><path d="m15 16 2 2 4-5" /></svg>
+            </button>}
             {(viewMode === 'plan' || viewMode === 'framing' || viewMode === 'roofplan') && <details className="cf-label-menu" onClick={event => {
               if ((event.target as HTMLElement).closest('input')) event.stopPropagation()
             }}>
@@ -676,7 +683,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 </div>
               </div>
             </details>}
-          </div>
+            </div>
+            </div>
+          </details>
 
           {/* Interactive Plan Canvas */}
           <div className="cf-viewport-stage" style={splitViewGridStyle}>
@@ -772,6 +781,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         </main>
 
         {inspectorOpen && <EditorInspector
+          onCloseInspector={() => setInspectorOpen(false)}
           activeTab={rightPanelTab}
           onActiveTabChange={setRightPanelTab}
           selectedId={selectedId}

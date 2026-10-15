@@ -3,22 +3,12 @@ import type { ProjectDocument, ProjectViewTemplate, SmartObject } from '@constru
 import { Eye, EyeOff, Search } from 'lucide-react'
 import type { AlignmentMode } from '../app/transformOperations.mjs'
 import { groupProjectBrowserObjects } from './groupProjectBrowserObjects.mjs'
-
-const familyLabels: Record<string, string> = {
-  'structure.grid': 'กริด', 'structure.column': 'เสา', 'structure.foundation': 'ฐานราก',
-  'structure.beam': 'คาน', 'structure.slab': 'พื้นโครงสร้าง', 'architecture.wall': 'ผนัง',
-  'architecture.floor': 'พื้นสถาปัตย์', 'architecture.ceiling': 'ฝ้า', 'architecture.room': 'ห้อง',
-  'architecture.room_separator': 'เส้นแบ่งห้อง', 'architecture.stair': 'บันได',
-  'door_window.door': 'ประตู', 'door_window.window': 'หน้าต่าง', 'roof.system': 'หลังคา',
-  'plumbing.pipe_route': 'แนวท่อ', 'drainage.pipe_route': 'แนวท่อระบายน้ำ',
-  'electrical.fixture': 'อุปกรณ์ไฟฟ้า', 'interior.cabinet_run': 'บิลท์อิน',
-  'decorative.moulding_run': 'แนวบัว',
-}
+import { getObjectFamilyDisplayName } from './objectDisplayNames.js'
 
 const objectLabel = (object: SmartObject) => {
   const data = object.module_data as Record<string, unknown>
   const mark = data.mark ?? data.tag ?? data.name ?? data.type_mark
-  return `${familyLabels[object.object_type] ?? object.object_type} · ${String(mark ?? object.id.slice(0, 8))}`
+  return `${getObjectFamilyDisplayName(object.object_type)} · ${String(mark ?? object.id.slice(0, 8))}`
 }
 
 type BrowserTreeRow =
@@ -262,7 +252,7 @@ export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selecte
             else next.add(row.family)
             return next
           })}
-        ><span>{familyLabels[row.family] ?? row.family}</span><small>{row.count}</small></button> : (() => {
+        ><span>{getObjectFamilyDisplayName(row.family)}</span><small>{row.count}</small></button> : (() => {
           const object = row.object
           const hidden = hiddenObjectIds.has(object.id)
           const selected = selectedIds.includes(object.id)
@@ -284,7 +274,7 @@ export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selecte
           </div>
         })())}
       </div> : groups.map(([family, members]) => <details key={family} open>
-        <summary role="treeitem" aria-expanded="true"><span>{familyLabels[family] ?? family}</span><small>{members.length}</small></summary>
+        <summary role="treeitem" aria-expanded="true"><span>{getObjectFamilyDisplayName(family)}</span><small>{members.length}</small></summary>
         <ul role="group">{members.map(object => {
           const hidden = hiddenObjectIds.has(object.id)
           const selected = selectedIds.includes(object.id)

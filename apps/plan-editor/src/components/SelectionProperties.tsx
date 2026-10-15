@@ -1,6 +1,7 @@
 import React from 'react'
 import { MousePointer2, Trash2 } from 'lucide-react'
 import type { ProjectDocument, SmartObject, TypeDefinition } from '@constructflow/project-model'
+import { getObjectFamilyDisplayName } from './objectDisplayNames.js'
 
 export const EmptySelectionProperties: React.FC = () => <div style={{ padding: 11, color: '#53657b', fontSize: 13, textAlign: 'center', marginTop: 40 }}>
   <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10, color: '#1682e8' }}><MousePointer2 size={23} /></div>
@@ -20,17 +21,12 @@ interface MultiSelectionPropertiesProps {
   onDeleteObjects?: (objectIds: string[]) => void
 }
 
-const familyLabels: Record<string, string> = {
-  'structure.beam': 'คาน', 'structure.column': 'เสา', 'structure.foundation': 'ฐานราก',
-  'architecture.wall': 'ผนัง', 'door_window.door': 'ประตู', 'door_window.window': 'หน้าต่าง',
-}
-
 export const MultiSelectionProperties: React.FC<MultiSelectionPropertiesProps> = ({
   project, selectedObjects, family, familyTypes, commonTypeId, canBulkUpdateLevel,
   onAssignTypeMany, onUpdateLevelMany, onDeleteObjects,
 }) => {
   const objectIds = selectedObjects.map(object => object.id)
-  const typeLabel = family ? familyLabels[family] ?? family : ''
+  const typeLabel = getObjectFamilyDisplayName(family)
   return <div data-testid="properties-multi-selection" data-object-ids={objectIds.join(',')}
     style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
     <div style={{ position: 'sticky', top: 0, zIndex: 3, background: '#fff', borderBottom: '1px solid #dce4ed', paddingTop: 4, paddingBottom: 10 }}>

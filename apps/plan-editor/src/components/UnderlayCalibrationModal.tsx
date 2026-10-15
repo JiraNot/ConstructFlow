@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Ruler, Check, X, ArrowRight } from 'lucide-react'
 import { formatLengthMm, parseLengthMm, type DisplayLengthUnit } from '@constructflow/project-model'
+import { useLegacyModalAccessibility } from './useLegacyModalAccessibility.js'
 
 interface UnderlayCalibrationModalProps {
   isOpen: boolean
@@ -19,6 +20,7 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
   currentScale_mm_per_px,
   onApplyScale,
 }) => {
+  useLegacyModalAccessibility(isOpen, onClose)
   const [inputValue, setInputValue] = useState<string>('4.000')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [axis, setAxis] = useState<'x' | 'y'>('x')
@@ -68,6 +70,10 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="ปรับสเกลภาพ"
+        tabIndex={-1}
         style={{
           width: 480,
           background: '#ffffff',
@@ -115,6 +121,8 @@ export const UnderlayCalibrationModal: React.FC<UnderlayCalibrationModalProps> =
             </div>
           </div>
           <button
+            type="button"
+            aria-label="ปิดปรับสเกลภาพ"
             onClick={onClose}
             style={{
               background: 'transparent',

@@ -13,6 +13,7 @@ import { ObjectLifecycleProperties } from './ObjectLifecycleProperties.js'
 import { SourceReferencesProperties } from './SourceReferencesProperties.js'
 import { ObjectSelectionHeader } from './ObjectSelectionHeader.js'
 import { resolvePropertiesSelection } from './propertiesSelection.js'
+import { getObjectFamilyDisplayName } from './objectDisplayNames.js'
 import type { PropertiesPanelProps } from './PropertiesPanel.types.js'
 
 type SingleSelection = ReturnType<typeof resolvePropertiesSelection>
@@ -37,7 +38,7 @@ export const SelectedObjectProperties: React.FC<{
   return (
     <div data-testid="properties-selection" data-object-id={selectedObj.id} data-object-type={selectedObj.object_type} style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <ObjectSelectionHeader project={project} object={selectedObj}
-        title={colObj ? `Column ${colObj.module_data.mark}` : fndObj ? `Footing ${fndObj.module_data.mark}` : beamObj ? `Beam ${beamObj.module_data.mark}` : wallObj ? `Wall ${wallObj.module_data.mark}` : doorObj ? `Door ${doorObj.module_data.mark}` : winObj ? `Window ${winObj.module_data.mark}` : grdObj ? `Grid ${grdObj.module_data.tag}` : roofObj ? `Roof ${String((roofObj.module_data as Record<string, unknown>).name ?? roofObj.id)}` : 'วัตถุ'}
+        title={`${getObjectFamilyDisplayName(selectedObj.object_type)} ${currentMark}`}
         currentMark={currentMark} onAssignType={onAssignType} onOpenTypeManager={onOpenTypeManager} />
 
       <StructurePropertiesSection project={project} displayUnit={displayUnit} column={colObj} foundation={fndObj} beam={beamObj}

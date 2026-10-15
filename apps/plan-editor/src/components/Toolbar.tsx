@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   MousePointer,
   Columns,
@@ -121,6 +121,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onOpenTypeManager,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [expandedToolGroup, setExpandedToolGroup] = useState<string | null>(null)
 
   const tools: { id: ToolType; label: string; icon: React.ReactNode; shortcut: string }[] = [
     { id: 'select', label: 'เลือก (S)', icon: <MousePointer size={16} />, shortcut: 'S' },
@@ -156,6 +157,19 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     { id: 'calibrate', label: 'ปรับสเกลภาพ (R)', icon: <Ruler size={16} />, shortcut: 'R' },
   ]
 
+  const availableTools = tools.filter(tool => tool.id !== 'calibrate' || (underlayHasImage && underlayVisible))
+  const pinnedTools = availableTools.filter(tool => ['select', 'wall', 'beam', 'door', 'window'].includes(tool.id))
+  const toolGroups: { title: string; ids: ToolType[] }[] = [
+    { title: 'โครงสร้าง', ids: ['column', 'foundation', 'slab'] },
+    { title: 'สถาปัตย์', ids: ['archFloor', 'ceiling', 'roof', 'cabinet', 'moulding', 'roomSeparator', 'stair'] },
+    { title: 'ระบบ', ids: ['pipe', 'fixture'] },
+    { title: 'เขียนแบบ/สำรวจ', ids: ['erase', 'grid', 'gridSystem', 'measure', 'calibrate'] },
+  ]
+  useEffect(() => {
+    const activeGroup = toolGroups.find(group => group.ids.includes(activeTool))
+    if (activeGroup) setExpandedToolGroup(activeGroup.title)
+  }, [activeTool])
+
   return (
     <div className={`cf-toolbar cf-toolbar-${orientation}`} style={{
       display: 'flex',
@@ -170,7 +184,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     }}>
       {/* Tool Buttons */}
       <div className="cf-tool-list" style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-        {tools.filter(tool => tool.id !== 'calibrate' || (underlayHasImage && underlayVisible)).map((t) => {
+        {pinnedTools.map((t) => {
           const isActive = activeTool === t.id
           return (
             <button
@@ -194,9 +208,27 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               }}
             >
               {t.icon}
-              <span className="cf-tool-label">{t.label.split(' ')[0]}</span>
+              <span className="cf-tool-label">{({ select: 'เลือก', wall: 'ผนัง', beam: 'คาน', door: 'ประตู', window: 'หน้าต่าง' } as Partial<Record<ToolType, string>>)[t.id]}</span>
             </button>
           )
+        })}
+      </div>
+
+      <div className="cf-tool-groups" aria-label="เครื่องมือเพิ่มเติม">
+        {toolGroups.map(group => {
+          const groupTools = availableTools.filter(tool => group.ids.includes(tool.id))
+          if (!groupTools.length) return null
+          return <details className="cf-tool-group" key={group.title} open={expandedToolGroup === group.title} onToggle={event => {
+            if (event.currentTarget.open) setExpandedToolGroup(group.title)
+            else setExpandedToolGroup(current => current === group.title ? null : current)
+          }}>
+            <summary aria-label={group.title}>{group.title}</summary>
+            <div className="cf-tool-group-menu" role="group" aria-label={group.title}>
+              {groupTools.map(t => <button key={t.id} type="button" className={`cf-tool-button ${activeTool === t.id ? 'is-active' : ''}`} onClick={() => onSelectTool(t.id)} title={t.label} aria-label={t.label}>
+              {t.icon}<span className="cf-tool-label">{({ erase: 'ลบ', column: 'เสา', foundation: 'ฐานราก', slab: 'พื้น', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้า', roof: 'หลังคา', pipe: 'ท่อ', fixture: 'อุปกรณ์', cabinet: 'บิลท์อิน', moulding: 'บัว', roomSeparator: 'แบ่งห้อง', stair: 'บันได', grid: 'กริด', gridSystem: 'ระบบกริด', measure: 'วัด', calibrate: 'ปรับสเกล' } as Partial<Record<ToolType, string>>)[t.id]}</span>
+              </button>)}
+            </div>
+          </details>
         })}
       </div>
 

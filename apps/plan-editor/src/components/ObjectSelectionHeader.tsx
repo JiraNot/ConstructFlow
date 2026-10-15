@@ -1,5 +1,6 @@
 import React from 'react'
 import { ProjectDocument, SmartObject, isBeamObject, isColumnObject, isDoorObject, isFoundationObject, isWallObject, isWindowObject } from '@constructflow/project-model'
+import { getObjectFamilyDisplayName } from './objectDisplayNames.js'
 
 interface ObjectSelectionHeaderProps {
   project: ProjectDocument
@@ -33,7 +34,7 @@ export const ObjectSelectionHeader: React.FC<ObjectSelectionHeaderProps> = ({ pr
           padding: '2px 4px',
           borderRadius: 2,
           border: '1px solid #dce4ed',
-        }}>{object.object_type}</span>
+        }} title={object.object_type}>{getObjectFamilyDisplayName(object.object_type)}</span>
         <span style={{ fontSize: 10, color: '#53657b' }}>v{object.schema_version}</span>
       </div>
       <div style={{ fontSize: 15, fontWeight: 700, color: '#24364b' }}>{title}</div>

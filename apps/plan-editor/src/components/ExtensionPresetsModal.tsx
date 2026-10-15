@@ -8,6 +8,7 @@ import type { CommandBatchResult, CommandRequest, ExtensionPresetType } from '@c
 import { planExtensionPreset } from '@constructflow/extension-engine'
 import { createAssemblyAsset, importAssemblyAssets, loadAssemblyAssets, saveAssemblyAssets, type AssemblyAsset } from '../app/assemblyAssetLibrary.mjs'
 import { AssemblyAssetLibraryPanel } from './AssemblyAssetLibraryPanel.js'
+import { useLegacyModalAccessibility } from './useLegacyModalAccessibility.js'
 import {
   Sparkles,
   Car,
@@ -35,6 +36,7 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
   project,
   onApplyPreset,
 }) => {
+  useLegacyModalAccessibility(isOpen, onClose)
   const [generationError, setGenerationError] = useState<string | null>(null)
   const [activePreset, setActivePreset] = useState<ExtensionPresetType>('carport')
 
@@ -177,6 +179,10 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="สร้างส่วนต่อเติม"
+        tabIndex={-1}
         style={{
           width: 860,
           maxHeight: '92vh',
@@ -226,6 +232,8 @@ export const ExtensionPresetsModal: React.FC<ExtensionPresetsModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
+            aria-label="ปิดสร้างส่วนต่อเติม"
             onClick={onClose}
             style={{
               background: 'transparent',

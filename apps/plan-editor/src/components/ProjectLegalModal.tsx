@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { ProjectDocument, ProjectLegalMetadata } from "@constructflow/project-model";
 import { FileText, ShieldCheck, MapPin, UserCheck, X } from "lucide-react";
+import { useLegacyModalAccessibility } from './useLegacyModalAccessibility.js'
 
 interface ProjectLegalModalProps {
   project: ProjectDocument;
@@ -15,6 +16,7 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
   onClose,
   onSave,
 }) => {
+  useLegacyModalAccessibility(isOpen, onClose)
   const existing = project.legal_metadata;
 
   const [deedNo, setDeedNo] = useState(existing?.deed_no ?? "45678");
@@ -107,6 +109,10 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="ข้อมูลโฉนดและผู้เกี่ยวข้อง"
+        tabIndex={-1}
         style={{
           width: "90%",
           maxWidth: 720,
@@ -128,6 +134,8 @@ export const ProjectLegalModal: React.FC<ProjectLegalModalProps> = ({
             </h2>
           </div>
           <button
+            type="button"
+            aria-label="ปิดข้อมูลโฉนดและผู้เกี่ยวข้อง"
             onClick={onClose}
             style={{ background: "transparent", border: "none", color: "#52677d", cursor: "pointer" }}
           >
