@@ -61,6 +61,11 @@ from the local subnet on a Private profile. To produce a
 production build without starting the server, use `npm run build:standalone`. These commands do
 not run test suites.
 
+To use **Continue with ChatGPT** in the local editor, install Python requirements with
+`python -m pip install -r apps/mcp-server/requirements.txt` and start the local AI bridge in a
+second terminal with `python apps/mcp-server/http_bridge.py`. The bridge listens on loopback port
+8000 and stores ChatGPT credentials in the operating system credential store.
+
 The generated [Kitchen Extension Proof project](examples/kitchen-extension-proof.cfproj)
 is a local `.cfproj` example with an Existing host wall and a 4.00 × 2.50 m New Construction
 extension. After building `project-model` and `extension-engine`, regenerate it with

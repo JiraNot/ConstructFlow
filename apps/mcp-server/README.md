@@ -133,6 +133,23 @@ The editor currently describes built-in wall, column, beam, door and window comm
 AI-enabled commands contributed by registered SDK modules. AI asks for missing host/level/design
 inputs instead of inventing them. Final domain validation remains authoritative.
 
+For local use, the Plan Editor also supports **Continue with ChatGPT**. Install the local
+gateway dependencies once, then run the gateway in a terminal while using the editor:
+
+```bash
+python -m pip install -r apps/mcp-server/requirements.txt
+python apps/mcp-server/http_bridge.py
+```
+
+The gateway stays bound to loopback by default. Sign-in opens the system browser and returns to
+the local gateway; access and refresh tokens are stored in the operating system credential store
+(Windows Credential Manager, macOS Keychain, or Linux Secret Service/KWallet), never in browser
+storage. The user chooses a model available to their ChatGPT account. Requests use the public
+Responses API and are sent with `store: false`. If no OS credential store is available, the UI
+reports that requirement and will not store credentials in a plain file. This local sign-in flow
+is disabled when the gateway binds to a non-loopback host; Coolify continues to use its separate
+server API-key profile.
+
 คุณสามารถพิมพ์สั่งงานด้วยภาษาไทยหรืออังกฤษได้ทันที เช่น:
 - *"สร้างเสา ค.ส.ล. 4 ต้น ขนาด 0.3x0.3 เมตร สูง 3.5 เมตร ที่พิกัด 0,0 และ 0,6 และ 4,0 และ 4,6"*
 - *"สร้างกำแพงรอบห้อง 4x6 เมตร ความหนา 0.15 เมตร"*

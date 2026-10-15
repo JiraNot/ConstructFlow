@@ -1,7 +1,7 @@
-import React, { useMemo, useState, useSyncExternalStore } from "react";
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ProjectDocument } from "@constructflow/project-model";
 import type { CommandRequest } from "@constructflow/command-schema";
-import { AlertTriangle, Bot, Check, LoaderCircle, Play, RefreshCw } from "lucide-react";
+import { AlertTriangle, Bot, Check, LoaderCircle, LogIn, LogOut, Play, RefreshCw } from "lucide-react";
 import { buildAIProjectContext, getAICommandDescriptors } from "../ai/aiCommandCatalog.js";
 import { CommandBus } from "../commands/CommandBus.js";
 
@@ -16,6 +16,8 @@ interface Plan {
   commands: CommandRequest[];
 }
 interface CommandResult { status: string; affected_object_ids?: string[]; errors?: string[] }
+interface AuthStatus { mode: "local" | "gateway"; connected: boolean; email: string; name: string; sharing: boolean }
+interface ChatGPTModel { slug: string; display_name: string }
 interface Props {
   project: ProjectDocument;
   selectedIds: readonly string[];
@@ -23,18 +25,20 @@ interface Props {
   onExecute: (commands: CommandRequest[], actor: "ai") => CommandResult | Promise<CommandResult>;
 }
 
+const AUTH_STATUS_ENDPOINT = "/api/ai/auth/status";
 const DEFAULT_ENDPOINT = "/api/ai/plan";
 function loadEndpoint() {
-  try {
-    return localStorage.getItem("cf-ai-plan-endpoint") || DEFAULT_ENDPOINT;
-  } catch {
-    return DEFAULT_ENDPOINT;
-  }
+  try { return localStorage.getItem("cf-ai-plan-endpoint") || DEFAULT_ENDPOINT; }
+  catch { return DEFAULT_ENDPOINT; }
 }
 
 export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: Props) {
+  const [auth, setAuth] = useState<AuthStatus>({ mode: "local", connected: false, email: "", name: "", sharing: false });
+  const [models, setModels] = useState<ChatGPTModel[]>([]);
+  const [model, setModel] = useState("");
   const [endpoint, setEndpoint] = useState(loadEndpoint);
-  const [token, setToken] = useState("");
+  const [gatewayToken, setGatewayToken] = useState("");
+  const [authBusy, setAuthBusy] = useState(true);
   const [prompt, setPrompt] = useState("");
   const [plan, setPlan] = useState<Plan | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
@@ -49,13 +53,118 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
   );
   const descriptors = useMemo(getAICommandDescriptors, [moduleRevision]);
 
+  const refreshAuth = async () => {
+    const response = await fetch(AUTH_STATUS_ENDPOINT, { cache: "no-store" });
+    const status = await response.json() as AuthStatus & { error?: string };
+    if (!response.ok) throw new Error(status.error || "ตรวจสอบบัญชี ChatGPT ไม่สำเร็จ");
+    setAuth(status);
+    if (status.connected && status.sharing) {
+      const modelResponse = await fetch("/api/ai/models", { cache: "no-store" });
+      const modelBody = await modelResponse.json() as { models?: ChatGPTModel[]; selected_model?: string; error?: string };
+      if (!modelResponse.ok) throw new Error(modelBody.error || "โหลดรายการโมเดล ChatGPT ไม่สำเร็จ");
+      const availableModels = modelBody.models ?? [];
+      const selectedModel = modelBody.selected_model || (availableModels.some(item => item.slug === model) ? model : availableModels[0]?.slug || "");
+      setModels(availableModels);
+      setModel(selectedModel);
+      if (selectedModel && selectedModel !== modelBody.selected_model) {
+        const saveModelResponse = await fetch("/api/ai/auth/model", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: selectedModel }),
+        });
+        const saveModelBody = await saveModelResponse.json() as { error?: string };
+        if (!saveModelResponse.ok) throw new Error(saveModelBody.error || "บันทึกรุ่นโมเดลเริ่มต้นไม่สำเร็จ");
+      }
+    } else {
+      setModels([]);
+      setModel("");
+    }
+    return status;
+  };
+
+  useEffect(() => {
+    let active = true;
+    void refreshAuth().catch(cause => {
+      if (active) setError(cause instanceof Error ? cause.message : String(cause));
+    }).finally(() => { if (active) setAuthBusy(false); });
+    return () => { active = false; };
+  }, []);
+
+  const connect = async () => {
+    const popup = window.open("about:blank", "constructflow-chatgpt-signin", "popup,width=560,height=760");
+    if (!popup) {
+      setError("อนุญาต popup สำหรับ Sign in with ChatGPT แล้วลองอีกครั้ง");
+      return;
+    }
+    setAuthBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/ai/auth/start", { method: "POST" });
+      const body = await response.json() as { authorization_url?: string; error?: string };
+      if (!response.ok || !body.authorization_url) throw new Error(body.error || "เริ่ม Sign in with ChatGPT ไม่สำเร็จ");
+      popup.location.href = body.authorization_url;
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < 5 * 60_000) {
+        await new Promise(resolve => window.setTimeout(resolve, 1_500));
+        const nextAuth = await refreshAuth();
+        if (nextAuth.connected) break;
+      }
+      const responseStatus = await fetch(AUTH_STATUS_ENDPOINT, { cache: "no-store" });
+      const nextAuth = await responseStatus.json() as AuthStatus;
+      setAuth(nextAuth);
+      if (!nextAuth.connected) throw new Error("ยังไม่พบการเชื่อมต่อ ChatGPT ที่เสร็จสมบูรณ์");
+      await refreshAuth();
+    } catch (cause) {
+      popup.close();
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setAuthBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/ai/auth/logout", { method: "POST" });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || "ออกจากบัญชี ChatGPT ไม่สำเร็จ");
+      setAuth({ mode: "local", connected: false, email: "", name: "", sharing: false });
+      setModels([]);
+      setModel("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const chooseModel = async (value: string) => {
+    setModel(value);
+    try {
+      const response = await fetch("/api/ai/auth/model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: value }),
+      });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || "บันทึกรุ่นโมเดลไม่สำเร็จ");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
   const generate = async () => {
     if (!prompt.trim()) {
       setError("พิมพ์สิ่งที่ต้องการให้ช่วยวางแผนก่อน");
       return;
     }
-    if (!endpoint.trim() || !token.trim()) {
-      setError("ระบุ URL ของ AI gateway และ token ก่อนส่งคำขอ");
+    if (auth.mode === "local" && (!auth.connected || !model)) {
+      setError("เชื่อมต่อบัญชี ChatGPT และเลือกรุ่นโมเดลก่อนส่งคำขอ");
+      return;
+    }
+    if (auth.mode === "gateway" && (!endpoint.trim() || !gatewayToken.trim())) {
+      setError("ระบุ URL และ token ของ AI gateway ก่อนส่งคำขอ");
       return;
     }
     if (!descriptors.length) {
@@ -73,15 +182,15 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
       localStorage.setItem("cf-ai-plan-endpoint", endpoint.trim());
       const response = await fetch(endpoint.trim(), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token.trim()}`,
-        },
+        headers: auth.mode === "gateway"
+          ? { "Content-Type": "application/json", Authorization: `Bearer ${gatewayToken.trim()}` }
+          : { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
           prompt: prompt.trim(),
           project_context: buildAIProjectContext(project, selectedIds),
           command_descriptors: descriptors,
+          ...(auth.mode === "local" ? { model } : {}),
         }),
       });
       const body = await response.json() as Record<string, unknown>;
@@ -153,20 +262,35 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
         <span className="cf-ai-icon"><Bot size={17} /></span>
         <div><strong>ผู้ช่วย AI</strong><small>ร่างคำสั่ง · ตรวจสอบ · ยืนยัน</small></div>
       </header>
-      <label className="cf-ai-field">
-        <span>AI gateway URL</span>
-        <input aria-label="AI gateway URL" value={endpoint} onChange={event => setEndpoint(event.target.value)} />
-      </label>
-      <label className="cf-ai-field">
-        <span>Gateway token</span>
-        <input aria-label="Gateway token" type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} />
-      </label>
+      <div className="cf-ai-account" aria-live="polite">
+        {auth.mode === "gateway" ? <>
+          <span className="cf-ai-account-state">AI gateway</span>
+          <label className="cf-ai-field"><span>Gateway URL</span><input aria-label="AI gateway URL" value={endpoint} onChange={event => setEndpoint(event.target.value)} /></label>
+          <label className="cf-ai-field"><span>Gateway token</span><input aria-label="Gateway token" type="password" autoComplete="off" value={gatewayToken} onChange={event => setGatewayToken(event.target.value)} /></label>
+        </> : auth.connected ? <>
+          <span className="cf-ai-account-state"><Check size={14} /> เชื่อมต่อ ChatGPT แล้ว</span>
+          <span className="cf-ai-account-email">{auth.name || auth.email}</span>
+          <button type="button" className="cf-ai-account-action" disabled={authBusy} onClick={() => void disconnect()}><LogOut size={13} /> ออกจากระบบ</button>
+        </> : <>
+          <span className="cf-ai-account-state">{authBusy ? "กำลังตรวจสอบการเชื่อมต่อ…" : "ยังไม่ได้เชื่อมต่อ ChatGPT"}</span>
+          <button type="button" className="cf-button cf-button-primary cf-ai-login" disabled={authBusy} onClick={() => void connect()}>
+            {authBusy ? <LoaderCircle size={14} className="cf-ai-spin" /> : <LogIn size={14} />}
+            {authBusy ? "กำลังเชื่อมต่อ…" : "Continue with ChatGPT"}
+          </button>
+        </>}
+      </div>
+      {auth.mode === "local" && auth.connected && <label className="cf-ai-field">
+        <span>รุ่นโมเดล</span>
+        <select aria-label="รุ่นโมเดล ChatGPT" value={model} onChange={event => void chooseModel(event.target.value)}>
+          {models.map(item => <option key={item.slug} value={item.slug}>{item.display_name}</option>)}
+        </select>
+      </label>}
       <label className="cf-ai-field cf-ai-prompt">
         <span>ต้องการทำอะไรกับโมเดลนี้?</span>
-        <textarea aria-label="คำขอผู้ช่วย AI" rows={5} maxLength={8000} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="เช่น เพิ่มผนังยาว 4 เมตรบนชั้นปัจจุบัน จากพิกัด X=0, Y=0" />
+        <textarea aria-label="คำขอผู้ช่วย AI" rows={5} maxLength={8000} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="เช่น เพิ่มผนังยาว 4 เมตรบนชั้นปัจจุบัน จากพิกัด X=0, Y=0" disabled={auth.mode === "local" && !auth.connected} />
       </label>
-      <p className="cf-ai-privacy">คำขอจะส่งบริบทระดับ, type และวัตถุในโครงการไปยัง gateway ที่กำหนด token อยู่ในหน่วยความจำชั่วคราวของหน้านี้</p>
-      <button className="cf-button cf-button-primary cf-ai-generate" disabled={busy || applying || !prompt.trim()} onClick={() => void generate()}>
+      <p className="cf-ai-privacy">{auth.mode === "local" ? "ใช้ ChatGPT plan ที่คุณอนุญาต · token เก็บใน credential store ของเครื่อง และไม่เข้า browser storage" : "คำขอและบริบทโครงการจะส่งไปยัง AI gateway ที่กำหนด"}</p>
+      <button className="cf-button cf-button-primary cf-ai-generate" disabled={busy || applying || (auth.mode === "local" && (!auth.connected || !model)) || (auth.mode === "gateway" && (!gatewayToken.trim() || !endpoint.trim())) || !prompt.trim()} onClick={() => void generate()}>
         {busy ? <LoaderCircle size={15} className="cf-ai-spin" /> : <Bot size={15} />}
         {busy ? "กำลังร่างแผน…" : "สร้างแผนคำสั่ง"}
       </button>

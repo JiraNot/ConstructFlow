@@ -470,7 +470,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-ai-header small { margin-top:2px; color:#64748b; font-size:10px; }
 .cf-ai-field { display:grid; gap:4px; color:#52677d; font-size:10px; font-weight:650; }
 .cf-ai-field input,.cf-ai-field textarea { width:100%; min-height:30px; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; background:white; color:#1e293b; font:inherit; font-weight:400; }
+.cf-ai-field select { width:100%; min-height:32px; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; background:white; color:#1e293b; font:inherit; font-weight:400; }
 .cf-ai-field textarea { resize:vertical; line-height:1.5; }
+.cf-ai-account { display:grid; gap:7px; padding:9px; border:1px solid #dbe4ec; border-radius:6px; background:#f8fafc; }
+.cf-ai-account-state { display:flex; align-items:center; gap:5px; color:#334155; font-size:11px; font-weight:700; }
+.cf-ai-account-email { overflow:hidden; color:#64748b; font-size:10px; text-overflow:ellipsis; }
+.cf-ai-account-action { justify-self:start; display:flex; align-items:center; gap:5px; padding:4px 0; border:0; background:none; color:#475569; font:inherit; font-size:10px; cursor:pointer; }
+.cf-ai-login { justify-self:start; display:flex; align-items:center; gap:6px; min-height:32px; padding:0 10px; }
 .cf-ai-prompt span { font-size:11px; color:#334155; }
 .cf-ai-privacy,.cf-ai-undo-note { margin:0; color:#64748b; font-size:9px; line-height:1.5; }
 .cf-ai-generate,.cf-ai-apply { display:flex; justify-content:center; align-items:center; gap:7px; min-height:34px; }

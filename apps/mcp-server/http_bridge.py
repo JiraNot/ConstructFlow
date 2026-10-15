@@ -9,6 +9,9 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import threading
 from urllib.parse import urlparse
 from ai_provider import AIPlanError, AIProviderError, generate_command_plan
+import chatgpt_auth
+from html import escape
+from urllib.parse import parse_qs
 
 # Configuration
 HTTP_PORT = 8000
@@ -235,6 +238,42 @@ class BridgeHandler(BaseHTTPRequestHandler):
         return payload
 
     def do_GET(self):
+        if self.path == "/api/ai/auth/status" and not is_loopback_host(os.environ.get("CONSTRUCTFLOW_HTTP_HOST", "127.0.0.1")):
+            self._json_response(200, {"mode": "gateway", "connected": False, "email": "", "name": "", "sharing": False})
+            return
+        if self.path.startswith("/api/ai/auth/") or self.path == "/api/ai/models":
+            if not is_loopback_host(os.environ.get("CONSTRUCTFLOW_HTTP_HOST", "127.0.0.1")):
+                self._json_response(404, {"error": "Local ChatGPT sign-in is disabled on remotely bound gateways"})
+                return
+            if not self._origin_is_allowed():
+                self._json_response(403, {"error": "Browser origin is not allowed"})
+                return
+
+        if self.path == "/api/ai/auth/status":
+            try:
+                self._json_response(200, chatgpt_auth.auth_status())
+            except chatgpt_auth.ChatGPTAuthError as error:
+                self._json_response(503, {"error": str(error)})
+            return
+
+        if self.path == "/api/ai/models":
+            try:
+                self._json_response(200, {
+                    "models": chatgpt_auth.list_models(),
+                    "selected_model": chatgpt_auth.selected_model(),
+                })
+            except chatgpt_auth.ChatGPTAuthError as error:
+                self._json_response(401, {"error": str(error)})
+            return
+
+        if self.path.startswith("/auth/callback?") or self.path == "/auth/callback":
+            try:
+                chatgpt_auth.finish_sign_in(parse_qs(urlparse(self.path).query, keep_blank_values=True))
+                self._auth_callback_page("Connected to ChatGPT", "Your ConstructFlow AI connection is ready.", success=True)
+            except chatgpt_auth.ChatGPTAuthError as error:
+                self._auth_callback_page("ChatGPT sign-in did not finish", str(error), success=False)
+            return
+
         if self.path == "/openapi.json":
             self._json_response(200, OPENAPI_SPEC)
             return
@@ -246,25 +285,78 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self.send_response(404)
         self.end_headers()
 
+    def _auth_callback_page(self, title, message, *, success):
+        body = f"""<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)}</title><style>body{{font:16px system-ui,sans-serif;margin:10vh auto;max-width:34rem;padding:0 1.25rem;color:#172033}}h1{{font-size:1.35rem}}p{{line-height:1.6;color:#526077}}button{{padding:.65rem 1rem;border:0;border-radius:.5rem;background:#0f766e;color:white;font:inherit;cursor:pointer}}</style><h1>{escape(title)}</h1><p>{escape(message)}</p><p>{'Return to ConstructFlow; you can close this window.' if success else 'Return to ConstructFlow and try again.'}</p><button onclick="window.close()">Close window</button></html>""".encode("utf-8")
+        self.send_response(200 if success else 400)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self._send_security_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_POST(self):
         if not self._origin_is_allowed():
             self._json_response(403, {"error": "Browser origin is not allowed"})
             return
+        local_auth_mode = is_loopback_host(os.environ.get("CONSTRUCTFLOW_HTTP_HOST", "127.0.0.1"))
+        if self.path.startswith("/api/ai/auth/") or self.path == "/api/ai/auth/model":
+            if not local_auth_mode:
+                self._json_response(404, {"error": "Local ChatGPT sign-in is disabled on remotely bound gateways"})
+                return
+            origin = self.headers.get("Origin", "").rstrip("/")
+            if not origin or origin not in allowed_browser_origins():
+                self._json_response(403, {"error": "A trusted local editor origin is required"})
+                return
+            if self.path == "/api/ai/auth/start":
+                try:
+                    authorization_url = chatgpt_auth.start_sign_in(origin)
+                    self._json_response(200, {"authorization_url": authorization_url})
+                except chatgpt_auth.ChatGPTAuthError as error:
+                    self._json_response(503, {"error": str(error)})
+                return
+            if self.path == "/api/ai/auth/logout":
+                try:
+                    chatgpt_auth.sign_out()
+                    self._json_response(200, {"signed_out": True})
+                except chatgpt_auth.ChatGPTAuthError as error:
+                    self._json_response(503, {"error": str(error)})
+                return
+            if self.path == "/api/ai/auth/model":
+                try:
+                    data = self._read_json_body(8_000)
+                    chatgpt_auth.select_model(data.get("model"))
+                    self._json_response(200, {"selected_model": chatgpt_auth.selected_model()})
+                except chatgpt_auth.ChatGPTAuthError as error:
+                    self._json_response(422, {"error": str(error)})
+                except AIPlanError as error:
+                    self._json_response(422, {"error": str(error)})
+                return
+
         if self.path == "/api/ai/plan":
-            expected_token = os.environ.get("CONSTRUCTFLOW_AI_TOKEN", "")
-            if not expected_token:
-                self._json_response(503, {"error": "AI gateway authentication is not configured"})
-                return
-            provided = self.headers.get("Authorization", "")
-            if not ai_gateway_authorized(provided, expected_token):
-                self._json_response(401, {"error": "Invalid AI gateway token"})
-                return
+            if local_auth_mode:
+                origin = self.headers.get("Origin", "").rstrip("/")
+                if not origin or origin not in allowed_browser_origins():
+                    self._json_response(403, {"error": "A trusted local editor origin is required"})
+                    return
+            else:
+                expected_token = os.environ.get("CONSTRUCTFLOW_AI_TOKEN", "")
+                if not expected_token:
+                    self._json_response(503, {"error": "AI gateway authentication is not configured"})
+                    return
+                provided = self.headers.get("Authorization", "")
+                if not ai_gateway_authorized(provided, expected_token):
+                    self._json_response(401, {"error": "Invalid AI gateway token"})
+                    return
             if not AI_REQUEST_LIMITER.acquire(blocking=False):
                 self._json_response(503, {"error": "AI gateway is at capacity; retry shortly"})
                 return
             try:
                 data = self._read_json_body(128_000)
-                result = generate_command_plan(data)
+                if local_auth_mode:
+                    model = data.pop("model", "") or chatgpt_auth.selected_model()
+                    result = generate_command_plan(data, chatgpt_model=model)
+                else:
+                    result = generate_command_plan(data)
                 status = 200
             except AIProviderError:
                 result = {"error": "AI provider request failed; check gateway logs and provider configuration"}
