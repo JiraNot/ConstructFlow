@@ -1,7 +1,8 @@
 import React, { useRef, useState, useSyncExternalStore } from 'react'
 import { CommandBus } from '../commands/CommandBus.js'
-import { inspectModulePackageFile, validateModulePackageExport } from '../app/modulePackageFile.mjs'
-import type { ConstructFlowModule, ModuleManifest } from '@constructflow/module-sdk'
+import { inspectModulePackageFile } from '../app/modulePackageFile.mjs'
+import { loadSandboxedModulePackage } from '../app/modulePackageSandbox.js'
+import type { ModuleManifest } from '@constructflow/module-sdk'
 
 type PendingPackage = { fileName: string; source: string; byteLength: number; sha256: string | null }
 
@@ -40,11 +41,8 @@ export const ExtensionPackageManager: React.FC = () => {
   const install = async () => {
     if (!pending || !trusted || busy) return
     setBusy(true); setFeedback('')
-    let moduleUrl: string | null = null
     try {
-      moduleUrl = URL.createObjectURL(new Blob([pending.source], { type: 'text/javascript' }))
-      const namespace = await import(/* @vite-ignore */ moduleUrl) as { default?: unknown }
-      const module = validateModulePackageExport(namespace.default) as ConstructFlowModule
+      const module = await loadSandboxedModulePackage(pending.source)
       const unregister = CommandBus.registerModule(module)
       unloaders.current.set(module.manifest.id, unregister)
       setFeedback(`ติดตั้ง ${module.manifest.id}@${module.manifest.version} แล้ว · ทำงานใน session นี้`)
@@ -52,7 +50,6 @@ export const ExtensionPackageManager: React.FC = () => {
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : 'ติดตั้ง extension ไม่สำเร็จ')
     } finally {
-      if (moduleUrl) URL.revokeObjectURL(moduleUrl)
       setBusy(false)
     }
   }
@@ -75,7 +72,7 @@ export const ExtensionPackageManager: React.FC = () => {
       <button type="button" onClick={() => fileRef.current?.click()}>นำเข้า .cfe.mjs</button>
       <input ref={fileRef} type="file" accept=".cfe.mjs,text/javascript" aria-label="เลือกแพ็กเกจ extension" hidden onChange={event => { void inspectFile(event.currentTarget.files?.[0]); event.currentTarget.value = '' }} />
     </div>
-    <p style={{ color: '#94a3b8', fontSize: 10, margin: '5px 0' }}>แพ็กเกจทำงานในหน้าแอปและถือเป็นโค้ดที่เชื่อถือได้ ไม่มี sandbox · โหลดไว้ใน session ปัจจุบัน</p>
+    <p style={{ color: '#94a3b8', fontSize: 10, margin: '5px 0' }}>คำสั่งแพ็กเกจทำงานใน worker แยก ไม่มี DOM, storage หรือ network API · รองรับ command handlers และ UI actions</p>
     {pending && <div style={{ marginTop: 8, padding: 8, background: '#0f172a', borderRadius: 4 }}>
       <strong style={{ fontSize: 11 }}>{pending.fileName} · {(pending.byteLength / 1024).toFixed(1)} KB</strong>
       {pending.sha256 && <div style={{ color: '#94a3b8', fontSize: 9, overflowWrap: 'anywhere', marginTop: 4 }}>SHA-256: {pending.sha256}</div>}
@@ -84,7 +81,7 @@ export const ExtensionPackageManager: React.FC = () => {
       </details>
       <label style={{ display: 'flex', gap: 6, alignItems: 'flex-start', marginTop: 8, color: '#fbbf24', fontSize: 10 }}>
         <input aria-label="เชื่อถือและอนุญาตให้รัน extension" type="checkbox" checked={trusted} onChange={event => setTrusted(event.target.checked)} />
-        <span>ฉันเชื่อถือผู้เผยแพร่และอนุญาตให้ extension รันโค้ดในหน้า ConstructFlow</span>
+        <span>ฉันเชื่อถือผู้เผยแพร่และอนุญาตให้ extension รัน command handlers ใน sandbox</span>
       </label>
       <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
         <button type="button" disabled={!trusted || busy} onClick={() => void install()}>{busy ? 'กำลังติดตั้ง…' : 'เชื่อถือและติดตั้ง'}</button>

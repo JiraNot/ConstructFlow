@@ -15,14 +15,15 @@ interface Plan {
   questions: string[];
   commands: CommandRequest[];
 }
+interface CommandResult { status: string; affected_object_ids?: string[]; errors?: string[] }
 interface Props {
   project: ProjectDocument;
   selectedIds: readonly string[];
-  onPreview: (commands: CommandRequest[]) => PreviewResult;
-  onExecute: (commands: CommandRequest[], actor: "ai") => { status: string; errors?: string[] };
+  onPreview: (commands: CommandRequest[]) => PreviewResult | Promise<PreviewResult>;
+  onExecute: (commands: CommandRequest[], actor: "ai") => CommandResult | Promise<CommandResult>;
 }
 
-const DEFAULT_ENDPOINT = "http://localhost:8000/api/ai/plan";
+const DEFAULT_ENDPOINT = "/api/ai/plan";
 function loadEndpoint() {
   try {
     return localStorage.getItem("cf-ai-plan-endpoint") || DEFAULT_ENDPOINT;
@@ -38,6 +39,7 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
   const [plan, setPlan] = useState<Plan | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const moduleRevision = useSyncExternalStore(
@@ -65,6 +67,8 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
     setNotice("");
     setPlan(null);
     setPreview(null);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 55_000);
     try {
       localStorage.setItem("cf-ai-plan-endpoint", endpoint.trim());
       const response = await fetch(endpoint.trim(), {
@@ -73,6 +77,7 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
           "Content-Type": "application/json",
           Authorization: `Bearer ${token.trim()}`,
         },
+        signal: controller.signal,
         body: JSON.stringify({
           prompt: prompt.trim(),
           project_context: buildAIProjectContext(project, selectedIds),
@@ -94,8 +99,24 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
       const questions = body.questions.filter((question): question is string => typeof question === "string").slice(0, 20);
       const nextPlan = { summary: body.summary, questions, commands };
       setPlan(nextPlan);
-      if (commands.length && !questions.length) setPreview(onPreview(commands));
+      if (commands.length && !questions.length) setPreview(await onPreview(commands));
       else setPreview(null);
+    } catch (cause) {
+      setError(cause instanceof DOMException && cause.name === "AbortError"
+        ? "รอ AI gateway นานเกินไป กรุณาลองอีกครั้ง"
+        : cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      window.clearTimeout(timeout);
+      setBusy(false);
+    }
+  };
+
+  const recheck = async () => {
+    if (!plan?.commands.length || plan.questions.length) return;
+    setBusy(true);
+    try {
+      setPreview(await onPreview(plan.commands));
+      setNotice("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -103,24 +124,26 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
     }
   };
 
-  const recheck = () => {
+  const apply = async () => {
     if (!plan?.commands.length || plan.questions.length) return;
-    setPreview(onPreview(plan.commands));
-    setNotice("");
-  };
-
-  const apply = () => {
-    if (!plan?.commands.length || plan.questions.length) return;
-    const currentPreview = onPreview(plan.commands);
-    setPreview(currentPreview);
-    if (!currentPreview.valid) return;
-    const result = onExecute(plan.commands, "ai");
-    if (result.status === "success") {
-      setNotice(`ใช้แผน AI แล้ว · ${plan.commands.length} คำสั่ง · กดย้อนกลับเพื่อ undo ทั้งชุด`);
-      setPlan(null);
-      setPreview(null);
-    } else {
-      setError((result.errors ?? []).join("\n") || "CommandBus ปฏิเสธแผนนี้");
+    setApplying(true);
+    setError("");
+    try {
+      const currentPreview = await onPreview(plan.commands);
+      setPreview(currentPreview);
+      if (!currentPreview.valid) return;
+      const result = await onExecute(plan.commands, "ai");
+      if (result.status === "success") {
+        setNotice(`ใช้แผน AI แล้ว · ${plan.commands.length} คำสั่ง · กดย้อนกลับเพื่อ undo ทั้งชุด`);
+        setPlan(null);
+        setPreview(null);
+      } else {
+        setError((result.errors ?? []).join("\n") || "CommandBus ปฏิเสธแผนนี้");
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setApplying(false);
     }
   };
 
@@ -143,7 +166,7 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
         <textarea aria-label="คำขอผู้ช่วย AI" rows={5} maxLength={8000} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="เช่น เพิ่มผนังยาว 4 เมตรบนชั้นปัจจุบัน จากพิกัด X=0, Y=0" />
       </label>
       <p className="cf-ai-privacy">คำขอจะส่งบริบทระดับ, type และวัตถุในโครงการไปยัง gateway ที่กำหนด token อยู่ในหน่วยความจำชั่วคราวของหน้านี้</p>
-      <button className="cf-button cf-button-primary cf-ai-generate" disabled={busy || !prompt.trim()} onClick={() => void generate()}>
+      <button className="cf-button cf-button-primary cf-ai-generate" disabled={busy || applying || !prompt.trim()} onClick={() => void generate()}>
         {busy ? <LoaderCircle size={15} className="cf-ai-spin" /> : <Bot size={15} />}
         {busy ? "กำลังร่างแผน…" : "สร้างแผนคำสั่ง"}
       </button>
@@ -159,8 +182,8 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
           {preview && <p className={preview.valid ? "cf-ai-valid" : "cf-ai-error"} role="status">
             {preview.valid ? `ผ่าน validation · กระทบ ${preview.affected_object_ids.length} วัตถุ` : preview.errors.join(" · ") || "ไม่ผ่าน validation"}
           </p>}
-          <button className="cf-button cf-button-primary cf-ai-apply" disabled={!preview?.valid || plan.questions.length > 0} onClick={apply}>
-            <Play size={14} /> ยืนยันและใช้ผ่าน CommandBus
+          <button className="cf-button cf-button-primary cf-ai-apply" disabled={!preview?.valid || plan.questions.length > 0 || busy || applying} onClick={() => void apply()}>
+            <Play size={14} /> {applying ? "กำลังตรวจสอบและใช้คำสั่ง…" : "ยืนยันและใช้ผ่าน CommandBus"}
           </button>
           <p className="cf-ai-undo-note">การยืนยันจะบันทึกเป็น transaction เดียวและย้อนกลับได้ด้วย Undo</p>
         </>}

@@ -8,6 +8,63 @@ import { stairFlightGripPoints } from '../src/components/stairFlightGripPoints.m
 
 const canvas = (page: Page) => page.locator('canvas').first()
 
+async function capturePaintTrace(page: Page, run: () => Promise<void>) {
+  const session = await page.context().newCDPSession(page)
+  let resolveTrace!: (event: { stream?: string }) => void
+  const traceComplete = new Promise<{ stream?: string }>(resolve => { resolveTrace = resolve })
+  session.on('Tracing.tracingComplete', resolveTrace)
+  await session.send('Tracing.start', {
+    categories: 'devtools.timeline,disabled-by-default-devtools.timeline.frame,cc',
+    transferMode: 'ReturnAsStream',
+  })
+  try {
+    await run()
+  } finally {
+    await session.send('Tracing.end')
+  }
+  const { stream } = await traceComplete
+  if (!stream) {
+    await session.detach()
+    throw new Error('Browser trace did not return a readable stream')
+  }
+  let traceText = ''
+  try {
+    while (true) {
+      const chunk = await session.send('IO.read', { handle: stream, size: 1_000_000 })
+      traceText += chunk.data
+      if (chunk.eof) break
+    }
+    await session.send('IO.close', { handle: stream })
+  } finally {
+    await session.detach()
+  }
+  const trace = JSON.parse(traceText) as { traceEvents?: Array<{ name?: string; dur?: number; ph?: string }> }
+  const durationsByKind = new Map<string, number[]>()
+  for (const event of trace.traceEvents ?? []) {
+    if (event.ph !== 'X' || typeof event.dur !== 'number') continue
+    const kind = event.name === 'Paint' ? 'paint' : event.name === 'CompositeLayers' ? 'composite' : event.name === 'RasterTask' ? 'raster' : null
+    if (!kind) continue
+    const values = durationsByKind.get(kind) ?? []
+    values.push(event.dur / 1000)
+    durationsByKind.set(kind, values)
+  }
+  const summarize = (values: number[] = []) => {
+    const sorted = [...values].sort((left, right) => left - right)
+    if (!sorted.length) return { sample_count: 0, p50_ms: null, p95_ms: null, total_ms: 0 }
+    return {
+      sample_count: sorted.length,
+      p50_ms: Number(sorted[Math.floor((sorted.length - 1) * 0.5)].toFixed(3)),
+      p95_ms: Number(sorted[Math.ceil((sorted.length - 1) * 0.95)].toFixed(3)),
+      total_ms: Number(sorted.reduce((sum, value) => sum + value, 0).toFixed(3)),
+    }
+  }
+  return {
+    paint: summarize(durationsByKind.get('paint')),
+    composite: summarize(durationsByKind.get('composite')),
+    raster: summarize(durationsByKind.get('raster')),
+  }
+}
+
 async function countBlueSelectionPixels(page: Page) {
   return canvas(page).evaluate(element => {
     const context = element.getContext('2d')
@@ -64,7 +121,7 @@ async function clickSurveyPoint(page: Page, xMm: number, yMm: number) {
 
 async function moveToSurveyPoint(page: Page, xMm: number, yMm: number) {
   const viewport = page.locator('.cf-plan-canvas').first()
-  const bounds = await viewport.boundingBox()
+  const bounds = await canvas(page).boundingBox()
   if (!bounds) throw new Error('Plan canvas is not visible')
   const panX = Number(await viewport.getAttribute('data-viewport-pan-x'))
   const panY = Number(await viewport.getAttribute('data-viewport-pan-y'))
@@ -483,7 +540,7 @@ async function readStoredProjectJson(page: Page) {
 }
 
 test('AI proposal is previewed, validated, committed through CommandBus, and undoable', async ({ page }) => {
-  await page.route('http://localhost:8000/api/ai/plan', async route => {
+  await page.route('**/api/ai/plan', async route => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -521,7 +578,7 @@ test('AI proposal is previewed, validated, committed through CommandBus, and und
 
 test('AI panel refreshes extension command descriptors registered while the panel is open', async ({ page }) => {
   let descriptorNames: string[] = []
-  await page.route('http://localhost:8000/api/ai/plan', async route => {
+  await page.route('**/api/ai/plan', async route => {
     const payload = route.request().postDataJSON() as { command_descriptors?: { name: string }[] }
     descriptorNames = payload.command_descriptors?.map(descriptor => descriptor.name) ?? []
     await route.fulfill({
@@ -593,8 +650,9 @@ test('extension UI actions collect schema input, require confirmation, and use t
   }).toBe('extension:approved note (priority 2)')
 })
 
-test('trusted module package import registers a command and runs it through the shared undoable session', async ({ page }) => {
+test('sandboxed module package import runs commands through the shared undoable session', async ({ page }) => {
   await page.goto('/')
+  expect(await page.evaluate(() => crossOriginIsolated)).toBe(true)
   await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว', { timeout: 30_000 })
   await page.getByRole('tab', { name: 'ส่วนขยาย' }).click()
   const manager = page.getByRole('region', { name: 'ตัวจัดการแพ็กเกจ extension' })
@@ -604,7 +662,14 @@ test('trusted module package import registers a command and runs it through the 
       const command = moduleId + '.set_project_note'
       return {
         commands: { [command]: context => {
-          context.updated.project.description = 'Loaded package note'
+          const networkAttempts = [
+            () => fetch('https://example.invalid/package-probe'),
+            () => new WebSocket('wss://example.invalid/package-probe'),
+            () => navigator.sendBeacon('https://example.invalid/package-probe', 'probe'),
+            () => new RTCPeerConnection(),
+          ]
+          const networkBlocked = networkAttempts.every(attempt => { try { attempt(); return false } catch { return true } })
+          context.updated.project.description = 'sandbox:' + typeof document + ':' + networkBlocked
           return { result: { status: 'success', command_id: context.command_id, command_name: context.commandName, affected_object_ids: [] }, updatedProject: context.updated, emittedEnvelope: context.envelope }
         } },
         commandDescriptors: [{ name: command, version: 1, owner_module: moduleId, ai_allowed: false, confirmation: 'none', input_schema: { type: 'object', properties: {} } }],
@@ -627,11 +692,11 @@ test('trusted module package import registers a command and runs it through the 
     const raw = await readStoredProjectJson(page)
     return raw ? (JSON.parse(raw) as { project: { description: string } }).project.description : null
   }
-  await expect.poll(readDescription).toBe('Loaded package note')
+  await expect.poll(readDescription).toBe('sandbox:undefined:true')
   await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
-  await expect.poll(readDescription).not.toBe('Loaded package note')
+  await expect.poll(readDescription).not.toBe('sandbox:undefined:true')
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
-  await expect.poll(readDescription).toBe('Loaded package note')
+  await expect.poll(readDescription).toBe('sandbox:undefined:true')
   await manager.getByRole('button', { name: 'ถอด sample.package' }).click()
   await expect(manager.getByText('sample.package@1.0.0', { exact: true })).toHaveCount(0)
 })
@@ -695,13 +760,17 @@ test('synthetic 600-wall project supports browser search, persistent selection, 
     requestAnimationFrame(tick)
   })
   const panCenter = { x: planBounds.x + planBounds.width / 2, y: planBounds.y + planBounds.height / 2 }
-  await page.mouse.move(panCenter.x, panCenter.y)
-  await page.mouse.down({ button: 'middle' })
-  await page.mouse.move(panCenter.x + 96, panCenter.y + 48, { steps: 16 })
-  await page.mouse.up({ button: 'middle' })
-  await page.mouse.move(panCenter.x, panCenter.y)
-  await page.mouse.wheel(0, -240)
-  await page.waitForTimeout(300)
+  const browserPaint = await capturePaintTrace(page, async () => {
+    for (let sample = 0; sample < 4; sample += 1) {
+      await page.mouse.move(panCenter.x, panCenter.y)
+      await page.mouse.down({ button: 'middle' })
+      await page.mouse.move(panCenter.x + 96 + sample * 2, panCenter.y + 48, { steps: 16 })
+      await page.mouse.up({ button: 'middle' })
+      await page.mouse.move(panCenter.x, panCenter.y)
+      await page.mouse.wheel(0, -120)
+      await page.waitForTimeout(100)
+    }
+  })
   const navigationFrameIntervalsMs = await page.evaluate(() => {
     const state = window as unknown as { __cfRafProbe?: { running: boolean; samples: number[] } }
       & { __cfPlanRedrawDurationsMs?: number[] }
@@ -820,6 +889,7 @@ test('synthetic 600-wall project supports browser search, persistent selection, 
     plan_redraw_sample_count: sortedPlanRedrawDurationsMs.length,
     plan_redraw_p50_ms: Math.round(sortedPlanRedrawDurationsMs[Math.floor((sortedPlanRedrawDurationsMs.length - 1) * 0.5)] * 100) / 100,
     plan_redraw_p95_ms: Math.round(sortedPlanRedrawDurationsMs[Math.ceil((sortedPlanRedrawDurationsMs.length - 1) * 0.95)] * 100) / 100,
+    browser_paint: browserPaint,
     fixture: 'synthetic walls; not a surveyed residential model',
   }
   console.log(`[browser-stress] ${JSON.stringify(metrics)}`)
@@ -873,8 +943,10 @@ test('synthetic 5,000-wall project restores, searches, selects, and preserves UU
     await profiler.send('Profiler.enable')
     await profiler.send('Profiler.start')
   }
-  await page.reload()
-  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 90_000 })
+  const restorePaint = await capturePaintTrace(page, async () => {
+    await page.reload()
+    await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง', { timeout: 90_000 })
+  })
   const reloadReadyAt = Date.now()
   if (profiler) {
     const profile = await profiler.send('Profiler.stop')
@@ -909,6 +981,7 @@ test('synthetic 5,000-wall project restores, searches, selects, and preserves UU
     snapshot_read_and_assert_ms: verificationCompleteAt - browserReadyAt,
     reload_to_verification_ms: verificationCompleteAt - reloadStartedAt,
     searched_object_id: objectId,
+    browser_paint_during_restore: restorePaint,
     fixture: 'synthetic walls; not a surveyed residential model',
   })}`)
 })
@@ -1328,7 +1401,7 @@ test('wall intersection start retains every host in the pending union preview', 
   await page.locator('.cf-tool-button[title^="ผนัง"]').click()
   await clickSurveyPoint(page, 0, 0)
   await expect(page.locator('[data-tool-step]')).toHaveAttribute('data-tool-step', 'end-point')
-  await moveToSurveyPoint(page, 1000, 1000)
+  await moveToSurveyPoint(page, 1000, -1000)
   await expect(canvas(page)).toHaveAttribute('data-wall-junction-preview', 'true')
   await expect(canvas(page)).toHaveAttribute('data-wall-junction-target-count', '2')
   await page.keyboard.press('Escape')
@@ -2493,6 +2566,59 @@ test('Project Browser deletes a multi-selection atomically with one Undo and Red
   await expect(rows).toHaveCount(2)
   await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
   await expect(rows).toHaveCount(0)
+})
+
+test('Project Browser deletes every reference-house object family with one undoable transaction', async ({ page }) => {
+  test.setTimeout(120_000)
+  const fixture = await readFile(new URL('../../../examples/constructflow-reference-house-2storey.cfproj', import.meta.url), 'utf8')
+  const project = JSON.parse(fixture) as { objects: Record<string, { object_type: string }> }
+  const families = [
+    'structure.grid', 'structure.column', 'structure.foundation', 'structure.beam',
+    'architecture.wall', 'door_window.door', 'door_window.window', 'architecture.room',
+    'structure.slab', 'architecture.stair', 'roof.system',
+  ]
+  const ids = families.map(family => {
+    const found = Object.entries(project.objects).find(([, object]) => object.object_type === family)?.[0]
+    expect(found, `reference fixture should contain ${family}`).toBeTruthy()
+    return found!
+  })
+
+  await page.goto('/')
+  await expect(page.locator('.cf-save-status')).toContainText('บันทึกในเครื่องแล้ว')
+  await seedLocalProjectSnapshot(page, fixture)
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const browser = page.getByLabel('Project Browser')
+  await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  for (const [index, id] of ids.entries()) {
+    // Selecting an object switches the detail panel back to Properties; reopen the browser for the next family.
+    await page.getByRole('tab', { name: 'รายการ' }).click()
+    await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+    const row = browser.locator(`[data-object-id="${id}"]`)
+    await expect(row).toHaveCount(1)
+    await row.locator('.cf-browser-object').click(index ? { modifiers: ['Control'] } : undefined)
+  }
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
+  await expect(browser.locator('[data-object-id].is-selected')).toHaveCount(ids.length)
+
+  await page.keyboard.press('Delete')
+  await page.getByRole('tab', { name: 'รายการ' }).click()
+  const readPresentIds = async () => {
+    const raw = await readStoredProjectJson(page)
+    if (!raw) return null
+    const saved = JSON.parse(raw) as { objects: Record<string, unknown> }
+    return ids.filter(id => Boolean(saved.objects[id]))
+  }
+  await expect.poll(readPresentIds).toEqual([])
+  await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
+  await expect.poll(readPresentIds).toEqual(expect.arrayContaining(ids))
+  await page.getByRole('button', { name: 'ทำซ้ำ' }).click()
+  await expect.poll(readPresentIds).toEqual([])
+  await page.reload()
+  await expect(page.locator('.cf-save-status')).toContainText('กู้คืนงานในเครื่อง')
+  await expect.poll(readPresentIds).toEqual([])
 })
 
 test('Project Browser numeric group move commits once and preserves UUIDs through Undo/Redo', async ({ page }) => {
@@ -4544,6 +4670,10 @@ test('split workbench keeps selection identity and plan navigation coordinated',
     expect(Math.abs(cameraYmm - centerYmm)).toBeLessThan(25)
   }
   await expect.poll(expectPlanAnd3DCenterToMatch).toBeUndefined()
+  const model3dBounds = await model3d.boundingBox()
+  if (!model3dBounds) throw new Error('Secondary 3D viewport is not visible')
+  const model3dShot = await page.screenshot({ clip: model3dBounds, timeout: 15_000 })
+  expect(await countCyanImagePixels(page, model3dShot), '3D view should paint the selected column highlight').toBeGreaterThan(0)
 
   const planBox = await planCanvas.boundingBox()
   if (!planBox) throw new Error('Primary plan viewport is not visible')
@@ -4679,7 +4809,7 @@ test('multiview layout and auxiliary views restore for the same project after re
   await expect(page.locator('.cf-viewport-stage')).toHaveAttribute('style', /minmax\(0(?:px)?, 58fr\) minmax\(0(?:px)?, 42fr\)/)
 })
 
-test('two-storey residential demo preserves browser selection across all views after autosave reload', async ({ page }) => {
+test('two-storey residential demo preserves browser selection across plan, ceiling and elevation views after autosave reload', async ({ page }) => {
   test.setTimeout(90_000)
   const pageErrors: string[] = []
   page.on('pageerror', error => pageErrors.push(error.message))
@@ -4743,37 +4873,19 @@ test('two-storey residential demo preserves browser selection across all views a
   const restoredProperties = page.getByTestId('properties-selection')
   await expect(restoredProperties).toHaveAttribute('data-object-id', objectId!)
   await expect(restoredProperties).toContainText(`Column ${targetTypeName}`)
-  const restoredViews = ['แปลนพื้น', 'แปลนคาน', 'แปลนหลังคา', 'แปลนฝ้า RCP', 'รูปด้านเหนือ', 'รูปด้านใต้', 'รูปด้านตะวันออก', 'รูปด้านตะวันตก', '3D ดูตัวอย่าง']
+  const restoredViews = ['แปลนพื้น', 'แปลนคาน', 'แปลนหลังคา', 'แปลนฝ้า RCP', 'รูปด้านเหนือ', 'รูปด้านใต้', 'รูปด้านตะวันออก', 'รูปด้านตะวันตก']
   for (const view of restoredViews) {
     await page.getByRole('button', { name: view, exact: true }).click()
     await expect(primaryPane).toHaveAttribute('data-primary-selected-object-id', objectId!)
     await expect(restoredProperties).toHaveAttribute('data-object-id', objectId!)
-    if (view === '3D ดูตัวอย่าง') {
-      const model = page.getByTestId('model3d-viewport')
-      await expect(model).toBeVisible()
-      const webglCanvas = model.locator('canvas').first()
-      await expect(webglCanvas).toBeVisible()
-      const screenshot = await webglCanvas.screenshot()
-      expect(await countCyanImagePixels(page, screenshot), '3D view should paint a cyan selection box around the selected column').toBeGreaterThan(0)
-    }
-    else await expect(page.locator('canvas').first()).toBeVisible()
+    await expect(page.locator('canvas').first()).toBeVisible()
     if (view === 'แปลนพื้น' || view === 'แปลนคาน' || view === 'แปลนหลังคา' || view.startsWith('รูปด้าน')) {
       const blueSelectionPixels = await countBlueSelectionPixels(page)
       expect(blueSelectionPixels, `${view} should paint the selected object with its blue selection outline`).toBeGreaterThan(0)
     }
   }
-  const houseModel = page.getByTestId('model3d-viewport')
-  await expect(houseModel).toBeVisible()
-  await expect(restoredProperties).toHaveAttribute('data-object-id', objectId!)
-  await expect(houseModel.getByRole('button', { name: 'ซูมเข้า 3D' })).toBeEnabled()
-  const cameraPose = await houseModel.evaluate(element => ({
-    x: Number(element.getAttribute('data-camera-target-x')),
-    y: Number(element.getAttribute('data-camera-target-y')),
-    distance: Number(element.getAttribute('data-camera-distance')),
-  }))
-  expect(Object.values(cameraPose).every(Number.isFinite)).toBe(true)
-  expect(cameraPose.distance).toBeGreaterThan(0)
-
+  // 3D selection and camera coordination are covered on a compact fixture by the split-workbench acceptance.
+  await page.getByRole('button', { name: 'แปลนพื้น', exact: true }).click()
   await page.getByRole('tab', { name: 'รายการ' }).click()
   const browserRoom = page.getByLabel('Project Browser')
   await browserRoom.getByRole('button', { name: 'ทั้งโครงการ' }).click()

@@ -24,7 +24,7 @@ export interface ModuleValidationIssue {
 
 export type ModuleCommandHandler = (
   context: CommandHandlerContext,
-) => CommandBusResult | undefined;
+) => CommandBusResult | undefined | Promise<CommandBusResult | undefined>;
 export type ModuleValidator = (
   project: ProjectDocument,
 ) => readonly ModuleValidationIssue[];
@@ -354,6 +354,49 @@ export class ModuleRegistry {
         project: structuredClone(context.project),
         input: structuredClone(context.input),
       });
+      if (response && typeof (response as Promise<unknown>).then === "function") {
+        void (response as Promise<unknown>).catch(() => undefined);
+        throw new Error(`Module command ${context.commandName} requires asynchronous CommandBus execution`);
+      }
+      const syncResponse = response as CommandBusResult | undefined;
+      if (!syncResponse) return undefined;
+      if (syncResponse.result.command_id !== context.command_id || syncResponse.result.command_name !== context.commandName)
+        throw new Error(`Module command ${context.commandName} returned a mismatched result identity`);
+      if (syncResponse.result.status === "success") {
+        const emitted = syncResponse.emittedEnvelope;
+        if (syncResponse.updatedProject.project.id !== context.project.project.id)
+          throw new Error(`Module command ${context.commandName} changed the project identity`);
+        if (!emitted || emitted.command_id !== context.command_id || emitted.name !== context.commandName || emitted.actor.kind !== context.envelope.actor.kind)
+          throw new Error(`Module command ${context.commandName} must emit its attributed command envelope`);
+      }
+      return syncResponse;
+    }
+    return undefined;
+  }
+
+  hasCommand(commandName: string): boolean {
+    return [...this.modules.values()].some(({ contribution }) => Boolean(contribution.commands[commandName]));
+  }
+
+  async executeAsync(context: CommandHandlerContext): Promise<CommandBusResult | undefined> {
+    for (const { contribution } of this.modules.values()) {
+      const handler = contribution.commands[context.commandName];
+      if (!handler) continue;
+      const descriptor = contribution.commandDescriptors?.find(candidate => candidate.name === context.commandName);
+      if (context.envelope.actor.kind === "ai" && (!descriptor || !descriptor.ai_allowed)) return {
+        result: { status: "rejected", command_id: context.command_id, command_name: context.commandName,
+          affected_object_ids: [], errors: [`AI is not authorized to execute extension command ${context.commandName}`] },
+        updatedProject: context.project,
+      };
+      if (descriptor) {
+        const errors = validateCommandInput(descriptor, context.input);
+        if (errors.length) return {
+          result: { status: "rejected", command_id: context.command_id, command_name: context.commandName,
+            affected_object_ids: [], errors },
+          updatedProject: context.project,
+        };
+      }
+      const response = await handler({ ...context, project: structuredClone(context.project), input: structuredClone(context.input) });
       if (!response) return undefined;
       if (response.result.command_id !== context.command_id || response.result.command_name !== context.commandName)
         throw new Error(`Module command ${context.commandName} returned a mismatched result identity`);

@@ -209,6 +209,48 @@ export class CommandBus {
     }
   }
 
+  /** Execute a sandboxed module command through the same project and module validation contracts. */
+  static async executeAsync(
+    project: ProjectDocument,
+    commandName: string,
+    input: Record<string, unknown>,
+    actorKind: CommandActorKind = 'human',
+  ): Promise<CommandBusResult> {
+    if (!extensionModules.hasCommand(commandName)) return this.execute(project, commandName, input, actorKind)
+    const command_id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const reject = (message: string, status: 'rejected' | 'failed' = 'rejected'): CommandBusResult => ({
+      result: { status, command_id, command_name: commandName, affected_object_ids: [], errors: [message] },
+      updatedProject: project,
+    })
+    try {
+      for (const key of ['phase', 'created_phase']) {
+        const value = input[key]
+        if (value !== undefined && (typeof value !== 'string' || !phases.has(value))) return reject(`Invalid ${key}: ${String(value)}`)
+      }
+      const removedPhase = input.removed_phase
+      if (removedPhase !== undefined && removedPhase !== null && removedPhase !== 'demolition') return reject(`Invalid removed_phase: ${String(removedPhase)}`)
+      if (commandName.startsWith('Create') && typeof input.id === 'string' && input.id && project.objects[input.id]) return reject(`Object UUID ${input.id} already exists`)
+      const payload = structuredClone(input)
+      const envelope: CommandEnvelope = {
+        command_id, name: commandName, version: 1, project_id: project.project.id,
+        timestamp: now, actor: { kind: actorKind }, input: payload,
+      }
+      const context: CommandHandlerContext = { project, updated: structuredClone(project), commandName, input: payload, command_id, now, envelope }
+      const response = await extensionModules.executeAsync(context)
+      if (!response) return reject(`Unknown command: ${commandName}`)
+      if (response.result.status !== 'success') return { ...response, updatedProject: project }
+      response.updatedProject.project.updated_at = now
+      validateProjectV2(response.updatedProject)
+      validateConstructionProject(response.updatedProject)
+      const moduleErrors = extensionModules.validate(response.updatedProject).filter(issue => issue.severity === 'error')
+      if (moduleErrors.length) return reject(moduleErrors.map(issue => `${issue.code}: ${issue.message}`).join('\n'))
+      return response
+    } catch (error: unknown) {
+      return reject(error instanceof Error ? error.message : String(error), 'failed')
+    }
+  }
+
   static executeBatch(
     project: ProjectDocument,
     commands: readonly CommandRequest[],
@@ -232,6 +274,28 @@ export class CommandBus {
     }
     return { transaction_id, status: 'success', updatedProject: current, results, emittedEnvelopes }
   }
+
+  static async executeBatchAsync(
+    project: ProjectDocument,
+    commands: readonly CommandRequest[],
+    actorKind: CommandActorKind = 'human',
+  ): Promise<CommandBatchResult> {
+    const transaction_id = crypto.randomUUID()
+    const results: CommandBatchResult['results'] = []
+    const emittedEnvelopes: CommandEnvelope[] = []
+    let current = project
+    for (const [index, command] of commands.entries()) {
+      const response = await this.executeAsync(current, command.name, command.input, actorKind)
+      results.push(response.result)
+      if (response.result.status !== 'success') return {
+        transaction_id, status: response.result.status, updatedProject: project,
+        results, emittedEnvelopes: [], failed_command_index: index, errors: response.result.errors,
+      }
+      current = response.updatedProject
+      if (response.emittedEnvelope) emittedEnvelopes.push({ ...response.emittedEnvelope, transaction_id })
+    }
+    return { transaction_id, status: 'success', updatedProject: current, results, emittedEnvelopes }
+  }
 }
 
 /** One history entry per committed batch; redo restores the same IDs, not new creations. */
@@ -244,6 +308,8 @@ export class ProjectCommandSession {
   private current: ProjectDocument
   private past: ProjectDocument[] = []
   private future: ProjectDocument[] = []
+  private revision = 0
+  private asyncTail: Promise<void> = Promise.resolve()
 
   constructor(project: ProjectDocument, history?: ProjectCommandHistorySnapshot) {
     this.current = structuredClone(project)
@@ -265,6 +331,7 @@ export class ProjectCommandSession {
     this.past.push(this.current)
     this.current = structuredClone(project)
     this.future = []
+    this.revision += 1
   }
 
   /** Replace the history baseline after opening/creating a document. */
@@ -272,6 +339,7 @@ export class ProjectCommandSession {
     this.current = structuredClone(project)
     this.past = []
     this.future = []
+    this.revision += 1
   }
 
   execute(commands: readonly CommandRequest[], actorKind: CommandActorKind = 'human'): CommandBatchResult {
@@ -280,19 +348,44 @@ export class ProjectCommandSession {
       this.past.push(this.current)
       this.current = structuredClone(response.updatedProject)
       this.future = []
+      this.revision += 1
     }
     return { ...response, updatedProject: structuredClone(response.updatedProject) }
   }
 
+  executeAsync(commands: readonly CommandRequest[], actorKind: CommandActorKind = 'human'): Promise<CommandBatchResult> {
+    const run = this.asyncTail.then(async () => {
+      const revisionAtStart = this.revision
+      const baseline = structuredClone(this.current)
+      const response = await CommandBus.executeBatchAsync(baseline, commands, actorKind)
+      if (this.revision !== revisionAtStart) return {
+        ...response,
+        status: 'rejected' as const,
+        updatedProject: structuredClone(this.current),
+        emittedEnvelopes: [],
+        errors: ['Project changed while the extension command was running; review and retry it.'],
+      }
+      if (response.status === 'success' && commands.length > 0) {
+        this.past.push(this.current)
+        this.current = structuredClone(response.updatedProject)
+        this.future = []
+        this.revision += 1
+      }
+      return { ...response, updatedProject: structuredClone(response.updatedProject) }
+    })
+    this.asyncTail = run.then(() => undefined, () => undefined)
+    return run
+  }
+
   undo(): ProjectDocument {
     const previous = this.past.pop()
-    if (previous) { this.future.push(this.current); this.current = previous }
+    if (previous) { this.future.push(this.current); this.current = previous; this.revision += 1 }
     return this.project
   }
 
   redo(): ProjectDocument {
     const next = this.future.pop()
-    if (next) { this.past.push(this.current); this.current = next }
+    if (next) { this.past.push(this.current); this.current = next; this.revision += 1 }
     return this.project
   }
 }

@@ -15,6 +15,10 @@ import sys
 import types
 import unittest
 import os
+import threading
+from http.server import ThreadingHTTPServer
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 from unittest.mock import patch
 
 
@@ -242,7 +246,7 @@ class McpBridgeServerTest(unittest.TestCase):
         class FakeResponse:
             def __enter__(self): return self
             def __exit__(self, *_args): return False
-            def read(self): return json.dumps(provider_body).encode("utf-8")
+            def read(self, size=-1): return json.dumps(provider_body).encode("utf-8")[:size]
 
         descriptors = [{
             "name": "CreateWall", "version": 1, "owner_module": "constructflow.architecture",
@@ -262,6 +266,26 @@ class McpBridgeServerTest(unittest.TestCase):
         self.assertNotIn("server-only-secret", request.data.decode("utf-8"))
         self.assertEqual(json.loads(request.data)["model"], "test-model")
 
+    def test_ai_gateway_requires_https_for_remote_provider_and_bounds_response_size(self):
+        request_data = {
+            "prompt": "test plan",
+            "project_context": {"active_level_id": "GF"},
+            "command_descriptors": [{"name": "CreateWall", "ai_allowed": True, "input_schema": {"type": "object", "properties": {}}}],
+        }
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key", "CONSTRUCTFLOW_AI_BASE_URL": "http://provider.example/v1/chat/completions"}):
+            with self.assertRaisesRegex(ai_provider.AIPlanError, "must use HTTPS"):
+                ai_provider.generate_command_plan(request_data)
+
+        class OversizedResponse:
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+            def read(self, size=-1): return b"x" * size
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key", "CONSTRUCTFLOW_AI_BASE_URL": "http://127.0.0.1:8001/v1/chat/completions"}), \
+             patch.object(ai_provider, "urlopen", return_value=OversizedResponse()):
+            with self.assertRaisesRegex(ai_provider.AIProviderError, "1 MB limit"):
+                ai_provider.generate_command_plan(request_data)
+
     def test_ai_gateway_rejects_unregistered_provider_commands(self):
         provider_body = {"choices": [{"message": {"content": json.dumps({
             "summary": "unsupported", "questions": [], "commands": [{"name": "DeleteObject", "input": {"object_id": "x"}}],
@@ -270,7 +294,7 @@ class McpBridgeServerTest(unittest.TestCase):
         class FakeResponse:
             def __enter__(self): return self
             def __exit__(self, *_args): return False
-            def read(self): return json.dumps(provider_body).encode("utf-8")
+            def read(self, size=-1): return json.dumps(provider_body).encode("utf-8")[:size]
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "server-only-secret"}), \
              patch.object(ai_provider, "urlopen", return_value=FakeResponse()):
@@ -310,6 +334,137 @@ class McpBridgeServerTest(unittest.TestCase):
                     "input_schema": {"type": "object", "properties": {}},
                 }],
             })
+
+    def test_gateway_public_binding_requires_provider_credentials_strong_token_and_exact_origins(self):
+        with patch.dict(os.environ, {"CONSTRUCTFLOW_AI_TOKEN": "short", "OPENAI_API_KEY": "", "CONSTRUCTFLOW_AI_ALLOWED_ORIGINS": "*"}, clear=False):
+            with self.assertRaisesRegex(RuntimeError, r"32\+ character"):
+                http_bridge.validate_gateway_binding("0.0.0.0")
+        with patch.dict(os.environ, {
+            "CONSTRUCTFLOW_AI_TOKEN": "x" * 40,
+            "OPENAI_API_KEY": "server-only-secret",
+            "CONSTRUCTFLOW_AI_ALLOWED_ORIGINS": "https://editor.constructflow.example",
+        }, clear=False):
+            http_bridge.validate_gateway_binding("0.0.0.0")
+        with patch.dict(os.environ, {
+            "CONSTRUCTFLOW_AI_TOKEN": "x" * 40,
+            "OPENAI_API_KEY": "server-only-secret",
+            "CONSTRUCTFLOW_AI_ALLOWED_ORIGINS": "*",
+        }, clear=False):
+            with self.assertRaisesRegex(RuntimeError, r"exact http\(s\) origins"):
+                http_bridge.validate_gateway_binding("0.0.0.0")
+
+    def test_http_ai_gateway_authenticates_restricts_origins_and_returns_provider_plan(self):
+        server_http = ThreadingHTTPServer(("127.0.0.1", 0), http_bridge.BridgeHandler)
+        thread = threading.Thread(target=server_http.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with patch.dict(os.environ, {
+                "CONSTRUCTFLOW_AI_TOKEN": "test-secret-token",
+                "CONSTRUCTFLOW_AI_ALLOWED_ORIGINS": "http://localhost:5184",
+            }, clear=False), patch.object(http_bridge, "generate_command_plan", return_value={
+                "summary": "plan", "questions": [], "commands": [],
+            }) as provider:
+                request = Request(
+                    f"http://127.0.0.1:{server_http.server_address[1]}/api/ai/plan",
+                    data=b'{"prompt":"plan","project_context":{},"command_descriptors":[]}',
+                    headers={"Content-Type": "application/json", "Authorization": "Bearer test-secret-token", "Origin": "http://localhost:5184"},
+                    method="POST",
+                )
+                with urlopen(request, timeout=2) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), "http://localhost:5184")
+                    self.assertEqual(response.headers.get("Cache-Control"), "no-store")
+                    self.assertEqual(json.loads(response.read()), {"summary": "plan", "questions": [], "commands": []})
+                provider.assert_called_once()
+
+                wrong_token = Request(
+                    f"http://127.0.0.1:{server_http.server_address[1]}/api/ai/plan",
+                    data=b"{}", headers={"Content-Type": "application/json", "Authorization": "Bearer wrong"}, method="POST",
+                )
+                with self.assertRaises(HTTPError) as unauthorized:
+                    urlopen(wrong_token, timeout=2)
+                self.assertEqual(unauthorized.exception.code, 401)
+
+                bad_origin = Request(
+                    f"http://127.0.0.1:{server_http.server_address[1]}/api/ai/plan",
+                    data=b"{}", headers={"Content-Type": "application/json", "Authorization": "Bearer test-secret-token", "Origin": "https://attacker.example"}, method="POST",
+                )
+                with self.assertRaises(HTTPError) as forbidden:
+                    urlopen(bad_origin, timeout=2)
+                self.assertEqual(forbidden.exception.code, 403)
+        finally:
+            server_http.shutdown()
+            server_http.server_close()
+            thread.join(timeout=2)
+
+    def test_http_gateway_runs_complete_openai_compatible_provider_roundtrip(self):
+        received_provider_request = []
+        provider_payload = {
+            "choices": [{"message": {"content": json.dumps({
+                "summary": "Create a wall",
+                "questions": [],
+                "commands": [{"name": "CreateWall", "input": {"start_point_mm": [0, 0], "end_point_mm": [4000, 0]}}],
+            })}}],
+        }
+
+        class ProviderHandler(http_bridge.BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+                received_provider_request.append((self.headers.get("Authorization"), body))
+                encoded = json.dumps(provider_payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+
+            def log_message(self, *_args):
+                return
+
+        provider_http = ThreadingHTTPServer(("127.0.0.1", 0), ProviderHandler)
+        provider_thread = threading.Thread(target=provider_http.serve_forever, daemon=True)
+        provider_thread.start()
+        gateway_http = ThreadingHTTPServer(("127.0.0.1", 0), http_bridge.BridgeHandler)
+        gateway_thread = threading.Thread(target=gateway_http.serve_forever, daemon=True)
+        gateway_thread.start()
+        try:
+            with patch.dict(os.environ, {
+                "CONSTRUCTFLOW_AI_TOKEN": "test-secret-token",
+                "CONSTRUCTFLOW_AI_ALLOWED_ORIGINS": "http://localhost:5184",
+                "OPENAI_API_KEY": "server-only-key",
+                "CONSTRUCTFLOW_AI_BASE_URL": f"http://127.0.0.1:{provider_http.server_address[1]}/v1/chat/completions",
+                "CONSTRUCTFLOW_AI_MODEL": "test-model",
+            }, clear=False):
+                request = Request(
+                    f"http://127.0.0.1:{gateway_http.server_address[1]}/api/ai/plan",
+                    data=json.dumps({
+                        "prompt": "สร้างผนัง",
+                        "project_context": {"active_level_id": "GF"},
+                        "command_descriptors": [{
+                            "name": "CreateWall", "version": 1, "owner_module": "constructflow.architecture",
+                            "ai_allowed": True, "confirmation": "none",
+                            "input_schema": {"type": "object", "properties": {"start_point_mm": {"type": "array"}}},
+                        }],
+                    }).encode("utf-8"),
+                    headers={"Content-Type": "application/json", "Authorization": "Bearer test-secret-token", "Origin": "http://localhost:5184"},
+                    method="POST",
+                )
+                with urlopen(request, timeout=3) as response:
+                    result = json.loads(response.read())
+                self.assertEqual(result["commands"][0]["name"], "CreateWall")
+                self.assertEqual(len(received_provider_request), 1)
+                provider_auth, body = received_provider_request[0]
+                self.assertEqual(provider_auth, "Bearer server-only-key")
+                self.assertEqual(body["model"], "test-model")
+                self.assertIn("CreateWall", body["messages"][1]["content"])
+                self.assertNotIn("server-only-key", json.dumps(body))
+        finally:
+            gateway_http.shutdown()
+            gateway_http.server_close()
+            gateway_thread.join(timeout=2)
+            provider_http.shutdown()
+            provider_http.server_close()
+            provider_thread.join(timeout=2)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

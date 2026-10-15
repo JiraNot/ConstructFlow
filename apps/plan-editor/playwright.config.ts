@@ -7,7 +7,10 @@ export default defineConfig({
   reporter: 'list',
   use: {
     ...devices['Desktop Chrome'],
-    channel: process.env.PLAYWRIGHT_CHANNEL ?? 'msedge',
+    channel: process.env.PLAYWRIGHT_EXECUTABLE_PATH ? undefined : process.env.PLAYWRIGHT_CHANNEL ?? 'msedge',
+    launchOptions: process.env.PLAYWRIGHT_EXECUTABLE_PATH
+      ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH }
+      : undefined,
     baseURL: 'http://127.0.0.1:5184',
     headless: true,
     trace: 'retain-on-failure',

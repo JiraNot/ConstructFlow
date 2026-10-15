@@ -2,8 +2,6 @@ import React, { useState, useEffect, useRef, useMemo, useSyncExternalStore, lazy
 import {
   ProjectDocument,
   createDefaultResidentialProjectDocument,
-  deserializeProject,
-  serializeProject,
   Phase,
   RemovalPhase,
   isGridObject,
@@ -41,6 +39,7 @@ import { useTypeCatalogSession } from './app/useTypeCatalogSession.js'
 import { useProjectContextCommands } from './app/useProjectContextCommands.js'
 import { useLocalProjectPersistence } from './app/useLocalProjectPersistence.js'
 import { useProjectFileActions, type ProjectFileAccess } from './app/useProjectFileActions.js'
+import { useProjectCreationActions } from './app/useProjectCreationActions.js'
 import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
 import { useReferenceDataImportActions } from './app/useReferenceDataImportActions.js'
 import { useWorkbenchKeyboardShortcuts } from './app/useWorkbenchKeyboardShortcuts.js'
@@ -82,6 +81,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setCommandQueue,
     sessionRef: projectSessionRef,
     dispatchCommandBatch,
+    dispatchAsyncCommandBatch,
     previewCommands: previewDirectManipulation,
   } = useProjectSession(() => createDefaultResidentialProjectDocument('CF-UNTITLED', 'Untitled Project'))
   const { selectedId, selectedIds, setSelectedId, setSelectedIds, selectObjects } = useEditorObjectSelection()
@@ -137,6 +137,20 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     movePaneSlot, reorderPaneSlots, resizePaneTrack,
     planAnd3DNavigationLinked, planAndRcpNavigationLinked,
   } = multiView
+  const { handleStartKitchenProof, handleStartHouseDemo, handleNewBlankProject } = useProjectCreationActions({
+    confirmReplaceUnsavedProject,
+    resetProjectSession: nextProject => projectSessionRef.current!.reset(nextProject),
+    updateActiveProjectFileHandle,
+    setProjectState,
+    setSavedProjectJson,
+    setReplacementBaselineJson,
+    setFileFeedback,
+    setSelectedId,
+    setSelectedIds,
+    setCommandQueue,
+    setActiveTool,
+    setViewMode,
+  })
   const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
   const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
   const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination' | 'ai' | 'extensions'>('properties')
@@ -299,68 +313,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const handleApplyCalibrationScale = (newScale: number, _realDistance_mm: number, axis: 'x' | 'y') => underlaySession.applyCalibrationScale(newScale, axis)
 
   const handleMoveElevationObject = createElevationObjectCommandHandler(project, dispatchCommandBatch, handleMoveColumn)
-
-  const handleStartKitchenProof = async () => {
-    if (!confirmReplaceUnsavedProject()) return
-    try {
-      const { createKitchenProofProject } = await import('@constructflow/extension-engine')
-      const generated = createKitchenProofProject()
-      if (generated.status !== 'success') {
-        window.alert(`สร้างโมเดลครัวพิสูจน์ไม่สำเร็จ: ${generated.errors?.join('; ') ?? 'unknown error'}`)
-        return
-      }
-      projectSessionRef.current!.reset(generated.updatedProject)
-      updateActiveProjectFileHandle(null)
-      setProjectState(generated.updatedProject)
-      setSavedProjectJson(null)
-      setReplacementBaselineJson(serializeProject(generated.updatedProject))
-      setFileFeedback('สร้างโมเดลครัวพิสูจน์แล้ว')
-      setSelectedId(null)
-      setCommandQueue(generated.emittedEnvelopes)
-      setViewMode('plan')
-    } catch (error) {
-      window.alert(`โหลดโครงการตัวอย่างครัวไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-
-  const handleStartHouseDemo = async () => {
-    if (!confirmReplaceUnsavedProject()) return
-    try {
-      const { loadHouseDemoRaw } = await import('./app/houseDemo.js')
-      const houseDemoRaw = loadHouseDemoRaw()
-      const restored = deserializeProject(houseDemoRaw)
-      projectSessionRef.current!.reset(restored)
-      updateActiveProjectFileHandle(null)
-      setProjectState(restored)
-      setSavedProjectJson(null)
-      setReplacementBaselineJson(serializeProject(restored))
-      setFileFeedback('เปิดแบบบ้านเดโม 2 ชั้นแล้ว')
-      setSelectedId(null)
-      setSelectedIds([])
-      setCommandQueue([])
-      setViewMode('plan')
-    } catch (error) {
-      window.alert(`เปิดแบบบ้านเดโมไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-
-  const handleNewBlankProject = () => {
-    if (!confirmReplaceUnsavedProject()) return
-    if (!window.confirm('สร้างโครงการใหม่แบบว่างหรือไม่? งานที่เปิดอยู่จะถูกแทนที่ด้วยโครงการค่าเริ่มต้น')) return
-    const blank = createDefaultResidentialProjectDocument(`CF-${crypto.randomUUID()}`, 'โครงการใหม่')
-    const serialized = serializeProject(blank)
-    projectSessionRef.current!.reset(blank)
-    updateActiveProjectFileHandle(null)
-    setProjectState(blank)
-    setSavedProjectJson(null)
-    setReplacementBaselineJson(serialized)
-    setFileFeedback('สร้างโครงการใหม่แบบว่างแล้ว')
-    setSelectedId(null)
-    setSelectedIds([])
-    setCommandQueue([])
-    setActiveTool('select')
-    setViewMode('plan')
-  }
 
   // Counts & Schedule breakdown
   const takeoff = useMemo(() => calculateTakeoff(project), [project])
@@ -854,13 +806,20 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           ai={{
             project,
             selectedIds,
-            onPreview: commands => previewDirectManipulation(commands, 'ai'),
-            onExecute: (commands, actor) => dispatchCommandBatch(commands, actor),
+            onPreview: async commands => {
+              const result = await CommandBus.executeBatchAsync(project, commands, 'ai')
+              return {
+                valid: result.status === 'success',
+                affected_object_ids: [...new Set(result.results.flatMap(item => item.affected_object_ids))],
+                errors: result.errors ?? [],
+              }
+            },
+            onExecute: (commands, actor) => dispatchAsyncCommandBatch(commands, actor),
           }}
           extensions={{
             contributions: moduleUIContributions,
             commandDescriptors: moduleCommandDescriptors,
-            onExecute: command => dispatchCommandBatch([command]),
+            onExecute: command => dispatchAsyncCommandBatch([command]),
           }}
           browser={{
             project,

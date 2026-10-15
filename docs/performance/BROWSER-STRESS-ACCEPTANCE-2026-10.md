@@ -73,3 +73,51 @@ The search/select interval starts before filling the Browser search and ends whe
 ## Evidence source
 
 The executable acceptance is `apps/plan-editor/e2e/authoring-workflows.spec.ts`, test `synthetic 600-wall project supports browser search, persistent selection, cross-view navigation, and reload`. It attaches `synthetic-600-wall-browser-metrics.json` to the Playwright test result and writes a compact `[browser-stress]` record to the test output.
+
+## Browser trace refresh — Linux / Chromium — 2026-10-14
+
+The focused acceptance now wraps pan/zoom and the 5,000-wall reload in Chromium CDP performance tracing. It reports Paint and RasterTask event durations separately from RAF interval and synchronous plan redraw. This is browser trace work duration; it is not end-to-end input-to-display latency. The 600-wall search/select figures contain three samples. Transform, autosave, Undo and Redo timings each contain one sample. Percentiles for those single observations are intentionally not reported.
+
+| Fixture / action | Count | Restore or action timing | Browser Paint p50 / p95 | RasterTask p50 / p95 | CompositeLayers |
+| --- | ---: | --- | ---: | ---: | --- |
+| Synthetic walls: initial / reload restore | 600 | 3,049 / 5,508 ms | 0.097 / 2.510 ms | 0.266 / 32.336 ms | No events |
+| Pan and wheel samples | 600 | RAF 16.67 / 149.99 ms; sync redraw 16.54 / 61.02 ms | Same traced interaction window | Same traced interaction window | No events |
+| Search/select (3 samples) | 600 | p50/p95 1,066 / 1,193 ms | Not separately traced | Not separately traced | — |
+| Move / autosave | 600 | 1,704 / 3,088 ms | — | — | — |
+| Undo / Redo to autosave | 600 | 2,396 / 2,399 ms | — | — | — |
+| Initial / reload restore | 5,000 | 6,758 / 8,472 ms | 0.080 / 1.808 ms during reload trace | 0.187 / 5.895 ms during reload trace | No events |
+| Browser activation / snapshot verification | 5,000 | 517 / 618 ms | — | — | — |
+
+The run used `/usr/bin/chromium`, headless Playwright, Node v24.19.0 on Linux x64 in the local container. These are single-run fixture values, informational only, with no release thresholds. Trace categories emitted no `CompositeLayers` events, so compositing p50/p95 cannot be inferred from this run. Repeat under the supported release browser and on a real surveyed project before using these results as acceptance targets.
+
+## Prior full authoring-suite trace refresh — Linux / Chromium — 2026-10-15
+
+The latest complete authoring-suite run captured 250 RAF intervals and 84 synchronous redraw samples for the 600-wall fixture, plus Paint and RasterTask trace events for both the 600- and 5,000-wall fixtures. Search/select p50/p95 uses only three samples. Transform, autosave, Undo and Redo remain single observations. The full authoring suite completed 87/91; failures are recorded in residential acceptance and should not be interpreted as passing evidence.
+
+| Fixture / action | Count | Restore or action timing | Browser Paint p50 / p95 | RasterTask p50 / p95 | CompositeLayers |
+| --- | ---: | --- | ---: | ---: | --- |
+| Synthetic walls: first / reload restore | 600 | 2,842.96 / 9,272.25 ms | 0.107 / 1.238 ms (38 events) | 0.296 / 2.864 ms (40 events) | No events |
+| Pan/zoom | 600 | RAF 16.67 / 166.67 ms (250 samples; 78 >50 ms); synchronous redraw 18.49 / 83.27 ms (84 samples) | Same traced interaction window | Same traced interaction window | No events |
+| Search/select | 600 | 932.91 / 1,213.82 ms p50/p95 (3 samples) | Not separately traced | Not separately traced | — |
+| Move / autosave | 600 | 1,894.42 / 2,075.42 ms; response-to-persistence 181 ms | — | — | — |
+| Undo / Redo to autosave | 600 | 2,326.84 / 2,235.62 ms (one sample each) | — | — | — |
+| First / reload restore | 5,000 | 7,514 / 8,563 ms | 0.106 / 1.623 ms (11 events) | 0.196 / 3.472 ms (89 events) | No events |
+| Activation / snapshot verification / reload-to-verify | 5,000 | 531 / 734 / 9,828 ms | Same reload trace | Same reload trace | No events |
+
+Environment remains headless `/usr/bin/chromium`, Playwright, Node v24.19.0 on Linux x64. Paint/RasterTask duration is browser trace work and does not include end-to-end input-to-presentation latency; absent `CompositeLayers` events mean compositing duration is unknown. This run is a single local fixture observation, not a release threshold or surveyed-project result.
+
+## Full authoring-suite trace refresh — Linux / Chromium — 2026-10-15
+
+After restoring the missing synchronous `CommandBus` import used by preview validation, the complete Playwright authoring file passed 92/92 tests in 13.1 minutes. It recorded one fresh 600-wall and one 5,000-wall browser stress observation; these single-run timings supersede neither earlier measurements nor provide a release threshold.
+
+| Fixture / action | Count | Restore or action timing | Browser Paint p50 / p95 | RasterTask p50 / p95 | CompositeLayers |
+| --- | ---: | --- | ---: | ---: | --- |
+| Synthetic walls: first / reload restore | 600 | 3,134 / 9,466 ms | 0.111 / 0.623 ms (38 events) | 0.252 / 7.959 ms (40 events) | No events |
+| Pan/zoom | 600 | RAF 16.67 / 116.66 ms (233 samples; 55 >50 ms); synchronous redraw 15.36 / 49.90 ms (84 samples) | Same traced interaction window | Same traced interaction window | No events |
+| Search/select | 600 | 757.58 / 785.06 ms p50/p95 (3 samples) | Not separately traced | Not separately traced | — |
+| Move / autosave | 600 | 3,517 / 3,917 ms; response-to-persistence 400 ms | — | — | — |
+| Undo / Redo to autosave | 600 | 3,011 / 2,693 ms (one sample each) | — | — | — |
+| First / reload restore | 5,000 | 8,339 / 7,784 ms | 0.053 / 2.688 ms (11 events) | 0.204 / 1.847 ms (95 events) | No events |
+| Activation / snapshot verification / reload-to-verify | 5,000 | 567 / 728 / 9,079 ms | Same reload trace | Same reload trace | No events |
+
+Environment: headless `/usr/bin/chromium` 155.0.8059.39 on Ubuntu 26.04.1 LTS, Linux x86_64 kernel 6.8.0-142-generic; Playwright with Node v24.21.0. Paint and RasterTask are browser trace durations, not input-to-presentation latency. Chrome emitted no `CompositeLayers` events, so compositing duration remains unknown. No surveyed client project was available.

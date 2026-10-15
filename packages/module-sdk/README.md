@@ -84,11 +84,19 @@ active for the current browser session and can be unloaded from the Extensions
 panel. See [`examples/sample-package.cfe.mjs`](./examples/sample-package.cfe.mjs)
 for a bundle that can be imported directly.
 
-Loaded modules are trusted in-process JavaScript, not sandboxed. They can access
-the page's browser capabilities and current project data. The host does not yet
-provide signature verification, a remote package registry, persistent auto-load,
-or permissions isolation. Distribute bundles only through a channel where users
-can verify the publisher and source. Registration checks namespaces, capability
+The Plan Editor executes uploaded bundles in a dedicated Web Worker and returns
+only serializable command contributions to the host. The worker has no DOM and
+replaces browser networking, nested-worker and persistent-storage APIs with
+throwing stubs. Initialization and each callback have a 10-second termination
+deadline; package source is capped at 2 MB, RPC input at 32 MB and output at
+64 MB. The editor requires COOP/COEP isolation and serves a restrictive CSP.
+Sandboxed packages currently support command handlers and declarative UI only;
+providers, validators and schema migrations are rejected because those host
+contracts are synchronous. Browser Workers have no enforceable per-package memory
+quota, and this is not an OS-process boundary or a security audit. The host also
+does not provide signature verification, a remote package registry or persistent
+auto-load. Users must explicitly trust each bundle. Direct SDK registration by
+trusted host code remains in-process. Registration checks namespaces, capability
 dependencies and object-type ownership. Declarative UI contributions reference a
 module-owned command and its input descriptor. The Plan Editor renders supported
 string, number, integer, boolean and enum fields, requires a second explicit

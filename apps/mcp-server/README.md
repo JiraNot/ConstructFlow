@@ -111,11 +111,23 @@ python apps/mcp-server/http_bridge.py
 ```
 
 By default the gateway binds to `127.0.0.1:8000`. The AI route requires the configured bearer
-token. In the editor's AI tab, use `http://localhost:8000/api/ai/plan` and enter the same token;
-the editor keeps it in memory only. The project name, active level/phase, catalog types, selected
-IDs and a capped object summary are sent to the configured gateway. Set
-`CONSTRUCTFLOW_AI_BASE_URL` to use an OpenAI-compatible provider endpoint or
-`CONSTRUCTFLOW_HTTP_HOST` only when intentionally changing the listener interface.
+token. In the editor's AI tab, use `/api/ai/plan` and enter the same token; the development server
+proxies that same-origin path to the local gateway. The editor keeps the token in memory only.
+The project name, active level/phase, catalog types, selected IDs and a capped object summary are
+sent to the configured gateway. Set `CONSTRUCTFLOW_AI_BASE_URL` to use an OpenAI-compatible provider
+endpoint.
+
+For a remote deployment, terminate TLS at a reverse proxy, route `/api/ai/plan` to this gateway,
+and serve the editor with `Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp` so the isolated extension worker can use its bounded
+asynchronous RPC channel. Keep the editor's Content-Security-Policy `connect-src` same-origin by
+using that reverse proxy. Set `CONSTRUCTFLOW_HTTP_HOST` to the private interface behind the proxy,
+`CONSTRUCTFLOW_AI_ALLOWED_ORIGINS` to the exact editor origins, and use a random
+`CONSTRUCTFLOW_AI_TOKEN` of at least 32 characters. Non-loopback binding also requires the provider
+key at startup. Do not expose the plain HTTP listener directly to the public internet.
+
+The legacy `/api/command` SketchUp route separately requires `CONSTRUCTFLOW_BRIDGE_TOKEN`; it is
+not enabled by merely starting the AI gateway. The route shares the exact-origin CORS allowlist.
 
 The editor currently describes built-in wall, column, beam, door and window commands, plus
 AI-enabled commands contributed by registered SDK modules. AI asks for missing host/level/design

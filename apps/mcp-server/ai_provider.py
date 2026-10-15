@@ -2,16 +2,23 @@
 
 import json
 import os
+from ipaddress import ip_address
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 MAX_PROMPT_LENGTH = 8_000
 MAX_CONTEXT_BYTES = 96_000
 MAX_COMMANDS = 100
+MAX_PROVIDER_RESPONSE_BYTES = 1_000_000
 
 
 class AIPlanError(ValueError):
     pass
+
+
+class AIProviderError(AIPlanError):
+    """Provider transport/response failure safe to classify as an upstream error."""
 
 
 def generate_command_plan(data):
@@ -41,6 +48,18 @@ def generate_command_plan(data):
         raise AIPlanError("Set OPENAI_API_KEY on the ConstructFlow AI gateway")
     base_url = os.environ.get("CONSTRUCTFLOW_AI_BASE_URL", "https://api.openai.com/v1/chat/completions").strip()
     model = os.environ.get("CONSTRUCTFLOW_AI_MODEL", "gpt-4o-mini").strip()
+    parsed_url = urlparse(base_url)
+    if parsed_url.scheme not in {"https", "http"} or not parsed_url.netloc or parsed_url.username or parsed_url.password or parsed_url.fragment:
+        raise AIPlanError("CONSTRUCTFLOW_AI_BASE_URL must be a valid HTTPS provider endpoint")
+    provider_host = (parsed_url.hostname or "").lower()
+    try:
+        provider_is_loopback = ip_address(provider_host).is_loopback
+    except ValueError:
+        provider_is_loopback = provider_host == "localhost"
+    if parsed_url.scheme != "https" and not provider_is_loopback:
+        raise AIPlanError("CONSTRUCTFLOW_AI_BASE_URL must use HTTPS except for a loopback test provider")
+    if not model or len(model) > 200:
+        raise AIPlanError("CONSTRUCTFLOW_AI_MODEL must contain 1-200 characters")
     request_payload = {
         "model": model,
         "temperature": 0.1,
@@ -76,30 +95,32 @@ def generate_command_plan(data):
     )
     try:
         with urlopen(request, timeout=45) as response:
-            provider_response = json.loads(response.read().decode("utf-8"))
+            raw_response = response.read(MAX_PROVIDER_RESPONSE_BYTES + 1)
+            if len(raw_response) > MAX_PROVIDER_RESPONSE_BYTES:
+                raise AIProviderError("AI provider response exceeds the 1 MB limit")
+            provider_response = json.loads(raw_response.decode("utf-8"))
     except HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")[:1000]
-        raise AIPlanError(f"AI provider returned HTTP {error.code}: {detail}") from error
+        raise AIProviderError(f"AI provider returned HTTP {error.code}") from error
     except (URLError, TimeoutError, json.JSONDecodeError) as error:
-        raise AIPlanError(f"AI provider request failed: {error}") from error
+        raise AIProviderError(f"AI provider request failed: {type(error).__name__}") from error
 
     try:
         content = provider_response["choices"][0]["message"]["content"]
         plan = json.loads(content)
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
-        raise AIPlanError("AI provider returned an invalid command plan") from error
+        raise AIProviderError("AI provider returned an invalid command plan") from error
     if not isinstance(plan, dict):
-        raise AIPlanError("AI provider response must be an object")
+        raise AIProviderError("AI provider response must be an object")
     commands = plan.get("commands", [])
     questions = plan.get("questions", [])
     if not isinstance(commands, list) or len(commands) > MAX_COMMANDS:
-        raise AIPlanError("AI plan must contain at most 100 commands")
+        raise AIProviderError("AI provider returned too many commands")
     if not isinstance(questions, list) or any(not isinstance(question, str) for question in questions):
-        raise AIPlanError("AI plan questions must be strings")
+        raise AIProviderError("AI provider returned invalid questions")
     validated = []
     for command in commands:
         if not isinstance(command, dict) or command.get("name") not in allowed or not isinstance(command.get("input"), dict):
-            raise AIPlanError("AI plan included an unregistered command or invalid input")
+            raise AIProviderError("AI provider included an unregistered command or invalid input")
         validated.append({"name": command["name"], "input": command["input"]})
     return {
         "summary": str(plan.get("summary", "แผนคำสั่งพร้อมตรวจสอบ"))[:2_000],

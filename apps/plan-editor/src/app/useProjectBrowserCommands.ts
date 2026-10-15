@@ -45,8 +45,13 @@ export function useProjectBrowserCommands({
   const handleDeleteObjects = (objectIds: string[]) => {
     const selected = new Set([...new Set(objectIds)].filter(id => Boolean(project.objects[id])))
     if (!selected.size) return
-    // Host deletion already cascades to dependents; omit selected children to keep the batch atomic.
-    const roots = [...selected].filter(id => !project.objects[id]!.host_refs.some(hostId => selected.has(hostId)))
+    // Omit a selected child only when every one of its hosts is also selected. A beam
+    // supported by two columns must still be explicitly deleted when only one support
+    // column is in the selection; deleting that column alone preserves the beam.
+    const roots = [...selected].filter(id => {
+      const hosts = project.objects[id]!.host_refs
+      return !hosts.length || !hosts.every(hostId => selected.has(hostId))
+    })
     const commands: CommandRequest[] = roots.map(objectId => ({ name: 'DeleteObject', input: { object_id: objectId } }))
     const result = dispatchCommandBatch(commands)
     if (result.status !== 'success') {

@@ -5,9 +5,10 @@ import os
 import uuid
 import sys
 import websockets
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import threading
-from ai_provider import AIPlanError, generate_command_plan
+from urllib.parse import urlparse
+from ai_provider import AIPlanError, AIProviderError, generate_command_plan
 
 # Configuration
 HTTP_PORT = 8000
@@ -51,6 +52,7 @@ OPENAPI_SPEC = {
             "post": {
                 "summary": "Execute ConstructFlow Command in SketchUp",
                 "description": "Executes a BIM modeling or management command in SketchUp.",
+                "security": [{"BridgeToken": []}],
                 "requestBody": {
                     "required": True,
                     "content": {
@@ -111,13 +113,45 @@ OPENAPI_SPEC = {
             }
         }
     },
-    "components": {"securitySchemes": {"GatewayToken": {"type": "http", "scheme": "bearer"}}}
+    "components": {"securitySchemes": {
+        "GatewayToken": {"type": "http", "scheme": "bearer"},
+        "BridgeToken": {"type": "http", "scheme": "bearer"},
+    }}
 }
 
 def ai_gateway_authorized(authorization, expected_token):
     return bool(expected_token) and hmac.compare_digest(
         authorization or "", f"Bearer {expected_token}"
     )
+
+
+def allowed_browser_origins():
+    configured = os.environ.get("CONSTRUCTFLOW_AI_ALLOWED_ORIGINS", "").strip()
+    if configured:
+        origins = {origin.strip().rstrip("/") for origin in configured.split(",") if origin.strip()}
+        if "*" in origins or any(urlparse(origin).scheme not in {"http", "https"} or not urlparse(origin).netloc or urlparse(origin).path for origin in origins):
+            raise RuntimeError("CONSTRUCTFLOW_AI_ALLOWED_ORIGINS must contain exact http(s) origins without paths or wildcards")
+        return origins
+    return {"http://localhost:5183", "http://127.0.0.1:5183", "http://localhost:5184", "http://127.0.0.1:5184"}
+
+
+def is_loopback_host(host):
+    return host in {"127.0.0.1", "localhost", "::1"}
+
+
+def validate_gateway_binding(host):
+    if is_loopback_host(host):
+        return
+    token = os.environ.get("CONSTRUCTFLOW_AI_TOKEN", "").strip()
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if len(token) < 32 or not api_key:
+        raise RuntimeError("Non-loopback gateway binding requires a 32+ character CONSTRUCTFLOW_AI_TOKEN and OPENAI_API_KEY")
+    if not os.environ.get("CONSTRUCTFLOW_AI_ALLOWED_ORIGINS", "").strip():
+        raise RuntimeError("Non-loopback gateway binding requires explicit CONSTRUCTFLOW_AI_ALLOWED_ORIGINS")
+    allowed_browser_origins()
+
+
+AI_REQUEST_LIMITER = threading.BoundedSemaphore(8)
 
 async def send_to_sketchup(command_name, params):
     try:
@@ -136,79 +170,130 @@ async def send_to_sketchup(command_name, params):
         return {"error": str(e)}
 
 class BridgeHandler(BaseHTTPRequestHandler):
+    def setup(self):
+        super().setup()
+        self.request.settimeout(15)
+
+    def _send_security_headers(self):
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+
     def _send_cors_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self.headers.get("Origin", "").rstrip("/")
+        if origin and origin in allowed_browser_origins():
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
     def do_OPTIONS(self):
-        self.send_response(200)
+        origin = self.headers.get("Origin", "").rstrip("/")
+        if origin and origin not in allowed_browser_origins():
+            self.send_response(403)
+            self._send_security_headers()
+            self.end_headers()
+            return
+        self.send_response(204)
         self._send_cors_headers()
+        self._send_security_headers()
         self.end_headers()
+
+    def _json_response(self, status, payload):
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self._send_cors_headers()
+        self._send_security_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _origin_is_allowed(self):
+        origin = self.headers.get("Origin", "").rstrip("/")
+        return not origin or origin in allowed_browser_origins()
+
+    def _read_json_body(self, maximum_bytes):
+        content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            raise AIPlanError("Content-Type must be application/json")
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as error:
+            raise AIPlanError("Content-Length must be a valid integer") from error
+        if content_length < 1 or content_length > maximum_bytes:
+            raise AIPlanError(f"Request must be between 1 and {maximum_bytes} bytes")
+        body = self.rfile.read(content_length)
+        if len(body) != content_length:
+            raise AIPlanError("Request body was incomplete")
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise AIPlanError("Request body must be valid UTF-8 JSON") from error
+        if not isinstance(payload, dict):
+            raise AIPlanError("Request body must be a JSON object")
+        return payload
 
     def do_GET(self):
         if self.path == "/openapi.json":
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self._send_cors_headers()
-            self.end_headers()
-            self.wfile.write(json.dumps(OPENAPI_SPEC, indent=2).encode('utf-8'))
+            self._json_response(200, OPENAPI_SPEC)
             return
 
         if self.path == "/api/status":
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self._send_cors_headers()
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "running", "bridge": "ConstructFlow AI REST Gateway"}).encode('utf-8'))
+            self._json_response(200, {"status": "running", "bridge": "ConstructFlow AI REST Gateway"})
             return
 
         self.send_response(404)
         self.end_headers()
 
     def do_POST(self):
+        if not self._origin_is_allowed():
+            self._json_response(403, {"error": "Browser origin is not allowed"})
+            return
         if self.path == "/api/ai/plan":
             expected_token = os.environ.get("CONSTRUCTFLOW_AI_TOKEN", "")
             if not expected_token:
-                self.send_response(503)
-                self._send_cors_headers()
-                self.end_headers()
-                self.wfile.write(b'{"error":"Set CONSTRUCTFLOW_AI_TOKEN on the AI gateway"}')
+                self._json_response(503, {"error": "AI gateway authentication is not configured"})
                 return
             provided = self.headers.get("Authorization", "")
             if not ai_gateway_authorized(provided, expected_token):
-                self.send_response(401)
-                self._send_cors_headers()
-                self.end_headers()
-                self.wfile.write(b'{"error":"Invalid AI gateway token"}')
+                self._json_response(401, {"error": "Invalid AI gateway token"})
+                return
+            if not AI_REQUEST_LIMITER.acquire(blocking=False):
+                self._json_response(503, {"error": "AI gateway is at capacity; retry shortly"})
                 return
             try:
-                content_length = int(self.headers.get("Content-Length", 0))
-                if content_length < 1 or content_length > 128_000:
-                    raise AIPlanError("Request must be between 1 and 128000 bytes")
-                data = json.loads(self.rfile.read(content_length).decode("utf-8"))
+                data = self._read_json_body(128_000)
                 result = generate_command_plan(data)
                 status = 200
-            except (AIPlanError, json.JSONDecodeError, UnicodeDecodeError) as error:
+            except AIProviderError:
+                result = {"error": "AI provider request failed; check gateway logs and provider configuration"}
+                status = 502
+            except AIPlanError as error:
                 result = {"error": str(error)}
                 status = 422
-            except Exception as error:
-                result = {"error": f"AI gateway failed: {error}"}
+            except Exception:
+                result = {"error": "AI gateway failed; check gateway logs"}
                 status = 502
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self._send_cors_headers()
-            self.end_headers()
-            self.wfile.write(json.dumps(result, ensure_ascii=False).encode("utf-8"))
+            finally:
+                AI_REQUEST_LIMITER.release()
+            self._json_response(status, result)
             return
 
         if self.path == "/api/command":
-            content_length = int(self.headers.get('Content-Length', 0))
-            body = self.rfile.read(content_length)
+            expected_token = os.environ.get("CONSTRUCTFLOW_BRIDGE_TOKEN", "")
+            if not expected_token:
+                self._json_response(503, {"error": "SketchUp bridge authentication is not configured"})
+                return
+            if not ai_gateway_authorized(self.headers.get("Authorization", ""), expected_token):
+                self._json_response(401, {"error": "Invalid bridge token"})
+                return
             try:
-                data = json.loads(body.decode('utf-8'))
+                data = self._read_json_body(128_000)
                 command_name = data.get("command_name")
                 params = data.get("params", {})
+                if not isinstance(command_name, str) or not command_name.strip() or not isinstance(params, dict):
+                    raise AIPlanError("command_name and object params are required")
 
                 # Call SketchUp via WebSocket
                 loop = asyncio.new_event_loop()
@@ -216,17 +301,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 result = loop.run_until_complete(send_to_sketchup(command_name, params))
                 loop.close()
 
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self._send_cors_headers()
-                self.end_headers()
-                self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
-            except Exception as e:
-                self.send_response(500)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self._send_cors_headers()
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+                self._json_response(200, result)
+            except AIPlanError as error:
+                self._json_response(422, {"error": str(error)})
+            except Exception:
+                self._json_response(502, {"error": "SketchUp bridge request failed"})
             return
 
         self.send_response(404)
@@ -234,7 +313,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
 def run_http_server():
     host = os.environ.get("CONSTRUCTFLOW_HTTP_HOST", "127.0.0.1")
-    server = HTTPServer((host, HTTP_PORT), BridgeHandler)
+    validate_gateway_binding(host)
+    server = ThreadingHTTPServer((host, HTTP_PORT), BridgeHandler)
+    server.daemon_threads = True
+    server.timeout = 1
     print(f"🌐 HTTP/OpenAPI Bridge running at http://{host}:{HTTP_PORT}")
     print(f"📄 OpenAPI schema for Custom GPT: http://localhost:{HTTP_PORT}/openapi.json")
     try:

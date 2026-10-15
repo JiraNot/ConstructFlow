@@ -117,6 +117,51 @@ test('registered extension commands share CommandBus validation, atomic batches,
   assert.equal(CommandBus.getRegisteredModules().some(entry => entry.id === 'vendor.notes'), false)
 })
 
+test('async extension commands serialize in one session history and reject stale results', async () => {
+  const initial = createDefaultResidentialProjectDocument('sdk-async-session-project')
+  let signalStarted
+  const executionStarted = new Promise(resolve => { signalStarted = resolve })
+  const unregister = CommandBus.registerModule(testModule({
+    commands: {
+      'vendor.notes.set_description_async': async context => {
+        if (context.input.wait_for_commit) signalStarted()
+        await new Promise(resolve => setTimeout(resolve, Number(context.input.delay_ms ?? 0)))
+        context.updated.project.description = String(context.input.description)
+        return {
+          result: { status: 'success', command_id: context.command_id, command_name: context.commandName, affected_object_ids: [] },
+          updatedProject: context.updated,
+          emittedEnvelope: context.envelope,
+        }
+      },
+    },
+  }))
+  try {
+    const session = new ProjectCommandSession(initial)
+    const first = session.executeAsync([{ name: 'vendor.notes.set_description_async', input: { description: 'extension:first', delay_ms: 15 } }])
+    const second = session.executeAsync([{ name: 'vendor.notes.set_description_async', input: { description: 'extension:second' } }])
+    const [firstResult, secondResult] = await Promise.all([first, second])
+    assert.equal(firstResult.status, 'success')
+    assert.equal(secondResult.status, 'success')
+    assert.equal(session.project.project.description, 'extension:second')
+    assert.equal(session.undo().project.description, 'extension:first')
+    assert.equal(session.undo().project.description, undefined)
+    assert.equal(session.redo().project.description, 'extension:first')
+    assert.equal(session.redo().project.description, 'extension:second')
+
+    const pending = session.executeAsync([{ name: 'vendor.notes.set_description_async', input: { description: 'extension:stale', delay_ms: 20, wait_for_commit: true } }])
+    await executionStarted
+    const humanEdit = session.project
+    humanEdit.project.description = 'human:kept'
+    session.commit(humanEdit)
+    const staleResult = await pending
+    assert.equal(staleResult.status, 'rejected')
+    assert.match(staleResult.errors?.[0] ?? '', /Project changed while the extension command was running/)
+    assert.equal(session.project.project.description, 'human:kept')
+  } finally {
+    unregister()
+  }
+})
+
 test('module registration enforces capabilities and command namespaces', () => {
   assert.throws(() => CommandBus.registerModule(testModule({
     manifest: { id: 'vendor.blocked', requires: ['missing.capability'] },

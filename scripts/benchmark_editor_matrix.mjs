@@ -56,9 +56,11 @@ const fixtures = [
   { name: 'kitchen-proof', project: kitchen.updatedProject },
   { name: 'reference-house-2storey', project: referenceHouse },
   { name: 'renovation-house-plus-kitchen', project: renovation.project },
+  { name: 'synthetic-house-717', project: makeStressFixture(referenceHouse, 717), stress: true },
   { name: 'synthetic-house-478', project: makeStressFixture(referenceHouse, 478), stress: true },
   { name: 'synthetic-house-956', project: makeStressFixture(referenceHouse, 956), stress: true },
   { name: 'synthetic-house-4780', project: makeStressFixture(referenceHouse, 4780), stress: true },
+  { name: 'synthetic-house-5019', project: makeStressFixture(referenceHouse, 5019), stress: true },
 ]
 
 const quantile = (values, fraction) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.ceil(values.length * fraction) - 1)]
@@ -128,7 +130,7 @@ const markdown = [
   '| Fixture | Objects | Operation | p50 ms | p95 ms |', '| --- | ---: | --- | ---: | ---: |',
   ...matrix.map(row => `| ${row.fixture} | ${row.object_count} | ${taskLabels[row.task] ?? row.task} | ${row.p50_ms.toFixed(3)} | ${row.p95_ms.toFixed(3)} |`), '',
   `Raw measurements: [EDITOR-PERFORMANCE-MATRIX-2026-10.json](./EDITOR-PERFORMANCE-MATRIX-2026-10.json).`,
-  'This matrix covers 21-object kitchen, 239-object two-storey house, 260-object combined renovation fixture, and synthetic 478/956/4,780-object geometry tiles. Synthetic stress fixtures are not residential acceptance models. Stress rows measure object summary, plan projection/hit-testing, snap-index/query, and the coordination engine; takeoff, BOQ, and drawing compilation remain unmeasured at that scale. Browser frame time, marquee selection, undo/redo, load/schema validation, and serialization still require separate evidence.', '',
+  'This matrix covers 21-object kitchen, 239-object two-storey house, 260-object combined renovation fixture, and synthetic 478/717/956/4,780/5,019-object geometry tiles. Synthetic stress fixtures are not residential acceptance models. Stress rows measure object summary, plan projection/hit-testing, snap-index/query, and the coordination engine; takeoff, BOQ, and drawing compilation remain unmeasured at that scale. Browser paint/compositing, undo/redo, load/schema validation, and serialization are measured separately by Playwright browser stress acceptance; these local traces do not define release thresholds.', '',
 ].join('\n')
 fs.writeFileSync(new URL('../docs/performance/EDITOR-PERFORMANCE-MATRIX-2026-10.md', import.meta.url), markdown)
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`)

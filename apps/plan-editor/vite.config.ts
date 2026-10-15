@@ -64,7 +64,30 @@ function fileAcceptanceDiskPlugin() {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => {
+  const development = command === 'serve'
+  const csp = [
+    "default-src 'self' data: blob:",
+    `script-src 'self' blob:${development ? " 'unsafe-inline' 'unsafe-eval'" : ''}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    `connect-src 'self'${development ? ' http://localhost:8000 http://127.0.0.1:8000 ws://localhost:5183 ws://127.0.0.1:5183 ws://localhost:5184 ws://127.0.0.1:5184 ws://localhost:8765 ws://127.0.0.1:8765' : ''}`,
+    "font-src 'self' data:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ')
+  const securityHeaders = {
+    'Content-Security-Policy': csp,
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Cross-Origin-Embedder-Policy': 'require-corp',
+    'Origin-Agent-Cluster': '?1',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+  }
+  const aiGatewayTarget = process.env.CONSTRUCTFLOW_AI_GATEWAY_TARGET ?? 'http://127.0.0.1:8000'
+  return {
   plugins: [react(), fileAcceptanceDiskPlugin()],
   resolve: {
     alias: {
@@ -77,6 +100,13 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5183,
     strictPort: true,
+    headers: securityHeaders,
+    proxy: {
+      '/api/ai': { target: aiGatewayTarget, changeOrigin: true },
+    },
+  },
+  preview: {
+    headers: securityHeaders,
   },
   build: {
     rollupOptions: {
@@ -87,4 +117,5 @@ export default defineConfig({
       },
     },
   },
+  }
 })

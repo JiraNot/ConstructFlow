@@ -15,7 +15,7 @@ function getInitialValue(property: InputProperty): unknown {
 function ExtensionAction({ action, descriptor, onExecute }: {
   action: ModuleUIActionContribution
   descriptor: ModuleCommandDescriptor
-  onExecute: (command: CommandRequest) => CommandBatchResult
+  onExecute: (command: CommandRequest) => CommandBatchResult | Promise<CommandBatchResult>
 }) {
   const properties = descriptor.input_schema.properties as Record<string, InputProperty>
   const required = new Set(descriptor.input_schema.required ?? [])
@@ -25,12 +25,13 @@ function ExtensionAction({ action, descriptor, onExecute }: {
   const [pendingConfirmation, setPendingConfirmation] = useState(false)
   const [pendingInput, setPendingInput] = useState<Record<string, unknown> | null>(null)
   const [feedback, setFeedback] = useState('')
+  const [executing, setExecuting] = useState(false)
   const schemaError = useMemo(() => Object.entries(properties).find(([, property]) => {
     if (property.enum !== undefined) return !Array.isArray(property.enum) || property.enum.some(value => !['string', 'number', 'boolean'].includes(typeof value))
     return !['string', 'number', 'integer', 'boolean'].includes(String(property.type))
   })?.[0], [properties])
 
-  const submit = () => {
+  const submit = async () => {
     const input: Record<string, unknown> = {}
     for (const [name, property] of Object.entries(properties)) {
       const value = values[name]
@@ -65,10 +66,17 @@ function ExtensionAction({ action, descriptor, onExecute }: {
       setFeedback('ตรวจสอบค่าที่กรอก แล้วกดยืนยันเพื่อส่งคำสั่ง')
       return
     }
-    const result = onExecute({ name: action.command, input: pendingInput ?? input })
-    setPendingConfirmation(false)
-    setPendingInput(null)
-    setFeedback(result.status === 'success' ? 'คำสั่งสำเร็จ · Undo ได้จากประวัติโครงการ' : result.errors?.[0] ?? 'คำสั่งไม่ผ่านการตรวจสอบ')
+    setExecuting(true)
+    try {
+      const result = await onExecute({ name: action.command, input: pendingInput ?? input })
+      setPendingConfirmation(false)
+      setPendingInput(null)
+      setFeedback(result.status === 'success' ? 'คำสั่งสำเร็จ · Undo ได้จากประวัติโครงการ' : result.errors?.[0] ?? 'คำสั่งไม่ผ่านการตรวจสอบ')
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : String(error))
+    } finally {
+      setExecuting(false)
+    }
   }
 
   return <section style={{ border: '1px solid #dbe3ed', borderRadius: 5, padding: 9, marginTop: 8 }}>
@@ -92,8 +100,8 @@ function ExtensionAction({ action, descriptor, onExecute }: {
         {typeof property.description === 'string' && property.description.length > 0 && <small style={{ color: '#64748b' }}>{property.description}</small>}
       </label>
     })}
-    <button type="button" disabled={Boolean(schemaError)} onClick={submit} style={{ marginTop: 8 }}>
-      {descriptor.confirmation === 'required' && pendingConfirmation ? 'ยืนยันและส่งคำสั่ง' : 'ตรวจสอบและส่งคำสั่ง'}
+    <button type="button" disabled={Boolean(schemaError) || executing} onClick={submit} style={{ marginTop: 8 }}>
+      {executing ? 'กำลังตรวจสอบใน sandbox…' : descriptor.confirmation === 'required' && pendingConfirmation ? 'ยืนยันและส่งคำสั่ง' : 'ตรวจสอบและส่งคำสั่ง'}
     </button>
     {feedback && <div role="status" style={{ marginTop: 5, fontSize: 10, color: feedback.includes('สำเร็จ') ? '#15803d' : '#64748b' }}>{feedback}</div>}
   </section>
@@ -102,7 +110,7 @@ function ExtensionAction({ action, descriptor, onExecute }: {
 export interface ModuleExtensionsPanelProps {
   contributions: readonly ModuleUIContribution[]
   commandDescriptors: readonly ModuleCommandDescriptor[]
-  onExecute: (command: CommandRequest) => CommandBatchResult
+  onExecute: (command: CommandRequest) => CommandBatchResult | Promise<CommandBatchResult>
 }
 
 /** Framework-neutral extension action descriptors rendered by the host through its normal command session. */

@@ -31,6 +31,15 @@ export function useProjectSession(initialProject: ProjectDocument | (() => Proje
     return result
   }
 
+  const dispatchAsyncCommandBatch = async (commands: CommandRequest[], actorKind: CommandActorKind = 'human') => {
+    const result = await sessionRef.current!.executeAsync(commands, actorKind)
+    if (result.status === 'success') {
+      setProjectState(result.updatedProject)
+      if (result.emittedEnvelopes.length > 0) setCommandQueue(queue => [...queue, ...result.emittedEnvelopes])
+    }
+    return result
+  }
+
   const previewCommands = (commands: CommandRequest[], actorKind: CommandActorKind = 'human') => {
     const result = CommandBus.executeBatch(project, commands, actorKind)
     return {
@@ -69,6 +78,7 @@ export function useProjectSession(initialProject: ProjectDocument | (() => Proje
     setCommandQueue,
     sessionRef,
     dispatchCommandBatch,
+    dispatchAsyncCommandBatch,
     previewCommands,
     reset,
     undo,
