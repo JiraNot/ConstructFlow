@@ -2,6 +2,7 @@ import React from 'react'
 import type { ProjectDocument } from '@constructflow/project-model'
 import type { ToolType } from './Toolbar.js'
 import type { ToolInteractionStatus } from '../app/toolInteractionStatus.mjs'
+import { getObjectFamilyDisplayName } from './objectDisplayNames.js'
 
 interface PlanCanvasInteractionHintsProps {
   activeTool: ToolType
@@ -58,13 +59,20 @@ export const PlanCanvasInteractionHints: React.FC<PlanCanvasInteractionHintsProp
         {pickCandidates.map(id => {
           const object = project.objects[id]
           if (!object) return null
-          const family = object.object_type === 'architecture.wall' ? 'ผนัง' : object.object_type === 'structure.beam' ? 'คาน' : object.object_type === 'structure.column' ? 'เสา' : object.object_type === 'structure.foundation' ? 'ฐานราก' : object.object_type === 'door_window.door' ? 'ประตู' : object.object_type === 'door_window.window' ? 'หน้าต่าง' : object.object_type
+          const family = getObjectFamilyDisplayName(object.object_type)
           const data = object.module_data as unknown as Record<string, unknown>
-          return <option key={id} value={id}>{family} {String(data.mark ?? data.type_mark ?? 'ไม่มีรหัสแบบ')}</option>
+          const mark = String(data.mark ?? data.type_mark ?? data.tag ?? '').trim()
+          const duplicates = pickCandidates.filter(candidateId => {
+            const candidate = project.objects[candidateId]
+            const values = candidate?.module_data as Record<string, unknown> | undefined
+            return candidate?.object_type === object.object_type && String(values?.mark ?? values?.type_mark ?? values?.tag ?? '').trim() === mark
+          }).sort()
+          const suffix = duplicates.length > 1 ? ` · ${duplicates.indexOf(id) + 1}` : ''
+          return <option key={id} value={id} title={`${family} ${mark} · ${id}`}>{family}{mark ? ` ${mark}` : ''}{suffix}</option>
         })}
       </select>
       <button type="button" onClick={() => onCyclePick()} aria-label="เลือกวัตถุถัดไป">›</button>
-      <small>Tab / Shift+Tab · iPad แตะลูกศรหรือเลือกจากรายการ</small>
+      <small>Tab สลับ · Shift+Tab ย้อน · แตะรายการเพื่อเลือก</small>
     </div>}
   </>
 )

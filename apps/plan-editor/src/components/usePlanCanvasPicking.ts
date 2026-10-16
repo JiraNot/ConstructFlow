@@ -2,8 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectDocument } from '@constructflow/project-model'
 import type { ViewportState } from '../viewport/viewportTransform.js'
 import type { PlanCanvasProps } from './PlanCanvas.types.js'
-import { findPlanHitObject } from './planHitTesting.mjs'
-import { resolvePlanCanvasPickCandidates } from './resolvePlanCanvasPickCandidates.mjs'
+import { findPlanHitCandidates, findPlanHitObject } from './planHitTesting.mjs'
 import type { ToolType } from './Toolbar.js'
 
 interface UsePlanCanvasPickingOptions {
@@ -22,6 +21,8 @@ export function usePlanCanvasPicking({
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [pickCandidates, setPickCandidates] = useState<string[]>([])
   const pickCandidatesRef = useRef<string[]>([])
+  const pickPointRef = useRef<[number, number] | null>(null)
+  const chosenCandidateRef = useRef<{ id: string; point: [number, number] } | null>(null)
 
   const setCandidates = useCallback((ids: string[]) => {
     if (ids.join('|') === pickCandidatesRef.current.join('|')) return
@@ -33,19 +34,34 @@ export function usePlanCanvasPicking({
     findPlanHitObject(worldPointMm, planProject, project, viewport.zoom, preferWall, excluded),
   [planProject, project, viewport.zoom])
 
-  const findCandidates = useCallback((point: [number, number], preferWall = false) =>
-    resolvePlanCanvasPickCandidates(planProject, findHitObject, point, preferWall),
-  [planProject, findHitObject])
+  const findCandidates = useCallback((point: [number, number], preferWall = false) => {
+    const ids = findPlanHitCandidates(point, planProject, project, viewport.zoom, preferWall)
+    pickPointRef.current = point
+    const chosen = chosenCandidateRef.current
+    if (chosen && (!ids.includes(chosen.id) || Math.hypot(point[0] - chosen.point[0], point[1] - chosen.point[1]) * viewport.zoom > 6)) chosenCandidateRef.current = null
+    // An explicit Tab/list choice survives small pointer movement so it can be
+    // dragged. Ordinary hover always follows the nearest visible geometry.
+    if (!preferWall && chosenCandidateRef.current) {
+      const index = ids.indexOf(chosenCandidateRef.current.id)
+      return [...ids.slice(index), ...ids.slice(0, index)]
+    }
+    return ids
+  }, [planProject, project, viewport.zoom])
+
+  const chooseCandidate = useCallback((id: string) => {
+    if (pickPointRef.current) chosenCandidateRef.current = { id, point: [...pickPointRef.current] }
+    setHoveredId(id)
+  }, [])
 
   const cyclePick = useCallback((reverse = false) => {
     const ids = pickCandidatesRef.current.filter(id => !!planProject.objects[id])
     if (ids.length < 2) return
     const current = ids.indexOf(hoveredId ?? selectedId ?? '')
     const next = ids[(current + (reverse ? -1 : 1) + ids.length) % ids.length]
-    setHoveredId(next)
+    chooseCandidate(next)
     onSelectionChange?.([next], next)
     onSelectObject(next)
-  }, [hoveredId, selectedId, onSelectObject, onSelectionChange, planProject])
+  }, [hoveredId, selectedId, onSelectObject, onSelectionChange, planProject, chooseCandidate])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -59,7 +75,16 @@ export function usePlanCanvasPicking({
     return () => window.removeEventListener('keydown', handler)
   }, [cyclePick, activeTool])
 
-  useEffect(() => { setCandidates([]) }, [activeTool, planProject, setCandidates])
+  useEffect(() => {
+    chosenCandidateRef.current = null
+    pickPointRef.current = null
+    setHoveredId(null)
+    setCandidates([])
+  }, [activeTool, planProject, setCandidates])
 
-  return { hoveredId, setHoveredId, pickCandidates, setCandidates, findHitObject, findCandidates, cyclePick }
+  useEffect(() => {
+    if (selectedId === null) chosenCandidateRef.current = null
+  }, [selectedId])
+
+  return { hoveredId, setHoveredId, chooseCandidate, pickCandidates, setCandidates, findHitObject, findCandidates, cyclePick }
 }

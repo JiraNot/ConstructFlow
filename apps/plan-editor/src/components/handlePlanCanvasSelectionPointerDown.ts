@@ -100,7 +100,7 @@ export function handlePlanCanvasSelectionPointerDown({
 
   const candidates = findCandidates(rawWorld, event.shiftKey)
   setCandidates(candidates)
-  const hitId = event.shiftKey ? findHitObject(rawWorld, true) : candidates.includes(hoveredId ?? '') ? hoveredId : candidates[0] ?? null
+  const hitId = event.shiftKey ? findHitObject(rawWorld, true) : candidates[0] ?? null
   setHoveredId(hitId)
   if (hitId && event.shiftKey) {
     const next = selectedIds.includes(hitId) ? selectedIds.filter(id => id !== hitId) : [...selectedIds, hitId]

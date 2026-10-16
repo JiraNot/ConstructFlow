@@ -57,7 +57,7 @@ export function usePlanCanvasSurfaceOverlays({
     hoveredId: picking.hoveredId,
     project: planProject,
     onCyclePick: picking.cyclePick,
-    onHoverChange: picking.setHoveredId,
+    onHoverChange: picking.chooseCandidate,
     onSelectionChange: props.onSelectionChange,
     onSelectObject: props.onSelectObject,
   }

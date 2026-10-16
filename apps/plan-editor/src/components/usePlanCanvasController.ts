@@ -37,7 +37,8 @@ export function usePlanCanvasController(props: PlanCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const dragDimensionInput = usePlanCanvasDragDimensions(displayUnit)
-  const planVisibleObjects = useMemo(() => getPlanVisibleObjects(project, planDiscipline), [project, planDiscipline])
+  const includeCeilings = activeTool === 'ceiling' || (activeTool === 'slabVoid' && project.objects[selectedId ?? '']?.object_type === 'architecture.ceiling')
+  const planVisibleObjects = useMemo(() => getPlanVisibleObjects(project, planDiscipline, { includeCeilings }), [project, planDiscipline, includeCeilings])
   const planProject = useMemo(() => getPlanViewProject(project, planVisibleObjects), [project, planVisibleObjects])
   const surveyReferencePoints = useMemo<[number, number][]>(
     () => project.site_survey?.points.map(point => [point.x_mm, point.y_mm]) ?? [],

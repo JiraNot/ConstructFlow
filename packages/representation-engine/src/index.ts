@@ -25,6 +25,7 @@ import {
 } from '@constructflow/project-model'
 export * from './finishSurfaces.js'
 export { doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement } from './openingDetails.js'
+export { getPlanPickCandidates } from './planPicking.js'
 
 export type Vec3Mm = [number, number, number]
 
@@ -589,9 +590,18 @@ export function getElevationVisibleOpeningIds(
 /** Return the Smart Objects that belong on the project's active plan level. */
 export type PlanDiscipline = 'architecture' | 'framing' | 'roof' | 'all'
 
-export function getPlanVisibleObjects(project: ProjectDocument, discipline: PlanDiscipline = 'all'): SmartObject[] {
+export function getPlanVisibleObjects(project: ProjectDocument, discipline: PlanDiscipline = 'all', options: { includeCeilings?: boolean } = {}): SmartObject[] {
+  const objects = Object.values(project.objects).filter(object => {
+    if (discipline === 'architecture' && ['structure.beam', 'structure.foundation', 'structure.rebar_set', 'roof.system'].includes(object.object_type)) return false
+    // Reflected ceilings belong to RCP. Only expose them on a floor plan while
+    // explicitly authoring a ceiling or its opening, never as a default pick/snap.
+    if (discipline === 'architecture' && object.object_type === 'architecture.ceiling' && !options.includeCeilings) return false
+    if (discipline === 'roof' && ['structure.beam', 'structure.foundation', 'structure.rebar_set'].includes(object.object_type)) return false
+    if (discipline === 'framing' && !['structure.beam', 'structure.column', 'structure.foundation', 'structure.grid', 'roof.system'].includes(object.object_type)) return false
+    return true
+  })
   const activeLevel = project.levels.find(level => level.id === project.project.active_level_id)
-  if (!activeLevel) return Object.values(project.objects)
+  if (!activeLevel) return objects
   const activeIndex = activeLevel.storey_index
   // A raised ground floor can reference grade beams at the ground datum.
   // Prefer beams hosted on the selected floor, otherwise use the closest lower
@@ -607,10 +617,7 @@ export function getPlanVisibleObjects(project: ProjectDocument, discipline: Plan
   const levelRef = (object: SmartObject, role: string): string | undefined =>
     object.level_refs.find(reference => reference.role === role)?.level_id
 
-  return Object.values(project.objects).filter(object => {
-    if (discipline === 'architecture' && ['structure.beam', 'structure.foundation', 'structure.rebar_set', 'roof.system'].includes(object.object_type)) return false
-    if (discipline === 'roof' && ['structure.beam', 'structure.foundation', 'structure.rebar_set'].includes(object.object_type)) return false
-    if (discipline === 'framing' && !['structure.beam', 'structure.column', 'structure.foundation', 'structure.grid', 'roof.system'].includes(object.object_type)) return false
+  return objects.filter(object => {
     const data = moduleData(object)
     if (!data) return true
 

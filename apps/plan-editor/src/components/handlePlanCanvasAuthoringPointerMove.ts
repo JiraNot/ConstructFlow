@@ -62,7 +62,7 @@ export function handlePlanCanvasAuthoringPointerMove({
 
   const candidates = findCandidates(rawWorld)
   if (activeTool === 'select' && !draggingObject) setCandidates(candidates)
-  setHoveredId(candidates.includes(hoveredId ?? '') ? hoveredId : candidates[0] ?? null)
+  setHoveredId(candidates[0] ?? null)
 
   if (draggingObject) {
     const moved = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
