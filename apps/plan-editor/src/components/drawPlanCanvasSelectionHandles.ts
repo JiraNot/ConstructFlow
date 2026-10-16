@@ -52,9 +52,10 @@ export function drawPlanCanvasSelectionHandles(
         } else if (isWallObject(object) || isBeamObject(object)) {
           const start = data.start_point_mm as [number, number] | undefined, end = data.end_point_mm as [number, number] | undefined
           if (start && end) { points.push([start[0], start[1], 'linear'], [end[0], end[1], 'linear']) }
-        } else if (isGridObject(object) && !object.module_data.system_id) {
+        } else if (isGridObject(object)) {
           const [start, end] = gridLineEndpoints(object)
-          points.push([start[0], start[1], 'linear'], [end[0], end[1], 'linear'])
+          if (object.module_data.system_id) points.push([(start[0] + end[0]) / 2, (start[1] + end[1]) / 2, 'linear'])
+          else points.push([start[0], start[1], 'linear'], [end[0], end[1], 'linear'])
         } else if (object.object_type === 'architecture.room_separator') {
           const start = data.start_point_mm as [number, number], end = data.end_point_mm as [number, number]
           points.push([start[0], start[1], 'linear'], [end[0], end[1], 'linear'])

@@ -1201,13 +1201,18 @@ test('mouse and keyboard authoring creates wall, beam, hosted opening, and point
   await expect(page.locator('body')).toContainText('SPAN LENGTH')
 
   // Place a column with the mouse, then place another with Enter at the canvas cursor.
+  const storedColumnCount = async () => {
+    const json = await readStoredProjectJson(page)
+    return json ? Object.values(JSON.parse(json).objects).filter((object: any) => object.object_type === 'structure.column').length : 0
+  }
+  const initialColumnCount = await storedColumnCount()
   await clickTool(page, 'เสา')
   await clickCanvasFraction(page, 0.65, 0.72)
-  await expect(page.locator('body')).toContainText('structure.column')
+  await expect.poll(storedColumnCount).toBe(initialColumnCount + 1)
   await moveToCanvasFraction(page, 0.78, 0.72)
   await canvasElement.focus()
   await page.keyboard.press('Enter')
-  await expect(page.locator('body')).toContainText('structure.column')
+  await expect.poll(storedColumnCount).toBe(initialColumnCount + 2)
 
   // Find the newly drawn wall through the live hosted-snap feedback, then place a door.
   await clickTool(page, 'ประตู')

@@ -341,3 +341,13 @@ High-impact destructive commands should require explicit confirmation from the u
 ## Versioning
 
 Breaking input/result behavior creates a new command version. Old persisted project state must never require replaying historical commands to remain readable; current semantic state is persisted independently.
+
+## Plan drafting dimensions and grid dragging (2026-10-16)
+
+- `SavePlanDimension { dimension }` creates or replaces one aligned drafting dimension by persistent UUID. A dimension contains `level_id`, mandatory `created_phase`, `start_mm`, `end_mm` and signed normal `offset_mm`. Its displayed length is calculated from the endpoints, never saved as editable text. Coordinates are canonical millimeters. The command validates the UUID, phase, existing level and finite, nonzero geometry.
+- `DeletePlanDimension { dimension_id }` deletes an existing annotation. Both commands use the shared transaction/history path. Dimensions persist in optional `drawing_settings.plan_dimensions`, with no project schema version bump. Legacy projects omit this field.
+- `ModifyGrid { object_id, position_mm }` now moves an individual grid-system member along its own axis. It preserves member UUIDs and label order, reconciles system origin/spacing/positions on all members, and rejects crossing or a gap below 1 mm. Other system edits continue through `UpdateGridSystem`.
+
+Plan dimensions are user-authored point references. Snapping an endpoint to model geometry copies that coordinate; it does not create a persistent constraint to that object. Moving the dimension's endpoint recalculates its length. A-02/A-03 vector sheets include dimensions scoped to their level and visible phase, retaining the user-placed offset.
+
+Editor workflow: **บอกระยะ (Shift+M)** → two reference points → place the dimension line. **M** remains the temporary tape measure. In Select, drag the dimension line to change its offset, drag its endpoint grips to change its references, or use Delete / **ลบระยะ**. Escape cancels an uncommitted gesture. See [acceptance evidence](../GRID-SNAP-DIMENSIONS-2026-10-16.md).

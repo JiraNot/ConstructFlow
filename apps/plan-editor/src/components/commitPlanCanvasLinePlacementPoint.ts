@@ -61,14 +61,8 @@ export function commitPlanCanvasLinePlacementPoint({
   onCommitWall,
 }: CommitPlanCanvasLinePlacementPointOptions) {
   if (activeTool === 'beam') {
-    const clickedColumn = Object.values(planProject.objects).find(object => {
-      if (!isColumnObject(object)) return false
-      const [cx, cy] = object.module_data.location_mm
-      const [width, depth] = object.module_data.section_mm
-      const tolerance = Math.max(width, depth, 400)
-      return Math.abs(snap.point_mm[0] - cx) <= tolerance && Math.abs(snap.point_mm[1] - cy) <= tolerance
-    })
-    const columnId = clickedColumn?.id ?? (snap.kind === 'column_center' ? snap.target_id : undefined)
+    const support = snap.target_id ? planProject.objects[snap.target_id] : undefined
+    const columnId = snap.kind === 'column_center' && support && isColumnObject(support) ? support.id : undefined
 
     if (!beamStartNode) {
       setBeamStartNode({ point_mm: snap.point_mm, columnId, reference: findNearestLinearReference(planProject, snap.point_mm) ?? undefined })

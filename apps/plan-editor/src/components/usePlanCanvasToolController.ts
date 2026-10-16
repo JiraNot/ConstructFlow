@@ -52,6 +52,7 @@ export function usePlanCanvasToolController({
     roomSeparatorStart: placement.roomSeparatorStart,
     slabBoundary: placement.slabBoundary,
     tapeMeasure: placement.tapeMeasure,
+    dimensionPoints: placement.dimensionPoints,
     calibrationP1: placement.calibrationP1,
     dimensionInputX: placement.dimensionInputX,
     dimensionInputY: placement.dimensionInputY,

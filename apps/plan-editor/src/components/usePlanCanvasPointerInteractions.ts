@@ -89,6 +89,8 @@ export function usePlanCanvasPointerInteractions({
     activeDoorTypeMark, activeWindowTypeMark, draggingObjectId: draggingObject?.id, gridCopySourceId,
     dimensionReferenceMode,
     lineState: {
+      dimensionPoints: placement.dimensionPoints,
+      tapeMeasure: placement.tapeMeasure,
       beamStartNode: placement.beamStartNode,
       wallStartNode: placement.wallStartNode,
       stairStartPoint: placement.stairStartPoint,
@@ -149,6 +151,7 @@ export function usePlanCanvasPointerInteractions({
           onCommitSurfaceVoid: callbacks.onCommitSurfaceVoid, onCommitGrid: callbacks.onCommitGrid,
           onCommitGridSystem: callbacks.onCommitGridSystem, onStartCalibrationModal: callbacks.onStartCalibrationModal,
           onCommitStair: callbacks.onCommitStair, onActivateTool: callbacks.onActivateTool,
+          onCommitManipulation: callbacks.onCommitManipulation, onManipulationRejected: callbacks.onManipulationRejected,
         },
         operations: { snapPlanWallHost, applyOpeningDistance, resolveReferencePath },
         interaction: { eraseActiveRef, erasedIdsRef, findCandidates },

@@ -1,4 +1,5 @@
 export type Vec2 = [number, number];
+export { alignedDimensionGeometry, alignedDimensionOffset } from './alignedDimension.js';
 export type Vec3 = [number, number, number];
 export type Triangle = [Vec3, Vec3, Vec3];
 export type SegmentPlacementReference = 'centerline' | 'left_face' | 'right_face';

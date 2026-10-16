@@ -44,7 +44,7 @@ export function createPlanCanvasPlacementCommitHandlers(options: CreatePlanCanva
 
   const commitPlacementAtCursor = () => {
     const canvas = canvasRef.current
-    if (!canvas || !activeSnap || (!supportsPlacementDimensions && activeTool !== 'measure' && activeTool !== 'calibrate')) return
+    if (!canvas || !activeSnap || (!supportsPlacementDimensions && !['measure', 'dimension', 'calibrate'].includes(activeTool))) return
     const rect = canvas.getBoundingClientRect()
     const [x, y] = worldToScreen(activeSnap.point_mm, viewport)
     canvas.focus({ preventScroll: true })

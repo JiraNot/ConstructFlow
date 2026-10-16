@@ -693,6 +693,14 @@ export function drawDirectManipulationGhost(
           drawRing(ring)
         }
       }
+    } else if (isGridObject(object)) {
+      const grid = object.module_data
+      const before = project.objects[id]
+      if (before && isGridObject(before) && before.module_data.position_mm === grid.position_mm && JSON.stringify(before.module_data.start_point_mm) === JSON.stringify(grid.start_point_mm) && JSON.stringify(before.module_data.end_point_mm) === JSON.stringify(grid.end_point_mm)) continue
+      const start = grid.start_point_mm ?? (grid.orientation === 'vertical' ? [grid.position_mm, grid.extent_mm[0]] : [grid.extent_mm[0], grid.position_mm])
+      const end = grid.end_point_mm ?? (grid.orientation === 'vertical' ? [grid.position_mm, grid.extent_mm[1]] : [grid.extent_mm[1], grid.position_mm])
+      ctx.strokeStyle = accent; ctx.lineWidth = 2.5
+      drawRing([start, end], false, false)
     } else if (object.object_type === 'architecture.stair') {
       const stair = decodeStair(data, candidate)
       const levelElevation = candidate.levels.find(level => level.id === stair.level_id)?.elevation_mm ?? stair.start_point_mm[2]
@@ -2646,7 +2654,7 @@ function drawSnapMarker(
     ctx.strokeStyle = '#22c55e'
     ctx.lineWidth = 2
     ctx.strokeRect(x - 5, y - 5, 10, 10)
-  } else if (snap.kind === 'column_face' || snap.kind === 'wall_face' || snap.kind === 'beam_edge' || snap.kind === 'wall_centerline' || snap.kind === 'beam_axis') {
+  } else if (snap.kind === 'column_face' || snap.kind === 'wall_face' || snap.kind === 'beam_edge' || snap.kind === 'object_edge' || snap.kind === 'wall_centerline' || snap.kind === 'beam_axis') {
     ctx.strokeStyle = '#06b6d4'
     ctx.lineWidth = 2
     ctx.beginPath()
@@ -2679,11 +2687,18 @@ function drawSnapMarker(
     ctx.stroke()
   }
 
-  // Tooltip description
-  ctx.fillStyle = '#f8fafc'
-  ctx.font = '10px monospace'
+  // Keep the label legible on the light plan background.
+  if (snap.kind !== 'free') {
+  ctx.font = '11px system-ui, sans-serif'
   ctx.textAlign = 'left'
+  const labelWidth = ctx.measureText(snap.description).width
+  ctx.fillStyle = 'rgba(255,255,255,.96)'
+  ctx.fillRect(x + 7, y - 24, labelWidth + 8, 19)
+  ctx.strokeStyle = '#bae6fd'; ctx.lineWidth = 1
+  ctx.strokeRect(x + 7, y - 24, labelWidth + 8, 19)
+  ctx.fillStyle = '#075985'
   ctx.fillText(snap.description, x + 10, y - 10)
+  }
 
   ctx.restore()
 }

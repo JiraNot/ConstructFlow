@@ -82,6 +82,12 @@ export function usePlanCanvasSurfaceController({
     contextMenu,
     containerSize,
     overlays,
+    dimensions: {
+      project: props.project, planProject, viewport: viewport.viewport, displayUnit: props.displayUnit,
+      activeTool: props.activeTool, points: placement.dimensionPoints, pointer: placement.activeSnap?.point_mm ?? null,
+      snapModes: props.preferences.snapModes, onCommit: props.onCommitManipulation, onPreview: props.onPreviewManipulation,
+      onRejected: props.onManipulationRejected, onClearObjectSelection: () => { props.onSelectionChange?.([], null); props.onSelectObject(null) },
+    },
     viewport: viewport.viewport,
     setViewport: viewport.setViewport,
     fitView: viewport.fitView,

@@ -4,6 +4,8 @@ const spanTools = new Set(['roomSeparator', 'pipe', 'cabinet', 'moulding'])
 export function resolvePlanCanvasLineSnap(snap, pointerPoint, shiftKey, tool, state, constrainLineSnap) {
   let start
   let reference
+  if (tool === 'dimension' && state.dimensionPoints?.length === 1) start = state.dimensionPoints[0]
+  if (tool === 'measure' && state.tapeMeasure && !state.tapeMeasure.complete) start = state.tapeMeasure.start
   if (tool === 'beam' && state.beamStartNode) {
     start = state.beamStartNode.point_mm
     reference = state.beamStartNode.reference

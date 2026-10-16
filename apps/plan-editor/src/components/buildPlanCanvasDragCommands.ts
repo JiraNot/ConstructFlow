@@ -1,4 +1,4 @@
-import { ProjectDocument, isColumnObject, type CabinetModuleData, type PipeRouteModuleData } from '@constructflow/project-model'
+import { ProjectDocument, isColumnObject, isGridObject, type CabinetModuleData, type PipeRouteModuleData } from '@constructflow/project-model'
 import { projectPointToWallOffsetMm } from '@constructflow/architecture-engine'
 import { movePipeRouteEndpoint, movePipeRouteNode } from '@constructflow/drainage-engine'
 import { snapOpeningOffsetBimAware, resizeOpeningFromEdge, type SnapResult } from '@constructflow/snapping-engine'
@@ -22,6 +22,17 @@ export function buildPlanCanvasDragCommands({ planProject, drag, rawWorld, ctrlK
     : snapPlanPoint(rawWorld, 16, drag.id)
   let point = ['slab-edge', 'slab-slope', 'roof-ridge', 'roof-seam', 'stair-landing', 'stair-first-flight', 'stair-second-flight'].includes(drag.kind) ? rawWorld : snap.point_mm
   const options: Record<string, unknown> = {}
+
+  const grid = planProject.objects[drag.id]
+  if (drag.kind === 'grid' && grid && isGridObject(grid) && grid.module_data.system_id) {
+    const data = grid.module_data
+    const axis = data.orientation === 'vertical' ? 0 : 1
+    const anchor: [number, number] = [...rawWorld]
+    anchor[axis] += data.position_mm - drag.startWorldMm[axis]
+    const target = ctrlKey ? anchor : snapPlanPoint(anchor, 16, drag.id).point_mm
+    point = [...drag.startWorldMm]
+    point[axis] += target[axis] - data.position_mm
+  }
 
   if (drag.kind === 'beam-endpoint') {
     const target = snap.target_id ? planProject.objects[snap.target_id] : undefined

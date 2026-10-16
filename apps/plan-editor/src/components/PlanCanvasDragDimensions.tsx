@@ -1,7 +1,7 @@
 import React from 'react'
 
 export type DragDimensionField = 'x' | 'y' | 'width' | 'height' | 'length' | 'offset'
-export type DragDimensionMode = 'move' | 'rectangle' | 'opening-width' | 'line-length' | 'stair-width' | 'stair-run' | 'stair-landing' | 'stair-first-flight' | 'stair-second-flight' | 'edge-offset'
+export type DragDimensionMode = 'move' | 'axis-x' | 'axis-y' | 'rectangle' | 'opening-width' | 'line-length' | 'stair-width' | 'stair-run' | 'stair-landing' | 'stair-first-flight' | 'stair-second-flight' | 'edge-offset'
 
 interface PlanCanvasDragDimensionsProps {
   mode: DragDimensionMode
@@ -17,7 +17,9 @@ interface PlanCanvasDragDimensionsProps {
 export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> = ({
   mode, displayUnit, values, style, readout, onChange, onCommit, onCancel,
 }) => {
-  const fields: Array<{ key: DragDimensionField; shortLabel: string; accessibleLabel: string }> = mode === 'rectangle'
+  const fields: Array<{ key: DragDimensionField; shortLabel: string; accessibleLabel: string }> = mode === 'axis-x' || mode === 'axis-y'
+    ? [{ key: mode === 'axis-x' ? 'x' : 'y', shortLabel: mode === 'axis-x' ? 'ΔX' : 'ΔY', accessibleLabel: `ระยะย้ายแกน ${mode === 'axis-x' ? 'X' : 'Y'} (${displayUnit})` }]
+    : mode === 'rectangle'
     ? [
         { key: 'width', shortLabel: 'W', accessibleLabel: `ขนาดเป้าหมาย W (${displayUnit})` },
         { key: 'height', shortLabel: 'H', accessibleLabel: `ขนาดเป้าหมาย H (${displayUnit})` },

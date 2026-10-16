@@ -7,6 +7,7 @@ export type SnapKind =
   | 'column_center' | 'column_corner' | 'column_face'
   | 'beam_endpoint' | 'beam_midpoint' | 'beam_axis' | 'beam_edge'
   | 'wall_endpoint' | 'wall_corner' | 'wall_midpoint' | 'wall_centerline' | 'wall_face'
+  | 'object_endpoint' | 'object_midpoint' | 'object_edge'
   | 'intersection' | 'parallel' | 'perpendicular' | 'free'
 
 export type SnapMode = 'grid' | 'center' | 'endpoint' | 'midpoint' | 'face' | 'centerline' | 'intersection'
@@ -19,12 +20,32 @@ export interface SnapResult {
   description: string
 }
 
+/** Screen-space inference from the last drawing point without stealing exact object snaps. */
+export function snapToDrawingAxis(snap: SnapResult, pointer: [number, number], origin: [number, number], viewport: SnapViewport, tolerancePx = 8): SnapResult {
+  if (!['free', 'grid_line', 'wall_centerline', 'beam_axis', 'wall_face', 'beam_edge', 'column_face', 'object_edge'].includes(snap.kind)) return snap
+  const tolerance = tolerancePx / Math.max(viewport.zoom, 0.0001)
+  const dx = pointer[0] - origin[0], dy = pointer[1] - origin[1]
+  if (Math.hypot(dx, dy) < tolerance * 2) return snap
+  if (Math.abs(dy) <= tolerance && Math.abs(dx) >= Math.abs(dy)) return { point_mm: [snap.point_mm[0], origin[1]], kind: 'parallel', description: 'แนวนอนจากจุดเริ่ม' }
+  if (Math.abs(dx) <= tolerance) return { point_mm: [origin[0], snap.point_mm[1]], kind: 'perpendicular', description: 'แนวตั้งจากจุดเริ่ม' }
+  return snap
+}
+
+/** A beam attaches to the column actually acquired by snapping, using its support datum. */
+export function resolveBeamSupportSnap(snap: SnapResult, project: ProjectDocument): SnapResult {
+  const support = snap.target_id ? project.objects[snap.target_id] : undefined
+  return support && isColumnObject(support) ? {
+    point_mm: [support.module_data.location_mm[0], support.module_data.location_mm[1]],
+    kind: 'column_center', target_id: support.id, description: `กึ่งกลางเสา ${support.module_data.mark} · จุดรองรับคาน`,
+  } : snap
+}
+
 interface SnapCandidate extends SnapResult {
   distance_sq: number
   priority: number
 }
 type Point = [number, number]
-interface Segment { start: Point; end: Point; object_id: string; source: 'beam' | 'wall' }
+interface Segment { start: Point; end: Point; object_id: string; source: 'beam' | 'wall' | 'object' }
 export interface LinearReference {
   target_id: string
   description: string
@@ -141,7 +162,7 @@ function snapModeFor(kind: SnapKind): SnapMode | null {
   if (kind === 'column_center') return 'center'
   if (kind.includes('endpoint') || kind === 'column_corner' || kind === 'wall_corner') return 'endpoint'
   if (kind.includes('midpoint')) return 'midpoint'
-  if (kind === 'column_face' || kind === 'beam_edge' || kind === 'wall_face') return 'face'
+  if (kind === 'column_face' || kind === 'beam_edge' || kind === 'wall_face' || kind === 'object_edge') return 'face'
   if (kind === 'wall_centerline' || kind === 'beam_axis') return 'centerline'
   if (kind === 'intersection') return 'intersection'
   return null
@@ -152,7 +173,31 @@ type Bounds2d = { minX: number; minY: number; maxX: number; maxY: number }
 const SNAP_INDEX_CELL_MM = 2000
 const MAX_SNAP_INDEX_CELLS_PER_OBJECT = 4096
 
-function snapBounds(object: ProjectDocument['objects'][string]): Bounds2d | null {
+/** Shared snap geometry for polygonal and routed model families. */
+function objectPaths(object: ProjectDocument['objects'][string], project?: ProjectDocument): { points: Point[]; closed: boolean }[] {
+  const data = object.module_data as unknown as Record<string, unknown>
+  if (object.object_type === 'door_window.door' || object.object_type === 'door_window.window') {
+    const host = project?.objects[String(data.wall_id)]
+    if (!host || !isWallObject(host)) return []
+    const start = host.module_data.start_point_mm, end = host.module_data.end_point_mm
+    const length = Math.hypot(end[0] - start[0], end[1] - start[1])
+    if (length < 1) return []
+    const pointAt = (offset: number): Point => [start[0] + (end[0] - start[0]) * offset / length, start[1] + (end[1] - start[1]) * offset / length]
+    return [{ points: [pointAt(Number(data.offset_along_wall_mm) - Number(data.width_mm) / 2), pointAt(Number(data.offset_along_wall_mm) + Number(data.width_mm) / 2)], closed: false }]
+  }
+  if (object.object_type === 'structure.foundation') {
+    const center = data.center_mm as number[], size = data.size_mm as number[]
+    return center && size ? [{ points: rectangleCorners([center[0], center[1]], size[0], size[1], Number(data.rotation_deg ?? 0)), closed: true }] : []
+  }
+  const boundary = data.boundary_mm as Point[] | undefined
+  if (boundary?.length) return [{ points: boundary, closed: true }, ...((data.voids_mm as Point[][] | undefined) ?? []).map(points => ({ points, closed: true }))]
+  const path = (data.nodes_mm ?? data.path_mm) as number[][] | undefined
+  if (path?.length) return [{ points: path.map(point => [point[0], point[1]]), closed: data.closed === true }]
+  if (object.object_type === 'architecture.room_separator') return [{ points: [data.start_point_mm, data.end_point_mm] as Point[], closed: false }]
+  return []
+}
+
+function snapBounds(object: ProjectDocument['objects'][string], project: ProjectDocument): Bounds2d | null {
   if (isGridObject(object)) return null
   if (isColumnObject(object)) {
     const [cx, cy] = object.module_data.location_mm
@@ -175,7 +220,8 @@ function snapBounds(object: ProjectDocument['objects'][string]): Bounds2d | null
       maxY: Math.max(sy, ey) + halfWidth,
     }
   }
-  return null
+  const points = objectPaths(object, project).flatMap(path => path.points)
+  return points.length ? { minX: Math.min(...points.map(p => p[0])), minY: Math.min(...points.map(p => p[1])), maxX: Math.max(...points.map(p => p[0])), maxY: Math.max(...points.map(p => p[1])) } : null
 }
 
 /**
@@ -195,7 +241,7 @@ export class SnapSpatialIndex {
         this.globalIds.add(object.id)
         continue
       }
-      const bounds = snapBounds(object)
+      const bounds = snapBounds(object, project)
       if (!bounds) continue
       this.boundsById.set(object.id, bounds)
       const minCellX = Math.floor(bounds.minX / SNAP_INDEX_CELL_MM)
@@ -278,6 +324,7 @@ export function snapPoint(
     : Object.values(project.objects)
   for (const object of objects) {
     if (isGridObject(object)) {
+      if (object.id === excludedObjectId) continue
       const { tag, orientation, position_mm } = object.module_data
       if (object.module_data.start_point_mm && object.module_data.end_point_mm) {
         angledGrids.push({ id: object.id, tag, start: object.module_data.start_point_mm, end: object.module_data.end_point_mm })
@@ -338,6 +385,17 @@ export function snapPoint(
         offer(projectToSegment(rawWorldPoint_mm, faceStart, faceEnd).point, 'wall_face', object.id, `ผิวผนัง ${object.module_data.mark || ''}`.trim(), 1)
       }
       segments.push({ start, end, object_id: object.id, source: 'wall' })
+    } else {
+      for (const path of objectPaths(object, project)) {
+        path.points.forEach(point => offer(point, 'object_endpoint', object.id, 'จุดปลาย / มุมวัตถุ', 0))
+        const edgeCount = path.closed ? path.points.length : path.points.length - 1
+        for (let i = 0; i < edgeCount; i++) {
+          const start = path.points[i], end = path.points[(i + 1) % path.points.length]
+          offer(midpoint(start, end), 'object_midpoint', object.id, 'กึ่งกลางขอบวัตถุ', 1)
+          offer(projectToSegment(rawWorldPoint_mm, start, end).point, 'object_edge', object.id, 'ขอบวัตถุ', 2)
+          segments.push({ start, end, object_id: object.id, source: 'object' })
+        }
+      }
     }
   }
 
@@ -351,6 +409,29 @@ export function snapPoint(
     offer(projected.point, 'grid_line', grid.id, `Grid ${grid.tag}`, 2)
     offer(grid.start, 'grid_line', grid.id, `ปลายเส้นกริด ${grid.tag}`, 1)
     offer(grid.end, 'grid_line', grid.id, `ปลายเส้นกริด ${grid.tag}`, 1)
+  }
+
+  // Explicit grid lines (including axis-aligned lines drawn by hand) must have
+  // the same intersection behavior as generated grid systems.
+  const gridSegments = [
+    ...angledGrids,
+    ...verticalGrids.map(grid => ({ ...grid, start: [grid.pos, rawWorldPoint_mm[1] - toleranceMm] as Point, end: [grid.pos, rawWorldPoint_mm[1] + toleranceMm] as Point })),
+    ...horizontalGrids.map(grid => ({ ...grid, start: [rawWorldPoint_mm[0] - toleranceMm, grid.pos] as Point, end: [rawWorldPoint_mm[0] + toleranceMm, grid.pos] as Point })),
+  ]
+  const explicitGridIds = new Set(angledGrids.map(grid => grid.id))
+  for (let i = 0; i < gridSegments.length; i++) {
+    const a = gridSegments[i]
+    for (let j = i + 1; j < gridSegments.length; j++) {
+      const b = gridSegments[j]
+      if (!explicitGridIds.has(a.id) && !explicitGridIds.has(b.id)) continue
+      const point = closestSegmentIntersection({ ...a, object_id: a.id, source: 'object' }, { ...b, object_id: b.id, source: 'object' })
+      if (point) offer(point, 'grid_intersection', [a.id, b.id].sort().join(':'), `จุดตัดกริด ${a.tag} / ${b.tag}`, 0)
+    }
+    for (const segment of segments) {
+      if (segment.object_id === excludedObjectId) continue
+      const point = closestSegmentIntersection({ ...a, object_id: a.id, source: 'object' }, segment)
+      if (point) offer(point, 'intersection', [a.id, segment.object_id].sort().join(':'), `จุดตัดกริด ${a.tag} กับวัตถุ`, 0)
+    }
   }
 
   for (let i = 0; i < segments.length; i++) {

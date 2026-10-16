@@ -6,6 +6,7 @@ import type { ViewportState } from '../viewport/viewportTransform.js'
 import { zoomAtScreenPoint } from '../viewport/viewportTransform.js'
 import { PlanCanvasInteractionOverlays } from './PlanCanvasInteractionOverlays.js'
 import { PlanCanvasObjectContextMenu } from './PlanCanvasObjectContextMenu.js'
+import { PlanDimensionLayer } from './PlanDimensionLayer.js'
 import type { ToolType } from './Toolbar.js'
 
 type CanvasEvents = Pick<ComponentProps<'canvas'>,
@@ -21,6 +22,7 @@ interface PlanCanvasSurfaceProps {
   contextMenu: (Omit<ComponentProps<typeof PlanCanvasObjectContextMenu>, 'containerSize'> & { object: SmartObject }) | null
   containerSize: { width: number; height: number }
   overlays: ComponentProps<typeof PlanCanvasInteractionOverlays>
+  dimensions: ComponentProps<typeof PlanDimensionLayer>
   viewport: ViewportState
   setViewport: Dispatch<SetStateAction<ViewportState>>
   fitView: () => void
@@ -37,6 +39,7 @@ export function PlanCanvasSurface({
   contextMenu,
   containerSize,
   overlays,
+  dimensions,
   viewport,
   setViewport,
   fitView,
@@ -67,6 +70,7 @@ export function PlanCanvasSurface({
       {...canvasEvents}
       style={{ position: 'absolute', inset: 0, display: 'block', width: '100%', height: '100%', touchAction: 'none' }}
     />
+    <PlanDimensionLayer {...dimensions} />
     {contextMenu && <PlanCanvasObjectContextMenu {...contextMenu} containerSize={containerSize} />}
     <PlanCanvasInteractionOverlays {...overlays} />
     {selectedSurveyPoint && <aside aria-label="จุดสำรวจที่เลือก" role="region" style={{ position: 'absolute', zIndex: 20, right: 12, top: 12, width: 270, maxWidth: 'calc(100% - 24px)', padding: 12, background: 'rgba(255,255,255,.97)', border: `1px solid ${selectedSurveyPoint.source_status === 'measured' ? '#0284c7' : '#d97706'}`, borderRadius: 6, boxShadow: '0 6px 20px rgba(15,23,42,.16)', color: '#0f172a', fontSize: 12 }}>

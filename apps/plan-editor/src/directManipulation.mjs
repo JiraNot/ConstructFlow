@@ -73,6 +73,7 @@ function moveSingleObject(project, object, dx, dy) {
     }
     case 'structure.grid':
     case 'reference.grid': {
+      if (data.system_id) return input('ModifyGrid', { object_id: object.id, position_mm: Number(data.position_mm) + (data.orientation === 'vertical' ? dx : dy) })
       if (data.start_point_mm && data.end_point_mm) {
         const a = point2(data.start_point_mm), b = point2(data.end_point_mm)
         return input('ModifyGrid', { object_id: object.id, start_point_mm: [a[0] + dx, a[1] + dy], end_point_mm: [b[0] + dx, b[1] + dy] })
@@ -332,6 +333,7 @@ export function buildDirectManipulationCommands(project, gesture, point, options
     if (Math.hypot(...delta) > 0.1) command = input('MoveWall', { object_id: object.id, delta_mm: delta })
   } else if (gesture.kind === 'grid') {
     const delta = [point[0] - gesture.startWorldMm[0], point[1] - gesture.startWorldMm[1]]
+    if (data.system_id) return [input('ModifyGrid', { object_id: object.id, position_mm: Number(data.position_mm) + (data.orientation === 'vertical' ? delta[0] : delta[1]) })]
     const start = point2(gesture.gridStartMm), end = point2(gesture.gridEndMm)
     command = input('ModifyGrid', { object_id: object.id, start_point_mm: [start[0] + delta[0], start[1] + delta[1]], end_point_mm: [end[0] + delta[0], end[1] + delta[1]] })
   } else if (gesture.kind === 'opening' || gesture.kind === 'opening-center') {

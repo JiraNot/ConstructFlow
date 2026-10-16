@@ -43,7 +43,7 @@ export const GridPropertiesSection: React.FC<GridPropertiesSectionProps> = ({ pr
                 const value = event.target.value.trim(); if (value) onUpdateGridSystem(grdObj.module_data.system_id!, { first_tag: value })
               }} style={verticalSelectStyle} />
             </label>
-            <small style={{ fontSize: 10, color: '#64748b' }}>แก้ชุดระยะและป้ายได้จากเส้นใดก็ได้ในระบบ</small>
+            <small style={{ fontSize: 10, color: '#64748b' }}>ลากเส้นบนแปลนเพื่อปรับช่วงระยะ · ไม่ข้ามเส้นข้างเคียง · Ctrl วางอิสระ · Esc ยกเลิก</small>
           </section>
           })()}
           {!grdObj.module_data.system_id && (() => {

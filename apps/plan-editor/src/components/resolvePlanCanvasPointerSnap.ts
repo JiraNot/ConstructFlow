@@ -1,5 +1,6 @@
 import type { ProjectDocument } from '@constructflow/project-model'
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
+import { resolveBeamSupportSnap } from '@constructflow/snapping-engine'
 import type { ToolType } from './Toolbar.js'
 import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import { resolvePlanCanvasLineSnap } from '../app/placementLineSnap.mjs'
@@ -61,7 +62,8 @@ export function resolvePlanCanvasPointerSnap({
   let snap: SnapResult = ctrlKey
     ? { point_mm: rawWorld, kind: 'free', description: 'Free / อิสระ (Ctrl)' }
     : snapPlanPoint(rawWorld, 16, draggingObjectId)
-  snap = resolvePlanCanvasLineSnap(snap, rawWorld, shiftKey, activeTool, lineState, resolveLineSnap)
+  if (activeTool === 'beam' && !ctrlKey) snap = resolveBeamSupportSnap(snap, planProject)
+  if (!ctrlKey || shiftKey) snap = resolvePlanCanvasLineSnap(snap, rawWorld, shiftKey, activeTool, lineState, resolveLineSnap)
 
   const copySource = activeTool === 'gridCopy' && gridCopySourceId ? planProject.objects[gridCopySourceId] : undefined
   const point = activeTool === 'gridCopy' && copySource && isGridObject(copySource)

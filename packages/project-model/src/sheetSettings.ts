@@ -1,4 +1,5 @@
 import { validateOpeningPlanSymbolLines, type OpeningPlanSymbolLine } from './openingPlanSymbol.js'
+import { validatePlanDimension, type PlanDimension } from './planDimension.js'
 
 /** Sheet-specific cleanup/redrafting for one model-hosted opening. */
 export interface OpeningViewOverride {
@@ -54,6 +55,7 @@ export interface SheetLayoutTemplate {
 }
 export interface DrawingSettings {
   viewports: Record<string, SavedSheetViewport>;
+  plan_dimensions?: PlanDimension[];
   layout_templates?: SheetLayoutTemplate[];
   revision?: string;
   author?: string;
@@ -64,6 +66,15 @@ export function validateDrawingSettings(
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Invalid drawing settings");
   const settings = value as DrawingSettings;
+  if (settings.plan_dimensions !== undefined) {
+    if (!Array.isArray(settings.plan_dimensions) || settings.plan_dimensions.length > 10000) throw new Error('Invalid plan dimensions')
+    const ids = new Set<string>()
+    for (const dimension of settings.plan_dimensions) {
+      validatePlanDimension(dimension)
+      if (ids.has(dimension.id)) throw new Error('Duplicate plan dimension UUID')
+      ids.add(dimension.id)
+    }
+  }
   if (
     !settings.viewports ||
     typeof settings.viewports !== "object" ||

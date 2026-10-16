@@ -182,6 +182,7 @@ export function validateProjectV2(project: ProjectDocument): void {
   if (!project.objects || typeof project.objects !== 'object' || Array.isArray(project.objects)) throw new Error('Invalid project format: objects map required')
   validateConstructionPayloads(project)
   if(project.drawing_settings!==undefined)validateDrawingSettings(project.drawing_settings)
+  if (project.drawing_settings?.plan_dimensions?.some(dimension => !project.levels.some(level => level.id === dimension.level_id))) throw new Error('Invalid project format: plan dimension references a missing level')
   if (project.view_settings !== undefined) {
     const settings = project.view_settings as unknown
     if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new Error('Invalid project format: view_settings must be an object')

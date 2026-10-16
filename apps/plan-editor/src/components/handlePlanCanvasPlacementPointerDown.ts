@@ -12,6 +12,7 @@ import { commitPlanCanvasConnectedPlacementPoint, commitPlanCanvasGridPoint, com
 import { commitPlanCanvasPolygonPoint } from './commitPlanCanvasPolygonPoint.mjs'
 import type { usePlanCanvasPlacementSession } from './usePlanCanvasPlacementSession.js'
 import { stairFromRun } from '@constructflow/architecture-engine'
+import { alignedDimensionOffset } from '@constructflow/geometry-kernel'
 
 type Point = [number, number]
 type PlacementSession = ReturnType<typeof usePlanCanvasPlacementSession>
@@ -20,7 +21,7 @@ type PlacementCallbacks = Pick<PlanCanvasProps,
   | 'onSelectionChange' | 'onSelectObject' | 'onCommitBeam' | 'onCommitWall' | 'onCommitRoomSeparator'
   | 'onCommitPipeRoute' | 'onCommitCabinet' | 'onCommitMoulding' | 'onCommitSlab' | 'onCommitArchitecturalFloor'
   | 'onCommitCeiling' | 'onCommitRoof' | 'onCommitSurfaceVoid' | 'onCommitGrid' | 'onCommitGridSystem'
-  | 'onStartCalibrationModal' | 'onCommitStair' | 'onActivateTool'
+  | 'onStartCalibrationModal' | 'onCommitStair' | 'onActivateTool' | 'onCommitManipulation' | 'onManipulationRejected'
 >
 
 interface HandlePlanCanvasPlacementPointerDownOptions {
@@ -120,6 +121,19 @@ export function handlePlanCanvasPlacementPointerDown({
       xFirstTag: gridXFirstTag, yFirstTag: gridYFirstTag, setError: setGridSystemError,
       onCommit: onCommitGridSystem, clearDimensionOverrides,
     })
+  } else if (activeTool === 'dimension') {
+    const points = placement.dimensionPoints
+    if (points.length === 0) placement.setDimensionPoints([snap.point_mm])
+    else if (points.length === 1) {
+      if (Math.hypot(snap.point_mm[0] - points[0][0], snap.point_mm[1] - points[0][1]) >= 1) placement.setDimensionPoints([...points, snap.point_mm])
+    } else {
+      const result = callbacks.onCommitManipulation([{ name: 'SavePlanDimension', input: { dimension: {
+        id: crypto.randomUUID(), level_id: project.project.active_level_id, created_phase: project.project.active_phase,
+        start_mm: points[0], end_mm: points[1], offset_mm: alignedDimensionOffset(points[0], points[1], snap.point_mm),
+      } } }])
+      if (result.status === 'success') placement.setDimensionPoints([])
+      else callbacks.onManipulationRejected?.(result.errors ?? ['บันทึกเส้นบอกระยะไม่สำเร็จ'])
+    }
   } else if (activeTool === 'measure') {
     if (!tapeMeasure || tapeMeasure.complete) setTapeMeasure({ start: snap.point_mm, end: snap.point_mm, complete: false })
     else setTapeMeasure({ ...tapeMeasure, end: snap.point_mm, complete: true })

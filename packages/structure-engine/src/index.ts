@@ -511,7 +511,16 @@ export function executeStructureCommand(context: CommandHandlerContext): Command
       const changes = input as unknown as ModifyGridInput
       const target = updated.objects[changes.object_id]
       if (!target || !isGridObject(target)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Grid UUID ${changes.object_id} not found`] }, updatedProject: project }
-      if (target.module_data.system_id) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Edit grid-system members through the Grid Line System properties'] }, updatedProject: project }
+      if (target.module_data.system_id) {
+        if (!Number.isFinite(changes.position_mm) || Object.keys(changes).some(key => !['object_id', 'position_mm'].includes(key))) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Grid-system members can move along their axis; edit other settings through system properties'] }, updatedProject: project }
+        const members = Object.values(updated.objects).filter(isGridObject).filter(member => member.module_data.system_id === target.module_data.system_id).sort((a, b) => (a.module_data.system_index ?? 0) - (b.module_data.system_index ?? 0))
+        const positions = members.map(member => member.id === target.id ? changes.position_mm! : member.module_data.position_mm)
+        if (positions.some((position, index) => index > 0 && position - positions[index - 1] < 1)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['เส้นกริดต้องห่างกันอย่างน้อย 1 mm และไม่ข้ามเส้นข้างเคียง'] }, updatedProject: project }
+        for (const [index, member] of members.entries()) updated.objects[member.id] = {
+          ...member, updated_at: now, module_data: { ...member.module_data, position_mm: positions[index], system_positions_mm: [...positions], system_origin_mm: positions[0], system_spacing_mm: positions.length > 1 ? positions[1] - positions[0] : member.module_data.system_spacing_mm },
+        }
+        return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: members.map(member => member.id), updated_object_ids: members.map(member => member.id) }, updatedProject: updated, emittedEnvelope: envelope }
+      }
       const data = { ...target.module_data }
       if (changes.start_point_mm !== undefined || changes.end_point_mm !== undefined) {
         const start = changes.start_point_mm ?? data.start_point_mm

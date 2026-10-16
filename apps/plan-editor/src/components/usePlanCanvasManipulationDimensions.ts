@@ -1,7 +1,7 @@
 import type { RefObject } from 'react'
 import type { DisplayLengthUnit, ProjectDocument } from '@constructflow/project-model'
 import type { CommandRequest } from '@constructflow/command-schema'
-import { formatLengthMm } from '@constructflow/project-model'
+import { formatLengthMm, isGridObject } from '@constructflow/project-model'
 import type { ViewportState } from '../viewport/viewportTransform.js'
 import { worldToScreen } from '../viewport/viewportTransform.js'
 import type { DragDimensionMode } from './PlanCanvasDragDimensions.js'
@@ -76,8 +76,10 @@ export function usePlanCanvasManipulationDimensions({
   const stairSecondFlight = draggingObject?.kind === 'stair-second-flight'
   const slabEdgeOffset = draggingObject?.kind === 'slab-edge'
   const lineLength = draggingObject?.kind === 'wall-endpoint' || draggingObject?.kind === 'beam-endpoint' || draggingObject?.kind === 'grid-endpoint' || draggingObject?.kind === 'separator-endpoint' || draggingObject?.kind === 'pipe-endpoint' || draggingObject?.kind === 'moulding-endpoint'
-  const mode: DragDimensionMode = rectangle ? 'rectangle' : openingWidth ? 'opening-width' : stairWidth ? 'stair-width' : stairRun ? 'stair-run' : stairLanding ? 'stair-landing' : stairFirstFlight ? 'stair-first-flight' : stairSecondFlight ? 'stair-second-flight' : slabEdgeOffset ? 'edge-offset' : lineLength ? 'line-length' : 'move'
-  const readout = slabEdgeOffset
+  const gridCandidate = draggingObject?.kind === 'grid' ? manipulationPreview?.project.objects[draggingObject.id] ?? planProject.objects[draggingObject.id] : undefined
+  const gridData = gridCandidate && isGridObject(gridCandidate) ? gridCandidate.module_data : undefined
+  const mode: DragDimensionMode = gridData?.system_id ? gridData.orientation === 'vertical' ? 'axis-x' : 'axis-y' : rectangle ? 'rectangle' : openingWidth ? 'opening-width' : stairWidth ? 'stair-width' : stairRun ? 'stair-run' : stairLanding ? 'stair-landing' : stairFirstFlight ? 'stair-first-flight' : stairSecondFlight ? 'stair-second-flight' : slabEdgeOffset ? 'edge-offset' : lineLength ? 'line-length' : 'move'
+  const readout = gridData?.system_id ? `กริด ${gridData.tag} · ${gridData.orientation === 'vertical' ? 'X' : 'Y'} = ${formatLengthMm(gridData.position_mm, displayUnit)} ${displayUnit}` : slabEdgeOffset
     ? `ระยะขอบ ${dragDimensions.offset || '0'} ${displayUnit}`
     : dimensions?.length !== null && dimensions?.length !== undefined
     ? `L ${formatLengthMm(dimensions.length, displayUnit)} ${displayUnit}`

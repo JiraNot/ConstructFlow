@@ -29,6 +29,7 @@ export const TOOL_INTERACTION_REGISTRY = Object.freeze({
   gridCopy: definition('grid-copy', 'line'),
   stair: definition('two-point', 'line', true),
   measure: definition('measure', 'line'),
+  dimension: definition('dimension', 'line'),
   calibrate: definition('calibration', 'line'),
   erase: definition('point', 'none'),
 })

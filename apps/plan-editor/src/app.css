@@ -796,6 +796,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-pick-stack small { width: 100%; color: #64748b; }
 
 @media (max-width: 900px) {
+  .cf-plan-canvas[data-active-tool="dimension"] .cf-tape-measure-hint { top:100px; left:12px; right:12px; transform:none; max-width:none; white-space:normal; line-height:1.5; }
   .cf-workspace { position: relative; }
   .cf-tool-rail {
     position: absolute; inset: auto 0 0; z-index: 30; flex-direction: row; align-items: center;

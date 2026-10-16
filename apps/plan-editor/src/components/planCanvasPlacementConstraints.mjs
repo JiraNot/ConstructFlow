@@ -1,5 +1,5 @@
 import { formatLengthMm, parseLengthMm } from '@constructflow/project-model'
-import { constrainPointToReference, inferLinearConstraint } from '@constructflow/snapping-engine'
+import { constrainPointToReference, inferLinearConstraint, snapToDrawingAxis } from '@constructflow/snapping-engine'
 
 export function applyPlanCanvasPlacementDimensions(point, refs, rawPoint, options) {
   const result = [...point]
@@ -40,7 +40,8 @@ export function resolvePlanCanvasReferencePath(start, end, widthMm, placementRef
 }
 
 export function constrainPlanCanvasLineSnap(snap, pointerPoint, start, lockAxis, reference, options) {
-  let constrainedSnap = snap
+  let constrainedSnap = !lockAxis && !reference && options.lineConstraintMode === 'auto'
+    ? snapToDrawingAxis(snap, pointerPoint, start, { zoom: options.viewportZoom }) : snap
   const inferredMode = !lockAxis && options.lineConstraintMode === 'auto' && reference
     ? inferLinearConstraint(pointerPoint, start, reference, 12 / Math.max(options.viewportZoom, 0.0001))
     : null
@@ -78,8 +79,8 @@ export function constrainPlanCanvasLineSnap(snap, pointerPoint, start, lockAxis,
   return {
     ...snap,
     point_mm,
-    kind: constraintApplied ? constrainedSnap.kind : snap.kind,
+    kind: constraintApplied || constrainedSnap !== snap ? constrainedSnap.kind : snap.kind,
     target_id: constraintApplied ? reference?.target_id : changed ? undefined : snap.target_id,
-    description: `${constraintApplied ? constrainedSnap.description : snap.description}${!lockAxis && options.lineConstraintMode !== 'none' && !reference ? ' · ไม่พบแนวอ้างอิงใกล้จุดเริ่ม' : ''}${options.lineConstraintMode === 'auto' && reference && !inferredMode && !lockAxis ? ' · Auto: เล็งใกล้แนวขนาน/ตั้งฉากเพื่อจัดแนว' : ''}${lockAxis ? ' · Ortho' : ''}${Number.isFinite(targetLengthMm) && targetLengthMm > 0 ? ` · ${formatLengthMm(targetLengthMm, options.displayUnit)} ${options.displayUnit}` : ''}`,
+    description: `${constrainedSnap.description}${options.lineConstraintMode === 'auto' && reference && !inferredMode && !lockAxis ? ' · Auto: เล็งใกล้แนวขนาน/ตั้งฉากเพื่อจัดแนว' : ''}${lockAxis ? ' · Ortho' : ''}${Number.isFinite(targetLengthMm) && targetLengthMm > 0 ? ` · ${formatLengthMm(targetLengthMm, options.displayUnit)} ${options.displayUnit}` : ''}`,
   }
 }

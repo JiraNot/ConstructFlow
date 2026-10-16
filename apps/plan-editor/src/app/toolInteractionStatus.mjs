@@ -4,7 +4,7 @@ const labels = {
   column: 'เสา', foundation: 'ฐานราก', beam: 'คาน', wall: 'ผนัง', door: 'ประตู', window: 'หน้าต่าง',
   slab: 'พื้นโครงสร้าง', slabVoid: 'ช่องเจาะพื้น/หลังคา', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้าเพดาน', roof: 'หลังคา',
   pipe: 'แนวท่อ', fixture: 'อุปกรณ์ไฟฟ้า', cabinet: 'บิลท์อิน', moulding: 'แนวบัว', roomSeparator: 'เส้นแบ่งห้อง',
-  stair: 'บันได', grid: 'เส้นกริด', gridSystem: 'ระบบกริด', gridCopy: 'สำเนาเส้นกริด', measure: 'ตลับเมตร', calibrate: 'ปรับสเกลภาพ',
+  stair: 'บันได', grid: 'เส้นกริด', gridSystem: 'ระบบกริด', gridCopy: 'สำเนาเส้นกริด', measure: 'ตลับเมตร', dimension: 'บอกระยะ', calibrate: 'ปรับสเกลภาพ',
 }
 
 const getStep = (tool, state) => {
@@ -17,6 +17,7 @@ const getStep = (tool, state) => {
   }
   if (['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(tool)) return state.slabBoundary?.length ? 'add-vertex' : 'first-vertex'
   if (tool === 'measure') return state.tapeMeasure?.complete ? 'complete' : state.tapeMeasure ? 'end-point' : 'start-point'
+  if (tool === 'dimension') return state.dimensionPoints?.length === 2 ? 'dimension-offset' : state.dimensionPoints?.length ? 'end-point' : 'start-point'
   if (tool === 'calibrate') return state.calibrationP1 ? 'second-reference' : 'first-reference'
   if (tool === 'gridSystem') return state.gridSystemError ? 'fix-intervals' : 'origin'
   if (tool === 'gridCopy') return state.gridCopySourceId ? 'place-copy' : 'select-source'
@@ -25,6 +26,7 @@ const getStep = (tool, state) => {
 }
 
 const stepText = {
+  'dimension-offset': 'วางเส้นระยะ',
   ready: 'พร้อมเลือกวัตถุ', 'start-point': 'กำหนดจุดเริ่ม', 'end-point': 'กำหนดจุดปลาย',
   'first-vertex': 'กำหนดจุดแรก', 'add-vertex': 'เพิ่มจุดหรือปิดรูป', complete: 'เสร็จแล้ว',
   'second-reference': 'กำหนดจุดอ้างอิงที่สอง', 'first-reference': 'กำหนดจุดอ้างอิงแรก',
@@ -59,6 +61,7 @@ export function resolveToolInteractionStatus(tool, state = {}) {
     case 'fixture': instruction = `อุปกรณ์ไฟฟ้า ${state.fixtureKind ?? 'light'} · เลื่อนแล้ว Enter วาง`; break
     case 'stair': instruction = `บันได · ${step === 'end-point' ? 'เลือกปลายเที่ยวแรก · ระยะ/องศากำหนดเอง · Shift ล็อกแกน · Enter วาง' : 'เลือกจุดเริ่มริมเที่ยวแรก · เลือกระดับจบและรูปแบบก่อนวาง'}`; break
     case 'measure': instruction = 'ตลับเมตร · เลือกจุดเริ่มและจุดปลาย · Enter ยืนยันจุด'; break
+    case 'dimension': instruction = `บอกระยะ · ${step === 'dimension-offset' ? 'เลื่อนแล้วคลิกวางแนวระยะ' : step === 'end-point' ? 'เลือกจุดที่สอง · Shift ล็อกแกน' : 'เลือกจุดแรก'} · Enter ยืนยัน`; break
     case 'calibrate': instruction = 'ปรับสเกลภาพ · เลือกจุดอ้างอิงสองจุด · Enter ยืนยันจุด'; break
   }
   const snapConstraint = state.snapCount === undefined
@@ -78,7 +81,7 @@ export function resolveEscapeAction(tool, hasPendingStep, hasSelection = false) 
 }
 
 export function hasPendingToolStep(state = {}) {
-  return Boolean(state.draggingObject || state.objectContextMenu || state.stairStartPoint || state.gridStartPoint
+  return Boolean(state.dimensionPoints?.length || state.draggingObject || state.objectContextMenu || state.stairStartPoint || state.gridStartPoint
     || state.gridCopySourceId
     || state.beamStartNode || state.wallStartNode || state.roomSeparatorStart || state.slabBoundary?.length
     || state.calibrationP1 || state.tapeMeasure || state.dimensionInputX?.trim() || state.dimensionInputY?.trim()

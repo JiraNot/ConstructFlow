@@ -42,8 +42,13 @@ export function findPlanCanvasEditHandle({ planProject, editableSelectionIds, vi
           endpointIndex: endpointIndex as 0 | 1, startPointMm: [...start] as [number, number], endPointMm: [...end] as [number, number],
         }
       }
-    } else if (isGridObject(object) && !object.module_data.system_id) {
+    } else if (isGridObject(object)) {
       const [start, end] = gridLineEndpoints(object)
+      if (object.module_data.system_id) {
+        const [x, y] = worldToScreen([(start[0] + end[0]) / 2, (start[1] + end[1]) / 2], viewport)
+        if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return { id, kind: 'grid' as const }
+        continue
+      }
       for (const [endpointIndex, point] of [start, end].entries()) {
         const [x, y] = worldToScreen(point, viewport)
         if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {

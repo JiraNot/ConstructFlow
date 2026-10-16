@@ -7,6 +7,7 @@ import {
   normalizeCoordinationSettings,
   validateCoordinationSettings,
   validateDrawingSettings,
+  validatePlanDimension,
   validateRainwaterDesignSettings,
   validateSiteSurvey,
   resolveStairVerticalExtent,
@@ -26,6 +27,25 @@ import {
 export function executeProjectCommand(context: CommandHandlerContext): CommandBusResult | undefined {
   const { project, updated, commandName, input, command_id, now, envelope } = context
   switch (commandName) {
+    case 'SavePlanDimension': {
+      const dimension = input.dimension
+      validatePlanDimension(dimension)
+      if (!updated.levels.some(level => level.id === dimension.level_id)) throw new Error('Plan dimension level does not exist')
+      const settings = updated.drawing_settings ?? { viewports: {} }
+      const dimensions = [...(settings.plan_dimensions ?? [])]
+      const index = dimensions.findIndex(item => item.id === dimension.id)
+      if (index < 0) dimensions.push(structuredClone(dimension))
+      else dimensions[index] = structuredClone(dimension)
+      updated.drawing_settings = { ...settings, plan_dimensions: dimensions }
+      validateDrawingSettings(updated.drawing_settings)
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] }, updatedProject: updated, emittedEnvelope: envelope }
+    }
+    case 'DeletePlanDimension': {
+      const settings = updated.drawing_settings
+      if (!settings?.plan_dimensions?.some(dimension => dimension.id === input.dimension_id)) throw new Error('Plan dimension does not exist')
+      updated.drawing_settings = { ...settings, plan_dimensions: settings.plan_dimensions.filter(dimension => dimension.id !== input.dimension_id) }
+      return { result: { status: 'success', command_id, command_name: commandName, affected_object_ids: [] }, updatedProject: updated, emittedEnvelope: envelope }
+    }
     case 'CreateLevel': {
       const level = input as unknown as CreateLevelInput
       if (!level.id || !level.name.trim()) throw new Error('Level id and name are required')

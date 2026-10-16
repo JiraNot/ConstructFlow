@@ -29,7 +29,7 @@ import {
   clippedCarpetSegments,
   clippedTerrazzoSegments
 } from "@constructflow/geometry-kernel";
-import { polygonInteriorPoint } from "@constructflow/geometry-kernel";
+import { polygonInteriorPoint, alignedDimensionGeometry } from "@constructflow/geometry-kernel";
 import { calculateBBS } from "@constructflow/structure-engine";
 import { resolvedData } from "@constructflow/module-sdk";
 import {
@@ -3298,7 +3298,7 @@ function compilePermitDrawingSetBase(
               return box.max_x <= dimensionViewBounds.min_x || box.min_x >= dimensionViewBounds.max_x ||
                 box.max_y <= dimensionViewBounds.min_y || box.min_y >= dimensionViewBounds.max_y ? [] : [box];
             });
-            const drawDimension = (dimensionId: string, a: Vec2, b: Vec2, label: string, witnessA?: Vec2, witnessB?: Vec2) => {
+            const drawDimension = (dimensionId: string, a: Vec2, b: Vec2, label: string, witnessA?: Vec2, witnessB?: Vec2, userPlaced = false) => {
               const override = viewport.dimension_overrides?.[dimensionId];
               const delta = override?.locked ? override.offset_mm : [0, 0];
               const baseA = mapped(a), baseB = mapped(b);
@@ -3315,7 +3315,7 @@ function compilePermitDrawingSetBase(
                 max_x: baseCenter[0] + width / 2,
                 max_y: baseCenter[1] + 0.7,
               }, normal, placedDimensionLabelBoxes, dimensionViewBounds,
-              { locked: override?.locked === true, max_offset_mm: 48, step_mm: 3, gap_mm: 0.8 });
+              { locked: userPlaced || override?.locked === true, max_offset_mm: 48, step_mm: 3, gap_mm: 0.8 });
               placedDimensionLabelBoxes.push(placement.box);
               if (placement.has_collision) warnings.push(`${label}: automatic dimension text overlaps another dimension or the A-02/A-03 view edge`);
               pa = [pa[0] + normal[0] * placement.offset_mm, pa[1] + normal[1] * placement.offset_mm];
@@ -3340,6 +3340,11 @@ function compilePermitDrawingSetBase(
                   : [normal[0] * placement.offset_mm, normal[1] * placement.offset_mm];
               }
             };
+            for (const dimension of project.drawing_settings?.plan_dimensions ?? []) {
+              if (dimension.level_id !== planLevelId || (dimension.created_phase !== 'existing' && dimension.created_phase !== project.project.active_phase)) continue;
+              const geometry = alignedDimensionGeometry(dimension.start_mm, dimension.end_mm, dimension.offset_mm);
+              if (geometry) drawDimension(`manual:${dimension.id}`, geometry.start_mm, geometry.end_mm, `${(geometry.length_mm / 1000).toFixed(3)} m`, dimension.start_mm, dimension.end_mm, true);
+            }
             const planPoints = viewObjects.filter(({ object }) => object.object_type !== "structure.grid")
               .flatMap(({ mesh, out }) => [...mesh.flat(), ...((out?.paths ?? []).flat() as Vec3[])])
               .filter(point => Array.isArray(point) && point.length >= 2 && point.slice(0, 3).every(Number.isFinite))

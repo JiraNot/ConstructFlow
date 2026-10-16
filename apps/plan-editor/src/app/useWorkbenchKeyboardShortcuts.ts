@@ -85,7 +85,7 @@ export function useWorkbenchKeyboardShortcuts({
       } else if (event.key.toLowerCase() === 'g') {
         setActiveTool(event.shiftKey ? 'gridSystem' : 'grid')
       } else if (event.key.toLowerCase() === 'm') {
-        setActiveTool('measure')
+        setActiveTool(event.shiftKey ? 'dimension' : 'measure')
       } else if (event.key.toLowerCase() === 'r') {
         if (canCalibrateUnderlayRef.current) setActiveTool('calibrate')
       } else if (event.key.toLowerCase() === 't') {

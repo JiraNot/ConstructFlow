@@ -50,6 +50,7 @@ export type ToolType =
   | 'gridSystem'
   | 'gridCopy'
   | 'measure'
+  | 'dimension'
   | 'calibrate'
   | 'erase'
 
@@ -154,11 +155,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     { id: 'grid', label: 'เส้นกริด (G)', icon: <Hash size={16} />, shortcut: 'G' },
     { id: 'gridSystem', label: 'ระบบ Grid Line (Shift+G)', icon: <Layers size={16} />, shortcut: 'Shift+G' },
     { id: 'measure', label: 'ตลับเมตร (M)', icon: <Ruler size={16} />, shortcut: 'M' },
+    { id: 'dimension', label: 'บอกระยะ (Shift+M) · เลือกสองจุดแล้ววางเส้นระยะ', icon: <Ruler size={16} />, shortcut: 'Shift+M' },
     { id: 'calibrate', label: 'ปรับสเกลภาพ (R)', icon: <Ruler size={16} />, shortcut: 'R' },
   ]
 
   const availableTools = tools.filter(tool => tool.id !== 'calibrate' || (underlayHasImage && underlayVisible))
-  const pinnedTools = availableTools.filter(tool => ['select', 'wall', 'beam', 'door', 'window'].includes(tool.id))
+  const pinnedTools = availableTools.filter(tool => ['select', 'wall', 'beam', 'door', 'window', 'dimension'].includes(tool.id))
   const toolGroups: { title: string; ids: ToolType[] }[] = [
     { title: 'โครงสร้าง', ids: ['column', 'foundation', 'slab'] },
     { title: 'สถาปัตย์', ids: ['archFloor', 'ceiling', 'roof', 'cabinet', 'moulding', 'roomSeparator', 'stair'] },
@@ -208,7 +210,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               }}
             >
               {t.icon}
-              <span className="cf-tool-label">{({ select: 'เลือก', wall: 'ผนัง', beam: 'คาน', door: 'ประตู', window: 'หน้าต่าง' } as Partial<Record<ToolType, string>>)[t.id]}</span>
+              <span className="cf-tool-label">{({ select: 'เลือก', wall: 'ผนัง', beam: 'คาน', door: 'ประตู', window: 'หน้าต่าง', dimension: 'บอกระยะ' } as Partial<Record<ToolType, string>>)[t.id]}</span>
             </button>
           )
         })}

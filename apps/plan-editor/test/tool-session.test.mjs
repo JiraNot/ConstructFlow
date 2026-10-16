@@ -7,7 +7,7 @@ import { hasPendingToolStep, resolveEscapeAction, resolveToolInteractionStatus }
 const toolbarTools = [
   'select', 'column', 'foundation', 'beam', 'wall', 'door', 'window', 'slab', 'slabVoid', 'archFloor',
   'ceiling', 'roof', 'pipe', 'fixture', 'cabinet', 'moulding', 'roomSeparator', 'stair', 'grid',
-  'gridSystem', 'gridCopy', 'measure', 'calibrate', 'erase',
+  'gridSystem', 'gridCopy', 'measure', 'dimension', 'calibrate', 'erase',
 ]
 
 test('interaction registry covers every toolbar tool and classifies drawing gestures', () => {

@@ -1,6 +1,6 @@
 import type { ToolType } from '../components/Toolbar.js'
 
-export type ToolInputKind = 'selection' | 'point' | 'hosted-point' | 'two-point' | 'polyline' | 'measure' | 'calibration' | 'grid-copy'
+export type ToolInputKind = 'selection' | 'point' | 'hosted-point' | 'two-point' | 'polyline' | 'measure' | 'dimension' | 'calibration' | 'grid-copy'
 export interface ToolInteractionDefinition {
   input: ToolInputKind
   dimensionPlacement: boolean

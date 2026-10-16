@@ -17,6 +17,7 @@ interface UsePlanCanvasPlacementSessionOptions {
 
 export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool, activation }: UsePlanCanvasPlacementSessionOptions) {
   const [gridStartPoint, setGridStartPoint] = useState<Point | null>(null)
+  const [dimensionPoints, setDimensionPoints] = useState<Point[]>([])
   const [stairStartPoint, setStairStartPoint] = useState<Point | null>(null)
   const [stairOptions, setStairOptions] = useState<StairPlacementOptions>({ stair_type: 'u_shape', width_mm: 900, landing_depth_mm: 900, turn_direction: 'right', num_risers: 18, flight_gap_mm: 100, top_level_id: '' })
   const [stairError, setStairError] = useState('')
@@ -63,6 +64,7 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
   }
 
   const resetPlacementDrafts = () => {
+    setDimensionPoints([])
     setGridStartPoint(null)
     setStairStartPoint(null)
     setStairError('')
@@ -127,11 +129,13 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
     if (!['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool)) setSlabBoundary([])
     if (activeTool !== 'calibrate') { setCalibrationP1(null); setCalibrationMousePoint(null) }
     if (activeTool !== 'measure') setTapeMeasure(null)
+    if (activeTool !== 'dimension') setDimensionPoints([])
     setDrawLengthMeters('')
     setDrawAngleDegrees('')
   }, [activeTool, activation])
 
   return {
+    dimensionPoints, setDimensionPoints,
     gridStartPoint, setGridStartPoint,
     stairStartPoint, setStairStartPoint, stairOptions, setStairOptions, stairError, setStairError,
     gridSequenceStyle, setGridSequenceStyle, gridCopySourceId, setGridCopySourceId,

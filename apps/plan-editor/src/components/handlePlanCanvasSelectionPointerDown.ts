@@ -78,6 +78,7 @@ export function handlePlanCanvasSelectionPointerDown({
         : '')
     if (editHandle.kind === 'stair-width' && editHandle.stairData) setResizeDimensionWidth(formatLengthMm(editHandle.stairData.width_mm, displayUnit))
     setDraggingObject({ id: editHandle.id, kind: editHandle.kind, endpointIndex: editHandle.endpointIndex,
+      ...(editHandle.kind === 'grid' && editObject && isGridObject(editObject) ? { gridStartMm: gridLineEndpoints(editObject)[0], gridEndMm: gridLineEndpoints(editObject)[1] } : {}),
       startPointMm: editHandle.startPointMm, endPointMm: editHandle.endPointMm,
       boundaryPointsMm: editHandle.boundaryPointsMm,
       edgeStartMm: editHandle.edgeStartMm,
@@ -134,7 +135,7 @@ export function handlePlanCanvasSelectionPointerDown({
     startDrag({ id: hitId, kind: 'column', startWorldMm: rawWorld, startScreenPx })
   } else if (isWallObject(object)) {
     startDrag({ id: hitId, kind: 'wall', startWorldMm: rawWorld, startScreenPx })
-  } else if (isGridObject(object) && !object.module_data.system_id) {
+  } else if (isGridObject(object)) {
     const [gridStartMm, gridEndMm] = gridLineEndpoints(object)
     startDrag({ id: hitId, kind: 'grid', startWorldMm: rawWorld, startScreenPx, gridStartMm, gridEndMm })
   } else if (isDoorObject(object) || isWindowObject(object)) {
