@@ -3,13 +3,13 @@ import { TOOL_INTERACTION_REGISTRY } from './toolInteractionRegistry.mjs'
 const labels = {
   column: 'เสา', foundation: 'ฐานราก', beam: 'คาน', wall: 'ผนัง', door: 'ประตู', window: 'หน้าต่าง',
   slab: 'พื้นโครงสร้าง', slabVoid: 'ช่องเจาะพื้น/หลังคา', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้าเพดาน', roof: 'หลังคา',
-  pipe: 'แนวท่อ', fixture: 'อุปกรณ์ไฟฟ้า', cabinet: 'บิลท์อิน', moulding: 'แนวบัว', roomSeparator: 'เส้นแบ่งห้อง',
+  pipe: 'แนวท่อ', fixture: 'อุปกรณ์ไฟฟ้า', cabinet: 'บิลท์อิน', furniture: 'เฟอร์นิเจอร์', moulding: 'แนวบัว', roomSeparator: 'เส้นแบ่งห้อง',
   stair: 'บันได', grid: 'เส้นกริด', gridSystem: 'ระบบกริด', gridCopy: 'สำเนาเส้นกริด', measure: 'ตลับเมตร', dimension: 'บอกระยะ', calibrate: 'ปรับสเกลภาพ',
 }
 
 const getStep = (tool, state) => {
   if (tool === 'select' || tool === 'erase') return 'ready'
-  if (['wall', 'beam', 'grid', 'roomSeparator', 'pipe', 'cabinet', 'moulding', 'stair'].includes(tool)) {
+  if (['wall', 'beam', 'grid', 'roomSeparator', 'pipe', 'cabinet', 'furniture', 'moulding', 'stair'].includes(tool)) {
     const hasStart = tool === 'wall' ? state.wallStartNode : tool === 'beam' ? state.beamStartNode
       : tool === 'grid' ? state.gridStartPoint : tool === 'stair' ? state.stairStartPoint
         : Boolean(state.roomSeparatorStart)
@@ -57,6 +57,7 @@ export function resolveToolInteractionStatus(tool, state = {}) {
       instruction = `แนวท่อ ${system} · ${step === 'end-point' ? 'เลือกจุดปลายเพื่อสร้างช่วงท่อ' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด`; break
     }
     case 'cabinet': instruction = `บิลท์อิน · ${step === 'end-point' ? 'เลือกปลายแนวหน้าตู้เพื่อกำหนดความกว้างและทิศ' : 'เลือกมุมเริ่มแนวหน้าตู้'} · Enter ยืนยันจุด`; break
+    case 'furniture': instruction = `เฟอร์นิเจอร์ · ${step === 'end-point' ? 'กำหนดความกว้างและทิศของชิ้นงาน' : 'เลือกมุมเริ่มวาง'} · Enter ยืนยันจุด`; break
     case 'moulding': instruction = `แนวบัว · ${step === 'end-point' ? 'เลือกจุดปลายแนวบัว' : 'เลือกจุดเริ่มแนวบัว'} · Enter ยืนยันจุด`; break
     case 'fixture': instruction = `อุปกรณ์ไฟฟ้า ${state.fixtureKind ?? 'light'} · เลื่อนแล้ว Enter วาง`; break
     case 'stair': instruction = `บันได · ${step === 'end-point' ? 'เลือกปลายเที่ยวแรก · ระยะ/องศากำหนดเอง · Shift ล็อกแกน · Enter วาง' : 'เลือกจุดเริ่มริมเที่ยวแรก · เลือกระดับจบและรูปแบบก่อนวาง'}`; break

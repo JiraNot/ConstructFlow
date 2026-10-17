@@ -6,7 +6,7 @@ export const objectFamilyDisplayNames: Readonly<Record<string, string>> = {
   'architecture.room_separator': 'เส้นแบ่งห้อง', 'architecture.stair': 'บันได',
   'door_window.door': 'ประตู', 'door_window.window': 'หน้าต่าง', 'roof.system': 'หลังคา',
   'plumbing.pipe_route': 'ท่อ', 'drainage.pipe_route': 'ท่อระบายน้ำ',
-  'electrical.fixture': 'อุปกรณ์ไฟฟ้า', 'interior.cabinet_run': 'บิลท์อิน', 'decorative.moulding_run': 'บัว',
+  'electrical.fixture': 'อุปกรณ์ไฟฟ้า', 'interior.cabinet_run': 'บิลท์อิน', 'interior.furniture': 'เฟอร์นิเจอร์', 'decorative.moulding_run': 'บัว',
 }
 
 export const getObjectFamilyDisplayName = (family: string | null | undefined) =>

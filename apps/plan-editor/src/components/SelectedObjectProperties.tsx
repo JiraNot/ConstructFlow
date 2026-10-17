@@ -11,6 +11,7 @@ import { RoomPropertiesSection } from './RoomPropertiesSection.js'
 import { GridPropertiesSection } from './GridPropertiesSection.js'
 import { ObjectLifecycleProperties } from './ObjectLifecycleProperties.js'
 import { SourceReferencesProperties } from './SourceReferencesProperties.js'
+import { FurniturePropertiesSection } from './FurniturePropertiesSection.js'
 import { ObjectSelectionHeader } from './ObjectSelectionHeader.js'
 import { resolvePropertiesSelection } from './propertiesSelection.js'
 import { getObjectFamilyDisplayName } from './objectDisplayNames.js'
@@ -24,14 +25,14 @@ export const SelectedObjectProperties: React.FC<{
 }> = ({ props, selection }) => {
   const { project, displayUnit, selectedId, onAssignType, onOpenTypeManager, onUpdateColumnVerticalReference,
     onUpdateBeamVerticalReference, onUpdateArchitectureSurface, onUpdateSlab, onUpdateRoof, onUpdateRainwaterDesign,
-    onUpdatePipeRoute, onUpdateElectricalFixture, onAssignElectricalFixtureToCircuit, onApplyElectricalPhaseBalance, onUpdateCabinet, onUpdateMoulding,
+    onUpdatePipeRoute, onUpdateElectricalFixture, onAssignElectricalFixtureToCircuit, onApplyElectricalPhaseBalance, onUpdateCabinet, onUpdateInteriorFurniture, onUpdateMoulding,
     onUpdateStair, onUpdateGridTag, onModifyGrid, onUpdateGridSystem, onUpdateWallFace, onDefineWallFinish,
     onUpdateWallFinish, onUpdateOpeningVertical, onRehostOpening, onUpdateOpeningInstanceParameters, onFlipDoorHanding, onUpdatePhase,
     onUpdateRemovalPhase, onAddFoundation, onDeleteObject, onDrawSurfaceVoid, onCreateRoomFinish } = props
   const { selectedObject: selectedObj, column: colObj, foundation: fndObj, beam: beamObj,
     wall: wallObj, door: doorObj, window: winObj, grid: grdObj, slab: slabObj,
     architectureSurface: architectureSurfaceObj, room: roomObj, roof: roofObj, pipe: pipeObj,
-    fixture: fixtureObj, cabinet: cabinetObj, moulding: mouldingObj, currentMark, hostedFoundation } = selection
+    fixture: fixtureObj, cabinet: cabinetObj, interiorFurniture: interiorFurnitureObj, moulding: mouldingObj, currentMark, hostedFoundation } = selection
 
   if (!selectedObj) return null
 
@@ -50,6 +51,7 @@ export const SelectedObjectProperties: React.FC<{
       <SystemsPropertiesSection project={project} displayUnit={displayUnit} pipeObj={pipeObj} fixtureObj={fixtureObj} cabinetObj={cabinetObj} mouldingObj={mouldingObj}
         onUpdatePipeRoute={onUpdatePipeRoute} onUpdateElectricalFixture={onUpdateElectricalFixture} onAssignElectricalFixtureToCircuit={onAssignElectricalFixtureToCircuit} onApplyElectricalPhaseBalance={onApplyElectricalPhaseBalance}
         onUpdateCabinet={onUpdateCabinet} onUpdateMoulding={onUpdateMoulding} />
+      <FurniturePropertiesSection object={interiorFurnitureObj} displayUnit={displayUnit} onUpdate={onUpdateInteriorFurniture} />
       <OpeningPropertiesSection project={project} displayUnit={displayUnit} door={doorObj} window={winObj}
         onUpdateOpeningVertical={onUpdateOpeningVertical} onRehostOpening={onRehostOpening} onUpdateOpeningInstanceParameters={onUpdateOpeningInstanceParameters} onFlipDoorHanding={onFlipDoorHanding} onOpenTypeManager={onOpenTypeManager} />
       <GridPropertiesSection project={project} grid={grdObj} selectedId={selectedId} displayUnit={displayUnit} onUpdateGridTag={onUpdateGridTag} onModifyGrid={onModifyGrid} onUpdateGridSystem={onUpdateGridSystem} />

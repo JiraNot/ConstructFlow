@@ -106,6 +106,10 @@ function moveSingleObject(project, object, dx, dy) {
       const location = point3(data.location_mm)
       return fullObjectUpdate(object, 'UpdateCabinetRun', { location_mm: [location[0] + dx, location[1] + dy, location[2]] })
     }
+    case 'interior.furniture': {
+      const location = point3(data.location_mm)
+      return fullObjectUpdate(object, 'UpdateInteriorFurniture', { location_mm: [location[0] + dx, location[1] + dy, location[2]] })
+    }
     case 'decorative.moulding_run':
       return fullObjectUpdate(object, 'UpdateMouldingRun', { path_mm: (data.path_mm ?? []).map(point => [point[0] + dx, point[1] + dy, point[2]]) })
     case 'drainage.pipe_route':

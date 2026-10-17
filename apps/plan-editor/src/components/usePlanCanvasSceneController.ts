@@ -38,7 +38,7 @@ export function usePlanCanvasSceneController({
   } = props
   const { activeSnap, activeWallSnap, beamStartNode, wallStartNode,
     stairStartPoint, calibrationP1, calibrationMousePoint, gridStartPoint,
-    gridCopySourceId, tapeMeasure, pipeSystem, fixtureKind, slabBoundary } = placement
+    gridCopySourceId, tapeMeasure, pipeSystem, fixtureKind, furnitureKind, slabBoundary } = placement
 
   const stairPreview = useMemo(() => {
     if (activeTool !== 'stair' || !stairStartPoint || !activeSnap) return null
@@ -57,6 +57,6 @@ export function usePlanCanvasSceneController({
     externalManipulationPreview, coordination, coordinationSeverities, coordinationFocusSelection,
     gridStartPoint, gridCopySourceId, tapeMeasure, dimensionReferenceMode: props.preferences.dimensionReferenceMode,
     selectionBox: pointer.selectionBox, roomSeparatorStart: placement.roomSeparatorStart,
-    pipeSystem, fixtureKind, slabBoundary,
+    pipeSystem, fixtureKind, furnitureKind, slabBoundary,
   })
 }

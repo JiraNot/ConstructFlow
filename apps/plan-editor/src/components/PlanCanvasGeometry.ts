@@ -19,6 +19,15 @@ export function getPlanObjectBounds(object: ProjectDocument['objects'][string]):
     return [Math.min(...corners.map(point => point[0])), Math.min(...corners.map(point => point[1])),
       Math.max(...corners.map(point => point[0])), Math.max(...corners.map(point => point[1]))]
   }
+  if (object.object_type === 'interior.furniture') {
+    const data = object.module_data as unknown as { location_mm: [number, number, number]; width_mm: number; depth_mm: number; rotation_deg: number }
+    const angle = data.rotation_deg * Math.PI / 180
+    const corners = [[0, 0], [data.width_mm, 0], [data.width_mm, data.depth_mm], [0, data.depth_mm]].map(([u, v]) => [
+      data.location_mm[0] + u * Math.cos(angle) - v * Math.sin(angle),
+      data.location_mm[1] + u * Math.sin(angle) + v * Math.cos(angle),
+    ] as [number, number])
+    return [Math.min(...corners.map(point => point[0])), Math.min(...corners.map(point => point[1])), Math.max(...corners.map(point => point[0])), Math.max(...corners.map(point => point[1]))]
+  }
   const data = object.module_data as unknown as Record<string, unknown>
   const points: [number, number][] = []
   for (const key of ['location_mm', 'center_mm', 'start_point_mm', 'end_point_mm', 'origin_mm']) {

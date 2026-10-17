@@ -1,4 +1,4 @@
-import type { ProjectDocument } from '@constructflow/project-model'
+import type { InteriorFurnitureKind, ProjectDocument } from '@constructflow/project-model'
 import { isGridObject } from '@constructflow/project-model'
 import type { DisplayLengthUnit } from '@constructflow/project-model'
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
@@ -28,13 +28,14 @@ interface PlanCanvasToolOverlayOptions {
   roomSeparatorStart: [number, number] | null
   pipeSystem: 'waste' | 'soil' | 'rainwater' | 'vent' | 'cold_water' | 'hot_water'
   fixtureKind: 'light' | 'switch' | 'outlet' | 'panel'
+  furnitureKind: InteriorFurnitureKind
   slabBoundary: [number, number][]
 }
 
 export function drawPlanCanvasToolOverlays({
   ctx, activeTool, gridStartPoint, activeSnap, planProject, viewport, gridCopySourceId, tapeMeasure,
   displayUnit, activeWallSnap, project, activeDoorTypeMark, activeWindowTypeMark, dimensionReferenceMode,
-  selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, slabBoundary,
+  selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary,
 }: PlanCanvasToolOverlayOptions) {
     if (activeTool === 'grid' && gridStartPoint && activeSnap) {
       const [x1, y1] = worldToScreen(gridStartPoint, viewport)
@@ -74,10 +75,22 @@ export function drawPlanCanvasToolOverlays({
       ctx.fillRect(left, top, Math.abs(selectionBox.end[0] - selectionBox.start[0]), Math.abs(selectionBox.end[1] - selectionBox.start[1]))
       ctx.strokeRect(left, top, Math.abs(selectionBox.end[0] - selectionBox.start[0]), Math.abs(selectionBox.end[1] - selectionBox.start[1])); ctx.restore()
     }
-    if (['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool) && roomSeparatorStart && activeSnap) {
+    if (['roomSeparator', 'pipe', 'cabinet', 'furniture', 'moulding'].includes(activeTool) && roomSeparatorStart && activeSnap) {
       const start = worldToScreen(roomSeparatorStart, viewport), end = worldToScreen(activeSnap.point_mm, viewport)
-      const color = activeTool === 'pipe' ? (['cold_water', 'hot_water'].includes(pipeSystem) ? '#0284c7' : pipeSystem === 'rainwater' ? '#0891b2' : '#7c3aed') : activeTool === 'cabinet' ? '#92400e' : activeTool === 'moulding' ? '#a21caf' : '#d97706'
-      ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = activeTool === 'cabinet' ? 2 : 1.8; ctx.setLineDash(activeTool === 'roomSeparator' ? [5, 3] : [7, 3]); ctx.beginPath(); ctx.moveTo(...start); ctx.lineTo(...end); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = '#fff'; ctx.strokeStyle = color; ctx.beginPath(); ctx.arc(...start, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore()
+      const color = activeTool === 'pipe' ? (['cold_water', 'hot_water'].includes(pipeSystem) ? '#0284c7' : pipeSystem === 'rainwater' ? '#0891b2' : '#7c3aed') : activeTool === 'furniture' ? '#7c3aed' : activeTool === 'cabinet' ? '#92400e' : activeTool === 'moulding' ? '#a21caf' : '#d97706'
+      ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = activeTool === 'cabinet' || activeTool === 'furniture' ? 2 : 1.8; ctx.setLineDash(activeTool === 'roomSeparator' ? [5, 3] : [7, 3]); ctx.beginPath(); ctx.moveTo(...start); ctx.lineTo(...end); ctx.stroke(); ctx.setLineDash([])
+      if (activeTool === 'furniture') {
+        const delta: [number, number] = [activeSnap.point_mm[0] - roomSeparatorStart[0], activeSnap.point_mm[1] - roomSeparatorStart[1]], length = Math.hypot(...delta)
+        if (length > 1) {
+          const depth = ({ sofa: 900, chair: 550, dining_table: 900, coffee_table: 600, desk: 700, bed_single: 2000, bed_double: 2000, toilet: 700, washbasin: 500, bathtub: 750 } as const)[furnitureKind]
+          const n: [number, number] = [-delta[1] / length * depth, delta[0] / length * depth]
+          const farStart = worldToScreen([roomSeparatorStart[0] + n[0], roomSeparatorStart[1] + n[1]], viewport)
+          const farEnd = worldToScreen([activeSnap.point_mm[0] + n[0], activeSnap.point_mm[1] + n[1]], viewport)
+          ctx.fillStyle = 'rgba(124,58,237,.12)'; ctx.beginPath(); ctx.moveTo(...start); ctx.lineTo(...end); ctx.lineTo(...farEnd); ctx.lineTo(...farStart); ctx.closePath(); ctx.fill(); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(...farStart); ctx.lineTo(...farEnd); ctx.stroke()
+        }
+      }
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = color; ctx.beginPath(); ctx.arc(...start, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore()
     }
     if (activeTool === 'fixture' && activeSnap) {
       const [x, y] = worldToScreen(activeSnap.point_mm, viewport)

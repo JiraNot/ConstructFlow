@@ -1,5 +1,5 @@
 const lineTools = new Set(['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'])
-const spanTools = new Set(['roomSeparator', 'pipe', 'cabinet', 'moulding'])
+const spanTools = new Set(['roomSeparator', 'pipe', 'cabinet', 'furniture', 'moulding'])
 
 export function resolvePlanCanvasLineSnap(snap, pointerPoint, shiftKey, tool, state, constrainLineSnap) {
   let start

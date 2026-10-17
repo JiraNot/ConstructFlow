@@ -19,7 +19,7 @@ type PlacementSession = ReturnType<typeof usePlanCanvasPlacementSession>
 type PlacementCallbacks = Pick<PlanCanvasProps,
   | 'onCopyGrid' | 'onCommitColumn' | 'onCommitFoundation' | 'onCommitDoor' | 'onCommitWindow' | 'onCommitFixture'
   | 'onSelectionChange' | 'onSelectObject' | 'onCommitBeam' | 'onCommitWall' | 'onCommitRoomSeparator'
-  | 'onCommitPipeRoute' | 'onCommitCabinet' | 'onCommitMoulding' | 'onCommitSlab' | 'onCommitArchitecturalFloor'
+  | 'onCommitPipeRoute' | 'onCommitCabinet' | 'onCommitFurniture' | 'onCommitMoulding' | 'onCommitSlab' | 'onCommitArchitecturalFloor'
   | 'onCommitCeiling' | 'onCommitRoof' | 'onCommitSurfaceVoid' | 'onCommitGrid' | 'onCommitGridSystem'
   | 'onStartCalibrationModal' | 'onCommitStair' | 'onActivateTool' | 'onCommitManipulation' | 'onManipulationRejected'
 >
@@ -56,7 +56,7 @@ export function handlePlanCanvasPlacementPointerDown({
   operations, interaction,
 }: HandlePlanCanvasPlacementPointerDownOptions) {
   const { onCopyGrid, onCommitColumn, onCommitFoundation, onCommitDoor, onCommitWindow, onCommitFixture,
-    onCommitBeam, onCommitWall, onCommitRoomSeparator, onCommitPipeRoute, onCommitCabinet, onCommitMoulding,
+    onCommitBeam, onCommitWall, onCommitRoomSeparator, onCommitPipeRoute, onCommitCabinet, onCommitFurniture, onCommitMoulding,
     onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling, onCommitRoof, onCommitSurfaceVoid,
     onCommitGrid, onCommitGridSystem, onStartCalibrationModal, onCommitStair, onActivateTool } = callbacks
   const { activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, placementReference, doorHanding } = settings
@@ -66,7 +66,7 @@ export function handlePlanCanvasPlacementPointerDown({
     beamStartNode, setBeamStartNode, wallStartNode, setWallStartNode, roomSeparatorStart, setRoomSeparatorStart,
     roofShape, roofSlopeDeg, roofThicknessMm, roofElevationOffsetMm, roofMaterial, pipeSystem, fixtureKind, slabBoundary,
     setSlabBoundary, calibrationP1, setCalibrationP1, setCalibrationMousePoint, tapeMeasure, setTapeMeasure,
-    activeWallSnap } = placement
+    activeWallSnap, furnitureKind } = placement
 
   if (activeTool === 'gridCopy' && gridCopySourceId) {
     const source = planProject.objects[gridCopySourceId]
@@ -93,12 +93,12 @@ export function handlePlanCanvasPlacementPointerDown({
       beamStartNode, wallStartNode, setBeamStartNode, setWallStartNode, setDrawLengthMeters, setDrawAngleDegrees,
       resolveReferencePath: operations.resolveReferencePath, clearDimensionOverrides, onCommitBeam, onCommitWall,
     })
-  } else if (isTwoPointInteraction(activeTool) && ['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool)) {
+  } else if (isTwoPointInteraction(activeTool) && ['roomSeparator', 'pipe', 'cabinet', 'furniture', 'moulding'].includes(activeTool)) {
     commitPlanCanvasConnectedPlacementPoint({
-      activeTool: activeTool as 'roomSeparator' | 'pipe' | 'cabinet' | 'moulding', point: snap.point_mm,
-      startPoint: roomSeparatorStart, pipeSystem, onStartPointChange: setRoomSeparatorStart,
+      activeTool: activeTool as 'roomSeparator' | 'pipe' | 'cabinet' | 'furniture' | 'moulding', point: snap.point_mm,
+      startPoint: roomSeparatorStart, pipeSystem, furnitureKind, onStartPointChange: setRoomSeparatorStart,
       onDrawLengthChange: setDrawLengthMeters, onDrawAngleChange: setDrawAngleDegrees, clearDimensionOverrides,
-      onCommitRoomSeparator, onCommitPipeRoute, onCommitCabinet, onCommitMoulding,
+      onCommitRoomSeparator, onCommitPipeRoute, onCommitCabinet, onCommitFurniture, onCommitMoulding,
     })
   } else if (isPolygonInteraction(activeTool)) {
     commitPlanCanvasPolygonPoint({

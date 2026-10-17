@@ -15,6 +15,7 @@ import type {
   CabinetModuleData,
   LEDModuleData,
   StairModuleData,
+  InteriorFurnitureModuleData,
 } from "@constructflow/project-model";
 export type ConstructionInput<T extends object> = T & {
   id?: string;
@@ -82,6 +83,8 @@ export interface ConstructionCommandInputs {
   AssignFixtureToCircuit: { fixture_id: string; circuit_id?: string | null };
   CreateCabinetRun: ConstructionInput<CabinetModuleData>;
   UpdateCabinetRun: ConstructionInput<CabinetModuleData>;
+  CreateInteriorFurniture: ConstructionInput<InteriorFurnitureModuleData>;
+  UpdateInteriorFurniture: ConstructionInput<InteriorFurnitureModuleData>;
   CreateLEDRun: ConstructionInput<LEDModuleData>;
   UpdateLEDRun: ConstructionInput<LEDModuleData>;
   SetBeamDrop: { id: string; drop_mm: number };

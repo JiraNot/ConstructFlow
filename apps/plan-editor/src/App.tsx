@@ -297,7 +297,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setFileFeedback,
   })
   const {
-    handleCommitPipeRoute, handleCommitFixture, handleCommitCabinet, handleCommitMoulding,
+    handleCommitPipeRoute, handleCommitFixture, handleCommitCabinet, handleCommitFurniture, handleCommitMoulding,
     handleCommitArchitecturalFloor, handleCommitCeiling, handleCommitRoomSeparator, handleDetectRooms,
     handleCreateRoomFinish, handleCommitSurfaceVoid, handleCommitDoor, handleCommitWindow,
     handleCommitStair, handleFlipDoorHanding,
@@ -375,6 +375,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     onCommitPipeRoute: handleCommitPipeRoute,
     onCommitFixture: handleCommitFixture,
     onCommitCabinet: handleCommitCabinet,
+    onCommitFurniture: handleCommitFurniture,
     onCommitMoulding: handleCommitMoulding,
     onCommitRoomSeparator: handleCommitRoomSeparator,
     onCommitSurfaceVoid: handleCommitSurfaceVoid,

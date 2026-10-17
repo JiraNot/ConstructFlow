@@ -1,9 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react'
-import type { DisplayLengthUnit } from '@constructflow/project-model'
+import type { DisplayLengthUnit, InteriorFurnitureKind } from '@constructflow/project-model'
 import { parseLengthMm } from '@constructflow/project-model'
 
 type Point = [number, number]
-type ConnectedPlacementTool = 'roomSeparator' | 'pipe' | 'cabinet' | 'moulding'
+type ConnectedPlacementTool = 'roomSeparator' | 'pipe' | 'cabinet' | 'furniture' | 'moulding'
 type PipeSystem = 'waste' | 'soil' | 'rainwater' | 'vent' | 'cold_water' | 'hot_water'
 
 interface CommitPlanCanvasConnectedPlacementPointOptions {
@@ -11,6 +11,7 @@ interface CommitPlanCanvasConnectedPlacementPointOptions {
   point: Point
   startPoint: Point | null
   pipeSystem: PipeSystem
+  furnitureKind: InteriorFurnitureKind
   onStartPointChange: Dispatch<SetStateAction<Point | null>>
   onDrawLengthChange: Dispatch<SetStateAction<string>>
   onDrawAngleChange: Dispatch<SetStateAction<string>>
@@ -18,6 +19,7 @@ interface CommitPlanCanvasConnectedPlacementPointOptions {
   onCommitRoomSeparator?: (start: Point, end: Point) => void
   onCommitPipeRoute?: (start: Point, end: Point, system: PipeSystem) => void
   onCommitCabinet?: (start: Point, end: Point) => void
+  onCommitFurniture?: (start: Point, end: Point, kind: InteriorFurnitureKind) => void
   onCommitMoulding?: (start: Point, end: Point) => void
 }
 
@@ -26,6 +28,7 @@ export function commitPlanCanvasConnectedPlacementPoint({
   point,
   startPoint,
   pipeSystem,
+  furnitureKind,
   onStartPointChange,
   onDrawLengthChange,
   onDrawAngleChange,
@@ -33,6 +36,7 @@ export function commitPlanCanvasConnectedPlacementPoint({
   onCommitRoomSeparator,
   onCommitPipeRoute,
   onCommitCabinet,
+  onCommitFurniture,
   onCommitMoulding,
 }: CommitPlanCanvasConnectedPlacementPointOptions) {
   if (!startPoint) {
@@ -46,6 +50,7 @@ export function commitPlanCanvasConnectedPlacementPoint({
   if (activeTool === 'roomSeparator') onCommitRoomSeparator?.(startPoint, point)
   else if (activeTool === 'pipe') onCommitPipeRoute?.(startPoint, point, pipeSystem)
   else if (activeTool === 'cabinet') onCommitCabinet?.(startPoint, point)
+  else if (activeTool === 'furniture') onCommitFurniture?.(startPoint, point, furnitureKind)
   else if (activeTool === 'moulding') onCommitMoulding?.(startPoint, point)
   onStartPointChange(null)
   onDrawLengthChange('')

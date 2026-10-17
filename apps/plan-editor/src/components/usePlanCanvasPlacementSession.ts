@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { formatLengthMm, parseLengthMm, type DisplayLengthUnit, type ProjectDocument } from '@constructflow/project-model'
+import { formatLengthMm, parseLengthMm, type DisplayLengthUnit, type InteriorFurnitureKind, type ProjectDocument } from '@constructflow/project-model'
 import type { StairPlacementOptions } from '@constructflow/architecture-engine'
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
 import type { ToolType } from './Toolbar.js'
@@ -47,6 +47,7 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
   const [roofMaterial, setRoofMaterial] = useState('metal_sheet')
   const [pipeSystem, setPipeSystem] = useState<'waste' | 'soil' | 'rainwater' | 'vent' | 'cold_water' | 'hot_water'>('waste')
   const [fixtureKind, setFixtureKind] = useState<'light' | 'switch' | 'outlet' | 'panel'>('light')
+  const [furnitureKind, setFurnitureKind] = useState<InteriorFurnitureKind>('sofa')
   const [slabBoundary, setSlabBoundary] = useState<Point[]>([])
   const [calibrationP1, setCalibrationP1] = useState<Point | null>(null)
   const [calibrationMousePoint, setCalibrationMousePoint] = useState<Point | null>(null)
@@ -122,7 +123,7 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
   useEffect(() => {
     if (activeTool !== 'beam') setBeamStartNode(null)
     if (activeTool !== 'wall') setWallStartNode(null)
-    if (!['roomSeparator', 'pipe', 'cabinet', 'moulding'].includes(activeTool)) setRoomSeparatorStart(null)
+    if (!['roomSeparator', 'pipe', 'cabinet', 'furniture', 'moulding'].includes(activeTool)) setRoomSeparatorStart(null)
     if (activeTool !== 'grid') setGridStartPoint(null)
     if (activeTool !== 'stair') { setStairStartPoint(null); setStairError('') }
     if (activeTool !== 'gridCopy') setGridCopySourceId(null)
@@ -148,7 +149,7 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
     beamStartNode, setBeamStartNode, wallStartNode, setWallStartNode,
     roomSeparatorStart, setRoomSeparatorStart, roofShape, setRoofShape, roofSlopeDeg, setRoofSlopeDeg,
     roofThicknessMm, setRoofThicknessMm, roofElevationOffsetMm, setRoofElevationOffsetMm, roofMaterial, setRoofMaterial,
-    pipeSystem, setPipeSystem, fixtureKind, setFixtureKind, slabBoundary, setSlabBoundary,
+    pipeSystem, setPipeSystem, fixtureKind, setFixtureKind, furnitureKind, setFurnitureKind, slabBoundary, setSlabBoundary,
     calibrationP1, setCalibrationP1, calibrationMousePoint, setCalibrationMousePoint,
     tapeMeasure, setTapeMeasure, activeSnap, setActiveSnap, activeWallSnap, setActiveWallSnap,
   }

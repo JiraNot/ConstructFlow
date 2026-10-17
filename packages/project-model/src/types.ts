@@ -453,6 +453,17 @@ export interface CabinetModuleData extends CatalogPlacement {
   countertop_mm:number
 }
 
+export type InteriorFurnitureKind = 'sofa' | 'chair' | 'dining_table' | 'coffee_table' | 'desk' | 'bed_single' | 'bed_double' | 'toilet' | 'washbasin' | 'bathtub'
+export interface InteriorFurnitureModuleData extends CatalogPlacement {
+  kind: InteriorFurnitureKind
+  location_mm: Point3Mm
+  width_mm: number
+  depth_mm: number
+  height_mm: number
+  rotation_deg: number
+  material: string
+}
+
 // -------------------------------------------------------------
 // Legal, Land Title Deed & Signatories (Permit Package อ.1)
 // -------------------------------------------------------------

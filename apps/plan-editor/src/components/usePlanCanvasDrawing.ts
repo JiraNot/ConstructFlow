@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
-import type { DoorHanding, ProjectDocument, StairModuleData } from '@constructflow/project-model'
+import type { DoorHanding, InteriorFurnitureKind, ProjectDocument, StairModuleData } from '@constructflow/project-model'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
 import type { DisplayLengthUnit } from '@constructflow/project-model'
@@ -56,6 +56,7 @@ interface UsePlanCanvasDrawingOptions {
   roomSeparatorStart: [number, number] | null
   pipeSystem: 'waste' | 'soil' | 'rainwater' | 'vent' | 'cold_water' | 'hot_water'
   fixtureKind: 'light' | 'switch' | 'outlet' | 'panel'
+  furnitureKind: InteriorFurnitureKind
   slabBoundary: [number, number][]
 }
 
@@ -68,7 +69,7 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
     hoveredId, underlay, labelMode, labelVisibility, planDiscipline, viewport, displayUnit,
     manipulationPreview, externalManipulationPreview, coordination, coordinationSeverities,
     coordinationFocusSelection, gridStartPoint, gridCopySourceId, tapeMeasure,
-    dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, slabBoundary,
+    dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary,
   } = options
 
   const redraw = useCallback(() => {
@@ -103,7 +104,7 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
     drawPlanCanvasToolOverlays({
       ctx, activeTool, gridStartPoint, activeSnap, planProject, viewport, gridCopySourceId, tapeMeasure,
       displayUnit, activeWallSnap, project, activeDoorTypeMark, activeWindowTypeMark,
-      dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, slabBoundary,
+      dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary,
     })
     if (probe) probe.push(performance.now() - drawStartedAt)
   }, [
@@ -114,7 +115,7 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
     hoveredId, underlay, labelMode, labelVisibility, planDiscipline, viewport, displayUnit,
     manipulationPreview, externalManipulationPreview, coordination, coordinationSeverities,
     coordinationFocusSelection, gridStartPoint, gridCopySourceId, tapeMeasure,
-    dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, slabBoundary,
+    dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary,
   ])
 
   useEffect(() => redraw(), [redraw])

@@ -98,6 +98,8 @@ export function useWorkbenchKeyboardShortcuts({
         setActiveTool('fixture')
       } else if (event.key.toLowerCase() === 'k') {
         setActiveTool('cabinet')
+      } else if (event.key.toLowerCase() === 'v') {
+        setActiveTool('furniture')
       } else if (event.key.toLowerCase() === 'j') {
         setActiveTool('moulding')
       } else if (event.key.toLowerCase() === 'p') {

@@ -816,4 +816,43 @@ export function tube(a: Vec3, b: Vec3, radius: number, sides = 8): Triangle[] {
 export function clippedCarpetSegments(b: readonly Vec2[], s = 400, v: readonly (readonly Vec2[])[] = []): Array<[Vec2, Vec2]> { return [...polygonDiagonalHatchSegments(b, s, v, 45), ...polygonDiagonalHatchSegments(b, s, v, -45)] }
 export function clippedTerrazzoSegments(b: readonly Vec2[], s = 300, v: readonly (readonly Vec2[])[] = []): Array<[Vec2, Vec2]> { const h = polygonDiagonalHatchSegments(b, s, v, 15); const res: Array<[Vec2, Vec2]> = []; for(let i=0; i<h.length; i++){ const [a, b_] = h[i]; const l = Math.hypot(b_[0]-a[0], b_[1]-a[1]); const dx = (b_[0]-a[0])/l, dy = (b_[1]-a[1])/l; let t = (i*47)%150; while(t<l){ const cs = 15; if(t+cs>l) break; res.push([[a[0]+dx*t, a[1]+dy*t], [a[0]+dx*(t+cs), a[1]+dy*(t+cs)]]); t += 120 + ((t*13)%100); } } return res; }
 
+/** Draw a restrained, repeatable grass stipple clipped to a surface and its voids. */
+export function clippedGrassSegments(
+  boundary: readonly Vec2[],
+  spacingMm = 240,
+  voids: readonly (readonly Vec2[])[] = [],
+  origin: Vec2 = [0, 0],
+  rotationDeg = 0,
+): Array<[Vec2, Vec2]> {
+  if (boundary.length < 3 || !(spacingMm > 0) || !Number.isFinite(rotationDeg)
+    || [...boundary, ...voids.flat(), origin].some(point => !Number.isFinite(point[0]) || !Number.isFinite(point[1]))) return []
+  const radians = rotationDeg * Math.PI / 180, cos = Math.cos(radians), sin = Math.sin(radians)
+  const toLocal = ([x, y]: Vec2): Vec2 => { const dx = x - origin[0], dy = y - origin[1]; return [dx * cos + dy * sin, -dx * sin + dy * cos] }
+  const toWorld = ([x, y]: Vec2): Vec2 => [origin[0] + x * cos - y * sin, origin[1] + x * sin + y * cos]
+  const outer = boundary.map(toLocal), holes = voids.filter(ring => ring.length >= 3).map(ring => ring.map(toLocal))
+  const inside = (point: Vec2, ring: readonly Vec2[]) => {
+    let result = false
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i], b = ring[j]
+      if ((a[1] > point[1]) !== (b[1] > point[1]) && point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]) result = !result
+    }
+    return result
+  }
+  const minX = Math.min(...outer.map(point => point[0])), maxX = Math.max(...outer.map(point => point[0]))
+  const minY = Math.min(...outer.map(point => point[1])), maxY = Math.max(...outer.map(point => point[1]))
+  const firstX = Math.ceil(minX / spacingMm), lastX = Math.floor(maxX / spacingMm)
+  const firstY = Math.ceil(minY / spacingMm), lastY = Math.floor(maxY / spacingMm)
+  if (lastX - firstX > 1000 || lastY - firstY > 1000 || (lastX - firstX + 1) * (lastY - firstY + 1) > 100_000) return []
+  const result: Array<[Vec2, Vec2]> = [], half = Math.min(32, spacingMm * 0.14)
+  for (let ix = firstX; ix <= lastX; ix++) for (let iy = firstY; iy <= lastY; iy++) {
+    const x = ix * spacingMm, y = iy * spacingMm, center: Vec2 = [x, y]
+    if (!inside(center, outer) || holes.some(hole => inside(center, hole))) continue
+    const a: Vec2 = [x - half, y - half], b: Vec2 = [x + half, y + half]
+    const c: Vec2 = [x - half, y + half], d: Vec2 = [x + half, y - half]
+    if (inside(a, outer) && inside(b, outer) && !holes.some(hole => inside(a, hole) || inside(b, hole))) result.push([toWorld(a), toWorld(b)])
+    if (inside(c, outer) && inside(d, outer) && !holes.some(hole => inside(c, hole) || inside(d, hole))) result.push([toWorld(c), toWorld(d)])
+  }
+  return result
+}
+
 export { polygonUnionBoundary, segmentOutsidePolygons } from './polygonUnionBoundary.js'

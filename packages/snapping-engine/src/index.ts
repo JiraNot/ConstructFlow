@@ -189,6 +189,13 @@ function objectPaths(object: ProjectDocument['objects'][string], project?: Proje
     const center = data.center_mm as number[], size = data.size_mm as number[]
     return center && size ? [{ points: rectangleCorners([center[0], center[1]], size[0], size[1], Number(data.rotation_deg ?? 0)), closed: true }] : []
   }
+  if (object.object_type === 'interior.furniture') {
+    const [x, y] = data.location_mm as number[], width = Number(data.width_mm), depth = Number(data.depth_mm), angle = Number(data.rotation_deg ?? 0) * Math.PI / 180
+    const corners = [[0, 0], [width, 0], [width, depth], [0, depth]].map(([u, v]) => [
+      x + u * Math.cos(angle) - v * Math.sin(angle), y + u * Math.sin(angle) + v * Math.cos(angle),
+    ] as Point)
+    return [{ points: corners, closed: true }]
+  }
   const boundary = data.boundary_mm as Point[] | undefined
   if (boundary?.length) return [{ points: boundary, closed: true }, ...((data.voids_mm as Point[][] | undefined) ?? []).map(points => ({ points, closed: true }))]
   const path = (data.nodes_mm ?? data.path_mm) as number[][] | undefined

@@ -9,6 +9,7 @@ import type {
   PipeRouteModuleData,
   ElectricalFixtureModuleData,
   CabinetModuleData,
+  InteriorFurnitureModuleData,
   MouldingModuleData,
   ProjectSourceReference,
 } from '@constructflow/project-model'
@@ -34,6 +35,7 @@ export interface PropertiesPanelProps {
   onAssignElectricalFixtureToCircuit?: (fixtureId: string, circuitId: string | null) => void
   onApplyElectricalPhaseBalance?: (assignments: Record<string, 'Phase A' | 'Phase B' | 'Phase C'>) => void
   onUpdateCabinet?: (objectId: string, changes: Partial<CabinetModuleData>) => void
+  onUpdateInteriorFurniture?: (objectId: string, changes: Partial<InteriorFurnitureModuleData>) => void
   onUpdateMoulding?: (objectId: string, changes: Partial<MouldingModuleData>) => void
   onUpdateStair?: (objectId: string, changes: Partial<StairModuleData>) => void
   onUpdateFoundationMark: (objectId: string, newMark: string) => void

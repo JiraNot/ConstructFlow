@@ -1,6 +1,7 @@
 import type {
   ProjectDocument,
   CabinetModuleData,
+  InteriorFurnitureModuleData,
 } from "@constructflow/project-model";
 import { legacyTypeUuid } from "@constructflow/project-model";
 import type {
@@ -71,6 +72,16 @@ export function decodeCabinet(
   if (result.modules_mm.length * (result.shelves + result.drawers + 1) > 10000)
     throw new Error("Joinery part count exceeds supported limit");
   return result;
+}
+
+export function decodeInteriorFurniture(d: Record<string, unknown>, p: ProjectDocument): InteriorFurnitureModuleData {
+  return {
+    ...placement(d, p),
+    kind: choice(d.kind, ["sofa", "chair", "dining_table", "coffee_table", "desk", "bed_single", "bed_double", "toilet", "washbasin", "bathtub"], "furniture kind") as InteriorFurnitureModuleData["kind"],
+    location_mm: vec3(d.location_mm, "location"),
+    width_mm: positive(d.width_mm, "width"), depth_mm: positive(d.depth_mm, "depth"), height_mm: positive(d.height_mm, "height"),
+    rotation_deg: num(d.rotation_deg ?? 0, "rotation"), material: text(d.material ?? "wood", "material"),
+  }
 }
 export interface JoineryPart {
   id: string;
@@ -290,6 +301,8 @@ export function generateJoineryParts(
 export function executeInteriorCommand(
   c: CommandHandlerContext,
 ): CommandBusResult | undefined {
+  if (["CreateInteriorFurniture", "UpdateInteriorFurniture"].includes(c.commandName))
+    return domainCommand(c, "interior.furniture", "constructflow.interior", decodeInteriorFurniture, { update: c.commandName === "UpdateInteriorFurniture" });
   if (["CreateCabinetRun", "UpdateCabinetRun"].includes(c.commandName))
     return domainCommand(
       c,
@@ -301,7 +314,41 @@ export function executeInteriorCommand(
   return undefined;
 }
 export function interiorOutputs(p: ProjectDocument): DomainOutput[] {
-  return Object.values(p.objects)
+  const furnitureOutputs = Object.values(p.objects)
+    .filter(o => o.object_type === "interior.furniture")
+    .map(o => {
+      const d = decodeInteriorFurniture(resolvedData(p, o), p), out = output(o, d)
+      const [x, y, z] = d.location_mm, angle = d.rotation_deg * Math.PI / 180
+      const local = (points: [number, number][]): Vec3[] => points.map(([u, v]) => [x + u * Math.cos(angle) - v * Math.sin(angle), y + u * Math.sin(angle) + v * Math.cos(angle), z])
+      const path = (points: [number, number][], close = false) => { const ring = close ? [...points, points[0]] : points; out.paths.push(local(ring)) }
+      const w = d.width_mm, depth = d.depth_mm, margin = Math.min(80, Math.min(w, depth) * 0.12)
+      path([[0, 0], [w, 0], [w, depth], [0, depth]], true)
+      if (d.kind === "sofa") {
+        path([[margin, margin], [w - margin, margin], [w - margin, depth - margin], [margin, depth - margin]], true)
+        const seatCount = Math.max(1, Math.round(w / 700))
+        for (let i = 1; i < seatCount; i++) { const sx = w * i / seatCount; path([[sx, margin], [sx, depth - margin]]) }
+        path([[margin, margin], [w - margin, margin]])
+      } else if (d.kind.startsWith("bed_")) {
+        path([[margin, margin * 2], [w - margin, margin * 2], [w - margin, depth - margin], [margin, depth - margin]], true)
+        const pillowWidth = Math.min(w * 0.38, 560), pillowHeight = Math.min(depth * 0.17, 220)
+        for (const center of [w * 0.28, w * 0.72]) path([[center - pillowWidth / 2, margin * 2 + margin * 0.3], [center + pillowWidth / 2, margin * 2 + margin * 0.3], [center + pillowWidth / 2, margin * 2 + margin * 0.3 + pillowHeight], [center - pillowWidth / 2, margin * 2 + margin * 0.3 + pillowHeight]], true)
+      } else if (d.kind === "dining_table" || d.kind === "coffee_table" || d.kind === "desk") {
+        const leg = Math.max(35, Math.min(65, margin * 0.7))
+        for (const [lx, ly] of [[margin, margin], [w - margin, margin], [w - margin, depth - margin], [margin, depth - margin]] as [number, number][]) path([[lx - leg / 2, ly - leg / 2], [lx + leg / 2, ly - leg / 2], [lx + leg / 2, ly + leg / 2], [lx - leg / 2, ly + leg / 2]], true)
+      } else if (d.kind === "chair") {
+        path([[margin, margin], [w - margin, margin], [w - margin, depth * 0.66], [margin, depth * 0.66]], true)
+        path([[margin, depth * 0.78], [w - margin, depth * 0.78]])
+      } else if (d.kind === "toilet" || d.kind === "washbasin" || d.kind === "bathtub") {
+        const inset = d.kind === "bathtub" ? margin * 0.65 : margin
+        path([[inset, inset], [w - inset, inset], [w - inset, depth - inset], [inset, depth - inset]], true)
+        if (d.kind !== "bathtub") path([[w * 0.22, depth * 0.25], [w * 0.78, depth * 0.25], [w * 0.78, depth * 0.78], [w * 0.22, depth * 0.78]], true)
+      }
+      out.meshes = box([x + w / 2 * Math.cos(angle) - depth / 2 * Math.sin(angle), y + w / 2 * Math.sin(angle) + depth / 2 * Math.cos(angle), z + d.height_mm / 2], [w, depth, d.height_mm], angle)
+      out.schedule = { Kind: d.kind, Width_m: w / 1000, Depth_m: depth / 1000, Height_m: d.height_mm / 1000, Material: d.material }
+      out.quantities = [{ classification: "interior.furniture.footprint", description: `${d.mark} ${d.kind}`, quantity: w * depth / 1e6, unit: "m2", formula: "width × depth / 1e6", material: d.material }]
+      return out
+    })
+  return [...furnitureOutputs, ...Object.values(p.objects)
     .filter((o) => o.object_type === "interior.cabinet_run")
     .map((o) => {
       const d = decodeCabinet(resolvedData(p, o), p),
@@ -405,7 +452,7 @@ export function interiorOutputs(p: ProjectDocument): DomainOutput[] {
         Edge_band_m: parts.reduce((s, v) => s + v.edge_band_m, 0),
       };
       return out;
-    });
+    })];
 }
 export function validateInterior(p: ProjectDocument): void {
   interiorOutputs(p);

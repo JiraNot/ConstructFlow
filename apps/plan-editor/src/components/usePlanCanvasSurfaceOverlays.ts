@@ -125,6 +125,7 @@ export function usePlanCanvasSurfaceOverlays({
     open: authoringControlsOpen,
     pipeSystem: placement.pipeSystem,
     fixtureKind: placement.fixtureKind,
+    furnitureKind: placement.furnitureKind,
     roof,
     stairOptions: placement.stairOptions,
     stairError: placement.stairError,
@@ -151,6 +152,7 @@ export function usePlanCanvasSurfaceOverlays({
     onOpenChange: setAuthoringControlsOpen,
     onPipeSystemChange: placement.setPipeSystem,
     onFixtureKindChange: placement.setFixtureKind,
+    onFurnitureKindChange: placement.setFurnitureKind,
     onRoofChange: updater => {
       const next = updater(roof)
       placement.setRoofShape(next.shape)

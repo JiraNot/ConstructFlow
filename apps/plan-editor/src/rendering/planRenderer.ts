@@ -21,7 +21,7 @@ import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
 import { resolveArchitecturalFloorPatternKind, decodeStair, getStairPlanDrawing } from '@constructflow/architecture-engine'
 import { SnapResult } from '@constructflow/snapping-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
-import { clippedGridSegments, clippedStaggeredPlankSegments, offsetPolygonOutward, polygonDiagonalHatchSegments, polygonInteriorPoint, wallMasonryHatchSegments , clippedCarpetSegments, clippedTerrazzoSegments} from "@constructflow/geometry-kernel"
+import { clippedGridSegments, clippedStaggeredPlankSegments, offsetPolygonOutward, polygonDiagonalHatchSegments, polygonInteriorPoint, wallMasonryHatchSegments , clippedCarpetSegments, clippedTerrazzoSegments, clippedGrassSegments} from "@constructflow/geometry-kernel"
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
 import { getPlanWallLayerBoundaries, getPlanFinishBoundaries, structuralPlasterThickness, getPlanVisibleObjects, resolvePlanPhaseStyle, resolvePlanWallPhaseStyle } from '@constructflow/representation-engine'
 import type { PlanDiscipline } from '@constructflow/representation-engine'
@@ -235,7 +235,10 @@ export function renderPlanView(
       ctx.closePath()
       if(obj.object_type==='architecture.floor'){
         const boundaryOpen=data.room_boundary_status==='unclosed',phase=getDisplayPhase(obj),phaseStyle=resolvePlanPhaseStyle(phase),voids=(Array.isArray(data.voids_mm)?data.voids_mm:[]) as [number,number][][]
-        ctx.fillStyle=boundaryOpen?'rgba(239,68,68,.12)':isSelected(obj.id)?'rgba(5,150,105,.22)':phase==='existing'?'rgba(148,163,184,.4)':phaseStyle.fill;ctx.strokeStyle=boundaryOpen?'#dc2626':isSelected(obj.id)?'#059669':phaseStyle.stroke;ctx.lineWidth=phase==='demolition'?1.5:phase==='existing'?1:2
+        const layers = Array.isArray(data.finish_layers) ? data.finish_layers as Array<{ material?: string }> : []
+        const patternKind = resolveArchitecturalFloorPatternKind(layers)
+        const finishTint = patternKind === 'grass' ? 'rgba(74,139,72,.16)' : patternKind === 'staggered_plank' ? 'rgba(184,133,74,.10)' : patternKind === 'terrazzo' ? 'rgba(166,139,112,.10)' : patternKind ? 'rgba(148,163,184,.07)' : phaseStyle.fill
+        ctx.fillStyle=boundaryOpen?'rgba(239,68,68,.12)':isSelected(obj.id)?'rgba(5,150,105,.22)':phase==='existing'?'rgba(148,163,184,.4)':finishTint;ctx.strokeStyle=boundaryOpen?'#dc2626':isSelected(obj.id)?'#059669':phaseStyle.stroke;ctx.lineWidth=phase==='demolition'?1.5:phase==='existing'?1:2
         ctx.setLineDash(boundaryOpen?[5,3]:phaseStyle.dash)
         for(const raw of voids){ctx.moveTo(...worldToScreen(raw[0],viewport));raw.slice(1).forEach(p=>ctx.lineTo(...worldToScreen(p,viewport)));ctx.closePath()}
         ctx.fill('evenodd');ctx.stroke();ctx.setLineDash([])
@@ -244,18 +247,18 @@ export function renderPlanView(
           for(const [a,b] of polygonDiagonalHatchSegments(ring,250,voids)){const [ax,ay]=worldToScreen(a,viewport),[bx,by]=worldToScreen(b,viewport);ctx.moveTo(ax,ay);ctx.lineTo(bx,by)}
           ctx.stroke()
         }
-        const layers = Array.isArray(data.finish_layers) ? data.finish_layers as Array<{ material?: string }> : []
-        const patternKind = resolveArchitecturalFloorPatternKind(layers)
         if (patternKind) {
           const spacing: [number, number] = Array.isArray(data.finish_pattern_mm) ? data.finish_pattern_mm as [number, number] : [600, 600]
           const origin: [number, number] = Array.isArray(data.finish_pattern_origin_mm) ? data.finish_pattern_origin_mm as [number, number] : [0, 0]
           const rotation = Number(data.finish_pattern_rotation_deg ?? 0)
-          ctx.beginPath(); ctx.strokeStyle = isSelected(obj.id) ? 'rgba(5,150,105,.72)' : phase==='demolition'?'#ef4444':'#cbd5e1'; ctx.lineWidth = .7;ctx.setLineDash(phaseStyle.dash)
-          const pattern = patternKind === 'staggered_plank' || patternKind === 'concrete_block'
+          ctx.beginPath(); ctx.strokeStyle = isSelected(obj.id) ? 'rgba(5,150,105,.72)' : phase==='demolition'?'#ef4444':patternKind==='grass'?'#78956f':'#cbd5e1'; ctx.lineWidth = .7;ctx.setLineDash(phaseStyle.dash)
+          const pattern = patternKind === 'grass'
+              ? clippedGrassSegments(ring, Math.max(160, spacing[0] * 0.4), voids, origin, rotation)
+              : patternKind === 'staggered_plank' || patternKind === 'concrete_block'
               ? clippedStaggeredPlankSegments(ring, spacing[0], spacing[1], voids, origin, rotation)
               : patternKind === 'carpet' ? clippedCarpetSegments(ring, spacing[0], voids)
               : patternKind === 'terrazzo' ? clippedTerrazzoSegments(ring, spacing[0], voids)
-              : clippedGridSegments(ring, spacing[0], spacing[1], voids, origin, rotation)
+              : clippedGridSegments(ring, spacing[0], spacing[1], voids, origin, rotation + (patternKind === 'diagonal_tile' ? 45 : 0))
           for (const [a, b] of pattern) {
             const [ax, ay] = worldToScreen(a, viewport), [bx, by] = worldToScreen(b, viewport)
             ctx.moveTo(ax, ay); ctx.lineTo(bx, by)
@@ -299,20 +302,22 @@ export function renderPlanView(
           })
           ctx.closePath()
         }
-        ctx.fillStyle = phase === 'demolition' ? 'rgba(239,68,68,.08)' : 'rgba(148,163,184,.12)'
-        ctx.fill('evenodd')
         const finishLayers = Array.isArray(data?.finish_layers) ? data.finish_layers as Array<{ material?: string }> : []
         const patternKind = resolveArchitecturalFloorPatternKind(finishLayers)
+        ctx.fillStyle = phase === 'demolition' ? 'rgba(239,68,68,.08)' : patternKind === 'grass' ? 'rgba(74,139,72,.16)' : 'rgba(148,163,184,.12)'
+        ctx.fill('evenodd')
         if (patternKind) {
           const spacing: [number, number] = Array.isArray(data?.finish_pattern_mm) ? data.finish_pattern_mm as [number, number] : [600, 600]
           const origin: [number, number] = Array.isArray(data?.finish_pattern_origin_mm) ? data.finish_pattern_origin_mm as [number, number] : [0, 0]
           const rotation = Number(data?.finish_pattern_rotation_deg ?? 0)
-          const segments = patternKind === 'staggered_plank' || patternKind === 'concrete_block'
+          const segments = patternKind === 'grass'
+            ? clippedGrassSegments(boundary, Math.max(160, spacing[0] * 0.4), voids, origin, rotation)
+            : patternKind === 'staggered_plank' || patternKind === 'concrete_block'
             ? clippedStaggeredPlankSegments(boundary, spacing[0], spacing[1], voids, origin, rotation)
             : patternKind === 'carpet' ? clippedCarpetSegments(boundary, spacing[0], voids)
             : patternKind === 'terrazzo' ? clippedTerrazzoSegments(boundary, spacing[0], voids)
-            : clippedGridSegments(boundary, spacing[0], spacing[1], voids, origin, rotation)
-          ctx.beginPath(); ctx.strokeStyle = isSelected(out.object_id) ? '#059669' : '#cbd5e1'; ctx.lineWidth = .7
+            : clippedGridSegments(boundary, spacing[0], spacing[1], voids, origin, rotation + (patternKind === 'diagonal_tile' ? 45 : 0))
+          ctx.beginPath(); ctx.strokeStyle = isSelected(out.object_id) ? '#059669' : patternKind === 'grass' ? '#78956f' : '#cbd5e1'; ctx.lineWidth = .7
           for (const [a, b] of segments) { const [ax, ay] = worldToScreen(a, viewport), [bx, by] = worldToScreen(b, viewport); ctx.moveTo(ax, ay); ctx.lineTo(bx, by) }
           ctx.stroke()
         }
@@ -438,6 +443,16 @@ export function renderPlanView(
     if (isColumnObject(obj)) {
       drawColumn(ctx, obj, project, viewport, isSelected(obj.id), hoveredId === obj.id, labelVisibility.structure)
     }
+  }
+
+  // 8.25 Interior cabinetry is drawn as a furniture plan symbol over the finish.
+  for (const obj of Object.values(project.objects)) {
+    if (obj.object_type !== 'interior.cabinet_run' || !visibleObjectIds.has(obj.id)) continue
+    drawCabinetPlanSymbol(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id)
+  }
+  for (const obj of Object.values(project.objects)) {
+    if (obj.object_type !== 'interior.furniture' || !visibleObjectIds.has(obj.id)) continue
+    drawInteriorFurnitureSymbol(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id)
   }
 
   // 8.5 Roof framing is an explicit structural plan discipline, so the roof
@@ -716,14 +731,9 @@ export function drawDirectManipulationGhost(
       const voids = data.voids_mm
       if (Array.isArray(voids)) for (const ring of voids) drawRing(ring, true, false)
     } else if (object.object_type === 'interior.cabinet_run') {
-      const d = data as unknown as import('@constructflow/project-model').CabinetModuleData
-      const angle = d.rotation_deg * Math.PI / 180
-      const local = [[0, 0], [d.width_mm, 0], [d.width_mm, d.depth_mm], [0, d.depth_mm]]
-      const ring = local.map(([x, y]) => [
-        d.location_mm[0] + x * Math.cos(angle) - y * Math.sin(angle),
-        d.location_mm[1] + x * Math.sin(angle) + y * Math.cos(angle),
-      ])
-      drawRing(ring)
+      drawCabinetPlanSymbol(ctx, object, viewport, true, false)
+    } else if (object.object_type === 'interior.furniture') {
+      drawInteriorFurnitureSymbol(ctx, object, viewport, true, false)
     } else if (Array.isArray(data.start_point_mm) && Array.isArray(data.end_point_mm)) {
       drawRing([data.start_point_mm, data.end_point_mm], false)
     } else {
@@ -1198,6 +1208,138 @@ function drawBeam(
   // Label badge
   if (showLabel) queuePlanLabel(ctx, 0, -18, text, isSelected ? '#0876d1' : '#33465b', isSelected ? '#1682e8' : '#c7d3df', isSelected ? 10 : isHovered ? 8 : 1, '#fbfdff', true)
 
+  ctx.restore()
+}
+
+function drawCabinetPlanSymbol(ctx: CanvasRenderingContext2D, object: SmartObject, viewport: ViewportState, selected: boolean, hovered: boolean) {
+  const data = object.module_data as import('@constructflow/project-model').CabinetModuleData
+  const [x, y] = data.location_mm
+  const width = Number(data.width_mm), depth = Number(data.depth_mm), rotation = Number(data.rotation_deg ?? 0) * Math.PI / 180
+  if (![x, y, width, depth, rotation].every(Number.isFinite) || width <= 0 || depth <= 0) return
+  const c = Math.cos(rotation), s = Math.sin(rotation)
+  const world = ([u, v]: [number, number]): [number, number] => [x + u * c - v * s, y + u * s + v * c]
+  const screen = (point: [number, number]) => worldToScreen(world(point), viewport)
+  const accent = selected ? '#0284c7' : hovered ? '#b45309' : '#795548'
+  ctx.save()
+  ctx.lineWidth = selected ? 2 : 1
+  ctx.strokeStyle = accent
+  ctx.fillStyle = selected ? 'rgba(2,132,199,.12)' : 'rgba(245,239,229,.82)'
+  const outline: [number, number][] = [[0, 0], [width, 0], [width, depth], [0, depth]]
+  ctx.beginPath(); outline.forEach((point, index) => { const p = screen(point); if (index) ctx.lineTo(...p); else ctx.moveTo(...p) }); ctx.closePath(); ctx.fill(); ctx.stroke()
+  // Slight countertop overhang and a second carcass line give the run a clear plan symbol.
+  const inset = Math.max(18, Math.min(35, depth * 0.06))
+  const inner: [number, number][] = [[inset, inset], [width - inset, inset], [width - inset, depth - inset], [inset, depth - inset]]
+  ctx.lineWidth = 0.75; ctx.strokeStyle = selected ? '#60a5fa' : '#b08968'
+  ctx.beginPath(); inner.forEach((point, index) => { const p = screen(point); if (index) ctx.lineTo(...p); else ctx.moveTo(...p) }); ctx.closePath(); ctx.stroke()
+
+  const modules = Array.isArray(data.modules_mm) ? data.modules_mm.map(value => Number(value)).filter(value => value > 0 && Number.isFinite(value)) : []
+  const moduleWidths = modules.length ? modules : [width]
+  const total = moduleWidths.reduce((sum, value) => sum + value, 0)
+  let cursor = 0
+  for (let index = 0; index < moduleWidths.length; index++) {
+    const start = cursor, end = index === moduleWidths.length - 1 ? width : cursor + width * moduleWidths[index] / total
+    if (index > 0) {
+      ctx.beginPath(); ctx.moveTo(...screen([start, inset])); ctx.lineTo(...screen([start, depth - inset])); ctx.stroke()
+    }
+    const center = (start + end) / 2
+    if (data.front === 'open') {
+      const shelves = Math.max(1, Math.min(4, Math.floor(Number(data.shelves) || 1)))
+      for (let shelf = 1; shelf <= shelves; shelf++) {
+        const sy = inset + (depth - inset * 2) * shelf / (shelves + 1)
+        ctx.beginPath(); ctx.moveTo(...screen([start + inset, sy])); ctx.lineTo(...screen([end - inset, sy])); ctx.stroke()
+      }
+    } else if (data.front === 'glass') {
+      ctx.beginPath(); ctx.moveTo(...screen([start + inset, inset])); ctx.lineTo(...screen([end - inset, depth - inset])); ctx.moveTo(...screen([end - inset, inset])); ctx.lineTo(...screen([start + inset, depth - inset])); ctx.stroke()
+    } else {
+      const drawers = Math.max(0, Math.min(6, Math.floor(Number(data.drawers) || 0)))
+      if (drawers > 1) for (let drawer = 1; drawer < drawers; drawer++) {
+        const dy = inset + (depth - inset * 2) * drawer / drawers
+        ctx.beginPath(); ctx.moveTo(...screen([start + inset, dy])); ctx.lineTo(...screen([end - inset, dy])); ctx.stroke()
+      }
+      const handleHalf = Math.min(22, Math.max(9, (end - start) * 0.035))
+      const handleY = depth * 0.72
+      ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(...screen([center - handleHalf, handleY])); ctx.lineTo(...screen([center + handleHalf, handleY])); ctx.stroke(); ctx.lineWidth = 0.75
+    }
+    cursor = end
+  }
+  ctx.restore()
+}
+
+function drawInteriorFurnitureSymbol(ctx: CanvasRenderingContext2D, object: SmartObject, viewport: ViewportState, selected: boolean, hovered: boolean) {
+  const data = object.module_data as import('@constructflow/project-model').InteriorFurnitureModuleData
+  const [x, y] = data.location_mm
+  const width = Number(data.width_mm), depth = Number(data.depth_mm), zoom = viewport.zoom
+  const angle = Number(data.rotation_deg ?? 0) * Math.PI / 180
+  if (![x, y, width, depth, zoom, angle].every(Number.isFinite) || width <= 0 || depth <= 0) return
+  const [sx, sy] = worldToScreen([x, y], viewport)
+  const line = selected ? '#0284c7' : hovered ? '#b45309' : '#64748b'
+  const upholstery = data.material === 'leather' ? '#d9b9a5' : '#e8e1d8'
+  ctx.save(); ctx.translate(sx, sy); ctx.rotate(angle); ctx.scale(zoom, zoom)
+  ctx.lineWidth = Math.max(0.7, 1 / zoom); ctx.strokeStyle = line; ctx.fillStyle = upholstery
+  const rect = (left: number, top: number, w: number, h: number, radius = 0, fill = true) => {
+    ctx.beginPath()
+    if (radius && 'roundRect' in ctx) ctx.roundRect(left, top, w, h, radius)
+    else ctx.rect(left, top, w, h)
+    if (fill) ctx.fill(); ctx.stroke()
+  }
+  const linePath = (points: [number, number][]) => { ctx.beginPath(); points.forEach(([px, py], index) => index ? ctx.lineTo(px, py) : ctx.moveTo(px, py)); ctx.stroke() }
+  const margin = Math.min(90, Math.min(width, depth) * 0.12)
+  switch (data.kind) {
+    case 'sofa': {
+      rect(0, 0, width, depth, 100)
+      rect(margin, margin, width - margin * 2, depth - margin * 2, 65)
+      rect(margin, margin, width - margin * 2, depth * 0.2, 45)
+      const seats = Math.max(1, Math.round(width / 700))
+      for (let index = 0; index < seats; index++) {
+        const seatWidth = (width - margin * 2) / seats
+        rect(margin + index * seatWidth + 12, depth * 0.28, seatWidth - 24, depth * 0.52, 45, false)
+      }
+      rect(margin * 0.45, margin, margin * 0.75, depth - margin * 2, 45)
+      rect(width - margin * 1.2, margin, margin * 0.75, depth - margin * 2, 45)
+      break
+    }
+    case 'bed_single': case 'bed_double': {
+      ctx.fillStyle = '#f2eee7'; rect(0, 0, width, depth, 75)
+      ctx.fillStyle = '#c3a889'; rect(0, 0, width, Math.max(70, margin * 0.55), 32)
+      ctx.fillStyle = '#fffdf8'; rect(margin, margin, width - margin * 2, depth - margin * 1.35, 48)
+      const pillowWidth = data.kind === 'bed_single' ? width * 0.62 : width * 0.38
+      const pillows = data.kind === 'bed_single' ? [width / 2] : [width * 0.29, width * 0.71]
+      for (const center of pillows) rect(center - pillowWidth / 2, margin * 1.25, pillowWidth, Math.min(depth * 0.17, 220), 32)
+      linePath([[margin, depth * 0.43], [width - margin, depth * 0.43]])
+      break
+    }
+    case 'chair': {
+      rect(margin, margin * 0.7, width - margin * 2, depth * 0.74, 55)
+      rect(margin * 0.65, margin * 0.4, width - margin * 1.3, Math.max(55, margin * 0.5), 35)
+      linePath([[margin, depth * 0.82], [width - margin, depth * 0.82]])
+      break
+    }
+    case 'dining_table': case 'coffee_table': case 'desk': {
+      ctx.fillStyle = data.kind === 'desk' ? '#eadcc7' : '#eee5d6'; rect(0, 0, width, depth, 45)
+      const leg = Math.max(38, Math.min(75, margin * 0.65))
+      for (const [lx, ly] of [[margin, margin], [width - margin, margin], [width - margin, depth - margin], [margin, depth - margin]]) rect(lx - leg / 2, ly - leg / 2, leg, leg, leg / 5)
+      if (data.kind === 'desk') { rect(width * 0.12, depth * 0.12, width * 0.3, depth * 0.08, 8); rect(width * 0.72, depth * 0.1, width * 0.16, depth * 0.52, 15) }
+      break
+    }
+    case 'toilet': {
+      ctx.fillStyle = '#f8fafc'; rect(width * 0.25, depth * 0.08, width * 0.5, depth * 0.24, 35)
+      ctx.beginPath(); ctx.ellipse(width / 2, depth * 0.62, width * 0.34, depth * 0.31, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+      ctx.beginPath(); ctx.ellipse(width / 2, depth * 0.62, width * 0.22, depth * 0.2, 0, 0, Math.PI * 2); ctx.stroke()
+      break
+    }
+    case 'washbasin': {
+      ctx.fillStyle = '#f8fafc'; rect(0, 0, width, depth, 75)
+      ctx.beginPath(); ctx.ellipse(width / 2, depth * 0.53, width * 0.34, depth * 0.32, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+      ctx.beginPath(); ctx.arc(width / 2, depth * 0.12, Math.max(24, margin * 0.16), 0, Math.PI * 2); ctx.stroke()
+      break
+    }
+    case 'bathtub': {
+      ctx.fillStyle = '#f8fafc'; rect(0, 0, width, depth, Math.min(width, depth) * 0.12)
+      ctx.beginPath(); ctx.roundRect(margin, margin, width - margin * 2, depth - margin * 2, Math.min(width, depth) * 0.1); ctx.fill(); ctx.stroke()
+      ctx.beginPath(); ctx.arc(width * 0.5, depth * 0.12, Math.max(24, margin * 0.14), 0, Math.PI * 2); ctx.stroke()
+      break
+    }
+  }
   ctx.restore()
 }
 

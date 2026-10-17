@@ -59,6 +59,14 @@ export const usePlanCanvasViewport = (
       if (object.object_type === 'interior.cabinet_run') {
         points.push(...cabinetFootprintPoints(object.module_data as unknown as CabinetModuleData))
       }
+      if (object.object_type === 'interior.furniture') {
+        const d = data as { location_mm: [number, number, number]; width_mm: number; depth_mm: number; rotation_deg: number }
+        const angle = Number(d.rotation_deg ?? 0) * Math.PI / 180
+        for (const [u, v] of [[0, 0], [d.width_mm, 0], [d.width_mm, d.depth_mm], [0, d.depth_mm]]) points.push([
+          d.location_mm[0] + u * Math.cos(angle) - v * Math.sin(angle),
+          d.location_mm[1] + u * Math.sin(angle) + v * Math.cos(angle),
+        ])
+      }
       for (const key of pointKeys) {
         const value = data[key]
         if (Array.isArray(value) && Number.isFinite(value[0]) && Number.isFinite(value[1])) {

@@ -37,7 +37,9 @@ export function usePlanCanvasToolController({
     value: PlanCanvasPreferences[K] | ((current: PlanCanvasPreferences[K]) => PlanCanvasPreferences[K]),
   ) => onPreferencesChange(current => updatePlanCanvasPreference(current, key, value))
 
-  const selectionHint = editableSelectionIds.some(id => planProject.objects[id]?.object_type === 'interior.cabinet_run')
+  const selectionHint = editableSelectionIds.some(id => planProject.objects[id]?.object_type === 'interior.furniture')
+    ? 'เลือกเฟอร์นิเจอร์ · ลากย้าย · ปรับชนิดและขนาดในแถบแก้ไข · Esc ล้างการเลือก'
+    : editableSelectionIds.some(id => planProject.objects[id]?.object_type === 'interior.cabinet_run')
     ? 'เลือกบิลท์อิน · ลากด้ามสีม่วงเพื่อหมุน โดยคงตำแหน่งและขนาด · Esc ล้างการเลือก'
     : 'เลือก · คลิกเลือกหรือ ลากครอบวัตถุ · Tab สลับวัตถุซ้อน · Esc ล้างการเลือก'
 

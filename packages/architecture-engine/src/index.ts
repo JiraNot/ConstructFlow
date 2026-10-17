@@ -32,18 +32,20 @@ function resolveOpeningResizePlacement(
   }
 }
 
-export type ArchitecturalFloorPatternKind = 'tile_grid' | 'staggered_plank' | 'carpet' | 'terrazzo' | 'concrete_block' | 'glass_block'
+export type ArchitecturalFloorPatternKind = 'tile_grid' | 'diagonal_tile' | 'staggered_plank' | 'carpet' | 'terrazzo' | 'concrete_block' | 'glass_block' | 'grass'
 
 /** Resolve plan hatch from the floor finish assembly's exposed finish material. */
 export function resolveArchitecturalFloorPatternKind(
   finishLayers: readonly { material?: unknown }[],
 ): ArchitecturalFloorPatternKind | undefined {
   const materials = finishLayers.map(layer => String(layer.material ?? ''))
+  if (materials.some(material => /grass|lawn|turf|หญ้า|สนามหญ้า/i.test(material))) return 'grass'
+  if (materials.some(material => /diagonal[_ -]?tile|tile[_ -]?diagonal|กระเบื้องลายทแยง/i.test(material))) return 'diagonal_tile'
   if (materials.some(material => /tile|porcelain|ceramic|กระเบื้อง/i.test(material))) return 'tile_grid'
   if (materials.some(material => /wood|timber|laminate|vinyl[_ -]?plank|ไม้|ลามิเนต/i.test(material))) return 'staggered_plank'
   if (materials.some(material => /carpet|พรม/i.test(material))) return 'carpet'
   if (materials.some(material => /terrazzo|หินขัด/i.test(material))) return 'terrazzo'
-  if (materials.some(material => /concrete[_ -]?block|คอนกรีตบล็อก/i.test(material))) return 'concrete_block'
+  if (materials.some(material => /concrete[_ -]?block|brick[_ -]?paver|อิฐปูพื้น|คอนกรีตบล็อก/i.test(material))) return 'concrete_block'
   if (materials.some(material => /glass[_ -]?block|บล็อกแก้ว/i.test(material))) return 'glass_block'
   return undefined
 }

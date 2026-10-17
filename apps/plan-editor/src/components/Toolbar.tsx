@@ -43,6 +43,7 @@ export type ToolType =
   | 'pipe'
   | 'fixture'
   | 'cabinet'
+  | 'furniture'
   | 'moulding'
   | 'roomSeparator'
   | 'stair'
@@ -140,6 +141,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     { id: 'pipe', label: 'แนวท่อ (U)', icon: <Minus size={16} />, shortcut: 'U' },
     { id: 'fixture', label: 'อุปกรณ์ไฟฟ้า (L)', icon: <Layers size={16} />, shortcut: 'L' },
     { id: 'cabinet', label: 'บิลท์อิน (K)', icon: <Square size={16} />, shortcut: 'K' },
+    { id: 'furniture', label: 'เฟอร์นิเจอร์ (V)', icon: <House size={16} />, shortcut: 'V' },
     { id: 'moulding', label: 'แนวบัว (J)', icon: <Minus size={16} />, shortcut: 'J' },
     { id: 'roomSeparator', label: 'เส้นแบ่งห้อง (Shift+R)', icon: <Minus size={16} />, shortcut: 'Shift+R' },
     {
@@ -163,7 +165,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const pinnedTools = availableTools.filter(tool => ['select', 'wall', 'beam', 'door', 'window', 'dimension'].includes(tool.id))
   const toolGroups: { title: string; ids: ToolType[] }[] = [
     { title: 'โครงสร้าง', ids: ['column', 'foundation', 'slab'] },
-    { title: 'สถาปัตย์', ids: ['archFloor', 'ceiling', 'roof', 'cabinet', 'moulding', 'roomSeparator', 'stair'] },
+    { title: 'สถาปัตย์', ids: ['archFloor', 'ceiling', 'roof', 'cabinet', 'furniture', 'moulding', 'roomSeparator', 'stair'] },
     { title: 'ระบบ', ids: ['pipe', 'fixture'] },
     { title: 'เขียนแบบ/สำรวจ', ids: ['erase', 'grid', 'gridSystem', 'measure', 'calibrate'] },
   ]
@@ -227,7 +229,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <summary aria-label={group.title}>{group.title}</summary>
             <div className="cf-tool-group-menu" role="group" aria-label={group.title}>
               {groupTools.map(t => <button key={t.id} type="button" className={`cf-tool-button ${activeTool === t.id ? 'is-active' : ''}`} onClick={() => onSelectTool(t.id)} title={t.label} aria-label={t.label}>
-              {t.icon}<span className="cf-tool-label">{({ erase: 'ลบ', column: 'เสา', foundation: 'ฐานราก', slab: 'พื้น', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้า', roof: 'หลังคา', pipe: 'ท่อ', fixture: 'อุปกรณ์', cabinet: 'บิลท์อิน', moulding: 'บัว', roomSeparator: 'แบ่งห้อง', stair: 'บันได', grid: 'กริด', gridSystem: 'ระบบกริด', measure: 'วัด', calibrate: 'ปรับสเกล' } as Partial<Record<ToolType, string>>)[t.id]}</span>
+              {t.icon}<span className="cf-tool-label">{({ erase: 'ลบ', column: 'เสา', foundation: 'ฐานราก', slab: 'พื้น', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้า', roof: 'หลังคา', pipe: 'ท่อ', fixture: 'อุปกรณ์', cabinet: 'บิลท์อิน', furniture: 'เฟอร์นิเจอร์', moulding: 'บัว', roomSeparator: 'แบ่งห้อง', stair: 'บันได', grid: 'กริด', gridSystem: 'ระบบกริด', measure: 'วัด', calibrate: 'ปรับสเกล' } as Partial<Record<ToolType, string>>)[t.id]}</span>
               </button>)}
             </div>
           </details>

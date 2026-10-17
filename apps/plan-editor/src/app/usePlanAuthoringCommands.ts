@@ -1,6 +1,7 @@
 import type { CommandBatchResult, CommandRequest } from '@constructflow/command-schema'
 import type {
   DoorHanding,
+  InteriorFurnitureKind,
   ProjectDocument,
   StairModuleData,
 } from '@constructflow/project-model'
@@ -85,6 +86,30 @@ export function usePlanAuthoringCommands({
       board_mm: 18, back_mm: 6, plinth_mm: 100, rotation_deg: Math.atan2(end[1] - start[1], end[0] - start[0]) * 180 / Math.PI,
       modules_mm: [width], shelves: 2, drawers: 0, front: 'solid', carcass_material: 'plywood', front_material: 'laminate',
       back_material: 'plywood', countertop_material: 'quartz', countertop_mm: 30,
+    })
+  }
+
+  const handleCommitFurniture = (start: [number, number], end: [number, number], kind: InteriorFurnitureKind = 'sofa') => {
+    const level = project.levels.find(item => item.id === project.project.active_level_id)
+    const width = Math.hypot(end[0] - start[0], end[1] - start[1])
+    if (!level || width < 200) return
+    const defaults: Record<InteriorFurnitureKind, { depth_mm: number; height_mm: number; material: string }> = {
+      sofa: { depth_mm: 900, height_mm: 850, material: 'fabric' },
+      chair: { depth_mm: 550, height_mm: 850, material: 'wood' },
+      dining_table: { depth_mm: 900, height_mm: 750, material: 'wood' },
+      coffee_table: { depth_mm: 600, height_mm: 450, material: 'wood' },
+      desk: { depth_mm: 700, height_mm: 750, material: 'wood' },
+      bed_single: { depth_mm: 2000, height_mm: 500, material: 'fabric' },
+      bed_double: { depth_mm: 2000, height_mm: 500, material: 'fabric' },
+      toilet: { depth_mm: 700, height_mm: 400, material: 'ceramic' },
+      washbasin: { depth_mm: 500, height_mm: 850, material: 'ceramic' },
+      bathtub: { depth_mm: 750, height_mm: 550, material: 'acrylic' },
+    }
+    const preset = defaults[kind]
+    runArchitectureCommand('CreateInteriorFurniture', {
+      id: crypto.randomUUID(), mark: `IF${Object.values(project.objects).filter(object => object.object_type === 'interior.furniture').length + 1}`, level_id: level.id, created_phase: 'new_construction',
+      kind, location_mm: [start[0], start[1], level.elevation_mm], width_mm: width,
+      ...preset, rotation_deg: Math.atan2(end[1] - start[1], end[0] - start[0]) * 180 / Math.PI,
     })
   }
 
@@ -241,6 +266,7 @@ export function usePlanAuthoringCommands({
     handleCommitPipeRoute,
     handleCommitFixture,
     handleCommitCabinet,
+    handleCommitFurniture,
     handleCommitMoulding,
     handleCommitArchitecturalFloor,
     handleCommitCeiling,

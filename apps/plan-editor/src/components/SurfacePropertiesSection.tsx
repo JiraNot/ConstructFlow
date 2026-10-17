@@ -22,11 +22,17 @@ type SurfacePropertiesSectionProps = {
 }
 
 const LengthInput: React.FC<{ value: number; unit: DisplayLengthUnit; onChange: (value: number) => void; style?: React.CSSProperties; 'aria-label'?: string }> = ({ value, unit, onChange, style, 'aria-label': ariaLabel }) => <WorkbenchNumberInput value={value} unit={unit} onChange={onChange} style={style} ariaLabel={ariaLabel} />
+const finishMaterialOptions = [
+  ['porcelain_tile', 'กระเบื้องพอร์ซเลน'], ['ceramic_tile', 'กระเบื้องเซรามิก'], ['diagonal_tile', 'กระเบื้องลายทแยง'],
+  ['wood_plank', 'พื้นไม้ / ลามิเนต'], ['carpet', 'พรม'], ['terrazzo', 'หินขัด'], ['concrete_block', 'บล็อกคอนกรีต'],
+  ['glass_block', 'บล็อกแก้ว'], ['grass', 'สนามหญ้า'], ['brick_paver', 'อิฐปูพื้น'],
+]
 
 export const SurfacePropertiesSection: React.FC<SurfacePropertiesSectionProps> = ({ project, displayUnit, slab: slabObj, architectureSurface: architectureSurfaceObj, onUpdateSlab, onUpdateArchitectureSurface, onDrawSurfaceVoid, onOpenTypeManager }) => {
   const verticalSelectStyle: React.CSSProperties = { width: '100%', background: '#fff', border: '1px solid #dce4ed', borderRadius: 3, padding: 5, color: '#24364b' }
   return (
     <>
+      <datalist id="cf-finish-materials">{finishMaterialOptions.map(([value, label]) => <option key={value} value={value} label={label} />)}</datalist>
       {slabObj && (
         (() => {
           const slabData = slabObj.module_data as Record<string, unknown>
@@ -90,7 +96,7 @@ export const SurfacePropertiesSection: React.FC<SurfacePropertiesSectionProps> =
               <strong style={{ fontSize: 11, marginTop: 3 }}>ชั้นปิดผิวในพื้นชิ้นนี้</strong>
               {finishLayers.length > 0 && <small style={{ fontSize: 9, color: '#64748b' }}>วัสดุ · ความหนา · Offset จากชั้นก่อน · หน่วยปริมาณ</small>}
               {finishLayers.map((layer, index) => <div key={`${slabObj.id}:finish:${index}`} style={{ display: 'grid', gridTemplateColumns: '1fr 0.7fr 0.7fr 0.6fr auto', gap: 4, alignItems: 'center' }}>
-                <input aria-label={`วัสดุปิดผิวพื้น ${index + 1}`} value={String(layer.material ?? '')} onChange={event => writeFinishLayers(finishLayers.map((item, i) => i === index ? { ...item, material: event.target.value } : item))} style={verticalSelectStyle} />
+              <input aria-label={`วัสดุปิดผิวพื้น ${index + 1}`} list="cf-finish-materials" value={String(layer.material ?? '')} onChange={event => writeFinishLayers(finishLayers.map((item, i) => i === index ? { ...item, material: event.target.value } : item))} style={verticalSelectStyle} />
                 <LengthInput aria-label={`ความหนาชั้นปิดผิว ${index + 1} (${displayUnit})`} value={Number(layer.thickness_mm ?? 10)} unit={displayUnit} onChange={value => writeFinishLayers(finishLayers.map((item, i) => i === index ? { ...item, thickness_mm: value } : item))} style={verticalSelectStyle} />
                 <LengthInput aria-label={`ระยะ offset ชั้นปิดผิว ${index + 1} (${displayUnit})`} value={Number(layer.offset_mm ?? 0)} unit={displayUnit} onChange={value => writeFinishLayers(finishLayers.map((item, i) => i === index ? { ...item, offset_mm: value } : item))} style={verticalSelectStyle} />
                 <select aria-label={`หน่วยถอดปริมาณชั้นปิดผิว ${index + 1}`} value={layer.quantity_unit ?? 'm2'} onChange={event => writeFinishLayers(finishLayers.map((item, i) => i === index ? { ...item, quantity_unit: event.target.value as 'm2' | 'm3' } : item))} style={verticalSelectStyle}><option value="m2">ตร.ม.</option><option value="m3">ลบ.ม.</option></select>
@@ -151,7 +157,7 @@ export const SurfacePropertiesSection: React.FC<SurfacePropertiesSectionProps> =
             <summary>รายละเอียดผิวพื้น · {layers.length} ชั้น · ลาย {Number((data.finish_pattern_mm as number[] | undefined)?.[0] ?? 600)} × {Number((data.finish_pattern_mm as number[] | undefined)?.[1] ?? 600)} มม.</summary>
             <strong style={{ fontSize: 11, marginTop: 3 }}>ชั้นวัสดุปูพื้น</strong>
             {layers.map((layer, index) => <div key={`${architectureSurfaceObj.id}:layer:${index}`} style={{ display: 'grid', gridTemplateColumns: '1fr 0.65fr 0.55fr auto', gap: 4, alignItems: 'center' }}>
-              <input aria-label={`วัสดุชั้นพื้น ${index + 1}`} defaultValue={String(layer.material ?? '')} key={`${architectureSurfaceObj.id}:layer-material:${index}:${String(layer.material ?? '')}`} onBlur={event => {
+              <input aria-label={`วัสดุชั้นพื้น ${index + 1}`} list="cf-finish-materials" defaultValue={String(layer.material ?? '')} key={`${architectureSurfaceObj.id}:layer-material:${index}:${String(layer.material ?? '')}`} onBlur={event => {
                 const finish_layers = layers.map((current, i) => i === index ? { ...current, material: event.currentTarget.value.trim() || 'unspecified' } : current)
                 update({ finish_layers: finish_layers.map(current => ({ material: String(current.material ?? 'unspecified'), thickness_mm: Number(current.thickness_mm ?? 0), ...(current.mark ? { mark: current.mark } : {}), ...(current.quantity_unit ? { quantity_unit: current.quantity_unit } : {}) })) })
               }} style={verticalSelectStyle} />

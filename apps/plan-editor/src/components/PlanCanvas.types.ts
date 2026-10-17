@@ -1,4 +1,4 @@
-import type { ProjectDocument, StairModuleData, DoorHanding, PlacementReference, DisplayLengthUnit } from '@constructflow/project-model'
+import type { ProjectDocument, StairModuleData, DoorHanding, PlacementReference, DisplayLengthUnit, InteriorFurnitureKind } from '@constructflow/project-model'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import type { ToolType } from './Toolbar.js'
 import type { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
@@ -49,6 +49,7 @@ export interface PlanCanvasProps {
   onCommitPipeRoute?: (start: [number, number], end: [number, number], system: 'waste' | 'soil' | 'rainwater' | 'vent' | 'cold_water' | 'hot_water') => void
   onCommitFixture?: (point: [number, number], kind: 'light' | 'switch' | 'outlet' | 'panel') => void
   onCommitCabinet?: (start: [number, number], end: [number, number]) => void
+  onCommitFurniture?: (start: [number, number], end: [number, number], kind: InteriorFurnitureKind) => void
   onCommitMoulding?: (start: [number, number], end: [number, number]) => void
   onCommitRoomSeparator?: (start: [number, number], end: [number, number]) => void
   onCommitSurfaceVoid: (hostId: string, boundary_mm: [number, number][]) => void

@@ -19,7 +19,7 @@ import type { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
 type CanvasCallbacks = Pick<PlanCanvasProps,
   | 'onCopyGrid' | 'onCommitColumn' | 'onCommitFoundation' | 'onCommitDoor' | 'onCommitWindow'
   | 'onCommitFixture' | 'onSelectionChange' | 'onSelectObject' | 'onCommitBeam' | 'onCommitWall'
-  | 'onCommitRoomSeparator' | 'onCommitPipeRoute' | 'onCommitCabinet' | 'onCommitMoulding'
+  | 'onCommitRoomSeparator' | 'onCommitPipeRoute' | 'onCommitCabinet' | 'onCommitFurniture' | 'onCommitMoulding'
   | 'onCommitSlab' | 'onCommitArchitecturalFloor' | 'onCommitCeiling' | 'onCommitRoof'
   | 'onCommitSurfaceVoid' | 'onCommitGrid' | 'onCommitGridSystem' | 'onStartCalibrationModal'
   | 'onCommitStair' | 'onActivateTool' | 'onDeleteObjects' | 'onPreviewManipulation'
@@ -145,7 +145,7 @@ export function usePlanCanvasPointerInteractions({
           onSelectionChange: callbacks.onSelectionChange, onSelectObject: callbacks.onSelectObject,
           onCommitBeam: callbacks.onCommitBeam, onCommitWall: callbacks.onCommitWall,
           onCommitRoomSeparator: callbacks.onCommitRoomSeparator, onCommitPipeRoute: callbacks.onCommitPipeRoute,
-          onCommitCabinet: callbacks.onCommitCabinet, onCommitMoulding: callbacks.onCommitMoulding,
+          onCommitCabinet: callbacks.onCommitCabinet, onCommitFurniture: callbacks.onCommitFurniture, onCommitMoulding: callbacks.onCommitMoulding,
           onCommitSlab: callbacks.onCommitSlab, onCommitArchitecturalFloor: callbacks.onCommitArchitecturalFloor,
           onCommitCeiling: callbacks.onCommitCeiling, onCommitRoof: callbacks.onCommitRoof,
           onCommitSurfaceVoid: callbacks.onCommitSurfaceVoid, onCommitGrid: callbacks.onCommitGrid,

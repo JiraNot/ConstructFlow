@@ -192,7 +192,6 @@ pip install google-genai websockets
 ```
 
 ### 3.2 ตั้งค่า API Key
-```bash
 export GEMINI_API_KEY="AIza..."
 ```
 

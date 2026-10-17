@@ -1,7 +1,7 @@
 import React from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { StairPlacementOptions } from '@constructflow/architecture-engine'
-import type { DisplayLengthUnit, ProjectDocument, StairModuleData } from '@constructflow/project-model'
+import type { DisplayLengthUnit, InteriorFurnitureKind, ProjectDocument, StairModuleData } from '@constructflow/project-model'
 import type { SnapMode } from '@constructflow/snapping-engine'
 import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
 import { TypePicker } from './TypePicker.js'
@@ -20,6 +20,7 @@ interface PlanCanvasAuthoringControlsProps {
   open: boolean
   pipeSystem: PipeSystem
   fixtureKind: FixtureKind
+  furnitureKind: InteriorFurnitureKind
   roof: { shape: 'hip' | 'gable' | 'flat'; slopeDeg: number; thicknessMm: number; elevationOffsetMm: number; material: string }
   stairOptions: StairPlacementOptions
   stairError: string
@@ -31,6 +32,7 @@ interface PlanCanvasAuthoringControlsProps {
   onOpenChange: (open: boolean) => void
   onPipeSystemChange: (value: PipeSystem) => void
   onFixtureKindChange: (value: FixtureKind) => void
+  onFurnitureKindChange: (value: InteriorFurnitureKind) => void
   onRoofChange: (updater: (current: PlanCanvasAuthoringControlsProps['roof']) => PlanCanvasAuthoringControlsProps['roof']) => void
   onStairOptionsChange: Dispatch<SetStateAction<StairPlacementOptions>>
   onGridSequenceStyleChange: (value: GridSequenceStyle) => void
@@ -47,7 +49,7 @@ interface PlanCanvasAuthoringControlsProps {
 const toolNames: Partial<Record<ToolType, string>> = {
   select: 'เลือกวัตถุ', erase: 'ลบวัตถุ', column: 'เสา', foundation: 'ฐานราก', beam: 'คาน', wall: 'ผนัง', door: 'ประตู',
   window: 'หน้าต่าง', slab: 'พื้นโครงสร้าง', slabVoid: 'ช่องเจาะพื้น/หลังคา', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้าเพดาน', roof: 'หลังคา',
-  pipe: 'แนวท่อ', fixture: 'อุปกรณ์ไฟฟ้า', cabinet: 'บิลท์อิน', moulding: 'แนวบัว', roomSeparator: 'เส้นแบ่งห้อง',
+  pipe: 'แนวท่อ', fixture: 'อุปกรณ์ไฟฟ้า', cabinet: 'บิลท์อิน', furniture: 'เฟอร์นิเจอร์', moulding: 'แนวบัว', roomSeparator: 'เส้นแบ่งห้อง',
   stair: 'บันได', grid: 'เส้นกริด', gridSystem: 'ระบบกริด', gridCopy: 'คัดลอกกริด', measure: 'ตลับเมตร', dimension: 'บอกระยะ', calibrate: 'ปรับสเกลภาพ',
 }
 
@@ -61,9 +63,9 @@ const typeLabelByTool: Partial<Record<ToolType, string>> = {
 }
 
 export const PlanCanvasAuthoringControls: React.FC<PlanCanvasAuthoringControlsProps> = props => {
-  const { project, activeTool, displayUnit, preferences, open, pipeSystem, fixtureKind, roof, stairOptions, stairError,
+  const { project, activeTool, displayUnit, preferences, open, pipeSystem, fixtureKind, furnitureKind, roof, stairOptions, stairError,
     gridSequenceStyle, gridStartPoint, gridSystem, lineReferenceDescription, activeTypeMarks, onOpenChange,
-    onPipeSystemChange, onFixtureKindChange, onRoofChange, onStairOptionsChange, onGridSequenceStyleChange,
+    onPipeSystemChange, onFixtureKindChange, onFurnitureKindChange, onRoofChange, onStairOptionsChange, onGridSequenceStyleChange,
     onGridIntervalsChange, onGridFirstTagChange, onPlacementReferenceChange, onLineConstraintModeChange,
     onSnapModeToggle, onPlacementKeyDown, onChangeActiveTypeMark, onOpenTypeManager } = props
 
@@ -89,6 +91,14 @@ export const PlanCanvasAuthoringControls: React.FC<PlanCanvasAuthoringControlsPr
         <select aria-label="ชนิดอุปกรณ์ไฟฟ้าที่จะวาง" value={fixtureKind} onChange={event => onFixtureKindChange(event.target.value as FixtureKind)}>
           <option value="light">ดวงโคม</option><option value="switch">สวิตช์</option><option value="outlet">เต้ารับ</option><option value="panel">ตู้ไฟ</option>
         </select>
+      </label>}
+      {activeTool === 'furniture' && <label className="cf-reference-control">ชนิดเฟอร์นิเจอร์
+        <select aria-label="ชนิดเฟอร์นิเจอร์ที่จะวาง" value={furnitureKind} onChange={event => onFurnitureKindChange(event.target.value as InteriorFurnitureKind)}>
+          <option value="sofa">โซฟา</option><option value="chair">เก้าอี้</option><option value="dining_table">โต๊ะอาหาร</option>
+          <option value="coffee_table">โต๊ะกลาง</option><option value="desk">โต๊ะทำงาน</option><option value="bed_single">เตียงเดี่ยว</option>
+          <option value="bed_double">เตียงคู่</option><option value="toilet">โถสุขภัณฑ์</option><option value="washbasin">อ่างล้างหน้า</option><option value="bathtub">อ่างอาบน้ำ</option>
+        </select>
+        <small>ลากแนวหน้ากว้าง · ความลึกตั้งฉากกับแนว · ปรับขนาดและวัสดุได้หลังวาง</small>
       </label>}
       {activeTool === 'roof' && <div className="cf-grid-orientation-control" role="group" aria-label="ตั้งค่าหลังคาก่อนวาด">
         <label>ทรงหลังคา <select aria-label="ทรงหลังคาก่อนวาด" value={roof.shape} onChange={event => roofUpdate('shape', event.target.value as typeof roof.shape)}><option value="hip">ปั้นหยา</option><option value="gable">จั่ว · รูป 4 ด้าน</option><option value="flat">ดาดฟ้า</option></select></label>

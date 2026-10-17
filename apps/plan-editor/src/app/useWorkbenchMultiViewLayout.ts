@@ -112,7 +112,7 @@ export function useWorkbenchMultiViewLayout(projectId: string, activeTool: strin
   useEffect(() => {
     if (['beam', 'foundation'].includes(activeTool)) setViewMode('framing')
     else if (activeTool === 'roof') setViewMode('roofplan')
-    else if (['stair', 'wall', 'door', 'window', 'archFloor', 'slab', 'ceiling', 'roomSeparator', 'pipe', 'fixture', 'cabinet', 'moulding'].includes(activeTool)) setViewMode('plan')
+    else if (['stair', 'wall', 'door', 'window', 'archFloor', 'slab', 'ceiling', 'roomSeparator', 'pipe', 'fixture', 'cabinet', 'furniture', 'moulding'].includes(activeTool)) setViewMode('plan')
   }, [activeTool])
 
   const planAnd3DNavigationLinked = paneModes.some(mode => mode === 'plan' || mode === 'framing' || mode === 'roofplan')

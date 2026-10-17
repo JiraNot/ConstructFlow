@@ -37,6 +37,7 @@ export function resolvePropertiesSelection(project: ProjectDocument, selectedId:
       column: null, foundation: null, beam: null, wall: null, door: null, window: null, grid: null,
       slab: null, architectureSurface: null, room: null, roof: null, pipe: null, fixture: null,
       cabinet: null, moulding: null, currentMark: '', hostedFoundation: undefined,
+      interiorFurniture: null,
     }
   }
 
@@ -54,6 +55,7 @@ export function resolvePropertiesSelection(project: ProjectDocument, selectedId:
   const pipe = ['plumbing.pipe_route', 'drainage.pipe_route'].includes(selectedObject.object_type) ? selectedObject : null
   const fixture = selectedObject.object_type === 'electrical.fixture' ? selectedObject : null
   const cabinet = selectedObject.object_type === 'interior.cabinet_run' ? selectedObject : null
+  const interiorFurniture = selectedObject.object_type === 'interior.furniture' ? selectedObject : null
   const moulding = selectedObject.object_type === 'decorative.moulding_run' ? selectedObject : null
   const selectedData = selectedObject.module_data as Record<string, unknown>
   const selectedType = project.types.find(type => type.object_type === selectedObject.object_type && type.id === selectedData.type_id)
@@ -61,6 +63,7 @@ export function resolvePropertiesSelection(project: ProjectDocument, selectedId:
   const currentMark = selectedType?.name ?? column?.module_data.mark ?? foundation?.module_data.mark ?? beam?.module_data.mark ?? wall?.module_data.mark
     ?? door?.module_data.mark ?? window?.module_data.mark ?? grid?.module_data.tag
     ?? (slab?.module_data as Record<string, unknown> | undefined)?.mark as string | undefined
+    ?? (interiorFurniture?.module_data as Record<string, unknown> | undefined)?.mark as string | undefined
     ?? (roof?.module_data as Record<string, unknown> | undefined)?.mark as string | undefined ?? ''
   const hostedFoundation = column
     ? Object.values(project.objects).find(object => isFoundationObject(object) && (object.module_data.supported_column_id === column.id || object.host_refs?.includes(column.id))) as SmartObject<FoundationModuleData> | undefined
@@ -68,7 +71,7 @@ export function resolvePropertiesSelection(project: ProjectDocument, selectedId:
 
   return {
     selectedObject, selectedObjects, family, familyTypes, commonTypeId, canBulkUpdateLevel,
-    column, foundation, beam, wall, door, window, grid, slab, architectureSurface, room, roof, pipe, fixture, cabinet, moulding,
+    column, foundation, beam, wall, door, window, grid, slab, architectureSurface, room, roof, pipe, fixture, cabinet, interiorFurniture, moulding,
     currentMark, hostedFoundation,
   }
 }

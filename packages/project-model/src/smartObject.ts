@@ -14,7 +14,7 @@ import {
   DoorModuleData,
   WindowModuleData,
   SlabModuleData,RebarModuleData,RoofModuleData,MouldingModuleData,PanelLayoutModuleData,PipeRouteModuleData,ManholeModuleData,SepticModuleData,PumpBypassModuleData,BathroomModuleData,ElectricalFixtureModuleData,CircuitModuleData,LEDModuleData,CabinetModuleData,
-  StairModuleData, RailingModuleData,
+  StairModuleData, RailingModuleData, InteriorFurnitureModuleData,
   RoomModuleData, RoomSeparatorModuleData, ArchitecturalFloorModuleData, CeilingModuleData,
   ProjectSourceReference,
 } from './types.js'
@@ -28,7 +28,7 @@ export type KnownModuleData =
   | DoorModuleData
   | WindowModuleData
   | SlabModuleData | RebarModuleData | RoofModuleData | MouldingModuleData | PanelLayoutModuleData | PipeRouteModuleData | ManholeModuleData | SepticModuleData | PumpBypassModuleData | BathroomModuleData | ElectricalFixtureModuleData | CircuitModuleData | LEDModuleData | CabinetModuleData
-  | StairModuleData | RailingModuleData
+  | StairModuleData | RailingModuleData | InteriorFurnitureModuleData
   | RoomModuleData | RoomSeparatorModuleData | ArchitecturalFloorModuleData | CeilingModuleData
   | Record<string, unknown>
 

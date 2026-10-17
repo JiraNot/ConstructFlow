@@ -172,6 +172,12 @@ const schemas: Record<
     points: "location_mm",
     text: "front carcass_material front_material back_material countertop_material",
   },
+  "interior.furniture": {
+    positive: "width_mm depth_mm height_mm",
+    finite: "rotation_deg",
+    points: "location_mm",
+    text: "kind material",
+  },
 };
 
 /** Persisted shape validation stays in the canonical model; domain solvers enforce feasibility. */
@@ -297,6 +303,9 @@ export function validateConstructionPayloads(project: ProjectDocument): void {
         fail("modules_mm");
       for (const w of d.modules_mm as unknown[])
         number(w, "module width", 0, false);
+    }
+    if (object.object_type === "interior.furniture") {
+      if (!["sofa", "chair", "dining_table", "coffee_table", "desk", "bed_single", "bed_double", "toilet", "washbasin", "bathtub"].includes(String(d.kind))) fail("kind");
     }
   }
 }

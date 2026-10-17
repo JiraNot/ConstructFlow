@@ -38,6 +38,7 @@ type PanelActions = Pick<PropertiesPanelProps,
   | 'onAssignElectricalFixtureToCircuit'
   | 'onApplyElectricalPhaseBalance'
   | 'onUpdateCabinet'
+  | 'onUpdateInteriorFurniture'
   | 'onUpdateMoulding'
   | 'onUpdateStair'
   | 'onUpdateFoundationMark'
@@ -295,6 +296,7 @@ export function usePropertiesPanelActions({ project, dispatchCommandBatch, setFi
       else setFileFeedback(`กำหนดเฟสให้ ${commands.length} วงจรแล้ว`)
     },
     onUpdateCabinet: (objectId, changes) => updateDomainObject(objectId, 'UpdateCabinetRun', changes),
+    onUpdateInteriorFurniture: (objectId, changes) => updateDomainObject(objectId, 'UpdateInteriorFurniture', changes),
     onUpdateMoulding: (objectId, changes) => updateDomainObject(objectId, 'UpdateMouldingRun', changes),
     onUpdateStair,
     onUpdateFoundationMark,

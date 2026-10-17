@@ -22,6 +22,7 @@ export const TOOL_INTERACTION_REGISTRY = Object.freeze({
   pipe: definition('two-point', 'line', true),
   fixture: definition('point', 'point', true),
   cabinet: definition('two-point', 'line', true),
+  furniture: definition('two-point', 'line', true),
   moulding: definition('two-point', 'line', true),
   roomSeparator: definition('two-point', 'line', true),
   grid: definition('two-point', 'line', true),
