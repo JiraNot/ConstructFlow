@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
+import { PDFDocument } from 'pdf-lib'
 import { CommandBus } from '@constructflow/command-runtime'
 import { createEmptyProjectDocument, serializeProject } from '@constructflow/project-model'
 import { getPlanFinishBoundaries } from '@constructflow/representation-engine'
@@ -671,7 +672,7 @@ test('AI accepts a customer multi-sheet PDF as the primary drawing source and as
     mimeType: 'application/pdf',
     buffer: Buffer.from('%PDF-1.4\nmock multi-sheet drawing'),
   })
-  await expect(page.getByText('PDF อาจมีหลายหน้า')).toBeVisible()
+  await expect(page.getByText('เลือกเฉพาะหน้าแปลนจาก PDF ได้')).toBeVisible()
   await page.getByRole('button', { name: 'สร้างแผนคำสั่ง' }).click()
   const plan = page.getByLabel('แผนคำสั่ง AI')
   await expect(plan).toContainText('ชั้นล่างหน้า 4 และชั้นบนหน้า 5')
@@ -680,6 +681,43 @@ test('AI accepts a customer multi-sheet PDF as the primary drawing source and as
   expect(received?.drawing_attachments).toHaveLength(1)
   expect(received?.drawing_attachments?.[0]).toMatchObject({ filename: 'customer-drawing-set.pdf', mime_type: 'application/pdf' })
   expect(received?.drawing_attachments?.[0].data_url).toMatch(/^data:application\/pdf;base64,JVBERi0xLjQ/)
+})
+
+test('AI can send selected PDF pages while preserving original page numbers', async ({ page }) => {
+  await page.setViewportSize({ width: 700, height: 1000 })
+  const sourcePdf = await PDFDocument.create()
+  sourcePdf.addPage([595, 842]); sourcePdf.addPage([595, 842]); sourcePdf.addPage([595, 842])
+  const sourceBytes = await sourcePdf.save()
+  let received: { drawing_attachments?: { filename: string; mime_type: string; data_url: string; source_page_numbers?: number[] }[] } | undefined
+  await page.route('**/api/ai/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ mode: 'gateway', connected: false, email: '', name: '', sharing: false }),
+  }))
+  await page.route('**/api/ai/plan', async route => {
+    received = route.request().postDataJSON() as typeof received
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ summary: 'ใช้หน้า 1 และ 3', questions: [], commands: [] }) })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'เปิดแผงข้อมูล' }).click()
+  await selectInspectorTab(page, 'AI')
+  await page.getByLabel('Gateway token').fill('test-token')
+  await page.getByLabel('แนบ PDF หรือภาพแปลน').setInputFiles({ name: 'customer-set.pdf', mimeType: 'application/pdf', buffer: Buffer.from(sourceBytes) })
+  await page.getByRole('button', { name: 'เลือกหน้าใน customer-set.pdf' }).click()
+  const picker = page.getByRole('dialog', { name: 'เลือกหน้าแปลน' })
+  await expect(picker).toContainText('3 หน้า')
+  expect(await picker.evaluate(element => element.getBoundingClientRect().width)).toBeLessThanOrEqual(700)
+  await picker.getByRole('button', { name: 'หน้า 1' }).click()
+  await picker.getByRole('button', { name: 'หน้า 3' }).click()
+  await picker.getByRole('button', { name: 'ใช้หน้านี้' }).click()
+  await expect(page.getByRole('button', { name: 'เลือกหน้าใน customer-set.pdf' })).toContainText('2 หน้า')
+  await page.getByRole('button', { name: 'สร้างแผนคำสั่ง' }).click()
+  await expect(page.getByLabel('แผนคำสั่ง AI')).toContainText('ใช้หน้า 1 และ 3')
+  const sent = received?.drawing_attachments?.[0]
+  expect(sent?.source_page_numbers).toEqual([1, 3])
+  expect(sent?.filename).toBe('customer-set.pdf')
+  const subset = await PDFDocument.load(Buffer.from(sent!.data_url.split(',')[1], 'base64'))
+  expect(subset.getPageCount()).toBe(2)
 })
 
 test('AI panel refreshes extension command descriptors registered while the panel is open', async ({ page }) => {

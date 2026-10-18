@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ProjectDocument } from "@constructflow/project-model";
 import type { CommandRequest } from "@constructflow/command-schema";
 import { AlertTriangle, Bot, Check, FileText, LoaderCircle, LogIn, LogOut, Paperclip, Play, RefreshCw, X } from "lucide-react";
 import { buildAIProjectContext, getAICommandDescriptors } from "../ai/aiCommandCatalog.js";
 import { CommandBus } from "../commands/CommandBus.js";
+const PdfPagePicker = lazy(() => import("./PdfPagePicker.js").then(module => ({ default: module.PdfPagePicker })));
 
 interface PreviewResult {
   valid: boolean;
@@ -23,6 +24,30 @@ interface DrawingAttachment {
   mime_type: "application/pdf" | "image/jpeg" | "image/png";
   data_url: string;
   file: File;
+  source_page_numbers?: number[];
+}
+
+async function getDrawingRequestAttachment(attachment: DrawingAttachment) {
+  let dataUrl = attachment.data_url;
+  if (attachment.mime_type === "application/pdf" && attachment.source_page_numbers?.length) {
+    const { PDFDocument } = await import("pdf-lib");
+    const source = await PDFDocument.load(await attachment.file.arrayBuffer());
+    const output = await PDFDocument.create();
+    const pages = await output.copyPages(source, attachment.source_page_numbers.map(page => page - 1));
+    pages.forEach(page => output.addPage(page));
+    const bytes = await output.save();
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length)));
+    }
+    dataUrl = `data:application/pdf;base64,${btoa(binary)}`;
+  }
+  return {
+    filename: attachment.filename,
+    mime_type: attachment.mime_type,
+    data_url: dataUrl,
+    ...(attachment.source_page_numbers?.length ? { source_page_numbers: attachment.source_page_numbers } : {}),
+  };
 }
 
 function readDrawingFile(file: File): Promise<DrawingAttachment> {
@@ -63,6 +88,7 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
   const [authBusy, setAuthBusy] = useState(true);
   const [prompt, setPrompt] = useState("");
   const [drawingAttachments, setDrawingAttachments] = useState<DrawingAttachment[]>([]);
+  const [editingPdfIndex, setEditingPdfIndex] = useState<number | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -216,7 +242,7 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
           prompt: requestPrompt,
           project_context: buildAIProjectContext(project, selectedIds),
           command_descriptors: descriptors,
-          ...(drawingAttachments.length ? { drawing_attachments: drawingAttachments.map(({ filename, mime_type, data_url }) => ({ filename, mime_type, data_url })) } : {}),
+          ...(drawingAttachments.length ? { drawing_attachments: await Promise.all(drawingAttachments.map(getDrawingRequestAttachment)) } : {}),
           ...(auth.mode === "local" ? { model } : {}),
         }),
       });
@@ -335,10 +361,13 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
         {drawingAttachments.map((attachment, index) => <div className="cf-ai-attached-file" key={`${attachment.filename}-${index}`}>
           {attachment.mime_type.startsWith("image/") ? <img src={drawingPreviewUrls[index]} alt={`ตัวอย่างแบบ ${attachment.filename}`} /> : <FileText size={19} />}
           <span title={attachment.filename}>{attachment.filename}</span>
+          {attachment.mime_type === "application/pdf" && <button type="button" className="cf-button cf-ai-pdf-pages" aria-label={`เลือกหน้าใน ${attachment.filename}`} onClick={() => setEditingPdfIndex(index)}>
+            {attachment.source_page_numbers?.length ? `${attachment.source_page_numbers.length} หน้า` : "เลือกหน้า"}
+          </button>}
           <button type="button" className="cf-icon-button" aria-label={`เอา ${attachment.filename} ออก`} onClick={() => { setDrawingAttachments(current => current.filter((_, itemIndex) => itemIndex !== index)); setPlan(null); setPreview(null); }}><X size={15} /></button>
         </div>)}
       </div>
-      {drawingAttachments.some(attachment => attachment.mime_type === "application/pdf") && <p className="cf-ai-privacy">PDF อาจมีหลายหน้า · AI จะระบุหน้าและชื่อแบบที่ใช้ในข้อเสนอ หากแยกชั้นหรือหน้าไม่ชัด จะถามก่อนสร้าง</p>}
+      {drawingAttachments.some(attachment => attachment.mime_type === "application/pdf") && <p className="cf-ai-privacy">เลือกเฉพาะหน้าแปลนจาก PDF ได้ · ถ้าไม่เลือกจะส่งทั้งเล่ม และ AI จะถามเมื่อแยกชั้นไม่ชัด</p>}
       <p className="cf-ai-privacy">{auth.mode === "local" ? "ใช้ ChatGPT plan ที่คุณอนุญาต · ไฟล์จะส่งเมื่อกดสร้างแผน · token เก็บในเครื่อง" : "คำขอและไฟล์ที่แนบจะส่งไปยัง AI gateway ที่กำหนดเมื่อกดสร้างแผน"}</p>
       <button className="cf-button cf-button-primary cf-ai-generate" disabled={busy || applying || (auth.mode === "local" && (!auth.connected || !model)) || (auth.mode === "gateway" && (!gatewayToken.trim() || !endpoint.trim())) || (!prompt.trim() && !drawingAttachments.length)} onClick={() => void generate()}>
         {busy ? <LoaderCircle size={15} className="cf-ai-spin" /> : <Bot size={15} />}
@@ -362,6 +391,19 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
           <p className="cf-ai-undo-note">การยืนยันจะบันทึกเป็น transaction เดียวและย้อนกลับได้ด้วย Undo</p>
         </>}
       </div>}
+      {editingPdfIndex !== null && drawingAttachments[editingPdfIndex] && <Suspense fallback={<p role="status" className="cf-ai-privacy">กำลังเปิดตัวเลือกหน้า PDF…</p>}><PdfPagePicker
+        file={drawingAttachments[editingPdfIndex].file}
+        selectedPages={drawingAttachments[editingPdfIndex].source_page_numbers}
+        onClose={() => setEditingPdfIndex(null)}
+        onConfirm={pages => {
+          setDrawingAttachments(current => current.map((attachment, index) => index === editingPdfIndex
+            ? { ...attachment, source_page_numbers: pages.length ? pages : undefined }
+            : attachment))
+          setEditingPdfIndex(null)
+          setPlan(null)
+          setPreview(null)
+        }}
+      /></Suspense>}
     </section>
   );
 }

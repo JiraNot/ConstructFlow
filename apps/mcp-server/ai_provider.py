@@ -70,6 +70,7 @@ def generate_command_plan(data, *, chatgpt_model=None):
             "from the drawing or supplied project context, return a concise question and do not emit affected commands. "
             "Do not infer columns, beams, foundations, structural sizes, MEP systems, or engineering approval from an architectural plan. "
             "For a multi-page PDF, identify the relevant floor-plan pages by PDF page number, sheet number/title, and floor/level before proposing geometry. "
+            "If drawing_sources supplies source_page_numbers, those are the original PDF page numbers for the supplied page subset; preserve them when citing pages. "
             "Ignore unrelated details, elevations, schedules, and specifications unless the user asks for them. If several pages could represent the same floor, "
             "or the level/page mapping is unclear, ask the user to choose before emitting commands. State the source page(s) in the summary for every proposed plan. "
             "Use existing catalog types when their dimensions match the drawing."
@@ -77,6 +78,10 @@ def generate_command_plan(data, *, chatgpt_model=None):
     user_input = json.dumps({
         "request": prompt.strip(),
         "project_context": context,
+        "drawing_sources": [
+            {"filename": attachment["filename"], "source_page_numbers": attachment.get("source_page_numbers", [])}
+            for attachment in attachments
+        ],
         "ai_command_descriptors": list(allowed.values()),
     }, ensure_ascii=False)
 
@@ -216,4 +221,17 @@ def validate_drawing_attachment(value):
     )
     if not signature_ok:
         raise AIPlanError("drawing attachment contents do not match its declared type")
-    return {"filename": filename, "mime_type": mime_type, "data_url": data_url}
+    source_page_numbers = value.get("source_page_numbers", [])
+    if (
+        not isinstance(source_page_numbers, list)
+        or len(source_page_numbers) > 1000
+        or any(type(page) is not int or page < 1 for page in source_page_numbers)
+        or len(set(source_page_numbers)) != len(source_page_numbers)
+    ):
+        raise AIPlanError("drawing source page numbers must be unique positive integers")
+    return {
+        "filename": filename,
+        "mime_type": mime_type,
+        "data_url": data_url,
+        **({"source_page_numbers": source_page_numbers} if source_page_numbers else {}),
+    }

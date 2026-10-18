@@ -443,7 +443,7 @@ class McpBridgeServerTest(unittest.TestCase):
                         "prompt": "สร้างผนัง",
                         "project_context": {"active_level_id": "GF"},
                         "drawing_attachments": [
-                            {"filename": "floor.pdf", "mime_type": "application/pdf", "data_url": "data:application/pdf;base64,JVBERi0xLjQK"},
+                            {"filename": "floor.pdf", "mime_type": "application/pdf", "data_url": "data:application/pdf;base64,JVBERi0xLjQK", "source_page_numbers": [4, 5]},
                             {"filename": "plan.png", "mime_type": "image/png", "data_url": "data:image/png;base64,iVBORw0KGgo="},
                         ],
                         "command_descriptors": [{
@@ -472,6 +472,7 @@ class McpBridgeServerTest(unittest.TestCase):
                 self.assertEqual(user_content[1]["type"], "file")
                 self.assertEqual(user_content[1]["file"]["filename"], "floor.pdf")
                 self.assertEqual(user_content[1]["file"]["file_data"], "data:application/pdf;base64,JVBERi0xLjQK")
+                self.assertIn('"source_page_numbers": [4, 5]', user_content[0]["text"])
                 self.assertEqual(user_content[2]["type"], "image_url")
                 self.assertEqual(user_content[2]["image_url"]["url"], "data:image/png;base64,iVBORw0KGgo=")
                 self.assertNotIn("server-only-key", json.dumps(body))
