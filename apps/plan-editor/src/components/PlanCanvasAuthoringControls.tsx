@@ -20,6 +20,7 @@ interface PlanCanvasAuthoringControlsProps {
   open: boolean
   pipeSystem: PipeSystem
   fixtureKind: FixtureKind
+  activeFamilyName?: string
   furnitureKind: InteriorFurnitureKind
   roof: { shape: 'hip' | 'gable' | 'flat'; slopeDeg: number; thicknessMm: number; elevationOffsetMm: number; material: string }
   stairOptions: StairPlacementOptions
@@ -74,9 +75,9 @@ export const PlanCanvasAuthoringControls: React.FC<PlanCanvasAuthoringControlsPr
   const family = typeFamilyByTool[activeTool]
   const activeTypeMark = activeTypeMarks[activeTool]
 
-  return <div className="cf-authoring-controls" onPointerDown={event => event.stopPropagation()}>
+  return <div className={`cf-authoring-controls ${open ? 'is-open' : 'is-collapsed'}`} onPointerDown={event => event.stopPropagation()}>
     <button type="button" className="cf-authoring-controls-toggle" aria-expanded={open} onClick={() => onOpenChange(!open)}>
-      <span>ตัวเลือกการวาด · {toolNames[activeTool] ?? activeTool}</span>
+      <span>ตัวเลือกการวาด · {toolNames[activeTool] ?? activeTool}{activeTypeMark ? ` · ${activeTypeMark}` : ''}</span>
       <span aria-hidden="true">{open ? 'ยุบ' : 'แสดง'}</span>
     </button>
     {open && <div className="cf-authoring-controls-content">
@@ -92,7 +93,8 @@ export const PlanCanvasAuthoringControls: React.FC<PlanCanvasAuthoringControlsPr
           <option value="light">ดวงโคม</option><option value="switch">สวิตช์</option><option value="outlet">เต้ารับ</option><option value="panel">ตู้ไฟ</option>
         </select>
       </label>}
-      {activeTool === 'furniture' && <label className="cf-reference-control">ชนิดเฟอร์นิเจอร์
+      {activeTool === 'furniture' && props.activeFamilyName && <strong>Family · {props.activeFamilyName}</strong>}
+      {activeTool === 'furniture' && !props.activeFamilyName && <label className="cf-reference-control">ชนิดเฟอร์นิเจอร์
         <select aria-label="ชนิดเฟอร์นิเจอร์ที่จะวาง" value={furnitureKind} onChange={event => onFurnitureKindChange(event.target.value as InteriorFurnitureKind)}>
           <option value="sofa">โซฟา</option><option value="chair">เก้าอี้</option><option value="dining_table">โต๊ะอาหาร</option>
           <option value="coffee_table">โต๊ะกลาง</option><option value="desk">โต๊ะทำงาน</option><option value="bed_single">เตียงเดี่ยว</option>

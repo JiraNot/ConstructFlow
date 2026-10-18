@@ -13,6 +13,8 @@ export function useLegacyModalAccessibility(isOpen: boolean, onClose: () => void
     ;(panel.querySelector<HTMLElement>('input:not([type="checkbox"])') ?? focusables()[0] ?? panel).focus()
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        // An active canvas draft consumes Escape before the surrounding dialog.
+        if (event.target instanceof Element && event.target.closest('[data-modal-escape-cancel="true"]')) return
         event.preventDefault()
         event.stopPropagation()
         onClose()

@@ -28,7 +28,7 @@ function objectColor(representation: ObjectRepresentation3D): THREE.ColorReprese
   return '#9bb2c4'
 }
 
-function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
+export function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
   const displayPhase = representation.display_phase
   const root = new THREE.Group() as unknown as ModelObject3D
   const standardMaterial = (color: THREE.ColorRepresentation, options: { transparent?: boolean; opacity?: number; metalness?: number; roughness?: number; depthWrite?: boolean } = {}) =>
@@ -374,6 +374,20 @@ function makeObjectMesh(representation: ObjectRepresentation3D): ModelObject3D {
     return root
   }
 
+  if (representation.shape.kind === 'triangle_mesh' && representation.shape.parts?.length) {
+    for (const part of representation.shape.parts) {
+      const geometry = new THREE.BufferGeometry()
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(part.triangles_mm.flat(2).map(mmToM), 3))
+      geometry.computeVertexNormals()
+      if (part.uvs) geometry.setAttribute('uv', new THREE.Float32BufferAttribute(part.uvs.flat(), 2))
+      const material = standardMaterial(displayPhase === 'new_construction' ? part.color : phaseColor(displayPhase), {roughness:part.roughness,metalness:part.metalness})
+      if (part.texture_data_url && displayPhase === 'new_construction') { const texture = new THREE.TextureLoader().load(part.texture_data_url); texture.flipY = false; texture.colorSpace = THREE.SRGBColorSpace; material.map = texture }
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.castShadow = true; mesh.receiveShadow = true; root.add(mesh)
+    }
+    root.userData = { objectId: representation.object_id, objectType: representation.object_type, interaction: representation.interaction, moveable: representation.interaction.kind !== 'select_only' }
+    return root
+  }
   let geometry: THREE.BufferGeometry
   if (representation.shape.kind === 'triangle_mesh') {
     geometry = new THREE.BufferGeometry()

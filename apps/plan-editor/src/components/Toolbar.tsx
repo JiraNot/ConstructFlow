@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useRef, useState } from 'react'
 import {
   MousePointer,
   Columns,
@@ -169,11 +169,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     { title: 'ระบบ', ids: ['pipe', 'fixture'] },
     { title: 'เขียนแบบ/สำรวจ', ids: ['erase', 'grid', 'gridSystem', 'measure', 'calibrate'] },
   ]
-  useEffect(() => {
-    const activeGroup = toolGroups.find(group => group.ids.includes(activeTool))
-    if (activeGroup) setExpandedToolGroup(activeGroup.title)
-  }, [activeTool])
-
   return (
     <div className={`cf-toolbar cf-toolbar-${orientation}`} style={{
       display: 'flex',
@@ -194,7 +189,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <button
               key={t.id}
               className={`cf-tool-button ${isActive ? 'is-active' : ''}`}
-              onClick={() => onSelectTool(t.id)}
+              onClick={() => { setExpandedToolGroup(null); onSelectTool(t.id) }}
               title={`${t.label}`}
               style={{
                 display: 'flex',
@@ -228,7 +223,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           }}>
             <summary aria-label={group.title}>{group.title}</summary>
             <div className="cf-tool-group-menu" role="group" aria-label={group.title}>
-              {groupTools.map(t => <button key={t.id} type="button" className={`cf-tool-button ${activeTool === t.id ? 'is-active' : ''}`} onClick={() => onSelectTool(t.id)} title={t.label} aria-label={t.label}>
+              {groupTools.map(t => <button key={t.id} type="button" className={`cf-tool-button ${activeTool === t.id ? 'is-active' : ''}`} onClick={() => { setExpandedToolGroup(null); onSelectTool(t.id) }} title={t.label} aria-label={t.label}>
               {t.icon}<span className="cf-tool-label">{({ erase: 'ลบ', column: 'เสา', foundation: 'ฐานราก', slab: 'พื้น', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้า', roof: 'หลังคา', pipe: 'ท่อ', fixture: 'อุปกรณ์', cabinet: 'บิลท์อิน', furniture: 'เฟอร์นิเจอร์', moulding: 'บัว', roomSeparator: 'แบ่งห้อง', stair: 'บันได', grid: 'กริด', gridSystem: 'ระบบกริด', measure: 'วัด', calibrate: 'ปรับสเกล' } as Partial<Record<ToolType, string>>)[t.id]}</span>
               </button>)}
             </div>

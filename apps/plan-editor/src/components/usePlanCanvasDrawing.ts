@@ -17,6 +17,8 @@ interface UsePlanCanvasDrawingOptions {
   canvasRef: RefObject<HTMLCanvasElement | null>
   project: ProjectDocument
   planProject: ProjectDocument
+  activeFamilyId?: string
+  activeFamilyTypeId?: string
   activeTool: ToolType
   activeSnap: SnapResult | null
   activeWallSnap: WallHostSnapResult | null
@@ -62,7 +64,7 @@ interface UsePlanCanvasDrawingOptions {
 
 export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: UsePlanCanvasDrawingOptions) {
   const {
-    activeTool, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark,
+    activeTool, activeFamilyId, activeFamilyTypeId, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark,
     activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
     beamStartNode, wallStartNode, activeWallSnap, doorHanding, stairPreview, stairStartPoint,
     resolveReferencePath, calibrationP1, calibrationMousePoint, selectedIds, editableSelectionIds,
@@ -102,13 +104,13 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
     })
     drawPlanCanvasSelectionHandles(ctx, editableSelectionIds, planProject, viewport, displayUnit, manipulationPreview)
     drawPlanCanvasToolOverlays({
-      ctx, activeTool, gridStartPoint, activeSnap, planProject, viewport, gridCopySourceId, tapeMeasure,
+      ctx, activeTool, activeFamilyId, activeFamilyTypeId, gridStartPoint, activeSnap, planProject, viewport, gridCopySourceId, tapeMeasure,
       displayUnit, activeWallSnap, project, activeDoorTypeMark, activeWindowTypeMark,
       dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary,
     })
     if (probe) probe.push(performance.now() - drawStartedAt)
   }, [
-    canvasRef, activeTool, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark,
+    canvasRef, activeTool, activeFamilyId, activeFamilyTypeId, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark,
     activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
     beamStartNode, wallStartNode, activeWallSnap, doorHanding, stairPreview, stairStartPoint,
     resolveReferencePath, calibrationP1, calibrationMousePoint, selectedIds, editableSelectionIds,

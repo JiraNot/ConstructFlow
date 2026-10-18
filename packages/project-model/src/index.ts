@@ -19,3 +19,5 @@ export * from './wallPlanStyle.js'
 export * from './parametricSymbol.js'
 export * from './parametricSymbolGenerators.js'
 export * from './dependencyGraph.js'
+
+export * from './family.js'

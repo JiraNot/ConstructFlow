@@ -1,3 +1,4 @@
+import { objectFamilyGeometry } from '@constructflow/family-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
 import { distanceToArc2D, distanceToPath2D, pointInPolygon2D, rectangleCorners2D } from '@constructflow/geometry-kernel'
 import type { ProjectDocument, SmartObject } from '@constructflow/project-model'
@@ -5,7 +6,7 @@ import { buildOpeningRepresentationShapeFromObject, getOpeningPlanLinework } fro
 
 type Point = [number, number]
 type Data = Record<string, unknown>
-interface PickPath { points: Point[]; closed?: boolean; filled?: boolean; halfWidth?: number }
+interface PickPath { points: Point[]; closed?: boolean; filled?: boolean; voids?: Point[][]; halfWidth?: number }
 interface PickArc { center: Point; radius: number; start: number; sweep: number }
 interface PickGeometry {
   id: string
@@ -80,7 +81,13 @@ function geometryFor(plan: ProjectDocument, source: ProjectDocument): PickGeomet
       const c = point(center), s = point(size)
       if (c && s) paths.push({ points: rectangleCorners2D(c, s[0], s[1], Number(data.rotation_deg ?? 0)), closed: true, filled: true })
     }
-    if (object.object_type === 'structure.column') addRectangle(data.location_mm, data.section_mm)
+    const custom = objectFamilyGeometry(source, object)
+    if (custom) for (const path of custom.worldPaths) {
+      const holes=path.voids?.map(ring=>ring.map(p=>{const world=custom.transform([...p,0]);return [world[0],world[1]] as Point}))
+      paths.push({ points: path.points.map(point => [point[0], point[1]]), closed: path.closed, filled: path.closed, voids:holes })
+      for(const points of holes??[])paths.push({points,closed:true})
+    }
+    else if (object.object_type === 'structure.column') addRectangle(data.location_mm, data.section_mm)
     else if (object.object_type === 'structure.foundation') addRectangle(data.center_mm, data.size_mm)
     else if (object.object_type === 'door_window.door' || object.object_type === 'door_window.window') openingGeometry(object, source, paths, arcs)
     else if (object.object_type === 'architecture.wall' || object.object_type === 'structure.beam') {
@@ -134,7 +141,7 @@ export function getPlanPickCandidates(plan: ProjectDocument, source: ProjectDocu
     const [minX, minY, maxX, maxY] = item.bounds
     if (point[0] < minX - tolerance || point[0] > maxX + tolerance || point[1] < minY - tolerance || point[1] > maxY + tolerance) continue
     let distance = Infinity
-    for (const path of item.paths) distance = Math.min(distance, path.filled && pointInPolygon2D(point, path.points) ? 0 : Math.max(0, distanceToPath2D(point, path.points, path.closed) - (path.halfWidth ?? 0)))
+    for (const path of item.paths) distance = Math.min(distance, path.filled && pointInPolygon2D(point, path.points) && !path.voids?.some(hole=>pointInPolygon2D(point,hole)) ? 0 : Math.max(0, distanceToPath2D(point, path.points, path.closed) - (path.halfWidth ?? 0)))
     for (const arc of item.arcs) distance = Math.min(distance, distanceToArc2D(point, arc.center, arc.radius, arc.start, arc.sweep))
     const inside = item.boundary && pointInPolygon2D(point, item.boundary) && !item.voids?.some(hole => pointInPolygon2D(point, hole))
     if (distance <= tolerance || inside) hits.push({ id: item.id, family: item.family, interior: distance > tolerance, distancePx: distance * scale })

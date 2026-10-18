@@ -221,7 +221,7 @@ export function usePlanAuthoringCommands({
       id: doorId, mark: activeDoorType, wall_id: wallId, offset_along_wall_mm: offset_mm,
       location_mm: [point_mm[0], point_mm[1], 0], width_mm: activeType?.parameters.width_mm || 800,
       height_mm: activeType?.parameters.height_mm || 2000, handing,
-    } }])
+    } }, ...(activeType?.parameters.family_id ? [{ name: 'AttachFamily', input: {object_id:doorId,family_id:activeType.parameters.family_id,family_type_id:activeType.parameters.family_type_id}}] : [])])
     if (result.status === 'success') {
       setSelectedId(doorId)
       setSelectedIds([doorId])
@@ -235,7 +235,7 @@ export function usePlanAuthoringCommands({
       id: windowId, mark: activeWindowType, wall_id: wallId, offset_along_wall_mm: offset_mm,
       location_mm: [point_mm[0], point_mm[1], 0], width_mm: activeType?.parameters.width_mm || 1200,
       height_mm: activeType?.parameters.height_mm || 1200, sill_height_mm: activeType?.parameters.sill_height_mm || 900,
-    } }])
+    } }, ...(activeType?.parameters.family_id ? [{ name: 'AttachFamily', input: {object_id:windowId,family_id:activeType.parameters.family_id,family_type_id:activeType.parameters.family_type_id}}] : [])])
     if (result.status === 'success') {
       setSelectedId(windowId)
       setSelectedIds([windowId])

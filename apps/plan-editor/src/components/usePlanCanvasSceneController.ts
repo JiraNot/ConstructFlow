@@ -57,6 +57,6 @@ export function usePlanCanvasSceneController({
     externalManipulationPreview, coordination, coordinationSeverities, coordinationFocusSelection,
     gridStartPoint, gridCopySourceId, tapeMeasure, dimensionReferenceMode: props.preferences.dimensionReferenceMode,
     selectionBox: pointer.selectionBox, roomSeparatorStart: placement.roomSeparatorStart,
-    pipeSystem, fixtureKind, furnitureKind, slabBoundary,
+    pipeSystem, fixtureKind, furnitureKind, slabBoundary, activeFamilyId: props.activeFamilyId, activeFamilyTypeId: props.activeFamilyTypeId,
   })
 }

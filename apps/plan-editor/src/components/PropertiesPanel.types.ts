@@ -15,6 +15,8 @@ import type {
 } from '@constructflow/project-model'
 
 export interface PropertiesPanelProps {
+  onOpenFamilyEditor?: () => void
+  onUpdateFamilyInstance?: (objectId: string, changes: Record<string, unknown>) => void
   project: ProjectDocument
   displayUnit: DisplayLengthUnit
   selectedId: string | null

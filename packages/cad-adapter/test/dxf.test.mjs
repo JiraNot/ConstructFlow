@@ -481,7 +481,8 @@ test("kitchen-extension permit sheets preserve auto-fitted scales and matching D
   const project = deserializeProject(readFileSync(new URL("../../../examples/kitchen-extension-proof.cfproj", import.meta.url), "utf8"));
   const compiled = compilePermitDrawingSet(project);
   const result = exportProjectToDxf(project);
-  assert.equal(compiled.sheets.length, 22, 'standard 20 sheets plus architecture/framing sheets for the extra storey datum');
+  assert.equal(compiled.sheets.length, 23, 'standard 20 sheets, the existing A-01 compliance continuation, and two extra storey sheets');
+  assert.deepEqual(compiled.sheets.slice(20).map(sheet=>sheet.id), ['A-01-C1', 'A-02-L3', 'S-02-L3']);
   assert.equal(result.layoutsCount, compiled.sheets.length);
   assert.deepEqual(Object.fromEntries(["A-02", "A-05", "A-06", "A-10"].map(id => [id, compiled.sheets.find(sheet => sheet.id === id)?.scale])), {
     "A-02": "1:25", "A-05": "1:50", "A-06": "1:50", "A-10": "1:50",

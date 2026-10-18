@@ -9,10 +9,11 @@ export const domainPackages = [
 export const packageDirectories = [
   "project-model",
   "geometry-kernel",
-  "snapping-engine",
   "command-schema",
   "constraint-engine",
   "module-sdk",
+  "family-engine",
+  "snapping-engine",
   "structure-engine",
   "architecture-engine",
   "catalog-engine",

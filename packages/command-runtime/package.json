@@ -23,7 +23,8 @@
     "@constructflow/interior-engine": "file:../interior-engine",
     "@constructflow/module-sdk": "file:../module-sdk",
     "@constructflow/domain-providers": "file:../domain-providers",
-    "@constructflow/constraint-engine": "file:../constraint-engine"
+    "@constructflow/constraint-engine": "file:../constraint-engine",
+    "@constructflow/family-engine": "file:../family-engine"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

@@ -33,13 +33,14 @@ interface UsePlanCanvasSurfaceOverlaysOptions {
   authoringControlsOpen: boolean
   setAuthoringControlsOpen: Dispatch<SetStateAction<boolean>>
   toggleDimensionReferenceMode: () => void
+  onFinishPolygon: () => void
 }
 
 /** Builds the view-models for all canvas hints, dimensions, and drawing controls. */
 export function usePlanCanvasSurfaceOverlays({
   props, planProject, editableSelectionIds, status, picking, placement, placementDimensions,
   manipulation, pointer, keyboard, displayUnit, dimensionReferenceMode, containerSize,
-  canvasRef, authoringControlsOpen, setAuthoringControlsOpen, toggleDimensionReferenceMode,
+  canvasRef, authoringControlsOpen, setAuthoringControlsOpen, toggleDimensionReferenceMode, onFinishPolygon,
 }: UsePlanCanvasSurfaceOverlaysOptions): OverlayModels {
   const setPreference = <K extends keyof PlanCanvasPreferences>(
     key: K,
@@ -48,7 +49,6 @@ export function usePlanCanvasSurfaceOverlays({
 
   const hints: OverlayModels['hints'] = {
     activeTool: props.activeTool,
-    tapeMeasure: placement.tapeMeasure,
     showSelectionHandleHint: hasPlanCanvasSelectionGrip(planProject, editableSelectionIds),
     placementStatus: status.placementStatus,
     placementHint: status.placementHint,
@@ -60,6 +60,12 @@ export function usePlanCanvasSurfaceOverlays({
     onHoverChange: picking.chooseCandidate,
     onSelectionChange: props.onSelectionChange,
     onSelectObject: props.onSelectObject,
+    onCancel: () => {
+      status.cancelCurrentPlacement()
+      canvasRef.current?.focus({ preventScroll: true })
+    },
+    canFinishPolygon: ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(props.activeTool) && placement.slabBoundary.length >= 3,
+    onFinishPolygon,
   }
 
   const dragDimensions = manipulation.dimensions && pointer.dragPreviewPoint && pointer.draggingObject ? {
@@ -126,6 +132,7 @@ export function usePlanCanvasSurfaceOverlays({
     pipeSystem: placement.pipeSystem,
     fixtureKind: placement.fixtureKind,
     furnitureKind: placement.furnitureKind,
+    activeFamilyName: props.project.families?.find(family=>family.id===props.activeFamilyId)?.name,
     roof,
     stairOptions: placement.stairOptions,
     stairError: placement.stairError,

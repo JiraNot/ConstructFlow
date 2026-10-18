@@ -359,6 +359,7 @@ class McpBridgeServerTest(unittest.TestCase):
         thread.start()
         try:
             with patch.dict(os.environ, {
+                "CONSTRUCTFLOW_HTTP_HOST": "0.0.0.0",  # Exercise the API-key gateway, not local ChatGPT sign-in.
                 "CONSTRUCTFLOW_AI_TOKEN": "test-secret-token",
                 "CONSTRUCTFLOW_AI_ALLOWED_ORIGINS": "http://localhost:5184",
             }, clear=False), patch.object(http_bridge, "generate_command_plan", return_value={
@@ -429,6 +430,7 @@ class McpBridgeServerTest(unittest.TestCase):
         gateway_thread.start()
         try:
             with patch.dict(os.environ, {
+                "CONSTRUCTFLOW_HTTP_HOST": "0.0.0.0",  # Exercise the API-key gateway, not local ChatGPT sign-in.
                 "CONSTRUCTFLOW_AI_TOKEN": "test-secret-token",
                 "CONSTRUCTFLOW_AI_ALLOWED_ORIGINS": "http://localhost:5184",
                 "OPENAI_API_KEY": "server-only-key",

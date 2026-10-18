@@ -1,3 +1,4 @@
+import type { FamilyInstanceData } from './family.js'
 // ConstructFlow Canonical SmartObject Interface
 // Strictly mirrors schemas/smart-object.schema.json
 
@@ -20,6 +21,7 @@ import {
 } from './types.js'
 
 export type KnownModuleData =
+  | FamilyInstanceData
   | GridModuleData
   | ColumnModuleData
   | FoundationModuleData

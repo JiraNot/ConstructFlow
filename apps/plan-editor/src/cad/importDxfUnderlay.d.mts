@@ -10,3 +10,5 @@ export interface ImportedDxfUnderlay {
 }
 
 export function importDxfUnderlay(source: string, options?: { maxImageDimension?: number }): ImportedDxfUnderlay
+
+export function importDxfDrawing(source: string, options?: { unitScaleMm?: number }): { paths: import('@constructflow/project-model').FamilyPath[]; bounds: [number, number, number, number]; drawing_units: string; unit_scale_mm: number; imported_entities: number; skipped_entities: number }

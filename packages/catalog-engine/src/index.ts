@@ -222,6 +222,13 @@ export function executeCatalogCommand(context: CommandHandlerContext): CommandBu
       const oldData = object.module_data as Record<string, unknown>
       const nextData: Record<string, unknown> = { ...oldData, mark: type.name, type_id: type.id, instance_overrides: {} }
       for (const field of PARAMETER_FIELDS) if (type.parameters[field] !== undefined) nextData[field] = structuredClone(type.parameters[field])
+      if (type.parameters.family_id) {
+        nextData.family_id = type.parameters.family_id
+        nextData.family_type_id = type.parameters.family_type_id
+        nextData.family_parameters = {}
+      } else {
+        delete nextData.family_id; delete nextData.family_type_id; delete nextData.family_parameters; delete nextData.family_bounds_mm
+      }
       const shiftedOpeningIds: string[] = []
       if (object.object_type === 'architecture.wall'
         && typeof oldData.thickness_mm === 'number' && typeof nextData.thickness_mm === 'number'

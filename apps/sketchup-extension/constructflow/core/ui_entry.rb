@@ -47,6 +47,10 @@ module JiraNot
           menu.add_item('🏠 สร้างโมเดลตัวอย่าง .SKP') { generate_real_project }
           menu.add_separator
           menu.add_item('🔄 นำเข้าผังจาก Plan Editor (.cfproj)...') { import_plan_editor_project(runtime) }
+          menu.add_item('ส่งออกสิ่งที่เลือกเป็น Family (.cffamily)...') do
+            require_relative 'family_asset_export'
+            FamilyAssetExport.export_selected
+          end
         end
 
         def import_plan_editor_project(runtime)

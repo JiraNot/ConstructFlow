@@ -5,3 +5,5 @@ export * from './architectureCommands.js'
 export * from './transactions.js'
 export * from './constructionCommands.js'
 export * from './extensionCommands.js'
+
+export * from './familyCommands.js'

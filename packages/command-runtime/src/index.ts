@@ -1,3 +1,4 @@
+import { executeFamilyCommand, reconcileFamilyDimensions } from '@constructflow/family-engine'
 import { validateProjectV2, type ProjectDocument } from '@constructflow/project-model'
 import type {
   CommandActorKind, CommandEnvelope, CommandRequest, CommandBusResult,
@@ -21,7 +22,7 @@ import { ConstructFlowSolver } from '@constructflow/constraint-engine'
 import { ModuleRegistry, type ConstructFlowModule } from '@constructflow/module-sdk'
 
 const handlers = [(context: CommandHandlerContext) => context.commandName === 'DuplicateObjects' ? executeDuplicateObjects(context) : null,
-  executeProjectCommand, executeStructureCommand, executeArchitectureCommand, executeCatalogCommand,
+  executeFamilyCommand, executeProjectCommand, executeStructureCommand, executeArchitectureCommand, executeCatalogCommand,
   executeStructureConstructionCommand, executeBathroomCommand, executeRoofCommand, executeDecorativeCommand,
   executePlumbingCommand, executeDrainageCommand, executeElectricalCommand, executeInteriorCommand]
 const phases = new Set(['existing', 'demolition', 'new_construction'])
@@ -196,6 +197,7 @@ export class CommandBus {
         const rebarIds=reconcileTypeReinforcement(context)
         response.result.affected_object_ids=[...new Set([...response.result.affected_object_ids,...rebarIds])]
         response.updatedProject.project.updated_at = now
+        reconcileFamilyDimensions(project, response.updatedProject)
         validateProjectV2(response.updatedProject)
         validateConstructionProject(response.updatedProject)
         const moduleErrors = extensionModules.validate(response.updatedProject)
@@ -241,6 +243,7 @@ export class CommandBus {
       if (!response) return reject(`Unknown command: ${commandName}`)
       if (response.result.status !== 'success') return { ...response, updatedProject: project }
       response.updatedProject.project.updated_at = now
+      reconcileFamilyDimensions(project, response.updatedProject)
       validateProjectV2(response.updatedProject)
       validateConstructionProject(response.updatedProject)
       const moduleErrors = extensionModules.validate(response.updatedProject).filter(issue => issue.severity === 'error')

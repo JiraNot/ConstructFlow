@@ -6,6 +6,13 @@ import { buildDirectManipulationCommands } from './directManipulation.mjs'
 export function buildElevationManipulationCommands(project: ProjectDocument, viewMode: string, objectId: string, deltaWorldMm: [number, number], deltaZMm: number, verticalIntent: 'move' | 'top' | 'base', gripIndex?: number): CommandRequest[] {
     const object = project.objects[objectId]
     if (!object) return []
+    if (object.object_type==='family.instance' || object.object_type==='interior.furniture' || object.object_type==='interior.cabinet_run') {
+      const data=object.module_data as Record<string,unknown>,position=data.location_mm as number[]
+      if (!position) return []
+      if (data.family_id) return [{name:'UpdateFamilyInstance',input:{object_id:object.id,location_mm:[position[0]+deltaWorldMm[0],position[1]+deltaWorldMm[1],position[2]+deltaZMm]}}]
+      if (object.object_type==='family.instance') return []
+      return [{name:object.object_type==='interior.furniture'?'UpdateInteriorFurniture':'UpdateCabinetRun',input:{...data,id:object.id,location_mm:[position[0]+deltaWorldMm[0],position[1]+deltaWorldMm[1],position[2]+deltaZMm]}}]
+    }
     const [dx,dy]=deltaWorldMm,commands:CommandRequest[]=[]
     const sideGrip=gripIndex===3||gripIndex===4
     const horizontalAxis=viewMode==='east'||viewMode==='west'?1:0

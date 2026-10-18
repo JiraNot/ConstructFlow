@@ -6,7 +6,7 @@ import { hasPendingToolStep, resolveEscapeAction, resolveToolInteractionStatus }
 
 const toolbarTools = [
   'select', 'column', 'foundation', 'beam', 'wall', 'door', 'window', 'slab', 'slabVoid', 'archFloor',
-  'ceiling', 'roof', 'pipe', 'fixture', 'cabinet', 'moulding', 'roomSeparator', 'stair', 'grid',
+  'ceiling', 'roof', 'pipe', 'fixture', 'cabinet', 'furniture', 'moulding', 'roomSeparator', 'stair', 'grid',
   'gridSystem', 'gridCopy', 'measure', 'dimension', 'calibrate', 'erase',
 ]
 
@@ -17,7 +17,7 @@ test('interaction registry covers every toolbar tool and classifies drawing gest
     assert.equal(usesPlacementDimensions(tool), definition.dimensionPlacement)
   }
   for (const tool of ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof']) assert.equal(isPolygonInteraction(tool), true)
-  for (const tool of ['beam', 'wall', 'pipe', 'cabinet', 'moulding', 'roomSeparator', 'stair', 'grid']) assert.equal(isTwoPointInteraction(tool), true)
+  for (const tool of ['beam', 'wall', 'pipe', 'cabinet', 'furniture', 'moulding', 'roomSeparator', 'stair', 'grid']) assert.equal(isTwoPointInteraction(tool), true)
 })
 
 test('tool session activation is stable for the current tool and increments on a tool change', () => {
@@ -92,7 +92,7 @@ test('Escape cancels a pending step first, exits an idle tool, and clears select
 })
 
 test('step feedback stays aligned with state across two-point, polygon, measurement, and reference tools', () => {
-  for (const tool of ['wall', 'beam', 'grid', 'roomSeparator', 'pipe', 'cabinet', 'moulding', 'stair']) {
+  for (const tool of ['wall', 'beam', 'grid', 'roomSeparator', 'pipe', 'cabinet', 'furniture', 'moulding', 'stair']) {
     const state = tool === 'wall' ? { wallStartNode: { point_mm: [0, 0] } }
       : tool === 'beam' ? { beamStartNode: { point_mm: [0, 0] } }
         : tool === 'grid' ? { gridStartPoint: [0, 0] }

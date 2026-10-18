@@ -106,7 +106,12 @@ function moveSingleObject(project, object, dx, dy) {
       const location = point3(data.location_mm)
       return fullObjectUpdate(object, 'UpdateCabinetRun', { location_mm: [location[0] + dx, location[1] + dy, location[2]] })
     }
+    case 'family.instance': {
+      const location = point3(data.location_mm)
+      return input('UpdateFamilyInstance', { object_id: object.id, location_mm: [location[0] + dx, location[1] + dy, location[2]] })
+    }
     case 'interior.furniture': {
+      if (data.family_id) { const location = point3(data.location_mm); return input('UpdateFamilyInstance', { object_id: object.id, location_mm: [location[0]+dx, location[1]+dy, location[2]] }) }
       const location = point3(data.location_mm)
       return fullObjectUpdate(object, 'UpdateInteriorFurniture', { location_mm: [location[0] + dx, location[1] + dy, location[2]] })
     }

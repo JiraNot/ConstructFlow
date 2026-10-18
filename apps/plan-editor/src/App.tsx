@@ -1,3 +1,4 @@
+import { useFamilyWorkbenchSession } from './app/useFamilyWorkbenchSession.js'
 import React, { useState, useEffect, useRef, useMemo, useSyncExternalStore, lazy, Suspense } from 'react'
 import {
   ProjectDocument,
@@ -24,10 +25,13 @@ import { SettingsModal } from './components/SettingsModal.js'
 import { TypeManagerModal } from './components/TypeManagerModal.js'
 import { UnderlayCalibrationModal } from './components/UnderlayCalibrationModal.js'
 import { ProjectLegalModal } from './components/ProjectLegalModal.js'
+import { LaserBleHudPill } from './components/LaserBleHudPill.js'
+import { PhotoDimensionModal } from './components/PhotoDimensionModal.js'
+import type { PhotoDimensionSession } from '@constructflow/laser-survey'
 import { useCoordinationReport } from './features/coordination/useCoordinationReport.js'
 import type { ProjectLegalMetadata } from '@constructflow/project-model'
 import { PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
-import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home, Compass } from 'lucide-react'
+import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home, Compass, PanelRightOpen } from 'lucide-react'
 import { calculateTakeoff, calculatePhasedBOQ } from '@constructflow/takeoff-engine'
 import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { usePlanPlacementCommands } from './app/usePlanPlacementCommands.js'
@@ -51,6 +55,8 @@ import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 import { createElevationObjectCommandHandler } from './app/elevationObjectCommands.js'
 import { MultiViewResizeHandle } from './components/MultiViewResizeHandle.js'
 import { ViewModePicker } from './components/ViewModePicker.js'
+
+const FamilyWorkbench = lazy(() => import('./components/FamilyWorkbench.js').then(module => ({ default: module.FamilyWorkbench })))
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
@@ -165,7 +171,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const coordination = useCoordinationReport(project, true)
   const coordinationFindings = coordination.report?.findings ?? []
   const [isSettingsOpen,setIsSettingsOpen] = useState(false)
-  const [inspectorOpen,setInspectorOpen] = useState(() => window.innerWidth > 900)
+  const [inspectorOpen,setInspectorOpen] = useState(() => window.innerWidth > 1180)
   const [workbenchTab,setWorkbenchTab] = useState<'model'|'sheets'>('model')
   const [isConstructionOpen,setIsConstructionOpen]=useState(false)
   const {
@@ -220,6 +226,28 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [measuredCalibrationDist_mm, setMeasuredCalibrationDist_mm] = useState<number>(4000)
   const [isPresetsModalOpen, setIsPresetsModalOpen] = useState<boolean>(false)
   const [isLegalModalOpen, setIsLegalModalOpen] = useState<boolean>(false)
+  const [isPhotoDimensionModalOpen, setIsPhotoDimensionModalOpen] = useState<boolean>(false)
+  const [photoSessions, setPhotoSessions] = useState<PhotoDimensionSession[]>(() => {
+    try {
+      const saved = localStorage.getItem('cf_photo_sessions')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+  const [activePhotoSession, setActivePhotoSession] = useState<PhotoDimensionSession | null>(null)
+  const handleSavePhotoSession = (session: PhotoDimensionSession) => {
+    setPhotoSessions(prev => {
+      const idx = prev.findIndex(s => s.id === session.id)
+      const next = idx >= 0 ? prev.map(s => s.id === session.id ? session : s) : [...prev, session]
+      try {
+        localStorage.setItem('cf_photo_sessions', JSON.stringify(next))
+      } catch (e) {
+        console.warn('Could not save photo sessions', e)
+      }
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!underlay.image || !underlay.visible) {
@@ -322,6 +350,13 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     handleExportTakeoff, handleExportBOQ, handleExportDrawingSet, handleExportDxf, handleExportIfc,
   } = useWorkbenchExportActions(project, takeoff, boq, setFileFeedback)
 
+  const familyWorkbench = useFamilyWorkbenchSession({
+    project, selectedId, onExecute: dispatchCommandBatch,
+    onSelect: id => { setSelectedId(id); setSelectedIds([id]) }, onTool: setActiveTool,
+    onViewPlan: () => setViewMode('plan'), onFeedback: setFileFeedback,
+    onSetOpeningType: (category, name) => category === 'door' ? setActiveDoorType(name) : setActiveWindowType(name),
+  })
+
   const planCanvasProps: Omit<PlanCanvasProps, 'planDiscipline'> = {
     project: viewProject,
     navigationViewport: planNavigationViewport,
@@ -330,6 +365,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     onPreferencesChange: setPlanCanvasPreferences,
     displayUnit,
     activeTool,
+    activeFamilyId: familyWorkbench.activeFamily?.id,
+    activeFamilyTypeId: familyWorkbench.activeTypeId,
     toolActivation: toolActivation,
     activeColumnTypeMark: activeColumnType,
     activeFoundationTypeMark: activeFoundationType,
@@ -345,6 +382,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     coordinationFocusSelection: false,
     onOpenTypeManager: () => openCatalog(),
     onChangeActiveTypeMark: mark => {
+      familyWorkbench.clear()
       if (activeTool === 'column') setActiveColumnType(mark)
       else if (activeTool === 'foundation') setActiveFoundationType(mark)
       else if (activeTool === 'beam') setActiveBeamType(mark)
@@ -366,8 +404,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     onCommitFoundation: handleCommitFoundation,
     onCommitBeam: handleCommitBeam,
     onCommitWall: handleCommitWall,
-    onCommitDoor: handleCommitDoor,
-    onCommitWindow: handleCommitWindow,
+    onCommitDoor: (wallId, point, offset, handing) => { if (!familyWorkbench.placeOpening('door', wallId, point, offset, handing)) handleCommitDoor(wallId, point, offset, handing) },
+    onCommitWindow: (wallId, point, offset) => { if (!familyWorkbench.placeOpening('window', wallId, point, offset)) handleCommitWindow(wallId, point, offset) },
     onCommitSlab: handleCommitSlab,
     onCommitArchitecturalFloor: handleCommitArchitecturalFloor,
     onCommitCeiling: handleCommitCeiling,
@@ -375,7 +413,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     onCommitPipeRoute: handleCommitPipeRoute,
     onCommitFixture: handleCommitFixture,
     onCommitCabinet: handleCommitCabinet,
-    onCommitFurniture: handleCommitFurniture,
+    onCommitFurniture: (start, end, kind) => { if (!familyWorkbench.placeFurniture(start, end, kind)) handleCommitFurniture(start, end, kind) },
     onCommitMoulding: handleCommitMoulding,
     onCommitRoomSeparator: handleCommitRoomSeparator,
     onCommitSurfaceVoid: handleCommitSurfaceVoid,
@@ -398,7 +436,13 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       setCursorCoords_mm(coords)
       setSnapKind(kind)
     },
+    photoSessions,
+    onOpenPhotoSession: (session: PhotoDimensionSession) => {
+      setActivePhotoSession(session)
+      setIsPhotoDimensionModalOpen(true)
+    },
   }
+
   const sharedEditorViewProps = {
     planCanvasProps, activeTool, toolActivation, project: viewProject, selectedId, selectedIds,
     onSelectObject: setSelectedId, onSelectionChange: selectObjects, splitViewEnabled,
@@ -474,6 +518,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               <option value="m">m</option><option value="cm">cm</option><option value="mm">mm</option>
             </select>
           </label>
+          <LaserBleHudPill onOpenPhotoDimensionModal={() => {
+            setActivePhotoSession(null)
+            setIsPhotoDimensionModalOpen(true)
+          }} />
         </div>
 
         <div className="cf-header-actions">
@@ -496,6 +544,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           <span role="status" aria-live="polite" className={`cf-save-status ${localAutosaveState === 'error' ? 'is-unsaved' : ''}`}>{localAutosaveState === 'saving' || localAutosaveState === 'restoring' ? 'กำลังบันทึกในเครื่อง…' : localAutosaveState === 'error' ? 'บันทึกในเครื่องไม่สำเร็จ' : 'บันทึกในเครื่องแล้ว'}{fileFeedback ? ` · ${fileFeedback}` : ''}</span>
           <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canUndo} onClick={() => { setProjectState(projectSessionRef.current!.undo()); setCommandQueue([]) }} title="ย้อนกลับ (Ctrl/⌘+Z)" aria-label="ย้อนกลับ"><Undo2 size={17} /></button>
           <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canRedo} onClick={() => { setProjectState(projectSessionRef.current!.redo()); setCommandQueue([]) }} title="ทำซ้ำ (Ctrl/⌘+Shift+Z หรือ Ctrl/⌘+Y)" aria-label="ทำซ้ำ"><Redo2 size={17} /></button>
+          <button type="button" className="cf-button cf-button-quiet cf-inspector-launcher" aria-expanded={inspectorOpen} aria-label={inspectorOpen ? 'ปิดแผงแก้ไข' : selectedId ? 'แก้ไขวัตถุที่เลือก' : 'เปิดแผงข้อมูล'} onClick={() => { setRightPanelTab('properties'); setInspectorOpen(value => !value) }}><PanelRightOpen size={17} /><span>{selectedId ? 'แก้ไข' : 'ข้อมูล'}</span></button>
           <details className="cf-more-menu" onClick={(event) => {
             if ((event.target as HTMLElement).closest('button')) {
               event.currentTarget.open = false;
@@ -515,6 +564,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               <button type="button" onClick={()=>{setWorkbenchTab('model');setIsConstructionOpen(true)}}><Layers2 size={15}/> เครื่องมืองานอาคาร</button>
               <button type="button" onClick={()=>setIsPresetsModalOpen(true)}><Sparkles size={15}/> ส่วนต่อเติมสำเร็จรูป</button>
               <button type="button" onClick={()=>openCatalog()}>คลังชนิด</button>
+              <button type="button" onClick={()=>familyWorkbench.show()}>Family Studio · นำเข้า / สร้าง / แก้ CAD</button>
               <div className="cf-menu-label">แบบและส่งออก</div>
               <button type="button" onClick={()=>{setWorkbenchTab('sheets');setIsConstructionOpen(true)}}>ชุดแบบและตาราง</button>
               <button type="button" aria-label="ส่งออก DXF 20 แผ่น" onClick={() => void handleExportDxf()}>DXF · 20 แผ่น</button>
@@ -533,10 +583,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       <div className="cf-workspace">
         <aside className="cf-tool-rail" aria-label="เครื่องมือเขียนแบบ">
           <div className="cf-rail-caption">เครื่องมือ</div>
+          <button type="button" className="cf-button cf-rail-family" onClick={()=>familyWorkbench.show()} title="สร้าง Family · เปิด DWG/DXF · นำเข้าโมเดล 3D">Family / CAD</button>
             <Toolbar orientation="vertical"
               activeTool={activeTool}
               lastPlacementTool={lastPlacementTool}
-              onSelectTool={setActiveTool}
+              onSelectTool={tool => { familyWorkbench.clear(); setActiveTool(tool) }}
               onRepeatLastTool={repeatLastTool}
               activeColumnType={activeColumnType}
               onChangeActiveColumnType={setActiveColumnType}
@@ -781,6 +832,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           </footer>
         </main>
 
+        {inspectorOpen && <button type="button" className="cf-inspector-backdrop" aria-label="ปิดแผงข้อมูล" onClick={() => setInspectorOpen(false)} />}
         {inspectorOpen && <EditorInspector
           onCloseInspector={() => setInspectorOpen(false)}
           activeTab={rightPanelTab}
@@ -792,6 +844,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             onDeleteObjects: handleDeleteObjects,
             onFlipDoorHanding: handleFlipDoorHanding,
             onOpenTypeManager: () => openCatalog(true, true),
+            onOpenFamilyEditor: () => familyWorkbench.show(true),
+            onUpdateFamilyInstance: (objectId, changes) => { const result = dispatchCommandBatch([{name:'UpdateFamilyInstance',input:{object_id:objectId,...changes}}]); if(result.status!=='success') setFileFeedback(result.errors?.join(' · ')??'แก้ Family ไม่สำเร็จ') },
             onAddFoundation: colId => handleCommitFoundation({ columnId: colId }),
             onDeleteObject: handleDeleteObject,
             onDrawSurfaceVoid: surfaceId => {
@@ -874,6 +928,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         />}
       </div>
 
+      {familyWorkbench.open && <Suspense fallback={<div>กำลังเปิด Family Studio…</div>}><FamilyWorkbench project={project} initialFamily={familyWorkbench.seed} selectedObjectId={selectedId} onExecute={dispatchCommandBatch} onPlace={familyWorkbench.place} onClose={familyWorkbench.close}/></Suspense>}
       {/* BIM Type Manager Modal */}
       {isConstructionOpen&&<Suspense fallback={<div>กำลังเปิด BIM Workbench…</div>}><ConstructionWorkbench project={project} initialTab={workbenchTab} onOpenCatalog={()=>{setIsConstructionOpen(false);openCatalog(false,false,'structure.slab')}} onClose={()=>setIsConstructionOpen(false)} onExecute={dispatchCommandBatch}/></Suspense>}
       <TypeManagerModal
@@ -923,6 +978,20 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           })
         }}
       />
+
+      {/* On-Site Photo Dimension Overlay & Defect Inspection Modal */}
+      <PhotoDimensionModal
+        isOpen={isPhotoDimensionModalOpen}
+        onClose={() => {
+          setIsPhotoDimensionModalOpen(false)
+          setActivePhotoSession(null)
+        }}
+        currentRoomName={project.project.name}
+        activeLevelId={project.project.active_level_id}
+        initialSession={activePhotoSession}
+        onSaveSession={handleSavePhotoSession}
+      />
+
     </div>
   )
 }

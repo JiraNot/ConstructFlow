@@ -887,3 +887,128 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 @media (max-width: 900px) { .cf-inspector-close { display:grid; } }
 .cf-legacy-dialog > div[role="dialog"] { max-height:92vh !important; overflow-y:auto !important; overscroll-behavior:contain; }
 @media (max-width: 700px) { .cf-legacy-dialog > div[role="dialog"] { max-height:100dvh !important; overflow-y:auto !important; } }
+
+/* Shared, low-learning-curve controls for every Inspector, catalog and Family form. */
+.cf-inspector-content :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),
+.cf-dialog :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),
+.cf-legacy-dialog :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),
+.cf-catalog-dialog :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),
+.cf-family-workbench :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea) {
+  min-height:38px; padding:7px 10px; border:1px solid #cbd5e1; border-radius:7px !important; background:#fff; color:#1e293b; font:inherit; font-size:13px; line-height:1.35; transition:border-color .14s ease,box-shadow .14s ease,background-color .14s ease;
+}
+.cf-inspector-content :is(input,select,textarea):focus-visible,
+.cf-dialog :is(input,select,textarea):focus-visible,
+.cf-legacy-dialog :is(input,select,textarea):focus-visible,
+.cf-catalog-dialog :is(input,select,textarea):focus-visible,
+.cf-family-workbench :is(input,select,textarea):focus-visible { outline:0; border-color:#0284c7 !important; box-shadow:0 0 0 3px rgb(2 132 199 / 15%); }
+.cf-inspector-content :is(input,select,textarea):disabled,
+.cf-dialog :is(input,select,textarea):disabled,
+.cf-legacy-dialog :is(input,select,textarea):disabled,
+.cf-catalog-dialog :is(input,select,textarea):disabled,
+.cf-family-workbench :is(input,select,textarea):disabled { background:#f1f5f9; color:#64748b; cursor:not-allowed; }
+.cf-inspector-content label,.cf-dialog label,.cf-legacy-dialog label,.cf-catalog-dialog .cf-field,.cf-family-workbench label { color:#475569; line-height:1.45; }
+.cf-inspector-content small,.cf-dialog small,.cf-legacy-dialog small,.cf-catalog-dialog .cf-help,.cf-family-workbench small { color:#64748b; line-height:1.55; }
+.cf-inspector-content .cf-inspector-section { margin:3px 0; padding:9px 10px; border-color:#e2e8f0; border-radius:8px; background:#fff; }
+.cf-inspector-content .cf-inspector-section > summary { padding:2px 0; color:#334155; font-size:12px; }
+.cf-inspector-content .cf-inspector-section[open] > summary { margin-bottom:8px; }
+.cf-inspector-content button,.cf-dialog button,.cf-legacy-dialog button,.cf-catalog-dialog button,.cf-family-workbench button { min-height:34px; border-radius:7px !important; }
+.cf-tool-hint,.cf-tape-measure-hint { border-radius:9px !important; box-shadow:0 5px 18px rgb(15 23 42 / 10%); }
+.cf-tool-hint small,.cf-tape-measure-hint small { line-height:1.55; }
+.cf-tape-measure-hint.cf-guided-hint { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:3px 12px; width:min(560px,calc(100% - 24px)); padding:10px 12px; white-space:normal; text-align:left; color:#334155; border-color:#dbe5ef; pointer-events:auto; }
+.cf-guided-hint-step { grid-column:1/-1; color:#075985; font-size:12px; }
+.cf-guided-hint-action { font-size:13px; font-weight:600; }
+.cf-guided-hint small { grid-column:1/-1; font-size:11px; }
+.cf-guided-hint kbd { justify-self:end; padding:3px 6px; border:1px solid #dbe3ec; border-radius:5px; background:#f8fafc; color:#64748b; font:500 10px system-ui,sans-serif; white-space:nowrap; }
+.cf-guided-hint-actions { display:flex; justify-content:flex-end; gap:5px; }
+.cf-guided-hint-actions button { min-height:32px; padding:4px 9px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#475569; font-size:11px; font-weight:650; cursor:pointer; white-space:nowrap; }
+.cf-guided-hint-actions button:first-child:not(:last-child) { border-color:#0284c7; background:#e0f2fe; color:#075985; }
+.cf-selection-handle-help { width:min(340px,calc(100% - 24px)) !important; pointer-events:auto; }
+.cf-selection-handle-help>summary { color:#334155; font-weight:650; cursor:pointer; }
+.cf-selection-handle-help>div { display:grid; gap:5px; margin-top:7px; font-size:11px; line-height:1.5; }
+@media(max-width:700px) {
+  .cf-inspector-content :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),.cf-dialog :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),.cf-legacy-dialog :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),.cf-catalog-dialog :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),.cf-family-workbench :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea) { min-height:42px; font-size:16px; }
+}
+.cf-object-dimension-guide { display:grid; gap:8px; padding:10px; border:1px solid #dbe5ef; border-radius:9px; background:linear-gradient(145deg,#f8fbff,#fff 72%); }
+.cf-object-dimension-guide>header { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.cf-object-dimension-guide>header strong { color:#26394f; font-size:12px; }
+.cf-object-dimension-guide>header span { color:#718196; font-size:10px; }
+.cf-object-dimension-views { display:grid; grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); gap:6px; }
+.cf-object-dimension-view { display:grid; align-content:start; gap:3px; min-width:0; padding:6px; border:1px solid #e3ebf3; border-radius:7px; background:#fff; color:#64748b; font-size:10px; }
+.cf-object-dimension-view>strong { color:#52677d; font-size:10px; }
+.cf-object-dimension-view svg { width:100%; height:52px; overflow:visible; }
+.cf-object-dimension-view svg rect { fill:#e8f4ff; stroke:#0284c7; stroke-width:2; }
+.cf-object-dimension-view svg path { fill:none; stroke:#7b8da1; stroke-width:1; stroke-dasharray:3 2; }
+.cf-object-dimension-view span { overflow-wrap:anywhere; }
+.cf-object-dimension-view b { color:#26394f; font-variant-numeric:tabular-nums; }
+.cf-object-type-advanced p { margin:0 0 8px; color:#64748b; font-size:11px; line-height:1.5; }
+
+/* Tablet field workspace: drawing stays full width and controls open on demand. */
+.cf-rail-family { width:64px; min-height:43px; margin:0; padding:4px !important; white-space:normal !important; text-align:center; font-size:10px; line-height:1.2; }
+.cf-inspector-launcher { display:none; }
+.cf-inspector-backdrop { display:none; }
+@media (max-width:1180px) {
+  .cf-workspace { position:relative; }
+  .cf-app-header { gap:6px; padding:0 8px; }
+  .cf-brand { flex:0 0 auto; }
+  .cf-brand-name,.cf-brand-divider,.cf-project-name,.cf-save-status { display:none; }
+  .cf-header-model-controls { flex:1 1 auto; gap:5px; overflow:hidden; }
+  .cf-header-field select { min-width:92px; max-width:136px; }
+  .cf-phase-field select { min-width:100px; }
+  .cf-laser-hud-container { flex:none; gap:4px; }
+  .cf-laser-hud-pill,.cf-laser-photo-button { min-width:44px; height:44px !important; justify-content:center !important; padding:0 8px !important; white-space:nowrap; }
+  .cf-laser-hud-pill:not(.is-connected) > span,.cf-laser-photo-button > span { display:none !important; }
+  .cf-laser-hud-pill.is-connected > span:nth-child(3),.cf-laser-hud-pill.is-connected > span:nth-child(4),.cf-laser-hud-pill.is-connected > svg:last-child { display:none !important; }
+  .cf-header-actions .cf-icon-button,.cf-header-actions .cf-button,.cf-save-menu > summary,.cf-more-menu > summary { min-width:44px; min-height:44px; }
+  .cf-inspector-launcher { display:inline-flex; }
+  .cf-tool-rail { position:absolute; inset:auto 0 0; z-index:30; flex-direction:row; align-items:center; height:calc(72px + env(safe-area-inset-bottom)); max-height:calc(72px + env(safe-area-inset-bottom)); overflow-x:auto; overflow-y:hidden; padding:3px 6px calc(3px + env(safe-area-inset-bottom)); border-top:1px solid #dce4ed; border-right:0; background:rgb(255 255 255 / 97%); backdrop-filter:none; }
+  .cf-rail-caption,.cf-rail-family { display:none; }
+  .cf-toolbar-vertical { width:max-content !important; flex:0 0 auto; flex-direction:row !important; gap:4px !important; }
+  .cf-toolbar-vertical .cf-tool-list { width:max-content; flex-direction:row !important; gap:3px !important; }
+  .cf-toolbar-vertical .cf-tool-button { width:48px !important; min-height:52px !important; }
+  .cf-toolbar-vertical .cf-tool-groups { display:flex; width:max-content; gap:4px; }
+  .cf-toolbar-vertical .cf-tool-group { width:auto; }
+  .cf-toolbar-vertical .cf-tool-group > summary { width:50px; min-height:50px; padding:3px; font-size:9px; }
+  .cf-toolbar-vertical .cf-tool-group-menu { position:fixed; bottom:calc(78px + env(safe-area-inset-bottom)); left:8px; z-index:40; width:220px; max-height:60dvh; overflow-y:auto; padding:6px; border:1px solid #dce5ef; border-radius:9px; background:#fff; box-shadow:0 8px 28px rgb(27 48 70 / 18%); }
+  .cf-toolbar-vertical .cf-tool-group-menu .cf-tool-button { flex-direction:row !important; justify-content:flex-start !important; width:100% !important; min-height:44px !important; padding:5px 8px !important; gap:9px !important; font-size:12px !important; }
+  .cf-tool-repeat { min-width:48px; min-height:48px; }
+  .cf-toolbar-vertical .cf-toolbar-utility { width:auto; padding:0 0 0 4px !important; border-top:0 !important; border-left:1px solid #edf1f5 !important; }
+  .cf-toolbar-vertical .cf-type-manager-button,.cf-toolbar-vertical .cf-underlay-button { width:48px !important; min-height:48px !important; }
+  .cf-toolbar-vertical .cf-underlay-tools,.cf-toolbar-vertical .cf-underlay-tools > div { flex-direction:row !important; }
+  .cf-canvas-shell { min-width:0; padding-bottom:calc(72px + env(safe-area-inset-bottom)); }
+  .cf-inspector-backdrop { position:absolute; inset:0 0 calc(72px + env(safe-area-inset-bottom)); z-index:24; display:block; width:100%; border:0; background:rgb(15 23 42 / 20%); }
+  .cf-inspector { position:absolute; top:0; right:0; bottom:calc(72px + env(safe-area-inset-bottom)); z-index:25; width:min(420px,92vw); min-width:0; box-shadow:-8px 0 28px rgb(15 23 42 / 15%); }
+  .cf-inspector-close { display:grid; width:44px; height:44px; }
+  .cf-inspector-tabs button,.cf-inspector-subtabs button { min-height:44px; }
+  .cf-object-dimension-guide { gap:5px; padding:7px; }
+  .cf-object-dimension-views { grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:4px; }
+  .cf-object-dimension-view { gap:2px; padding:4px; }
+  .cf-object-dimension-view svg { height:36px; }
+  .cf-object-dimension-view span { font-size:9px; line-height:1.25; }
+  .cf-view-switch-shell > summary { min-height:44px; }
+  .cf-canvas-zoom { height:48px; }
+  .cf-canvas-zoom button { width:44px; height:44px; }
+  .cf-more-popover button,.cf-catalog-categories button,.cf-catalog-filters button,.cf-dialog-footer button { min-height:44px; }
+  .cf-inspector-content details > summary { display:flex; align-items:center; min-height:44px; }
+  .cf-inspector-content details > summary::before { content:'▸'; flex:none; margin-right:6px; color:#64748b; }
+  .cf-inspector-content details[open] > summary::before { content:'▾'; }
+  .cf-inspector-content input[type="checkbox"],.cf-dialog input[type="checkbox"] { width:20px; height:20px; accent-color:#0284c7; vertical-align:middle; }
+  .cf-plan-canvas[data-active-tool="select"] .cf-guided-hint:not(.cf-selection-handle-help) { display:none; }
+  .cf-tape-measure-hint.cf-guided-hint { top:103px; left:12px; right:auto; transform:none; width:min(380px,calc(100% - 24px)); }
+  .cf-guided-hint-actions button { min-height:44px; padding:6px 12px; }
+  .cf-authoring-controls { bottom:calc(80px + env(safe-area-inset-bottom)); width:min(520px,calc(100% - 24px)); padding:5px; }
+  .cf-authoring-controls.is-collapsed { width:auto; max-width:calc(100% - 24px); }
+  .cf-authoring-controls-toggle { min-height:44px; padding:7px 10px; }
+}
+@media (max-width:900px) {
+  .cf-header-field > span { display:none; }
+  .cf-header-field select { min-width:74px; max-width:95px; }
+  .cf-phase-field select { min-width:80px; }
+  .cf-header-actions > .cf-button > span,.cf-inspector-launcher > span { display:none; }
+  .cf-tool-repeat span { display:none; }
+  .cf-toolbar-vertical .cf-type-manager-button span,.cf-toolbar-vertical .cf-underlay-button span { display:none; }
+}
+@media (max-width:800px) {
+  .cf-dialog-overlay { align-items:stretch; padding:0; }
+  .cf-dialog { width:100vw; height:100dvh; max-height:100dvh; border:0; border-radius:0; }
+  .cf-dialog-footer { padding-bottom:calc(8px + env(safe-area-inset-bottom)); }
+}

@@ -1,3 +1,5 @@
+import { objectFamilyGeometry } from '@constructflow/family-engine'
+import { drawFamilyPath } from '../rendering/familyRenderer.js'
 import { resolveWallTopSegments } from '@constructflow/architecture-engine'
 import React, { useEffect, useRef, useState } from 'react'
 import { getDisplayPhase, resolveBeamBaseElevation, resolveColumnVerticalExtent, resolveOpeningVerticalExtent, resolveSlabElevation, resolveWallVerticalExtent, type ProjectDocument } from '@constructflow/project-model'
@@ -238,7 +240,10 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
       const bounds: number[] = [Infinity, -Infinity, Infinity, -Infinity]
       for (const object of items) {
         const d = object.module_data as Record<string, unknown>
-        if (object.object_type === 'architecture.wall') {
+        const custom = objectFamilyGeometry(project, object)
+        if (custom) {
+          for (const point of custom.worldParts.flatMap(part=>part.triangles.flat())) {bounds[0]=Math.min(bounds[0],horizontalCoordinate(point));bounds[1]=Math.max(bounds[1],horizontalCoordinate(point));bounds[2]=Math.min(bounds[2],point[2]);bounds[3]=Math.max(bounds[3],point[2])}
+        } else if (object.object_type === 'architecture.wall') {
           const a = d.start_point_mm as number[], b = d.end_point_mm as number[]
           if (!a || !b) continue
           bounds[0] = Math.min(bounds[0], horizontalCoordinate(a), horizontalCoordinate(b)); bounds[1] = Math.max(bounds[1], horizontalCoordinate(a), horizontalCoordinate(b))
@@ -349,7 +354,25 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
       for(const o of orderedItems){
         if(!groundDrawn&&o.object_type!=='structure.column'&&o.object_type!=='structure.beam'&&o.object_type!=='structure.slab'){drawGroundHatch();groundDrawn=true}
         const d=o.module_data as Record<string,unknown>; let left=0,right=0,bottom=0,top=0; let fill='#d8e1ea',stroke='#475569'
-        if(o.object_type==='architecture.wall'){
+        const custom = objectFamilyGeometry(project,o)
+        if(custom){
+          const horizontalLocalX = Math.abs(isEastWest?Math.sin(custom.angle):Math.cos(custom.angle))
+          const symbolicView = horizontalLocalX>=Math.SQRT1_2?'front':'side'
+          const symbols = custom.paths.filter(path=>path.view===symbolicView&&path.visible!==false)
+          const style=getElevationWallStyle(getDisplayPhase(o),isSelected(o.id))
+          if(symbols.length){
+            for(const path of symbols)drawFamilyPath(ctx,path,point=>{const world=custom.transform(symbolicView==='front'?[point[0],(custom.parameters.D??0)/2,point[1]]:[(custom.parameters.W??0)/2,point[0],point[1]]);return [sx(horizontalCoordinate(world)),sy(world[2])]},isSelected(o.id)?'#0284c7':getDisplayPhase(o)==='new_construction'?undefined:style.stroke)
+          }else{
+            ctx.strokeStyle=style.stroke;ctx.lineWidth=isSelected(o.id)?2:1.2;ctx.setLineDash(style.dash);ctx.beginPath()
+            for(const part of custom.worldParts)for(const[a,b]of getVisibleElevationMeshEdges(part.triangles,direction as Exclude<ElevationDirection,'rcp'>,scale).flatMap(edge=>clipElevationEdgeBySurfaces(edge,direction,finishSurfaces))){ctx.moveTo(sx(horizontalCoordinate(a)),sy(a[2]));ctx.lineTo(sx(horizontalCoordinate(b)),sy(b[2]))}
+            ctx.stroke();ctx.setLineDash([])
+          }
+          const points=custom.worldParts.flatMap(part=>part.triangles.flat())
+          if(!points.length)continue
+          const region=points.reduce((r,p)=>[Math.min(r[0],sx(horizontalCoordinate(p))),Math.min(r[1],sy(p[2])),Math.max(r[2],sx(horizontalCoordinate(p))),Math.max(r[3],sy(p[2])),Math.min(r[4],p[2]),Math.max(r[5],p[2])],[Infinity,Infinity,-Infinity,-Infinity,Infinity,-Infinity])
+          ;[left,top,right,bottom]=region
+          if(isSelected(o.id))selectedVisual={id:o.id,x:left,y:top,w:right-left,h:bottom-top,topElev:region[5],baseElev:region[4],height:region[5]-region[4],label:custom.family.name}
+        }else if(o.object_type==='architecture.wall'){
           if(!groundDrawn){drawGroundHatch();groundDrawn=true}
           const a=d.start_point_mm as number[],b=d.end_point_mm as number[];if(!a||!b)continue
           const originalExtent=resolveWallVerticalExtent(project,o);if(!originalExtent)continue

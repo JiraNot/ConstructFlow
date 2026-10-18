@@ -25,12 +25,12 @@ const result = CommandBus.executeBatch(
 assert.equal(result.status, "success", JSON.stringify(result.errors));
 const p = result.updatedProject,
   set = compilePermitDrawingSet(p);
-assert.equal(set.sheets.length, 22);
+assert.equal(set.sheets.length, 23);
 assert.deepEqual(
   set.sheets.slice(0, PERMIT_INDEX.length).map((s) => s.id),
   PERMIT_INDEX.map((s) => s[0]),
 );
-assert.deepEqual(set.sheets.slice(PERMIT_INDEX.length).map(s => s.id), ['A-02-L3', 'S-02-L3']);
+assert.deepEqual(set.sheets.slice(PERMIT_INDEX.length).map(s => s.id), ['A-01-C1', 'A-02-L3', 'S-02-L3']);
 const outputs = constructionOutputs(p);
 for (const out of outputs) {
   for (const q of out.quantities)

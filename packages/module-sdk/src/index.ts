@@ -198,6 +198,7 @@ export function domainCommand<T extends object>(
     ...(type ? { type_id: type.id, instance_overrides: overrides } : {}),
   };
   const data = decode(raw, updated);
+  if (typeof raw.family_id === "string") Object.assign(data, { family_id: raw.family_id, family_type_id: raw.family_type_id, family_parameters: structuredClone(raw.family_parameters ?? {}) });
   const levelId =
     typeof raw.level_id === "string"
       ? raw.level_id

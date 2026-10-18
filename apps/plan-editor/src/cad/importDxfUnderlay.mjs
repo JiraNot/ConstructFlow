@@ -1,3 +1,4 @@
+import { pointInPolygon2D } from '@constructflow/geometry-kernel'
 const UNIT_TO_MM = new Map([
   [0, ['unitless', 1]], [1, ['inches', 25.4]], [2, ['feet', 304.8]], [3, ['miles', 1_609_344]],
   [4, ['millimeters', 1]], [5, ['centimeters', 10]], [6, ['meters', 1000]], [7, ['kilometers', 1_000_000]],
@@ -368,6 +369,25 @@ function hatchBoundaries(entity) {
   return paths
 }
 
+/** DXF definition lines already contain the pattern angle/scale in drawing coordinates. */
+function hatchDefinitionLines(entity) {
+  const start=entity.pairs.findIndex(pair=>pair.code===78)
+  if(start<0)return []
+  const result=[]
+  for(const pair of entity.pairs.slice(start+1)){
+    const value=Number(pair.value)
+    if(pair.code===53){if(result.length>=100)throw new Error('Hatch เกิน 100 ชุดเส้น');result.push({angle_deg:value,base_mm:[0,0],offset_mm:[0,0],dashes_mm:[]})}
+    else if(result.length){const line=result.at(-1);if(pair.code===43)line.base_mm[0]=value;else if(pair.code===44)line.base_mm[1]=value;else if(pair.code===45)line.offset_mm[0]=value;else if(pair.code===46)line.offset_mm[1]=value;else if(pair.code===49){if(line.dashes_mm.length>=24)throw new Error('Hatch เกิน 24 ระยะเส้นประ');line.dashes_mm.push(value)}else if(pair.code===98)break}
+  }
+  return result.filter(line=>[line.angle_deg,...line.base_mm,...line.offset_mm,...line.dashes_mm].every(Number.isFinite))
+}
+function transformHatchLines(lines,transform){
+  return lines.map(line=>{
+    const angle=line.angle_deg*Math.PI/180,dx=transform.a*Math.cos(angle)+transform.c*Math.sin(angle),dy=transform.b*Math.cos(angle)+transform.d*Math.sin(angle),length=Math.hypot(dx,dy),offset=line.offset_mm
+    return {...line,angle_deg:Math.atan2(dy,dx)*180/Math.PI,base_mm:transformPoint(line.base_mm,transform),offset_mm:[transform.a*offset[0]+transform.c*offset[1],transform.b*offset[0]+transform.d*offset[1]],dashes_mm:line.dashes_mm.map(value=>value*length)}
+  })
+}
+
 function resolveDrawingUnits(pairs) {
   for (let index = 0; index < pairs.length; index += 1) {
     if (pairs[index].code !== 9 || pairs[index].value !== '$INSUNITS') continue
@@ -393,7 +413,7 @@ function transformPoint([x, y], transform) {
   return [transform.a * x + transform.c * y + transform.tx, transform.b * x + transform.d * y + transform.ty]
 }
 
-function shapesForEntity(entity) {
+function shapesForEntity(entity, editable = false) {
   if (entity.type === 'LINE') {
     const x1 = numberOf(entity, 10), y1 = numberOf(entity, 20), x2 = numberOf(entity, 11), y2 = numberOf(entity, 21)
     return [x1, y1, x2, y2].every(Number.isFinite) ? [{ kind: 'polyline', points: [[x1, y1], [x2, y2]], closed: false }] : null
@@ -417,7 +437,12 @@ function shapesForEntity(entity) {
   }
   if (entity.type === 'HATCH') {
     const boundaries = hatchBoundaries(entity)
-    return boundaries.length ? boundaries : null
+    return boundaries.length ? boundaries.map(shape => ({ ...shape, hatch: { name: valueOf(entity, 2) ?? 'ANSI31', solid: numberOf(entity, 70) === 1, angle: numberOf(entity, 52) ?? 0, scale: numberOf(entity, 41) ?? 1, lines:editable?hatchDefinitionLines(entity):[] } })) : null
+  }
+  if (editable && (entity.type === 'TEXT' || entity.type === 'MTEXT')) {
+    const x = numberOf(entity, 10), y = numberOf(entity, 20), height = numberOf(entity, 40) ?? 100
+    const text = entity.pairs.filter(pair => pair.code === 1 || pair.code === 3).map(pair => pair.value).join('').replace(/\\P/g, ' ')
+    return Number.isFinite(x) && Number.isFinite(y) && text ? [{ points: [[x, y], [x + Math.max(height, text.length * height * .6), y + height]], closed: false, text }] : null
   }
   if (entity.type === 'SPLINE') {
     const shape = splineShape(entity)
@@ -480,27 +505,31 @@ function insertTransform(entity, block, column = 0, row = 0) {
   }
 }
 
-function expandEntities(entities, blocks, transform, geometry, onUnsupported, stack = new Set(), depth = 0) {
+function expandEntities(entities, blocks, transform, geometry, onUnsupported, stack = new Set(), depth = 0, editable = false, inheritedLayer = '0') {
   for (const entity of entities) {
     if (entity.type === 'INSERT') {
       const name = valueOf(entity, 2)?.toUpperCase()
       const block = name ? blocks.get(name) : null
-      if (!block || stack.has(name) || depth >= 16) { onUnsupported(); continue }
+      if (!block || stack.has(name) || depth >= 16) { onUnsupported(entity.type); continue }
       const base = insertTransform(entity, block)
       const count = base.countX * base.countY
-      if (count > 1000) { onUnsupported(); continue }
+      if (count > 1000) { onUnsupported(entity.type); continue }
       const nextStack = new Set(stack)
       nextStack.add(name)
       for (let row = 0; row < base.countY; row += 1) for (let column = 0; column < base.countX; column += 1) {
         const local = insertTransform(entity, block, column, row)
-        expandEntities(block.entities, blocks, multiplyTransforms(transform, local), geometry, onUnsupported, nextStack, depth + 1)
+        expandEntities(block.entities, blocks, multiplyTransforms(transform, local), geometry, onUnsupported, nextStack, depth + 1, editable, valueOf(entity,8) ?? inheritedLayer)
       }
       continue
     }
-    const shapes = shapesForEntity(entity)
+    const shapes = shapesForEntity(entity, editable)
     if (shapes) {
-      for (const shape of shapes) geometry.push({ ...shape, points: shape.points.map(point => transformPoint(point, transform)) })
-    } else if (!['ATTRIB', 'SEQEND', 'ENDBLK', 'BLOCK', 'ENDSEC', 'EOF'].includes(entity.type)) onUnsupported()
+      const hatchGroup = entity.type === 'HATCH' ? `hatch-${geometry.length}` : undefined
+      for (const shape of shapes) {
+        if (geometry.length >= 20000) throw new Error('แบบ CAD เกิน 20,000 ชิ้นส่วน กรุณาแยกไฟล์')
+        geometry.push({ ...shape, ...(shape.hatch?.lines?.length?{hatch:{...shape.hatch,lines:transformHatchLines(shape.hatch.lines,transform)}}:{}), layer: (valueOf(entity,8) && valueOf(entity,8)!=='0') ? valueOf(entity,8) : inheritedLayer, hatchGroup, color: numberOf(entity, 420), colorIndex: numberOf(entity, 62), lineweight: numberOf(entity, 370), linetype: valueOf(entity, 6), points: shape.points.map(point => transformPoint(point, transform)) })
+      }
+    } else if (!['ATTRIB', 'SEQEND', 'ENDBLK', 'BLOCK', 'ENDSEC', 'EOF'].includes(entity.type)) onUnsupported(entity.type)
   }
 }
 
@@ -543,4 +572,38 @@ export function importDxfUnderlay(source, { maxImageDimension = 4096 } = {}) {
     imported_entities: geometry.length,
     skipped_entities: unsupportedEntities,
   }
+}
+
+
+/** Native CAD entities in canonical mm. Curves are editable sampled paths, never rasterized. */
+export function importDxfDrawing(source, { unitScaleMm } = {}) {
+  const pairs = readPairs(source)
+  if (!pairs.length) throw new Error('ไฟล์ DXF ไม่มี group code ที่อ่านได้')
+  const [drawing_units, declaredScale] = resolveDrawingUnits(pairs)
+  const scale = unitScaleMm ?? declaredScale
+  if (!(scale > 0) || !Number.isFinite(scale)) throw new Error('หน่วย CAD ไม่ถูกต้อง')
+  const geometry = [], unsupported = new Map()
+  expandEntities(parseEntities(readSectionPairs(pairs, 'ENTITIES')), readBlocks(readSectionPairs(pairs, 'BLOCKS')), IDENTITY, geometry, type => unsupported.set(type ?? 'unsupported', (unsupported.get(type ?? 'unsupported') ?? 0) + 1), new Set(), 0, true)
+  if (!geometry.length) throw new Error('ไม่พบเส้น CAD ที่รองรับใน Model Space')
+  const groups = new Map()
+  for(const shape of geometry) if(shape.hatchGroup){const list=groups.get(shape.hatchGroup)??[];list.push(shape);groups.set(shape.hatchGroup,list)}
+  const holeSet=new Set()
+  const area=points=>Math.abs(points.reduce((sum,a,i)=>{const b=points[(i+1)%points.length];return sum+a[0]*b[1]-b[0]*a[1]},0))
+  for(const shapes of groups.values()){
+    shapes.sort((a,b)=>area(b.points)-area(a.points))
+    for(let index=1;index<shapes.length;index++){
+      const shape=shapes[index],parent=shapes.slice(0,index).reverse().find(outer=>pointInPolygon2D(shape.points[0],outer.points))
+      if(parent&&!holeSet.has(parent)){parent.voids??=[];parent.voids.push(shape.points);holeSet.add(shape)}
+    }
+  }
+  const paths = geometry.filter(shape=>!holeSet.has(shape)).map((shape, index) => {
+    const palette = ['#334155','#dc2626','#eab308','#16a34a','#06b6d4','#2563eb','#a855f7','#334155']
+    const color = shape.color !== null && shape.color !== undefined ? '#' + Number(shape.color).toString(16).padStart(6, '0').slice(-6) : palette[Math.abs(shape.colorIndex ?? 7) % 8]
+    return { id: `cad-${index}`, points: shape.points.map(([x,y]) => [x * scale, y * scale]), ...(shape.voids?{voids:shape.voids.map(ring=>ring.map(([x,y])=>[x*scale,y*scale]))}:{}), closed: shape.closed, view: 'plan', layer: shape.layer, color, lineweight_mm: shape.lineweight > 0 ? Math.min(5, shape.lineweight / 100) : .25,
+      ...(shape.linetype && /dash|hidden|center/i.test(shape.linetype) ? { dash: [6,3] } : {}), ...(shape.text ? { text: shape.text } : {}),
+      ...(shape.hatch ? { hatch: { pattern: shape.hatch.solid ? 'solid' : shape.hatch.lines?.length ? 'custom' : /brick/i.test(shape.hatch.name) ? 'brick' : /wood/i.test(shape.hatch.name) ? 'wood' : 'diagonal', spacing_mm: Math.max(1, 100 * shape.hatch.scale * scale), rotation_deg: shape.hatch.lines?.length?0:shape.hatch.angle, color, name:shape.hatch.name,
+        ...(shape.hatch.lines?.length?{pattern_scale:1,lines:shape.hatch.lines.map(line=>({...line,base_mm:line.base_mm.map(v=>v*scale),offset_mm:line.offset_mm.map(v=>v*scale),dashes_mm:line.dashes_mm.map(v=>v*scale)}))}:{}) } } : {}) }
+  })
+  const bounds = paths.flatMap(path => path.points).reduce((b,[x,y]) => [Math.min(b[0],x),Math.min(b[1],y),Math.max(b[2],x),Math.max(b[3],y)], [Infinity,Infinity,-Infinity,-Infinity])
+  return { paths, bounds, drawing_units, unit_scale_mm: scale, imported_entities: paths.length, skipped_entities: [...unsupported.values()].reduce((a,b)=>a+b,0) }
 }

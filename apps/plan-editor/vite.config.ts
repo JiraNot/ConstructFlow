@@ -68,10 +68,10 @@ export default defineConfig(({ command }) => {
   const development = command === 'serve'
   const csp = [
     "default-src 'self' data: blob:",
-    `script-src 'self' blob:${development ? " 'unsafe-inline' 'unsafe-eval'" : ''}`,
+    `script-src 'self' blob: 'wasm-unsafe-eval'${development ? " 'unsafe-inline' 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
-    `connect-src 'self'${development ? ' http://localhost:8000 http://127.0.0.1:8000 ws://localhost:5183 ws://127.0.0.1:5183 ws://localhost:5184 ws://127.0.0.1:5184 ws://localhost:8765 ws://127.0.0.1:8765' : ''}`,
+    `connect-src 'self' data: blob:${development ? ' http://localhost:8000 http://127.0.0.1:8000 ws://localhost:5183 ws://127.0.0.1:5183 ws://localhost:5184 ws://127.0.0.1:5184 ws://localhost:8765 ws://127.0.0.1:8765' : ''}`,
     "font-src 'self' data:",
     "worker-src 'self' blob:",
     "object-src 'none'",
@@ -89,10 +89,12 @@ export default defineConfig(({ command }) => {
   const aiGatewayTarget = process.env.CONSTRUCTFLOW_AI_GATEWAY_TARGET ?? 'http://127.0.0.1:8000'
   return {
   plugins: [react(), fileAcceptanceDiskPlugin()],
+  optimizeDeps: { include: ['@constructflow/geometry-kernel > earcut', 'three', 'three/addons/controls/OrbitControls.js', 'three/addons/loaders/GLTFLoader.js', 'three/addons/loaders/OBJLoader.js', '@mlightcad/libredwg-web'] },
   resolve: {
     alias: {
       '@constructflow/constraint-engine': fileURLToPath(new URL('../../packages/constraint-engine/dist/index.js', import.meta.url)),
       '@constructflow/architecture-engine': fileURLToPath(new URL('../../packages/architecture-engine/dist/index.js', import.meta.url)),
+      '@constructflow/laser-survey': fileURLToPath(new URL('../../packages/laser-survey/dist/index.js', import.meta.url)),
     },
   },
   server: {

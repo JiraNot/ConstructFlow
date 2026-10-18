@@ -1,3 +1,4 @@
+import { familyOutputs, validateFamilyProject } from '@constructflow/family-engine'
 import type { ProjectDocument } from "@constructflow/project-model";
 export { generateProjectCutList } from "@constructflow/interior-engine";
 import type { DomainOutput } from "@constructflow/module-sdk";
@@ -35,7 +36,8 @@ import {
 } from "@constructflow/interior-engine";
 
 export function constructionOutputs(project: ProjectDocument): DomainOutput[] {
-  return [
+  const custom = familyOutputs(project)
+  const native = [
     structureOutputs,
     bathroomOutputs,
     stairOutputs,
@@ -47,10 +49,14 @@ export function constructionOutputs(project: ProjectDocument): DomainOutput[] {
     electricalOutputs,
     interiorOutputs,
   ].flatMap((provider) => provider(project));
+  const overrides = new Map(custom.map(output => [output.object_id, output]))
+  const nativeIds = new Set(native.map(output=>output.object_id))
+  return [...native.map(output => { const family = overrides.get(output.object_id); return family ? {...output, paths:family.paths, meshes:family.meshes, schedule:{...output.schedule,...family.schedule}} : output }), ...custom.filter(output=>!nativeIds.has(output.object_id))];
 }
 
 export function validateConstructionProject(project: ProjectDocument): void {
   for (const validate of [
+    validateFamilyProject,
     validateStructureConstruction,
     validateBathroom,
     validateStairs,

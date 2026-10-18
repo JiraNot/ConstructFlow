@@ -9,8 +9,11 @@
     "build": "tsc",
     "test": "node --test test/*.test.mjs"
   },
-  "dependencies": {},
+  "dependencies": {
+    "earcut": "3.0.2"
+  },
   "devDependencies": {
+    "@types/earcut": "3.0.0",
     "typescript": "^5.7.3"
   }
 }

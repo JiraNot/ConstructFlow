@@ -1,6 +1,6 @@
 import { deserializeProject, serializeProject } from '@constructflow/project-model'
 import { validateConstructionProject } from '@constructflow/domain-providers'
-import { CommandBus } from './commands/CommandBus.js'
+import { CommandBus } from '@constructflow/command-runtime'
 
 /** Read and canonicalize a local ConstructFlow project file before it replaces editor state. */
 export async function readProjectFile(file) {

@@ -856,3 +856,6 @@ export function clippedGrassSegments(
 }
 
 export { polygonUnionBoundary, segmentOutsidePolygons } from './polygonUnionBoundary.js'
+export { clippedMaterialPatternSegments } from './materialPattern.js'
+export type { MaterialPatternLine } from './materialPattern.js'
+export { extrudeWithVoids } from './extrudeWithVoids.js'

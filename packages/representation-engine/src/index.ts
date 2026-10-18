@@ -1,3 +1,4 @@
+import { objectFamilyGeometry, objectFamily } from '@constructflow/family-engine'
 import type { DoorFaceComponent } from '@constructflow/project-model'
 import {
   getDisplayPhase,
@@ -76,7 +77,7 @@ export interface WallExtrusionLayer {
 }
 
 export type RepresentationShape =
-  | { kind: 'triangle_mesh'; triangles_mm: Triangle[] }
+  | { kind: 'triangle_mesh'; triangles_mm: Triangle[]; parts?: { color: string; triangles_mm: Triangle[]; uvs?: [number, number][]; texture_data_url?: string; roughness?: number; metalness?: number }[] }
   | { kind: 'box'; size_mm: Vec3Mm }
   | { kind: 'wall_extrusion'; length_mm: number; thickness_mm: number; height_mm: number; cutouts: OpeningCutout[]; profiles_mm?: Vec2[][]; layers?: WallExtrusionLayer[] }
   | {
@@ -996,15 +997,18 @@ export function buildProjectRepresentations3D(project: ProjectDocument, options:
   const objects = Object.values(project.objects)
     .filter(object => !options.visibleObjectIds || options.visibleObjectIds.has(object.id))
     .sort((a, b) => a.id.localeCompare(b.id))
-    .map(object => representObject(project, object, warnings, options.visibleObjectIds))
+    .map(object => objectFamily(project, object) ? undefined : representObject(project, object, warnings, options.visibleObjectIds))
     .filter((object): object is ObjectRepresentation3D => object !== undefined)
   for (const out of constructionOutputs(project)) {
     if (options.visibleObjectIds && !options.visibleObjectIds.has(out.object_id)) continue
     const object = project.objects[out.object_id], data = moduleData(object) ?? {}
     const roofStructureOnly = options.roofFramingOnly && object?.object_type === 'roof.system'
     const triangles = roofStructureOnly ? [...(out.mesh_groups?.roof_framing ?? [])] : [...out.meshes]
-    if (!triangles.length && !roofStructureOnly) for(const path of out.paths) for(let i=1;i<path.length;i++) if(Math.hypot(...path[i].map((v,j)=>v-path[i-1][j]))>1e-8)triangles.push(...tube(path[i-1],path[i],typeof data.diameter_mm==='number'?data.diameter_mm/2:10))
-    if(triangles.length) objects.push(baseObject(object,data,[0,0,0],0,{kind:'triangle_mesh',triangles_mm:triangles},{kind:'select_only'}))
+    if (!triangles.length && !roofStructureOnly && !objectFamily(project,object)) for(const path of out.paths) for(let i=1;i<path.length;i++) if(Math.hypot(...path[i].map((v,j)=>v-path[i-1][j]))>1e-8)triangles.push(...tube(path[i-1],path[i],typeof data.diameter_mm==='number'?data.diameter_mm/2:10))
+    if(triangles.length) {
+      const custom = objectFamilyGeometry(project, object)
+      objects.push(baseObject(object,data,[0,0,0],0,{kind:'triangle_mesh',triangles_mm:triangles,...(custom ? {parts:custom.worldParts.map(part=>({color:part.color,triangles_mm:part.triangles,uvs:part.uvs,texture_data_url:part.texture_data_url,roughness:part.roughness,metalness:part.metalness}))}: {})},{kind:'select_only'}))
+    }
     warnings.push(...out.warnings.map(w=>`${object.id}: ${w}`))
   }
   objects.sort((a, b) => a.object_id.localeCompare(b.object_id))

@@ -1,3 +1,4 @@
+import { drawFamilyObject } from '../rendering/familyRenderer.js'
 import type { InteriorFurnitureKind, ProjectDocument } from '@constructflow/project-model'
 import { isGridObject } from '@constructflow/project-model'
 import type { DisplayLengthUnit } from '@constructflow/project-model'
@@ -11,6 +12,8 @@ import { usesPlacementDimensions } from '../app/toolInteractionRegistry.mjs'
 
 interface PlanCanvasToolOverlayOptions {
   ctx: CanvasRenderingContext2D
+  activeFamilyId?: string
+  activeFamilyTypeId?: string
   activeTool: ToolType
   gridStartPoint: [number, number] | null
   activeSnap: SnapResult | null
@@ -33,7 +36,7 @@ interface PlanCanvasToolOverlayOptions {
 }
 
 export function drawPlanCanvasToolOverlays({
-  ctx, activeTool, gridStartPoint, activeSnap, planProject, viewport, gridCopySourceId, tapeMeasure,
+  ctx, activeTool, activeFamilyId, activeFamilyTypeId, gridStartPoint, activeSnap, planProject, viewport, gridCopySourceId, tapeMeasure,
   displayUnit, activeWallSnap, project, activeDoorTypeMark, activeWindowTypeMark, dimensionReferenceMode,
   selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary,
 }: PlanCanvasToolOverlayOptions) {
@@ -79,7 +82,14 @@ export function drawPlanCanvasToolOverlays({
       const start = worldToScreen(roomSeparatorStart, viewport), end = worldToScreen(activeSnap.point_mm, viewport)
       const color = activeTool === 'pipe' ? (['cold_water', 'hot_water'].includes(pipeSystem) ? '#0284c7' : pipeSystem === 'rainwater' ? '#0891b2' : '#7c3aed') : activeTool === 'furniture' ? '#7c3aed' : activeTool === 'cabinet' ? '#92400e' : activeTool === 'moulding' ? '#a21caf' : '#d97706'
       ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = activeTool === 'cabinet' || activeTool === 'furniture' ? 2 : 1.8; ctx.setLineDash(activeTool === 'roomSeparator' ? [5, 3] : [7, 3]); ctx.beginPath(); ctx.moveTo(...start); ctx.lineTo(...end); ctx.stroke(); ctx.setLineDash([])
-      if (activeTool === 'furniture') {
+      if (activeTool === 'furniture' && activeFamilyId) {
+        const family = project.families?.find(family => family.id === activeFamilyId)
+        const width = Math.hypot(activeSnap.point_mm[0]-roomSeparatorStart[0],activeSnap.point_mm[1]-roomSeparatorStart[1])
+        if (family && width > 1) {
+          const overrides = family.parameters.some(p=>p.name==='W'&&p.scope==='instance'&&!p.formula)?{W:width}:{}
+          drawFamilyObject(ctx, project, {id:'preview',object_type:'family.instance',module_data:{family_id:activeFamilyId,family_type_id:activeFamilyTypeId,family_parameters:overrides,location_mm:[...roomSeparatorStart,0],rotation_deg:Math.atan2(activeSnap.point_mm[1]-roomSeparatorStart[1],activeSnap.point_mm[0]-roomSeparatorStart[0])*180/Math.PI},created_phase:'new_construction'} as unknown as import('@constructflow/project-model').SmartObject,viewport,true,false)
+        }
+      } else if (activeTool === 'furniture') {
         const delta: [number, number] = [activeSnap.point_mm[0] - roomSeparatorStart[0], activeSnap.point_mm[1] - roomSeparatorStart[1]], length = Math.hypot(...delta)
         if (length > 1) {
           const depth = ({ sofa: 900, chair: 550, dining_table: 900, coffee_table: 600, desk: 700, bed_single: 2000, bed_double: 2000, toilet: 700, washbasin: 500, bathtub: 750 } as const)[furnitureKind]

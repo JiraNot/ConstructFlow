@@ -62,6 +62,7 @@ for (const directory of packages) {
 let totalTests = 0
 for (const directory of [
   "packages/geometry-kernel",
+  "packages/family-engine",
   "packages/project-model",
   "packages/snapping-engine",
   "packages/constraint-engine",

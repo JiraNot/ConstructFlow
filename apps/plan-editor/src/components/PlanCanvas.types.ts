@@ -14,6 +14,8 @@ export interface PlanCanvasProps {
   onPreferencesChange: (updater: (current: PlanCanvasPreferences) => PlanCanvasPreferences) => void
   planDiscipline?: 'architecture' | 'framing' | 'roof'
   displayUnit: DisplayLengthUnit
+  activeFamilyId?: string
+  activeFamilyTypeId?: string
   activeTool: ToolType
   toolActivation?: number
   activeColumnTypeMark: string
@@ -73,4 +75,7 @@ export interface PlanCanvasProps {
   coordinationFocusSelection?: boolean
   navigationViewport?: CoordinatedPlanViewport | null
   onNavigationViewportChange?: (viewport: CoordinatedPlanViewport) => void
+  /** On-site photo survey sessions with pinned 2D coordinates and camera orientation */
+  photoSessions?: import('@constructflow/laser-survey').PhotoDimensionSession[]
+  onOpenPhotoSession?: (session: import('@constructflow/laser-survey').PhotoDimensionSession) => void
 }

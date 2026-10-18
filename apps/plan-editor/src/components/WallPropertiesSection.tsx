@@ -18,10 +18,9 @@ interface WallPropertiesSectionProps {
   onUpdateWallFace: (objectId: string, changes: WallFaceChanges) => void
   onDefineWallFinish?: (name: string, parameters: Record<string, unknown>) => void
   onUpdateWallFinish?: (typeId: string, name: string, parameters: Record<string, unknown>) => void
-  onOpenTypeManager: () => void
 }
 
-export const WallPropertiesSection: React.FC<WallPropertiesSectionProps> = ({ wall: wallObj, project, displayUnit, onUpdateWallFace, onDefineWallFinish, onUpdateWallFinish, onOpenTypeManager }) => {
+export const WallPropertiesSection: React.FC<WallPropertiesSectionProps> = ({ wall: wallObj, project, displayUnit, onUpdateWallFace, onDefineWallFinish, onUpdateWallFinish }) => {
   const [newWallFinishName, setNewWallFinishName] = useState('')
   const [newWallFinishDescription, setNewWallFinishDescription] = useState('')
   const [newWallFinishMaterial, setNewWallFinishMaterial] = useState('wall_paint')
@@ -44,7 +43,6 @@ export const WallPropertiesSection: React.FC<WallPropertiesSectionProps> = ({ wa
     const value = override ?? instanceValue ?? typeValue
     return typeof value === 'string' && value.trim() ? value : fallback
   }
-  const wallMasonryThickness = wallLayerField('masonry_thickness_mm', wallObj.module_data.thickness_mm)
   const wallInsidePlaster = wallLayerField('plaster_inside_thickness_mm', 0)
   const wallOutsidePlaster = wallLayerField('plaster_outside_thickness_mm', 0)
   const wallVertical = resolveWallVerticalExtent(project, wallObj)
@@ -67,45 +65,10 @@ export const WallPropertiesSection: React.FC<WallPropertiesSectionProps> = ({ wa
   return <>
       {wallObj && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ความหนาและความสูง ({displayUnit})</label>
-              <button
-                onClick={onOpenTypeManager}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#40566e',
-                  fontSize: 11,
-                  cursor: 'pointer',
-                  padding: 0,
-                  textDecoration: 'underline',
-                }}
-              >
-                แก้ไขชนิด
-              </button>
-            </div>
-            <div style={{
-              background: '#f5f8fc',
-              padding: '5px 7px',
-              borderRadius: 3,
-              fontSize: 13,
-              fontWeight: 700,
-              color: '#40566e',
-              border: '1px solid #eef3f8',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}>
-              <span>{formatLengthMm(wallObj.module_data.thickness_mm, displayUnit)} {displayUnit} · แกน/โครง {formatLengthMm(wallMasonryThickness, displayUnit)} · ผิว {formatLengthMm(wallInsidePlaster, displayUnit)}/{formatLengthMm(wallOutsidePlaster, displayUnit)} · สูง {formatLengthMm(wallVertical?.height_mm ?? wallObj.module_data.height_mm, displayUnit)}</span>
-              <span style={{ fontSize: 10, color: '#53657b', fontWeight: 500 }}>Type {wallObj.module_data.mark}</span>
-            </div>
-          </div>
-
-          <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+          <details className="cf-inspector-section"><summary>ปรับตามท้องบันได</summary><label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
             <span><input type="checkbox" aria-label="ตัดผนังตามท้องบันไดอัตโนมัติ" checked={wallObj.module_data.fit_to_stair === true} onChange={e => onUpdateWallFace(wallObj.id, { fit_to_stair: e.target.checked })} /> ตัดขอบบนตามท้องบันไดอัตโนมัติ</span>
             <small style={{ color: '#52677d' }}>ติดตามบันไดและชานพักที่ทับแนวผนังเมื่อย้ายหรือปรับขนาด · ปิดเพื่อคืนความสูงเดิม</small>
-          </label>
+          </label></details>
           <section style={{ display: 'grid', gap: 5, padding: 6, background: '#f5f8fc', border: '1px solid #e5edf5', borderRadius: 3 }}>
             <strong style={{ fontSize: 11, color: '#40566e' }}>ระดับและความสูงผนัง</strong>
             <label style={{ display: 'grid', gap: 3, fontSize: 11, color: '#52677d' }}>ขอบบนผนัง
@@ -165,29 +128,6 @@ export const WallPropertiesSection: React.FC<WallPropertiesSectionProps> = ({ wa
           </button>
             </div>
           </details>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>
-              WALL LENGTH (ความยาวผนัง)
-            </label>
-            <div style={{
-              background: '#f5f8fc',
-              padding: '5px 7px',
-              borderRadius: 3,
-              fontSize: 13,
-              fontWeight: 700,
-              color: '#0873c4',
-              border: '1px solid #eef3f8',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}>
-              <span>{formatLengthMm(wallObj.module_data.length_mm, displayUnit)} {displayUnit}</span>
-              <span style={{ fontSize: 11, color: '#52677d', fontFamily: 'monospace' }}>
-                {formatLengthMm(wallObj.module_data.length_mm, displayUnit)} {displayUnit}
-              </span>
-            </div>
-          </div>
 
           {/* Hosted Openings Status */}
           <details className="cf-inspector-section">

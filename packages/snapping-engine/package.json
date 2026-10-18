@@ -11,7 +11,8 @@
     "bench:snap": "node scripts/benchmark_snap.mjs"
   },
   "dependencies": {
-    "@constructflow/project-model": "file:../project-model"
+    "@constructflow/project-model": "file:../project-model",
+    "@constructflow/family-engine": "file:../family-engine"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

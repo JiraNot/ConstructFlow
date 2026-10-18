@@ -1,3 +1,4 @@
+import { FamilyInstanceProperties } from './FamilyInstanceProperties.js'
 import React from 'react'
 import type { DisplayLengthUnit } from '@constructflow/project-model'
 import { StairProperties } from './StairProperties.js'
@@ -11,8 +12,8 @@ import { RoomPropertiesSection } from './RoomPropertiesSection.js'
 import { GridPropertiesSection } from './GridPropertiesSection.js'
 import { ObjectLifecycleProperties } from './ObjectLifecycleProperties.js'
 import { SourceReferencesProperties } from './SourceReferencesProperties.js'
-import { FurniturePropertiesSection } from './FurniturePropertiesSection.js'
 import { ObjectSelectionHeader } from './ObjectSelectionHeader.js'
+import { SelectedObjectDimensionGuide } from './SelectedObjectDimensionGuide.js'
 import { resolvePropertiesSelection } from './propertiesSelection.js'
 import { getObjectFamilyDisplayName } from './objectDisplayNames.js'
 import type { PropertiesPanelProps } from './PropertiesPanel.types.js'
@@ -41,17 +42,18 @@ export const SelectedObjectProperties: React.FC<{
       <ObjectSelectionHeader project={project} object={selectedObj}
         title={`${getObjectFamilyDisplayName(selectedObj.object_type)} ${currentMark}`}
         currentMark={currentMark} onAssignType={onAssignType} onOpenTypeManager={onOpenTypeManager} />
+      <SelectedObjectDimensionGuide project={project} object={selectedObj} displayUnit={displayUnit} />
 
       <StructurePropertiesSection project={project} displayUnit={displayUnit} column={colObj} foundation={fndObj} beam={beamObj}
         onUpdateColumnVerticalReference={onUpdateColumnVerticalReference} onUpdateBeamVerticalReference={onUpdateBeamVerticalReference} onOpenTypeManager={onOpenTypeManager} />
       {wallObj && <WallPropertiesSection wall={wallObj} project={project} displayUnit={displayUnit} onUpdateWallFace={onUpdateWallFace}
-        onUpdateWallFinish={onUpdateWallFinish} onDefineWallFinish={onDefineWallFinish} onOpenTypeManager={onOpenTypeManager} />}
+        onUpdateWallFinish={onUpdateWallFinish} onDefineWallFinish={onDefineWallFinish} />}
       {roofObj && <RoofPropertiesSection roof={roofObj} project={project} displayUnit={displayUnit} onUpdateRoof={onUpdateRoof}
         onUpdateRainwaterDesign={onUpdateRainwaterDesign} onDrawSurfaceVoid={onDrawSurfaceVoid} />}
       <SystemsPropertiesSection project={project} displayUnit={displayUnit} pipeObj={pipeObj} fixtureObj={fixtureObj} cabinetObj={cabinetObj} mouldingObj={mouldingObj}
         onUpdatePipeRoute={onUpdatePipeRoute} onUpdateElectricalFixture={onUpdateElectricalFixture} onAssignElectricalFixtureToCircuit={onAssignElectricalFixtureToCircuit} onApplyElectricalPhaseBalance={onApplyElectricalPhaseBalance}
         onUpdateCabinet={onUpdateCabinet} onUpdateMoulding={onUpdateMoulding} />
-      <FurniturePropertiesSection object={interiorFurnitureObj} displayUnit={displayUnit} onUpdate={onUpdateInteriorFurniture} />
+      {['family.instance','interior.furniture','interior.cabinet_run','door_window.door','door_window.window'].includes(selectedObj.object_type) && <FamilyInstanceProperties project={project} object={selectedObj} onEdit={props.onOpenFamilyEditor} onUpdate={changes=>props.onUpdateFamilyInstance?.(selectedObj.id,changes)}/>}
       <OpeningPropertiesSection project={project} displayUnit={displayUnit} door={doorObj} window={winObj}
         onUpdateOpeningVertical={onUpdateOpeningVertical} onRehostOpening={onRehostOpening} onUpdateOpeningInstanceParameters={onUpdateOpeningInstanceParameters} onFlipDoorHanding={onFlipDoorHanding} onOpenTypeManager={onOpenTypeManager} />
       <GridPropertiesSection project={project} grid={grdObj} selectedId={selectedId} displayUnit={displayUnit} onUpdateGridTag={onUpdateGridTag} onModifyGrid={onModifyGrid} onUpdateGridSystem={onUpdateGridSystem} />

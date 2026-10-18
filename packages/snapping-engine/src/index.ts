@@ -1,3 +1,4 @@
+import { objectFamilyGeometry } from '@constructflow/family-engine'
 import { type ProjectDocument, isColumnObject, isGridObject, isBeamObject, isWallObject } from '@constructflow/project-model'
 
 export interface SnapViewport { zoom: number }
@@ -175,6 +176,7 @@ const MAX_SNAP_INDEX_CELLS_PER_OBJECT = 4096
 
 /** Shared snap geometry for polygonal and routed model families. */
 function objectPaths(object: ProjectDocument['objects'][string], project?: ProjectDocument): { points: Point[]; closed: boolean }[] {
+  if (project) { const family = objectFamilyGeometry(project, object); if (family) return family.worldPaths.flatMap(path => [{ points: path.points.map(point => [point[0], point[1]] as Point), closed: path.closed },...(path.voids??[]).map(ring=>({points:ring.map(point=>{const world=family.transform([...point,0]);return [world[0],world[1]] as Point}),closed:true}))]) }
   const data = object.module_data as unknown as Record<string, unknown>
   if (object.object_type === 'door_window.door' || object.object_type === 'door_window.window') {
     const host = project?.objects[String(data.wall_id)]

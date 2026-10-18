@@ -1,3 +1,4 @@
+import type { FamilyBinding } from './family.js'
 // ConstructFlow Canonical Semantic Types (Millimeter Units)
 
 export type Phase = 'existing' | 'demolition' | 'new_construction'
@@ -187,7 +188,7 @@ export interface WallInterfaceTreatment {
 
 export type DoorHanding = 'left_in' | 'left_out' | 'right_in' | 'right_out'
 
-export interface DoorModuleData {
+export interface DoorModuleData extends FamilyBinding {
   type_id?: string
   instance_overrides?: Record<string, unknown>
   mark: string // Human-readable mark, e.g. "D1", "D2"
@@ -207,7 +208,7 @@ export interface DoorModuleData {
   door_type_id?: string
 }
 
-export interface WindowModuleData {
+export interface WindowModuleData extends FamilyBinding {
   type_id?: string
   instance_overrides?: Record<string, unknown>
   mark: string // Human-readable mark, e.g. "W1", "W2"
@@ -228,7 +229,7 @@ export interface WindowModuleData {
 // Standalone construction payloads. Coordinates/dimensions are canonical millimetres.
 export type Point2Mm = [number, number]
 export type Point3Mm = [number, number, number]
-export interface CatalogPlacement {
+export interface CatalogPlacement extends FamilyBinding {
   mark: string
   type_id?: string
   instance_overrides?: Record<string, unknown>

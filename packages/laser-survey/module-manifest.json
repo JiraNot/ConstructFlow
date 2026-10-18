@@ -1,0 +1,32 @@
+{
+  "$schema": "https://constructflow.dev/schemas/module-manifest.schema.json",
+  "id": "constructflow.laser-survey",
+  "name": "Site Laser Survey & As-Built Verification",
+  "version": "1.0.0",
+  "schema_version": 1,
+  "requires": ["constructflow.architecture-engine"],
+  "provides": {
+    "object_types": [
+      "laser_asbuilt_wall",
+      "laser_survey_session",
+      "inspection_defect_item",
+      "photo_dimension_markup"
+    ],
+    "commands": [
+      "connect_xiaomi_laser",
+      "disconnect_xiaomi_laser",
+      "stamp_laser_measurement",
+      "verify_asbuilt_tolerances",
+      "generate_site_inspection_report"
+    ],
+    "capabilities": [
+      "xiaomi_ble_laser_stream",
+      "photo_dimension_stamping",
+      "asbuilt_tolerance_checker",
+      "renovation_phase_assignment"
+    ],
+    "validators": [
+      "validate_asbuilt_tolerance"
+    ]
+  }
+}

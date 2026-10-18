@@ -1,3 +1,5 @@
+import { objectFamily } from '@constructflow/family-engine'
+import { drawFamilyObject } from './familyRenderer.js'
 import {
   ProjectDocument,
   SmartObject,
@@ -282,6 +284,7 @@ export function renderPlanView(
   const { visibleObjectIds, outputs } = getCachedPlanSourceData(sourceProject)
   for (const out of outputs) {
     if (!project.objects[out.object_id] || !visibleObjectIds.has(out.object_id)) continue
+    if (objectFamily(sourceProject, project.objects[out.object_id])) continue
     if (out.paths.length && !out.paths.some(path => areWorldPointsVisible(path, viewport, width, height))) continue
     const phase=out.removed_phase==='demolition'?'demolition':out.phase
     const outputObject = project.objects[out.object_id]
@@ -448,11 +451,11 @@ export function renderPlanView(
   // 8.25 Interior cabinetry is drawn as a furniture plan symbol over the finish.
   for (const obj of Object.values(project.objects)) {
     if (obj.object_type !== 'interior.cabinet_run' || !visibleObjectIds.has(obj.id)) continue
-    drawCabinetPlanSymbol(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id)
+    if (!drawFamilyObject(ctx, sourceProject, obj, viewport, isSelected(obj.id), hoveredId === obj.id)) drawCabinetPlanSymbol(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id)
   }
   for (const obj of Object.values(project.objects)) {
-    if (obj.object_type !== 'interior.furniture' || !visibleObjectIds.has(obj.id)) continue
-    drawInteriorFurnitureSymbol(ctx, obj, viewport, isSelected(obj.id), hoveredId === obj.id)
+    if (!objectFamily(sourceProject, obj) || obj.object_type === 'interior.cabinet_run' || !visibleObjectIds.has(obj.id)) continue
+    drawFamilyObject(ctx, sourceProject, obj, viewport, isSelected(obj.id), hoveredId === obj.id)
   }
 
   // 8.5 Roof framing is an explicit structural plan discipline, so the roof
@@ -649,6 +652,7 @@ export function drawDirectManipulationGhost(
   for (const id of ids) {
     const object = candidate.objects[id]
     if (!object || object.status === 'archived') continue
+    if (drawFamilyObject(ctx, candidate, object, viewport, true, false)) continue
     if (isWallObject(object)) {
       drawWall(ctx, object, candidate, viewport, false, false, false)
     } else if (isColumnObject(object)) {
@@ -732,8 +736,7 @@ export function drawDirectManipulationGhost(
       if (Array.isArray(voids)) for (const ring of voids) drawRing(ring, true, false)
     } else if (object.object_type === 'interior.cabinet_run') {
       drawCabinetPlanSymbol(ctx, object, viewport, true, false)
-    } else if (object.object_type === 'interior.furniture') {
-      drawInteriorFurnitureSymbol(ctx, object, viewport, true, false)
+
     } else if (Array.isArray(data.start_point_mm) && Array.isArray(data.end_point_mm)) {
       drawRing([data.start_point_mm, data.end_point_mm], false)
     } else {
@@ -1265,83 +1268,6 @@ function drawCabinetPlanSymbol(ctx: CanvasRenderingContext2D, object: SmartObjec
   ctx.restore()
 }
 
-function drawInteriorFurnitureSymbol(ctx: CanvasRenderingContext2D, object: SmartObject, viewport: ViewportState, selected: boolean, hovered: boolean) {
-  const data = object.module_data as import('@constructflow/project-model').InteriorFurnitureModuleData
-  const [x, y] = data.location_mm
-  const width = Number(data.width_mm), depth = Number(data.depth_mm), zoom = viewport.zoom
-  const angle = Number(data.rotation_deg ?? 0) * Math.PI / 180
-  if (![x, y, width, depth, zoom, angle].every(Number.isFinite) || width <= 0 || depth <= 0) return
-  const [sx, sy] = worldToScreen([x, y], viewport)
-  const line = selected ? '#0284c7' : hovered ? '#b45309' : '#64748b'
-  const upholstery = data.material === 'leather' ? '#d9b9a5' : '#e8e1d8'
-  ctx.save(); ctx.translate(sx, sy); ctx.rotate(angle); ctx.scale(zoom, zoom)
-  ctx.lineWidth = Math.max(0.7, 1 / zoom); ctx.strokeStyle = line; ctx.fillStyle = upholstery
-  const rect = (left: number, top: number, w: number, h: number, radius = 0, fill = true) => {
-    ctx.beginPath()
-    if (radius && 'roundRect' in ctx) ctx.roundRect(left, top, w, h, radius)
-    else ctx.rect(left, top, w, h)
-    if (fill) ctx.fill(); ctx.stroke()
-  }
-  const linePath = (points: [number, number][]) => { ctx.beginPath(); points.forEach(([px, py], index) => index ? ctx.lineTo(px, py) : ctx.moveTo(px, py)); ctx.stroke() }
-  const margin = Math.min(90, Math.min(width, depth) * 0.12)
-  switch (data.kind) {
-    case 'sofa': {
-      rect(0, 0, width, depth, 100)
-      rect(margin, margin, width - margin * 2, depth - margin * 2, 65)
-      rect(margin, margin, width - margin * 2, depth * 0.2, 45)
-      const seats = Math.max(1, Math.round(width / 700))
-      for (let index = 0; index < seats; index++) {
-        const seatWidth = (width - margin * 2) / seats
-        rect(margin + index * seatWidth + 12, depth * 0.28, seatWidth - 24, depth * 0.52, 45, false)
-      }
-      rect(margin * 0.45, margin, margin * 0.75, depth - margin * 2, 45)
-      rect(width - margin * 1.2, margin, margin * 0.75, depth - margin * 2, 45)
-      break
-    }
-    case 'bed_single': case 'bed_double': {
-      ctx.fillStyle = '#f2eee7'; rect(0, 0, width, depth, 75)
-      ctx.fillStyle = '#c3a889'; rect(0, 0, width, Math.max(70, margin * 0.55), 32)
-      ctx.fillStyle = '#fffdf8'; rect(margin, margin, width - margin * 2, depth - margin * 1.35, 48)
-      const pillowWidth = data.kind === 'bed_single' ? width * 0.62 : width * 0.38
-      const pillows = data.kind === 'bed_single' ? [width / 2] : [width * 0.29, width * 0.71]
-      for (const center of pillows) rect(center - pillowWidth / 2, margin * 1.25, pillowWidth, Math.min(depth * 0.17, 220), 32)
-      linePath([[margin, depth * 0.43], [width - margin, depth * 0.43]])
-      break
-    }
-    case 'chair': {
-      rect(margin, margin * 0.7, width - margin * 2, depth * 0.74, 55)
-      rect(margin * 0.65, margin * 0.4, width - margin * 1.3, Math.max(55, margin * 0.5), 35)
-      linePath([[margin, depth * 0.82], [width - margin, depth * 0.82]])
-      break
-    }
-    case 'dining_table': case 'coffee_table': case 'desk': {
-      ctx.fillStyle = data.kind === 'desk' ? '#eadcc7' : '#eee5d6'; rect(0, 0, width, depth, 45)
-      const leg = Math.max(38, Math.min(75, margin * 0.65))
-      for (const [lx, ly] of [[margin, margin], [width - margin, margin], [width - margin, depth - margin], [margin, depth - margin]]) rect(lx - leg / 2, ly - leg / 2, leg, leg, leg / 5)
-      if (data.kind === 'desk') { rect(width * 0.12, depth * 0.12, width * 0.3, depth * 0.08, 8); rect(width * 0.72, depth * 0.1, width * 0.16, depth * 0.52, 15) }
-      break
-    }
-    case 'toilet': {
-      ctx.fillStyle = '#f8fafc'; rect(width * 0.25, depth * 0.08, width * 0.5, depth * 0.24, 35)
-      ctx.beginPath(); ctx.ellipse(width / 2, depth * 0.62, width * 0.34, depth * 0.31, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-      ctx.beginPath(); ctx.ellipse(width / 2, depth * 0.62, width * 0.22, depth * 0.2, 0, 0, Math.PI * 2); ctx.stroke()
-      break
-    }
-    case 'washbasin': {
-      ctx.fillStyle = '#f8fafc'; rect(0, 0, width, depth, 75)
-      ctx.beginPath(); ctx.ellipse(width / 2, depth * 0.53, width * 0.34, depth * 0.32, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-      ctx.beginPath(); ctx.arc(width / 2, depth * 0.12, Math.max(24, margin * 0.16), 0, Math.PI * 2); ctx.stroke()
-      break
-    }
-    case 'bathtub': {
-      ctx.fillStyle = '#f8fafc'; rect(0, 0, width, depth, Math.min(width, depth) * 0.12)
-      ctx.beginPath(); ctx.roundRect(margin, margin, width - margin * 2, depth - margin * 2, Math.min(width, depth) * 0.1); ctx.fill(); ctx.stroke()
-      ctx.beginPath(); ctx.arc(width * 0.5, depth * 0.12, Math.max(24, margin * 0.14), 0, Math.PI * 2); ctx.stroke()
-      break
-    }
-  }
-  ctx.restore()
-}
 
 function drawWall(
   ctx: CanvasRenderingContext2D,
@@ -1534,6 +1460,7 @@ function drawDoor(
   isHovered: boolean,
   showLabel: boolean
 ) {
+  if (objectFamily(project, door)) return
   const { mark, wall_id, offset_along_wall_mm, width_mm, handing } = door.module_data
   const hostWall = project.objects[wall_id]
   if (!hostWall || !isWallObject(hostWall)) return
@@ -1901,6 +1828,7 @@ function drawWindow(
   isHovered: boolean,
   showLabel: boolean
 ) {
+  if (objectFamily(project, win)) return
   const { mark, wall_id, offset_along_wall_mm, width_mm } = win.module_data
   const hostWall = project.objects[wall_id]
   if (!hostWall || !isWallObject(hostWall)) return

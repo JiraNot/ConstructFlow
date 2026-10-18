@@ -62,6 +62,7 @@ export function usePlanCanvasSurfaceController({
     dimensionReferenceMode: props.preferences.dimensionReferenceMode,
     containerSize, canvasRef, authoringControlsOpen, setAuthoringControlsOpen,
     toggleDimensionReferenceMode: placementController.toggleDimensionReferenceMode,
+    onFinishPolygon: () => { placementController.commitActivePlacement(); canvasRef.current?.focus({ preventScroll: true }) },
   })
 
   return {
@@ -88,6 +89,12 @@ export function usePlanCanvasSurfaceController({
       snapModes: props.preferences.snapModes, onCommit: props.onCommitManipulation, onPreview: props.onPreviewManipulation,
       onRejected: props.onManipulationRejected, onClearObjectSelection: () => { props.onSelectionChange?.([], null); props.onSelectObject(null) },
     },
+    photoPins: props.photoSessions ? {
+      viewport: viewport.viewport,
+      activeLevelId: props.project.project.active_level_id,
+      sessions: props.photoSessions,
+      onSelectSession: props.onOpenPhotoSession ?? (() => {}),
+    } : undefined,
     viewport: viewport.viewport,
     setViewport: viewport.setViewport,
     fitView: viewport.fitView,

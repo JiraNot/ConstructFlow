@@ -1,3 +1,4 @@
+import { validateProjectFamilies } from './family.js'
 import { validateDoorFaceComponents } from './doorFace.js'
 import { validateOpeningPlanSymbolLines } from './openingPlanSymbol.js'
 import type { Phase } from './types.js'
@@ -180,6 +181,7 @@ export function validateProjectV2(project: ProjectDocument): void {
     throw new Error('Invalid project format: constraints must be an array when present')
   }
   if (!project.objects || typeof project.objects !== 'object' || Array.isArray(project.objects)) throw new Error('Invalid project format: objects map required')
+  validateProjectFamilies(project)
   validateConstructionPayloads(project)
   if(project.drawing_settings!==undefined)validateDrawingSettings(project.drawing_settings)
   if (project.drawing_settings?.plan_dimensions?.some(dimension => !project.levels.some(level => level.id === dimension.level_id))) throw new Error('Invalid project format: plan dimension references a missing level')
@@ -261,8 +263,8 @@ export function validateProjectV2(project: ProjectDocument): void {
       base_offset_mm: ['architecture.wall', 'structure.column', 'structure.beam', 'architecture.stair'],
       top_offset_mm: ['architecture.wall', 'structure.column', 'architecture.stair'],
       vertical_constraint: ['architecture.wall', 'structure.column', 'door_window.door', 'door_window.window'],
-      width_mm: ['door_window.door', 'door_window.window', 'interior.cabinet_run', 'architecture.stair'],
-      height_mm: ['architecture.wall', 'door_window.door', 'door_window.window', 'interior.cabinet_run'],
+      width_mm: ['door_window.door', 'door_window.window', 'interior.cabinet_run', 'architecture.stair', 'interior.furniture', 'family.instance'],
+      height_mm: ['architecture.wall', 'door_window.door', 'door_window.window', 'interior.cabinet_run', 'interior.furniture', 'family.instance'],
       sill_height_mm: ['door_window.door', 'door_window.window'],
       head_level_id: ['door_window.door', 'door_window.window'],
       head_offset_mm: ['door_window.door', 'door_window.window'],

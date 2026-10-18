@@ -23,7 +23,7 @@ export const ObjectSelectionHeader: React.FC<ObjectSelectionHeaderProps> = ({ pr
   }).length
 
   return <>
-    <div style={{ borderBottom: '1px solid #dce4ed', paddingBottom: 10 }}>
+    <div className="cf-object-identity" style={{ borderBottom: '1px solid #dce4ed', paddingBottom: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
         <span style={{
           fontSize: 10,
@@ -40,17 +40,19 @@ export const ObjectSelectionHeader: React.FC<ObjectSelectionHeaderProps> = ({ pr
       <div style={{ fontSize: 15, fontWeight: 700, color: '#24364b' }}>{title}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px 10px', marginTop: 5, color: '#64748b', fontSize: 10 }}>
         <span>ระดับ: {project.levels.find(level => level.id === object.level_refs?.[0]?.level_id)?.name ?? 'Ground Floor'}</span>
-        <span>Phase: {object.created_phase === 'existing' ? 'เดิม' : object.created_phase === 'demolition' ? 'รื้อถอน' : 'ก่อสร้างใหม่'}</span>
+        <span>เฟส: {object.created_phase === 'existing' ? 'เดิม' : object.created_phase === 'demolition' ? 'รื้อถอน' : 'ก่อสร้างใหม่'}</span>
       </div>
     </div>
 
-    {supportsTypePicker && <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>เปลี่ยนชนิดของชิ้นนี้</label>
+    {supportsTypePicker && <div className="cf-object-type-picker" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <label style={{ fontSize: 11, color: '#52677d', fontWeight: 600 }}>ชนิดของชิ้นนี้</label>
       <select aria-label="ชนิดของชิ้นที่เลือก" value={currentMark} onChange={event => onAssignType(object.id, event.target.value)} style={{ width: '100%', background: '#fff', border: '1px solid #dce4ed', padding: 6, color: '#24364b' }}>
         {objectTypes.map(type => <option key={type.id} value={type.name}>{type.name}</option>)}
       </select>
-      <small style={{ color: '#64748b', fontSize: 10 }}>เปลี่ยนค่าเฉพาะ instance นี้</small>
-      <button className="cf-button cf-button-quiet" onClick={onOpenTypeManager}>แก้ไข Type ในแค็ตตาล็อก · ใช้กับ {assignedInstances} ชิ้น</button>
+      <details className="cf-inspector-section cf-object-type-advanced"><summary>แก้ชนิดต้นแบบ · ใช้กับ {assignedInstances} ชิ้น</summary>
+        <p>การแก้นี้ส่งผลต่อทุกชิ้นที่ใช้ชนิดเดียวกัน</p>
+        <button type="button" className="cf-button cf-button-quiet" onClick={onOpenTypeManager}>เปิดคลังชนิด</button>
+      </details>
     </div>}
   </>
 }
