@@ -79,6 +79,22 @@ export interface AppProps {
   projectFileAccess?: ProjectFileAccess
 }
 
+const levelPickerLabel = (name: string) => {
+  const normalized = name.trim().toLowerCase()
+  if (normalized === 'ground floor') return 'ชั้นล่าง'
+  if (normalized === 'first floor') return 'ชั้น 1'
+  if (normalized === 'second floor') return 'ชั้น 2'
+  if (normalized === 'roof eaves') return 'ชายคา'
+  return name
+}
+
+const phasePickerLabel = (phase: Phase, fallback: string) => {
+  if (phase === 'existing') return 'อาคารเดิม'
+  if (phase === 'demolition') return 'รื้อถอน'
+  if (phase === 'new_construction') return 'สร้างใหม่'
+  return fallback
+}
+
 export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const {
     project,
@@ -171,7 +187,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const coordination = useCoordinationReport(project, true)
   const coordinationFindings = coordination.report?.findings ?? []
   const [isSettingsOpen,setIsSettingsOpen] = useState(false)
-  const [inspectorOpen,setInspectorOpen] = useState(() => window.innerWidth > 1180)
+  const [inspectorOpen,setInspectorOpen] = useState(() => window.innerWidth > 1180 && !window.matchMedia('(pointer: coarse)').matches)
   const [workbenchTab,setWorkbenchTab] = useState<'model'|'sheets'>('model')
   const [isConstructionOpen,setIsConstructionOpen]=useState(false)
   const {
@@ -454,6 +470,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
   const renderEditorView = (mode: EditorViewMode, auxiliary = false) =>
     <EditorViewRenderer mode={mode} auxiliary={auxiliary} {...sharedEditorViewProps} />
+  const localSaveStatusLabel = localAutosaveState === 'saving' || localAutosaveState === 'restoring'
+    ? 'กำลังบันทึกในเครื่อง…'
+    : localAutosaveState === 'error' ? 'บันทึกในเครื่องไม่สำเร็จ' : 'บันทึกอัตโนมัติในเครื่องแล้ว'
+  const localSaveStatusIcon = localAutosaveState === 'error' ? '!' : localAutosaveState === 'saving' || localAutosaveState === 'restoring' ? '…' : '✓'
 
   if (!localAutosaveReady) return (
     <div role="status" aria-live="polite" style={{ display: 'grid', placeItems: 'center', width: '100vw', height: '100vh', color: '#475569', fontFamily: 'sans-serif' }}>
@@ -479,7 +499,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               onBlur={handleProjectNameCommit}
               onKeyDown={event => {
                 if (event.key === 'Enter') { event.preventDefault(); handleProjectNameCommit() }
-                if (event.key === 'Escape') { setProjectNameDraft(project.project.name); setIsProjectNameEditing(false) }
+                if (event.key === 'Escape') {
+                  setProjectNameDraft(project.project.name)
+                  setIsProjectNameEditing(false)
+                  window.requestAnimationFrame(() => document.querySelector<HTMLElement>('.cf-more-menu summary')?.focus())
+                }
               }}
             />
           ) : (
@@ -497,7 +521,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           <label className="cf-header-field">
             <span>ชั้น</span>
             <select value={project.project.active_level_id} onChange={(e) => handleSetWorkingLevel(e.target.value)} aria-label="ชั้นอาคาร">
-              {project.levels.map(lvl => <option key={lvl.id} value={lvl.id}>{lvl.name} ({lvl.elevation_mm >= 0 ? '+' : ''}{formatLengthMm(lvl.elevation_mm, displayUnit)} {displayUnit})</option>)}
+              {project.levels.map(lvl => <option key={lvl.id} value={lvl.id}>{levelPickerLabel(lvl.name)} ({lvl.elevation_mm >= 0 ? '+' : ''}{formatLengthMm(lvl.elevation_mm, displayUnit)} {displayUnit})</option>)}
             </select>
           </label>
           {activeTool === 'column' && <label className="cf-header-field">
@@ -510,7 +534,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           <label className="cf-header-field cf-phase-field">
             <span>เฟสสร้าง</span>
             <select value={project.project.active_phase} onChange={(e) => handleSetWorkingPhase(e.target.value as Phase)} aria-label="เฟสงาน">
-              {project.phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+              {project.phases.map((ph) => <option key={ph.id} value={ph.id}>{phasePickerLabel(ph.id as Phase, ph.name)}</option>)}
             </select>
           </label>
           <label className="cf-unit-pill">หน่วย
@@ -541,19 +565,25 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               <button type="button" aria-label="บันทึกเป็นไฟล์ .cfproj" onClick={() => void handleSaveAsProject()}><Download size={15} /> บันทึกเป็นไฟล์ (.cfproj)…</button>
             </div>
           </details>
-          <span role="status" aria-live="polite" className={`cf-save-status ${localAutosaveState === 'error' ? 'is-unsaved' : ''}`}>{localAutosaveState === 'saving' || localAutosaveState === 'restoring' ? 'กำลังบันทึกในเครื่อง…' : localAutosaveState === 'error' ? 'บันทึกในเครื่องไม่สำเร็จ' : 'บันทึกในเครื่องแล้ว'}{fileFeedback ? ` · ${fileFeedback}` : ''}</span>
+          <span role="status" aria-live="polite" title={localSaveStatusLabel} className={`cf-save-status ${localAutosaveState === 'error' ? 'is-unsaved' : ''} ${localAutosaveState === 'saving' || localAutosaveState === 'restoring' ? 'is-saving' : 'is-saved'}`}>
+            <span className="cf-save-status-full">{localSaveStatusLabel}{fileFeedback ? ` · ${fileFeedback}` : ''}</span>
+            <span className="cf-save-status-compact" aria-hidden="true">{localSaveStatusIcon}</span>
+          </span>
           <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canUndo} onClick={() => { setProjectState(projectSessionRef.current!.undo()); setCommandQueue([]) }} title="ย้อนกลับ (Ctrl/⌘+Z)" aria-label="ย้อนกลับ"><Undo2 size={17} /></button>
           <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canRedo} onClick={() => { setProjectState(projectSessionRef.current!.redo()); setCommandQueue([]) }} title="ทำซ้ำ (Ctrl/⌘+Shift+Z หรือ Ctrl/⌘+Y)" aria-label="ทำซ้ำ"><Redo2 size={17} /></button>
           <button type="button" className="cf-button cf-button-quiet cf-inspector-launcher" aria-expanded={inspectorOpen} aria-label={inspectorOpen ? 'ปิดแผงแก้ไข' : selectedId ? 'แก้ไขวัตถุที่เลือก' : 'เปิดแผงข้อมูล'} onClick={() => { setRightPanelTab('properties'); setInspectorOpen(value => !value) }}><PanelRightOpen size={17} /><span>{selectedId ? 'แก้ไข' : 'ข้อมูล'}</span></button>
           <details className="cf-more-menu" onClick={(event) => {
             if ((event.target as HTMLElement).closest('button')) {
               event.currentTarget.open = false;
-              event.currentTarget.querySelector('summary')?.focus();
+              if (!(event.target as HTMLElement).closest('[data-preserve-focus]')) {
+                event.currentTarget.querySelector('summary')?.focus();
+              }
             }
           }}>
             <summary className="cf-button cf-button-quiet" aria-label="เมนูโครงการ" title="เมนูโครงการ">เมนู</summary>
             <div className="cf-more-popover">
               <div className="cf-menu-label">โครงการ</div>
+              <button type="button" data-preserve-focus onClick={() => { setProjectNameDraft(project.project.name); setIsProjectNameEditing(true) }}>เปลี่ยนชื่อโครงการ</button>
               <button type="button" onClick={handleNewBlankProject}>สร้างโครงการใหม่ (ว่าง)</button>
               <button type="button" aria-label="โฉนดและผู้เซ็นแบบ" onClick={() => setIsLegalModalOpen(true)}><FileCheck size={15} /> โฉนดและผู้เซ็นแบบ</button>
               <button type="button" onClick={() => document.getElementById('cf-survey-open')?.click()}>นำเข้าข้อมูลสำรวจ CSV</button>

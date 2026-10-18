@@ -946,6 +946,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-rail-family { width:64px; min-height:43px; margin:0; padding:4px !important; white-space:normal !important; text-align:center; font-size:10px; line-height:1.2; }
 .cf-inspector-launcher { display:none; }
 .cf-inspector-backdrop { display:none; }
+@media (max-width:1450px) {
+  .cf-app-header { gap:6px; padding:0 8px; }
+  .cf-brand { flex:0 0 auto; }
+  .cf-brand-name,.cf-brand-divider,.cf-project-name,.cf-save-status { display:none; }
+  .cf-header-model-controls { flex:1 1 auto; gap:5px; }
+  .cf-header-field select { min-width:110px; max-width:136px; }
+  .cf-phase-field select { min-width:112px; }
+  .cf-header-actions .cf-icon-button,.cf-header-actions .cf-button,.cf-save-menu > summary,.cf-more-menu > summary,.cf-inspector-launcher { min-width:44px; min-height:44px; }
+  .cf-inspector-launcher { display:inline-flex; }
+}
 @media (max-width:1180px) {
   .cf-workspace { position:relative; }
   .cf-app-header { gap:6px; padding:0 8px; }
@@ -1008,7 +1018,49 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .cf-toolbar-vertical .cf-type-manager-button span,.cf-toolbar-vertical .cf-underlay-button span { display:none; }
 }
 @media (max-width:800px) {
+  .cf-header-model-controls { flex:1 1 0; gap:4px; }
+  .cf-header-field select { min-width:116px; max-width:124px; padding-right:20px; }
+  .cf-phase-field select { min-width:96px; max-width:104px; }
+  .cf-inspector { left:0; width:100%; }
   .cf-dialog-overlay { align-items:stretch; padding:0; }
   .cf-dialog { width:100vw; height:100dvh; max-height:100dvh; border:0; border-radius:0; }
   .cf-dialog-footer { padding-bottom:calc(8px + env(safe-area-inset-bottom)); }
+}
+/* High-resolution tablets may expose a wide CSS viewport; keep touch targets tablet-sized. */
+@media (pointer:coarse) and (min-width:1181px) {
+  .cf-app-header .cf-header-field select { min-height:44px; }
+  .cf-header-actions .cf-icon-button,.cf-header-actions .cf-button,.cf-save-menu > summary,.cf-more-menu > summary,.cf-inspector-launcher { min-width:44px; min-height:44px; }
+  .cf-toolbar-vertical .cf-tool-button,.cf-toolbar-vertical .cf-tool-group > summary { min-height:48px; }
+  .cf-toolbar-vertical .cf-type-manager-button,.cf-toolbar-vertical .cf-underlay-button,.cf-tool-repeat { min-height:48px; }
+  .cf-inspector-tabs button,.cf-inspector-subtabs button { min-height:44px; }
+  .cf-canvas-zoom button { width:44px; height:44px; }
+}
+@media (pointer:coarse) {
+  .cf-inspector-content :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),
+  .cf-dialog :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),
+  .cf-legacy-dialog :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),
+  .cf-catalog-dialog :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),
+  .cf-family-workbench :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea) { min-height:44px; font-size:16px; }
+  .cf-inspector-content button,.cf-dialog button,.cf-legacy-dialog button,.cf-catalog-dialog button,.cf-family-workbench button { min-height:44px; }
+  .cf-inspector-content input[type="checkbox"],.cf-dialog input[type="checkbox"],.cf-legacy-dialog input[type="checkbox"],.cf-catalog-dialog input[type="checkbox"],.cf-family-workbench input[type="checkbox"] { width:20px; height:20px; }
+  .cf-family-drawbar button { min-width:44px; padding:8px; font-size:13px; }
+  .cf-photo-dimension-modal button { min-height:44px !important; padding-inline:10px !important; font-size:14px !important; }
+  .cf-photo-dimension-modal :is(input:not([type="file"]),select,textarea) { min-height:44px !important; font-size:16px !important; }
+  .cf-photo-dimension-header { flex-wrap:wrap; gap:8px !important; padding:8px 12px !important; }
+  .cf-photo-dimension-stage { min-width:0; padding:8px !important; }
+  .cf-photo-dimension-inspector { min-width:0; }
+}
+@media (pointer:coarse) and (orientation:portrait) {
+  .cf-photo-dimension-body { flex-direction:column; }
+  .cf-photo-dimension-stage { flex:1 1 auto !important; min-height:30dvh; }
+  .cf-photo-dimension-inspector { width:auto !important; max-width:none !important; max-height:38dvh; overflow-y:auto !important; border-left:0 !important; border-top:1px solid #232f46; }
+}
+.cf-photo-dimension-stage canvas { max-width:100%; max-height:100%; object-fit:contain; }
+.cf-save-status-compact { display:none; }
+@media (max-width:1450px) {
+  .cf-save-status { display:inline-flex !important; flex:none; width:30px; height:30px; max-width:30px; align-items:center; justify-content:center; padding:0; overflow:visible; }
+  .cf-save-status-full { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .cf-save-status-compact { display:grid; width:28px; height:28px; place-items:center; border:1px solid #bbf7d0; border-radius:50%; background:#f0fdf4; color:#15803d; font-size:15px; font-weight:750; line-height:1; }
+  .cf-save-status.is-saving .cf-save-status-compact { border-color:#fde68a; background:#fffbeb; color:#b45309; }
+  .cf-save-status.is-unsaved .cf-save-status-compact { border-color:#fecaca; background:#fef2f2; color:#b91c1c; }
 }

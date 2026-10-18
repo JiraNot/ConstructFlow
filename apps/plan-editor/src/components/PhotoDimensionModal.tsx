@@ -92,6 +92,7 @@ export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null)
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const drawCanvasRef = useRef<() => void>(() => {})
   const imageElementRef = useRef<HTMLImageElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -181,8 +182,12 @@ export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
       renderW = parentHeight * imgAspect
     }
 
-    canvas.width = renderW
-    canvas.height = renderH
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    canvas.style.width = `${renderW}px`
+    canvas.style.height = `${renderH}px`
+    canvas.width = Math.max(1, Math.round(renderW * dpr))
+    canvas.height = Math.max(1, Math.round(renderH * dpr))
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
     ctx.clearRect(0, 0, renderW, renderH)
     ctx.drawImage(img, 0, 0, renderW, renderH)
@@ -224,9 +229,22 @@ export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
     })
   }
 
+  drawCanvasRef.current = drawCanvas
+
   useEffect(() => {
     drawCanvas()
   }, [dimensions, areas, selectedLineId, selectedAreaId, isDrawing, currentDragRatio, activeMode])
+
+  useEffect(() => {
+    if (!imageSrc) return
+    const parent = canvasRef.current?.parentElement
+    if (!parent) return
+    const redraw = () => drawCanvasRef.current()
+    const observer = new ResizeObserver(redraw)
+    observer.observe(parent)
+    window.addEventListener('resize', redraw)
+    return () => { observer.disconnect(); window.removeEventListener('resize', redraw) }
+  }, [imageSrc])
 
   // Pointer Event Handlers for Stylus (Huawei M-Pencil) & Touch with Palm Rejection
   const getCanvasRatioCoords = (e: React.PointerEvent<HTMLCanvasElement>): [number, number] | null => {
@@ -260,7 +278,7 @@ export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
         const ly2 = line.end_ratio[1] * canvas.height
 
         const dist = pointToLineDistance(clickX, clickY, lx1, ly1, lx2, ly2)
-        if (dist <= 18) {
+        if (dist <= 18 * Math.min(window.devicePixelRatio || 1, 2)) {
           foundLineId = line.id
           break
         }
@@ -510,6 +528,7 @@ export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
 
   return (
     <div
+      className="cf-photo-dimension-modal"
       style={{
         position: 'fixed',
         inset: 0,
@@ -522,6 +541,7 @@ export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
     >
       {/* Top Header */}
       <header
+        className="cf-photo-dimension-header"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -709,9 +729,10 @@ export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
       </header>
 
       {/* Main Body */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div className="cf-photo-dimension-body" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* Canvas Area */}
         <div
+          className="cf-photo-dimension-stage"
           style={{
             flex: 1,
             position: 'relative',
@@ -793,6 +814,7 @@ export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
         {/* Right Inspector Sidebar */}
         {imageSrc && (
           <aside
+            className="cf-photo-dimension-inspector"
             style={{
               width: '340px',
               background: '#0B0F17',

@@ -17,6 +17,8 @@ alongside the master blueprint. The original Ruby implementation evidence remain
 
 `ROADMAP.md` is the sole active product release sequence. Standalone reliability and outputs are verified without external CAD/BIM software; native application gates apply only to the optional adapter being delivered. `roadmap/PRODUCTION-ROADMAP.md` is an entrypoint to this same plan.
 
+The first production release criteria, including tablet and real-project acceptance, are tracked in [`implementation/V1.0-RELEASE-READINESS.md`](implementation/V1.0-RELEASE-READINESS.md). This release gate narrows the claim for v1.0 without replacing the broader roadmap or master specification.
+
 Feature coverage against the standalone Master Specification is audited in
 [`FEATURE-PLAN-AUDIT-2026-10-07.md`](FEATURE-PLAN-AUDIT-2026-10-07.md).
 This report separates documented scope, implementation-ready contracts and missing planning work.

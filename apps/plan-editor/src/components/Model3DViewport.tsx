@@ -487,6 +487,7 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
   const selectRef = useRef(onSelectObject)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [hasModel, setHasModel] = useState(false)
+  const [webglAvailable, setWebglAvailable] = useState(true)
   const [roofFramingOnly, setRoofFramingOnly] = useState(false)
   const [autoFramedSelection, setAutoFramedSelection] = useState('')
   const [cameraPose, setCameraPose] = useState({ targetX: '', targetY: '', distance: '' })
@@ -543,7 +544,16 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
     // Start from +Y so the first 3D view shows the same front side as the plan.
     camera.position.set(12, 16, 13)
     cameraRef.current = camera
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    let renderer: THREE.WebGLRenderer
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    } catch {
+      sceneRef.current = null
+      cameraRef.current = null
+      setWebglAvailable(false)
+      return
+    }
+    setWebglAvailable(true)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.shadowMap.enabled = false
     renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -785,6 +795,10 @@ export const Model3DViewport: React.FC<Model3DViewportProps> = ({ project, onSel
   }, [coordination, project])
 
   return <div ref={hostRef} data-testid="model3d-viewport" data-auto-framed-selection={autoFramedSelection} data-camera-target-x={cameraPose.targetX} data-camera-target-y={cameraPose.targetY} data-camera-distance={cameraPose.distance} style={{ width: '100%', height: '100%', minHeight: 240, position: 'relative', background: '#080f1e' }}>
+    {!webglAvailable && <div role="status" style={{ position: 'absolute', inset: 0, zIndex: 1, display: 'grid', placeContent: 'center', gap: 8, padding: 24, color: '#dbeafe', textAlign: 'center', background: '#111c2d' }}>
+      <strong>เปิดมุมมอง 3D ไม่ได้</strong>
+      <span style={{ color: '#a9bdd4', fontSize: 13 }}>เบราว์เซอร์หรืออุปกรณ์นี้ไม่พร้อมใช้ WebGL · ใช้แปลนหรือรูปด้านต่อได้</span>
+    </div>}
     <div style={{ position: 'absolute', left: 12, top: 10, zIndex: 1, color: '#94a3b8', background: 'rgba(8,15,30,0.76)', padding: '4px 6px', borderRadius: 2, fontSize: 11, pointerEvents: 'none' }}>
       ภาพตัวอย่าง 3D · ลากเพื่อหมุน · เลื่อนเพื่อซูม · เลือกวัตถุเพื่อดูคุณสมบัติ
     </div>

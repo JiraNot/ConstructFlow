@@ -152,7 +152,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     const representations = new Map(buildProjectRepresentations3D(project).objects.map(representation => [representation.object_id, representation]))
     const draw = () => {
       const rect = canvas.getBoundingClientRect()
-      const dpr = window.devicePixelRatio || 1
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
       canvas.width = Math.max(1, Math.round(rect.width * dpr))
       canvas.height = Math.max(1, Math.round(rect.height * dpr))
       const ctx = canvas.getContext('2d')
@@ -584,7 +584,8 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     }
     draw()
     const observer=new ResizeObserver(draw);observer.observe(canvas)
-    return ()=>observer.disconnect()
+    window.addEventListener('resize', draw)
+    return ()=>{observer.disconnect();window.removeEventListener('resize',draw)}
   },[project,direction,selectedId,selectedIds,underlay,viewRevision,coordination,manipulationPreview,navigation,planNavigation])
 
   const zoomBy = (factor: number) => {

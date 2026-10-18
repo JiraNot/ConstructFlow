@@ -17,10 +17,21 @@ export function FamilyCanvasEditor({ family, typeId, view, selectedId, onSelect,
   const scale=Math.min((size.width-90)/Math.max(100,bounds[2]-bounds[0]),(size.height-90)/Math.max(100,bounds[3]-bounds[1]))*zoom,panX=size.width/2-(bounds[0]+bounds[2])/2*scale,panY=size.height/2-(bounds[1]+bounds[3])/2*scale*verticalSign
   const screen=([x,y]:Vec2):Vec2=>[x*scale+panX,y*scale*verticalSign+panY]
   const world=(event:React.PointerEvent):Vec2=>{const rect=canvasRef.current!.getBoundingClientRect();return [(event.clientX-rect.left-panX)/scale,(event.clientY-rect.top-panY)/scale/verticalSign]}
-  useEffect(()=>{const observer=new ResizeObserver(entries=>{const rect=entries[0].contentRect;setSize({width:rect.width,height:Math.max(260,rect.height)})});if(hostRef.current)observer.observe(hostRef.current);return()=>observer.disconnect()},[])
+  useEffect(()=>{
+    const observer=new ResizeObserver(entries=>{const rect=entries[0].contentRect;setSize({width:rect.width,height:Math.max(260,rect.height)})})
+    if(hostRef.current)observer.observe(hostRef.current)
+    const handleWindowResize=()=>setSize(current=>({...current}))
+    window.addEventListener('resize',handleWindowResize)
+    return()=>{observer.disconnect();window.removeEventListener('resize',handleWindowResize)}
+  },[])
   useEffect(()=>{setStart([]);setZoom(1)},[family.id,view])
   useEffect(()=>{
-    const ctx=canvasRef.current?.getContext('2d');if(!ctx)return
+    const canvas=canvasRef.current,ctx=canvas?.getContext('2d');if(!canvas||!ctx)return
+    const dpr=Math.min(window.devicePixelRatio||1,2)
+    const backingWidth=Math.max(1,Math.round(size.width*dpr)),backingHeight=Math.max(1,Math.round(size.height*dpr))
+    if(canvas.width!==backingWidth)canvas.width=backingWidth
+    if(canvas.height!==backingHeight)canvas.height=backingHeight
+    ctx.setTransform(dpr,0,0,dpr,0,0)
     ctx.clearRect(0,0,size.width,size.height);ctx.fillStyle='#fbfcfe';ctx.fillRect(0,0,size.width,size.height)
     ctx.strokeStyle='#edf1f6';ctx.lineWidth=1;const step=Math.max(20,100*scale)
     ctx.beginPath();for(let x=panX%step;x<size.width;x+=step){ctx.moveTo(x,0);ctx.lineTo(x,size.height)}for(let y=panY%step;y<size.height;y+=step){ctx.moveTo(0,y);ctx.lineTo(size.width,y)}ctx.stroke()
@@ -42,7 +53,7 @@ export function FamilyCanvasEditor({ family, typeId, view, selectedId, onSelect,
       <button disabled={!selectedId} onClick={()=>{onChange({...family,paths:family.paths.filter(path=>path.id!==selectedId),extrusions:family.extrusions.filter(form=>form.profile_id!==selectedId)});onSelect(null)}}>ลบเส้น</button>
     </div>
     <div ref={hostRef} className="cf-family-canvas-host">
-      <canvas ref={canvasRef} width={size.width} height={size.height} tabIndex={0} data-modal-escape-cancel={start.length>0||dragPoint?"true":undefined} aria-label="เขียนและแก้เส้น Family" style={{touchAction:'none'}}
+      <canvas ref={canvasRef} width={size.width} height={size.height} tabIndex={0} data-modal-escape-cancel={start.length>0||dragPoint?"true":undefined} aria-label="เขียนและแก้เส้น Family" style={{width:'100%',height:'100%',touchAction:'none'}}
         onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();setStart([]);drag.current=null;setDragPoint(null)}if(event.key==='Enter'&&tool==='polyline'&&start.length>1){event.preventDefault();addPath(start)}if(event.key==='Delete'&&selectedId){event.preventDefault();onChange({...family,paths:family.paths.filter(path=>path.id!==selectedId),extrusions:family.extrusions.filter(form=>form.profile_id!==selectedId)});onSelect(null)}}}
         onPointerDown={event=>{
           event.currentTarget.focus();const point=world(event)

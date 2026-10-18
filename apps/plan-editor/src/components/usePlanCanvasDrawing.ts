@@ -79,6 +79,7 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    const rect = canvas.getBoundingClientRect()
     const probe = (window as unknown as { __cfPlanRedrawDurationsMs?: number[] }).__cfPlanRedrawDurationsMs
     const drawStartedAt = probe ? performance.now() : 0
 
@@ -97,7 +98,7 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
       : null
 
     drawPlanCanvasBaseScene({
-      ctx, width: canvas.width, height: canvas.height, project, planProject, viewport, selectedIds,
+      ctx, width: rect.width, height: rect.height, project, planProject, viewport, selectedIds,
       editableSelectionIds, hoveredId, activeSnap, ghost, underlay, calibrationOverlay, labelMode,
       labelVisibility, planDiscipline, manipulationPreview, externalManipulationPreview, coordination,
       coordinationSeverities, coordinationFocusSelection,
@@ -132,15 +133,21 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
       const canvas = canvasRef.current
       if (!canvas) return
       const rect = container.getBoundingClientRect()
-      const width = Math.round(rect.width), height = Math.round(rect.height)
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const width = Math.max(1, Math.round(rect.width * dpr)), height = Math.max(1, Math.round(rect.height * dpr))
       if (canvas.width !== width) canvas.width = width
       if (canvas.height !== height) canvas.height = height
+      canvas.getContext('2d')?.setTransform(dpr, 0, 0, dpr, 0, 0)
       redrawRef.current()
     }
 
     const observer = new ResizeObserver(resizeCanvas)
     observer.observe(container)
+    window.addEventListener('resize', resizeCanvas)
     resizeCanvas()
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', resizeCanvas)
+    }
   }, [containerRef, canvasRef])
 }
