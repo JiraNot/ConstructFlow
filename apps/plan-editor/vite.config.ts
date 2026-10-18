@@ -115,6 +115,13 @@ export default defineConfig(({ command }) => {
       output: {
         manualChunks(id) {
           if (id.includes('/node_modules/three/')) return 'three-vendor'
+          if (id.includes('/node_modules/pdf-lib/')) return 'pdf-lib-vendor'
+          if (id.includes('/node_modules/@pdf-lib/fontkit/')) return 'pdf-font-vendor'
+          if (
+            id.includes('/node_modules/react-dom/') ||
+            id.includes('/node_modules/react/') ||
+            id.includes('/node_modules/scheduler/')
+          ) return 'react-vendor'
         },
       },
     },

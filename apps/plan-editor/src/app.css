@@ -1036,6 +1036,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .cf-canvas-zoom button { width:44px; height:44px; }
 }
 @media (pointer:coarse) {
+  .cf-elevation-controls { gap:6px !important; padding:5px !important; }
+  .cf-elevation-controls button { width:44px !important; height:44px !important; line-height:40px !important; font-size:22px !important; }
+  .cf-elevation-controls input[type="range"] { width:min(120px,25vw) !important; min-height:44px; }
   .cf-inspector-content :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),
   .cf-dialog :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),
   .cf-legacy-dialog :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),select,textarea),

@@ -20,19 +20,12 @@ import { Toolbar, ToolType } from './components/Toolbar.js'
 import type { PlanCanvasProps } from './components/PlanCanvas.types.js'
 import type { CoordinatedElevationNavigation } from './components/ElevationCanvas.js'
 import { EditorViewRenderer } from './components/EditorViewRenderer.js'
-import { EditorInspector } from './components/EditorInspector.js'
-import { SettingsModal } from './components/SettingsModal.js'
-import { TypeManagerModal } from './components/TypeManagerModal.js'
-import { UnderlayCalibrationModal } from './components/UnderlayCalibrationModal.js'
-import { ProjectLegalModal } from './components/ProjectLegalModal.js'
 import { LaserBleHudPill } from './components/LaserBleHudPill.js'
-import { PhotoDimensionModal } from './components/PhotoDimensionModal.js'
 import type { PhotoDimensionSession } from '@constructflow/laser-survey'
 import { useCoordinationReport } from './features/coordination/useCoordinationReport.js'
 import type { ProjectLegalMetadata } from '@constructflow/project-model'
 import { PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
 import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home, Compass, PanelRightOpen } from 'lucide-react'
-import { calculateTakeoff, calculatePhasedBOQ } from '@constructflow/takeoff-engine'
 import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { usePlanPlacementCommands } from './app/usePlanPlacementCommands.js'
 import { usePropertiesPanelActions } from './app/usePropertiesPanelActions.js'
@@ -57,6 +50,12 @@ import { MultiViewResizeHandle } from './components/MultiViewResizeHandle.js'
 import { ViewModePicker } from './components/ViewModePicker.js'
 
 const FamilyWorkbench = lazy(() => import('./components/FamilyWorkbench.js').then(module => ({ default: module.FamilyWorkbench })))
+const EditorInspector = lazy(() => import('./components/EditorInspector.js').then(module => ({ default: module.EditorInspector })))
+const SettingsModal = lazy(() => import('./components/SettingsModal.js').then(module => ({ default: module.SettingsModal })))
+const TypeManagerModal = lazy(() => import('./components/TypeManagerModal.js').then(module => ({ default: module.TypeManagerModal })))
+const UnderlayCalibrationModal = lazy(() => import('./components/UnderlayCalibrationModal.js').then(module => ({ default: module.UnderlayCalibrationModal })))
+const ProjectLegalModal = lazy(() => import('./components/ProjectLegalModal.js').then(module => ({ default: module.ProjectLegalModal })))
+const PhotoDimensionModal = lazy(() => import('./components/PhotoDimensionModal.js').then(module => ({ default: module.PhotoDimensionModal })))
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
@@ -360,11 +359,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const handleMoveElevationObject = createElevationObjectCommandHandler(project, dispatchCommandBatch, handleMoveColumn)
 
   // Counts & Schedule breakdown
-  const takeoff = useMemo(() => calculateTakeoff(project), [project])
-  const boq = useMemo(() => calculatePhasedBOQ(project), [project])
   const {
     handleExportTakeoff, handleExportBOQ, handleExportDrawingSet, handleExportDxf, handleExportIfc,
-  } = useWorkbenchExportActions(project, takeoff, boq, setFileFeedback)
+  } = useWorkbenchExportActions(project, setFileFeedback)
 
   const familyWorkbench = useFamilyWorkbenchSession({
     project, selectedId, onExecute: dispatchCommandBatch,
@@ -863,10 +860,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         </main>
 
         {inspectorOpen && <button type="button" className="cf-inspector-backdrop" aria-label="ปิดแผงข้อมูล" onClick={() => setInspectorOpen(false)} />}
-        {inspectorOpen && <EditorInspector
+        {inspectorOpen && <Suspense fallback={<aside className="cf-inspector" role="status">กำลังเปิดแผงข้อมูล…</aside>}><EditorInspector
           onCloseInspector={() => setInspectorOpen(false)}
           activeTab={rightPanelTab}
           onActiveTabChange={setRightPanelTab}
+          project={project}
           selectedId={selectedId}
           selectedIds={selectedIds}
           properties={{
@@ -885,8 +883,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             },
             onCreateRoomFinish: handleCreateRoomFinish,
           }}
-          takeoff={takeoff}
-          boq={boq}
           onOpenConstruction={() => setIsConstructionOpen(true)}
           onExportTakeoff={handleExportTakeoff}
           onExportBOQ={handleExportBOQ}
@@ -955,14 +951,14 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             onCancelAlignment: () => setAlignmentPreview(null),
             alignmentPreviewActive: !!alignmentPreview,
           }}
-        />}
+        /></Suspense>}
       </div>
 
       {familyWorkbench.open && <Suspense fallback={<div>กำลังเปิด Family Studio…</div>}><FamilyWorkbench project={project} initialFamily={familyWorkbench.seed} selectedObjectId={selectedId} onExecute={dispatchCommandBatch} onPlace={familyWorkbench.place} onClose={familyWorkbench.close}/></Suspense>}
       {/* BIM Type Manager Modal */}
       {isConstructionOpen&&<Suspense fallback={<div>กำลังเปิด BIM Workbench…</div>}><ConstructionWorkbench project={project} initialTab={workbenchTab} onOpenCatalog={()=>{setIsConstructionOpen(false);openCatalog(false,false,'structure.slab')}} onClose={()=>setIsConstructionOpen(false)} onExecute={dispatchCommandBatch}/></Suspense>}
-      <TypeManagerModal
-        isOpen={isTypeManagerOpen}
+      {isTypeManagerOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดคลังชนิด…</div>}><TypeManagerModal
+        isOpen
         onClose={() => setIsTypeManagerOpen(false)}
         project={project}
         initialFamily={catalogContext.family}
@@ -974,18 +970,18 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         onChoose={chooseCatalogType}
         onExecute={dispatchCommandBatch}
         onRenamed={syncRenamedActiveType}
-      />
+      /></Suspense>}
 
-      {isSettingsOpen && <SettingsModal project={project} displayUnit={displayUnit} onClose={()=>setIsSettingsOpen(false)} onExecute={dispatchCommandBatch} inspectorOpen={inspectorOpen} onInspectorChange={setInspectorOpen}/>}
+      {isSettingsOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดการตั้งค่า…</div>}><SettingsModal project={project} displayUnit={displayUnit} onClose={()=>setIsSettingsOpen(false)} onExecute={dispatchCommandBatch} inspectorOpen={inspectorOpen} onInspectorChange={setInspectorOpen}/></Suspense>}
       {/* Underlay Point-to-Point Scale Calibration Modal */}
-      <UnderlayCalibrationModal
-        isOpen={calibrationModalOpen}
+      {calibrationModalOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดปรับมาตราส่วน…</div>}><UnderlayCalibrationModal
+        isOpen
         onClose={() => setCalibrationModalOpen(false)}
         measuredDistance_mm={measuredCalibrationDist_mm}
         displayUnit={displayUnit}
         currentScale_mm_per_px={underlay.scale_mm_per_px}
         onApplyScale={handleApplyCalibrationScale}
-      />
+      /></Suspense>}
 
       {/* 1-Click Parametric Extension Presets Modal */}
       <Suspense fallback={null}><ExtensionPresetsModal
@@ -996,8 +992,8 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       /></Suspense>
 
       {/* Title Deed & Legal Signatories Modal (Permit Issue Set) */}
-      <ProjectLegalModal
-        isOpen={isLegalModalOpen}
+      {isLegalModalOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดข้อมูลโครงการ…</div>}><ProjectLegalModal
+        isOpen
         onClose={() => setIsLegalModalOpen(false)}
         project={project}
         onSave={(legal) => {
@@ -1007,11 +1003,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             return next
           })
         }}
-      />
+      /></Suspense>}
 
       {/* On-Site Photo Dimension Overlay & Defect Inspection Modal */}
-      <PhotoDimensionModal
-        isOpen={isPhotoDimensionModalOpen}
+      {isPhotoDimensionModalOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดเครื่องมือวัดจากภาพ…</div>}><PhotoDimensionModal
+        isOpen
         onClose={() => {
           setIsPhotoDimensionModalOpen(false)
           setActivePhotoSession(null)
@@ -1020,7 +1016,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         activeLevelId={project.project.active_level_id}
         initialSession={activePhotoSession}
         onSaveSession={handleSavePhotoSession}
-      />
+      /></Suspense>}
 
     </div>
   )

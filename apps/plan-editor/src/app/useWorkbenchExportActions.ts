@@ -1,9 +1,4 @@
 import type { ProjectDocument } from '@constructflow/project-model'
-import { calculatePhasedBOQ, calculateTakeoff } from '@constructflow/takeoff-engine'
-
-type TakeoffReport = ReturnType<typeof calculateTakeoff>
-type PhasedBOQReport = ReturnType<typeof calculatePhasedBOQ>
-
 function downloadTextFile(filename: string, content: string, mimeType: string, revokeDelayMs = 0) {
   const url = URL.createObjectURL(new Blob([content], { type: mimeType }))
   const anchor = document.createElement('a')
@@ -25,11 +20,12 @@ function csvDocument(rows: Array<Array<string | number>>) {
 /** Owns file compilation, downloads, and export feedback for the workbench. */
 export function useWorkbenchExportActions(
   project: ProjectDocument,
-  takeoff: TakeoffReport,
-  boq: PhasedBOQReport,
   setFileFeedback: (message: string) => void,
 ) {
-  const handleExportTakeoff = () => {
+  const handleExportTakeoff = async () => {
+    try {
+    const { calculateTakeoff } = await import('@constructflow/takeoff-engine')
+    const takeoff = calculateTakeoff(project)
     const rows: Array<Array<string | number>> = [
       ['Cost center', 'Phase', 'Mark', 'Object type', 'Material', 'Quantity', 'Unit', 'Waste %', 'Gross Quantity', 'Formula'],
       ...takeoff.lines.map(line => [
@@ -39,9 +35,15 @@ export function useWorkbenchExportActions(
       ]),
     ]
     downloadTextFile(`${project.project.id || 'project'}-takeoff.csv`, csvDocument(rows), 'text/csv;charset=utf-8')
+    } catch (error) {
+      setFileFeedback(`ส่งออกปริมาณไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
-  const handleExportBOQ = () => {
+  const handleExportBOQ = async () => {
+    try {
+    const { calculatePhasedBOQ } = await import('@constructflow/takeoff-engine')
+    const boq = calculatePhasedBOQ(project)
     const rows: Array<Array<string | number>> = [[
       'หมวดงาน / Cost Center', 'สถานะ / Phase', 'สัญลักษณ์ / Mark', 'ประเภทวัตถุ', 'วัสดุ',
       'ปริมาณสุทธิ', 'หน่วย', 'เผื่อเศษ (%)', 'ปริมาณรวมเศษ', 'ราคาวัสดุ/หน่วย (บาท)',
@@ -78,6 +80,9 @@ export function useWorkbenchExportActions(
     rows.push([`Factor F (งานอาคาร กรมบัญชีกลาง - กำไร ดอกเบี้ย ภาษี 7%)`, '', '', '', '', '', '', '', '', '', '', '', '', boq.factor_f.factor_f.toFixed(4), ''])
     rows.push(['ยอดรวมค่าก่อสร้างสุทธิ (Grand Total THB)', '', '', '', '', '', '', '', '', '', '', '', '', boq.grand_total_thb.toFixed(2), ''])
     downloadTextFile(`${project.project.id || 'project'}-boq-thailand.csv`, csvDocument(rows), 'text/csv;charset=utf-8')
+    } catch (error) {
+      setFileFeedback(`ส่งออก BOQ ไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   const handleExportDrawingSet = async () => {

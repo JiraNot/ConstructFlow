@@ -632,11 +632,16 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
   }} onDoubleClick={fitView} onPointerDown={event=>{
     if(event.button!==0&&event.button!==1)return
     const rect=event.currentTarget.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top
-    const hit=hitRegions.current.filter(r=>x>=r.x-4&&x<=r.x+r.w+4&&y>=r.y-4&&y<=r.y+r.h+4).sort((a,b)=>a.w*a.h-b.w*b.h)[0]
+      // Touch taps need a larger acquisition area than a mouse click. Keep the
+      // smallest projected object first so hosted openings remain selectable
+      // where they overlap their wall.
+      const hitTolerance = event.pointerType === 'touch' ? 22 : event.pointerType === 'pen' ? 12 : 4
+      const hit=hitRegions.current.filter(r=>x>=r.x-hitTolerance&&x<=r.x+r.w+hitTolerance&&y>=r.y-hitTolerance&&y<=r.y+r.h+hitTolerance).sort((a,b)=>a.w*a.h-b.w*b.h)[0]
     const target=hit?.id?project.objects[hit.id]:undefined
     const selectedHit = !!hit && (selectedIds.includes(hit.id) || selectedId === hit.id)
     const gripPoints = hit ? [[hit.x,hit.y],[hit.x+hit.w/2,hit.y],[hit.x+hit.w,hit.y],[hit.x,hit.y+hit.h/2],[hit.x+hit.w,hit.y+hit.h/2],[hit.x,hit.y+hit.h],[hit.x+hit.w/2,hit.y+hit.h],[hit.x+hit.w,hit.y+hit.h]] : []
-    const nearestGrip = selectedHit ? gripPoints.map((point,index)=>({index,distance:Math.hypot(x-point[0],y-point[1])})).filter(item=>activeElevationGrips(target).includes(item.index)&&item.distance<=14).sort((a,b)=>a.distance-b.distance)[0] : undefined
+    const gripTolerance = event.pointerType === 'touch' ? 22 : event.pointerType === 'pen' ? 18 : 14
+    const nearestGrip = selectedHit ? gripPoints.map((point,index)=>({index,distance:Math.hypot(x-point[0],y-point[1])})).filter(item=>activeElevationGrips(target).includes(item.index)&&item.distance<=gripTolerance).sort((a,b)=>a.distance-b.distance)[0] : undefined
     const gripIndex = nearestGrip?.index ?? null
     const panMode=event.button===1
     const view=currentView()
@@ -716,7 +721,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     if(start.id&&project.objects[start.id]?.object_type!=='roof.system'&&Math.hypot(dx,dy)>3&&onMoveObject){const view=viewTransform.current,horizontal=(dx/view.scale)*(view.reversed?-1:1);onMoveObject(start.id,view.isEastWest?[0,horizontal]:[horizontal,0],-dy/view.scale,start.verticalIntent);onSelectObject(start.id)}
   }} onPointerCancel={event=>{pointerDown.current=null;setSelectionBox(null);setManipulationPreview(null);try{event.currentTarget.releasePointerCapture(event.pointerId)}catch{}}}/>
     {selectionBox&&<div aria-hidden="true" style={{position:'absolute',left:Math.min(selectionBox.x1,selectionBox.x2),top:Math.min(selectionBox.y1,selectionBox.y2),width:Math.abs(selectionBox.x2-selectionBox.x1),height:Math.abs(selectionBox.y2-selectionBox.y1),border:'1px solid #0284c7',background:'rgba(2,132,199,.12)',pointerEvents:'none'}}/>}
-    <div role="group" aria-label="ควบคุมสเกลรูปด้าน" style={{position:'absolute',bottom:10,right:10,display:'flex',alignItems:'center',gap: 4,padding: 3,border:'1px solid #dbe3ec',borderRadius: 4,background:'rgba(248,250,252,.94)',boxShadow:'0 2px 8px rgba(15,23,42,.08)'}}>
+    <div className="cf-elevation-controls" role="group" aria-label="ควบคุมสเกลรูปด้าน" style={{position:'absolute',bottom:10,right:10,display:'flex',alignItems:'center',gap: 4,padding: 3,border:'1px solid #dbe3ec',borderRadius: 4,background:'rgba(248,250,252,.94)',boxShadow:'0 2px 8px rgba(15,23,42,.08)'}}>
       <button type="button" aria-label="ย่อรูปด้าน" title="ย่อ" style={controlStyle} onClick={()=>zoomBy(1/1.25)}>−</button>
       <input type="range" min={20} max={800} step={5} value={Math.round(currentView().zoom*100)} aria-label="เปอร์เซ็นต์ซูมรูปด้าน" aria-valuetext={`${Math.round(currentView().zoom*100)}% จากภาพพอดี`} title="ปรับซูมจากภาพพอดี · 20–800%" style={{width:84,accentColor:'#2563eb',cursor:'ew-resize'}} onChange={event=>{
         const view=currentView()
