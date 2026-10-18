@@ -439,7 +439,7 @@ export function validateProjectV2(project: ProjectDocument): void {
       if (!Array.isArray(object.source_refs) || object.source_refs.length > 100) throw new Error(`Invalid project format: object ${id} has invalid source references`)
       const sourceKeys = new Set<string>()
       for (const source of object.source_refs) {
-        if (!source || !['site_survey_point', 'site_survey_boundary', 'underlay'].includes(source.kind) || typeof source.source_id !== 'string' || !source.source_id.trim() || (source.label !== undefined && (typeof source.label !== 'string' || !source.label.trim() || source.label.length > 1000))) throw new Error(`Invalid project format: object ${id} has a malformed source reference`)
+        if (!source || !['site_survey_point', 'site_survey_boundary', 'underlay', 'drawing_page'].includes(source.kind) || typeof source.source_id !== 'string' || !source.source_id.trim() || (source.label !== undefined && (typeof source.label !== 'string' || !source.label.trim() || source.label.length > 1000)) || (source.page_number !== undefined && (!Number.isInteger(source.page_number) || source.page_number < 1)) || (source.evidence !== undefined && (typeof source.evidence !== 'string' || source.evidence.length > 1000)) || (source.confidence !== undefined && !['high', 'medium', 'low'].includes(source.confidence))) throw new Error(`Invalid project format: object ${id} has a malformed source reference`)
         const sourceKey = `${source.kind}:${source.source_id}`
         if (sourceKeys.has(sourceKey)) throw new Error(`Invalid project format: object ${id} has duplicate source references`)
         sourceKeys.add(sourceKey)

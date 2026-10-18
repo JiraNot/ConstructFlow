@@ -5,6 +5,7 @@ import { AlertTriangle, Bot, Check, FileText, LoaderCircle, LogIn, LogOut, Paper
 import { buildAIProjectContext, getAICommandDescriptors } from "../ai/aiCommandCatalog.js";
 import { CommandBus } from "../commands/CommandBus.js";
 const PdfPagePicker = lazy(() => import("./PdfPagePicker.js").then(module => ({ default: module.PdfPagePicker })));
+const DrawingEvidencePreview = lazy(() => import("./DrawingEvidencePreview.js").then(module => ({ default: module.DrawingEvidencePreview })));
 
 interface PreviewResult {
   valid: boolean;
@@ -15,7 +16,11 @@ interface Plan {
   summary: string;
   questions: string[];
   commands: CommandRequest[];
+  object_evidence: DrawingEvidence[];
 }
+interface DrawingPage { filename: string; source_page_number: number; sheet_number: string; title: string; view_kind: string; level_label: string; confidence: "high" | "medium" | "low" }
+interface DrawingEvidence { command_index: number; filename: string; source_page_number: number; region: [number, number, number, number]; evidence: string; confidence: "high" | "medium" | "low" }
+interface ScaleCalibration { filename: string; source_page_number: number; points: [[number, number], [number, number]]; distance_mm: number }
 interface CommandResult { status: string; affected_object_ids?: string[]; errors?: string[] }
 interface AuthStatus { mode: "local" | "gateway"; connected: boolean; email: string; name: string; sharing: boolean }
 interface ChatGPTModel { slug: string; display_name: string }
@@ -25,6 +30,7 @@ interface DrawingAttachment {
   data_url: string;
   file: File;
   source_page_numbers?: number[];
+  scale_calibrations?: ScaleCalibration[];
 }
 
 async function getDrawingRequestAttachment(attachment: DrawingAttachment) {
@@ -89,6 +95,8 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
   const [prompt, setPrompt] = useState("");
   const [drawingAttachments, setDrawingAttachments] = useState<DrawingAttachment[]>([]);
   const [editingPdfIndex, setEditingPdfIndex] = useState<number | null>(null);
+  const [drawingPages, setDrawingPages] = useState<DrawingPage[]>([]);
+  const [analyzing, setAnalyzing] = useState(false);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -227,6 +235,7 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
     setNotice("");
     setPlan(null);
     setPreview(null);
+    setDrawingPages([]);
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), drawingAttachments.length ? 120_000 : 55_000);
     try {
@@ -243,6 +252,7 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
           project_context: buildAIProjectContext(project, selectedIds),
           command_descriptors: descriptors,
           ...(drawingAttachments.length ? { drawing_attachments: await Promise.all(drawingAttachments.map(getDrawingRequestAttachment)) } : {}),
+          scale_calibrations: drawingAttachments.flatMap(attachment => attachment.scale_calibrations ?? []),
           ...(auth.mode === "local" ? { model } : {}),
         }),
       });
@@ -259,7 +269,8 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
         return { name: item.name, input: item.input as Record<string, unknown> };
       });
       const questions = body.questions.filter((question): question is string => typeof question === "string").slice(0, 20);
-      const nextPlan = { summary: body.summary, questions, commands };
+      const evidence = Array.isArray(body.object_evidence) ? body.object_evidence.filter((item): item is DrawingEvidence => !!item && typeof item === "object" && Number.isInteger((item as DrawingEvidence).command_index) && typeof (item as DrawingEvidence).filename === "string" && Number.isInteger((item as DrawingEvidence).source_page_number) && Array.isArray((item as DrawingEvidence).region) && (item as DrawingEvidence).region.length === 4).slice(0, 500) : [];
+      const nextPlan = { summary: body.summary, questions, commands, object_evidence: evidence };
       setPlan(nextPlan);
       if (commands.length && !questions.length) setPreview(await onPreview(commands));
       else setPreview(null);
@@ -271,6 +282,32 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
       window.clearTimeout(timeout);
       setBusy(false);
     }
+  };
+
+  const analyzeDrawings = async () => {
+    if (!drawingAttachments.length) return;
+    setAnalyzing(true); setError(""); setNotice(""); setDrawingPages([]);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 120_000);
+    try {
+      const descriptors = getAICommandDescriptors();
+      const response = await fetch(endpoint.trim(), {
+        method: "POST",
+        headers: auth.mode === "gateway" ? { "Content-Type": "application/json", Authorization: `Bearer ${gatewayToken.trim()}` } : { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({ prompt: "จัดหมวดหน้าแบบที่แนบ ระบุหน้าแปลนและชั้นจากข้อความบนแบบ", project_context: buildAIProjectContext(project, selectedIds), command_descriptors: descriptors, analysis_only: true, drawing_attachments: await Promise.all(drawingAttachments.map(getDrawingRequestAttachment)), ...(auth.mode === "local" ? { model } : {}) }),
+      });
+      const body = await response.json() as Record<string, unknown>;
+      if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : `AI gateway returned HTTP ${response.status}`);
+      const pages = Array.isArray(body.drawing_pages) ? body.drawing_pages.filter((item): item is DrawingPage => !!item && typeof item === "object" && typeof (item as DrawingPage).filename === "string" && Number.isInteger((item as DrawingPage).source_page_number) && typeof (item as DrawingPage).view_kind === "string") : [];
+      setDrawingPages(pages);
+      const grouped = new Map<string, number[]>();
+      for (const page of pages.filter(item => item.view_kind === "floor_plan" && item.confidence !== "low")) grouped.set(page.filename, [...(grouped.get(page.filename) ?? []), page.source_page_number]);
+      setDrawingAttachments(current => current.map(attachment => grouped.has(attachment.filename) ? { ...attachment, source_page_numbers: [...new Set(grouped.get(attachment.filename))].sort((a, b) => a - b) } : attachment));
+      setNotice(pages.length ? `AI จัดหมวดได้ ${pages.length} หน้า · เลือกหน้าแปลนที่ความเชื่อมั่นปานกลางขึ้นไปแล้ว ตรวจรายการก่อนสร้างแผน` : "AI ยังไม่พบหน้าแบบที่จัดหมวดได้ กรุณาเลือกหน้าด้วยตนเอง");
+    } catch (cause) {
+      setError(cause instanceof DOMException && cause.name === "AbortError" ? "วิเคราะห์หน้าแบบนานเกินไป กรุณาลองอีกครั้ง" : cause instanceof Error ? cause.message : String(cause));
+    } finally { window.clearTimeout(timeout); setAnalyzing(false); }
   };
 
   const recheck = async () => {
@@ -291,10 +328,11 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
     setApplying(true);
     setError("");
     try {
-      const currentPreview = await onPreview(plan.commands);
+      const commands = commandsWithEvidence(plan);
+      const currentPreview = await onPreview(commands);
       setPreview(currentPreview);
       if (!currentPreview.valid) return;
-      const result = await onExecute(plan.commands, "ai");
+      const result = await onExecute(commands, "ai");
       if (result.status === "success") {
         setNotice(`ใช้แผน AI แล้ว · ${plan.commands.length} คำสั่ง · กดย้อนกลับเพื่อ undo ทั้งชุด`);
         setPlan(null);
@@ -307,6 +345,29 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
     } finally {
       setApplying(false);
     }
+  };
+
+  const commandsWithEvidence = (currentPlan: Plan): CommandRequest[] => {
+    const commands = [...currentPlan.commands];
+    const refsByObject = new Map<string, NonNullable<ProjectDocument["objects"][string]["source_refs"]>>();
+    currentPlan.object_evidence.forEach(item => {
+      const input = currentPlan.commands[item.command_index]?.input as Record<string, unknown> | undefined;
+      if (!input || !item.filename || !Number.isInteger(item.source_page_number)) return;
+      const objectId = typeof input.id === "string" ? input.id : typeof input.object_id === "string" ? input.object_id : "";
+      if (!objectId) return;
+      const key = `${item.filename}#${item.source_page_number}`;
+      const refs = refsByObject.get(objectId) ?? [...(project.objects[objectId]?.source_refs ?? [])];
+      if (!refs.some(ref => ref.kind === "drawing_page" && ref.source_id === key)) refs.push({ kind: "drawing_page", source_id: key, label: item.filename, page_number: item.source_page_number, evidence: item.evidence, confidence: item.confidence });
+      refsByObject.set(objectId, refs);
+    });
+    const groups = new Map<string, string[]>();
+    const refsBySignature = new Map<string, NonNullable<ProjectDocument["objects"][string]["source_refs"]>>();
+    for (const [id, refs] of refsByObject) {
+      const signature = JSON.stringify(refs)
+      groups.set(signature, [...(groups.get(signature) ?? []), id]); refsBySignature.set(signature, refs)
+    }
+    for (const [signature, ids] of groups) commands.push({ name: "UpdateObjectSourceReferences", input: { object_ids: ids, source_refs: refsBySignature.get(signature) ?? [] } } as CommandRequest);
+    return commands;
   };
 
   return (
@@ -369,7 +430,15 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
       </div>
       {drawingAttachments.some(attachment => attachment.mime_type === "application/pdf") && <p className="cf-ai-privacy">เลือกเฉพาะหน้าแปลนจาก PDF ได้ · ถ้าไม่เลือกจะส่งทั้งเล่ม และ AI จะถามเมื่อแยกชั้นไม่ชัด</p>}
       <p className="cf-ai-privacy">{auth.mode === "local" ? "ใช้ ChatGPT plan ที่คุณอนุญาต · ไฟล์จะส่งเมื่อกดสร้างแผน · token เก็บในเครื่อง" : "คำขอและไฟล์ที่แนบจะส่งไปยัง AI gateway ที่กำหนดเมื่อกดสร้างแผน"}</p>
-      <button className="cf-button cf-button-primary cf-ai-generate" disabled={busy || applying || (auth.mode === "local" && (!auth.connected || !model)) || (auth.mode === "gateway" && (!gatewayToken.trim() || !endpoint.trim())) || (!prompt.trim() && !drawingAttachments.length)} onClick={() => void generate()}>
+      {drawingAttachments.length > 0 && <button type="button" className="cf-button cf-ai-generate" disabled={busy || analyzing || applying || (auth.mode === "local" && (!auth.connected || !model)) || (auth.mode === "gateway" && (!gatewayToken.trim() || !endpoint.trim()))} onClick={() => void analyzeDrawings()}>
+        {analyzing ? <LoaderCircle size={15} className="cf-ai-spin" /> : <FileText size={15} />}
+        {analyzing ? "กำลังแยกหน้าแบบ…" : "AI วิเคราะห์และเลือกหน้าแปลน"}
+      </button>}
+      {drawingPages.length > 0 && <div className="cf-ai-drawing-pages" aria-label="ผลจัดหมวดหน้าแบบ">
+        <strong>หน้าแบบที่ AI อ่านได้</strong>
+        {drawingPages.map((page, index) => <div key={`${page.filename}-${page.source_page_number}-${index}`}><span>{page.filename} · หน้า {page.source_page_number}</span><small>{[page.sheet_number, page.title, page.level_label].filter(Boolean).join(" · ") || page.view_kind} · {page.view_kind === "floor_plan" ? "แปลน" : page.view_kind} · มั่นใจ{page.confidence === "high" ? "สูง" : page.confidence === "medium" ? "ปานกลาง" : "ต่ำ"}</small></div>)}
+      </div>}
+      <button className="cf-button cf-button-primary cf-ai-generate" disabled={busy || analyzing || applying || (auth.mode === "local" && (!auth.connected || !model)) || (auth.mode === "gateway" && (!gatewayToken.trim() || !endpoint.trim())) || (!prompt.trim() && !drawingAttachments.length)} onClick={() => void generate()}>
         {busy ? <LoaderCircle size={15} className="cf-ai-spin" /> : <Bot size={15} />}
         {busy ? "กำลังร่างแผน…" : "สร้างแผนคำสั่ง"}
       </button>
@@ -382,6 +451,14 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
         {plan.commands.length > 0 && <>
           <div className="cf-ai-command-heading"><strong>{plan.commands.length} คำสั่ง</strong><button type="button" className="cf-icon-button" aria-label="ตรวจแผน AI ซ้ำ" onClick={recheck}><RefreshCw size={14} /></button></div>
           <ol className="cf-ai-command-list">{plan.commands.map((command, index) => <li key={`${index}-${command.name}`}><b>{command.name}</b><pre>{JSON.stringify(command.input, null, 2)}</pre></li>)}</ol>
+          {plan.object_evidence.length > 0 && <div className="cf-ai-evidence">
+            <strong>หลักฐานจากแบบ</strong>
+            {plan.object_evidence.map(item => <div key={`${item.command_index}-${item.filename}-${item.source_page_number}`}><span>คำสั่ง {item.command_index + 1} · {item.filename} · หน้า {item.source_page_number}</span><small>{item.evidence || "AI ระบุบริเวณอ้างอิงไว้ให้ตรวจ"} · มั่นใจ{item.confidence === "high" ? "สูง" : item.confidence === "medium" ? "ปานกลาง" : "ต่ำ"}</small></div>)}
+            {[...new Map(plan.object_evidence.map(item => [`${item.filename}#${item.source_page_number}`, { filename: item.filename, page: item.source_page_number, regions: plan.object_evidence.filter(candidate => candidate.filename === item.filename && candidate.source_page_number === item.source_page_number).map(candidate => ({ region: candidate.region, label: `คำสั่ง ${candidate.command_index + 1}` })) }])).values()].map(group => {
+              const attachment = drawingAttachments.find(candidate => candidate.filename === group.filename)
+              return attachment?.mime_type === "application/pdf" ? <Suspense key={`${group.filename}-${group.page}`} fallback={<small>กำลังเปิดภาพอ้างอิง…</small>}><DrawingEvidencePreview file={attachment.file} pageNumber={group.page} regions={group.regions} /></Suspense> : null
+            })}
+          </div>}
           {preview && <p className={preview.valid ? "cf-ai-valid" : "cf-ai-error"} role="status">
             {preview.valid ? `ผ่าน validation · กระทบ ${preview.affected_object_ids.length} วัตถุ` : preview.errors.join(" · ") || "ไม่ผ่าน validation"}
           </p>}
@@ -394,10 +471,12 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
       {editingPdfIndex !== null && drawingAttachments[editingPdfIndex] && <Suspense fallback={<p role="status" className="cf-ai-privacy">กำลังเปิดตัวเลือกหน้า PDF…</p>}><PdfPagePicker
         file={drawingAttachments[editingPdfIndex].file}
         selectedPages={drawingAttachments[editingPdfIndex].source_page_numbers}
+        suggestedPages={drawingPages.filter(page => page.filename === drawingAttachments[editingPdfIndex!]?.filename && page.view_kind === "floor_plan" && page.confidence !== "low").map(page => page.source_page_number)}
+        scaleCalibrations={drawingAttachments[editingPdfIndex].scale_calibrations}
         onClose={() => setEditingPdfIndex(null)}
-        onConfirm={pages => {
+        onConfirm={(pages, calibrations) => {
           setDrawingAttachments(current => current.map((attachment, index) => index === editingPdfIndex
-            ? { ...attachment, source_page_numbers: pages.length ? pages : undefined }
+            ? { ...attachment, source_page_numbers: pages.length ? pages : undefined, scale_calibrations: calibrations }
             : attachment))
           setEditingPdfIndex(null)
           setPlan(null)

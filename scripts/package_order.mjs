@@ -8,6 +8,7 @@ export const domainPackages = [
 ];
 export const packageDirectories = [
   "project-model",
+  "laser-survey",
   "geometry-kernel",
   "command-schema",
   "constraint-engine",

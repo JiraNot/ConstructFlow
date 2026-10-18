@@ -101,13 +101,13 @@ export function executeProjectCommand(context: CommandHandlerContext): CommandBu
       const validUnderlayIds = new Set(Object.keys(updated.underlays ?? {}))
       const keys = new Set<string>()
       for (const source of source_refs) {
-        if (!source || typeof source.source_id !== 'string' || !source.source_id.trim() || !['site_survey_point', 'site_survey_boundary', 'underlay'].includes(source.kind)) {
+        if (!source || typeof source.source_id !== 'string' || !source.source_id.trim() || !['site_survey_point', 'site_survey_boundary', 'underlay', 'drawing_page'].includes(source.kind) || (source.kind === 'drawing_page' && (!Number.isInteger(source.page_number) || source.page_number! < 1))) {
           throw new Error('Project source reference is malformed')
         }
         const key = `${source.kind}:${source.source_id}`
         if (keys.has(key)) throw new Error('Project source references must be unique')
         keys.add(key)
-        const exists = source.kind === 'site_survey_point' ? validPointIds.has(source.source_id)
+        const exists = source.kind === 'drawing_page' ? true : source.kind === 'site_survey_point' ? validPointIds.has(source.source_id)
           : source.kind === 'site_survey_boundary' ? validBoundaryIds.has(source.source_id)
             : validUnderlayIds.has(source.source_id)
         if (!exists) throw new Error(`Project source ${key} does not exist`)

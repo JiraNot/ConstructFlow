@@ -49,10 +49,15 @@ def generate_command_plan(data, *, chatgpt_model=None):
         raise AIPlanError("No AI-eligible command descriptors were supplied")
 
     attachments = validate_drawing_attachments(data.get("drawing_attachments", data.get("drawing_attachment")))
+    analysis_only = data.get("analysis_only") is True
+    scale_calibrations = validate_scale_calibrations(data.get("scale_calibrations", []))
+    attachment_pages = {attachment["filename"]: set(attachment.get("source_page_numbers", [])) for attachment in attachments}
+    if any(calibration["filename"] not in attachment_pages or (attachment_pages[calibration["filename"]] and calibration["source_page_number"] not in attachment_pages[calibration["filename"]]) for calibration in scale_calibrations):
+        raise AIPlanError("scale calibration must refer to a supplied source page")
 
     instruction = (
         "You are ConstructFlow's BIM authoring planner. Return only a JSON object with keys "
-        "summary (string), questions (array of strings), and commands (array of {name,input}). "
+        "summary (string), questions (array of strings), commands (array of {name,input}), drawing_pages (array of page classifications), and object_evidence (array). "
         "Use only command names in the supplied AI-eligible command descriptors and follow their input schemas. "
         "Command coordinates and dimensions are millimetres. Use only supplied project UUIDs and catalog type IDs. "
         "Never invent survey measurements, levels, hosts, or object IDs. If required information is missing or ambiguous, "
@@ -75,6 +80,22 @@ def generate_command_plan(data, *, chatgpt_model=None):
             "or the level/page mapping is unclear, ask the user to choose before emitting commands. State the source page(s) in the summary for every proposed plan. "
             "Use existing catalog types when their dimensions match the drawing."
         )
+        instruction += (
+            " For every proposed model command that is supported by a drawing, return one object_evidence item using its zero-based command_index, "
+            "filename, original source_page_number, normalized image region [left,top,right,bottom] from 0 to 1, a short visible evidence note, "
+            "and confidence. Never fabricate precise regions when the source is unclear; omit that evidence and ask a question instead. "
+            "If user_calibrations are supplied, the two normalized points on that PDF page are exactly the stated real-world distance in millimetres; "
+            "use them to derive scale and dimensions. Image origin is top-left, X right, Y down; geometry should be placed relative to the project origin "
+            "only when project context establishes it, otherwise ask the user to position/align the imported plan."
+        )
+    if analysis_only:
+        instruction += (
+            " This is a drawing classification request only. Do not create model commands. Return commands as an empty array. "
+            "Classify each supplied original PDF page, preserving source page numbers. For every clearly identifiable plan page, "
+            "return an item in drawing_pages with filename, source_page_number, sheet_number, title, view_kind "
+            "(floor_plan, elevation, section, detail, schedule, site_plan, or unknown), level_label, and confidence (high, medium, low). "
+            "Do not classify a page as a floor plan unless the drawing content supports it. Return questions for ambiguous floor/level mapping."
+        )
     user_input = json.dumps({
         "request": prompt.strip(),
         "project_context": context,
@@ -82,6 +103,7 @@ def generate_command_plan(data, *, chatgpt_model=None):
             {"filename": attachment["filename"], "source_page_numbers": attachment.get("source_page_numbers", [])}
             for attachment in attachments
         ],
+        "user_calibrations": scale_calibrations,
         "ai_command_descriptors": list(allowed.values()),
     }, ensure_ascii=False)
 
@@ -173,8 +195,68 @@ def generate_command_plan(data, *, chatgpt_model=None):
     return {
         "summary": str(plan.get("summary", "แผนคำสั่งพร้อมตรวจสอบ"))[:2_000],
         "questions": questions[:20],
-        "commands": validated,
+        "commands": [] if analysis_only else validated,
+        "drawing_pages": validate_drawing_pages(plan.get("drawing_pages", []), attachments),
+        "object_evidence": validate_object_evidence(plan.get("object_evidence", []), len(validated), attachments) if not analysis_only else [],
     }
+
+
+def validate_scale_calibrations(value):
+    if not isinstance(value, list) or len(value) > 100:
+        raise AIPlanError("scale_calibrations must be a bounded list")
+    results = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise AIPlanError("scale calibration is malformed")
+        page = item.get("source_page_number")
+        distance = item.get("distance_mm")
+        points = item.get("points")
+        if type(page) is not int or page < 1 or not isinstance(distance, (int, float)) or not 1 <= distance <= 1_000_000 or not isinstance(points, list) or len(points) != 2:
+            raise AIPlanError("scale calibration requires a page, two points, and a known distance")
+        if any(not isinstance(point, list) or len(point) != 2 or any(not isinstance(axis, (int, float)) or not 0 <= axis <= 1 for axis in point) for point in points):
+            raise AIPlanError("scale calibration points must be normalized page coordinates")
+        results.append({"filename": str(item.get("filename", ""))[:255], "source_page_number": page, "distance_mm": distance, "points": points})
+    return results
+
+
+def validate_drawing_pages(value, attachments):
+    if not isinstance(value, list) or len(value) > 1000:
+        raise AIProviderError("AI provider returned invalid drawing page classifications")
+    valid_files = {attachment["filename"]: set(attachment.get("source_page_numbers", [])) for attachment in attachments}
+    result = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise AIProviderError("AI provider returned a malformed drawing page classification")
+        filename, page = item.get("filename"), item.get("source_page_number")
+        view_kind, confidence = item.get("view_kind"), item.get("confidence")
+        if filename not in valid_files or type(page) is not int or page < 1 or (valid_files[filename] and page not in valid_files[filename]):
+            raise AIProviderError("AI provider cited a drawing page that was not supplied")
+        if view_kind not in {"floor_plan", "elevation", "section", "detail", "schedule", "site_plan", "unknown"} or confidence not in {"high", "medium", "low"}:
+            raise AIProviderError("AI provider returned invalid drawing page metadata")
+        result.append({"filename": filename, "source_page_number": page, "sheet_number": str(item.get("sheet_number", ""))[:100], "title": str(item.get("title", ""))[:300], "view_kind": view_kind, "level_label": str(item.get("level_label", ""))[:100], "confidence": confidence})
+    return result
+
+
+def validate_object_evidence(value, command_count, attachments):
+    if not isinstance(value, list) or len(value) > min(500, command_count):
+        raise AIProviderError("AI provider returned invalid object evidence")
+    source_pages = {attachment["filename"]: set(attachment.get("source_page_numbers", [])) for attachment in attachments}
+    result = []
+    indices = set()
+    for item in value:
+        if not isinstance(item, dict):
+            raise AIProviderError("AI provider returned malformed object evidence")
+        index, filename, page = item.get("command_index"), item.get("filename"), item.get("source_page_number")
+        region, confidence = item.get("region"), item.get("confidence")
+        if type(index) is not int or not 0 <= index < command_count or index in indices or filename not in source_pages or type(page) is not int or page < 1 or (source_pages[filename] and page not in source_pages[filename]):
+            raise AIProviderError("AI provider cited invalid object evidence")
+        if not isinstance(region, list) or len(region) != 4 or any(not isinstance(value, (int, float)) or not 0 <= value <= 1 for value in region) or region[2] <= region[0] or region[3] <= region[1]:
+            raise AIProviderError("AI provider returned an invalid evidence region")
+        if confidence not in {"high", "medium", "low"}:
+            raise AIProviderError("AI provider returned invalid evidence confidence")
+        indices.add(index)
+        result.append({"command_index": index, "filename": filename, "source_page_number": page, "region": region, "evidence": str(item.get("evidence", ""))[:1000], "confidence": confidence})
+    return result
 
 
 def validate_drawing_attachments(value):

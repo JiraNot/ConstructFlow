@@ -502,5 +502,61 @@ class McpBridgeServerTest(unittest.TestCase):
                 "filename": "large.pdf", "mime_type": "application/pdf", "data_url": f"data:application/pdf;base64,{too_large}",
             })
 
+    def test_drawing_page_analysis_and_user_scale_calibration_validation(self):
+        import ai_provider
+        attachments = [{"filename": "plans.pdf", "mime_type": "application/pdf", "data_url": "data:application/pdf;base64,JVBERi0xLjQK", "source_page_numbers": [3, 6]}]
+        calibrations = ai_provider.validate_scale_calibrations([{
+            "filename": "plans.pdf", "source_page_number": 3, "points": [[0.2, 0.4], [0.8, 0.4]], "distance_mm": 4000,
+        }])
+        self.assertEqual(calibrations[0]["distance_mm"], 4000)
+        pages = ai_provider.validate_drawing_pages([{
+            "filename": "plans.pdf", "source_page_number": 6, "sheet_number": "A-02", "title": "ชั้นบน",
+            "view_kind": "floor_plan", "level_label": "ชั้น 2", "confidence": "high",
+        }], attachments)
+        self.assertEqual(pages[0]["source_page_number"], 6)
+        with self.assertRaisesRegex(ai_provider.AIProviderError, "not supplied"):
+            ai_provider.validate_drawing_pages([{
+                "filename": "plans.pdf", "source_page_number": 2, "view_kind": "floor_plan", "confidence": "high",
+            }], attachments)
+        with self.assertRaises(ai_provider.AIPlanError):
+            ai_provider.validate_scale_calibrations([{
+                "filename": "plans.pdf", "source_page_number": 3, "points": [[-0.1, 0.4], [0.8, 0.4]], "distance_mm": 4000,
+            }])
+
+    def test_ai_analysis_only_classifies_pages_without_returning_commands(self):
+        import ai_provider
+        provider_body = {"choices": [{"message": {"content": json.dumps({
+            "summary": "พบแปลนชั้นล่างและชั้นบน", "questions": [], "commands": [{"name": "CreateWall", "input": {}}],
+            "drawing_pages": [{"filename": "house.pdf", "source_page_number": 3, "sheet_number": "A-02", "title": "แปลนชั้นบน", "view_kind": "floor_plan", "level_label": "ชั้น 2", "confidence": "high"}],
+        })}}]}
+
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+            def read(self, size=-1): return json.dumps(provider_body).encode("utf-8")[:size]
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "server-only-secret"}), patch.object(ai_provider, "urlopen", return_value=FakeResponse()):
+            result = ai_provider.generate_command_plan({
+                "prompt": "classify drawings", "analysis_only": True, "project_context": {},
+                "drawing_attachments": [{"filename": "house.pdf", "mime_type": "application/pdf", "data_url": "data:application/pdf;base64,JVBERi0xLjQK"}],
+                "command_descriptors": [{"name": "CreateWall", "ai_allowed": True, "input_schema": {"type": "object", "properties": {}}}],
+            })
+        self.assertEqual(result["commands"], [])
+        self.assertEqual(result["drawing_pages"][0]["source_page_number"], 3)
+
+    def test_ai_drawing_evidence_requires_normalized_region_and_supplied_page(self):
+        import ai_provider
+        attachments = [{"filename": "plans.pdf", "source_page_numbers": [3]}]
+        evidence = ai_provider.validate_object_evidence([{
+            "command_index": 0, "filename": "plans.pdf", "source_page_number": 3,
+            "region": [0.1, 0.2, 0.6, 0.8], "evidence": "แนวผนังภายนอก", "confidence": "medium",
+        }], 1, attachments)
+        self.assertEqual(evidence[0]["region"], [0.1, 0.2, 0.6, 0.8])
+        with self.assertRaisesRegex(ai_provider.AIProviderError, "invalid object evidence"):
+            ai_provider.validate_object_evidence([{
+                "command_index": 0, "filename": "plans.pdf", "source_page_number": 4,
+                "region": [0.1, 0.2, 0.6, 0.8], "confidence": "medium",
+            }], 1, attachments)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

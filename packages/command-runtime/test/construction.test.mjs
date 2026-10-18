@@ -606,6 +606,7 @@ test('model objects keep traceable survey and underlay sources through undo, red
     { kind: 'site_survey_point', source_id: 'P1' },
     { kind: 'site_survey_boundary', source_id: 'LOT-9' },
     { kind: 'underlay', source_id: 'plan:level-ground' },
+    { kind: 'drawing_page', source_id: 'customer-plan.pdf#3', label: 'customer-plan.pdf', page_number: 3, evidence: 'Exterior wall', confidence: 'medium' },
   ];
   assert.equal(session.execute([{ name: 'UpdateObjectSourceReferences', input: { object_ids: [wallId], source_refs } }]).status, 'success');
   assert.deepEqual(session.project.objects[wallId].source_refs, source_refs);

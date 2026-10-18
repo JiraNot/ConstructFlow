@@ -11,10 +11,15 @@ export type SmartObjectStatus = 'active' | 'warning' | 'invalid' | 'archived'
 
 /** Persistent provenance link from a model object to an imported project input. */
 export interface ProjectSourceReference {
-  kind: 'site_survey_point' | 'site_survey_boundary' | 'underlay'
+  kind: 'site_survey_point' | 'site_survey_boundary' | 'underlay' | 'drawing_page'
   source_id: string
   /** Human-readable snapshot retained if the imported source is later detached. */
   label?: string
+  /** Original page number for a source drawing. */
+  page_number?: number
+  /** Short source evidence captured at review time. */
+  evidence?: string
+  confidence?: 'high' | 'medium' | 'low'
 }
 
 export interface Level {

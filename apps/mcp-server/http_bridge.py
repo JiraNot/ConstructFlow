@@ -106,6 +106,8 @@ OPENAPI_SPEC = {
                             "project_context": {"type": "object"},
                             "command_descriptors": {"type": "array", "minItems": 1, "maxItems": 250},
                             "drawing_attachments": {"type": "array", "maxItems": 8, "description": "Optional user-selected PDF, JPG, or PNG drawings. Combined decoded size is limited to 20 MB."},
+                            "analysis_only": {"type": "boolean", "description": "Classify drawing pages without proposing or executing model commands."},
+                            "scale_calibrations": {"type": "array", "maxItems": 100, "description": "User-confirmed known distances between normalized points on source pages."},
                         },
                     }}}
                 },

@@ -52,7 +52,9 @@ export function SourceReferencesProperties({ project, object, onUpdate }: Props)
     <div style={{ display: 'grid', gap: 4, marginBottom: 6 }}>
       {linked.map(source => {
         const option = sources.find(candidate => candidate.key === sourceKey(source))
-        const label = option?.label ?? `${source.label ?? `${source.kind} · ${source.source_id}`} (แหล่งข้อมูลไม่ได้แนบแล้ว)`
+        const label = source.kind === 'drawing_page'
+          ? `แบบ ${source.label ?? source.source_id} · หน้า ${source.page_number ?? '?'}${source.evidence ? ` · ${source.evidence}` : ''}${source.confidence ? ` · มั่นใจ${source.confidence === 'high' ? 'สูง' : source.confidence === 'medium' ? 'ปานกลาง' : 'ต่ำ'}` : ''}`
+          : option?.label ?? `${source.label ?? `${source.kind} · ${source.source_id}`} (แหล่งข้อมูลไม่ได้แนบแล้ว)`
         return <div key={sourceKey(source)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', borderRadius: 3, background: '#f5f8fc', fontSize: 11 }}>
           <span style={{ flex: 1, overflowWrap: 'anywhere' }}>{label}</span>
           <button type="button" aria-label={`ลบแหล่งอ้างอิง ${source.source_id}`} onClick={() => onUpdate(object.id, linked.filter(item => sourceKey(item) !== sourceKey(source)))} style={{ border: 0, background: 'transparent', color: '#b91c1c', cursor: 'pointer' }}>ลบ</button>
