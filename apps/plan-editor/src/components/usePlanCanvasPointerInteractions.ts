@@ -49,7 +49,7 @@ interface UsePlanCanvasPointerInteractionsOptions {
   placement: ReturnType<typeof usePlanCanvasPlacementSession>
   picking: ReturnType<typeof usePlanCanvasPicking>
   dragDimensions: ReturnType<typeof usePlanCanvasDragDimensions>
-  manipulation: Pick<ReturnType<typeof usePlanCanvasManipulationInteractions>, 'previewDragAt' | 'lastPreviewValidationRef' | 'buildDragCommands'>
+  manipulation: Pick<ReturnType<typeof usePlanCanvasManipulationInteractions>, 'previewDragAt' | 'lastPreviewValidationRef' | 'buildDragCommands' | 'cancelPendingPreview'>
   resizeDimensionWidth: (value: string) => void
   resizeDimensionHeight: (value: string) => void
   resizeDimensionLength: (value: string) => void
@@ -164,6 +164,7 @@ export function usePlanCanvasPointerInteractions({
       onSelectObject: callbacks.onSelectObject, eraseActiveRef, erasedIdsRef,
       onDeleteObjects: callbacks.onDeleteObjects, draggingObject,
       manualDragPointRef: dragDimensions.manualPointRef, buildDragCommands: manipulation.buildDragCommands,
+      cancelPendingPreview: manipulation.cancelPendingPreview,
       onPreviewManipulation: callbacks.onPreviewManipulation, onCommitManipulation: callbacks.onCommitManipulation,
       onManipulationRejected: callbacks.onManipulationRejected, setDraggingObject, setDragPreviewPoint,
       setResizeDimensionWidth: resizeDimensionWidth, setResizeDimensionHeight: resizeDimensionHeight,

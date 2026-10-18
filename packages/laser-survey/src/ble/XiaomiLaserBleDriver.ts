@@ -229,8 +229,8 @@ export class XiaomiLaserBleDriver {
                 this.handleCharacteristicValueChanged(target.value)
               }
             })
-            this.dataChar = char
             console.log(`[XiaomiLaserBleDriver] Subscribed notifications on: ${char.uuid}`)
+            this.dataChar = char
           } catch (e) {
             console.warn(`[XiaomiLaserBleDriver] Could not start notifications on ${char.uuid}:`, e)
           }

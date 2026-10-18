@@ -8,7 +8,7 @@ import type { PlanCanvasProps } from './PlanCanvas.types.js'
 import type { ToolType } from './Toolbar.js'
 
 type Point = [number, number]
-interface Props {
+export interface PlanDimensionLayerProps {
   project: ProjectDocument
   planProject: ProjectDocument
   viewport: ViewportState
@@ -24,7 +24,7 @@ interface Props {
 }
 
 /** Drafting annotations have their own focus and gestures; all saves use project commands. */
-export function PlanDimensionLayer({ project, planProject, viewport, displayUnit, activeTool, points, pointer, snapModes, onCommit, onPreview, onRejected, onClearObjectSelection }: Props) {
+export function PlanDimensionLayer({ project, planProject, viewport, displayUnit, activeTool, points, pointer, snapModes, onCommit, onPreview, onRejected, onClearObjectSelection }: PlanDimensionLayerProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const drag = useRef<{ original: PlanDimension; kind: 'start' | 'end' | 'offset'; client: Point; offset: number } | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)

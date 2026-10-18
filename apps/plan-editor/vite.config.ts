@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import preact from '@preact/preset-vite'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -88,7 +88,7 @@ export default defineConfig(({ command }) => {
   }
   const aiGatewayTarget = process.env.CONSTRUCTFLOW_AI_GATEWAY_TARGET ?? 'http://127.0.0.1:8000'
   return {
-  plugins: [react(), fileAcceptanceDiskPlugin()],
+  plugins: [preact(), fileAcceptanceDiskPlugin()],
   optimizeDeps: { include: ['@constructflow/geometry-kernel > earcut', 'three', 'three/addons/controls/OrbitControls.js', 'three/addons/loaders/GLTFLoader.js', 'three/addons/loaders/OBJLoader.js', '@mlightcad/libredwg-web'] },
   resolve: {
     alias: {
@@ -111,17 +111,14 @@ export default defineConfig(({ command }) => {
     headers: securityHeaders,
   },
   build: {
+    minify: 'terser',
+    terserOptions: { compress: { passes: 2 } },
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (id.includes('/node_modules/three/')) return 'three-vendor'
           if (id.includes('/node_modules/pdf-lib/')) return 'pdf-lib-vendor'
           if (id.includes('/node_modules/@pdf-lib/fontkit/')) return 'pdf-font-vendor'
-          if (
-            id.includes('/node_modules/react-dom/') ||
-            id.includes('/node_modules/react/') ||
-            id.includes('/node_modules/scheduler/')
-          ) return 'react-vendor'
         },
       },
     },

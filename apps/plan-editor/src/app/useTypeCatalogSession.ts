@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ProjectDocument, TypeDefinition } from '@constructflow/project-model'
 import type { ToolType } from '../components/Toolbar.js'
-import { TOOL_FAMILIES } from '../components/catalogPresentation.js'
+import { TOOL_FAMILIES } from './toolCatalogFamilies.js'
 
 export interface CatalogContext {
   family?: string

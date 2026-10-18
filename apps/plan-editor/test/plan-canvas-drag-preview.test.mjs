@@ -27,37 +27,37 @@ function createOptions(overrides = {}) {
   return { options, calls }
 }
 
-test('released drag validates and commits the built command batch once', () => {
+test('released drag validates and commits the built command batch once', async () => {
   const { options, calls } = createOptions()
-  commitPlanCanvasDragPreview(options)
+  await commitPlanCanvasDragPreview(options)
   assert.equal(calls.built.length, 1)
   assert.equal(calls.previewed.length, 1)
   assert.equal(calls.committed.length, 1)
   assert.deepEqual(calls.rejected, [])
 })
 
-test('manual dimensions allow a sub-threshold release and disable snapping', () => {
+test('manual dimensions allow a sub-threshold release and disable snapping', async () => {
   const { options, calls } = createOptions({ movedPixels: 0.5, hasManualDimensions: true })
-  commitPlanCanvasDragPreview(options)
+  await commitPlanCanvasDragPreview(options)
   assert.equal(calls.built.length, 1)
   assert.equal(calls.built[0].ctrlKey, true)
   assert.equal(calls.committed.length, 1)
 })
 
-test('small pointer jitter without dimensions does not build, preview, or commit commands', () => {
+test('small pointer jitter without dimensions does not build, preview, or commit commands', async () => {
   const { options, calls } = createOptions({ movedPixels: 2.9 })
-  commitPlanCanvasDragPreview(options)
+  await commitPlanCanvasDragPreview(options)
   assert.deepEqual(calls, { built: [], previewed: [], committed: [], rejected: [] })
 })
 
-test('invalid candidate is rejected without dispatching a commit', () => {
+test('invalid candidate is rejected without dispatching a commit', async () => {
   const { options, calls } = createOptions({
     preview: commands => {
       calls.previewed.push(commands)
       return { valid: false, project: {}, affected_object_ids: [], errors: ['blocked'] }
     },
   })
-  commitPlanCanvasDragPreview(options)
+  await commitPlanCanvasDragPreview(options)
   assert.equal(calls.committed.length, 0)
   assert.deepEqual(calls.rejected, [['blocked']])
 })

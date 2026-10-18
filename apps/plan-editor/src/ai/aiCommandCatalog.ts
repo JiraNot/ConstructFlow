@@ -20,6 +20,7 @@ const builtInCommands: ModuleCommandDescriptor[] = [
     input_schema: {
       type: "object",
       properties: {
+        id: { type: "string", format: "uuid", description: "A fresh UUID for this new wall; use it as an opening host reference if needed" },
         mark: { type: "string" },
         start_point_mm: pointSchema,
         end_point_mm: pointSchema,
@@ -27,6 +28,7 @@ const builtInCommands: ModuleCommandDescriptor[] = [
         height_mm: { type: "number", exclusiveMinimum: 0 },
         level_id: { type: "string" },
         type_id: { type: "string" },
+        phase: { type: "string", enum: ["existing", "demolition", "new_construction"] },
       },
       required: ["start_point_mm", "end_point_mm", "thickness_mm", "height_mm"],
     },
@@ -83,6 +85,7 @@ const builtInCommands: ModuleCommandDescriptor[] = [
     input_schema: {
       type: "object",
       properties: {
+        id: { type: "string", format: "uuid" },
         mark: { type: "string" },
         wall_id: { type: "string" },
         offset_along_wall_mm: { type: "number", minimum: 0 },
@@ -90,6 +93,7 @@ const builtInCommands: ModuleCommandDescriptor[] = [
         height_mm: { type: "number", exclusiveMinimum: 0 },
         type_id: { type: "string" },
         level_id: { type: "string" },
+        phase: { type: "string", enum: ["existing", "demolition", "new_construction"] },
       },
       required: ["wall_id", "offset_along_wall_mm", "width_mm", "height_mm"],
     },
@@ -104,6 +108,7 @@ const builtInCommands: ModuleCommandDescriptor[] = [
     input_schema: {
       type: "object",
       properties: {
+        id: { type: "string", format: "uuid" },
         mark: { type: "string" },
         wall_id: { type: "string" },
         offset_along_wall_mm: { type: "number", minimum: 0 },
@@ -112,6 +117,7 @@ const builtInCommands: ModuleCommandDescriptor[] = [
         sill_height_mm: { type: "number", minimum: 0 },
         type_id: { type: "string" },
         level_id: { type: "string" },
+        phase: { type: "string", enum: ["existing", "demolition", "new_construction"] },
       },
       required: ["wall_id", "offset_along_wall_mm", "width_mm", "height_mm"],
     },

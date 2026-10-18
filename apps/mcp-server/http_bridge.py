@@ -105,6 +105,7 @@ OPENAPI_SPEC = {
                             "prompt": {"type": "string", "maxLength": 8000},
                             "project_context": {"type": "object"},
                             "command_descriptors": {"type": "array", "minItems": 1, "maxItems": 250},
+                            "drawing_attachments": {"type": "array", "maxItems": 8, "description": "Optional user-selected PDF, JPG, or PNG drawings. Combined decoded size is limited to 20 MB."},
                         },
                     }}}
                 },
@@ -351,7 +352,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self._json_response(503, {"error": "AI gateway is at capacity; retry shortly"})
                 return
             try:
-                data = self._read_json_body(128_000)
+                data = self._read_json_body(30 * 1024 * 1024)
                 if local_auth_mode:
                     model = data.pop("model", "") or chatgpt_auth.selected_model()
                     result = generate_command_plan(data, chatgpt_model=model)

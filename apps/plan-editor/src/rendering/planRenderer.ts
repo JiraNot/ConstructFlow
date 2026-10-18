@@ -30,6 +30,9 @@ import type { PlanDiscipline } from '@constructflow/representation-engine'
 import { getRoofEaveBoundary, solveRoofFraming } from '@constructflow/roof-engine'
 import type { RoofModuleData } from '@constructflow/project-model'
 import { beginPlanLabels, queuePlanLabel, flushPlanLabels, planLabelScale } from './planLabels.js'
+import { DEFAULT_PLAN_LABEL_VISIBILITY, type CalibrationOverlay, type PlanLabelVisibility, type PlacementGhost, type UnderlayConfig } from './planRendererTypes.js'
+export type { CalibrationOverlay, PlanLabelVisibility, PlacementGhost, UnderlayConfig } from './planRendererTypes.js'
+export { DEFAULT_PLAN_LABEL_VISIBILITY } from './planRendererTypes.js'
 
 interface CachedPlanSourceData {
   visibleObjectIds: Set<string>
@@ -119,39 +122,6 @@ function openingValue(project: ProjectDocument, object: SmartObject, field: stri
   return overrides?.[field] ?? data[field] ?? type?.parameters[field] ?? fallback
 }
 
-export interface UnderlayConfig {
-  image: HTMLImageElement | null
-  source_file?: string
-  scale_source?: 'declared_units' | 'assumed_units' | 'calibrated'
-  origin_mm: [number, number]
-  scale_mm_per_px: number
-  opacity: number
-  visible: boolean
-  rotation_deg?: number
-}
-
-export interface CalibrationOverlay {
-  point1_mm: [number, number] | null
-  point2_mm: [number, number] | null
-  mouse_mm?: [number, number] | null
-}
-
-export interface PlanLabelVisibility {
-  structure: boolean
-  beams?: boolean
-  walls: boolean
-  openings: boolean
-  grids: boolean
-}
-
-export const DEFAULT_PLAN_LABEL_VISIBILITY: PlanLabelVisibility = {
-  structure: true,
-  beams: true,
-  walls: true,
-  openings: true,
-  grids: true,
-}
-
 export function renderPlanView(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -180,8 +150,10 @@ export function renderPlanView(
   drawBackgroundCadGrid(ctx, width, height, viewport)
 
   // 2.5 Underlay Image (Floor plan underlay / DWG with scale & opacity)
-  if (underlay && underlay.visible && underlay.image) {
-    drawUnderlayImage(ctx, underlay, viewport)
+  if (underlay) {
+    for (const layer of [underlay, ...(underlay.additional_layers ?? [])]) {
+      if (layer.visible && layer.image) drawUnderlayImage(ctx, layer, viewport)
+    }
   }
 
   // Site survey is the measured reference layer. Keep it above imported underlays and
@@ -2266,29 +2238,6 @@ function drawWindow(
   ctx.restore()
 
   ctx.restore()
-}
-
-export interface PlacementGhost {
-  type: string
-  location_mm: [number, number]
-  target_location_mm?: [number, number]
-  reference_start_mm?: [number, number]
-  size_mm?: [number, number] | [number, number, number]
-  mark?: string
-  handing?: DoorHanding
-  operation?: string
-  panel_count?: number
-  sill_height_mm?: number
-  glazing_material?: string
-  wall_id?: string
-  offset_along_wall_mm?: number
-  stair?: import('@constructflow/project-model').StairModuleData
-  wall_junction_preview?: {
-    point_mm: [number, number]
-    target_count: number
-    target_marks: string[]
-    segments_mm: Array<[[number, number], [number, number]]>
-  }
 }
 
 function drawPlacementGhost(

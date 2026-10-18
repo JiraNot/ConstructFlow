@@ -3,8 +3,8 @@
 // The engine reads `project.coordination_settings` itself, so project-level rule overrides and
 // construction slack travel with the .cfproj file and never need separate UI plumbing.
 
-import { useMemo } from 'react'
-import { runCoordination, type CoordinationReport } from '@constructflow/clash-engine'
+import { useEffect, useState } from 'react'
+import type { CoordinationReport } from '@constructflow/clash-engine'
 import type { ProjectDocument } from '@constructflow/project-model'
 
 export interface CoordinationReportState {
@@ -17,13 +17,25 @@ export interface CoordinationReportState {
  * Pass `enabled: false` for heavy documents where the user has switched overlay review off.
  */
 export function useCoordinationReport(project: ProjectDocument, enabled = true): CoordinationReportState {
-  return useMemo(() => {
-    if (!enabled) return { report: null, error: null }
-    try {
-      return { report: runCoordination(project), error: null }
-    } catch (error) {
-      console.warn('Coordination error:', error)
-      return { report: null, error: error instanceof Error ? error.message : String(error) }
+  const [state, setState] = useState<CoordinationReportState>({ report: null, error: null })
+
+  useEffect(() => {
+    let current = true
+    if (!enabled) {
+      setState({ report: null, error: null })
+      return () => { current = false }
     }
+
+    setState({ report: null, error: null })
+    void import('@constructflow/clash-engine').then(({ runCoordination }) => {
+      if (current) setState({ report: runCoordination(project), error: null })
+    }).catch(error => {
+      if (!current) return
+      console.warn('Coordination error:', error)
+      setState({ report: null, error: error instanceof Error ? error.message : String(error) })
+    })
+    return () => { current = false }
   }, [project, enabled])
+
+  return enabled ? state : { report: null, error: null }
 }

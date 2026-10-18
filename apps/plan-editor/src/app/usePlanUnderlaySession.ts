@@ -29,45 +29,81 @@ export function usePlanUnderlaySession({
   const underlayKey = `${viewMode}:${activeLevelId}`
   const hydratedUnderlayRef = useRef<string | null>(null)
   const canCalibrateUnderlayRef = useRef(false)
-  canCalibrateUnderlayRef.current = !!underlay.image && underlay.visible
+  const allUnderlays = [underlay, ...(underlay.additional_layers ?? [])]
+  canCalibrateUnderlayRef.current = allUnderlays.some(layer => !!layer.image && layer.visible)
   const calibrationPointsRef = useRef<{ first: [number, number]; second: [number, number] } | null>(null)
 
   useEffect(() => {
-    const saved = project.underlays?.[underlayKey]
-    if (!saved) {
-      if (hydratedUnderlayRef.current !== underlayKey) {
-        hydratedUnderlayRef.current = underlayKey
-        setUnderlay(current => ({ ...current, image: null }))
-      }
-      return
-    }
-    if (hydratedUnderlayRef.current === `${underlayKey}:${saved.data_url}`) return
+    const savedEntries = Object.entries(project.underlays ?? {}).filter(([key, saved]) =>
+      key === underlayKey || (saved.view_id === viewMode && saved.level_id === activeLevelId),
+    )
+    const signature = `${underlayKey}:${savedEntries.map(([key, saved]) => `${key}:${saved.data_url}:${saved.visible}`).join('|')}`
+    if (hydratedUnderlayRef.current === signature) return
     let isCurrent = true
-    const image = new Image()
-    image.onload = () => {
+    const loaded = Promise.all(savedEntries.map(([key, saved]) => new Promise<UnderlayConfig | null>(resolve => {
+      const image = new Image()
+      image.onload = () => {
+        image.dataset.projectSrc = saved.data_url
+        resolve({
+          image, storage_key: key, drawing_id: saved.drawing_id, display_name: saved.display_name,
+          view_id: saved.view_id, level_id: saved.level_id, source_file: saved.source_file,
+          source_kind: saved.source_kind, source_layout: saved.source_layout, source_region: saved.source_region,
+          scale_source: saved.scale_source, origin_mm: saved.origin_mm, scale_mm_per_px: saved.scale_mm_per_px,
+          rotation_deg: saved.rotation_deg, opacity: saved.opacity, visible: saved.visible,
+        })
+      }
+      image.onerror = () => resolve(null)
+      image.src = saved.data_url
+    })))
+    void loaded.then(layers => {
       if (!isCurrent) return
-      image.dataset.projectSrc = saved.data_url
-      hydratedUnderlayRef.current = `${underlayKey}:${saved.data_url}`
-      setUnderlay({ image, source_file: saved.source_file, scale_source: saved.scale_source, origin_mm: saved.origin_mm, scale_mm_per_px: saved.scale_mm_per_px, rotation_deg: saved.rotation_deg, opacity: saved.opacity, visible: saved.visible })
-    }
-    image.onerror = () => { if (isCurrent) hydratedUnderlayRef.current = `${underlayKey}:${saved.data_url}` }
-    image.src = saved.data_url
+      hydratedUnderlayRef.current = signature
+      const validLayers = layers.filter((layer): layer is UnderlayConfig => layer !== null)
+      const legacy = validLayers.find(layer => layer.storage_key === underlayKey && !layer.drawing_id)
+      const primary = legacy ?? validLayers[0]
+      const additional = validLayers.filter(layer => layer !== primary)
+      setUnderlay(primary
+        ? { ...primary, additional_layers: additional }
+        : { image: null, origin_mm: [0, 0], scale_mm_per_px: 10, opacity: 0.6, visible: true, rotation_deg: 0, additional_layers: [] })
+    })
     return () => {
       isCurrent = false
-      image.onload = null
-      image.onerror = null
     }
-  }, [project.underlays, underlayKey])
+  }, [project.underlays, underlayKey, viewMode, activeLevelId, setUnderlay])
 
   useEffect(() => {
-    const image = underlay.image
-    const dataUrl = image?.dataset.projectSrc
-    if (!image || !dataUrl || !dataUrl.startsWith('data:image/')) return
-    const value = { data_url: dataUrl, ...(underlay.source_file ? { source_file: underlay.source_file } : {}), ...(underlay.scale_source ? { scale_source: underlay.scale_source } : {}), origin_mm: underlay.origin_mm, scale_mm_per_px: underlay.scale_mm_per_px, rotation_deg: underlay.rotation_deg ?? 0, opacity: underlay.opacity, visible: underlay.visible }
+    const toProjectUnderlay = (layer: UnderlayConfig) => {
+      const image = layer.image
+      const dataUrl = image?.dataset.projectSrc
+      if (!image || !dataUrl || !dataUrl.startsWith('data:image/')) return null
+      return {
+        data_url: dataUrl,
+        ...(layer.drawing_id ? { drawing_id: layer.drawing_id } : {}),
+        ...(layer.display_name ? { display_name: layer.display_name } : {}),
+        ...(layer.view_id ? { view_id: layer.view_id as import('@constructflow/project-model').ProjectViewId } : {}),
+        ...(layer.level_id ? { level_id: layer.level_id } : {}),
+        ...(layer.source_file ? { source_file: layer.source_file } : {}),
+        ...(layer.source_kind ? { source_kind: layer.source_kind } : {}),
+        ...(layer.source_layout ? { source_layout: layer.source_layout } : {}),
+        ...(layer.source_region ? { source_region: layer.source_region } : {}),
+        ...(layer.scale_source ? { scale_source: layer.scale_source } : {}),
+        origin_mm: layer.origin_mm, scale_mm_per_px: layer.scale_mm_per_px,
+        rotation_deg: layer.rotation_deg ?? 0, opacity: layer.opacity, visible: layer.visible,
+      }
+    }
+    const layers = allUnderlays
+    const values = layers.map(layer => ({ key: layer.storage_key ?? underlayKey, value: toProjectUnderlay(layer) })).filter((entry): entry is { key: string; value: NonNullable<ReturnType<typeof toProjectUnderlay>> } => !!entry.value)
+    if (!values.length) return
     const timer = window.setTimeout(() => setProjectState(current => {
-      const existing = current.underlays?.[underlayKey]
-      if (existing && JSON.stringify(existing) === JSON.stringify(value)) return current
-      const updated = { ...current, underlays: { ...current.underlays, [underlayKey]: value } }
+      const next = { ...(current.underlays ?? {}) }
+      let changed = false
+      for (const { key, value } of values) {
+        if (next[key] && JSON.stringify(next[key]) === JSON.stringify(value)) continue
+        next[key] = value
+        changed = true
+      }
+      if (!changed) return current
+      const updated = { ...current, underlays: next }
       sessionRef.current?.commit(updated)
       return updated
     }), 180)
@@ -75,16 +111,24 @@ export function usePlanUnderlaySession({
   }, [underlay, underlayKey, sessionRef, setProjectState])
 
   const clearUnderlay = () => {
-    setUnderlay(current => ({ ...current, image: null }))
+    setUnderlay({ image: null, origin_mm: [0, 0], scale_mm_per_px: 10, opacity: 0.6, visible: true, rotation_deg: 0, additional_layers: [] })
     setProjectState(current => {
-      if (!current.underlays?.[underlayKey]) return current
+      if (!current.underlays) return current
       const underlays = { ...current.underlays }
       delete underlays[underlayKey]
+      for (const [key, layer] of Object.entries(underlays)) {
+        if (layer.view_id === viewMode && layer.level_id === activeLevelId) delete underlays[key]
+      }
       const updated = { ...current, underlays }
       sessionRef.current?.commit(updated)
       return updated
     })
     hydratedUnderlayRef.current = underlayKey
+  }
+
+  const toggleAllUnderlays = () => {
+    const nextVisible = !allUnderlays.some(layer => layer.image && layer.visible)
+    setUnderlay(current => ({ ...current, visible: nextVisible, additional_layers: (current.additional_layers ?? []).map(layer => ({ ...layer, visible: nextVisible })) }))
   }
 
   const applyCalibrationScale = (newScale: number, axis: 'x' | 'y') => {
@@ -120,6 +164,7 @@ export function usePlanUnderlaySession({
     canCalibrateUnderlayRef,
     calibrationPointsRef,
     clearUnderlay,
+    toggleAllUnderlays,
     applyCalibrationScale,
   }
 }

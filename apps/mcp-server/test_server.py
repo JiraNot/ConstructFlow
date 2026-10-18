@@ -442,6 +442,10 @@ class McpBridgeServerTest(unittest.TestCase):
                     data=json.dumps({
                         "prompt": "สร้างผนัง",
                         "project_context": {"active_level_id": "GF"},
+                        "drawing_attachments": [
+                            {"filename": "floor.pdf", "mime_type": "application/pdf", "data_url": "data:application/pdf;base64,JVBERi0xLjQK"},
+                            {"filename": "plan.png", "mime_type": "image/png", "data_url": "data:image/png;base64,iVBORw0KGgo="},
+                        ],
                         "command_descriptors": [{
                             "name": "CreateWall", "version": 1, "owner_module": "constructflow.architecture",
                             "ai_allowed": True, "confirmation": "none",
@@ -458,7 +462,18 @@ class McpBridgeServerTest(unittest.TestCase):
                 provider_auth, body = received_provider_request[0]
                 self.assertEqual(provider_auth, "Bearer server-only-key")
                 self.assertEqual(body["model"], "test-model")
-                self.assertIn("CreateWall", body["messages"][1]["content"])
+                system_instructions = body["messages"][0]["content"]
+                self.assertIn("multi-page PDF", system_instructions)
+                self.assertIn("PDF page number", system_instructions)
+                self.assertIn("ask the user to choose", system_instructions)
+                user_content = body["messages"][1]["content"]
+                self.assertIsInstance(user_content, list)
+                self.assertIn("CreateWall", user_content[0]["text"])
+                self.assertEqual(user_content[1]["type"], "file")
+                self.assertEqual(user_content[1]["file"]["filename"], "floor.pdf")
+                self.assertEqual(user_content[1]["file"]["file_data"], "data:application/pdf;base64,JVBERi0xLjQK")
+                self.assertEqual(user_content[2]["type"], "image_url")
+                self.assertEqual(user_content[2]["image_url"]["url"], "data:image/png;base64,iVBORw0KGgo=")
                 self.assertNotIn("server-only-key", json.dumps(body))
         finally:
             gateway_http.shutdown()
@@ -467,6 +482,24 @@ class McpBridgeServerTest(unittest.TestCase):
             provider_http.shutdown()
             provider_http.server_close()
             provider_thread.join(timeout=2)
+
+    def test_drawing_attachment_validation_rejects_malformed_type_count_and_total_size(self):
+        import ai_provider
+
+        with self.assertRaises(ai_provider.AIPlanError):
+            ai_provider.validate_drawing_attachments({
+                "filename": "plan.png", "mime_type": "image/png", "data_url": "data:image/png;base64,JVBERi0xLjQK",
+            })
+        with self.assertRaises(ai_provider.AIPlanError):
+            ai_provider.validate_drawing_attachments([
+                {"filename": f"{index}.pdf", "mime_type": "application/pdf", "data_url": "data:application/pdf;base64,JVBERi0xLjQK"}
+                for index in range(9)
+            ])
+        too_large = "A" * (((20 * 1024 * 1024) * 4 // 3) + 4)
+        with self.assertRaises(ai_provider.AIPlanError):
+            ai_provider.validate_drawing_attachments({
+                "filename": "large.pdf", "mime_type": "application/pdf", "data_url": f"data:application/pdf;base64,{too_large}",
+            })
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

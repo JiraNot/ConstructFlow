@@ -1,7 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { ProjectDocument } from '@constructflow/project-model'
 import { readProjectFile, writeProjectFile, type LocalProjectFileHandle } from '../projectFileIO.js'
-import { saveLocalProjectSnapshot } from '../projectAutosave.js'
 
 export interface ProjectFileAccess {
   showOpenFilePicker?: (options: {
@@ -87,6 +86,7 @@ export function useProjectFileActions(options: UseProjectFileActionsOptions) {
         setLocalAutosaveState('saved')
         setFileFeedback(`บันทึกไฟล์ ${projectFileName(project)} แล้ว`)
       } else {
+        const { saveLocalProjectSnapshot } = await import('../projectAutosave.js')
         await saveLocalProjectSnapshot({ projectJson, savedProjectJson, replacementBaselineJson: projectJson })
         setReplacementBaselineJson(projectJson)
         setLocalAutosaveState('saved')

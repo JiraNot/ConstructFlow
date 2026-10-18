@@ -10,6 +10,7 @@ import {
   formatLengthMm,
   type DisplayLengthUnit,
   type ProjectViewTemplate,
+  type ProjectUnderlay,
 } from '@constructflow/project-model'
 import { useProjectSession } from './app/useProjectSession.js'
 import { useEditorObjectSelection } from './app/useEditorObjectSelection.js'
@@ -20,16 +21,15 @@ import { Toolbar, ToolType } from './components/Toolbar.js'
 import type { PlanCanvasProps } from './components/PlanCanvas.types.js'
 import type { CoordinatedElevationNavigation } from './components/ElevationCanvas.js'
 import { EditorViewRenderer } from './components/EditorViewRenderer.js'
-import { LaserBleHudPill } from './components/LaserBleHudPill.js'
 import type { PhotoDimensionSession } from '@constructflow/laser-survey'
 import { useCoordinationReport } from './features/coordination/useCoordinationReport.js'
 import type { ProjectLegalMetadata } from '@constructflow/project-model'
-import { PlanLabelVisibility, DEFAULT_PLAN_LABEL_VISIBILITY } from './rendering/planRenderer.js'
+import { DEFAULT_PLAN_LABEL_VISIBILITY, type PlanLabelVisibility } from './rendering/planRendererTypes.js'
 import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home, Compass, PanelRightOpen } from 'lucide-react'
 import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { usePlanPlacementCommands } from './app/usePlanPlacementCommands.js'
 import { usePropertiesPanelActions } from './app/usePropertiesPanelActions.js'
-import { usePlanAuthoringCommands } from './app/usePlanAuthoringCommands.js'
+import { preloadPlanAuthoringHandlers, usePlanAuthoringCommands } from './app/usePlanAuthoringCommands.js'
 import { useGridAuthoringCommands } from './app/useGridAuthoringCommands.js'
 import { useProjectBrowserCommands } from './app/useProjectBrowserCommands.js'
 import { useTypeCatalogSession } from './app/useTypeCatalogSession.js'
@@ -48,8 +48,11 @@ import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 import { createElevationObjectCommandHandler } from './app/elevationObjectCommands.js'
 import { MultiViewResizeHandle } from './components/MultiViewResizeHandle.js'
 import { ViewModePicker } from './components/ViewModePicker.js'
+import { DwgDrawingPickerModal } from './components/DwgDrawingPickerModal.js'
+import type { DwgDrawingCandidate } from './cad/importDwgUnderlay.js'
 
 const FamilyWorkbench = lazy(() => import('./components/FamilyWorkbench.js').then(module => ({ default: module.FamilyWorkbench })))
+const LaserBleHudPill = lazy(() => import('./components/LaserBleHudPill.js').then(module => ({ default: module.LaserBleHudPill })))
 const EditorInspector = lazy(() => import('./components/EditorInspector.js').then(module => ({ default: module.EditorInspector })))
 const SettingsModal = lazy(() => import('./components/SettingsModal.js').then(module => ({ default: module.SettingsModal })))
 const TypeManagerModal = lazy(() => import('./components/TypeManagerModal.js').then(module => ({ default: module.TypeManagerModal })))
@@ -95,6 +98,9 @@ const phasePickerLabel = (phase: Phase, fallback: string) => {
 }
 
 export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
+  const [dwgPickerState, setDwgPickerState] = useState<{ file: File; candidates: DwgDrawingCandidate[] } | null>(null)
+  const [quickStartDismissed, setQuickStartDismissed] = useState(false)
+  const [laserHudReady, setLaserHudReady] = useState(false)
   const {
     project,
     setProjectState,
@@ -107,6 +113,12 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     previewCommands: previewDirectManipulation,
   } = useProjectSession(() => createDefaultResidentialProjectDocument('CF-UNTITLED', 'Untitled Project'))
   const { selectedId, selectedIds, setSelectedId, setSelectedIds, selectObjects } = useEditorObjectSelection()
+
+  useEffect(() => {
+    // Keep the laser driver and BLE stack off the critical editor startup path.
+    const timer = window.setTimeout(() => setLaserHudReady(true), 700)
+    return () => window.clearTimeout(timer)
+  }, [])
   const {
     projectJson, savedProjectJson, setSavedProjectJson, replacementBaselineJson, setReplacementBaselineJson,
     localAutosaveReady, localAutosaveState, setLocalAutosaveState, activeProjectFileHandle,
@@ -145,6 +157,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
 
   const { activeTool, activation: toolActivation, lastPlacementTool, activate: setActiveTool, repeat: repeatLastTool } = useToolSession()
+  useEffect(() => {
+    if (['door', 'window', 'pipe', 'fixture', 'cabinet', 'furniture', 'moulding', 'archFloor', 'ceiling', 'roomSeparator', 'slabVoid', 'stair'].includes(activeTool)) {
+      void preloadPlanAuthoringHandlers().catch(() => undefined)
+    }
+  }, [activeTool])
   const [planCanvasPreferences, setPlanCanvasPreferences] = useState<PlanCanvasPreferences>(DEFAULT_PLAN_CANVAS_PREFERENCES)
   const [planNavigationViewport, setPlanNavigationViewport] = useState<CoordinatedPlanViewport | null>(null)
   const [elevationNavigation, setElevationNavigation] = useState<CoordinatedElevationNavigation>({ zoom: 1, panY: 0, panXNorthSouth: 0, panXEastWest: 0 })
@@ -176,6 +193,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
   const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
   const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination' | 'ai' | 'extensions'>('properties')
+  useEffect(() => {
+    if (rightPanelTab === 'objects') void import('./app/planTransformHandlers.js').catch(() => undefined)
+  }, [rightPanelTab])
   const moduleRegistryRevision = useSyncExternalStore(
     listener => CommandBus.subscribeToModules(listener),
     () => CommandBus.getModuleRegistryRevision(),
@@ -183,10 +203,16 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   )
   const moduleUIContributions = useMemo(() => CommandBus.getModuleUIContributions(), [moduleRegistryRevision])
   const moduleCommandDescriptors = useMemo(() => CommandBus.getModuleCommandDescriptors(), [moduleRegistryRevision])
-  const coordination = useCoordinationReport(project, true)
-  const coordinationFindings = coordination.report?.findings ?? []
   const [isSettingsOpen,setIsSettingsOpen] = useState(false)
   const [inspectorOpen,setInspectorOpen] = useState(() => window.innerWidth > 1180 && !window.matchMedia('(pointer: coarse)').matches)
+  const coordinationViews = splitViewEnabled ? paneModes : [viewMode]
+  const coordinationNeeded = (inspectorOpen && rightPanelTab === 'coordination')
+    || coordinationViews.some(mode => !['plan', 'framing', 'roofplan'].includes(mode))
+  const coordination = useCoordinationReport(project, coordinationNeeded)
+  const coordinationFindings = coordination.report?.findings ?? []
+  useEffect(() => {
+    if (selectedId && inspectorOpen) void import('./app/propertiesPanelActionHandlers.js').catch(() => undefined)
+  }, [selectedId, inspectorOpen])
   const [workbenchTab,setWorkbenchTab] = useState<'model'|'sheets'>('model')
   const [isConstructionOpen,setIsConstructionOpen]=useState(false)
   const {
@@ -265,11 +291,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
 
   useEffect(() => {
-    if (!underlay.image || !underlay.visible) {
+    if (![underlay, ...(underlay.additional_layers ?? [])].some(layer => layer.image && layer.visible)) {
       if (activeTool === 'calibrate') setActiveTool('select')
       setCalibrationModalOpen(false)
     }
-  }, [underlay.image, underlay.visible, activeTool])
+  }, [underlay, activeTool])
 
   useEffect(() => {
     if (localAutosaveState !== 'error') return
@@ -323,7 +349,6 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     handleCommitBeam,
     handleCommitWall,
     handleCommitSlab,
-    runArchitectureCommand,
     handleCommitRoof,
   } = usePlanPlacementCommands({
     project,
@@ -350,8 +375,14 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const { handleCommitGrid, handleCopyGrid, handleCommitGridSystem } = useGridAuthoringCommands({
     project, dispatchCommandBatch, setFileFeedback,
   })
-  const { handleUploadUnderlayImage, handleImportSiteSurvey } = useReferenceDataImportActions({
+  const { handleUploadUnderlayImage, handleImportDwgCandidates, handleImportSiteSurvey } = useReferenceDataImportActions({
     underlayKey, hydratedUnderlayRef, setUnderlay, setFileFeedback, dispatchCommandBatch,
+    onChooseDwgCandidates: (file, candidates) => setDwgPickerState({ file, candidates }),
+    onImportDwgDrawings: drawings => {
+      const additions = Object.fromEntries(drawings.map(({ key, underlay }) => [key, underlay])) as Record<string, ProjectUnderlay>
+      setProject({ ...project, underlays: { ...project.underlays, ...additions } })
+    },
+    viewId: viewMode,
   })
   const handleClearUnderlay = underlaySession.clearUnderlay
   const handleApplyCalibrationScale = (newScale: number, _realDistance_mm: number, axis: 'x' | 'y') => underlaySession.applyCalibrationScale(newScale, axis)
@@ -539,10 +570,14 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               <option value="m">m</option><option value="cm">cm</option><option value="mm">mm</option>
             </select>
           </label>
-          <LaserBleHudPill onOpenPhotoDimensionModal={() => {
-            setActivePhotoSession(null)
-            setIsPhotoDimensionModalOpen(true)
-          }} />
+          {laserHudReady ? (
+            <Suspense fallback={<span aria-hidden="true" className="cf-laser-hud-placeholder" />}>
+              <LaserBleHudPill onOpenPhotoDimensionModal={() => {
+                setActivePhotoSession(null)
+                setIsPhotoDimensionModalOpen(true)
+              }} />
+            </Suspense>
+          ) : <span aria-hidden="true" className="cf-laser-hud-placeholder" />}
         </div>
 
         <div className="cf-header-actions">
@@ -646,10 +681,11 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               windowTypes={(project.types || [])
                 .filter((t) => t.object_type === 'door_window.window')
                   .map((t) => ({ name: t.name, width_mm: t.parameters?.width_mm, height_mm: t.parameters?.height_mm, opening_operation: t.parameters?.opening_operation, panel_count: t.parameters?.panel_count, panel_layout: Array.isArray(t.parameters?.panel_layout) ? t.parameters.panel_layout as string[] : undefined, panel_width_ratios: Array.isArray(t.parameters?.panel_width_ratios) ? t.parameters.panel_width_ratios as number[] : undefined, transom_height_mm: t.parameters?.transom_height_mm, bottom_light_height_mm: t.parameters?.bottom_light_height_mm, muntin_rows: t.parameters?.muntin_rows, muntin_columns: t.parameters?.muntin_columns }))}
-              underlayHasImage={viewMode === 'plan' && !!underlay.image}
-              underlayVisible={underlay.visible}
+              underlayHasImage={viewMode === 'plan' && [underlay, ...(underlay.additional_layers ?? [])].some(layer => !!layer.image)}
+              underlayVisible={[underlay, ...(underlay.additional_layers ?? [])].some(layer => !!layer.image && layer.visible)}
               underlayOpacity={underlay.opacity}
-              onToggleUnderlayVisible={() => setUnderlay((u) => ({ ...u, visible: !u.visible }))}
+              underlayLabel={(underlay.additional_layers?.length ?? 0) > 0 ? `${(underlay.additional_layers?.length ?? 0) + (underlay.image ? 1 : 0)} แปลนอ้างอิง` : underlay.source_layout ? `${underlay.source_file ?? 'ไฟล์อ้างอิง'} · ${underlay.source_layout}` : underlay.source_file}
+              onToggleUnderlayVisible={underlaySession.toggleAllUnderlays}
               onChangeUnderlayOpacity={(opacity) => setUnderlay((u) => ({ ...u, opacity }))}
               onUploadUnderlayImage={handleUploadUnderlayImage}
               onClearUnderlay={handleClearUnderlay}
@@ -659,6 +695,17 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
         {/* Center Canvas Area */}
         <main className="cf-canvas-shell">
+          {Object.keys(project.objects).length === 0 && !quickStartDismissed && <section aria-label="เริ่มทำแปลน" style={{ position: 'absolute', zIndex: 6, top: 58, left: '50%', transform: 'translateX(-50%)', width: 'min(760px, calc(100% - 24px))', padding: '12px 14px', border: '1px solid #cbd5e1', borderRadius: 12, background: 'rgba(255,255,255,.97)', boxShadow: '0 10px 28px rgba(15,23,42,.12)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+              <div><strong style={{ display: 'block', fontSize: 15 }}>เริ่มแบบบ้านของคุณ</strong><span style={{ color: '#64748b', fontSize: 12 }}>เลือกวิธีเริ่มงานได้เลย เปลี่ยนหรือย้อนกลับได้ภายหลัง</span></div>
+              <button type="button" aria-label="ปิดคำแนะนำเริ่มงาน" onClick={() => setQuickStartDismissed(true)} style={{ minWidth: 44, minHeight: 44, border: 0, borderRadius: 8, background: 'transparent', color: '#64748b', fontSize: 20, lineHeight: 1 }}>×</button>
+            </div>
+            <div className="cf-quick-start-actions">
+              <button type="button" onClick={() => document.querySelector<HTMLInputElement>('.cf-underlay-tools input[type="file"]')?.click()} style={{ minHeight: 44, border: '1px solid #7dd3fc', borderRadius: 9, background: '#f0f9ff', color: '#075985', fontWeight: 650 }}>นำเข้าแบบเดิม</button>
+              <button type="button" onClick={() => { setQuickStartDismissed(true); setActiveTool('wall') }} style={{ minHeight: 44, border: '1px solid #cbd5e1', borderRadius: 9, background: '#fff', color: '#334155', fontWeight: 650 }}>วาดผนังเอง</button>
+              <button type="button" onClick={() => { setQuickStartDismissed(true); handleStartHouseDemo() }} style={{ minHeight: 44, border: '1px solid #cbd5e1', borderRadius: 9, background: '#fff', color: '#334155', fontWeight: 650 }}>ลองแบบตัวอย่าง</button>
+            </div>
+          </section>}
           <details className="cf-view-switch-shell" onClick={event => {
             if ((event.target as HTMLElement).closest('.cf-view-switch button')) event.currentTarget.open = false
           }}>
@@ -924,6 +971,17 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             onSaveViewTemplate: handleSaveViewTemplate,
             onApplyViewTemplate: handleApplyViewTemplate,
             onDeleteViewTemplate: handleDeleteViewTemplate,
+            onUpdateReferenceDrawing: (key, changes) => {
+              const underlay = project.underlays?.[key]
+              if (!underlay?.drawing_id) return
+              setProject({ ...project, underlays: { ...project.underlays, [key]: { ...underlay, ...changes } } })
+            },
+            onDeleteReferenceDrawing: key => {
+              if (!project.underlays?.[key]?.drawing_id) return
+              const underlays = { ...project.underlays }
+              delete underlays[key]
+              setProject({ ...project, underlays })
+            },
             onSelectObjects: ids => {
               const object = project.objects[ids[0] ?? '']
               if (object) {
@@ -956,6 +1014,18 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
       {familyWorkbench.open && <Suspense fallback={<div>กำลังเปิด Family Studio…</div>}><FamilyWorkbench project={project} initialFamily={familyWorkbench.seed} selectedObjectId={selectedId} onExecute={dispatchCommandBatch} onPlace={familyWorkbench.place} onClose={familyWorkbench.close}/></Suspense>}
       {/* BIM Type Manager Modal */}
+      {dwgPickerState && <DwgDrawingPickerModal
+        file={dwgPickerState.file}
+        candidates={dwgPickerState.candidates}
+        levels={project.levels.map(level => ({ id: level.id, name: levelPickerLabel(level.name) }))}
+        activeLevelId={project.project.active_level_id}
+        onClose={() => setDwgPickerState(null)}
+        onImport={selections => {
+          const { file } = dwgPickerState
+          setDwgPickerState(null)
+          void handleImportDwgCandidates(file, selections)
+        }}
+      />}
       {isConstructionOpen&&<Suspense fallback={<div>กำลังเปิด BIM Workbench…</div>}><ConstructionWorkbench project={project} initialTab={workbenchTab} onOpenCatalog={()=>{setIsConstructionOpen(false);openCatalog(false,false,'structure.slab')}} onClose={()=>setIsConstructionOpen(false)} onExecute={dispatchCommandBatch}/></Suspense>}
       {isTypeManagerOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดคลังชนิด…</div>}><TypeManagerModal
         isOpen

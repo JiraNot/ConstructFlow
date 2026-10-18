@@ -1,11 +1,8 @@
 import type { ProjectDocument } from '@constructflow/project-model'
-import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import type { SnapResult } from '@constructflow/snapping-engine'
 import type { PlanDiscipline } from '@constructflow/representation-engine'
-import { drawDirectManipulationGhost, renderPlanView, type CalibrationOverlay, type PlanLabelVisibility, type PlacementGhost, type UnderlayConfig } from '../rendering/planRenderer.js'
-import { drawCoordinationPrimitives, planCoordinationOverlay } from '../rendering/coordinationOverlay.js'
-import { worldToScreen, type ViewportState } from '../viewport/viewportTransform.js'
-import { drawElectricalCircuitLogicalLinks, resolveElectricalCircuitLogicalLinks } from '../rendering/electricalCircuitLogicalLinks.js'
+import type { CalibrationOverlay, PlanCanvasRenderer, PlanLabelVisibility, PlacementGhost, UnderlayConfig } from '../rendering/planRendererTypes.js'
+import type { ViewportState } from '../viewport/viewportTransform.js'
 
 interface ManipulationPreview {
   project: ProjectDocument
@@ -32,35 +29,23 @@ interface PlanCanvasBaseSceneOptions {
   planDiscipline: PlanDiscipline
   manipulationPreview: ManipulationPreview | null
   externalManipulationPreview?: ManipulationPreview | null
-  coordination: readonly CoordinationFinding[]
-  coordinationSeverities?: readonly ClashSeverity[]
-  coordinationFocusSelection?: boolean
+  renderer: PlanCanvasRenderer
 }
 
 export function drawPlanCanvasBaseScene({
   ctx, width, height, project, planProject, viewport, selectedIds, editableSelectionIds, hoveredId, activeSnap,
   ghost, underlay, calibrationOverlay, labelMode, labelVisibility, planDiscipline, manipulationPreview,
-  externalManipulationPreview, coordination, coordinationSeverities, coordinationFocusSelection,
+  externalManipulationPreview,
+  renderer,
 }: PlanCanvasBaseSceneOptions) {
-  renderPlanView(ctx, width, height, planProject, viewport, selectedIds, hoveredId, activeSnap, ghost,
+  renderer.renderPlanView(ctx, width, height, planProject, viewport, selectedIds, hoveredId, activeSnap, ghost,
     underlay, calibrationOverlay, project, labelMode, labelVisibility, [], planDiscipline)
 
-  const circuitLinks = resolveElectricalCircuitLogicalLinks(project, editableSelectionIds, new Set(Object.keys(planProject.objects)))
-  drawElectricalCircuitLogicalLinks(ctx, circuitLinks, viewport)
-  ctx.canvas.dataset.electricalCircuitLogicalLinkCount = String(circuitLinks.length)
+  ctx.canvas.dataset.electricalCircuitLogicalLinkCount = '0'
 
   const visibleManipulationPreview = manipulationPreview ?? externalManipulationPreview
   if (visibleManipulationPreview) {
-    drawDirectManipulationGhost(ctx, planProject, visibleManipulationPreview.project, visibleManipulationPreview.ids,
+    renderer.drawDirectManipulationGhost(ctx, planProject, visibleManipulationPreview.project, visibleManipulationPreview.ids,
       viewport, visibleManipulationPreview.valid, planDiscipline)
-  }
-
-  if (coordination.length) {
-    const focusIds = coordinationFocusSelection && editableSelectionIds.length ? editableSelectionIds : undefined
-    drawCoordinationPrimitives(ctx, planCoordinationOverlay(coordination, {
-      project: point => worldToScreen([point[0], point[1]], viewport),
-      ...(coordinationSeverities ? { severities: coordinationSeverities } : {}),
-      ...(focusIds ? { objectIds: focusIds } : {}),
-    }), 0.55 + 0.45 * Math.abs(Math.sin(Date.now() / 320)))
   }
 }

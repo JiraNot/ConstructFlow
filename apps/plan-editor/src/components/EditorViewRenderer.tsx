@@ -5,10 +5,9 @@ import type { PlanCanvasProps } from './PlanCanvas.types.js'
 import type { CoordinatedElevationNavigation } from './ElevationCanvas.js'
 import type { EditorViewMode } from '../app/useMultiViewPreferences.js'
 import type { CoordinatedPlanViewport } from '../viewport/viewportTransform.js'
-import { buildElevationManipulationCommands } from '../elevationManipulationCommands.js'
 
 const Model3DViewport = lazy(() => import('./Model3DViewport.js').then(module => ({ default: module.Model3DViewport })))
-const ElevationCanvas = lazy(() => import('./ElevationCanvas.js').then(module => ({ default: module.ElevationCanvas })))
+const ElevationViewRenderer = lazy(() => import('./ElevationViewRenderer.js').then(module => ({ default: module.ElevationViewRenderer })))
 
 interface EditorViewRendererProps {
   mode: EditorViewMode
@@ -62,15 +61,12 @@ export const EditorViewRenderer: React.FC<EditorViewRendererProps> = ({
   )
 
   return <Suspense fallback={<div role="status" style={{ padding: 24, color: '#64748b' }}>กำลังเปิดรูปด้าน…</div>}>
-    <ElevationCanvas project={project} direction={mode} selectedId={selectedId} selectedIds={selectedIds}
+    <ElevationViewRenderer mode={mode} project={project} selectedId={selectedId} selectedIds={selectedIds}
       onSelectObject={onSelectObject} onSelectionChange={onSelectionChange} underlay={underlay}
       coordination={coordination} navigation={elevationNavigation} onNavigationChange={onElevationNavigationChange}
-      planNavigation={mode === 'rcp' && planAndRcpNavigationLinked ? planNavigationViewport : null}
-      onPlanNavigationChange={mode === 'rcp' && planAndRcpNavigationLinked ? onPlanNavigationViewportChange : undefined}
-      onMoveObject={mode === 'rcp' ? undefined : onMoveElevationObject}
-      onBuildManipulation={mode === 'rcp' ? undefined : (objectId, deltaWorldMm, deltaZMm, verticalIntent, gripIndex) =>
-        buildElevationManipulationCommands(project, mode, objectId, deltaWorldMm, deltaZMm, verticalIntent, gripIndex)}
-      onPreviewManipulation={previewManipulation} onCommitManipulation={commitManipulation}
+      planNavigationViewport={planNavigationViewport} onPlanNavigationViewportChange={onPlanNavigationViewportChange}
+      planAndRcpNavigationLinked={planAndRcpNavigationLinked} onMoveElevationObject={onMoveElevationObject}
+      previewManipulation={previewManipulation} commitManipulation={commitManipulation}
       onManipulationRejected={onManipulationRejected} />
   </Suspense>
 }

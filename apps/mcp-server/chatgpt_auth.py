@@ -311,7 +311,7 @@ def select_model(model):
     _save_record(record)
 
 
-def stream_response(model, input_text, instructions):
+def stream_response(model, input_text, instructions, *, input_content=None):
     if not isinstance(model, str) or not model.strip():
         raise ChatGPTAuthError("เลือกรุ่นโมเดล ChatGPT ก่อน")
     with _refresh_lock:
@@ -321,10 +321,18 @@ def stream_response(model, input_text, instructions):
         if model != record.get("selected_model"):
             raise ChatGPTAuthError("เลือกรุ่นโมเดลจากรายการบัญชี ChatGPT ก่อนส่งคำขอ")
         token = _access_token(record)
+    user_content = [{"type": "input_text", "text": input_text}]
+    if input_content is not None:
+        if not isinstance(input_content, list) or len(input_content) > 8:
+            raise ChatGPTAuthError("ไฟล์แนบ AI ไม่ถูกต้อง")
+        for item in input_content:
+            if not isinstance(item, dict) or item.get("type") not in {"input_file", "input_image"}:
+                raise ChatGPTAuthError("ชนิดไฟล์แนบ AI ไม่รองรับ")
+            user_content.append(item)
     payload = json.dumps({
         "model": model,
         "instructions": instructions,
-        "input": [{"role": "user", "content": input_text}],
+        "input": [{"role": "user", "content": user_content}],
         "store": False,
         "stream": True,
     }, ensure_ascii=False).encode("utf-8")

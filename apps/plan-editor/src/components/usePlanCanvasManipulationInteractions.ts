@@ -38,6 +38,7 @@ export function usePlanCanvasManipulationInteractions({
     buildPlanCanvasDragCommands({ planProject, drag, rawWorld, ctrlKey, viewport, snapPlanPoint })
   const previewState = usePlanCanvasManipulationPreview({
     planProject,
+    dragging: Boolean(draggingObject),
     buildCommands: buildDragCommands,
     syncDimensions: dragDimensions.syncFromPreview,
     manualDragPointRef: dragDimensions.manualPointRef,
@@ -48,7 +49,8 @@ export function usePlanCanvasManipulationInteractions({
   const dimensionState = usePlanCanvasManipulationDimensions({
     containerRef, canvasRef, planProject, viewport, displayUnit, dragDimensions,
     draggingObject, dragPreviewPoint, manipulationPreview, setDraggingObject, setDragPreviewPoint,
-    setManipulationPreview, onCommitManipulation, onManipulationRejected,
+    setManipulationPreview, cancelPendingPreview: previewState.cancelPendingPreview,
+    onCommitManipulation, onManipulationRejected,
     previewDragAt: previewState.previewDragAt,
   })
   return { ...previewState, ...dimensionState, buildDragCommands }

@@ -616,6 +616,72 @@ test('AI proposal is previewed, validated, committed through CommandBus, and und
   await expect(browser.locator('li[data-object-id]')).toHaveCount(0)
 })
 
+test('AI can read a single scaled-plan image and sends it as a drawing attachment', async ({ page }) => {
+  let received: { prompt?: string; drawing_attachments?: { filename: string; mime_type: string; data_url: string }[] } | undefined
+  await page.route('**/api/ai/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ mode: 'gateway', connected: false, email: '', name: '', sharing: false }),
+  }))
+  await page.route('**/api/ai/plan', async route => {
+    received = route.request().postDataJSON() as typeof received
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ summary: 'อ่านแปลนภาพเดียว', questions: ['ระบุมาตราส่วนก่อนสร้างโมเดล'], commands: [] }),
+    })
+  })
+  await page.goto('/')
+  await selectInspectorTab(page, 'AI')
+  await page.getByLabel('Gateway token').fill('test-token')
+  await page.getByLabel('แนบ PDF หรือภาพแปลน').setInputFiles({
+    name: 'floor-plan.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZ2QAAAAASUVORK5CYII=', 'base64'),
+  })
+  await expect(page.getByAltText('ตัวอย่างแบบ floor-plan.png')).toBeVisible()
+  await page.getByRole('button', { name: 'สร้างแผนคำสั่ง' }).click()
+  await expect(page.getByLabel('แผนคำสั่ง AI')).toContainText('ระบุมาตราส่วนก่อนสร้างโมเดล')
+  expect(received?.prompt).toContain('อ่าน PDF หรือภาพที่แนบ')
+  expect(received?.drawing_attachments).toHaveLength(1)
+  expect(received?.drawing_attachments?.[0]).toMatchObject({ filename: 'floor-plan.png', mime_type: 'image/png' })
+  expect(received?.drawing_attachments?.[0].data_url).toMatch(/^data:image\/png;base64,iVBORw0KGgo/)
+})
+
+test('AI accepts a customer multi-sheet PDF as the primary drawing source and asks for page scope when ambiguous', async ({ page }) => {
+  let received: { prompt?: string; drawing_attachments?: { filename: string; mime_type: string; data_url: string }[] } | undefined
+  await page.route('**/api/ai/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ mode: 'gateway', connected: false, email: '', name: '', sharing: false }),
+  }))
+  await page.route('**/api/ai/plan', async route => {
+    received = route.request().postDataJSON() as typeof received
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ summary: 'พบแปลนชั้นล่างหน้า 4 และชั้นบนหน้า 5', questions: ['ยืนยันว่าต้องการเริ่มจากสองหน้านี้หรือไม่'], commands: [] }),
+    })
+  })
+  await page.goto('/')
+  await selectInspectorTab(page, 'AI')
+  await page.getByLabel('Gateway token').fill('test-token')
+  await page.getByLabel('แนบ PDF หรือภาพแปลน').setInputFiles({
+    name: 'customer-drawing-set.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4\nmock multi-sheet drawing'),
+  })
+  await expect(page.getByText('PDF อาจมีหลายหน้า')).toBeVisible()
+  await page.getByRole('button', { name: 'สร้างแผนคำสั่ง' }).click()
+  const plan = page.getByLabel('แผนคำสั่ง AI')
+  await expect(plan).toContainText('ชั้นล่างหน้า 4 และชั้นบนหน้า 5')
+  await expect(plan).toContainText('ยืนยันว่าต้องการเริ่มจากสองหน้านี้หรือไม่')
+  expect(received?.prompt).toContain('ระบุหน้า เลขที่แบบ และชั้น')
+  expect(received?.drawing_attachments).toHaveLength(1)
+  expect(received?.drawing_attachments?.[0]).toMatchObject({ filename: 'customer-drawing-set.pdf', mime_type: 'application/pdf' })
+  expect(received?.drawing_attachments?.[0].data_url).toMatch(/^data:application\/pdf;base64,JVBERi0xLjQ/)
+})
+
 test('AI panel refreshes extension command descriptors registered while the panel is open', async ({ page }) => {
   let descriptorNames: string[] = []
   await page.route('**/api/ai/plan', async route => {

@@ -196,7 +196,15 @@ export interface ProjectViewTemplate {
 
 export interface ProjectUnderlay {
   data_url: string
+  /** Stable identity/name/scope for individually managed drawings imported from multi-plan CAD files. */
+  drawing_id?: string
+  display_name?: string
+  view_id?: ProjectViewId
+  level_id?: string
   source_file?: string
+  source_kind?: 'image' | 'dxf' | 'dwg'
+  source_layout?: string
+  source_region?: [number, number, number, number]
   scale_source?: 'declared_units' | 'assumed_units' | 'calibrated'
   origin_mm: [number, number]
   scale_mm_per_px: number

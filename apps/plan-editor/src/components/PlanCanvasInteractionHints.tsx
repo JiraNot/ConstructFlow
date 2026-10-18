@@ -4,7 +4,7 @@ import type { ToolType } from './Toolbar.js'
 import type { ToolInteractionStatus } from '../app/toolInteractionStatus.mjs'
 import { getObjectFamilyDisplayName } from './objectDisplayNames.js'
 
-interface PlanCanvasInteractionHintsProps {
+export interface PlanCanvasInteractionHintsProps {
   activeTool: ToolType
   showSelectionHandleHint: boolean
   placementStatus: ToolInteractionStatus | null

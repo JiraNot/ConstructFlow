@@ -24,7 +24,7 @@ interface HandlePlanCanvasAuthoringPointerMoveOptions {
   setHoveredId: Dispatch<SetStateAction<string | null>>
   setManipulationPreview: Dispatch<SetStateAction<{ project: ProjectDocument; ids: string[]; valid: boolean } | null>>
   onCursorChange: (coordsMm: Point, snapKind: string) => void
-  previewDragAt: (drag: PlanCanvasDraggingObject, point: Point, ctrlKey: boolean) => void
+  previewDragAt: (drag: PlanCanvasDraggingObject, point: Point, ctrlKey: boolean) => Promise<unknown>
 }
 
 export function handlePlanCanvasAuthoringPointerMove({
@@ -66,7 +66,7 @@ export function handlePlanCanvasAuthoringPointerMove({
 
   if (draggingObject) {
     const moved = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
-    if (moved >= 3) previewDragAt(draggingObject, rawWorld, event.ctrlKey)
+    if (moved >= 3) void previewDragAt(draggingObject, rawWorld, event.ctrlKey)
     else setManipulationPreview(null)
   }
 }

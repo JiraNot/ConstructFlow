@@ -41,7 +41,7 @@ export function usePlanCanvasPointerHandlers({
   }, [canvasRef, pointerDown])
 
   const handlePointerUp = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
-    handlePlanCanvasPointerUp({ event, canvas: canvasRef.current, ...pointerUp })
+    void handlePlanCanvasPointerUp({ event, canvas: canvasRef.current, ...pointerUp })
   }, [canvasRef, pointerUp])
 
   return { handlePointerMove, handlePointerDown, handlePointerUp }

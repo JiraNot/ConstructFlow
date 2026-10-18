@@ -74,6 +74,7 @@ export function usePlanCanvasPointerController({
       previewDragAt: manipulation.previewDragAt,
       lastPreviewValidationRef: manipulation.lastPreviewValidationRef,
       buildDragCommands: manipulation.buildDragCommands,
+      cancelPendingPreview: manipulation.cancelPendingPreview,
     },
     resizeDimensionWidth: dragDimensions.setWidth,
     resizeDimensionHeight: dragDimensions.setHeight,

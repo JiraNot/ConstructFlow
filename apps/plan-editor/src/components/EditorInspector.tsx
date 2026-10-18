@@ -1,15 +1,15 @@
 import React, { lazy, Suspense, type ComponentProps } from 'react'
 import type { ProjectDocument } from '@constructflow/project-model'
 import { PropertiesPanel } from './PropertiesPanel.js'
-import { ProjectBrowser } from './ProjectBrowser.js'
-import { CoordinationPanel } from './CoordinationPanel.js'
-import { AICommandPanel } from './AICommandPanel.js'
-import { ModuleExtensionsPanel } from './ModuleExtensionsPanel.js'
 import { X } from 'lucide-react'
 
 type InspectorTab = 'properties' | 'quantities' | 'objects' | 'ai' | 'extensions' | 'coordination'
 
 const TakeoffPanel = lazy(() => import('./TakeoffPanel.js').then(module => ({ default: module.TakeoffPanel })))
+const ProjectBrowser = lazy(() => import('./ProjectBrowser.js').then(module => ({ default: module.ProjectBrowser })))
+const CoordinationPanel = lazy(() => import('./CoordinationPanel.js').then(module => ({ default: module.CoordinationPanel })))
+const AICommandPanel = lazy(() => import('./AICommandPanel.js').then(module => ({ default: module.AICommandPanel })))
+const ModuleExtensionsPanel = lazy(() => import('./ModuleExtensionsPanel.js').then(module => ({ default: module.ModuleExtensionsPanel })))
 
 interface EditorInspectorProps {
   onCloseInspector?: () => void
@@ -64,10 +64,10 @@ export const EditorInspector: React.FC<EditorInspectorProps> = ({
       <TakeoffPanel project={project} onOpenConstruction={onOpenConstruction} onExportTakeoff={onExportTakeoff} onExportBOQ={onExportBOQ} />
     </Suspense>}
 
-    {activeTab === 'coordination' && <CoordinationPanel {...coordination} />}
-    {activeTab === 'ai' && <AICommandPanel {...ai} />}
-    {activeTab === 'extensions' && <ModuleExtensionsPanel {...extensions} />}
-    {activeTab === 'objects' && <ProjectBrowser {...browser} />}
+    {activeTab === 'coordination' && <Suspense fallback={<div role="status" className="cf-inspector-content">กำลังเปิดเครื่องมือตรวจระยะ…</div>}><CoordinationPanel {...coordination} /></Suspense>}
+    {activeTab === 'ai' && <Suspense fallback={<div role="status" className="cf-inspector-content">กำลังเปิด AI…</div>}><AICommandPanel {...ai} /></Suspense>}
+    {activeTab === 'extensions' && <Suspense fallback={<div role="status" className="cf-inspector-content">กำลังเปิดส่วนขยาย…</div>}><ModuleExtensionsPanel {...extensions} /></Suspense>}
+    {activeTab === 'objects' && <Suspense fallback={<div role="status" className="cf-inspector-content">กำลังเปิดรายการวัตถุ…</div>}><ProjectBrowser {...browser} /></Suspense>}
   </aside>
     )
   })()

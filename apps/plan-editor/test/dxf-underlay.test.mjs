@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { importDxfUnderlay } from '../src/cad/importDxfUnderlay.mjs'
+import { importDxfDrawingCandidates, importDxfUnderlay } from '../src/cad/importDxfUnderlay.mjs'
 
 const dxf = (units, entities) => [
   '0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', String(units), '0', 'ENDSEC',
@@ -36,6 +36,20 @@ test('DXF underlay import converts declared feet to millimeter scale and assumes
   assert.equal(feet.drawing_units, 'feet')
   assert.ok(feet.scale_mm_per_px > unitless.scale_mm_per_px * 300)
   assert.equal(unitless.drawing_units, 'unitless')
+})
+
+test('DXF import separates Model Space from named Paper Space layouts and reports their layers', () => {
+  const entities = [
+    '0', 'LINE', '8', 'A-WALL', '10', '0', '20', '0', '11', '5000', '21', '0',
+    '0', 'LINE', '67', '1', '410', 'A-02 Ground', '8', 'A-PLAN', '10', '0', '20', '0', '11', '4000', '21', '0',
+    '0', 'LINE', '67', '1', '410', 'S-01 Foundation', '8', 'S-FOOTING', '10', '0', '20', '0', '11', '3000', '21', '0',
+  ].join('\n')
+  const candidates = importDxfDrawingCandidates(dxf(4, entities))
+
+  assert.deepEqual(candidates.map(candidate => candidate.name), ['Model Space', 'A-02 Ground', 'S-01 Foundation'])
+  assert.deepEqual(candidates.map(candidate => candidate.prepared.imported_entities), [1, 1, 1])
+  assert.deepEqual(candidates.map(candidate => candidate.layers), [['A-WALL'], ['A-PLAN'], ['S-FOOTING']])
+  assert.ok(candidates.every(candidate => candidate.svg.includes('<svg')))
 })
 
 test('DXF underlay expands block inserts with base point, nonuniform scale, and rotation', () => {

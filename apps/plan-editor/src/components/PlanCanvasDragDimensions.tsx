@@ -3,7 +3,7 @@ import React from 'react'
 export type DragDimensionField = 'x' | 'y' | 'width' | 'height' | 'length' | 'offset'
 export type DragDimensionMode = 'move' | 'axis-x' | 'axis-y' | 'rectangle' | 'opening-width' | 'line-length' | 'stair-width' | 'stair-run' | 'stair-landing' | 'stair-first-flight' | 'stair-second-flight' | 'edge-offset'
 
-interface PlanCanvasDragDimensionsProps {
+export interface PlanCanvasDragDimensionsProps {
   mode: DragDimensionMode
   displayUnit: string
   values: Record<DragDimensionField, string>

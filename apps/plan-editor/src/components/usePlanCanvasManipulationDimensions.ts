@@ -23,6 +23,7 @@ interface UsePlanCanvasManipulationDimensionsOptions {
   setDraggingObject: (drag: PlanCanvasDraggingObject | null) => void
   setDragPreviewPoint: (point: [number, number] | null) => void
   setManipulationPreview: (preview: { project: ProjectDocument; ids: string[]; valid: boolean } | null) => void
+  cancelPendingPreview: () => void
   previewDragAt: ReturnType<typeof usePlanCanvasManipulationPreview>['previewDragAt']
   onCommitManipulation: (commands: CommandRequest[]) => { status: string; errors?: string[] }
   onManipulationRejected?: (errors: string[]) => void
@@ -31,16 +32,17 @@ interface UsePlanCanvasManipulationDimensionsOptions {
 export function usePlanCanvasManipulationDimensions({
   containerRef, canvasRef, planProject, viewport, displayUnit, dragDimensions, draggingObject,
   dragPreviewPoint, manipulationPreview, setDraggingObject, setDragPreviewPoint,
-  setManipulationPreview, previewDragAt, onCommitManipulation, onManipulationRejected,
+  setManipulationPreview, previewDragAt, cancelPendingPreview, onCommitManipulation, onManipulationRejected,
 }: UsePlanCanvasManipulationDimensionsOptions) {
   const updateMoveDimension = (axis: 'x' | 'y', value: string) =>
     dragDimensions.updateMove(draggingObject, axis, value, previewDragAt)
   const updateResizeDimension = (axis: 'width' | 'height' | 'length' | 'offset', value: string) =>
     dragDimensions.updateResize(draggingObject, axis, value, previewDragAt)
 
-  const commitDragDimensions = () => {
+  const commitDragDimensions = async () => {
     if (!draggingObject || !dragDimensions.manualPointRef.current) return
-    const { commands, valid } = previewDragAt(draggingObject, dragDimensions.manualPointRef.current, true, true)
+    const { commands, valid } = await previewDragAt(draggingObject, dragDimensions.manualPointRef.current, true, true)
+    cancelPendingPreview()
     if (commands.length && valid) onCommitManipulation(commands)
     else if (commands.length) onManipulationRejected?.(['ไม่สามารถใช้มิติที่ระบุได้'])
     dragDimensions.manualPointRef.current = null

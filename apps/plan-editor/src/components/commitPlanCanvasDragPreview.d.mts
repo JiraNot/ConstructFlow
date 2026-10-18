@@ -7,10 +7,10 @@ interface PlanCanvasDragPreviewOptions {
   ctrlKey: boolean
   hasManualDimensions: boolean
   movedPixels: number
-  buildCommands: (drag: PlanDragGesture, rawWorld: [number, number], ctrlKey: boolean) => CommandRequest[]
+  buildCommands: (drag: PlanDragGesture, rawWorld: [number, number], ctrlKey: boolean) => Promise<CommandRequest[]>
   preview: (commands: CommandRequest[]) => DirectManipulationPreviewResult
   commit: (commands: CommandRequest[]) => unknown
   onRejected?: (errors: string[]) => void
 }
 
-export function commitPlanCanvasDragPreview(options: PlanCanvasDragPreviewOptions): void
+export function commitPlanCanvasDragPreview(options: PlanCanvasDragPreviewOptions): Promise<void>

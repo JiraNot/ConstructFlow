@@ -34,7 +34,8 @@ interface HandlePlanCanvasPointerUpOptions {
   onDeleteObjects?: (ids: string[]) => void
   draggingObject: PlanCanvasDraggingObject | null
   manualDragPointRef: MutableRefObject<Point | null>
-  buildDragCommands: (drag: PlanDragGesture, rawWorld: Point, ctrlKey: boolean) => CommandRequest[]
+  buildDragCommands: (drag: PlanDragGesture, rawWorld: Point, ctrlKey: boolean) => Promise<CommandRequest[]>
+  cancelPendingPreview: () => void
   onPreviewManipulation: (commands: CommandRequest[]) => DirectManipulationPreviewResult
   onCommitManipulation: (commands: CommandRequest[]) => { status: string; errors?: string[] }
   onManipulationRejected?: (errors: string[]) => void
@@ -45,7 +46,7 @@ interface HandlePlanCanvasPointerUpOptions {
   setResizeDimensionLength: (value: string) => void
 }
 
-export function handlePlanCanvasPointerUp({
+export async function handlePlanCanvasPointerUp({
   event,
   canvas,
   viewport,
@@ -69,6 +70,7 @@ export function handlePlanCanvasPointerUp({
   draggingObject,
   manualDragPointRef,
   buildDragCommands,
+  cancelPendingPreview,
   onPreviewManipulation,
   onCommitManipulation,
   onManipulationRejected,
@@ -131,6 +133,7 @@ export function handlePlanCanvasPointerUp({
   }
 
   if (!draggingObject) return
+  cancelPendingPreview()
   const rect = canvas?.getBoundingClientRect()
   if (rect) {
     const screenX = event.clientX - rect.left
@@ -139,17 +142,21 @@ export function handlePlanCanvasPointerUp({
     const hasManualDimensions = manualDragPointRef.current !== null
     const rawWorld = manualDragPointRef.current ?? pointerWorld
     const movedPixels = Math.hypot(screenX - draggingObject.startScreenPx[0], screenY - draggingObject.startScreenPx[1])
-    commitPlanCanvasDragPreview({
-      drag: draggingObject,
-      rawWorld,
-      ctrlKey: event.ctrlKey,
-      hasManualDimensions,
-      movedPixels,
-      buildCommands: buildDragCommands,
-      preview: onPreviewManipulation,
-      commit: onCommitManipulation,
-      onRejected: onManipulationRejected,
-    })
+    try {
+      await commitPlanCanvasDragPreview({
+        drag: draggingObject,
+        rawWorld,
+        ctrlKey: event.ctrlKey,
+        hasManualDimensions,
+        movedPixels,
+        buildCommands: buildDragCommands,
+        preview: onPreviewManipulation,
+        commit: onCommitManipulation,
+        onRejected: onManipulationRejected,
+      })
+    } catch (error) {
+      onManipulationRejected?.([error instanceof Error ? error.message : String(error)])
+    }
   }
   manualDragPointRef.current = null
   setDraggingObject(null)

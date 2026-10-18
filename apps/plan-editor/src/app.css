@@ -478,6 +478,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-ai-account-action { justify-self:start; display:flex; align-items:center; gap:5px; padding:4px 0; border:0; background:none; color:#475569; font:inherit; font-size:10px; cursor:pointer; }
 .cf-ai-login { justify-self:start; display:flex; align-items:center; gap:6px; min-height:32px; padding:0 10px; }
 .cf-ai-prompt span { font-size:11px; color:#334155; }
+.cf-ai-drawing-attach { display:flex; flex-direction:column; gap:7px; }
+.cf-ai-attach-button { display:flex; align-items:center; justify-content:center; gap:7px; width:100%; min-height:40px; border:1px dashed #94a3b8; background:#f8fafc; color:#334155; cursor:pointer; }
+.cf-ai-attach-button input { display:none; }
+.cf-ai-attached-file { display:flex; align-items:center; gap:8px; min-width:0; padding:6px; border:1px solid #dbe4ec; border-radius:5px; background:#f8fafc; color:#475569; font-size:10px; }
+.cf-ai-attached-file > span { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cf-ai-attached-file img { width:54px; height:42px; object-fit:contain; border:1px solid #e2e8f0; background:#fff; }
 .cf-ai-privacy,.cf-ai-undo-note { margin:0; color:#64748b; font-size:9px; line-height:1.5; }
 .cf-ai-generate,.cf-ai-apply { display:flex; justify-content:center; align-items:center; gap:7px; min-height:34px; }
 .cf-ai-error,.cf-ai-notice,.cf-ai-valid { display:flex; align-items:flex-start; gap:6px; margin:0; padding:8px; border-radius:4px; font-size:10px; line-height:1.45; white-space:pre-wrap; }
@@ -493,6 +499,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-ai-command-list li { padding:7px; border:1px solid #e2e8f0; border-radius:4px; font-size:10px; }
 .cf-ai-command-list pre { max-height:140px; margin:5px 0 0; overflow:auto; color:#475569; font:9px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
 .cf-ai-spin { animation:cf-ai-spin 1s linear infinite; }
+@media (max-width: 700px) { .cf-ai-attach-button { min-height:48px; } .cf-ai-attached-file { min-height:48px; } }
 @keyframes cf-ai-spin { to { transform:rotate(360deg); } }
 .cf-inspector-content [style*="15, 23, 42"], .cf-inspector-content [style*="17, 24, 39"], .cf-inspector-content [style*="17, 28, 49"], .cf-inspector-content [style*="30, 41, 59"] {
   border-color: #e0e7ef !important; background-color: #f8fafc !important;
@@ -946,6 +953,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-rail-family { width:64px; min-height:43px; margin:0; padding:4px !important; white-space:normal !important; text-align:center; font-size:10px; line-height:1.2; }
 .cf-inspector-launcher { display:none; }
 .cf-inspector-backdrop { display:none; }
+.cf-laser-hud-placeholder { display:inline-block; flex:0 0 202px; height:28px; }
 @media (max-width:1450px) {
   .cf-app-header { gap:6px; padding:0 8px; }
   .cf-brand { flex:0 0 auto; }
@@ -965,6 +973,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .cf-header-field select { min-width:92px; max-width:136px; }
   .cf-phase-field select { min-width:100px; }
   .cf-laser-hud-container { flex:none; gap:4px; }
+  .cf-laser-hud-placeholder { flex-basis:92px; height:44px; }
   .cf-laser-hud-pill,.cf-laser-photo-button { min-width:44px; height:44px !important; justify-content:center !important; padding:0 8px !important; white-space:nowrap; }
   .cf-laser-hud-pill:not(.is-connected) > span,.cf-laser-photo-button > span { display:none !important; }
   .cf-laser-hud-pill.is-connected > span:nth-child(3),.cf-laser-hud-pill.is-connected > span:nth-child(4),.cf-laser-hud-pill.is-connected > svg:last-child { display:none !important; }
@@ -1057,6 +1066,42 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .cf-photo-dimension-body { flex-direction:column; }
   .cf-photo-dimension-stage { flex:1 1 auto !important; min-height:30dvh; }
   .cf-photo-dimension-inspector { width:auto !important; max-width:none !important; max-height:38dvh; overflow-y:auto !important; border-left:0 !important; border-top:1px solid #232f46; }
+}
+.cf-dwg-picker-body { display:grid; grid-template-columns:minmax(180px,240px) minmax(0,1fr); }
+.cf-dwg-picker-preview { position:relative; width:100%; max-height:58dvh; overflow:hidden; border:1px solid #cbd5e1; border-radius:10px; background:#f8fafc; touch-action:none; }
+.cf-dwg-picker-add-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(130px,.7fr) auto; align-items:end; gap:8px; margin-top:10px; padding:10px; border:1px solid #dbe4ee; border-radius:10px; background:#f8fafc; }
+.cf-dwg-picker-add-row label,.cf-dwg-queued-plan label { display:grid; gap:4px; color:#475569; font-size:11px; }
+.cf-dwg-picker-add-row input,.cf-dwg-picker-add-row select,.cf-dwg-queued-plan input,.cf-dwg-queued-plan select { width:100%; min-width:0; min-height:38px; padding:6px 8px; border:1px solid #cbd5e1; border-radius:7px; background:#fff; color:#0f172a; }
+.cf-dwg-picker-add-row button,.cf-dwg-queued-plan>button { display:flex; align-items:center; justify-content:center; gap:5px; min-height:40px; padding:7px 10px; border:1px solid #0284c7; border-radius:8px; background:#e0f2fe; color:#075985; font-weight:650; }
+.cf-dwg-queued-plans { display:grid; gap:7px; margin-top:12px; }
+.cf-dwg-queued-plans>strong { font-size:13px; }
+.cf-dwg-queued-plans>p { margin:0; color:#64748b; font-size:12px; }
+.cf-dwg-queued-plan { display:grid; grid-template-columns:24px minmax(100px,1fr) minmax(100px,.7fr) minmax(100px,auto) 34px; align-items:end; gap:7px; padding:8px; border:1px solid #dbe4ee; border-radius:9px; background:#fff; }
+.cf-dwg-queued-index { align-self:center; display:grid; place-items:center; width:22px; height:22px; border-radius:50%; background:#e0f2fe; color:#0369a1; font-size:11px; font-weight:700; }
+.cf-dwg-queued-plan small { align-self:center; color:#64748b; font-size:11px; }
+.cf-dwg-queued-plan>button { min-width:34px; width:34px; padding:4px; border-color:#fecaca; background:#fff1f2; color:#be123c; }
+.cf-browser-reference-drawings { margin:8px 0; border:1px solid #dbe4ee; border-radius:9px; background:#f8fafc; }
+.cf-browser-reference-drawings>summary { display:flex; align-items:center; justify-content:space-between; min-height:40px; padding:7px 10px; color:#334155; font-size:12px; font-weight:700; cursor:pointer; }
+.cf-browser-reference-drawings>summary span { min-width:20px; padding:2px 6px; border-radius:99px; background:#e0f2fe; color:#0369a1; text-align:center; }
+.cf-reference-drawing-list { display:grid; gap:6px; padding:0 7px 7px; }
+.cf-reference-drawing-list>p { margin:3px; color:#64748b; font-size:12px; }
+.cf-reference-drawing-row { display:grid; grid-template-columns:30px minmax(0,1fr) 96px 30px; align-items:center; gap:6px; padding:6px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; }
+.cf-reference-drawing-row>span { min-width:0; overflow:hidden; color:#334155; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.cf-reference-drawing-row>span small { display:block; overflow:hidden; color:#94a3b8; font-size:10px; text-overflow:ellipsis; }
+.cf-reference-drawing-row>button { display:grid; place-items:center; min-width:30px; min-height:30px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#475569; }
+.cf-reference-drawing-row>select { min-width:0; min-height:34px; padding:4px; border:1px solid #cbd5e1; border-radius:6px; color:#334155; background:#fff; font-size:11px; }
+.cf-quick-start-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:11px; }
+@media (max-width:700px) {
+  .cf-dwg-picker-panel { width:100% !important; height:100dvh; max-height:100dvh !important; border-radius:0 !important; }
+  .cf-dwg-picker-body { grid-template-columns:minmax(0,1fr); gap:10px; padding:10px !important; }
+  .cf-dwg-picker-list { display:grid !important; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
+  .cf-dwg-picker-preview { max-height:40dvh; }
+  .cf-dwg-picker-add-row { grid-template-columns:minmax(0,1fr) minmax(100px,.8fr); }
+  .cf-dwg-picker-add-row button { grid-column:1 / -1; }
+  .cf-dwg-queued-plan { grid-template-columns:24px minmax(0,1fr) minmax(100px,.75fr) 34px; }
+  .cf-dwg-queued-plan small { grid-column:2 / 4; grid-row:2; }
+  .cf-dwg-queued-plan>button { grid-column:4; grid-row:1 / 3; align-self:center; }
+  .cf-quick-start-actions { grid-template-columns:minmax(0,1fr); }
 }
 .cf-photo-dimension-stage canvas { max-width:100%; max-height:100%; object-fit:contain; }
 .cf-save-status-compact { display:none; }

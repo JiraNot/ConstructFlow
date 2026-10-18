@@ -4,7 +4,7 @@ import type { DisplayLengthUnit } from '@constructflow/project-model'
 
 type Axis = 'x' | 'y'
 
-interface PlanCanvasPlacementDimensionsProps {
+export interface PlanCanvasPlacementDimensionsProps {
   position: [number, number] | null
   containerSize: { width: number; height: number }
   displayUnit: DisplayLengthUnit

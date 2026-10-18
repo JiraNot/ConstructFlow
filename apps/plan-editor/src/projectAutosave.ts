@@ -1,6 +1,4 @@
-import { deserializeProject, type ProjectDocument } from '@constructflow/project-model'
-import { validateConstructionProject } from '@constructflow/domain-providers'
-import { CommandBus } from './commands/CommandBus.js'
+import type { ProjectDocument } from '@constructflow/project-model'
 import type { LocalProjectFileHandle } from './projectFileIO.js'
 
 const DATABASE_NAME = 'constructflow-local-projects'
@@ -49,10 +47,14 @@ export async function loadLocalProjectSnapshot(): Promise<LoadedLocalProjectSnap
         resolve(null)
         return
       }
-      try {
+      void Promise.all([
+        import('@constructflow/project-model'),
+        import('@constructflow/domain-providers'),
+        import('./commands/CommandBus.js'),
+      ]).then(([projectModel, domainProviders, commandRuntime]) => {
         // Never let an invalid/stale browser snapshot replace the valid current document.
-        const project = CommandBus.migrateProject(deserializeProject(value.projectJson))
-        validateConstructionProject(project)
+        const project = commandRuntime.CommandBus.migrateProject(projectModel.deserializeProject(value.projectJson))
+        domainProviders.validateConstructionProject(project)
         resolve({
           projectJson: value.projectJson,
           project,
@@ -61,9 +63,7 @@ export async function loadLocalProjectSnapshot(): Promise<LoadedLocalProjectSnap
           fileHandle: isProjectFileHandle(value.fileHandle) ? value.fileHandle : null,
           savedAt: Number.isFinite(value.savedAt) ? value.savedAt : Date.now(),
         })
-      } catch (error) {
-        reject(error)
-      }
+      }).catch(reject)
     }
     request.onerror = () => reject(request.error ?? new Error('อ่านงานที่บันทึกในเครื่องไม่สำเร็จ'))
     transaction.oncomplete = () => database.close()

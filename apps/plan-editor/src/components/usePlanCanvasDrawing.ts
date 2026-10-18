@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useRef, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { DoorHanding, InteriorFurnitureKind, ProjectDocument, StairModuleData } from '@constructflow/project-model'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
 import type { DisplayLengthUnit } from '@constructflow/project-model'
-import type { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
+import { loadPlanCanvasRenderer, type PlanCanvasRenderer, type UnderlayConfig, type PlanLabelVisibility } from '../rendering/planRendererTypes.js'
 import type { ViewportState } from '../viewport/viewportTransform.js'
 import type { ToolType } from './Toolbar.js'
 import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
-import { buildPlanPlacementGhost } from './buildPlanPlacementGhost.js'
 import { drawPlanCanvasBaseScene } from './drawPlanCanvasBaseScene.js'
-import { drawPlanCanvasSelectionHandles } from './drawPlanCanvasSelectionHandles.js'
-import { drawPlanCanvasToolOverlays } from './drawPlanCanvasToolOverlays.js'
+
+type SelectionHandleRenderer = typeof import('./drawPlanCanvasSelectionHandles.js')['drawPlanCanvasSelectionHandles']
+type TransientRenderer = typeof import('./planCanvasTransientRenderer.js')
+type CoordinationOverlayRenderer = typeof import('./drawPlanCanvasCoordinationOverlay.js')['drawPlanCanvasCoordinationOverlay']
+type ElectricalCircuitOverlayRenderer = typeof import('./drawPlanCanvasElectricalCircuitOverlay.js')['drawPlanCanvasElectricalCircuitOverlay']
 
 interface UsePlanCanvasDrawingOptions {
   containerRef: RefObject<HTMLDivElement | null>
@@ -63,6 +65,11 @@ interface UsePlanCanvasDrawingOptions {
 }
 
 export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: UsePlanCanvasDrawingOptions) {
+  const [drawSelectionHandles, setDrawSelectionHandles] = useState<SelectionHandleRenderer | null>(null)
+  const [transientRenderer, setTransientRenderer] = useState<TransientRenderer | null>(null)
+  const [drawCoordinationOverlay, setDrawCoordinationOverlay] = useState<CoordinationOverlayRenderer | null>(null)
+  const [drawElectricalCircuitOverlay, setDrawElectricalCircuitOverlay] = useState<ElectricalCircuitOverlayRenderer | null>(null)
+  const [planRenderer, setPlanRenderer] = useState<PlanCanvasRenderer | null>(null)
   const {
     activeTool, activeFamilyId, activeFamilyTypeId, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark,
     activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
@@ -80,14 +87,15 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     const rect = canvas.getBoundingClientRect()
+    if (!planRenderer) return
     const probe = (window as unknown as { __cfPlanRedrawDurationsMs?: number[] }).__cfPlanRedrawDurationsMs
     const drawStartedAt = probe ? performance.now() : 0
 
-    const ghost = buildPlanPlacementGhost({
+    const ghost = transientRenderer?.buildPlanPlacementGhost({
       activeTool, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark,
       activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, beamStartNode, wallStartNode,
       activeWallSnap, doorHanding, stairPreview, stairStartPoint, resolveReferencePath,
-    })
+    }) ?? null
     canvas.dataset.wallJunctionPreview = ghost?.wall_junction_preview ? 'true' : 'false'
     canvas.dataset.wallJunctionTargetCount = String(ghost?.wall_junction_preview?.target_count ?? 0)
     const visibleManipulationPreview = manipulationPreview ?? externalManipulationPreview
@@ -100,18 +108,22 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
     drawPlanCanvasBaseScene({
       ctx, width: rect.width, height: rect.height, project, planProject, viewport, selectedIds,
       editableSelectionIds, hoveredId, activeSnap, ghost, underlay, calibrationOverlay, labelMode,
-      labelVisibility, planDiscipline, manipulationPreview, externalManipulationPreview, coordination,
-      coordinationSeverities, coordinationFocusSelection,
+      labelVisibility, planDiscipline, manipulationPreview, externalManipulationPreview, renderer: planRenderer,
     })
-    drawPlanCanvasSelectionHandles(ctx, editableSelectionIds, planProject, viewport, displayUnit, manipulationPreview)
-    drawPlanCanvasToolOverlays({
+    if (drawElectricalCircuitOverlay && editableSelectionIds.some(id => {
+      const object = planProject.objects[id]
+      return object?.object_type === 'electrical.fixture' && (object.module_data as { kind?: unknown }).kind === 'panel'
+    })) drawElectricalCircuitOverlay(ctx, project, editableSelectionIds, new Set(Object.keys(planProject.objects)), viewport)
+    if (coordination.length) drawCoordinationOverlay?.(ctx, coordination, project, viewport, editableSelectionIds, coordinationSeverities, coordinationFocusSelection)
+    drawSelectionHandles?.(ctx, editableSelectionIds, planProject, viewport, displayUnit, manipulationPreview)
+    transientRenderer?.drawPlanCanvasToolOverlays({
       ctx, activeTool, activeFamilyId, activeFamilyTypeId, gridStartPoint, activeSnap, planProject, viewport, gridCopySourceId, tapeMeasure,
       displayUnit, activeWallSnap, project, activeDoorTypeMark, activeWindowTypeMark,
       dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary,
     })
     if (probe) probe.push(performance.now() - drawStartedAt)
   }, [
-    canvasRef, activeTool, activeFamilyId, activeFamilyTypeId, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark,
+    canvasRef, drawSelectionHandles, transientRenderer, drawCoordinationOverlay, drawElectricalCircuitOverlay, planRenderer, activeTool, activeFamilyId, activeFamilyTypeId, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark,
     activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
     beamStartNode, wallStartNode, activeWallSnap, doorHanding, stairPreview, stairStartPoint,
     resolveReferencePath, calibrationP1, calibrationMousePoint, selectedIds, editableSelectionIds,
@@ -120,6 +132,55 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
     coordinationFocusSelection, gridStartPoint, gridCopySourceId, tapeMeasure,
     dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary,
   ])
+
+  useEffect(() => {
+    let active = true
+    void loadPlanCanvasRenderer()
+      .then(renderer => { if (active) setPlanRenderer(renderer) })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!editableSelectionIds.length || drawSelectionHandles) return
+    let active = true
+    void import('./drawPlanCanvasSelectionHandles.js')
+      .then(module => { if (active) setDrawSelectionHandles(() => module.drawPlanCanvasSelectionHandles) })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [editableSelectionIds.length, drawSelectionHandles])
+
+  const transientToolsNeeded = activeTool !== 'select' || activeSnap !== null || selectionBox !== null || tapeMeasure !== null
+  useEffect(() => {
+    if (!transientToolsNeeded || transientRenderer) return
+    let active = true
+    void import('./planCanvasTransientRenderer.js')
+      .then(module => { if (active) setTransientRenderer(module) })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [transientToolsNeeded, transientRenderer])
+
+  useEffect(() => {
+    if (!coordination.length || drawCoordinationOverlay) return
+    let active = true
+    void import('./drawPlanCanvasCoordinationOverlay.js')
+      .then(module => { if (active) setDrawCoordinationOverlay(() => module.drawPlanCanvasCoordinationOverlay) })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [coordination.length, drawCoordinationOverlay])
+
+  const electricalPanelSelected = editableSelectionIds.some(id => {
+    const object = planProject.objects[id]
+    return object?.object_type === 'electrical.fixture' && (object.module_data as { kind?: unknown }).kind === 'panel'
+  })
+  useEffect(() => {
+    if (!electricalPanelSelected || drawElectricalCircuitOverlay) return
+    let active = true
+    void import('./drawPlanCanvasElectricalCircuitOverlay.js')
+      .then(module => { if (active) setDrawElectricalCircuitOverlay(() => module.drawPlanCanvasElectricalCircuitOverlay) })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [electricalPanelSelected, drawElectricalCircuitOverlay])
 
   useEffect(() => redraw(), [redraw])
 

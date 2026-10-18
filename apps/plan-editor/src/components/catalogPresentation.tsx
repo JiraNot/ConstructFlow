@@ -8,6 +8,7 @@ import {
   type OpeningGridZone,
   measureOpeningRegions,
 } from "@constructflow/architecture-engine";
+export { TOOL_FAMILIES } from '../app/toolCatalogFamilies.js'
 type OpeningOperation = "hinged" | "sliding" | "fixed" | "awning" | "louver" | "bifold" | "pocket" | "surface_sliding";
 type GlazingMaterial =
   | "none"
@@ -38,17 +39,6 @@ export const OPERATION_LABELS: Record<string, string> = {
   awning: "บานกระทุ้ง",
   louver: "บานเกล็ด",
 };
-export const TOOL_FAMILIES: Record<string, string> = {
-  column: "structure.column",
-  foundation: "structure.foundation",
-  beam: "structure.beam",
-  wall: "architecture.wall",
-  door: "door_window.door",
-  window: "door_window.window",
-  slab: "structure.slab",
-  roof: "roof.system",
-};
-
 export function typeDescription(type: TypeDefinition): string {
   const p = type.parameters;
   const family =

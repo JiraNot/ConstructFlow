@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ProjectDocument } from "@constructflow/project-model";
 import type { CommandRequest } from "@constructflow/command-schema";
-import { AlertTriangle, Bot, Check, LoaderCircle, LogIn, LogOut, Play, RefreshCw } from "lucide-react";
+import { AlertTriangle, Bot, Check, FileText, LoaderCircle, LogIn, LogOut, Paperclip, Play, RefreshCw, X } from "lucide-react";
 import { buildAIProjectContext, getAICommandDescriptors } from "../ai/aiCommandCatalog.js";
 import { CommandBus } from "../commands/CommandBus.js";
 
@@ -18,6 +18,28 @@ interface Plan {
 interface CommandResult { status: string; affected_object_ids?: string[]; errors?: string[] }
 interface AuthStatus { mode: "local" | "gateway"; connected: boolean; email: string; name: string; sharing: boolean }
 interface ChatGPTModel { slug: string; display_name: string }
+interface DrawingAttachment {
+  filename: string;
+  mime_type: "application/pdf" | "image/jpeg" | "image/png";
+  data_url: string;
+  file: File;
+}
+
+function readDrawingFile(file: File): Promise<DrawingAttachment> {
+  return new Promise((resolve, reject) => {
+    const extension = file.name.toLowerCase().split(".").pop();
+    const mimeType = file.type || (extension === "pdf" ? "application/pdf" : extension === "png" ? "image/png" : extension === "jpg" || extension === "jpeg" ? "image/jpeg" : "");
+    if (!(mimeType === "application/pdf" || mimeType === "image/jpeg" || mimeType === "image/png")) { reject(new Error(`${file.name}: รองรับเฉพาะ PDF, JPG และ PNG`)); return; }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`อ่าน ${file.name} ไม่สำเร็จ`));
+    reader.onload = () => {
+      const encoded = String(reader.result ?? "").split(",", 2)[1];
+      if (!encoded) { reject(new Error(`${file.name}: อ่านข้อมูลไฟล์ไม่ได้`)); return; }
+      resolve({ filename: file.name, mime_type: mimeType, data_url: `data:${mimeType};base64,${encoded}`, file });
+    };
+    reader.readAsDataURL(file);
+  });
+}
 interface Props {
   project: ProjectDocument;
   selectedIds: readonly string[];
@@ -40,12 +62,15 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
   const [gatewayToken, setGatewayToken] = useState("");
   const [authBusy, setAuthBusy] = useState(true);
   const [prompt, setPrompt] = useState("");
+  const [drawingAttachments, setDrawingAttachments] = useState<DrawingAttachment[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const drawingPreviewUrls = useMemo(() => drawingAttachments.map(item => URL.createObjectURL(item.file)), [drawingAttachments]);
+  useEffect(() => () => { drawingPreviewUrls.forEach(URL.revokeObjectURL); }, [drawingPreviewUrls]);
   const moduleRevision = useSyncExternalStore(
     listener => CommandBus.subscribeToModules(listener),
     () => CommandBus.getModuleRegistryRevision(),
@@ -155,8 +180,8 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
   };
 
   const generate = async () => {
-    if (!prompt.trim()) {
-      setError("พิมพ์สิ่งที่ต้องการให้ช่วยวางแผนก่อน");
+    if (!prompt.trim() && !drawingAttachments.length) {
+      setError("พิมพ์คำขอหรือแนบแบบที่ต้องการให้ช่วยอ่านก่อน");
       return;
     }
     if (auth.mode === "local" && (!auth.connected || !model)) {
@@ -177,9 +202,10 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
     setPlan(null);
     setPreview(null);
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 55_000);
+    const timeout = window.setTimeout(() => controller.abort(), drawingAttachments.length ? 120_000 : 55_000);
     try {
       localStorage.setItem("cf-ai-plan-endpoint", endpoint.trim());
+      const requestPrompt = prompt.trim() || "อ่าน PDF หรือภาพที่แนบ ระบุหน้า เลขที่แบบ และชั้นของแต่ละแปลนก่อน แล้วเสนอผนัง ประตู หน้าต่างเฉพาะส่วนที่มีหลักฐานจากมิติหรือมาตราส่วน หากแยกหน้า/ชั้นหรือข้อมูลสำคัญไม่ได้ให้ถามก่อน ห้ามเดาค่า";
       const response = await fetch(endpoint.trim(), {
         method: "POST",
         headers: auth.mode === "gateway"
@@ -187,9 +213,10 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
           : { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          prompt: prompt.trim(),
+          prompt: requestPrompt,
           project_context: buildAIProjectContext(project, selectedIds),
           command_descriptors: descriptors,
+          ...(drawingAttachments.length ? { drawing_attachments: drawingAttachments.map(({ filename, mime_type, data_url }) => ({ filename, mime_type, data_url })) } : {}),
           ...(auth.mode === "local" ? { model } : {}),
         }),
       });
@@ -286,11 +313,34 @@ export function AICommandPanel({ project, selectedIds, onPreview, onExecute }: P
         </select>
       </label>}
       <label className="cf-ai-field cf-ai-prompt">
-        <span>ต้องการทำอะไรกับโมเดลนี้?</span>
-        <textarea aria-label="คำขอผู้ช่วย AI" rows={5} maxLength={8000} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="เช่น เพิ่มผนังยาว 4 เมตรบนชั้นปัจจุบัน จากพิกัด X=0, Y=0" disabled={auth.mode === "local" && !auth.connected} />
+        <span>บอกสิ่งที่ต้องการ หรือแนบแบบ PDF/ภาพจากลูกค้า</span>
+        <textarea aria-label="คำขอผู้ช่วย AI" rows={4} maxLength={8000} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="เช่น อ่านหน้าแปลนชั้นล่างและชั้นบนจาก PDF แล้วร่างโมเดลให้ตรวจ" disabled={auth.mode === "local" && !auth.connected} />
       </label>
-      <p className="cf-ai-privacy">{auth.mode === "local" ? "ใช้ ChatGPT plan ที่คุณอนุญาต · token เก็บใน credential store ของเครื่อง และไม่เข้า browser storage" : "คำขอและบริบทโครงการจะส่งไปยัง AI gateway ที่กำหนด"}</p>
-      <button className="cf-button cf-button-primary cf-ai-generate" disabled={busy || applying || (auth.mode === "local" && (!auth.connected || !model)) || (auth.mode === "gateway" && (!gatewayToken.trim() || !endpoint.trim())) || !prompt.trim()} onClick={() => void generate()}>
+      <div className="cf-ai-drawing-attach">
+        <label className="cf-button cf-ai-attach-button">
+          <Paperclip size={15} /> แนบ PDF หรือภาพแปลน
+          <input aria-label="แนบ PDF หรือภาพแปลน" type="file" multiple accept=".pdf,application/pdf,.jpg,.jpeg,image/jpeg,.png,image/png" onChange={event => {
+            const files = Array.from(event.currentTarget.files ?? []);
+            event.currentTarget.value = "";
+            if (!files.length) return;
+            const combinedBytes = [...drawingAttachments.map(item => item.file.size), ...files.map(file => file.size)].reduce((sum, size) => sum + size, 0);
+            if (combinedBytes <= 0 || combinedBytes > 20 * 1024 * 1024) { setError("ขนาดไฟล์แบบรวมต้องไม่เกิน 20 MB"); return; }
+            if (drawingAttachments.length + files.length > 8) { setError("แนบแบบได้ไม่เกิน 8 ไฟล์ต่อครั้ง"); return; }
+            void Promise.all(files.map(readDrawingFile)).then(attachments => {
+              setError(""); setPlan(null); setPreview(null);
+              setDrawingAttachments(current => [...current, ...attachments]);
+            }).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
+          }} />
+        </label>
+        {drawingAttachments.map((attachment, index) => <div className="cf-ai-attached-file" key={`${attachment.filename}-${index}`}>
+          {attachment.mime_type.startsWith("image/") ? <img src={drawingPreviewUrls[index]} alt={`ตัวอย่างแบบ ${attachment.filename}`} /> : <FileText size={19} />}
+          <span title={attachment.filename}>{attachment.filename}</span>
+          <button type="button" className="cf-icon-button" aria-label={`เอา ${attachment.filename} ออก`} onClick={() => { setDrawingAttachments(current => current.filter((_, itemIndex) => itemIndex !== index)); setPlan(null); setPreview(null); }}><X size={15} /></button>
+        </div>)}
+      </div>
+      {drawingAttachments.some(attachment => attachment.mime_type === "application/pdf") && <p className="cf-ai-privacy">PDF อาจมีหลายหน้า · AI จะระบุหน้าและชื่อแบบที่ใช้ในข้อเสนอ หากแยกชั้นหรือหน้าไม่ชัด จะถามก่อนสร้าง</p>}
+      <p className="cf-ai-privacy">{auth.mode === "local" ? "ใช้ ChatGPT plan ที่คุณอนุญาต · ไฟล์จะส่งเมื่อกดสร้างแผน · token เก็บในเครื่อง" : "คำขอและไฟล์ที่แนบจะส่งไปยัง AI gateway ที่กำหนดเมื่อกดสร้างแผน"}</p>
+      <button className="cf-button cf-button-primary cf-ai-generate" disabled={busy || applying || (auth.mode === "local" && (!auth.connected || !model)) || (auth.mode === "gateway" && (!gatewayToken.trim() || !endpoint.trim())) || (!prompt.trim() && !drawingAttachments.length)} onClick={() => void generate()}>
         {busy ? <LoaderCircle size={15} className="cf-ai-spin" /> : <Bot size={15} />}
         {busy ? "กำลังร่างแผน…" : "สร้างแผนคำสั่ง"}
       </button>

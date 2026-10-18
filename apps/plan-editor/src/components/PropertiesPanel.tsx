@@ -1,8 +1,9 @@
-import React from 'react'
+import React, { lazy, Suspense } from 'react'
 import { EmptySelectionProperties, MultiSelectionProperties } from './SelectionProperties.js'
 import { resolvePropertiesSelection } from './propertiesSelection.js'
-import { SelectedObjectProperties } from './SelectedObjectProperties.js'
 import type { PropertiesPanelProps } from './PropertiesPanel.types.js'
+
+const SelectedObjectProperties = lazy(() => import('./SelectedObjectProperties.js').then(module => ({ default: module.SelectedObjectProperties })))
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = props => {
   const { project, selectedId, selectedIds = selectedId ? [selectedId] : [],
@@ -20,5 +21,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = props => {
       onAssignTypeMany={onAssignTypeMany} onUpdateLevelMany={onUpdateLevelMany} onDeleteObjects={onDeleteObjects} />
   }
 
-  return <SelectedObjectProperties props={props} selection={selection} />
+  return <Suspense fallback={<div role="status" className="cf-inspector-content">กำลังโหลดคุณสมบัติวัตถุ…</div>}>
+    <SelectedObjectProperties props={props} selection={selection} />
+  </Suspense>
 }

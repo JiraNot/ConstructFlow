@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectDocument, ProjectViewTemplate, SmartObject } from '@constructflow/project-model'
-import { Eye, EyeOff, Search } from 'lucide-react'
+import { Eye, EyeOff, Search, Trash2 } from 'lucide-react'
 import type { AlignmentMode } from '../app/transformOperations.mjs'
 import { groupProjectBrowserObjects } from './groupProjectBrowserObjects.mjs'
 import { getObjectFamilyDisplayName } from './objectDisplayNames.js'
@@ -30,6 +30,8 @@ interface ProjectBrowserProps {
   onSaveViewTemplate: (name: string) => boolean
   onApplyViewTemplate: (template: ProjectViewTemplate) => boolean
   onDeleteViewTemplate: (templateId: string) => boolean
+  onUpdateReferenceDrawing: (storageKey: string, changes: { level_id?: string; visible?: boolean }) => void
+  onDeleteReferenceDrawing: (storageKey: string) => void
   onSelectObjects: (ids: string[]) => void
   onToggleVisibility: (objectId: string) => void
   onShowAll: () => void
@@ -46,7 +48,7 @@ interface ProjectBrowserProps {
   alignmentPreviewActive: boolean
 }
 
-export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selectedIds, hiddenObjectIds, activeLevelId, activeViewId, viewTemplates, onSelectLevel, onSelectView, onSaveViewTemplate, onApplyViewTemplate, onDeleteViewTemplate, onSelectObjects, onToggleVisibility, onShowAll, onPreviewArray, onMoveObjects, onPreviewAlignment, onPreviewOffset, onPreviewMirror, onPreviewSplit, onPreviewJoin, onPreviewTrim, onCommitAlignment, onCancelAlignment, alignmentPreviewActive }) => {
+export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selectedIds, hiddenObjectIds, activeLevelId, activeViewId, viewTemplates, onSelectLevel, onSelectView, onSaveViewTemplate, onApplyViewTemplate, onDeleteViewTemplate, onUpdateReferenceDrawing, onDeleteReferenceDrawing, onSelectObjects, onToggleVisibility, onShowAll, onPreviewArray, onMoveObjects, onPreviewAlignment, onPreviewOffset, onPreviewMirror, onPreviewSplit, onPreviewJoin, onPreviewTrim, onCommitAlignment, onCancelAlignment, alignmentPreviewActive }) => {
   const [query, setQuery] = useState('')
   const [viewTemplateName, setViewTemplateName] = useState('')
   const [viewTemplateFeedback, setViewTemplateFeedback] = useState('')
@@ -119,6 +121,18 @@ export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selecte
     <nav className="cf-browser-views" aria-label="มุมมองโครงการ">
       {([['plan', 'แปลน'], ['framing', 'แปลนคาน'], ['roofplan', 'แปลนหลังคา'], ['north', 'เหนือ'], ['south', 'ใต้'], ['east', 'ตะวันออก'], ['west', 'ตะวันตก'], ['rcp', 'RCP'], ['model3d', '3D']] as const).map(([id, label]) => <button key={id} type="button" className={activeViewId === id ? 'is-active' : ''} onClick={() => onSelectView(id)}>{label}</button>)}
     </nav>
+    <details className="cf-browser-reference-drawings">
+      <summary>แบบ DWG/DXF ที่นำเข้า <span>{Object.values(project.underlays ?? {}).filter(underlay => !!underlay.drawing_id).length}</span></summary>
+      <div className="cf-reference-drawing-list">
+        {Object.entries(project.underlays ?? {}).filter(([, underlay]) => !!underlay.drawing_id).map(([key, underlay]) => <div className="cf-reference-drawing-row" key={key}>
+          <button type="button" aria-label={`${underlay.visible ? 'ซ่อน' : 'แสดง'} ${underlay.display_name ?? underlay.source_file ?? 'แปลน'}`} title={underlay.visible ? 'ซ่อนแปลนนี้' : 'แสดงแปลนนี้'} onClick={() => onUpdateReferenceDrawing(key, { visible: !underlay.visible })}>{underlay.visible ? <Eye size={15}/> : <EyeOff size={15}/>}</button>
+          <span title={underlay.source_file}>{underlay.display_name ?? underlay.source_layout ?? underlay.source_file ?? 'แปลน DWG'}<small>{underlay.source_file}{underlay.source_layout ? ` · ${underlay.source_layout}` : ' · Model Space'}</small></span>
+          <select aria-label={`ชั้นของ ${underlay.display_name ?? 'แปลน'}`} value={underlay.level_id ?? activeLevelId} onChange={event => onUpdateReferenceDrawing(key, { level_id: event.target.value })}>{project.levels.map(level => <option key={level.id} value={level.id}>{level.name}</option>)}</select>
+          <button type="button" aria-label={`ลบ ${underlay.display_name ?? 'แปลน'}`} title="ลบแบบอ้างอิง" onClick={() => onDeleteReferenceDrawing(key)}><Trash2 size={14}/></button>
+        </div>)}
+        {!Object.values(project.underlays ?? {}).some(underlay => !!underlay.drawing_id) && <p>ยังไม่มีแบบ DWG/DXF แยกชั้น</p>}
+      </div>
+    </details>
     <section className="cf-browser-view-templates" aria-label="แม่แบบมุมมอง">
       <form onSubmit={event => {
         event.preventDefault()

@@ -3,7 +3,8 @@ import { projectPointToWallOffsetMm } from '@constructflow/architecture-engine'
 import { movePipeRouteEndpoint, movePipeRouteNode } from '@constructflow/drainage-engine'
 import { snapOpeningOffsetBimAware, resizeOpeningFromEdge, type SnapResult } from '@constructflow/snapping-engine'
 import type { CommandRequest } from '@constructflow/command-schema'
-import { buildDirectManipulationCommands, type PlanDragGesture } from '../directManipulation.mjs'
+import type { PlanDragGesture } from '../directManipulation.mjs'
+import { loadDirectManipulation } from '../directManipulationLoader.js'
 import type { ViewportState } from '../viewport/viewportTransform.js'
 import { cabinetRotationFromGrip } from './PlanCanvasGeometry.js'
 
@@ -16,7 +17,7 @@ interface BuildPlanCanvasDragCommandsOptions {
   snapPlanPoint: (point: [number, number], distancePx?: number, excludedObjectId?: string) => SnapResult
 }
 
-export function buildPlanCanvasDragCommands({ planProject, drag, rawWorld, ctrlKey, viewport, snapPlanPoint }: BuildPlanCanvasDragCommandsOptions): CommandRequest[] {
+export async function buildPlanCanvasDragCommands({ planProject, drag, rawWorld, ctrlKey, viewport, snapPlanPoint }: BuildPlanCanvasDragCommandsOptions): Promise<CommandRequest[]> {
   const snap = ctrlKey
     ? { point_mm: rawWorld, target_id: undefined }
     : snapPlanPoint(rawWorld, 16, drag.id)
@@ -87,5 +88,6 @@ export function buildPlanCanvasDragCommands({ planProject, drag, rawWorld, ctrlK
     options.cabinetRotationDeg = cabinetRotationFromGrip(drag.cabinetData as unknown as CabinetModuleData, point, viewport.zoom)
   }
 
+  const { buildDirectManipulationCommands } = await loadDirectManipulation()
   return buildDirectManipulationCommands(planProject, drag, point, options)
 }

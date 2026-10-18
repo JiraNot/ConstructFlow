@@ -1,7 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 import {
   createDefaultResidentialProjectDocument,
-  deserializeProject,
   serializeProject,
   type ProjectDocument,
 } from '@constructflow/project-model'
@@ -73,6 +72,7 @@ export function useProjectCreationActions({
     if (!confirmReplaceUnsavedProject()) return
     try {
       const { loadHouseDemoRaw } = await import('./houseDemo.js')
+      const { deserializeProject } = await import('@constructflow/project-model')
       replaceProject(deserializeProject(loadHouseDemoRaw()), 'เปิดแบบบ้านเดโม 2 ชั้นแล้ว')
     } catch (error) {
       window.alert(`เปิดแบบบ้านเดโมไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)

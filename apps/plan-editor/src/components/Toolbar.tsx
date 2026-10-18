@@ -82,6 +82,7 @@ interface ToolbarProps {
   underlayHasImage?: boolean
   underlayVisible?: boolean
   underlayOpacity?: number
+  underlayLabel?: string
   onToggleUnderlayVisible?: () => void
   onChangeUnderlayOpacity?: (opacity: number) => void
   onUploadUnderlayImage?: (file: File) => void
@@ -116,6 +117,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   underlayHasImage,
   underlayVisible,
   underlayOpacity,
+  underlayLabel,
   onToggleUnderlayVisible,
   onChangeUnderlayOpacity,
   onUploadUnderlayImage,
@@ -270,6 +272,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             if (file && onUploadUnderlayImage) {
               onUploadUnderlayImage(file)
             }
+            e.currentTarget.value = ''
           }}
         />
 
@@ -277,7 +280,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             className="cf-underlay-button"
             onClick={() => fileInputRef.current?.click()}
-            title="นำเข้าภาพหรือไฟล์ DWG/DXF เป็น Underlay แล้วปรับเทียบสเกลได้"
+            title="นำเข้าภาพหรือแบบ DWG/DXF แล้วเลือกแปลนและปรับสเกล"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -293,7 +296,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             }}
           >
             <Upload size={13} />
-            <span>Import Underlay</span>
+            <span>นำเข้าแบบ</span>
           </button>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -301,7 +304,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <button
               className="cf-underlay-button"
               onClick={onToggleUnderlayVisible}
-              title={underlayVisible ? 'ซ่อนภาพแปลนพื้น (Hide Underlay)' : 'แสดงภาพแปลนพื้น (Show Underlay)'}
+              title={`${underlayVisible ? 'ซ่อนแบบอ้างอิง' : 'แสดงแบบอ้างอิง'}${underlayLabel ? ` · ${underlayLabel}` : ''}`}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -316,7 +319,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               }}
             >
               {underlayVisible ? <Eye size={13} /> : <EyeOff size={13} />}
-              <span>{underlayVisible ? 'Underlay ON' : 'Underlay OFF'}</span>
+              <span>{underlayVisible ? 'แบบอ้างอิงแสดง' : 'แบบอ้างอิงซ่อน'}</span>
             </button>
 
             {/* Opacity slider */}
@@ -337,7 +340,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             {/* Clear Underlay */}
             <button
               onClick={onClearUnderlay}
-              title="ลบภาพแปลนพื้นออก (Remove Underlay)"
+              title="เอาแบบอ้างอิงออกจากมุมมองนี้"
               style={{
                 background: 'transparent',
                 border: 'none',

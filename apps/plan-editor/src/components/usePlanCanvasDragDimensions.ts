@@ -5,7 +5,7 @@ import { resolveDragDimensionTarget, resolveLineEndpointLengthTarget, resolveOpe
 import { stairLandingGripPoint } from './stairLandingGripPoint.mjs'
 import { stairFlightGripPoints } from './stairFlightGripPoints.mjs'
 
-type PreviewDrag = (drag: PlanDragGesture, point: [number, number], ctrlKey: boolean, manual?: boolean) => { commands: unknown[]; valid: boolean }
+type PreviewDrag = (drag: PlanDragGesture, point: [number, number], ctrlKey: boolean, manual?: boolean) => Promise<{ commands: unknown[]; valid: boolean }>
 
 function endpointSegment(points: number[][] | undefined, endpointIndex: number | undefined) {
   if (!points || points.length < 2 || endpointIndex === undefined) return null

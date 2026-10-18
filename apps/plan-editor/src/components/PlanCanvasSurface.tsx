@@ -1,4 +1,4 @@
-import React, { type ComponentProps, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import React, { lazy, Suspense, type ComponentProps, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { SmartObject } from '@constructflow/project-model'
 import type { SiteSurveyPoint } from '@constructflow/project-model'
@@ -6,13 +6,16 @@ import type { ViewportState } from '../viewport/viewportTransform.js'
 import { zoomAtScreenPoint } from '../viewport/viewportTransform.js'
 import { PlanCanvasInteractionOverlays } from './PlanCanvasInteractionOverlays.js'
 import { PlanCanvasObjectContextMenu } from './PlanCanvasObjectContextMenu.js'
-import { PlanDimensionLayer } from './PlanDimensionLayer.js'
-import { PlanPhotoPinLayer } from './PlanPhotoPinLayer.js'
+import type { PlanDimensionLayerProps } from './PlanDimensionLayer.js'
+import type { PlanPhotoPinLayerProps } from './PlanPhotoPinLayer.js'
 import type { ToolType } from './Toolbar.js'
 
 type CanvasEvents = Pick<ComponentProps<'canvas'>,
   'onPointerMove' | 'onPointerDown' | 'onDoubleClick' | 'onContextMenu' | 'onPointerUp' | 'onWheel' | 'onKeyDown' | 'onPointerCancel'
 >
+
+const PlanDimensionLayer = lazy(() => import('./PlanDimensionLayer.js').then(module => ({ default: module.PlanDimensionLayer })))
+const PlanPhotoPinLayer = lazy(() => import('./PlanPhotoPinLayer.js').then(module => ({ default: module.PlanPhotoPinLayer })))
 
 interface PlanCanvasSurfaceProps {
   containerRef: RefObject<HTMLDivElement | null>
@@ -23,8 +26,8 @@ interface PlanCanvasSurfaceProps {
   contextMenu: (Omit<ComponentProps<typeof PlanCanvasObjectContextMenu>, 'containerSize'> & { object: SmartObject }) | null
   containerSize: { width: number; height: number }
   overlays: ComponentProps<typeof PlanCanvasInteractionOverlays>
-  dimensions: ComponentProps<typeof PlanDimensionLayer>
-  photoPins?: ComponentProps<typeof PlanPhotoPinLayer>
+  dimensions: PlanDimensionLayerProps
+  photoPins?: PlanPhotoPinLayerProps
   viewport: ViewportState
   setViewport: Dispatch<SetStateAction<ViewportState>>
   fitView: () => void
@@ -74,8 +77,10 @@ export function PlanCanvasSurface({
       {...canvasEvents}
       style={{ position: 'absolute', inset: 0, display: 'block', width: '100%', height: '100%', touchAction: 'none' }}
     />
-    <PlanDimensionLayer {...dimensions} />
-    {photoPins && <PlanPhotoPinLayer {...photoPins} />}
+    {(activeTool === 'dimension' || (dimensions.project.drawing_settings?.plan_dimensions?.length ?? 0) > 0) && <Suspense fallback={null}>
+      <PlanDimensionLayer {...dimensions} />
+    </Suspense>}
+    {photoPins?.sessions.length ? <Suspense fallback={null}><PlanPhotoPinLayer {...photoPins} /></Suspense> : null}
     {contextMenu && <PlanCanvasObjectContextMenu {...contextMenu} containerSize={containerSize} />}
     <PlanCanvasInteractionOverlays {...overlays} />
 

@@ -5,6 +5,8 @@ WORKDIR /workspace
 # Package installs use local file: dependencies, so build from the repository root.
 COPY . .
 RUN npm run build:standalone -- --install
+RUN node scripts/compress-static-assets.mjs apps/plan-editor/dist \
+    && find apps/plan-editor/dist -type f -name '*.wasm' -delete
 
 FROM nginx:alpine AS runtime
 

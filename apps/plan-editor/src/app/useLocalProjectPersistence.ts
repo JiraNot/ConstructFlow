@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { serializeProject, type ProjectDocument } from '@constructflow/project-model'
 import type { CommandEnvelope } from '@constructflow/command-schema'
-import { loadLocalProjectSnapshot, saveLocalProjectSnapshot } from '../projectAutosave.js'
 import type { LocalProjectFileHandle } from '../projectFileIO.js'
 
 type ProjectSessionRef = { current: { reset: (project: ProjectDocument) => void } | null }
@@ -35,7 +34,7 @@ export function useLocalProjectPersistence({
 
   useEffect(() => {
     let active = true
-    void loadLocalProjectSnapshot()
+    void import('../projectAutosave.js').then(({ loadLocalProjectSnapshot }) => loadLocalProjectSnapshot())
       .then(snapshot => {
         if (!active || !snapshot) return
         const restored = snapshot.project
@@ -67,7 +66,8 @@ export function useLocalProjectPersistence({
     const persistSnapshot = () => {
       if (saving) return
       saving = true
-      void saveLocalProjectSnapshot({ projectJson, savedProjectJson, replacementBaselineJson, fileHandle: activeProjectFileHandle })
+      void import('../projectAutosave.js')
+        .then(({ saveLocalProjectSnapshot }) => saveLocalProjectSnapshot({ projectJson, savedProjectJson, replacementBaselineJson, fileHandle: activeProjectFileHandle }))
         .then(() => setLocalAutosaveState('saved'))
         .catch(error => {
           console.error('Unable to autosave local ConstructFlow project', error)

@@ -50,7 +50,7 @@ export function usePlanCanvasController(props: PlanCanvasProps) {
   )
   const { viewport, setViewport } = viewportController
   const placement = usePlanCanvasPlacementSession({ project, displayUnit, activeTool, activation: toolActivation })
-  const [authoringControlsOpen, setAuthoringControlsOpen] = useState(() => window.innerWidth > 1180)
+  const [authoringControlsOpen, setAuthoringControlsOpen] = useState(false)
   const surveySelection = usePlanCanvasSurveySelection({ project, activeTool, viewport, onSelectObject, onSelectionChange })
   const { snapModes } = preferences
   const { snapPlanPoint, snapPlanWallHost } = usePlanCanvasSnapping({ planProject, viewport, snapModes })

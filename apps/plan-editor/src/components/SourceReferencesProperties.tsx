@@ -32,7 +32,8 @@ export function SourceReferencesProperties({ project, object, onUpdate }: Props)
     for (const [key, underlay] of Object.entries(project.underlays ?? {})) {
       const scaleLabel = underlay.scale_source === 'calibrated' ? 'ปรับเทียบแล้ว'
         : underlay.scale_source === 'declared_units' ? 'ใช้หน่วยจากไฟล์' : 'ยังใช้สเกลสมมติ'
-      const label = `แบบอ้างอิง ${underlay.source_file ?? key} · ${scaleLabel}`
+      const sourceName = underlay.source_layout ? `${underlay.source_file ?? key} · ${underlay.source_layout}` : underlay.source_file ?? key
+      const label = `แบบอ้างอิง ${sourceName} · ${scaleLabel}`
       options.push({
         key: `underlay:${key}`,
         source: { kind: 'underlay', source_id: key, label },

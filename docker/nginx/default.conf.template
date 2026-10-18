@@ -1,8 +1,28 @@
+map "$http_accept_encoding:$uri" $asset_suffix {
+    default "";
+    "~*br:.*\\.(?:css|js|json|svg|wasm)$" ".br";
+    "~*gzip:.*\\.wasm$" ".gz";
+}
+
+map $asset_suffix $asset_content_encoding {
+    default "";
+    ".br" br;
+    ".gz" gzip;
+}
+
 server {
     listen 80;
     server_name _;
     root /usr/share/nginx/html;
     index index.html;
+
+    # WebAssembly is shipped as a standalone asset (not in the JS entry chunk).
+    # Nginx does not gzip application/wasm by default, even though these binaries compress well.
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_comp_level 6;
+    gzip_types application/javascript application/json application/wasm image/svg+xml text/css text/plain;
 
     add_header Content-Security-Policy "default-src 'self' data: blob:; script-src 'self' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
     add_header Cross-Origin-Opener-Policy "same-origin" always;
@@ -18,6 +38,7 @@ server {
     }
 
     location ^~ /api/ai/ {
+        client_max_body_size 30m;
         resolver 127.0.0.11 valid=10s ipv6=off;
         set $ai_gateway AI_GATEWAY_UPSTREAM;
         proxy_pass http://$ai_gateway;
@@ -26,12 +47,31 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
     }
 
     location /assets/ {
         expires 1y;
         add_header Cache-Control "public, immutable";
-        try_files $uri =404;
+        add_header Vary Accept-Encoding always;
+        add_header Content-Encoding $asset_content_encoding;
+        try_files $uri$asset_suffix $uri =404;
+    }
+
+    location ~* \.wasm$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header Vary Accept-Encoding always;
+        default_type application/wasm;
+        add_header Content-Encoding $asset_content_encoding;
+        gzip_comp_level 9;
+        gzip_types application/wasm;
+        try_files $uri$asset_suffix $uri =404;
+    }
+
+    location ~* \.(?:br|gz)$ {
+        return 404;
     }
 
     location / {

@@ -534,11 +534,16 @@ function expandEntities(entities, blocks, transform, geometry, onUnsupported, st
 }
 
 /** Parses common model-space vector entities into a lightweight, calibrated SVG underlay. */
-export function importDxfUnderlay(source, { maxImageDimension = 4096 } = {}) {
+export function importDxfUnderlay(source, { maxImageDimension = 4096, space = 'model_space', layoutName } = {}) {
   const pairs = readPairs(source)
   if (!pairs.length) throw new Error('ไฟล์ DXF ไม่มีข้อมูล group code ที่อ่านได้')
   const [unitName, millimetersPerUnit] = resolveDrawingUnits(pairs)
-  const entities = parseEntities(readSectionPairs(pairs, 'ENTITIES'))
+  const entities = parseEntities(readSectionPairs(pairs, 'ENTITIES')).filter(entity => {
+    const entityLayout = valueOf(entity, 410)
+    const paperSpace = Number(valueOf(entity, 67) ?? 0) === 1
+    if (space === 'paper_space') return !!entityLayout && entityLayout.toLowerCase() !== 'model' && (!layoutName || entityLayout === layoutName)
+    return !paperSpace && (!entityLayout || entityLayout.toLowerCase() === 'model')
+  })
   const blocks = readBlocks(readSectionPairs(pairs, 'BLOCKS'))
   const geometry = []
   let unsupportedEntities = 0
@@ -571,7 +576,32 @@ export function importDxfUnderlay(source, { maxImageDimension = 4096 } = {}) {
     drawing_units: unitName,
     imported_entities: geometry.length,
     skipped_entities: unsupportedEntities,
+    layers: [...new Set(geometry.map(shape => shape.layer).filter(Boolean))].sort(),
   }
+}
+
+/** Returns each DXF model/layout view separately so users can pick one plan at a time. */
+export function importDxfDrawingCandidates(source, { maxImageDimension = 4096 } = {}) {
+  const pairs = readPairs(source)
+  if (!pairs.length) throw new Error('ไฟล์ DXF ไม่มีข้อมูล group code ที่อ่านได้')
+  const records = parseEntities(readSectionPairs(pairs, 'ENTITIES'))
+  const layoutNames = [...new Set(records
+    .filter(entity => Number(valueOf(entity, 67) ?? 0) === 1 || (valueOf(entity, 410) && valueOf(entity, 410).toLowerCase() !== 'model'))
+    .map(entity => valueOf(entity, 410))
+    .filter(name => typeof name === 'string' && name.trim()))].sort((a, b) => a.localeCompare(b))
+  const candidates = []
+  const addCandidate = (id, name, kind, options) => {
+    try {
+      const underlay = importDxfUnderlay(source, { maxImageDimension, ...options })
+      const encoded = underlay.dataUrl.slice(underlay.dataUrl.indexOf(',') + 1)
+      const svg = decodeURIComponent(encoded)
+      candidates.push({ id, name, kind, svg, entityCount: underlay.imported_entities, unsupportedEntities: underlay.skipped_entities, layers: underlay.layers ?? [], prepared: underlay })
+    } catch { /* Empty or unsupported spaces are omitted; at least one usable view is required below. */ }
+  }
+  addCandidate('model-space', 'Model Space', 'model_space', { space: 'model_space' })
+  for (const layoutName of layoutNames) addCandidate(`layout:${layoutName}`, layoutName, 'paper_space', { space: 'paper_space', layoutName })
+  if (!candidates.length) throw new Error('ไม่พบ Model Space หรือ Layout ที่มีเส้น 2D ให้เลือก')
+  return candidates
 }
 
 

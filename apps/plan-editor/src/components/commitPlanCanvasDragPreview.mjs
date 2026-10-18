@@ -1,5 +1,5 @@
 /** Validate and commit a released plan-canvas drag from its original gesture. */
-export function commitPlanCanvasDragPreview({
+export async function commitPlanCanvasDragPreview({
   drag,
   rawWorld,
   ctrlKey,
@@ -12,7 +12,7 @@ export function commitPlanCanvasDragPreview({
 }) {
   if (movedPixels < 3 && !hasManualDimensions) return
 
-  const commands = buildCommands(drag, rawWorld, ctrlKey || hasManualDimensions)
+  const commands = await buildCommands(drag, rawWorld, ctrlKey || hasManualDimensions)
   if (!commands.length) return
 
   const validation = preview(commands)

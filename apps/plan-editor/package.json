@@ -22,7 +22,9 @@
     "@constructflow/drainage-engine": "file:../../packages/drainage-engine",
     "@constructflow/electrical-engine": "file:../../packages/electrical-engine",
     "@constructflow/extension-engine": "file:../../packages/extension-engine",
+    "@constructflow/family-engine": "file:../../packages/family-engine",
     "@constructflow/geometry-kernel": "file:../../packages/geometry-kernel",
+    "@constructflow/laser-survey": "file:../../packages/laser-survey",
     "@constructflow/module-sdk": "file:../../packages/module-sdk",
     "@constructflow/project-model": "file:../../packages/project-model",
     "@constructflow/representation-engine": "file:../../packages/representation-engine",
@@ -33,18 +35,18 @@
     "@mlightcad/libredwg-web": "0.7.14",
     "constructflow-standalone": "file:../..",
     "lucide-react": "^1.16.0",
+    "preact": "^10.27.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "three": "^0.186.1",
-    "@constructflow/family-engine": "file:../../packages/family-engine",
-    "@constructflow/laser-survey": "file:../../packages/laser-survey"
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
+    "@preact/preset-vite": "^2.10.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.186.0",
-    "@vitejs/plugin-react": "^4.3.4",
+    "terser": "^5.51.2",
     "typescript": "^5.7.3",
     "vite": "^6.2.0"
   }
