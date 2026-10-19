@@ -522,6 +522,75 @@ class McpBridgeServerTest(unittest.TestCase):
             ai_provider.validate_scale_calibrations([{
                 "filename": "plans.pdf", "source_page_number": 3, "points": [[-0.1, 0.4], [0.8, 0.4]], "distance_mm": 4000,
             }])
+        with self.assertRaisesRegex(ai_provider.AIPlanError, "two distinct points"):
+            ai_provider.validate_scale_calibrations([{
+                "filename": "plans.pdf", "source_page_number": 3, "points": [[0.4, 0.4], [0.4, 0.4]], "distance_mm": 4000,
+            }])
+        with self.assertRaises(ai_provider.AIPlanError):
+            ai_provider.validate_scale_calibrations([{
+                "filename": "plans.pdf", "source_page_number": 3, "points": [[0.2, 0.4], [0.8, 0.4]], "distance_mm": float("nan"),
+            }])
+        with self.assertRaises(ai_provider.AIPlanError):
+            ai_provider.validate_scale_calibrations([{
+                "filename": "plans.pdf", "source_page_number": 3, "points": [[True, 0.4], [0.8, 0.4]], "distance_mm": 4000,
+            }])
+
+    def test_drawing_alignment_requires_supplied_page_and_project_level(self):
+        import ai_provider
+        attachments = [{"filename": "plans.pdf", "source_page_numbers": [3]}]
+        context = {"levels": [{"id": "level-ground", "name": "ชั้นล่าง"}]}
+        alignment = ai_provider.validate_drawing_alignments([{
+            "filename": "plans.pdf", "source_page_number": 3, "anchor_normalized": [0.5, 0.5],
+            "target_origin_mm": [1200, -800], "rotation_deg": 90, "level_id": "level-ground",
+        }], attachments, context)
+        self.assertEqual(alignment[0]["target_origin_mm"], [1200, -800])
+        with self.assertRaisesRegex(ai_provider.AIPlanError, "supplied source page"):
+            ai_provider.validate_drawing_alignments([{
+                "filename": "plans.pdf", "source_page_number": 2, "anchor_normalized": [0.5, 0.5],
+                "target_origin_mm": [0, 0], "rotation_deg": 0, "level_id": "level-ground",
+            }], attachments, context)
+        with self.assertRaisesRegex(ai_provider.AIPlanError, "existing project level"):
+            ai_provider.validate_drawing_alignments([{
+                "filename": "plans.pdf", "source_page_number": 3, "anchor_normalized": [0.5, 0.5],
+                "target_origin_mm": [0, 0], "rotation_deg": 0, "level_id": "unknown",
+            }], attachments, context)
+        with self.assertRaisesRegex(ai_provider.AIPlanError, "only once per source page"):
+            ai_provider.validate_drawing_alignments([
+                {"filename": "plans.pdf", "source_page_number": 3, "anchor_normalized": [0.5, 0.5], "target_origin_mm": [0, 0], "rotation_deg": 0, "level_id": "level-ground"},
+                {"filename": "plans.pdf", "source_page_number": 3, "anchor_normalized": [0.6, 0.5], "target_origin_mm": [100, 0], "rotation_deg": 0, "level_id": "level-ground"},
+            ], attachments, context)
+
+    def test_ai_preserves_reviewed_drawing_trace_including_explicitly_empty_trace(self):
+        import ai_provider
+        trace = [{
+            "filename": "plan.png", "source_page_number": 1, "kind": "wall", "points": [[0.1, 0.2], [0.9, 0.2]],
+            "confidence": "high", "evidence": "ผู้ใช้แก้แนวผนัง",
+        }]
+        provider_body = {"choices": [{"message": {"content": json.dumps({
+            "summary": "ตรวจร่างแล้ว", "questions": ["ระบุความสูงผนัง"], "commands": [],
+            "drawing_trace": [], "drawing_pages": [], "object_evidence": [],
+        })}}]}
+
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+            def read(self, size=-1): return json.dumps(provider_body).encode("utf-8")[:size]
+
+        attachment = {"filename": "plan.png", "mime_type": "image/png", "data_url": "data:image/png;base64,iVBORw0KGgo="}
+        descriptor = [{"name": "CreateWall", "ai_allowed": True, "input_schema": {"type": "object", "properties": {}}}]
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "server-only-secret"}), patch.object(ai_provider, "urlopen", return_value=FakeResponse()):
+            result = ai_provider.generate_command_plan({
+                "prompt": "build from reviewed trace", "project_context": {}, "drawing_attachments": [attachment],
+                "drawing_trace_edits": trace, "command_descriptors": descriptor,
+            })
+        self.assertEqual(result["drawing_trace"], trace)
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "server-only-secret"}), patch.object(ai_provider, "urlopen", return_value=FakeResponse()):
+            result = ai_provider.generate_command_plan({
+                "prompt": "respect removed trace", "project_context": {}, "drawing_attachments": [attachment],
+                "drawing_trace_edits": [], "command_descriptors": descriptor,
+            })
+        self.assertEqual(result["drawing_trace"], [])
 
     def test_ai_analysis_only_classifies_pages_without_returning_commands(self):
         import ai_provider

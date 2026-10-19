@@ -268,21 +268,33 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [isPresetsModalOpen, setIsPresetsModalOpen] = useState<boolean>(false)
   const [isLegalModalOpen, setIsLegalModalOpen] = useState<boolean>(false)
   const [isPhotoDimensionModalOpen, setIsPhotoDimensionModalOpen] = useState<boolean>(false)
+  const photoSessionsStorageKey = `cf_photo_sessions:${project.project.id}`
   const [photoSessions, setPhotoSessions] = useState<PhotoDimensionSession[]>(() => {
     try {
-      const saved = localStorage.getItem('cf_photo_sessions')
-      return saved ? JSON.parse(saved) : []
+      const saved = localStorage.getItem(photoSessionsStorageKey)
+      const parsed: unknown = saved ? JSON.parse(saved) : []
+      return Array.isArray(parsed) ? parsed as PhotoDimensionSession[] : []
     } catch {
       return []
     }
   })
   const [activePhotoSession, setActivePhotoSession] = useState<PhotoDimensionSession | null>(null)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(photoSessionsStorageKey)
+      const parsed: unknown = saved ? JSON.parse(saved) : []
+      setPhotoSessions(Array.isArray(parsed) ? parsed as PhotoDimensionSession[] : [])
+    } catch {
+      setPhotoSessions([])
+    }
+    setActivePhotoSession(null)
+  }, [photoSessionsStorageKey])
   const handleSavePhotoSession = (session: PhotoDimensionSession) => {
     setPhotoSessions(prev => {
       const idx = prev.findIndex(s => s.id === session.id)
       const next = idx >= 0 ? prev.map(s => s.id === session.id ? session : s) : [...prev, session]
       try {
-        localStorage.setItem('cf_photo_sessions', JSON.stringify(next))
+        localStorage.setItem(photoSessionsStorageKey, JSON.stringify(next))
       } catch (e) {
         console.warn('Could not save photo sessions', e)
       }

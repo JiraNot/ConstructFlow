@@ -580,15 +580,23 @@ async function readStoredProjectJson(page: Page) {
   }))
 }
 
-test('AI proposal is previewed, validated, committed through CommandBus, and undoable', async ({ page }) => {
+test('AI proposal supports per-command edits and skips before a validated undoable commit', async ({ page }) => {
+  await page.route('**/api/ai/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ mode: 'gateway', connected: false, email: '', name: '', sharing: false }),
+  }))
   await page.route('**/api/ai/plan', async route => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         summary: 'เพิ่มผนังตัวอย่าง',
-        questions: [],
-        commands: [{ name: 'CreateWall', input: { mark: 'AI-W1', start_point_mm: [1000, 1000], end_point_mm: [4000, 1000], thickness_mm: 100, height_mm: 2800 } }],
+        questions: ['ยืนยันความสูงชั้นบนก่อนเพิ่มผนังชั้นนั้น'],
+        commands: [
+          { name: 'CreateWall', input: { mark: 'AI-W1', start_point_mm: [1000, 1000], end_point_mm: [4000, 1000], thickness_mm: 100, height_mm: 2800 } },
+          { name: 'CreateWall', input: { mark: 'AI-W2', start_point_mm: [1000, 2000], end_point_mm: [4000, 2000], thickness_mm: 100, height_mm: 2800 } },
+        ],
       }),
     })
   })
@@ -602,7 +610,16 @@ test('AI proposal is previewed, validated, committed through CommandBus, and und
   await expect(plan).toContainText('เพิ่มผนังตัวอย่าง')
   await expect(plan).toContainText('CreateWall')
   await expect(plan.getByRole('status')).toContainText('ผ่าน validation')
-  const apply = plan.getByRole('button', { name: 'ยืนยันและใช้ผ่าน CommandBus' })
+  const commands = plan.locator('.cf-ai-command-list > li')
+  await commands.nth(0).getByRole('button', { name: 'แก้' }).click()
+  await commands.nth(0).getByLabel('แก้พารามิเตอร์รายการนี้').fill(JSON.stringify({ mark: 'AI-W1-EDIT', start_point_mm: [1000, 1000], end_point_mm: [4000, 1000], thickness_mm: 100, height_mm: 2800 }, null, 2))
+  await commands.nth(0).getByRole('button', { name: 'บันทึกและตรวจใหม่' }).click()
+  await expect(plan.getByRole('status')).toContainText('ผ่าน validation')
+  await commands.nth(1).getByLabel('รวมรายการนี้').uncheck()
+  await plan.getByRole('button', { name: 'ตรวจแผน AI ซ้ำ' }).click()
+  await expect(plan.getByRole('status')).toContainText('ผ่าน validation')
+  await expect(plan).toContainText('รายการอื่นทำต่อได้')
+  const apply = plan.getByRole('button', { name: 'ยืนยันรายการที่ผ่าน · ใช้ผ่าน CommandBus' })
   await expect(apply).toBeEnabled()
   await apply.click()
   await expect(page.locator('.cf-ai-notice')).toContainText('ใช้แผน AI แล้ว')
@@ -611,8 +628,10 @@ test('AI proposal is previewed, validated, committed through CommandBus, and und
   await selectInspectorTab(page, 'รายการ')
   const browser = page.getByLabel('Project Browser')
   await browser.getByRole('button', { name: 'ทั้งโครงการ' }).click()
-  await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill('AI-W1')
+  await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill('AI-W1-EDIT')
   await expect(browser.locator('li[data-object-id]')).toHaveCount(1)
+  await browser.getByLabel('ค้นหาวัตถุในโครงการ').fill('AI-W2')
+  await expect(browser.locator('li[data-object-id]')).toHaveCount(0)
   await page.getByRole('button', { name: 'ย้อนกลับ' }).click()
   await expect(browser.locator('li[data-object-id]')).toHaveCount(0)
 })
@@ -647,6 +666,97 @@ test('AI can read a single scaled-plan image and sends it as a drawing attachmen
   expect(received?.drawing_attachments).toHaveLength(1)
   expect(received?.drawing_attachments?.[0]).toMatchObject({ filename: 'floor-plan.png', mime_type: 'image/png' })
   expect(received?.drawing_attachments?.[0].data_url).toMatch(/^data:image\/png;base64,iVBORw0KGgo/)
+})
+
+test('AI image input lets the user calibrate a known point-to-point distance', async ({ page }) => {
+  let received: { scale_calibrations?: { filename: string; source_page_number: number; points: [[number, number], [number, number]]; distance_mm: number }[] } | undefined
+  await page.route('**/api/ai/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ mode: 'gateway', connected: false, email: '', name: '', sharing: false }),
+  }))
+  await page.route('**/api/ai/plan', async route => {
+    received = route.request().postDataJSON() as typeof received
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ summary: 'ใช้ระยะที่ผู้ใช้วัดอ้างอิง', questions: [], commands: [] }) })
+  })
+  await page.goto('/')
+  await selectInspectorTab(page, 'AI')
+  await page.getByLabel('Gateway token').fill('test-token')
+  const imageBytes = await readFile('../../docs/assets/opening-designs-2026-10-08/door-face-editor.jpg')
+  await page.getByLabel('แนบ PDF หรือภาพแปลน').setInputFiles({ name: 'customer-plan.jpg', mimeType: 'image/jpeg', buffer: imageBytes })
+  await page.getByRole('button', { name: 'ปรับสเกลภาพ customer-plan.jpg' }).click()
+  const calibration = page.getByRole('dialog', { name: 'ปรับสเกลและตำแหน่งภาพแปลน' })
+  const drawingCanvas = calibration.locator('canvas')
+  await expect.poll(() => drawingCanvas.evaluate(canvas => canvas.getBoundingClientRect().width)).toBeGreaterThan(400)
+  await drawingCanvas.click({ position: { x: 100, y: 180 } })
+  await drawingCanvas.click({ position: { x: 500, y: 180 } })
+  await calibration.getByLabel('ระยะจริง (มม.)').fill('2400')
+  await calibration.getByRole('button', { name: 'ใช้สเกลนี้' }).click()
+  await page.getByRole('button', { name: 'ปรับสเกลภาพ customer-plan.jpg' }).click()
+  const secondCalibration = page.getByRole('dialog', { name: 'ปรับสเกลและตำแหน่งภาพแปลน' })
+  const secondCanvas = secondCalibration.locator('canvas')
+  await expect(secondCalibration).toContainText('2,400 มม.')
+  await secondCanvas.click({ position: { x: 160, y: 440 } })
+  await secondCanvas.click({ position: { x: 500, y: 440 } })
+  await secondCalibration.getByLabel('ระยะจริง (มม.)').fill('3000')
+  await secondCalibration.getByRole('button', { name: 'เพิ่มระยะอ้างอิง' }).click()
+  await page.getByRole('button', { name: 'อัปเดตคำสั่งด้วยสเกลใหม่' }).click()
+  await expect(page.getByLabel('แผนคำสั่ง AI')).toContainText('ใช้ระยะที่ผู้ใช้วัดอ้างอิง')
+  expect(received?.scale_calibrations).toHaveLength(2)
+  expect(received?.scale_calibrations?.map(item => item.distance_mm)).toEqual([2400, 3000])
+  expect(received?.scale_calibrations?.[0]).toMatchObject({ filename: 'customer-plan.jpg', source_page_number: 1, distance_mm: 2400 })
+  expect(received?.scale_calibrations?.[0].points[0]).not.toEqual(received?.scale_calibrations?.[0].points[1])
+})
+
+test('AI image trace edits, including removing all trace segments, are sent back before replanning', async ({ page }) => {
+  const received: Array<{ drawing_trace_edits?: { filename: string; source_page_number: number; kind: 'wall' | 'opening'; points: [[number, number], [number, number]]; confidence: 'high' | 'medium' | 'low'; evidence: string }[] }> = []
+  await page.route('**/api/ai/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ mode: 'gateway', connected: false, email: '', name: '', sharing: false }),
+  }))
+  await page.route('**/api/ai/plan', async route => {
+    const request = route.request().postDataJSON() as typeof received[number]
+    received.push(request)
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        summary: 'ตรวจร่างเส้นภาพ', questions: [], commands: [],
+        drawing_trace: request.drawing_trace_edits ?? [{
+          filename: 'customer-plan.jpg', source_page_number: 1, kind: 'wall', points: [[0.2, 0.3], [0.8, 0.3]], confidence: 'medium', evidence: 'แนวผนังที่เห็นชัด',
+        }],
+      }),
+    })
+  })
+  await page.goto('/')
+  await selectInspectorTab(page, 'AI')
+  await page.getByLabel('Gateway token').fill('test-token')
+  const imageBytes = await readFile('../../docs/assets/opening-designs-2026-10-08/door-face-editor.jpg')
+  await page.getByLabel('แนบ PDF หรือภาพแปลน').setInputFiles({ name: 'customer-plan.jpg', mimeType: 'image/jpeg', buffer: imageBytes })
+  await page.getByRole('button', { name: 'สร้างแผนคำสั่ง' }).click()
+  const plan = page.getByLabel('แผนคำสั่ง AI')
+  const firstEndpoint = plan.locator('.cf-ai-trace-point').first()
+  await expect(firstEndpoint).toBeVisible()
+  const before = await firstEndpoint.getAttribute('cx')
+  await firstEndpoint.focus()
+  await expect(firstEndpoint).toBeFocused()
+  await firstEndpoint.press('ArrowRight')
+  const secondEndpoint = plan.locator('.cf-ai-trace-point').nth(1)
+  const secondBefore = Number(await secondEndpoint.evaluate(element => element.style.left.replace('%', '')))
+  const secondBounds = await secondEndpoint.boundingBox()
+  await page.mouse.move(secondBounds!.x + secondBounds!.width / 2, secondBounds!.y + secondBounds!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(secondBounds!.x + secondBounds!.width / 2 + 20, secondBounds!.y + secondBounds!.height / 2)
+  await page.mouse.up()
+  await page.getByRole('button', { name: 'สร้างคำสั่งจากร่างที่แก้' }).click()
+  await expect(plan).toContainText('ตรวจร่างเส้นภาพ')
+  expect(received[1].drawing_trace_edits?.[0].points[0][0]).toBeGreaterThan(Number(before))
+  expect(received[1].drawing_trace_edits?.[0].points[1][0]).toBeGreaterThan(secondBefore / 100)
+
+  await plan.getByRole('button', { name: 'ลบแนวผนัง 1' }).click()
+  await page.getByRole('button', { name: 'สร้างคำสั่งจากร่างที่แก้' }).click()
+  expect(received[2]).toHaveProperty('drawing_trace_edits', [])
 })
 
 test('AI accepts a customer multi-sheet PDF as the primary drawing source and asks for page scope when ambiguous', async ({ page }) => {
@@ -720,8 +830,76 @@ test('AI can send selected PDF pages while preserving original page numbers', as
   expect(subset.getPageCount()).toBe(2)
 })
 
+test('AI drawing alignment maps each selected PDF floor to its own project coordinate and level', async ({ page }) => {
+  const sourcePdf = await PDFDocument.create()
+  sourcePdf.addPage([595, 842])
+  sourcePdf.addPage([595, 842])
+  let received: { drawing_alignments?: { filename: string; source_page_number: number; anchor_normalized: [number, number]; target_origin_mm: [number, number]; rotation_deg: number; level_id: string }[] } | undefined
+  await page.route('**/api/ai/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ mode: 'gateway', connected: false, email: '', name: '', sharing: false }),
+  }))
+  await page.route('**/api/ai/plan', async route => {
+    received = route.request().postDataJSON() as typeof received
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ summary: 'วางแปลนบนชั้นที่เลือก', questions: [], commands: [] }) })
+  })
+  await page.goto('/')
+  await selectInspectorTab(page, 'AI')
+  await page.getByLabel('Gateway token').fill('test-token')
+  await page.getByLabel('แนบ PDF หรือภาพแปลน').setInputFiles({ name: 'aligned-plan.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await sourcePdf.save()) })
+  await page.getByRole('button', { name: 'เลือกหน้าใน aligned-plan.pdf' }).click()
+  const picker = page.getByRole('dialog', { name: 'เลือกหน้าแปลน' })
+  const firstPage = picker.locator('.cf-pdf-page-option').nth(0)
+  await firstPage.getByRole('button', { name: 'จัดตำแหน่ง' }).click()
+  const firstAlignment = page.getByRole('dialog', { name: 'จัดตำแหน่งแปลนกับโครงการ' })
+  const firstCanvas = firstAlignment.locator('.cf-pdf-calibration-page canvas')
+  await expect.poll(() => firstCanvas.evaluate(canvas => canvas.getBoundingClientRect().width)).toBeGreaterThan(0)
+  const firstBounds = await firstCanvas.boundingBox()
+  await firstCanvas.click({ position: { x: firstBounds!.width / 2, y: firstBounds!.height / 2 } })
+  await firstAlignment.getByLabel('พิกัด X (มม.)').fill('1200')
+  await firstAlignment.getByLabel('พิกัด Y (มม.)').fill('-300')
+  await firstAlignment.getByLabel('หมุน (องศา)').fill('90')
+  const firstLevel = firstAlignment.getByLabel('ชั้น')
+  await expect(firstLevel.locator('option')).not.toHaveCount(0)
+  await firstLevel.selectOption({ index: 0 })
+  const firstLevelId = await firstLevel.inputValue()
+  await firstAlignment.getByRole('button', { name: 'ใช้ตำแหน่งนี้' }).click()
+  const secondPage = picker.locator('.cf-pdf-page-option').nth(1)
+  await secondPage.getByRole('button', { name: 'จัดตำแหน่ง' }).click()
+  const secondAlignment = page.getByRole('dialog', { name: 'จัดตำแหน่งแปลนกับโครงการ' })
+  const secondCanvas = secondAlignment.locator('.cf-pdf-calibration-page canvas')
+  await expect.poll(() => secondCanvas.evaluate(canvas => canvas.getBoundingClientRect().width)).toBeGreaterThan(0)
+  const secondBounds = await secondCanvas.boundingBox()
+  await secondCanvas.click({ position: { x: secondBounds!.width / 3, y: secondBounds!.height / 3 } })
+  await secondAlignment.getByLabel('พิกัด X (มม.)').fill('6200')
+  await secondAlignment.getByLabel('พิกัด Y (มม.)').fill('4300')
+  await secondAlignment.getByLabel('หมุน (องศา)').fill('0')
+  const secondLevel = secondAlignment.getByLabel('ชั้น')
+  await secondLevel.selectOption({ index: 1 })
+  const secondLevelId = await secondLevel.inputValue()
+  await secondAlignment.getByRole('button', { name: 'ใช้ตำแหน่งนี้' }).click()
+  await picker.getByRole('button', { name: 'ใช้หน้านี้' }).click()
+  await page.getByRole('button', { name: 'อัปเดตคำสั่งด้วยสเกลใหม่' }).click()
+  await expect(page.getByLabel('แผนคำสั่ง AI')).toContainText('วางแปลนบนชั้นที่เลือก')
+  expect(received?.drawing_alignments).toHaveLength(2)
+  expect(received?.drawing_alignments?.[0]).toMatchObject({
+    filename: 'aligned-plan.pdf', source_page_number: 1, target_origin_mm: [1200, -300], rotation_deg: 90,
+  })
+  expect(received?.drawing_alignments?.[0].anchor_normalized.every(value => value > 0 && value < 1)).toBe(true)
+  expect(received?.drawing_alignments?.[0].level_id).toBe(firstLevelId)
+  expect(received?.drawing_alignments?.[1]).toMatchObject({
+    filename: 'aligned-plan.pdf', source_page_number: 2, target_origin_mm: [6200, 4300], rotation_deg: 0, level_id: secondLevelId,
+  })
+})
+
 test('AI panel refreshes extension command descriptors registered while the panel is open', async ({ page }) => {
   let descriptorNames: string[] = []
+  await page.route('**/api/ai/auth/status', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ mode: 'gateway', connected: false, email: '', name: '', sharing: false }),
+  }))
   await page.route('**/api/ai/plan', async route => {
     const payload = route.request().postDataJSON() as { command_descriptors?: { name: string }[] }
     descriptorNames = payload.command_descriptors?.map(descriptor => descriptor.name) ?? []

@@ -108,6 +108,8 @@ OPENAPI_SPEC = {
                             "drawing_attachments": {"type": "array", "maxItems": 8, "description": "Optional user-selected PDF, JPG, or PNG drawings. Combined decoded size is limited to 20 MB."},
                             "analysis_only": {"type": "boolean", "description": "Classify drawing pages without proposing or executing model commands."},
                             "scale_calibrations": {"type": "array", "maxItems": 100, "description": "User-confirmed known distances between normalized points on source pages."},
+                            "drawing_alignments": {"type": "array", "maxItems": 100, "description": "User-confirmed mapping from a normalized source-page anchor to project X/Y, rotation, and level."},
+                            "drawing_trace_edits": {"type": "array", "maxItems": 2000, "description": "User-reviewed normalized wall/opening trace segments; accepted as drafting intent but still requires physical scale before model commands."},
                         },
                     }}}
                 },

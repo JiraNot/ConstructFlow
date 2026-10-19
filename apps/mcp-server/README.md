@@ -117,6 +117,18 @@ The project name, active level/phase, catalog types, selected IDs and a capped o
 sent to the configured gateway. Set `CONSTRUCTFLOW_AI_BASE_URL` to use an OpenAI-compatible provider
 endpoint.
 
+When a PDF, JPG or PNG is attached, the proposal can also include a visual wall/opening trace in
+normalized source-page coordinates. The editor shows it over the original drawing; endpoints can be
+dragged or nudged with arrow keys, and false segments can be removed before asking AI to build a new
+proposal from the reviewed trace. Trace coordinates are image-space only: they never become model
+dimensions by themselves. Add a known point-to-point distance and the required level/placement
+information before asking for BIM commands. Multiple reference distances are cross-checked by the
+AI; the image-calibration panel also warns when its references imply noticeably different scales.
+
+If an AI response has follow-up questions and also contains independent commands, the editor still
+previews the commands through `CommandBus`. Only the selected, valid items are eligible for human
+confirmation. Missing dimensions are never replaced by pixel estimates or typical defaults.
+
 For a remote deployment, terminate TLS at a reverse proxy, route `/api/ai/plan` to this gateway,
 and serve the editor with `Cross-Origin-Opener-Policy: same-origin` and
 `Cross-Origin-Embedder-Policy: require-corp` so the isolated extension worker can use its bounded
@@ -131,7 +143,8 @@ not enabled by merely starting the AI gateway. The route shares the exact-origin
 
 The editor currently describes built-in wall, column, beam, door and window commands, plus
 AI-enabled commands contributed by registered SDK modules. AI asks for missing host/level/design
-inputs instead of inventing them. Final domain validation remains authoritative.
+inputs instead of inventing them, while continuing with independent supported items. Final domain
+validation remains authoritative.
 
 For local use, the Plan Editor also supports **Continue with ChatGPT**. Install the local
 gateway dependencies once, then run the gateway in a terminal while using the editor:
