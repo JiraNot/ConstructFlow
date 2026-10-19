@@ -52,8 +52,12 @@ export function usePlanCanvasPlacementDimensions({
         ? openingDimensionRefs(activeSnap.point_mm, planProject, activeWallSnap, dimensionReferenceMode)
         : findTemporaryDimensionRefs(activeSnap.point_mm, planProject, undefined, dimensionReferenceMode)
     : { refX: undefined, refY: undefined }
-  const showXDimension = !!activeSnap && (dimensionHostAxis ? dimensionHostAxis === 'x' : dimensionReferences.refX !== undefined)
-  const showYDimension = !!activeSnap && (dimensionHostAxis ? dimensionHostAxis === 'y' : dimensionReferences.refY !== undefined)
+  const hasPolygonSegment = ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool) && slabBoundary.length > 0
+  const hasLineGeometryInput = !!stairStartPoint || !!wallStartNode || !!beamStartNode || !!roomSeparatorStart || hasPolygonSegment || (activeTool === 'grid' && !!gridStartPoint)
+  // While drawing a segment, the length/angle controls are the intended numeric
+  // inputs. Showing nearby reference X/Y dimensions at the same time is ambiguous.
+  const showXDimension = !!activeSnap && !hasLineGeometryInput && (dimensionHostAxis ? dimensionHostAxis === 'x' : dimensionReferences.refX !== undefined)
+  const showYDimension = !!activeSnap && !hasLineGeometryInput && (dimensionHostAxis ? dimensionHostAxis === 'y' : dimensionReferences.refY !== undefined)
   const xDimensionAnchor = dimensionAnchorX ?? dimensionReferences.refX
   const yDimensionAnchor = dimensionAnchorY ?? dimensionReferences.refY
   const activeOpeningWidth = activeWallSnap
@@ -66,8 +70,6 @@ export function usePlanCanvasPlacementDimensions({
   const yDimensionDisplay = dimensionInputY || (dimensionPoint && yDimensionAnchor !== undefined ? formatLengthMm(Math.abs(dimensionPoint[1] - yDimensionAnchor), displayUnit) : '')
   const dimensionOverlayPosition = activeSnap ? worldToScreen(activeSnap.point_mm, viewport) : null
   const supportsPlacementDimensions = usesPlacementDimensions(activeTool)
-  const hasPolygonSegment = ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool) && slabBoundary.length > 0
-  const hasLineGeometryInput = !!stairStartPoint || !!wallStartNode || !!beamStartNode || !!roomSeparatorStart || hasPolygonSegment || (activeTool === 'grid' && !!gridStartPoint)
 
   return {
     dimensionHostAxis,

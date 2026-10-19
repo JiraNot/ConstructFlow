@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {validateFamilyDefinition} from '@constructflow/project-model'
-import {builtInFurnitureFamilies,evaluateFamily,projectFamilyPlan,createFamilyTemplate,parseFamilyPat} from '../dist/index.js'
+import {builtInFurnitureFamilies,evaluateFamily,projectFamilyPlan,projectFamilyElevation,createFamilyTemplate,parseFamilyPat} from '../dist/index.js'
 
 test('every built-in furniture family has editable paths and parameter-driven solid parts',()=>{
  assert.equal(builtInFurnitureFamilies.length,10)
@@ -10,6 +10,23 @@ test('every built-in furniture family has editable paths and parameter-driven so
   const geometry=evaluateFamily(family,undefined,{W:2400,D:1100,H:950})
   assert.ok(geometry.paths.length>1,family.name);assert.ok(geometry.parts.length>1,family.name)
   assert.ok(geometry.parts.every(part=>part.triangles.flat().flat().every(Number.isFinite)))
+ }
+})
+test('built-in family 3D geometry produces front and side elevations',()=>{
+ for(const family of builtInFurnitureFamilies){
+  for(const view of ['front','side']){
+   const paths=projectFamilyElevation(family,undefined,view)
+   assert.ok(paths.length>0,`${family.name} ${view}`)
+   assert.ok(paths.every(path=>path.view===view&&path.points.length===2&&path.points.flat().every(Number.isFinite)))
+  }
+ }
+})
+test('front and side projections remain available for parametric families without authored 3D geometry',()=>{
+ const family=createFamilyTemplate(crypto.randomUUID())
+ for(const view of ['front','side']){
+  const paths=projectFamilyElevation(family,undefined,view)
+  assert.ok(paths.length>0,view)
+  assert.ok(paths.every(path=>path.points.flat().every(Number.isFinite)))
  }
 })
 test('generated plan omits coplanar cap triangulation edges and keeps parameter bindings',()=>{

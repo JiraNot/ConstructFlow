@@ -122,9 +122,8 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
       dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary,
     })
     if (probe) probe.push(performance.now() - drawStartedAt)
-  }, [
-    canvasRef, drawSelectionHandles, transientRenderer, drawCoordinationOverlay, drawElectricalCircuitOverlay, planRenderer, activeTool, activeFamilyId, activeFamilyTypeId, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark,
-    activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
+  }, [    canvasRef, drawSelectionHandles, transientRenderer, drawCoordinationOverlay, drawElectricalCircuitOverlay, planRenderer, activeTool, activeFamilyId, activeFamilyTypeId, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
+
     beamStartNode, wallStartNode, activeWallSnap, doorHanding, stairPreview, stairStartPoint,
     resolveReferencePath, calibrationP1, calibrationMousePoint, selectedIds, editableSelectionIds,
     hoveredId, underlay, labelMode, labelVisibility, planDiscipline, viewport, displayUnit,

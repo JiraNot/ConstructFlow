@@ -4,6 +4,12 @@ import type { LinearReference, SnapResult } from '@constructflow/snapping-engine
 type Point = [number, number]
 type DimensionRefs = { refX?: number; refY?: number }
 
+export function resolvePlanCanvasNumericInputTarget(options: {
+  hasLineGeometryInput: boolean
+  showXDimension: boolean
+  showYDimension: boolean
+}): 'length' | 'axis' | null
+
 export function applyPlanCanvasPlacementDimensions(
   point: Point,
   refs: DimensionRefs,

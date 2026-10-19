@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { distanceToPath2D, type Vec2 } from '@constructflow/geometry-kernel'
 import type { FamilyDefinition, FamilyPath } from '@constructflow/project-model'
-import { evaluateFamily, translateFamilyPath, familyCirclePoints } from '@constructflow/family-engine'
+import { evaluateFamily, projectFamilyElevation, translateFamilyPath, familyCirclePoints } from '@constructflow/family-engine'
 import { drawFamilyPath } from '../rendering/familyRenderer.js'
 
 export function FamilyCanvasEditor({ family, typeId, view, selectedId, onSelect, onChange }: { family: FamilyDefinition; typeId?: string; view: 'plan'|'front'|'side'; selectedId: string|null; onSelect: (id: string|null)=>void; onChange: (family: FamilyDefinition)=>void }) {
@@ -11,7 +11,11 @@ export function FamilyCanvasEditor({ family, typeId, view, selectedId, onSelect,
   const [dragPoint,setDragPoint]=useState<Vec2|null>(null)
   let geometry:ReturnType<typeof evaluateFamily>|undefined,error=''
   try{geometry=evaluateFamily(family,typeId)}catch(e){error=e instanceof Error?e.message:String(e)}
-  const paths=geometry?.paths.filter(path=>path.view===view)??[], all=paths.flatMap(path=>path.points)
+  const authoredPaths=geometry?.paths.filter(path=>path.view===view&&path.visible!==false)??[]
+  const projectedPaths=authoredPaths.length||view==='plan'?[]:geometry?projectFamilyElevation(family,typeId,view):[]
+  const paths=[...authoredPaths,...projectedPaths]
+  const editablePaths=authoredPaths
+  const all=paths.flatMap(path=>path.points)
   const bounds=all.reduce((b,[x,y])=>[Math.min(b[0],x),Math.min(b[1],y),Math.max(b[2],x),Math.max(b[3],y)],[0,0,(view==='side'?geometry?.parameters.D:geometry?.parameters.W)??1200,view!=='plan'?geometry?.parameters.H??2100:geometry?.parameters.D??600])
   const verticalSign=view==='plan'?1:-1
   const scale=Math.min((size.width-90)/Math.max(100,bounds[2]-bounds[0]),(size.height-90)/Math.max(100,bounds[3]-bounds[1]))*zoom,panX=size.width/2-(bounds[0]+bounds[2])/2*scale,panY=size.height/2-(bounds[1]+bounds[3])/2*scale*verticalSign
@@ -65,14 +69,15 @@ export function FamilyCanvasEditor({ family, typeId, view, selectedId, onSelect,
             else if(event.detail>=2)addPath([...start,point]);else setStart([...start,point])
             return
           }
-          const selected=paths.find(path=>path.id===selectedId),handle=selected?.points.findIndex(p=>Math.hypot(p[0]-point[0],p[1]-point[1])*scale<9)??-1
-          const nearest=handle>=0?selected:paths.filter(path=>path.visible!==false).map(path=>({path,distance:Math.min(distanceToPath2D(point,path.points,path.closed),...(path.voids??[]).map(ring=>distanceToPath2D(point,ring,true)))*scale})).filter(item=>item.distance<9).sort((a,b)=>a.distance-b.distance)[0]?.path
+          const selected=editablePaths.find(path=>path.id===selectedId),handle=selected?.points.findIndex(p=>Math.hypot(p[0]-point[0],p[1]-point[1])*scale<9)??-1
+          const nearest=handle>=0?selected:editablePaths.map(path=>({path,distance:Math.min(distanceToPath2D(point,path.points,path.closed),...(path.voids??[]).map(ring=>distanceToPath2D(point,ring,true)))*scale})).filter(item=>item.distance<9).sort((a,b)=>a.distance-b.distance)[0]?.path
           onSelect(nearest?.id??null)
           if(nearest){drag.current={id:nearest.id,index:handle,start:point,points:nearest.points,panX,panY,scale};event.currentTarget.setPointerCapture(event.pointerId)}
         }}
         onPointerMove={event=>{const d=drag.current;if(d){const rect=event.currentTarget.getBoundingClientRect();setDragPoint([(event.clientX-rect.left-d.panX)/d.scale,(event.clientY-rect.top-d.panY)/d.scale/verticalSign])}else setCursor(world(event))}}
         onPointerUp={()=>{const d=drag.current;if(d&&dragPoint){const next=family.paths.map(path=>path.id!==d.id?path:d.index>=0?{...path,points:path.points.map((point,index)=>index===d.index?dragPoint:point)}:translateFamilyPath(path,[dragPoint[0]-d.start[0],dragPoint[1]-d.start[1]]));onChange({...family,paths:next})}drag.current=null;setDragPoint(null)}}
         onPointerCancel={()=>{drag.current=null;setDragPoint(null)}}/>
+      {projectedPaths.length>0&&<div className="cf-family-view-label">รูปด้านจากโมเดล 3D</div>}
       {error&&<div className="cf-family-error" role="alert">{error}</div>}
     </div>
   </div>

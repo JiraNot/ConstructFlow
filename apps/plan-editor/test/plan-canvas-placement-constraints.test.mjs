@@ -4,6 +4,7 @@ import {
   applyPlanCanvasPlacementDimensions,
   constrainPlanCanvasGridCopyToParallelOffset,
   constrainPlanCanvasLineSnap,
+  resolvePlanCanvasNumericInputTarget,
   resolvePlanCanvasReferencePath,
 } from '../src/components/planCanvasPlacementConstraints.mjs'
 
@@ -30,6 +31,13 @@ test('placement dimensions ignore invalid and negative values without disturbing
     metricDimensions({ dimensionInputX: '-1m', dimensionInputY: 'bad' }),
   )
   assert.deepEqual(result, [1200, 900])
+})
+
+test('numeric placement input targets segment length while drawing and X/Y offsets otherwise', () => {
+  assert.equal(resolvePlanCanvasNumericInputTarget({ hasLineGeometryInput: true, showXDimension: false, showYDimension: false }), 'length')
+  assert.equal(resolvePlanCanvasNumericInputTarget({ hasLineGeometryInput: true, showXDimension: true, showYDimension: true }), 'length')
+  assert.equal(resolvePlanCanvasNumericInputTarget({ hasLineGeometryInput: false, showXDimension: true, showYDimension: false }), 'axis')
+  assert.equal(resolvePlanCanvasNumericInputTarget({ hasLineGeometryInput: false, showXDimension: false, showYDimension: false }), null)
 })
 
 test('Shift grid copy preserves its source direction and uses only perpendicular spacing', () => {

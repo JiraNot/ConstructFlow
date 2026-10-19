@@ -104,6 +104,7 @@ export function usePlanCanvasSurfaceOverlays({
     drawAngleDegrees: placement.drawAngleDegrees,
     dimensionInputXRef: placement.dimensionInputXRef,
     dimensionInputYRef: placement.dimensionInputYRef,
+    drawLengthInputRef: placement.drawLengthInputRef,
     setDimensionKeyboardAxis: placement.setDimensionKeyboardAxis,
     setDimensionAnchorX: placement.setDimensionAnchorX,
     setDimensionAnchorY: placement.setDimensionAnchorY,

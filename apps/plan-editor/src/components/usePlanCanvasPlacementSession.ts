@@ -29,6 +29,7 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
   const [gridYFirstTag, setGridYFirstTag] = useState('1')
   const [gridSystemError, setGridSystemError] = useState('')
   const [drawLengthMeters, setDrawLengthMeters] = useState('')
+  const drawLengthInputRef = useRef<HTMLInputElement>(null)
   const [drawAngleDegrees, setDrawAngleDegrees] = useState('')
   const [dimensionInputX, setDimensionInputX] = useState('')
   const [dimensionInputY, setDimensionInputY] = useState('')
@@ -142,7 +143,7 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
     gridSequenceStyle, setGridSequenceStyle, gridCopySourceId, setGridCopySourceId,
     gridXIntervals, setGridXIntervals, gridYIntervals, setGridYIntervals,
     gridXFirstTag, setGridXFirstTag, gridYFirstTag, setGridYFirstTag, gridSystemError, setGridSystemError,
-    drawLengthMeters, setDrawLengthMeters, drawAngleDegrees, setDrawAngleDegrees,
+    drawLengthMeters, setDrawLengthMeters, drawLengthInputRef, drawAngleDegrees, setDrawAngleDegrees,
     dimensionInputX, setDimensionInputX, dimensionInputY, setDimensionInputY,
     dimensionInputXRef, dimensionInputYRef, dimensionAnchorX, setDimensionAnchorX, dimensionAnchorY, setDimensionAnchorY,
     dimensionKeyboardAxis, setDimensionKeyboardAxis, clearDimensionOverrides, resetPlacementDrafts,

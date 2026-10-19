@@ -255,6 +255,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-dimension-reference-toggle { min-height: 30px; padding: 2px 5px; border: 1px solid #fed7aa; border-radius: 3px; background: #fff7ed; color: #9a3412; font-size: 10px; font-weight: 650; cursor: pointer; }
 .cf-dimension-reference-toggle[aria-pressed="true"] { border-color: #fb923c; background: #ffedd5; }
 .cf-dynamic-dimensions small { flex-basis: 100%; color: #64748b; font-size: 10px; }
+.cf-dynamic-dimensions.is-drawing-segment { max-width: min(240px,calc(100% - 16px)); gap: 4px; padding: 6px 8px; }
+.cf-dynamic-dimensions.is-drawing-segment label { display: flex; justify-content: space-between; width: 100%; }
+.cf-dynamic-dimensions.is-drawing-segment input { width: 104px; min-height: 32px; }
+.cf-dynamic-dimensions.is-drawing-segment .cf-placement-angle { display: none; }
+.cf-dynamic-dimensions.is-drawing-segment:focus-within .cf-placement-angle { display: flex; }
+.cf-dynamic-dimensions.is-drawing-segment .cf-dimension-reference-toggle { display: none; }
+.cf-dynamic-dimensions.is-drawing-segment small { font-size: 9px; }
 .cf-manipulation-dimensions {
   position: absolute;
   z-index: 15;
@@ -769,6 +776,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .cf-picker-thumbnail svg { width:100%; height:100%; }
 .cf-type-picker .cf-button { margin-top:18px; }
 .cf-authoring-controls { width:min(660px,calc(100% - 24px)); min-width:0; padding: 8px; font-size:12px; }
+.cf-authoring-controls.is-open { max-width:min(460px,calc(100% - 24px)); max-height:min(46vh,360px); }
+.cf-authoring-controls.is-open .cf-authoring-controls-content { align-items:stretch; }
 .cf-snap-details { width:100%; padding-top:4px; }
 .cf-snap-details > summary { cursor:pointer; color:#40566e; font-size:12px; }
 .cf-snap-controls { padding-top:10px; }
@@ -1069,6 +1078,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   .cf-tape-measure-hint.cf-guided-hint { top:103px; left:12px; right:auto; transform:none; width:min(380px,calc(100% - 24px)); }
   .cf-guided-hint-actions button { min-height:44px; padding:6px 12px; }
   .cf-authoring-controls { bottom:calc(80px + env(safe-area-inset-bottom)); width:min(520px,calc(100% - 24px)); padding:5px; }
+  .cf-authoring-controls.is-open { max-width:min(420px,calc(100% - 24px)); max-height:min(42vh,320px); }
   .cf-authoring-controls.is-collapsed { width:auto; max-width:calc(100% - 24px); }
   .cf-authoring-controls-toggle { min-height:44px; padding:7px 10px; }
 }

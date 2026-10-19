@@ -1,6 +1,12 @@
 import { formatLengthMm, parseLengthMm } from '@constructflow/project-model'
 import { constrainPointToReference, inferLinearConstraint, snapToDrawingAxis } from '@constructflow/snapping-engine'
 
+export function resolvePlanCanvasNumericInputTarget({ hasLineGeometryInput, showXDimension, showYDimension }) {
+  if (hasLineGeometryInput) return 'length'
+  if (showXDimension || showYDimension) return 'axis'
+  return null
+}
+
 export function applyPlanCanvasPlacementDimensions(point, refs, rawPoint, options) {
   const result = [...point]
   for (const axis of ['x', 'y']) {

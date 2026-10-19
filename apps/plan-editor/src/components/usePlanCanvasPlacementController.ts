@@ -36,7 +36,7 @@ export function usePlanCanvasPlacementController({
     dimensionInputX, setDimensionInputX, dimensionInputY, setDimensionInputY,
     dimensionAnchorX, setDimensionAnchorX, dimensionAnchorY, setDimensionAnchorY,
     dimensionKeyboardAxis, setDimensionKeyboardAxis, dimensionInputXRef, dimensionInputYRef,
-    drawLengthMeters, drawAngleDegrees, clearDimensionOverrides,
+    drawLengthMeters, setDrawLengthMeters, drawLengthInputRef, drawAngleDegrees, clearDimensionOverrides,
   } = placement
 
   const setPreference = <K extends keyof typeof props.preferences>(
@@ -105,10 +105,11 @@ export function usePlanCanvasPlacementController({
     dimensionHostAxis: placementDimensions.dimensionHostAxis,
     dimensionKeyboardAxis, dimensionAnchorX, dimensionAnchorY,
     dimensionReferences: placementDimensions.dimensionReferences,
-    dimensionInputX, dimensionInputY,
+    dimensionInputX, dimensionInputY, drawLengthMeters, hasLineGeometryInput: placementDimensions.hasLineGeometryInput,
+    setDrawLengthMeters,
     showXDimension: placementDimensions.showXDimension,
     showYDimension: placementDimensions.showYDimension,
-    dimensionInputXRef, dimensionInputYRef, canvasRef,
+    dimensionInputXRef, dimensionInputYRef, drawLengthInputRef, canvasRef,
     setDimensionKeyboardAxis, setDimensionAnchorX, setDimensionAnchorY,
     setDimensionInputX, setDimensionInputY, commitActivePlacement, cancelCurrentPlacement,
     toggleDimensionReferenceMode,

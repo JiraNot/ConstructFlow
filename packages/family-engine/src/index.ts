@@ -62,6 +62,76 @@ export function evaluateFamily(family: FamilyDefinition, typeId?: string, overri
   }
   return { parameters, paths, parts }
 }
+/** Derive an orthographic front or side elevation from a family's evaluated 3D parts. */
+export function projectFamilyElevation(family: FamilyDefinition, typeId: string | undefined, view: 'front' | 'side'): EvaluatedFamilyPath[] {
+  const geometry = evaluateFamily(family, typeId)
+  const triangles = geometry.parts.flatMap(part => part.triangles)
+  if (!triangles.length) {
+    const horizontal = view === 'front' ? geometry.parameters.W : geometry.parameters.D
+    const height = geometry.parameters.H
+    if (horizontal === undefined || height === undefined || horizontal <= 0 || height <= 0) return []
+    const corners: Vec2[] = [[0, 0], [horizontal, 0], [horizontal, height], [0, height]]
+    return corners.map((point, index) => ({
+      id: `elevation-${view}-${index}`,
+      points: [point, corners[(index + 1) % corners.length]],
+      closed: false,
+      view,
+      layer: 'ขอบเขตโดยประมาณ',
+      color: '#94a3b8',
+      lineweight_mm: 0.18,
+      dash: [5, 3],
+    }))
+  }
+  const horizontalAxis = view === 'front' ? 0 : 1
+  const depthAxis = view === 'front' ? 1 : 0
+  const project = (point: Vec3): Vec2 => [point[horizontalAxis], point[2]]
+  const edgeMap = new Map<string, { a: Vec2; b: Vec2; normals: Vec3[] }>()
+  const pointKey = (point: Vec2) => point.map(value => Math.round(value * 100) / 100).join(',')
+
+  for (const triangle of triangles) {
+    const [a, b, c] = triangle
+    const ab = b.map((value, axis) => value - a[axis]) as Vec3
+    const ac = c.map((value, axis) => value - a[axis]) as Vec3
+    const raw: Vec3 = [ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]]
+    const magnitude = Math.hypot(...raw)
+    if (magnitude < 1e-8) continue
+    const normal = raw.map(value => value / magnitude) as Vec3
+    for (let index = 0; index < 3; index++) {
+      const start = triangle[index], end = triangle[(index + 1) % 3]
+      const p = project(start), q = project(end)
+      if (Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.01) continue
+      const startKey = pointKey(p), endKey = pointKey(q)
+      const [first, second] = [startKey, endKey].sort()
+      const key = `${first}|${second}`
+      const edge = edgeMap.get(key) ?? {
+        a: first === startKey ? p : q,
+        b: first === startKey ? q : p,
+        normals: [],
+      }
+      edge.normals.push(normal)
+      edgeMap.set(key, edge)
+    }
+  }
+
+  const paths: EvaluatedFamilyPath[] = []
+  for (const edge of edgeMap.values()) {
+    const feature = edge.normals.length === 1 || edge.normals.slice(1).some(normal =>
+      Math.abs(normal.reduce((sum, value, axis) => sum + value * edge.normals[0][axis], 0)) < 0.9999,
+    )
+    if (!feature) continue
+    paths.push({
+      id: `elevation-${view}-${paths.length}`,
+      points: [edge.a, edge.b],
+      closed: false,
+      view,
+      layer: 'รูปด้านจาก 3D',
+      color: '#475569',
+      lineweight_mm: 0.18,
+    })
+  }
+  return paths
+}
+
 export function availableFamilies(project: ProjectDocument): FamilyDefinition[] {
   const all = new Map(builtInFurnitureFamilies.map(family => [family.id, family]))
   for (const family of project.families ?? []) all.set(family.id, family)
