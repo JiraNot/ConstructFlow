@@ -3315,11 +3315,15 @@ function compilePermitDrawingSetBase(
                 max_x: baseCenter[0] + width / 2,
                 max_y: baseCenter[1] + 0.7,
               }, normal, placedDimensionLabelBoxes, dimensionViewBounds,
-              { locked: userPlaced || override?.locked === true, max_offset_mm: 48, step_mm: 3, gap_mm: 0.8 });
+              { locked: userPlaced || override?.locked === true, max_offset_mm: 84, step_mm: 3, gap_mm: 0.8 });
               placedDimensionLabelBoxes.push(placement.box);
               if (placement.has_collision) warnings.push(`${label}: automatic dimension text overlaps another dimension or the A-02/A-03 view edge`);
-              pa = [pa[0] + normal[0] * placement.offset_mm, pa[1] + normal[1] * placement.offset_mm];
-              pb = [pb[0] + normal[0] * placement.offset_mm, pb[1] + normal[1] * placement.offset_mm];
+              const labelShift: Vec2 = [
+                normal[0] * placement.offset_mm + tangent[0] * placement.tangent_offset_mm,
+                normal[1] * placement.offset_mm + tangent[1] * placement.tangent_offset_mm,
+              ];
+              pa = [pa[0] + labelShift[0], pa[1] + labelShift[1]];
+              pb = [pb[0] + labelShift[0], pb[1] + labelShift[1]];
               if (witnessA) path([mapped(witnessA), pa], dimensionColor, 0.1);
               if (witnessB) path([mapped(witnessB), pb], dimensionColor, 0.1);
               const center: Vec2 = [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2];
@@ -3337,7 +3341,7 @@ function compilePermitDrawingSetBase(
                 labelPrimitive.dimension_id = dimensionId;
                 labelPrimitive.automatic_offset_mm = override?.locked
                   ? [0, 0]
-                  : [normal[0] * placement.offset_mm, normal[1] * placement.offset_mm];
+                  : labelShift;
               }
             };
             for (const dimension of project.drawing_settings?.plan_dimensions ?? []) {

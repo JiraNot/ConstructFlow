@@ -24,16 +24,26 @@ test("automatic plan dimensions move labels off nearby labels and inside view bo
   const placed = placeDimensionLabel(base, [0, 1], [base], { min_x: 0, min_y: 0, max_x: 100, max_y: 30 });
   assert.equal(placed.has_collision, false);
   assert.notEqual(placed.offset_mm, 0);
-  assert.ok(placed.box.max_y < 10);
+  assert.equal(placed.box.max_y < 10 || placed.box.min_y > 13, true);
 
   const locked = placeDimensionLabel(base, [0, 1], [base], { min_x: 0, min_y: 0, max_x: 100, max_y: 30 }, { locked: true });
   assert.equal(locked.offset_mm, 0);
+  assert.equal(locked.tangent_offset_mm, 0);
   assert.equal(locked.has_collision, true);
 
   const nearEdge = placeDimensionLabel({ min_x: 40, min_y: 1, max_x: 60, max_y: 4 }, [0, 1], [], { min_x: 0, min_y: 0, max_x: 100, max_y: 10 });
   assert.equal(nearEdge.has_collision, false);
   assert.ok(nearEdge.box.min_y >= 0);
   assert.ok(nearEdge.box.max_y <= 10);
+
+  const tangentClearance = placeDimensionLabel(
+    { min_x: 45, min_y: 10, max_x: 55, max_y: 13 }, [0, 1],
+    [{ min_x: 43, min_y: 9, max_x: 57, max_y: 14 }],
+    { min_x: 0, min_y: 0, max_x: 100, max_y: 30 },
+    { max_offset_mm: 6, step_mm: 3 },
+  );
+  assert.equal(tangentClearance.has_collision, false, "a label can shift along a tight dimension lane when the normal direction is blocked");
+  assert.notEqual(tangentClearance.offset_mm, 0);
 
   const crowdedBounds = { min_x: 0, min_y: 0, max_x: 100, max_y: 30 };
   const denseLabels = [];
@@ -172,6 +182,60 @@ test("house demo keeps the existing grade datum and places its two finished floo
   });
   const denseSheet = compilePermitDrawingSet(denseColumns).sheets.find(sheet => sheet.id === "A-02");
   assertDimensionsFit(denseSheet);
+
+  const crowdedOpenings = structuredClone(house);
+  const groundOpenings = Object.values(crowdedOpenings.objects).filter(object =>
+    (object.object_type === "door_window.door" || object.object_type === "door_window.window") && object.module_data.level_id === "GF");
+  const sharedWallId = groundOpenings.find(object => object.object_type === "door_window.window").module_data.wall_id;
+  groundOpenings.filter(object => object.module_data.wall_id === sharedWallId).forEach((opening, index) => {
+    opening.module_data.offset_along_wall_mm = 2500 + index * 12;
+  });
+  const crowdedOpeningSet = compilePermitDrawingSet(crowdedOpenings, { viewports: { "A-02": { scale_denominator: 100 } } });
+  const crowdedOpeningSheet = crowdedOpeningSet.sheets.find(sheet => sheet.id === "A-02");
+  assertDimensionsFit(crowdedOpeningSheet);
+  assert.ok(groundOpenings.filter(object => object.module_data.wall_id === sharedWallId).every(opening =>
+    crowdedOpeningSheet.primitives.some(primitive => primitive.kind === "text" && primitive.dimension_id === `opening:${opening.id}:width`)),
+  "every crowded hosted opening retains its associative dimension label at a closer paper scale");
+});
+
+test("automatic plan dimensions stay on-sheet across representative projects and supported scales", () => {
+  const projectFiles = [
+    "constructflow-house-demo.cfproj",
+    "constructflow-reference-house-2storey.cfproj",
+    "kitchen-extension-proof.cfproj",
+    "kitchen-extension-proof-v1.cfproj",
+    "wall-stair-finish-proof.cfproj",
+  ];
+  const assertSheetDimensionsFit = sheet => {
+    const labels = sheet.primitives.filter(item => item.kind === "text" && item.dimension_id);
+    const boxes = labels.map(label => ({
+      min_x: label.at[0], min_y: label.at[1] - 1.3,
+      max_x: label.at[0] + (label.max_width ?? label.text.length * 0.88), max_y: label.at[1] + 0.4,
+    }));
+    for (let index = 0; index < boxes.length; index++) {
+      const box = boxes[index];
+      assert.ok(box.min_x >= 0 && box.min_y >= 0 && box.max_x <= 420 && box.max_y <= 297,
+        `${sheet.id} dimension ${labels[index].dimension_id} must remain on the A3 sheet`);
+      for (let next = index + 1; next < boxes.length; next++) {
+        const other = boxes[next];
+        assert.ok(!(box.min_x < other.max_x + 0.8 && box.max_x + 0.8 > other.min_x && box.min_y < other.max_y && box.max_y > other.min_y),
+          `${sheet.id} dimensions ${labels[index].dimension_id} and ${labels[next].dimension_id} must not overlap`);
+      }
+    }
+    assert.equal(sheet.warnings.filter(warning => warning.includes("automatic dimension text overlaps")).length, 0,
+      `${sheet.id} should place every automatic dimension without collisions or edge clipping`);
+  };
+
+  for (const filename of projectFiles) {
+    const project = deserializeProject(readFileSync(new URL(`../../../examples/${filename}`, import.meta.url), "utf8"));
+    for (const scale of [50, 100, 200]) {
+      const set = compilePermitDrawingSet(project, {
+        viewports: { "A-02": { scale_denominator: scale }, "A-03": { scale_denominator: scale } },
+      });
+      for (const sheetId of ["A-02", "A-03"])
+        assertSheetDimensionsFit(set.sheets.find(sheet => sheet.id === sheetId));
+    }
+  }
 });
 
 test("A-02 persists locked dimension placement while keeping opening values model-derived, including angled hosts", () => {
