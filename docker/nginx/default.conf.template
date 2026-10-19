@@ -1,6 +1,6 @@
 map "$http_accept_encoding:$uri" $asset_suffix {
     default "";
-    "~*br:.*\\.(?:css|js|json|svg|wasm)$" ".br";
+    "~*br:.*\\.wasm$" ".br";
     "~*gzip:.*\\.wasm$" ".gz";
 }
 
@@ -55,8 +55,10 @@ server {
         expires 1y;
         add_header Cache-Control "public, immutable";
         add_header Vary Accept-Encoding always;
-        add_header Content-Encoding $asset_content_encoding;
-        try_files $uri$asset_suffix $uri =404;
+        # Serve JS/CSS/JSON/SVG using their real extension so nginx emits the
+        # correct MIME type. Dynamic gzip handles these files; .br files use
+        # a .br extension that nginx would otherwise report as octet-stream.
+        try_files $uri =404;
     }
 
     location ~* \.wasm$ {
