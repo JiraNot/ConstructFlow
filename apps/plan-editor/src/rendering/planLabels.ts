@@ -5,19 +5,27 @@ interface PlanLabel {
 }
 export type PlanLabelShape = PlanLabel['shape']
 
-export function planLabelScale(zoom: number) {
-  // Plan annotations are screen-space UI. Model zoom changes geometry, never
-  // the readable size of labels, grid bubbles, or opening tags.
-  void zoom
+export function planLabelScale(_zoom: number) {
   return 1
 }
 
 const frames = new WeakMap<CanvasRenderingContext2D, PlanLabel[]>()
-const frameZooms = new WeakMap<CanvasRenderingContext2D, number>()
+const baseTransforms = new WeakMap<CanvasRenderingContext2D, DOMMatrix>()
 
-export function beginPlanLabels(ctx: CanvasRenderingContext2D, zoom: number) {
+function toScreenPoint(x: number, y: number, transform: DOMMatrix) {
+  const determinant = transform.a * transform.d - transform.b * transform.c
+  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-12) return [x, y] as [number, number]
+  const translatedX = x - transform.e
+  const translatedY = y - transform.f
+  return [
+    (transform.d * translatedX - transform.c * translatedY) / determinant,
+    (transform.a * translatedY - transform.b * translatedX) / determinant,
+  ] as [number, number]
+}
+
+export function beginPlanLabels(ctx: CanvasRenderingContext2D, _zoom: number) {
   frames.set(ctx, [])
-  frameZooms.set(ctx, zoom)
+  baseTransforms.set(ctx, ctx.getTransform())
 }
 
 export function queuePlanLabel(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string, border: string, priority = 0, background = '#fbfdff', rotateWithObject = false, shape: PlanLabelShape = 'rect', leaderAnchor?: [number, number]) {
@@ -29,11 +37,14 @@ export function queuePlanLabel(ctx: CanvasRenderingContext2D, x: number, y: numb
   const baseHeight = shape === 'triangle' || shape === 'triangle-down' ? 34 : shape === 'hexagon' ? 26 : 18
   const labelWidth = shape === 'circle' ? Math.max(baseWidth, baseHeight) : shape === 'hexagon' ? Math.max(baseWidth, 48) : shape === 'triangle' || shape === 'triangle-down' ? Math.max(baseWidth, 46) : baseWidth
   const anchor = leaderAnchor ?? [x, y]
+  const baseTransform = baseTransforms.get(ctx) ?? transform
+  const [screenX, screenY] = toScreenPoint(transform.a * x + transform.c * y + transform.e, transform.b * x + transform.d * y + transform.f, baseTransform)
+  const [anchorScreenX, anchorScreenY] = toScreenPoint(transform.a * anchor[0] + transform.c * anchor[1] + transform.e, transform.b * anchor[0] + transform.d * anchor[1] + transform.f, baseTransform)
   frames.get(ctx)?.push({
-    x: transform.a * x + transform.c * y + transform.e,
-    y: transform.b * x + transform.d * y + transform.f,
-    anchorX: transform.a * anchor[0] + transform.c * anchor[1] + transform.e,
-    anchorY: transform.b * anchor[0] + transform.d * anchor[1] + transform.f,
+    x: screenX,
+    y: screenY,
+    anchorX: anchorScreenX,
+    anchorY: anchorScreenY,
     text, width: labelWidth, height: baseHeight,
     font: ctx.font, color, border, background, priority, angle, shape,
   })
@@ -42,19 +53,17 @@ export function queuePlanLabel(ctx: CanvasRenderingContext2D, x: number, y: numb
 /** Screen-space annotation layout; geometry and picking stay at their model coordinates. */
 export function flushPlanLabels(ctx: CanvasRenderingContext2D, width: number, height: number) {
   const labels = frames.get(ctx) ?? []
-  const zoom = frameZooms.get(ctx) ?? 0.08
-  // Labels grow modestly as the plan is zoomed out, then stop at a readable cap.
-  const labelScale = planLabelScale(zoom)
+  const baseTransform = baseTransforms.get(ctx) ?? ctx.getTransform()
   const placed: Array<{ x: number; y: number; width: number; height: number }> = []
   ctx.save()
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.setTransform(baseTransform.a, baseTransform.b, baseTransform.c, baseTransform.d, baseTransform.e, baseTransform.f)
   ctx.setLineDash([])
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   for (const label of labels.sort((a, b) => b.priority - a.priority)) {
     if (label.x < 0 || label.x > width || label.y < 0 || label.y > height) continue
-    const labelWidth = label.width * labelScale
-    const labelHeight = label.height * labelScale
+    const labelWidth = label.width
+    const labelHeight = label.height
     const boxWidth = Math.abs(Math.cos(label.angle)) * labelWidth + Math.abs(Math.sin(label.angle)) * labelHeight
     const boxHeight = Math.abs(Math.sin(label.angle)) * labelWidth + Math.abs(Math.cos(label.angle)) * labelHeight
     let position: { x: number; y: number; width: number; height: number } | null = null
@@ -92,7 +101,6 @@ export function flushPlanLabels(ctx: CanvasRenderingContext2D, width: number, he
     ctx.save()
     ctx.translate(position.x, position.y)
     ctx.rotate(label.angle)
-    ctx.scale(labelScale, labelScale)
     ctx.strokeStyle = label.border
     ctx.lineWidth = 0.8
     ctx.fillStyle = label.background
@@ -139,5 +147,5 @@ export function flushPlanLabels(ctx: CanvasRenderingContext2D, width: number, he
   }
   ctx.restore()
   frames.delete(ctx)
-  frameZooms.delete(ctx)
+  baseTransforms.delete(ctx)
 }

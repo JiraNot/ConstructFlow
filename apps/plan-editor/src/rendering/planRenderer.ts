@@ -30,6 +30,7 @@ import type { PlanDiscipline } from '@constructflow/representation-engine'
 import { getRoofEaveBoundary, solveRoofFraming } from '@constructflow/roof-engine'
 import type { RoofModuleData } from '@constructflow/project-model'
 import { beginPlanLabels, queuePlanLabel, flushPlanLabels, planLabelScale } from './planLabels.js'
+import { drawElectricalFixtureScreenSymbol, PLAN_GRID_BUBBLE_RADIUS_PX } from './planAnnotationSymbols.mjs'
 import { DEFAULT_PLAN_LABEL_VISIBILITY, type CalibrationOverlay, type PlanLabelVisibility, type PlacementGhost, type UnderlayConfig } from './planRendererTypes.js'
 export type { CalibrationOverlay, PlanLabelVisibility, PlacementGhost, UnderlayConfig } from './planRendererTypes.js'
 export { DEFAULT_PLAN_LABEL_VISIBILITY } from './planRendererTypes.js'
@@ -507,6 +508,16 @@ export function renderPlanView(
     }
   }
 
+  // Electrical symbols use screen-sized marks independent of model zoom.
+  for (const obj of Object.values(project.objects)) {
+    if (obj.object_type !== 'electrical.fixture' || obj.removed_phase !== null || obj.status === 'archived') continue
+    const data = obj.module_data as Record<string, unknown>
+    const location = data.location_mm
+    if (!Array.isArray(location) || !Number.isFinite(Number(location[0])) || !Number.isFinite(Number(location[1]))) continue
+    const [x, y] = worldToScreen([Number(location[0]), Number(location[1])], viewport)
+    drawElectricalFixtureScreenSymbol(ctx, x, y, data.kind)
+  }
+
   // 11. Calibration Overlay (Point-to-Point Scale Measure)
   if (calibration && (calibration.point1_mm || calibration.point2_mm)) {
     drawCalibrationOverlay(ctx, calibration, viewport)
@@ -708,7 +719,6 @@ export function drawDirectManipulationGhost(
       if (Array.isArray(voids)) for (const ring of voids) drawRing(ring, true, false)
     } else if (object.object_type === 'interior.cabinet_run') {
       drawCabinetPlanSymbol(ctx, object, viewport, true, false)
-
     } else if (Array.isArray(data.start_point_mm) && Array.isArray(data.end_point_mm)) {
       drawRing([data.start_point_mm, data.end_point_mm], false)
     } else {
@@ -716,8 +726,7 @@ export function drawDirectManipulationGhost(
       if (path) drawRing(path, false)
       else if (Array.isArray(data.location_mm)) {
         const [x, y] = worldToScreen([Number(data.location_mm[0]), Number(data.location_mm[1])], viewport)
-        const size = object.object_type === 'electrical.fixture' ? 9 : 6
-        ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+        ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
       }
     }
   }
@@ -924,25 +933,24 @@ function drawStructuralGrid(
   ctx.setLineDash([])
 
   if (!showLabel) { ctx.restore(); return }
-  // Grid Bubble Marker
-  const radius = 14
+  // Draw the graphic and tag together on the screen-space layer.
+  const radius = PLAN_GRID_BUBBLE_RADIUS_PX
+  const baseTransform = ctx.getTransform()
+  ctx.save()
+  ctx.setTransform(baseTransform.a, baseTransform.b, baseTransform.c, baseTransform.d, baseTransform.e, baseTransform.f)
   ctx.fillStyle = '#ffffff'
-  ctx.beginPath()
-  ctx.arc(bubbleX, bubbleY, radius, 0, Math.PI * 2)
-  ctx.fill()
-
   ctx.strokeStyle = isSelected ? '#38bdf8' : '#94a3b8'
   ctx.lineWidth = 1.5
   ctx.beginPath()
   ctx.arc(bubbleX, bubbleY, radius, 0, Math.PI * 2)
+  ctx.fill()
   ctx.stroke()
-
   ctx.fillStyle = '#33465b'
   ctx.font = 'bold 12px monospace'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(displayTag, bubbleX, bubbleY)
-
+  ctx.restore()
   ctx.restore()
 }
 
@@ -1177,12 +1185,16 @@ function drawBeam(
     angle += Math.PI
   }
 
+  ctx.save()
+  const base = ctx.getTransform()
+  ctx.setTransform(base.a, base.b, base.c, base.d, base.e, base.f)
   ctx.translate(mx, my)
   ctx.rotate(angle)
 
   // Label badge
   if (showLabel) queuePlanLabel(ctx, 0, -18, text, isSelected ? '#0876d1' : '#33465b', isSelected ? '#1682e8' : '#c7d3df', isSelected ? 10 : isHovered ? 8 : 1, '#fbfdff', true)
 
+  ctx.restore()
   ctx.restore()
 }
 
@@ -1240,6 +1252,26 @@ function drawCabinetPlanSymbol(ctx: CanvasRenderingContext2D, object: SmartObjec
   ctx.restore()
 }
 
+
+function planHatchScreenSegments(
+  segments: Array<[[number, number], [number, number]]>,
+  viewport: ViewportState,
+  markLengthPx: number,
+): Array<[[number, number], [number, number]]> {
+  const halfLengthMm = markLengthPx / (2 * viewport.zoom)
+  return segments.flatMap(([start, end]) => {
+    const dx = end[0] - start[0], dy = end[1] - start[1]
+    const length = Math.hypot(dx, dy)
+    if (length < halfLengthMm * 2) return []
+    const middle: [number, number] = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2]
+    const alongX = dx / length * halfLengthMm, alongY = dy / length * halfLengthMm
+    const [screenStart, screenEnd] = [
+      worldToScreen([middle[0] - alongX, middle[1] - alongY], viewport),
+      worldToScreen([middle[0] + alongX, middle[1] + alongY], viewport),
+    ]
+    return [[screenStart, screenEnd] as [[number, number], [number, number]]]
+  })
+}
 
 function drawWall(
   ctx: CanvasRenderingContext2D,
@@ -1353,19 +1385,16 @@ function drawWall(
     ctx.restore()
   }
 
-  // Draw hatch over the solid fills so it remains visible. Generate once from
-  // the full host wall to keep its pitch aligned through opening gaps.
+  // Generate wall hatching from the model footprint, then draw short screen-fixed marks.
   if (isDemolition || (!isExisting && isMasonryWallPlanHatch(wall, project.types))) {
     const hatchSegments = wallMasonryHatchSegments(
       [x1, y1], [x2, y2], thickness_mm,
       mergedOpenings.map(opening => [opening.start_dist, opening.end_dist]),
       isDemolition ? 250 : 140,
     )
+    const marks = planHatchScreenSegments(hatchSegments, viewport, isDemolition ? 6 : 4)
     ctx.beginPath()
-    for (const [start, end] of hatchSegments) {
-      const [startX, startY] = worldToScreen(start, viewport), [endX, endY] = worldToScreen(end, viewport)
-      ctx.moveTo(startX, startY); ctx.lineTo(endX, endY)
-    }
+    for (const [a, b] of marks) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]) }
     ctx.strokeStyle = isSelected ? 'rgba(3, 105, 161, 0.62)' : isDemolition ? '#ef4444' : '#9aa6b4'
     ctx.lineWidth = 0.75
     ctx.stroke()
@@ -1399,13 +1428,13 @@ function drawWall(
   const orientationSign = Math.cos(labelAngle - rawAngle) < 0 ? -1 : 1
   const insideLocalSign = interiorSign * orientationSign
   const halfThicknessPx = thickness_mm * viewport.zoom / 2
-  const triangleHalfHeight = 17 * planLabelScale(viewport.zoom)
+  const triangleHalfHeight = 17
   const wallMark = mark || 'W1'
   const insideMark = String(wallValue('inside_finish_mark', wallMark) || wallMark)
   const outsideMark = String(wallValue('outside_finish_mark', wallMark) || wallMark)
   const priority = isSelected ? 10 : isHovered ? 8 : 2
   ctx.font = 'bold 10px monospace'
-  const tagWidthPx = Math.max(30, ctx.measureText(insideMark).width + 10, ctx.measureText(outsideMark).width + 10) * planLabelScale(viewport.zoom)
+  const tagWidthPx = Math.max(30, ctx.measureText(insideMark).width + 10, ctx.measureText(outsideMark).width + 10)
   // Put the tag in the longest continuous solid run, never over a hosted
   // door/window opening. Hide it when every remaining run is too short.
   const labelSegment = subSegments
@@ -1543,10 +1572,10 @@ function drawDoor(
     const clearEnd = [sj2x - ux * jambFaceWidthPx, sj2y - uy * jambFaceWidthPx] as const
     const clearSpan = Math.hypot(clearEnd[0] - clearStart[0], clearEnd[1] - clearStart[1])
     const count = panelCount >= 4 ? 4 : 2
-    const stileWidthPx = Math.max(3, Math.min(45 * viewport.zoom, clearSpan * 0.08))
-    const overlapPx = Math.max(stileWidthPx, Math.min(30 * viewport.zoom, clearSpan * 0.1))
+    const stileWidthPx = Math.max(3, Math.min(45, clearSpan * 0.08))
+    const overlapPx = Math.max(stileWidthPx, Math.min(30, clearSpan * 0.1))
     const panelLengthPx = (clearSpan + overlapPx * (count - 1)) / count
-    const sashThickPx = Math.max(2.5, Math.min(30 * viewport.zoom, thick_px * 0.3))
+    const sashThickPx = Math.max(2.5, Math.min(30, thick_px * 0.3))
 
     // Continuous track lines
     ctx.beginPath()
@@ -1600,7 +1629,7 @@ function drawDoor(
       // Direction arrow placed OUTSIDE door frame
       const arrDir = count === 2 ? (i === 0 ? 1 : -1) : (i === 1 ? -1 : i === 2 ? 1 : 0)
       if (arrDir !== 0) {
-        const arrowOutDist = halfWall + Math.max(5, Math.min(60 * viewport.zoom, 8))
+        const arrowOutDist = halfWall + 8
         const arrowSideSign = count === 2 ? (i === 0 ? 1 : -1) : -1
         const amx = (pStartX + pEndX) / 2 + nx * (arrowSideSign * arrowOutDist - trackOffsetPx)
         const amy = (pStartY + pEndY) / 2 + ny * (arrowSideSign * arrowOutDist - trackOffsetPx)
@@ -1910,9 +1939,9 @@ function drawWindow(
   if (operation === 'sliding' && panelCount === 2) {
     // Standard 2-Panel Bypass Sliding Window (W1): Stile boxes at ends + crisp glass centerline
     const trackGap = Math.max(2, Math.min(thickPx * 0.2, 8))
-    const sashThickPx = Math.max(2.5, Math.min(28 * viewport.zoom, thickPx * 0.28))
-    const stileWidthPx = Math.max(3, Math.min(32 * viewport.zoom, clearSpan * 0.08))
-    const overlapPx = Math.max(stileWidthPx * 1.2, Math.min(28 * viewport.zoom, clearSpan * 0.12))
+    const sashThickPx = Math.max(2.5, Math.min(28, thickPx * 0.28))
+    const stileWidthPx = Math.max(3, Math.min(32, clearSpan * 0.08))
+    const overlapPx = Math.max(stileWidthPx * 1.2, Math.min(28, clearSpan * 0.12))
     const panelLen = (clearSpan + overlapPx) / 2
 
     // Continuous sill track lines
@@ -2000,7 +2029,7 @@ function drawWindow(
     ctx.stroke()
 
     // Direction arrows placed OUTSIDE the window frame (per AutoCAD/Revit architectural standard)
-    const arrowOutDist = halfWall + Math.max(5, Math.min(60 * viewport.zoom, 8))
+    const arrowOutDist = halfWall + 8
     const asz = Math.min(14, Math.max(8, panelLen * 0.2))
 
     // Outer Sash arrow: placed outside wall on +nx side
@@ -2029,9 +2058,9 @@ function drawWindow(
   } else if (operation === 'sliding' && panelCount >= 4) {
     // 4-Panel Sliding Window (W2): Center panels parting <- | ->
     const trackGap = Math.max(2, Math.min(thickPx * 0.2, 8))
-    const sashThickPx = Math.max(2.5, Math.min(28 * viewport.zoom, thickPx * 0.28))
-    const stileWidthPx = Math.max(3, Math.min(30 * viewport.zoom, clearSpan * 0.06))
-    const overlapPx = Math.max(stileWidthPx * 1.2, Math.min(24 * viewport.zoom, clearSpan * 0.08))
+    const sashThickPx = Math.max(2.5, Math.min(28, thickPx * 0.28))
+    const stileWidthPx = Math.max(3, Math.min(30, clearSpan * 0.06))
+    const overlapPx = Math.max(stileWidthPx * 1.2, Math.min(24, clearSpan * 0.08))
     const panelLen = (clearSpan + overlapPx * 3) / 4
 
     // Continuous sill track lines
@@ -2086,7 +2115,7 @@ function drawWindow(
       // Direction arrow for middle moving panels placed OUTSIDE the window frame
       const arrDir = i === 1 ? -1 : i === 2 ? 1 : 0
       if (arrDir !== 0) {
-        const arrowOutDist = halfWall + Math.max(5, Math.min(60 * viewport.zoom, 8))
+        const arrowOutDist = halfWall + 8
         const pmx = (pStartX + pEndX) / 2 - nx * (arrowOutDist + trackOffset)
         const pmy = (pStartY + pEndY) / 2 - ny * (arrowOutDist + trackOffset)
         const asz = Math.min(12, Math.max(6, panelLen * 0.16))
@@ -2111,8 +2140,8 @@ function drawWindow(
     ctx.stroke()
 
     // 2. Projected outward sash frame
-    const projDepthPx = Math.max(14, Math.min(200 * viewport.zoom, clearSpan * 0.35))
-    const frameProfilePx = Math.max(2.5, Math.min(30 * viewport.zoom, 18))
+    const projDepthPx = Math.max(14, Math.min(200, clearSpan * 0.35))
+    const frameProfilePx = Math.max(2.5, Math.min(30, 18))
 
     const pWall1 = [clearStart[0] + outNx * halfWall, clearStart[1] + outNy * halfWall] as const
     const pWall2 = [clearEnd[0] + outNx * halfWall, clearEnd[1] + outNy * halfWall] as const
@@ -2161,7 +2190,7 @@ function drawWindow(
     ctx.setLineDash([])
   } else if (operation === 'casement' || operation === 'hinged') {
     // Casement / Hinged Window (บานเปิดข้าง)
-    const sashThickPx = Math.max(3, Math.min(30 * viewport.zoom, thickPx * 0.3))
+    const sashThickPx = Math.max(3, Math.min(30, thickPx * 0.3))
     const pWall1 = [clearStart[0] + outNx * halfWall, clearStart[1] + outNy * halfWall] as const
     const pWall2 = [clearEnd[0] + outNx * halfWall, clearEnd[1] + outNy * halfWall] as const
 
@@ -2196,12 +2225,12 @@ function drawWindow(
     ctx.beginPath()
     ctx.strokeStyle = sashColor
     ctx.lineWidth = 1.1
-    const sashThickPx = Math.max(3, thickPx * 0.35)
+    const sashThickPx = Math.max(3, Math.min(18, thickPx * 0.35))
     ctx.rect(clearStart[0] - nx * (sashThickPx / 2), clearStart[1] - ny * (sashThickPx / 2), clearSpan, sashThickPx)
     ctx.stroke()
 
     // Slanted glass slats
-    const slatStep = Math.max(12, 100 * viewport.zoom)
+    const slatStep = 24
     const numSlats = Math.floor(clearSpan / slatStep)
     ctx.beginPath()
     ctx.strokeStyle = glassColor
@@ -2215,7 +2244,7 @@ function drawWindow(
     ctx.stroke()
   } else {
     // Fixed Picture Window (W6)
-    const glassOffsetPx = Math.max(1.5, 6 * viewport.zoom)
+    const glassOffsetPx = 6
     ctx.beginPath()
     ctx.strokeStyle = glassColor
     ctx.lineWidth = 1
@@ -2231,8 +2260,7 @@ function drawWindow(
   ctx.font = 'bold 9px monospace'
   ctx.save()
   ctx.translate(scx, scy)
-  const windowTagScale = planLabelScale(viewport.zoom)
-  const windowTagOffset = halfWall + 10 * windowTagScale + 8
+  const windowTagOffset = halfWall + 18
   ctx.rotate(Math.atan2(-uy, ux))
   if (showLabel) queuePlanLabel(ctx, 0, -windowTagOffset, text, '#0369a1', isSelected ? '#1682e8' : '#0ea5e9', isSelected ? 10 : isHovered ? 8 : 5, '#fbfdff', true, 'hexagon', [0, -halfWall])
   ctx.restore()
