@@ -143,9 +143,9 @@ export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> =
         </div>
         <div className="cf-plan-numeric-keypad__actions">
           <button type="button" className="is-cancel" onPointerDown={event => event.preventDefault()} onClick={onCancel}>ยกเลิก</button>
-          <button type="button" className="is-confirm" aria-label="ยืนยันมิติ" onPointerDown={event => event.preventDefault()} onClick={onCommit}>✓ ยืนยัน</button>
+          <button type="button" className="is-confirm" aria-label="เสร็จสิ้นการป้อนตัวเลข" onPointerDown={event => event.preventDefault()} onClick={() => setKeypadField(null)}>เสร็จ</button>
         </div>
-        <small className="cf-plan-numeric-keypad__hint">แตะตัวเลขเพื่อกำหนดมิติ · ✓ ยืนยัน · ยกเลิกเพื่อย้อนกลับ</small>
+        <small className="cf-plan-numeric-keypad__hint">เสร็จเพื่อปิดแป้น · กดยืนยันบนแถบด้านล่างเพื่อบันทึก</small>
       </div>, document.body,
     )}
   </>
