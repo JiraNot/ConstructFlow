@@ -115,10 +115,13 @@ export function usePlanCanvasSurfaceOverlays({
     onFinishPolygon,
   }
 
-  const dragDimensions = props.preferences.realtimeDimensions && manipulation.dimensions && manipulation.activePoint && manipulation.activeDrag ? {
+  const touchControls = typeof window !== 'undefined' && window.matchMedia('(any-pointer: coarse)').matches
+  const showManipulationOverlay = props.preferences.realtimeDimensions || touchControls
+  const dragDimensions = showManipulationOverlay && manipulation.dimensions && manipulation.activePoint && manipulation.activeDrag ? {
     mode: manipulation.mode,
     displayUnit,
     values: manipulation.values,
+    showDimensions: props.preferences.realtimeDimensions,
     onChange: (field: 'x' | 'y' | 'width' | 'height' | 'length' | 'offset', value: string) =>
       field === 'x' || field === 'y'
         ? manipulation.updateMoveDimension(field, value)

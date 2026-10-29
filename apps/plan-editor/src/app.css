@@ -405,10 +405,33 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   pointer-events: none;
 }
 .cf-manipulation-dimensions span { line-height:1.45; overflow-wrap:anywhere; }
-.cf-manipulation-dimensions span:last-child { color: #bae6fd; font: 500 9px system-ui, sans-serif; }
+.cf-manipulation-dimensions__hint { color: #bae6fd; font: 500 9px system-ui, sans-serif; }
 .cf-manipulation-dimensions label { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; }
 .cf-manipulation-dimensions input { width: 76px; min-height: 24px; border: 1px solid #38bdf8; border-radius: 3px; padding: 1px 4px; background: #0f172a; color: #e0f2fe; font: inherit; text-align: right; pointer-events: auto; }
 .cf-manipulation-dimensions input:focus { outline: 2px solid #7dd3fc; outline-offset: 1px; }
+.cf-manipulation-actions { display: none; }
+.cf-manipulation-dimensions.is-touch-dock {
+  position: fixed !important; top: auto !important; left: auto !important;
+  right: max(12px,env(safe-area-inset-right)); bottom: calc(132px + env(safe-area-inset-bottom)); z-index: 1100;
+  display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px 10px;
+  width: min(380px,calc(100vw - 24px)); min-width: 0; max-width: none; max-height: min(42dvh,300px); overflow: auto;
+  padding: 10px; border: 1px solid #d5e0e9; border-radius: 9px; background: rgb(255 255 255 / 98%);
+  box-shadow: 0 6px 20px rgb(15 23 42 / 15%); color: #334155; font: 600 11px/1.4 system-ui,sans-serif;
+  pointer-events: auto; touch-action: manipulation;
+}
+.cf-manipulation-dimensions.is-touch-dock label { min-height: 40px; }
+.cf-manipulation-dimensions.is-touch-dock input { width: 92px; min-height: 40px; border-color: #cbd5e1; border-radius: 6px; background: #f8fafc; color: #24364a; font-size: 14px; }
+.cf-manipulation-dimensions.is-touch-dock .cf-manipulation-dimensions__readout,
+.cf-manipulation-dimensions.is-touch-dock .cf-manipulation-dimensions__hint,
+.cf-manipulation-dimensions.is-touch-dock .cf-manipulation-dimensions__prompt,
+.cf-manipulation-dimensions.is-touch-dock .cf-manipulation-actions { grid-column: 1 / -1; }
+.cf-manipulation-dimensions.is-touch-dock .cf-manipulation-dimensions__readout { color: #334155; }
+.cf-manipulation-dimensions.is-touch-dock .cf-manipulation-dimensions__hint { color: #64748b; font: 500 10px/1.35 system-ui,sans-serif; }
+.cf-manipulation-dimensions.is-touch-dock .cf-manipulation-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cf-manipulation-dimensions.is-touch-dock .cf-manipulation-actions button { min-height: 44px; border: 1px solid #d5e0e9; border-radius: 7px; background: #f8fafc; color: #334155; font: 650 13px system-ui,sans-serif; touch-action: manipulation; }
+.cf-manipulation-dimensions.is-touch-dock .cf-manipulation-actions button.is-confirm { border-color: #1682c4; background: #1682c4; color: #fff; }
+.cf-manipulation-dimensions.is-touch-dock.is-actions-only { grid-template-columns: 1fr; }
+.cf-manipulation-dimensions.is-touch-dock.is-actions-only .cf-manipulation-dimensions__prompt { grid-column: 1; }
 .cf-tape-measure-hint { position:absolute; top:58px; left:50%; z-index:10; transform:translateX(-50%); max-width:calc(100% - 24px); padding: 4px 7px; border:1px solid #c4b5fd; border-radius: 4px; background:rgb(255 255 255 / 96%); box-shadow: none; color:#5b21b6; font-size:11px; white-space:nowrap; pointer-events:none; }
 .cf-canvas-zoom {
   position: absolute; top: 56px; left: 12px; z-index: 11; display: inline-flex; align-items: center; gap: 3px;

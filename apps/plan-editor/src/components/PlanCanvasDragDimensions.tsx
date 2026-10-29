@@ -9,6 +9,7 @@ export interface PlanCanvasDragDimensionsProps {
   displayUnit: string
   values: Record<DragDimensionField, string>
   style: React.CSSProperties
+  showDimensions?: boolean
   readout?: string | null
   onChange: (field: DragDimensionField, value: string) => void
   onCommit: () => void
@@ -16,11 +17,12 @@ export interface PlanCanvasDragDimensionsProps {
 }
 
 export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> = ({
-  mode, displayUnit, values, style, readout, onChange, onCommit, onCancel,
+  mode, displayUnit, values, style, showDimensions = true, readout, onChange, onCommit, onCancel,
 }) => {
   const [keypadField, setKeypadField] = useState<DragDimensionField | null>(null)
   const [keypadHasStarted, setKeypadHasStarted] = useState(false)
   const touchInput = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+  const touchControls = typeof window !== 'undefined' && window.matchMedia('(any-pointer: coarse)').matches
   const fields: Array<{ key: DragDimensionField; shortLabel: string; accessibleLabel: string }> = mode === 'axis-x' || mode === 'axis-y'
     ? [{ key: mode === 'axis-x' ? 'x' : 'y', shortLabel: mode === 'axis-x' ? 'ΔX' : 'ΔY', accessibleLabel: `ระยะย้ายแกน ${mode === 'axis-x' ? 'X' : 'Y'} (${displayUnit})` }]
     : mode === 'rectangle'
@@ -86,15 +88,14 @@ export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> =
     setKeypadHasStarted(true)
   }
 
-  return <>
-    <div
-      className="cf-manipulation-dimensions"
-      role="group"
-      aria-label="มิติชั่วคราวระหว่างแก้ไขวัตถุ"
-      onPointerDown={event => event.stopPropagation()}
-      style={style}
-    >
-      {fields.map(field => <label key={field.key}>{field.shortLabel} <input
+  const manipulationPanel = (showDimensions || touchControls) ? <div
+    className={`cf-manipulation-dimensions${touchControls ? ' is-touch-dock' : ''}${!showDimensions ? ' is-actions-only' : ''}`}
+    role="group"
+    aria-label={showDimensions ? 'มิติและปุ่มยืนยันการแก้ไขวัตถุ' : 'ยืนยันการแก้ไขวัตถุ'}
+    onPointerDown={event => event.stopPropagation()}
+    style={style}
+  >
+      {showDimensions && fields.map(field => <label key={field.key}>{field.shortLabel} <input
         aria-label={field.accessibleLabel}
         type="text"
         inputMode={touchInput ? 'none' : 'decimal'}
@@ -109,9 +110,19 @@ export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> =
           else if (event.key === 'Escape') { event.preventDefault(); onCancel() }
         }}
       /></label>)}
-      {readout && <span>{readout}</span>}
-      <span>{touchInput ? 'แตะช่องระยะเพื่อเปิดแป้นตัวเลข' : 'Tab เพื่อเปลี่ยนช่อง · Enter ยืนยัน · Esc ยกเลิก'}</span>
-    </div>
+      {showDimensions && readout && <span className="cf-manipulation-dimensions__readout">{readout}</span>}
+      {showDimensions && <span className="cf-manipulation-dimensions__hint">{touchInput ? 'แตะช่องระยะเพื่อแก้ค่า · กดยืนยันเพื่อบันทึก' : 'Tab เพื่อเปลี่ยนช่อง · Enter ยืนยัน · Esc ยกเลิก'}</span>}
+      {!showDimensions && <strong className="cf-manipulation-dimensions__prompt">ยืนยันการแก้ไขวัตถุ</strong>}
+      {touchControls && <div className="cf-manipulation-actions">
+        <button type="button" className="is-cancel" onClick={onCancel}>ยกเลิก</button>
+        <button type="button" className="is-confirm" onClick={onCommit}>ยืนยัน</button>
+      </div>}
+  </div> : null
+
+  return <>
+    {manipulationPanel && (touchControls && typeof document !== 'undefined'
+      ? createPortal(manipulationPanel, document.body)
+      : manipulationPanel)}
     {keypadField && touchInput && typeof document !== 'undefined' && createPortal(
       <div className="cf-plan-numeric-keypad" role="dialog" aria-label={`ป้อน${fields.find(field => field.key === keypadField)?.accessibleLabel ?? 'ระยะ'}ด้วยแป้นตัวเลข`} onPointerDown={event => event.stopPropagation()}>
         <div className="cf-plan-numeric-keypad__heading">
