@@ -7,9 +7,9 @@ export const domainPackages = [
   "interior-engine",
 ];
 export const packageDirectories = [
+  "geometry-kernel",
   "project-model",
   "laser-survey",
-  "geometry-kernel",
   "command-schema",
   "constraint-engine",
   "module-sdk",
