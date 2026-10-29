@@ -62,6 +62,9 @@ export function usePlanCanvasSurfaceController({
     dimensionReferenceMode: props.preferences.dimensionReferenceMode,
     containerSize, canvasRef, authoringControlsOpen, setAuthoringControlsOpen,
     toggleDimensionReferenceMode: placementController.toggleDimensionReferenceMode,
+    onCommitPlacement: () => {
+      if (!pointerController.pointerInteractions.commitLinePlacementAtSnap()) placementController.commitActivePlacement(true)
+    },
     onFinishPolygon: () => { placementController.commitActivePlacement(); canvasRef.current?.focus({ preventScroll: true }) },
   })
 
@@ -69,7 +72,7 @@ export function usePlanCanvasSurfaceController({
     containerRef,
     canvasRef,
     activeTool: props.activeTool,
-    cursor: pointer.isPanning ? 'grabbing' : props.activeTool === 'select' ? 'default' : 'crosshair',
+    cursor: pointer.isPanning ? 'grabbing' : props.activeTool === 'pan' ? 'grab' : props.activeTool === 'select' ? 'default' : 'crosshair',
     canvasEvents: {
       onPointerMove: pointerController.pointerInteractions.handlePointerMove,
       onPointerDown: pointerController.pointerInteractions.handlePointerDown,
@@ -84,9 +87,9 @@ export function usePlanCanvasSurfaceController({
     containerSize,
     overlays,
     dimensions: {
-      project: props.project, planProject, viewport: viewport.viewport, displayUnit: props.displayUnit,
+      project: props.project, planProject, viewport: viewport.viewport, displayUnit: props.displayUnit, lengthPrecision: props.preferences.lengthPrecision,
       activeTool: props.activeTool, points: placement.dimensionPoints, pointer: placement.activeSnap?.point_mm ?? null,
-      snapModes: props.preferences.snapModes, onCommit: props.onCommitManipulation, onPreview: props.onPreviewManipulation,
+      snapModes: props.preferences.objectSnapEnabled ? props.preferences.snapModes : [], onCommit: props.onCommitManipulation, onPreview: props.onPreviewManipulation,
       onRejected: props.onManipulationRejected, onClearObjectSelection: () => { props.onSelectionChange?.([], null); props.onSelectObject(null) },
     },
     photoPins: props.photoSessions ? {
@@ -94,6 +97,12 @@ export function usePlanCanvasSurfaceController({
       activeLevelId: props.project.project.active_level_id,
       sessions: props.photoSessions,
       onSelectSession: props.onOpenPhotoSession ?? (() => {}),
+    } : undefined,
+    commentPins: (props.project.comments?.length ?? 0) > 0 && props.onOpenProjectComment ? {
+      viewport: viewport.viewport,
+      activeLevelId: props.project.project.active_level_id,
+      comments: props.project.comments ?? [],
+      onOpen: props.onOpenProjectComment,
     } : undefined,
     viewport: viewport.viewport,
     setViewport: viewport.setViewport,

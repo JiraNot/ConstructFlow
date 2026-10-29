@@ -1,7 +1,7 @@
 import React from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { StairPlacementOptions } from '@constructflow/architecture-engine'
-import type { DisplayLengthUnit, InteriorFurnitureKind, ProjectDocument, StairModuleData } from '@constructflow/project-model'
+import type { DisplayLengthUnit, InteriorFurnitureKind, PlanFillStyle, ProjectDocument, StairModuleData } from '@constructflow/project-model'
 import type { SnapMode } from '@constructflow/snapping-engine'
 import { WorkbenchNumberInput } from './WorkbenchNumberInput.js'
 import { TypePicker } from './TypePicker.js'
@@ -18,6 +18,9 @@ export interface PlanCanvasAuthoringControlsProps {
   activeTool: ToolType
   displayUnit: DisplayLengthUnit
   preferences: PlanCanvasPreferences
+  lineDrawingMode: PlanCanvasPreferences['lineDrawingMode']
+  wallAngleSnapDeg: PlanCanvasPreferences['wallAngleSnapDeg']
+  fillStyle: PlanFillStyle
   open: boolean
   pipeSystem: PipeSystem
   fixtureKind: FixtureKind
@@ -42,6 +45,8 @@ export interface PlanCanvasAuthoringControlsProps {
   onGridFirstTagChange: (axis: 'x' | 'y', value: string) => void
   onPlacementReferenceChange: (value: PlanCanvasPreferences['placementReference']) => void
   onLineConstraintModeChange: (value: PlanCanvasPreferences['lineConstraintMode']) => void
+  onWallAngleSnapChange: (value: PlanCanvasPreferences['wallAngleSnapDeg']) => void
+  onFillStyleChange: (updater: (style: PlanFillStyle) => PlanFillStyle) => void
   onSnapModeToggle: (mode: SnapMode) => void
   onPlacementKeyDown: React.KeyboardEventHandler<HTMLInputElement>
   onChangeActiveTypeMark: (value: string) => void
@@ -58,16 +63,19 @@ const typeLabelByTool: Partial<Record<ToolType, string>> = {
 }
 
 export const PlanCanvasAuthoringControlsContent: React.FC<PlanCanvasAuthoringControlsProps> = props => {
-  const { project, activeTool, displayUnit, preferences, open, pipeSystem, fixtureKind, furnitureKind, roof, stairOptions, stairError,
+  const { project, activeTool, displayUnit, preferences, lineDrawingMode, wallAngleSnapDeg, fillStyle, open, pipeSystem, fixtureKind, furnitureKind, roof, stairOptions, stairError,
     gridSequenceStyle, gridStartPoint, gridSystem, lineReferenceDescription, activeTypeMarks,
     onPipeSystemChange, onFixtureKindChange, onFurnitureKindChange, onRoofChange, onStairOptionsChange, onGridSequenceStyleChange,
-    onGridIntervalsChange, onGridFirstTagChange, onPlacementReferenceChange, onLineConstraintModeChange,
+    onGridIntervalsChange, onGridFirstTagChange, onPlacementReferenceChange, onLineConstraintModeChange, onWallAngleSnapChange, onFillStyleChange,
     onSnapModeToggle, onPlacementKeyDown, onChangeActiveTypeMark, onOpenTypeManager } = props
 
   const baseLevelElevation = project.levels.find(level => level.id === project.project.active_level_id)?.elevation_mm ?? 0
   const roofUpdate = <K extends keyof typeof roof>(key: K, value: (typeof roof)[K]) => onRoofChange(current => ({ ...current, [key]: value }))
   const family = typeFamilyByTool[activeTool]
   const activeTypeMark = activeTypeMarks[activeTool]
+  const isLinearTool = activeTool === 'wall' || activeTool === 'beam'
+  const usesReferenceConstraint = preferences.lineConstraintMode === 'parallel' || preferences.lineConstraintMode === 'perpendicular'
+  const showAngleStep = isLinearTool && lineDrawingMode === 'angled' && !usesReferenceConstraint
 
   return <div className="cf-authoring-controls-content">
       {activeTool === 'pipe' && <label className="cf-reference-control">ระบบท่อ
@@ -129,17 +137,33 @@ export const PlanCanvasAuthoringControlsContent: React.FC<PlanCanvasAuthoringCon
         {gridSystem.error && <small role="alert" style={{ color: '#b42332' }}>{gridSystem.error}</small>}
       </div>}
       {family && <TypePicker types={project.types.filter(type => type.object_type === family)} value={activeTypeMark ?? ''} label={typeLabelByTool[activeTool] ?? 'วัตถุ'} displayUnit={displayUnit} onChange={onChangeActiveTypeMark} onOpenCatalog={onOpenTypeManager} />}
-      {(activeTool === 'wall' || activeTool === 'beam') && <label className="cf-reference-control">
-        <span>แนวอ้างอิง</span><select aria-label="แนวอ้างอิงการวาง" value={preferences.placementReference} onChange={event => onPlacementReferenceChange(event.target.value as PlanCanvasPreferences['placementReference'])}><option value="centerline">กึ่งกลาง</option><option value="left_face">ริมซ้ายตามทิศลาก</option><option value="right_face">ริมขวาตามทิศลาก</option></select>
-      </label>}
-      {(activeTool === 'wall' || activeTool === 'beam') && <label className="cf-reference-control">
-        <span>จัดแนวช่วงที่วาด</span><select aria-label="ข้อจำกัดแนวการวาด" value={preferences.lineConstraintMode} onChange={event => onLineConstraintModeChange(event.target.value as PlanCanvasPreferences['lineConstraintMode'])}><option value="auto">อัตโนมัติ: ขนาน/ตั้งฉาก</option><option value="none">อิสระ</option><option value="parallel">ขนานกับแนวใกล้จุดเริ่ม</option><option value="perpendicular">ตั้งฉากกับแนวใกล้จุดเริ่ม</option></select>
-        {preferences.lineConstraintMode !== 'none' && <span className="cf-snap-hint">{lineReferenceDescription ? `อ้างอิง: ${lineReferenceDescription}` : 'เริ่มจากหรือใกล้แนวผนัง/คาน ภายใน 150 มม.'}</span>}
-      </label>}
-      <details className="cf-snap-details"><summary>Snap · {preferences.snapModes.length ? `เปิด ${preferences.snapModes.length} ประเภท` : 'วางอิสระ'} · ตั้งค่า</summary><div className="cf-snap-controls" role="group" aria-label="ประเภทจุด Snap">
+      <details className="cf-snap-details"><summary title={`ตั้งค่าจุด Snap · เปิดอยู่ ${preferences.snapModes.length} ประเภท`} aria-label={`ตั้งค่าจุด Snap · เปิดอยู่ ${preferences.snapModes.length} ประเภท`}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 5h5M14 5h5M5 19h5M14 19h5M5 5v5M19 5v5M5 14v5M19 14v5" /><path d="M8 12h8M12 8v8" /></svg><span>Snap</span><b>{preferences.snapModes.length}</b></summary><div className="cf-snap-controls" role="group" aria-label="ประเภทจุด Snap">
         <span>Snap</span>
         {([['grid', 'กริด'], ['endpoint', 'ปลาย/มุม'], ['midpoint', 'กึ่งกลาง'], ['center', 'ศูนย์กลาง'], ['face', 'ขอบ'], ['centerline', 'แนว'], ['intersection', 'จุดตัด']] as [SnapMode, string][]).map(([mode, label]) => <button key={mode} type="button" aria-pressed={preferences.snapModes.includes(mode)} className={preferences.snapModes.includes(mode) ? 'is-enabled' : ''} title={`${preferences.snapModes.includes(mode) ? 'ปิด' : 'เปิด'} Snap ${label}`} onClick={() => onSnapModeToggle(mode)}>{label}</button>)}
-        <span className="cf-snap-hint">Ctrl วางอิสระ · {activeTool === 'wall' || activeTool === 'beam' ? `Space เปลี่ยนแนวอ้างอิง (ขณะนี้: ${preferences.placementReference === 'centerline' ? 'กึ่งกลาง' : preferences.placementReference === 'left_face' ? 'ชิดซ้าย' : 'ชิดขวา'})` : 'เลื่อนเมาส์ให้เห็นสัญลักษณ์ก่อนคลิก'}</span>
+        <span className="cf-snap-hint">Ctrl วางอิสระ · {isLinearTool ? `Space เปลี่ยนแนวอ้างอิง (ขณะนี้: ${preferences.placementReference === 'centerline' ? 'กึ่งกลาง' : preferences.placementReference === 'left_face' ? 'ชิดซ้าย' : 'ชิดขวา'})` : 'เลื่อนเมาส์ให้เห็นสัญลักษณ์ก่อนคลิก'}</span>
       </div></details>
+      {(activeTool === 'wall' || activeTool === 'beam') && <label className="cf-reference-control cf-placement-reference-control">
+        <span title="แนวอ้างอิงการวางผนังหรือคาน">อ้างอิง</span><select aria-label="แนวอ้างอิงการวาง" title="เลือกตำแหน่งอ้างอิงจากกึ่งกลางหรือขอบผนัง/คาน" value={preferences.placementReference} onChange={event => onPlacementReferenceChange(event.target.value as PlanCanvasPreferences['placementReference'])}><option value="centerline">กึ่งกลาง</option><option value="left_face">ขอบซ้าย</option><option value="right_face">ขอบขวา</option></select>
+      </label>}
+      {isLinearTool && lineDrawingMode === 'angled' && <label className="cf-reference-control cf-line-constraint-control">
+        <span title="โหมดขนาน/ตั้งฉากจะอ้างอิงผนังหรือคานใกล้จุดเริ่ม">อ้างแนว</span><select aria-label="ความสัมพันธ์กับแนวผนังหรือคาน" title="โหมดตั้งฉากและขนานต้องเริ่มใกล้แนวผนังหรือคาน" value={preferences.lineConstraintMode} onChange={event => onLineConstraintModeChange(event.target.value as PlanCanvasPreferences['lineConstraintMode'])}><option value="auto">อัตโนมัติ</option><option value="none">อิสระ</option><option value="parallel">ขนานกับแนว</option><option value="perpendicular">ตั้งฉากกับแนว</option></select>
+        {preferences.lineConstraintMode !== 'none' && <span className="cf-snap-hint">{lineReferenceDescription ? `อ้างอิง: ${lineReferenceDescription}` : preferences.lineConstraintMode === 'auto' ? 'เริ่มใกล้ผนัง/คานเพื่อจัดแนวอัตโนมัติ' : 'เริ่มห่างแนวไม่เกิน 150 มม. · นอกแนวจะล็อกแกน 0°/90°'}</span>}
+      </label>}
+      {showAngleStep && <label className="cf-reference-control cf-wall-angle-dock-control">
+        <span>ขั้นมุม</span><select aria-label="ขั้นสแนปมุมผนังและคาน" value={wallAngleSnapDeg} onChange={event => onWallAngleSnapChange(Number(event.target.value) as PlanCanvasPreferences['wallAngleSnapDeg'])}>
+          <option value={0}>อิสระ</option><option value={15}>15°</option><option value={30}>30°</option><option value={45}>45°</option><option value={90}>90°</option>
+        </select>
+      </label>}
+      {activeTool === 'fill' && <details className="cf-fill-style-dock">
+        <summary>สีและ Hatch</summary>
+        <div className="cf-fill-style-panel" onPointerDown={event => event.stopPropagation()}>
+          <div className="cf-fill-style-row"><strong>รูปแบบเติม</strong><div className="cf-fill-style-segmented"><button type="button" aria-pressed={fillStyle.fill_type === 'solid'} onClick={() => onFillStyleChange(style => ({ ...style, fill_type: 'solid' }))}>สีพื้น</button><button type="button" aria-pressed={fillStyle.fill_type === 'pattern'} onClick={() => onFillStyleChange(style => ({ ...style, fill_type: 'pattern' }))}>ลาย Hatch</button></div></div>
+          {fillStyle.fill_type === 'pattern' && <div className="cf-fill-pattern-options" role="group" aria-label="เลือกลาย Hatch">{(['diagonal', 'crosshatch', 'grid', 'dots'] as const).map(pattern => <button type="button" key={pattern} aria-pressed={fillStyle.pattern === pattern} onClick={() => onFillStyleChange(style => ({ ...style, pattern }))}>{({ diagonal: 'เฉียง', crosshatch: 'กากบาท', grid: 'ตาราง', dots: 'จุด' })[pattern]}</button>)}</div>}
+          <div className="cf-fill-color-row" role="group" aria-label="สีเติม">{['#64748b', '#0f172a', '#2563eb', '#7c3aed', '#dc2626', '#ea580c', '#16a34a'].map(color => <button type="button" key={color} aria-label={`เลือกสี ${color}`} aria-pressed={fillStyle.color === color} style={{ backgroundColor: color }} onClick={() => onFillStyleChange(style => ({ ...style, color }))} />)}<input type="color" aria-label="กำหนดสีเติมเอง" value={fillStyle.color} onChange={event => onFillStyleChange(style => ({ ...style, color: event.target.value }))} /></div>
+          <label className="cf-fill-range-row"><span>ความโปร่งใส</span><input type="range" min="0" max="100" value={Math.round(fillStyle.opacity * 100)} onChange={event => onFillStyleChange(style => ({ ...style, opacity: Number(event.target.value) / 100 }))} /><output>{Math.round(fillStyle.opacity * 100)}%</output></label>
+          {fillStyle.fill_type === 'pattern' && <><label className="cf-fill-range-row"><span>ระยะลาย</span><input type="range" min="50" max="1000" step="50" value={fillStyle.scale_mm} onChange={event => onFillStyleChange(style => ({ ...style, scale_mm: Number(event.target.value) }))} /><output>{(fillStyle.scale_mm / 1000).toFixed(2)} m</output></label><label className="cf-fill-range-row"><span>หมุนลาย</span><input type="range" min="0" max="180" step="15" value={fillStyle.rotation_deg} onChange={event => onFillStyleChange(style => ({ ...style, rotation_deg: Number(event.target.value) }))} /><output>{fillStyle.rotation_deg}°</output></label></>}
+          <div className="cf-fill-style-row"><label>สีขอบ <input type="color" aria-label="กำหนดสีเส้นขอบ" value={fillStyle.border_color} onChange={event => onFillStyleChange(style => ({ ...style, border_color: event.target.value }))} /></label><label>เส้นขอบ <select value={fillStyle.border_style} onChange={event => onFillStyleChange(style => ({ ...style, border_style: event.target.value as PlanFillStyle['border_style'] }))}><option value="solid">ทึบ</option><option value="dashed">ประ</option><option value="dotted">จุด</option><option value="dot-dash">จุด-ประ</option></select></label><label>น้ำหนัก <select value={fillStyle.border_width_mm} onChange={event => onFillStyleChange(style => ({ ...style, border_width_mm: Number(event.target.value) }))}><option value={0}>ไม่มี</option><option value={10}>บาง</option><option value={20}>ปกติ</option><option value={40}>หนา</option></select></label></div>
+        </div>
+      </details>}
     </div>
 }

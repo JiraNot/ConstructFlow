@@ -22,6 +22,7 @@ export interface ReadProjectFileResult {
   project: ProjectDocument
   serialized: string
   name: string
+  mediaAssets: Record<string, string>
 }
 
 export function readProjectFile(file: LocalProjectFile): Promise<ReadProjectFileResult>

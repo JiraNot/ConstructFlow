@@ -5,6 +5,9 @@
   "description": "ConstructFlow Canonical Semantic Project Model and SmartObject Schema",
   "type": "module",
   "sideEffects": false,
+  "dependencies": {
+    "@constructflow/geometry-kernel": "file:../geometry-kernel"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {

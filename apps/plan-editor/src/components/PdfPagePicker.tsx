@@ -13,12 +13,16 @@ interface Props {
   scaleCalibrations?: Array<{ filename: string; source_page_number: number; points: [[number, number], [number, number]]; distance_mm: number }>
   alignments?: Array<{ filename: string; source_page_number: number; anchor_normalized: [number, number]; target_origin_mm: [number, number]; rotation_deg: number; level_id: string }>
   levels?: Array<{ id: string; name: string }>
+  activeLevelId?: string
+  requireScaleCalibration?: boolean
+  confirmBusy?: boolean
   onClose: () => void
   onUpdate?: (pages: number[], calibrations: Array<{ filename: string; source_page_number: number; points: [[number, number], [number, number]]; distance_mm: number }>, alignments?: Props["alignments"]) => void
   onConfirm: (pages: number[], calibrations: Array<{ filename: string; source_page_number: number; points: [[number, number], [number, number]]; distance_mm: number }>, alignments?: Props["alignments"]) => void
 }
 
 type DrawingAlignment = NonNullable<Props["alignments"]>[number]
+const MAX_SELECTED_PAGES = 20
 
 function PdfPageCard({ document, pageNumber, selected, onToggle }: {
   document: PDFDocumentProxy
@@ -57,12 +61,13 @@ function PdfPageCard({ document, pageNumber, selected, onToggle }: {
   </button>
 }
 
-export function PdfPagePicker({ file, selectedPages, suggestedPages = [], scaleCalibrations = [], alignments = [], levels = [], onClose, onUpdate, onConfirm }: Props) {
+export function PdfPagePicker({ file, selectedPages, suggestedPages = [], scaleCalibrations = [], alignments = [], levels = [], activeLevelId, requireScaleCalibration = false, confirmBusy = false, onClose, onUpdate, onConfirm }: Props) {
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null)
   const [pageCount, setPageCount] = useState(0)
   const [selected, setSelected] = useState<Set<number>>(new Set(selectedPages ?? []))
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState('')
+  const [selectionNotice, setSelectionNotice] = useState('')
   const [pageOffset, setPageOffset] = useState(0)
   const [calibrationPage, setCalibrationPage] = useState<number | null>(null)
   const [modalMode, setModalMode] = useState<"scale" | "align">("scale")
@@ -71,7 +76,7 @@ export function PdfPagePicker({ file, selectedPages, suggestedPages = [], scaleC
   const [alignmentTargetX, setAlignmentTargetX] = useState("0")
   const [alignmentTargetY, setAlignmentTargetY] = useState("0")
   const [alignmentRotation, setAlignmentRotation] = useState("0")
-  const [alignmentLevelId, setAlignmentLevelId] = useState(alignments[0]?.level_id || levels[0]?.id || "")
+  const [alignmentLevelId, setAlignmentLevelId] = useState(alignments[0]?.level_id || activeLevelId || levels[0]?.id || "")
   const calibrationCanvasRef = useRef<HTMLCanvasElement>(null)
   const calibrationWrapRef = useRef<HTMLDivElement>(null)
   const pagesPerView = 12
@@ -98,13 +103,15 @@ export function PdfPagePicker({ file, selectedPages, suggestedPages = [], scaleC
     return () => { active = false; if (loadingTask) void loadingTask.destroy() }
   }, [file])
 
-  const togglePage = (page: number) => setSelected(current => {
-    const next = new Set(current)
-    if (next.has(page)) next.delete(page); else next.add(page)
-    return next
-  })
-  const selectVisible = () => setSelected(current => new Set([...current, ...visiblePages]))
-  const clearSelection = () => setSelected(new Set())
+  const togglePage = (page: number) => {
+    const next = new Set(selected)
+    if (next.has(page)) next.delete(page)
+    else if (next.size >= MAX_SELECTED_PAGES) { setSelectionNotice(`นำเข้าได้ครั้งละ ${MAX_SELECTED_PAGES} หน้า · ยกเลิกบางหน้าแล้วเลือกใหม่`); return }
+    else next.add(page)
+    setSelected(next)
+    setSelectionNotice('')
+  }
+  const clearSelection = () => { setSelected(new Set()); setSelectionNotice('') }
 
   useEffect(() => {
     let active = true
@@ -134,6 +141,7 @@ export function PdfPagePicker({ file, selectedPages, suggestedPages = [], scaleC
   }
   const saveCalibration = () => {
     if (calibrationPage === null || calibrationPoints.length !== 2 || Number(calibrationDistance) <= 0) return
+    if (!selected.has(calibrationPage) && selected.size >= MAX_SELECTED_PAGES) { setSelectionNotice(`นำเข้าได้ครั้งละ ${MAX_SELECTED_PAGES} หน้า · ยกเลิกบางหน้าแล้วเลือกใหม่`); return }
     const pages = [...new Set([...selected, calibrationPage])].sort((a, b) => a - b)
     setSelected(new Set(pages))
     onUpdate?.(pages, [...scaleCalibrations, { filename: file.name, source_page_number: calibrationPage, points: calibrationPoints as [[number, number], [number, number]], distance_mm: Number(calibrationDistance) }].filter(item => pages.includes(item.source_page_number)), alignments.filter(item => pages.includes(item.source_page_number)))
@@ -141,6 +149,7 @@ export function PdfPagePicker({ file, selectedPages, suggestedPages = [], scaleC
   }
   const saveAlignment = () => {
     if (calibrationPage === null || !calibrationPoints[0] || !alignmentLevelId) return
+    if (!selected.has(calibrationPage) && selected.size >= MAX_SELECTED_PAGES) { setSelectionNotice(`นำเข้าได้ครั้งละ ${MAX_SELECTED_PAGES} หน้า · ยกเลิกบางหน้าแล้วเลือกใหม่`); return }
     const nextAlignment = { filename: file.name, source_page_number: calibrationPage, anchor_normalized: calibrationPoints[0], target_origin_mm: [Number(alignmentTargetX), Number(alignmentTargetY)] as [number, number], rotation_deg: Number(alignmentRotation), level_id: alignmentLevelId }
     const pages = [...new Set([...selected, calibrationPage])].sort((a, b) => a - b)
     setSelected(new Set(pages))
@@ -152,25 +161,28 @@ export function PdfPagePicker({ file, selectedPages, suggestedPages = [], scaleC
     const includesPage = (page: number) => pages.length === 0 || pages.includes(page)
     onConfirm(pages, scaleCalibrations.filter(item => includesPage(item.source_page_number)), alignments.filter(item => includesPage(item.source_page_number)))
   }
+  const scaleReady = !requireScaleCalibration || (selected.size > 0 && [...selected].every(page => scaleCalibrations.some(item => item.filename === file.name && item.source_page_number === page && item.distance_mm > 0)))
+  const canConfirm = !busy && !error && selected.size > 0 && selected.size <= MAX_SELECTED_PAGES && scaleReady
 
-  return <div className="cf-pdf-picker-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
+  return <div className="cf-pdf-picker-backdrop" onMouseDown={event => { if (!confirmBusy && event.target === event.currentTarget) onClose() }}>
     <section className="cf-pdf-picker" role="dialog" aria-modal="true" aria-labelledby="cf-pdf-picker-title">
       <header className="cf-pdf-picker-header">
         <div><strong id="cf-pdf-picker-title">เลือกหน้าแปลน</strong><small title={file.name}>{file.name} · {busy ? 'กำลังอ่าน PDF…' : `${pageCount} หน้า`}</small></div>
-        <button type="button" className="cf-icon-button" aria-label="ปิดตัวเลือกหน้า" onClick={onClose}><X size={18} /></button>
+        <button type="button" className="cf-icon-button" aria-label="ปิดตัวเลือกหน้า" onClick={onClose} disabled={confirmBusy}><X size={18} /></button>
       </header>
       {busy ? <div className="cf-pdf-picker-loading"><LoaderCircle className="cf-ai-spin" size={20} /> กำลังเตรียมตัวอย่างหน้า</div> : error ? <p className="cf-ai-error" role="alert">{error}</p> : <>
-        <p className="cf-pdf-picker-help">แตะหน้าเพื่อเลือก · สีแนะนำคือหน้าแปลนที่ AI แยกได้ · ตั้งสเกลโดยแตะปลายมิติที่ทราบค่า 2 จุด</p>
-        <div className="cf-pdf-page-grid">{visiblePages.map(page => { const pageAlignment = alignments.find(item => item.source_page_number === page); return <div className={`cf-pdf-page-option${suggestedPages.includes(page) ? " is-suggested" : ""}`} key={page}><PdfPageCard document={document!} pageNumber={page} selected={selected.has(page)} onToggle={() => togglePage(page)} />{suggestedPages.includes(page) && <small>AI แนะนำ</small>}<button type="button" className="cf-button cf-pdf-calibrate" onClick={() => { setModalMode("scale"); setCalibrationPage(page); setCalibrationPoints([]); setCalibrationDistance("") }}>{scaleCalibrations.some(item => item.source_page_number === page) ? `เพิ่มสเกล (${scaleCalibrations.filter(item => item.source_page_number === page).length})` : "ตั้งสเกล"}</button><button type="button" className="cf-button cf-pdf-calibrate" onClick={() => { setModalMode("align"); setCalibrationPage(page); setCalibrationPoints(pageAlignment ? [pageAlignment.anchor_normalized] : []); setAlignmentTargetX(String(pageAlignment?.target_origin_mm[0] ?? 0)); setAlignmentTargetY(String(pageAlignment?.target_origin_mm[1] ?? 0)); setAlignmentRotation(String(pageAlignment?.rotation_deg ?? 0)); setAlignmentLevelId(pageAlignment?.level_id || levels[0]?.id || "") }}>{pageAlignment ? "ปรับตำแหน่งแล้ว" : "จัดตำแหน่ง"}</button></div> })}</div>
+        <p className="cf-pdf-picker-help">เลือกได้หลายหน้า · ตั้งสเกลให้ครบทุกหน้าที่เลือกโดยแตะปลายมิติที่ทราบค่า 2 จุด · จัดตำแหน่งแยกชั้นได้</p>
+        <div className="cf-pdf-page-grid">{visiblePages.map(page => { const pageAlignment = alignments.find(item => item.filename === file.name && item.source_page_number === page); const pageCalibrations = scaleCalibrations.filter(item => item.filename === file.name && item.source_page_number === page); return <div className={`cf-pdf-page-option${suggestedPages.includes(page) ? " is-suggested" : ""}`} key={page}><PdfPageCard document={document!} pageNumber={page} selected={selected.has(page)} onToggle={() => togglePage(page)} />{suggestedPages.includes(page) && <small>AI แนะนำ</small>}<button type="button" className="cf-button cf-pdf-calibrate" onClick={() => { setModalMode("scale"); setCalibrationPage(page); setCalibrationPoints([]); setCalibrationDistance("") }}>{pageCalibrations.length ? `ปรับสเกล (${pageCalibrations.length})` : "ตั้งสเกล"}</button><button type="button" className="cf-button cf-pdf-calibrate" onClick={() => { setModalMode("align"); setCalibrationPage(page); setCalibrationPoints(pageAlignment ? [pageAlignment.anchor_normalized] : []); setAlignmentTargetX(String(pageAlignment?.target_origin_mm[0] ?? 0)); setAlignmentTargetY(String(pageAlignment?.target_origin_mm[1] ?? 0)); setAlignmentRotation(String(pageAlignment?.rotation_deg ?? 0)); setAlignmentLevelId(pageAlignment?.level_id || activeLevelId || levels[0]?.id || "") }}>{pageAlignment ? "ปรับตำแหน่งแล้ว" : "จัดตำแหน่ง"}</button></div> })}</div>
         <nav className="cf-pdf-picker-pages" aria-label="เปลี่ยนหน้าตัวอย่าง PDF">
           <button type="button" className="cf-icon-button" aria-label="ดูหน้าก่อน" disabled={pageOffset === 0} onClick={() => setPageOffset(value => Math.max(0, value - pagesPerView))}><ChevronLeft size={18} /></button>
           <span>หน้า {pageOffset + 1}–{Math.min(pageOffset + visiblePages.length, pageCount)} จาก {pageCount}</span>
           <button type="button" className="cf-icon-button" aria-label="ดูหน้าถัดไป" disabled={pageOffset + pagesPerView >= pageCount} onClick={() => setPageOffset(value => Math.min(Math.max(0, pageCount - pagesPerView), value + pagesPerView))}><ChevronRight size={18} /></button>
         </nav>
       </>}
+      {selectionNotice && <p className="cf-pdf-picker-selection-notice" role="status">{selectionNotice}</p>}
       <footer className="cf-pdf-picker-footer">
-          <span>{selected.size ? `เลือก ${selected.size} หน้า` : 'ส่ง PDF ทั้งเล่ม'}</span>
-        <div><button type="button" className="cf-button" disabled={busy || !!error || !selected.size} onClick={clearSelection}>ล้างที่เลือก</button><button type="button" className="cf-button cf-button-primary" disabled={busy || !!error} onClick={confirmSelection}>ใช้หน้านี้</button></div>
+          <span>{selected.size ? `เลือก ${selected.size}/${MAX_SELECTED_PAGES} หน้า${scaleReady ? ' · สเกลครบ' : ' · ตั้งสเกลให้ครบทุกหน้า'}` : 'เลือกหน้าและตั้งสเกลเพื่อใช้เป็นแบบอ้างอิง'}</span>
+        <div><button type="button" className="cf-button" disabled={busy || confirmBusy || !!error || !selected.size} onClick={clearSelection}>ล้างที่เลือก</button><button type="button" className="cf-button cf-button-primary" disabled={!canConfirm || confirmBusy} onClick={confirmSelection}>{confirmBusy ? 'กำลังแปลงหน้า…' : `นำเข้า ${selected.size} หน้า`}</button></div>
       </footer>
       {calibrationPage !== null && <div className="cf-pdf-calibration-backdrop"><section className="cf-pdf-calibration" role="dialog" aria-modal="true" aria-label={modalMode === "scale" ? "ปรับสเกลจากมิติที่ทราบ" : "จัดตำแหน่งแปลนกับโครงการ"}><header><strong>{modalMode === "scale" ? "ปรับสเกล" : "จัดตำแหน่งแปลน"} · หน้า {calibrationPage}</strong><button type="button" className="cf-icon-button" aria-label="ปิดหน้าต่าง" onClick={() => setCalibrationPage(null)}><X size={18} /></button></header><p>{modalMode === "scale" ? "แตะปลายเส้นมิติที่ทราบระยะจริง 2 จุด แล้วกรอกระยะตามตัวเลขบนแบบ" : "แตะจุดอ้างอิงบนแปลน แล้วระบุพิกัดโครงการของจุดนั้น เพื่อวางแปลนลงบนชั้นที่ถูกต้อง"}</p><div ref={calibrationWrapRef} className="cf-pdf-calibration-page" onClick={captureCalibrationPoint}><canvas ref={calibrationCanvasRef} />{calibrationPoints.map((point, index) => <i key={index} style={{ left: `${point[0] * 100}%`, top: `${point[1] * 100}%` }}>{modalMode === "scale" ? index + 1 : "จุด"}</i>)}</div>{modalMode === "scale" ? <label>ระยะจริง (มม.)<input type="number" min="1" value={calibrationDistance} onChange={event => setCalibrationDistance(event.target.value)} placeholder="เช่น 4000" /></label> : <div className="cf-pdf-alignment-fields"><label>พิกัด X (มม.)<input type="number" value={alignmentTargetX} onChange={event => setAlignmentTargetX(event.target.value)} /></label><label>พิกัด Y (มม.)<input type="number" value={alignmentTargetY} onChange={event => setAlignmentTargetY(event.target.value)} /></label><label>หมุน (องศา)<input type="number" value={alignmentRotation} onChange={event => setAlignmentRotation(event.target.value)} /></label><label>ชั้น<select value={alignmentLevelId} onChange={event => setAlignmentLevelId(event.target.value)}>{levels.map(level => <option key={level.id} value={level.id}>{level.name}</option>)}</select></label></div>}<footer><button type="button" className="cf-button" onClick={() => setCalibrationPage(null)}>ยกเลิก</button><button type="button" className="cf-button cf-button-primary" disabled={modalMode === "scale" ? calibrationPoints.length !== 2 || (calibrationPoints[0]?.[0] === calibrationPoints[1]?.[0] && calibrationPoints[0]?.[1] === calibrationPoints[1]?.[1]) || Number(calibrationDistance) <= 0 : calibrationPoints.length !== 1 || !alignmentLevelId || !alignmentTargetX.trim() || !alignmentTargetY.trim() || !alignmentRotation.trim() || !Number.isFinite(Number(alignmentTargetX)) || !Number.isFinite(Number(alignmentTargetY)) || !Number.isFinite(Number(alignmentRotation))} onClick={modalMode === "scale" ? saveCalibration : saveAlignment}>{modalMode === "scale" ? "ใช้สเกลนี้" : "ใช้ตำแหน่งนี้"}</button></footer></section></div>}
     </section>

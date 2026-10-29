@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { projectPointToWallOffsetMm } from '@constructflow/architecture-engine'
-import { parseLengthMm, type DisplayLengthUnit, type ProjectDocument } from '@constructflow/project-model'
+import { parseLengthMm, wallCenterlinePointAtOffsetMm, type DisplayLengthUnit, type ProjectDocument, type WallModuleData } from '@constructflow/project-model'
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
 import { usesPlacementDimensions } from '../app/toolInteractionRegistry.mjs'
 import { applyPlanCanvasPlacementDimensions } from './planCanvasPlacementConstraints.mjs'
@@ -59,15 +59,19 @@ export function usePlanCanvasOpeningPlacementDimensions({
       if (refs.axis === 'x') point[0] = Math.round(center)
       else point[1] = Math.round(center)
     }
-    const offset = projectPointToWallOffsetMm(point, wallSnap.wall_start_mm, wallSnap.wall_end_mm, openingWidthMm)
+    const host = planProject.objects[wallSnap.wall_id]
+    const curveGeometry = host?.object_type === 'architecture.wall'
+      ? (host.module_data as WallModuleData).curve_geometry
+      : undefined
+    const offset = projectPointToWallOffsetMm(point, wallSnap.wall_start_mm, wallSnap.wall_end_mm, openingWidthMm, curveGeometry)
     if (offset === undefined) return wallSnap
-    const dx = wallSnap.wall_end_mm[0] - wallSnap.wall_start_mm[0]
-    const dy = wallSnap.wall_end_mm[1] - wallSnap.wall_start_mm[1]
-    const length = Math.hypot(dx, dy)
-    const adjustedPoint: Point = [
-      Math.round(wallSnap.wall_start_mm[0] + dx / length * offset),
-      Math.round(wallSnap.wall_start_mm[1] + dy / length * offset),
-    ]
+    const wallGeometry = {
+      start_point_mm: [...wallSnap.wall_start_mm, 0] as [number, number, number],
+      end_point_mm: [...wallSnap.wall_end_mm, 0] as [number, number, number],
+      curve_geometry: curveGeometry,
+    }
+    const pointOnWall = wallCenterlinePointAtOffsetMm(wallGeometry, offset).point_mm
+    const adjustedPoint: Point = [Math.round(pointOnWall[0]), Math.round(pointOnWall[1])]
     const axis = refs.axis
     return {
       ...wallSnap,
@@ -90,7 +94,7 @@ export function usePlanCanvasOpeningPlacementDimensions({
     } else {
       const point = applyPlacementDimensions(
         activeSnap.point_mm,
-        findTemporaryDimensionRefs(activeSnap.point_mm, planProject, undefined, dimensionReferenceMode),
+        findTemporaryDimensionRefs(activeSnap.point_mm, planProject, activeSnap.target_id, dimensionReferenceMode),
         activeSnap.point_mm,
       )
       if (point[0] !== activeSnap.point_mm[0] || point[1] !== activeSnap.point_mm[1]) {

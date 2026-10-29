@@ -1,0 +1,176 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@constructflow/architecture-engine':
+        specifier: file:../architecture-engine
+        version: file:../architecture-engine
+      '@constructflow/domain-providers':
+        specifier: file:../domain-providers
+        version: file:../domain-providers
+      '@constructflow/project-model':
+        specifier: file:../project-model
+        version: file:../project-model
+    devDependencies:
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
+packages:
+
+  '@constructflow/architecture-engine@file:../architecture-engine':
+    resolution: {directory: ../architecture-engine, type: directory}
+
+  '@constructflow/command-schema@file:../command-schema':
+    resolution: {directory: ../command-schema, type: directory}
+
+  '@constructflow/decorative-engine@file:../decorative-engine':
+    resolution: {directory: ../decorative-engine, type: directory}
+
+  '@constructflow/domain-providers@file:../domain-providers':
+    resolution: {directory: ../domain-providers, type: directory}
+
+  '@constructflow/drainage-engine@file:../drainage-engine':
+    resolution: {directory: ../drainage-engine, type: directory}
+
+  '@constructflow/electrical-engine@file:../electrical-engine':
+    resolution: {directory: ../electrical-engine, type: directory}
+
+  '@constructflow/family-engine@file:../family-engine':
+    resolution: {directory: ../family-engine, type: directory}
+
+  '@constructflow/geometry-kernel@file:../geometry-kernel':
+    resolution: {directory: ../geometry-kernel, type: directory}
+
+  '@constructflow/interior-engine@file:../interior-engine':
+    resolution: {directory: ../interior-engine, type: directory}
+
+  '@constructflow/module-sdk@file:../module-sdk':
+    resolution: {directory: ../module-sdk, type: directory}
+
+  '@constructflow/plumbing-engine@file:../plumbing-engine':
+    resolution: {directory: ../plumbing-engine, type: directory}
+
+  '@constructflow/project-model@file:../project-model':
+    resolution: {directory: ../project-model, type: directory}
+
+  '@constructflow/roof-engine@file:../roof-engine':
+    resolution: {directory: ../roof-engine, type: directory}
+
+  '@constructflow/structure-engine@file:../structure-engine':
+    resolution: {directory: ../structure-engine, type: directory}
+
+  earcut@3.0.2:
+    resolution: {integrity: sha512-X7hshQbLyMJ/3RPhyObLARM2sNxxmRALLKx1+NVFFnQ9gKzmCrxm9+uLIAdBcvc8FNLpctqlQ2V6AE92Ol9UDQ==}
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+snapshots:
+
+  '@constructflow/architecture-engine@file:../architecture-engine':
+    dependencies:
+      '@constructflow/command-schema': file:../command-schema
+      '@constructflow/geometry-kernel': file:../geometry-kernel
+      '@constructflow/module-sdk': file:../module-sdk
+      '@constructflow/project-model': file:../project-model
+
+  '@constructflow/command-schema@file:../command-schema':
+    dependencies:
+      '@constructflow/project-model': file:../project-model
+
+  '@constructflow/decorative-engine@file:../decorative-engine':
+    dependencies:
+      '@constructflow/command-schema': file:../command-schema
+      '@constructflow/geometry-kernel': file:../geometry-kernel
+      '@constructflow/module-sdk': file:../module-sdk
+      '@constructflow/project-model': file:../project-model
+
+  '@constructflow/domain-providers@file:../domain-providers':
+    dependencies:
+      '@constructflow/architecture-engine': file:../architecture-engine
+      '@constructflow/command-schema': file:../command-schema
+      '@constructflow/decorative-engine': file:../decorative-engine
+      '@constructflow/drainage-engine': file:../drainage-engine
+      '@constructflow/electrical-engine': file:../electrical-engine
+      '@constructflow/family-engine': file:../family-engine
+      '@constructflow/geometry-kernel': file:../geometry-kernel
+      '@constructflow/interior-engine': file:../interior-engine
+      '@constructflow/module-sdk': file:../module-sdk
+      '@constructflow/plumbing-engine': file:../plumbing-engine
+      '@constructflow/project-model': file:../project-model
+      '@constructflow/roof-engine': file:../roof-engine
+      '@constructflow/structure-engine': file:../structure-engine
+
+  '@constructflow/drainage-engine@file:../drainage-engine':
+    dependencies:
+      '@constructflow/command-schema': file:../command-schema
+      '@constructflow/geometry-kernel': file:../geometry-kernel
+      '@constructflow/module-sdk': file:../module-sdk
+      '@constructflow/project-model': file:../project-model
+
+  '@constructflow/electrical-engine@file:../electrical-engine':
+    dependencies:
+      '@constructflow/command-schema': file:../command-schema
+      '@constructflow/geometry-kernel': file:../geometry-kernel
+      '@constructflow/module-sdk': file:../module-sdk
+      '@constructflow/project-model': file:../project-model
+
+  '@constructflow/family-engine@file:../family-engine':
+    dependencies:
+      '@constructflow/command-schema': file:../command-schema
+      '@constructflow/geometry-kernel': file:../geometry-kernel
+      '@constructflow/module-sdk': file:../module-sdk
+      '@constructflow/project-model': file:../project-model
+
+  '@constructflow/geometry-kernel@file:../geometry-kernel':
+    dependencies:
+      earcut: 3.0.2
+
+  '@constructflow/interior-engine@file:../interior-engine':
+    dependencies:
+      '@constructflow/command-schema': file:../command-schema
+      '@constructflow/geometry-kernel': file:../geometry-kernel
+      '@constructflow/module-sdk': file:../module-sdk
+      '@constructflow/project-model': file:../project-model
+
+  '@constructflow/module-sdk@file:../module-sdk':
+    dependencies:
+      '@constructflow/command-schema': file:../command-schema
+      '@constructflow/geometry-kernel': file:../geometry-kernel
+      '@constructflow/project-model': file:../project-model
+
+  '@constructflow/plumbing-engine@file:../plumbing-engine':
+    dependencies:
+      '@constructflow/command-schema': file:../command-schema
+      '@constructflow/geometry-kernel': file:../geometry-kernel
+      '@constructflow/module-sdk': file:../module-sdk
+      '@constructflow/project-model': file:../project-model
+
+  '@constructflow/project-model@file:../project-model': {}
+
+  '@constructflow/roof-engine@file:../roof-engine':
+    dependencies:
+      '@constructflow/command-schema': file:../command-schema
+      '@constructflow/geometry-kernel': file:../geometry-kernel
+      '@constructflow/module-sdk': file:../module-sdk
+      '@constructflow/project-model': file:../project-model
+
+  '@constructflow/structure-engine@file:../structure-engine':
+    dependencies:
+      '@constructflow/command-schema': file:../command-schema
+      '@constructflow/geometry-kernel': file:../geometry-kernel
+      '@constructflow/module-sdk': file:../module-sdk
+      '@constructflow/project-model': file:../project-model
+
+  earcut@3.0.2: {}
+
+  typescript@5.9.3: {}

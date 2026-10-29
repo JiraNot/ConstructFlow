@@ -4,6 +4,7 @@ import type { BeamModuleData, DisplayLengthUnit, ProjectDocument } from '@constr
 import type { CommandBatchResult, CommandRequest } from '@constructflow/command-schema'
 import { CommandBus } from '../commands/CommandBus.js'
 import { buildDirectManipulationCommands } from '../directManipulation.mjs'
+import { expandSelectionWithHostedOpenings } from './duplicateSelection.js'
 import { getPlanObjectBounds } from '../components/PlanCanvasGeometry.js'
 import { computeAlignmentDelta, computeOffsetDelta, joinLineSegments, reflectPlanPoint, splitLineAtRatio, trimLineAtIntersection, type AlignmentMode } from './transformOperations.mjs'
 
@@ -48,14 +49,18 @@ interface CreatePlanTransformCommandHandlersOptions {
   dispatchCommandBatch: (commands: CommandRequest[]) => CommandBatchResult
   setSelectedIds: Dispatch<SetStateAction<string[]>>
   setSelectedId: Dispatch<SetStateAction<string | null>>
-  setRightPanelTab: Dispatch<SetStateAction<'properties' | 'quantities' | 'objects' | 'coordination' | 'ai' | 'extensions'>>
+  setRightPanelTab: Dispatch<SetStateAction<'properties' | 'quantities' | 'objects' | 'field_forms' | 'coordination' | 'ai' | 'extensions' | 'integrations'>>
   setFileFeedback: (message: string) => void
   setViewMode: Dispatch<SetStateAction<EditorView>>
 }
 export function createPlanTransformCommandHandlers({ project, selectedIds, displayUnit, dispatchCommandBatch, setSelectedIds, setSelectedId, setRightPanelTab, setFileFeedback, setViewMode, alignmentPreview, setAlignmentPreview }: CreatePlanTransformCommandHandlersOptions) {
   const handlePreviewArrayObjects = (objectIds: string[], copies: number, deltaXmm: number, deltaYmm: number) => {
-    const ids = [...new Set(objectIds)].filter(id => Boolean(project.objects[id]))
-    if (!ids.length || copies < 1 || copies > 100 || !Number.isFinite(deltaXmm) || !Number.isFinite(deltaYmm) || Math.hypot(deltaXmm, deltaYmm) < 1) return
+    const sourceIds = [...new Set(objectIds)].filter(id => Boolean(project.objects[id]))
+    const ids = expandSelectionWithHostedOpenings(project, sourceIds)
+    if (!ids.length || !Number.isInteger(copies) || copies < 1 || copies > 100 || ids.length * copies > 500 || !Number.isFinite(deltaXmm) || !Number.isFinite(deltaYmm) || Math.hypot(deltaXmm, deltaYmm) < 1) {
+      if (ids.length * copies > 500) setFileFeedback('อาร์เรย์ครั้งเดียวสร้างสำเนาได้ไม่เกิน 500 ชิ้น · ลดจำนวนหรือชุดวัตถุ')
+      return
+    }
     const commands: CommandRequest[] = []
     const createdIds: string[] = []
     for (let index = 1; index <= copies; index += 1) {
@@ -68,9 +73,9 @@ export function createPlanTransformCommandHandlers({ project, selectedIds, displ
       setFileFeedback(validation.errors?.[0] ?? 'ตรวจสอบ Preview อาร์เรย์ไม่ผ่าน')
       return
     }
-    setAlignmentPreview({ project: validation.updatedProject, ids: createdIds, commands, sourceIds: ids, description: 'Array' })
+    setAlignmentPreview({ project: validation.updatedProject, ids: createdIds, commands, sourceIds, description: 'Array' })
     setViewMode('plan')
-    setFileFeedback(`Preview อาร์เรย์ ${createdIds.length} ชิ้นใน ${copies} ชุดแล้ว · ยืนยันหรือยกเลิกใน Project Browser`)
+    setFileFeedback('Preview อาร์เรย์ ' + createdIds.length + ' ชิ้นใน ' + copies + ' ชุดแล้ว · ตรวจแบบก่อนยืนยัน')
   }
 
   const handleMoveObjectsByDelta = (objectIds: string[], deltaXmm: number, deltaYmm: number) => {
@@ -149,28 +154,49 @@ export function createPlanTransformCommandHandlers({ project, selectedIds, displ
   const handlePreviewOffset = (objectIds: string[], distanceMm: number, side: 'left' | 'right') => {
     const ids = [...new Set(objectIds)].filter(id => Boolean(project.objects[id]))
     if (!ids.length || !Number.isFinite(distanceMm) || Math.abs(distanceMm) < 1) { setFileFeedback('ระยะ Offset ต้องไม่เป็นศูนย์'); return }
-    if (hasConflictingHostSelection(ids)) { setFileFeedback('Offset วัตถุที่เชื่อมกันพร้อมกันไม่ได้ · เลือกผนัง/ช่องเปิด หรือเสา/ฐานราก/คานแยกชุดกัน'); return }
-    let working = project
+    if (ids.some(id => ['door_window.door', 'door_window.window'].includes(project.objects[id]!.object_type))) {
+      setFileFeedback('เลือกผนังเพื่อทำสำเนา Offset · ระบบจะคัดลอกประตูและหน้าต่างที่ติดกับผนังไปด้วย'); return
+    }
     const commands: CommandRequest[] = []
-    const affectedIds = new Set<string>()
+    const createdIds: string[] = []
+    const copied = new Set<string>()
     for (const id of ids) {
-      const object = working.objects[id]
+      if (copied.has(id)) continue
+      const object = project.objects[id]
       const line = object ? getOffsetLineEndpoints(object) : null
       const delta = line ? computeOffsetDelta(line[0], line[1], distanceMm, side) : null
       if (!object || !line || !delta) { setFileFeedback('Offset รองรับเฉพาะผนัง คาน กริด และเส้นแบ่งห้องที่มีแนวเส้นชัดเจน'); return }
-      const candidate = buildDirectManipulationCommands(working, { id, kind: 'object-move', startWorldMm: [0, 0], startScreenPx: [0, 0] }, delta)
-      if (!candidate.length) { setFileFeedback(`Offset วัตถุ ${id.slice(0, 8)} ไม่ได้ · ไม่มีคำสั่งย้ายที่รองรับ`); return }
-      const result = CommandBus.executeBatch(working, candidate)
-      if (result.status !== 'success') { setFileFeedback(result.errors?.[0] ?? 'ตรวจสอบ Offset ไม่ผ่าน'); return }
-      working = result.updatedProject
-      commands.push(...candidate)
-      for (const resultItem of result.results) for (const affected of resultItem.affected_object_ids) affectedIds.add(affected)
+      const data = object.module_data as Record<string, unknown>
+      if (object.object_type === 'architecture.wall' && data.curve_geometry) {
+        setFileFeedback(`Offset ผนังโค้ง ${id.slice(0, 8)} ยังไม่รองรับ · ใช้ทำสำเนาแล้วขยับ หรือวาดเส้นโค้งใหม่`); return
+      }
+      if (object.object_type === 'structure.beam' && (object.host_refs.length || data.start_column_id || data.end_column_id)) {
+        setFileFeedback(`Offset คาน ${id.slice(0, 8)} ไม่ได้ขณะเชื่อมกับเสา · แยกคานอิสระก่อน`); return
+      }
+      if ((object.object_type === 'structure.grid' || object.object_type === 'reference.grid') && data.system_id) {
+        setFileFeedback(`Offset กริด ${id.slice(0, 8)} ไม่ได้ขณะเป็นสมาชิก Grid System`); return
+      }
+      const group = [id]
+      if (object.object_type === 'architecture.wall') {
+        for (const candidate of Object.values(project.objects)) {
+          if ((candidate.object_type === 'door_window.door' || candidate.object_type === 'door_window.window')
+            && String((candidate.module_data as Record<string, unknown>).wall_id ?? '') === id) group.push(candidate.id)
+        }
+      }
+      for (const sourceId of group) copied.add(sourceId)
+      if (createdIds.length + group.length > 500) { setFileFeedback('Offset ครั้งเดียวสร้างสำเนาได้ไม่เกิน 500 ชิ้น · ลดจำนวนวัตถุที่เลือก'); return }
+      const idMap = Object.fromEntries(group.map(sourceId => [sourceId, crypto.randomUUID()]))
+      createdIds.push(...Object.values(idMap))
+      commands.push({ name: 'DuplicateObjects', input: {
+        object_ids: group, delta_x_mm: delta[0], delta_y_mm: delta[1], id_map: idMap,
+      } })
     }
+    if (!commands.length) { setFileFeedback('ไม่มีวัตถุที่รองรับ Offset'); return }
     const validation = CommandBus.executeBatch(project, commands)
     if (validation.status !== 'success') { setFileFeedback(validation.errors?.[0] ?? 'ตรวจสอบ preview Offset ไม่ผ่าน'); return }
-    setAlignmentPreview({ project: validation.updatedProject, ids: [...affectedIds], commands, sourceIds: ids, description: 'Offset' })
+    setAlignmentPreview({ project: validation.updatedProject, ids: createdIds, commands, sourceIds: ids, description: 'Offset copy' })
     setViewMode('plan')
-    setFileFeedback(`Preview Offset ${ids.length} เส้น · ยืนยันหรือยกเลิกใน Project Browser`)
+    setFileFeedback(`Preview สำเนา Offset ${createdIds.length} ชิ้น · ยืนยันหรือยกเลิกก่อนเพิ่มลงแบบ`)
   }
 
   const handlePreviewMirror = (objectIds: string[], axis: 'vertical' | 'horizontal') => {
@@ -193,6 +219,7 @@ export function createPlanTransformCommandHandlers({ project, selectedIds, displ
       const reflectedEnd = reflectPlanPoint(end, axis, axisCoordinate)
       if (!reflectedStart || !reflectedEnd) { setFileFeedback('คำนวณแนว Mirror ไม่สำเร็จ'); return }
       if (object.object_type === 'architecture.wall') {
+        if (data.curve_geometry) { setFileFeedback(`Mirror ผนังโค้ง ${id.slice(0, 8)} ยังไม่รองรับ · วาดเส้นโค้งสะท้อนใหม่เพื่อคงรัศมีและทิศโค้ง`); return }
         const hasHostedOpenings = Object.values(project.objects).some(candidate => (candidate.object_type === 'door_window.door' || candidate.object_type === 'door_window.window') && String((candidate.module_data as Record<string, unknown>).wall_id ?? '') === id)
         if (hasHostedOpenings) { setFileFeedback(`Mirror ผนัง ${id.slice(0, 8)} ไม่ได้ขณะมีช่องเปิดเป็น host · แยก workflow สำหรับผนัง/ช่องเปิดก่อน`); return }
         // Reverse the endpoints after reflection to preserve the wall's left/right face semantics.
@@ -519,7 +546,7 @@ export function createPlanTransformCommandHandlers({ project, selectedIds, displ
       return
     }
     setAlignmentPreview(null)
-    if (alignmentPreview.description === 'Array') {
+    if (alignmentPreview.description === 'Array' || alignmentPreview.description === 'Offset copy') {
       setSelectedIds(alignmentPreview.ids)
       setSelectedId(alignmentPreview.ids[0] ?? null)
       setRightPanelTab('properties')

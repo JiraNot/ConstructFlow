@@ -194,7 +194,7 @@ export const LaserBleHudPill: React.FC<LaserBleHudPillProps> = ({
           }}
         >
           <Camera size={13} />
-          <span>ถ่ายรูปใส่ระยะ</span>
+          <span aria-hidden="true">ถ่ายรูปใส่ระยะ</span>
         </button>
       )}
 

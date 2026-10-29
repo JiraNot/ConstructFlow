@@ -295,13 +295,13 @@ export function applyExtensionPreset(project: ProjectDocument, options: Extensio
   try {
     return CommandBus.executeBatch(project, planExtensionPreset(project, options), actorKind)
   } catch (error: unknown) {
-    return {transaction_id: crypto.randomUUID(), status: 'rejected', updatedProject: project, results: [], emittedEnvelopes: [], errors: [error instanceof Error ? error.message : String(error)]}
+    return {transaction_id: crypto.randomUUID(), status: 'rejected', updatedProject: project, results: [], emittedEnvelopes: [], committedEnvelopes: [], errors: [error instanceof Error ? error.message : String(error)]}
   }
 }
 
 /** Build the first standalone acceptance model as one atomic Existing + New transaction. */
 export function createKitchenProofProject(actorKind: CommandActorKind = 'human'): CommandBatchResult {
-  const seed = createEmptyProjectDocument('CF-KITCHEN-PROOF-001', 'Kitchen Extension Proof · 4.00 × 2.50 m')
+  const seed = createEmptyProjectDocument(crypto.randomUUID(), 'Kitchen Extension Proof · 4.00 × 2.50 m')
   seed.levels = [
     { id: 'DATUM', name: 'Ground Floor', elevation_mm: 0, storey_index: 0, height_mm: 400 },
     { id: 'GF', name: 'First Floor', elevation_mm: 400, storey_index: 1, height_mm: 3400 },
@@ -339,7 +339,7 @@ export function createKitchenProofProject(actorKind: CommandActorKind = 'human')
   } catch (error: unknown) {
     return {
       transaction_id: crypto.randomUUID(), status: 'rejected', updatedProject: seed,
-      results: [], emittedEnvelopes: [], errors: [error instanceof Error ? error.message : String(error)],
+      results: [], emittedEnvelopes: [], committedEnvelopes: [], errors: [error instanceof Error ? error.message : String(error)],
     }
   }
 }

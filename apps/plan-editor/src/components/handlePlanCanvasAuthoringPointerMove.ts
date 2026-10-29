@@ -3,6 +3,10 @@ import type { ProjectDocument } from '@constructflow/project-model'
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
 import { screenToWorld, type ViewportState } from '../viewport/viewportTransform.js'
 import type { PlanCanvasDraggingObject } from './planCanvasInteractionTypes.js'
+import type { WallTouchDrawGesture } from './planCanvasInteractionTypes.js'
+import type { WallDrawMode } from './planCanvasInteractionTypes.js'
+import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
+import { updateTouchWallPath } from './wallDrawGeometry.js'
 
 type Point = [number, number]
 
@@ -25,6 +29,12 @@ interface HandlePlanCanvasAuthoringPointerMoveOptions {
   setManipulationPreview: Dispatch<SetStateAction<{ project: ProjectDocument; ids: string[]; valid: boolean } | null>>
   onCursorChange: (coordsMm: Point, snapKind: string) => void
   previewDragAt: (drag: PlanCanvasDraggingObject, point: Point, ctrlKey: boolean) => Promise<unknown>
+  wallTouchGestureRef: import('react').MutableRefObject<WallTouchDrawGesture | null>
+  measureGestureRef: import('react').MutableRefObject<import('./planCanvasInteractionTypes.js').MeasureDragGesture | null>
+  setWallTouchPreview: (points: Point[] | null) => void
+  wallDrawMode: WallDrawMode
+  lineDrawingMode: PlanCanvasPreferences['lineDrawingMode']
+  wallAngleSnapDeg: PlanCanvasPreferences['wallAngleSnapDeg']
 }
 
 export function handlePlanCanvasAuthoringPointerMove({
@@ -46,6 +56,12 @@ export function handlePlanCanvasAuthoringPointerMove({
   setManipulationPreview,
   onCursorChange,
   previewDragAt,
+  wallTouchGestureRef,
+  measureGestureRef,
+  setWallTouchPreview,
+  wallDrawMode,
+  lineDrawingMode,
+  wallAngleSnapDeg,
 }: HandlePlanCanvasAuthoringPointerMoveOptions) {
   const [screenX, screenY] = screenPoint
   if (activeTool !== 'select' && activeTool !== 'erase' && event.pointerType === 'mouse' && document.activeElement !== canvas) {
@@ -54,6 +70,12 @@ export function handlePlanCanvasAuthoringPointerMove({
 
   const rawWorld = screenToWorld(screenPoint, viewport)
   const { snap, wallSnap } = resolveSnap(rawWorld, event.ctrlKey, event.shiftKey)
+  const wallGesture = wallTouchGestureRef.current
+  if (wallGesture?.pointerId === event.pointerId) {
+    const angleSnapDeg = lineDrawingMode === 'orthogonal' ? 90 : wallAngleSnapDeg
+    setWallTouchPreview(updateTouchWallPath(wallGesture, screenPoint, rawWorld, snap.point_mm, wallDrawMode, angleSnapDeg))
+  }
+  if (measureGestureRef.current?.pointerId === event.pointerId) measureGestureRef.current.latestWorldMm = snap.point_mm
   setActiveWallSnap(wallSnap)
   setActiveSnap(snap)
   onCursorChange(snap.point_mm, snap.description)

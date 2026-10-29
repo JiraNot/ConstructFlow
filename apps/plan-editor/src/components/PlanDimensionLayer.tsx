@@ -13,6 +13,7 @@ export interface PlanDimensionLayerProps {
   planProject: ProjectDocument
   viewport: ViewportState
   displayUnit: DisplayLengthUnit
+  lengthPrecision?: number
   activeTool: ToolType
   points: Point[]
   pointer: Point | null
@@ -24,7 +25,7 @@ export interface PlanDimensionLayerProps {
 }
 
 /** Drafting annotations have their own focus and gestures; all saves use project commands. */
-export function PlanDimensionLayer({ project, planProject, viewport, displayUnit, activeTool, points, pointer, snapModes, onCommit, onPreview, onRejected, onClearObjectSelection }: PlanDimensionLayerProps) {
+export function PlanDimensionLayer({ project, planProject, viewport, displayUnit, lengthPrecision = 3, activeTool, points, pointer, snapModes, onCommit, onPreview, onRejected, onClearObjectSelection }: PlanDimensionLayerProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const drag = useRef<{ original: PlanDimension; kind: 'start' | 'end' | 'offset'; client: Point; offset: number } | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -81,7 +82,7 @@ export function PlanDimensionLayer({ project, planProject, viewport, displayUnit
     const center = worldToScreen(shape.label_mm, viewport)
     const isSelected = !preview && selectedId === dimension.id
     const color = isSelected ? (valid ? '#0284c7' : '#dc2626') : preview ? '#0284c7' : '#52677d'
-    const label = `${formatLengthMm(shape.length_mm, displayUnit)} ${displayUnit}`
+    const label = `${formatLengthMm(shape.length_mm, displayUnit, lengthPrecision)} ${displayUnit}`
     const interactive = !preview && activeTool === 'select'
     return <g key={dimension.id} data-plan-dimension={preview ? 'preview' : dimension.id} aria-label={`เส้นบอกระยะ ${label}`}>
       <g fill="none" stroke={color} strokeWidth={isSelected ? 1.7 : 1.1} strokeDasharray={preview ? '5 3' : undefined}>

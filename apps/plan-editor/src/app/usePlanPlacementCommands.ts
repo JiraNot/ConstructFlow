@@ -1,11 +1,10 @@
-import type { Dispatch, SetStateAction } from 'react'
 import {
   ProjectDocument,
   isColumnObject,
+  type WallPathSegmentMm,
   type PlacementReference,
 } from '@constructflow/project-model'
-import { CommandEnvelope } from '@constructflow/command-schema'
-import { CommandBus } from '../commands/CommandBus.js'
+import type { CommandRequest } from '@constructflow/command-schema'
 
 interface UsePlanPlacementCommandsOptions {
   project: ProjectDocument
@@ -16,10 +15,9 @@ interface UsePlanPlacementCommandsOptions {
   activeWallType: string
   activeSlabType: string
   activeRoofType: string
-  setProject: (project: ProjectDocument) => void
   setSelectedId: (id: string | null) => void
-  setCommandQueue: Dispatch<SetStateAction<CommandEnvelope[]>>
   setFileFeedback: (message: string) => void
+  dispatchCommandBatch: (commands: CommandRequest[]) => { status: string; errors?: string[] }
 }
 
 const nextHigherLevelId = (project: ProjectDocument, baseLevelId: string): string => {
@@ -38,10 +36,9 @@ export function usePlanPlacementCommands({
   activeWallType,
   activeSlabType,
   activeRoofType,
-  setProject,
   setSelectedId,
-  setCommandQueue,
   setFileFeedback,
+  dispatchCommandBatch,
 }: UsePlanPlacementCommandsOptions) {
   const handleCommitColumn = (location_mm: [number, number]) => {
     const colId = crypto.randomUUID()
@@ -50,32 +47,28 @@ export function usePlanPlacementCommands({
     const topLevelId = project.levels.some(level => level.id === activeColumnTopLevelId && level.elevation_mm > baseElevation)
       ? activeColumnTopLevelId
       : nextHigherLevelId(project, baseLevelId)
-    const res = CommandBus.execute(project, 'CreateColumn', {
+    const res = dispatchCommandBatch([{ name: 'CreateColumn', input: {
       id: colId,
       mark: activeColumnType,
       location_mm: [location_mm[0], location_mm[1], 0],
       base_level_id: baseLevelId,
       ...(topLevelId ? { top_level_id: topLevelId } : {}),
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
+    } }])
+    if (res.status === 'success') {
       setSelectedId(colId)
-      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
     }
   }
 
   const handleCommitFoundation = (opts: { columnId?: string; location_mm?: [number, number] }) => {
     const foundationId = crypto.randomUUID()
-    const res = CommandBus.execute(project, 'CreateFoundation', {
+    const res = dispatchCommandBatch([{ name: 'CreateFoundation', input: {
       id: foundationId,
       mark: activeFoundationType,
       supported_column_id: opts.columnId,
       location_mm: opts.location_mm ? [opts.location_mm[0], opts.location_mm[1], 0] : undefined,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
+    } }])
+    if (res.status === 'success') {
       setSelectedId(foundationId)
-      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
     }
   }
 
@@ -91,7 +84,7 @@ export function usePlanPlacementCommands({
     const endColumn = endColId ? project.objects[endColId] : undefined
     if (startColumn && isColumnObject(startColumn)) start_point_mm = [startColumn.module_data.location_mm[0], startColumn.module_data.location_mm[1]]
     if (endColumn && isColumnObject(endColumn)) end_point_mm = [endColumn.module_data.location_mm[0], endColumn.module_data.location_mm[1]]
-    const res = CommandBus.execute(project, 'CreateBeam', {
+    const res = dispatchCommandBatch([{ name: 'CreateBeam', input: {
       id: beamId,
       mark: activeBeamType,
       placement_reference: placementReference,
@@ -100,11 +93,9 @@ export function usePlanPlacementCommands({
       start_column_id: startColId,
       end_column_id: endColId,
       level_id: project.project.active_level_id,
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
+    } }])
+    if (res.status === 'success') {
       setSelectedId(beamId)
-      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
     }
   }
 
@@ -116,7 +107,7 @@ export function usePlanPlacementCommands({
   ) => {
     const wallId = crypto.randomUUID()
     const levelId = verticalReference?.level_id ?? project.project.active_level_id
-    const res = CommandBus.execute(project, 'CreateWall', {
+    const res = dispatchCommandBatch([{ name: 'CreateWall', input: {
       id: wallId,
       mark: activeWallType,
       placement_reference: placementReference,
@@ -128,12 +119,47 @@ export function usePlanPlacementCommands({
       ...(verticalReference?.base_offset_mm !== undefined ? { base_offset_mm: verticalReference.base_offset_mm } : {}),
       ...(verticalReference?.top_offset_mm !== undefined ? { top_offset_mm: verticalReference.top_offset_mm } : {}),
       ...(!verticalReference ? { inherit_joined_wall_constraint: true } : {}),
-    })
-    if (res.result.status === 'success') {
-      setProject(res.updatedProject)
+    } }])
+    if (res.status === 'success') {
       setSelectedId(wallId)
-      if (res.emittedEnvelope) setCommandQueue(queue => [...queue, res.emittedEnvelope!])
     }
+  }
+
+  const handleCommitWallPath = (
+    segments: WallPathSegmentMm[],
+    placementReference: PlacementReference = 'centerline',
+    verticalReference?: { level_id: string; top_level_id?: string; height_mm?: number; base_offset_mm?: number; top_offset_mm?: number },
+  ) => {
+    const commands: CommandRequest[] = []
+    const createdIds: string[] = []
+    for (const segment of segments) {
+      const start = segment.start_mm
+      const end = segment.end_mm
+      if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 100) continue
+      const id = crypto.randomUUID()
+      createdIds.push(id)
+      commands.push({
+        name: 'CreateWall',
+        input: {
+          id,
+          mark: activeWallType,
+          placement_reference: placementReference,
+          start_point_mm: [start[0], start[1], 0],
+          end_point_mm: [end[0], end[1], 0],
+          ...(segment.curve_geometry ? { curve_geometry: segment.curve_geometry } : {}),
+          level_id: verticalReference?.level_id ?? project.project.active_level_id,
+          ...(verticalReference?.top_level_id ? { top_level_id: verticalReference.top_level_id } : {}),
+          ...(verticalReference?.height_mm !== undefined ? { height_mm: verticalReference.height_mm } : {}),
+          ...(verticalReference?.base_offset_mm !== undefined ? { base_offset_mm: verticalReference.base_offset_mm } : {}),
+          ...(verticalReference?.top_offset_mm !== undefined ? { top_offset_mm: verticalReference.top_offset_mm } : {}),
+          ...(!verticalReference ? { inherit_joined_wall_constraint: true } : {}),
+        },
+      })
+    }
+    if (!commands.length) return
+    const result = dispatchCommandBatch(commands)
+    if (result.status === 'success') setSelectedId(createdIds.at(-1)!)
+    else setFileFeedback(result.errors?.[0] ?? 'สร้างแนวผนังไม่สำเร็จ')
   }
 
   const handleCommitSlab = (boundary_mm: [number, number][]) => {
@@ -141,7 +167,7 @@ export function usePlanPlacementCommands({
     const level = project.levels.find(item => item.id === project.project.active_level_id)
     if (!type || !level || boundary_mm.length < 3) return
     const id = crypto.randomUUID()
-    const result = CommandBus.execute(project, 'CreateSlab', {
+    const result = dispatchCommandBatch([{ name: 'CreateSlab', input: {
       id,
       type_id: type.id,
       mark: type.name,
@@ -159,22 +185,18 @@ export function usePlanPlacementCommands({
       finish_pattern_mm: Array.isArray(type.parameters.finish_pattern_mm) ? type.parameters.finish_pattern_mm : [600, 600],
       finish_pattern_origin_mm: Array.isArray(type.parameters.finish_pattern_origin_mm) ? type.parameters.finish_pattern_origin_mm : [0, 0],
       finish_pattern_rotation_deg: Number(type.parameters.finish_pattern_rotation_deg ?? 0),
-    })
-    if (result.result.status === 'success') {
-      setProject(result.updatedProject)
+    } }])
+    if (result.status === 'success') {
       setSelectedId(id)
-      if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
     }
   }
 
   const runArchitectureCommand = (name: string, input: Record<string, unknown>) => {
-    const result = CommandBus.execute(project, name, input)
-    if (result.result.status === 'success') {
-      setProject(result.updatedProject)
-      const created = result.result.created_object_ids?.[0] ?? result.result.affected_object_ids?.[0]
+    const result = dispatchCommandBatch([{ name, input }])
+    if (result.status === 'success') {
+      const created = Object.keys(input).find(key => key === 'id' && typeof input[key] === 'string') ? String(input.id) : undefined
       if (created) setSelectedId(created)
-      if (result.emittedEnvelope) setCommandQueue(queue => [...queue, result.emittedEnvelope!])
-    } else setFileFeedback(result.result.errors?.join(' · ') ?? 'คำสั่งไม่สำเร็จ')
+    } else setFileFeedback(result.errors?.join(' · ') ?? 'คำสั่งไม่สำเร็จ')
   }
 
   const handleCommitRoof = (
@@ -202,5 +224,5 @@ export function usePlanPlacementCommands({
     })
   }
 
-  return { handleCommitColumn, handleCommitFoundation, handleCommitBeam, handleCommitWall, handleCommitSlab, runArchitectureCommand, handleCommitRoof }
+  return { handleCommitColumn, handleCommitFoundation, handleCommitBeam, handleCommitWall, handleCommitWallPath, handleCommitSlab, runArchitectureCommand, handleCommitRoof }
 }

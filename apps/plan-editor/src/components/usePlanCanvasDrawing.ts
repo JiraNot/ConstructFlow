@@ -3,11 +3,14 @@ import type { DoorHanding, InteriorFurnitureKind, ProjectDocument, StairModuleDa
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
 import type { DisplayLengthUnit } from '@constructflow/project-model'
-import { loadPlanCanvasRenderer, type PlanCanvasRenderer, type UnderlayConfig, type PlanLabelVisibility } from '../rendering/planRendererTypes.js'
-import type { ViewportState } from '../viewport/viewportTransform.js'
+import { loadPlanCanvasRenderer, type PlanCanvasRenderer, type UnderlayConfig, type PlanCanvasDisplaySettings, type PlanLabelVisibility } from '../rendering/planRendererTypes.js'
+import { worldToScreen, type ViewportState } from '../viewport/viewportTransform.js'
 import type { ToolType } from './Toolbar.js'
 import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
+import type { ProjectPresenceSession } from '../projectPresence.js'
+import type { MeasureMode, PlanSketchMode, WallDrawMode } from './planCanvasInteractionTypes.js'
 import { drawPlanCanvasBaseScene } from './drawPlanCanvasBaseScene.js'
+import { drawPlanCanvasWallTouchPreview } from './drawPlanCanvasWallTouchPreview.js'
 
 type SelectionHandleRenderer = typeof import('./drawPlanCanvasSelectionHandles.js')['drawPlanCanvasSelectionHandles']
 type TransientRenderer = typeof import('./planCanvasTransientRenderer.js')
@@ -22,6 +25,8 @@ interface UsePlanCanvasDrawingOptions {
   activeFamilyId?: string
   activeFamilyTypeId?: string
   activeTool: ToolType
+  supplierBundleVisualType?: 'shape' | 'length' | 'area'
+  bundleStartPoint?: [number, number] | null
   activeSnap: SnapResult | null
   activeWallSnap: WallHostSnapResult | null
   activeColumnTypeMark: string
@@ -39,14 +44,19 @@ interface UsePlanCanvasDrawingOptions {
   calibrationP1: [number, number] | null
   calibrationMousePoint: [number, number] | null
   selectedIds: string[]
+  collaborators: readonly ProjectPresenceSession[]
   editableSelectionIds: string[]
   hoveredId: string | null
   underlay?: UnderlayConfig | null
   labelMode: 'name' | 'name-size'
   labelVisibility: PlanLabelVisibility
+  displaySettings: PlanCanvasDisplaySettings
   planDiscipline: 'architecture' | 'framing' | 'roof'
   viewport: ViewportState
   displayUnit: DisplayLengthUnit
+  showRealtimeDimensions?: boolean
+  lengthPrecision?: number
+  anglePrecision?: number
   manipulationPreview: { project: ProjectDocument; ids: string[]; valid: boolean } | null
   externalManipulationPreview: { project: ProjectDocument; ids: string[]; valid: boolean } | null
   coordination: readonly CoordinationFinding[]
@@ -55,6 +65,9 @@ interface UsePlanCanvasDrawingOptions {
   gridStartPoint: [number, number] | null
   gridCopySourceId: string | null
   tapeMeasure: { start: [number, number]; end: [number, number]; complete: boolean } | null
+  measureMode?: MeasureMode
+  measurePoints?: [number, number][]
+  measureComplete?: boolean
   dimensionReferenceMode: PlanCanvasPreferences['dimensionReferenceMode']
   selectionBox: { start: [number, number]; end: [number, number] } | null
   roomSeparatorStart: [number, number] | null
@@ -62,6 +75,12 @@ interface UsePlanCanvasDrawingOptions {
   fixtureKind: 'light' | 'switch' | 'outlet' | 'panel'
   furnitureKind: InteriorFurnitureKind
   slabBoundary: [number, number][]
+  wallTouchPreview?: [number, number][] | null
+  wallDrawMode?: WallDrawMode
+  lineDrawingMode?: PlanCanvasPreferences['lineDrawingMode']
+  wallAngleSnapDeg?: PlanCanvasPreferences['wallAngleSnapDeg']
+  sketchMode?: PlanSketchMode
+  sketchPoints?: [number, number][]
 }
 
 export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: UsePlanCanvasDrawingOptions) {
@@ -71,14 +90,15 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
   const [drawElectricalCircuitOverlay, setDrawElectricalCircuitOverlay] = useState<ElectricalCircuitOverlayRenderer | null>(null)
   const [planRenderer, setPlanRenderer] = useState<PlanCanvasRenderer | null>(null)
   const {
-    activeTool, activeFamilyId, activeFamilyTypeId, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark,
+    activeTool, supplierBundleVisualType, bundleStartPoint, activeFamilyId, activeFamilyTypeId, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark,
     activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
     beamStartNode, wallStartNode, activeWallSnap, doorHanding, stairPreview, stairStartPoint,
-    resolveReferencePath, calibrationP1, calibrationMousePoint, selectedIds, editableSelectionIds,
-    hoveredId, underlay, labelMode, labelVisibility, planDiscipline, viewport, displayUnit,
+    resolveReferencePath, calibrationP1, calibrationMousePoint, selectedIds, editableSelectionIds, collaborators,
+    hoveredId, underlay, labelMode, labelVisibility, displaySettings, planDiscipline, viewport, displayUnit, showRealtimeDimensions = true, lengthPrecision = 3, anglePrecision = 0,
     manipulationPreview, externalManipulationPreview, coordination, coordinationSeverities,
-    coordinationFocusSelection, gridStartPoint, gridCopySourceId, tapeMeasure,
+    coordinationFocusSelection, gridStartPoint, gridCopySourceId, tapeMeasure, measureMode, measurePoints, measureComplete,
     dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary,
+    wallTouchPreview, wallDrawMode = 'continuous-lines', lineDrawingMode = 'orthogonal', wallAngleSnapDeg = 45, sketchMode, sketchPoints,
   } = options
 
   const redraw = useCallback(() => {
@@ -93,7 +113,8 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
 
     const ghost = transientRenderer?.buildPlanPlacementGhost({
       activeTool, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark,
-      activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, beamStartNode, wallStartNode,
+      activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark, beamStartNode,
+      wallStartNode: wallTouchPreview?.length ? null : wallStartNode,
       activeWallSnap, doorHanding, stairPreview, stairStartPoint, resolveReferencePath,
     }) ?? null
     canvas.dataset.wallJunctionPreview = ghost?.wall_junction_preview ? 'true' : 'false'
@@ -106,30 +127,34 @@ export function usePlanCanvasDrawing({ containerRef, canvasRef, ...options }: Us
       : null
 
     drawPlanCanvasBaseScene({
-      ctx, width: rect.width, height: rect.height, project, planProject, viewport, selectedIds,
+      ctx, width: rect.width, height: rect.height, project, planProject, viewport,
+      selectedIds: [...new Set([...selectedIds, ...collaborators.flatMap(session => session.selected_object_ids)])], collaborators,
       editableSelectionIds, hoveredId, activeSnap, ghost, underlay, calibrationOverlay, labelMode,
-      labelVisibility, planDiscipline, manipulationPreview, externalManipulationPreview, renderer: planRenderer,
+      labelVisibility, displaySettings, planDiscipline, manipulationPreview, externalManipulationPreview, renderer: planRenderer,
     })
+    if (wallTouchPreview) drawPlanCanvasWallTouchPreview(ctx, wallTouchPreview, viewport, displayUnit, lengthPrecision, anglePrecision, lineDrawingMode === 'orthogonal' ? 90 : wallAngleSnapDeg, wallDrawMode)
     if (drawElectricalCircuitOverlay && editableSelectionIds.some(id => {
       const object = planProject.objects[id]
       return object?.object_type === 'electrical.fixture' && (object.module_data as { kind?: unknown }).kind === 'panel'
     })) drawElectricalCircuitOverlay(ctx, project, editableSelectionIds, new Set(Object.keys(planProject.objects)), viewport)
     if (coordination.length) drawCoordinationOverlay?.(ctx, coordination, project, viewport, editableSelectionIds, coordinationSeverities, coordinationFocusSelection)
-    drawSelectionHandles?.(ctx, editableSelectionIds, planProject, viewport, displayUnit, manipulationPreview)
+    drawSelectionHandles?.(ctx, editableSelectionIds, planProject, viewport, displayUnit, manipulationPreview, showRealtimeDimensions, lengthPrecision, activeTool === 'select')
     transientRenderer?.drawPlanCanvasToolOverlays({
-      ctx, activeTool, activeFamilyId, activeFamilyTypeId, gridStartPoint, activeSnap, planProject, viewport, gridCopySourceId, tapeMeasure,
-      displayUnit, activeWallSnap, project, activeDoorTypeMark, activeWindowTypeMark,
-      dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary,
+      ctx, activeTool, supplierBundleVisualType, bundleStartPoint, activeFamilyId, activeFamilyTypeId, gridStartPoint, activeSnap,
+      wallStartNode: wallTouchPreview?.length ? null : wallStartNode, beamStartNode,
+      lineDrawingMode, planProject, viewport, gridCopySourceId, tapeMeasure, measureMode, measurePoints, measureComplete,
+      displayUnit, activeWallSnap, project, activeDoorTypeMark, activeWindowTypeMark, showRealtimeDimensions, lengthPrecision, anglePrecision,
+      dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary, sketchMode, sketchPoints,
     })
     if (probe) probe.push(performance.now() - drawStartedAt)
-  }, [    canvasRef, drawSelectionHandles, transientRenderer, drawCoordinationOverlay, drawElectricalCircuitOverlay, planRenderer, activeTool, activeFamilyId, activeFamilyTypeId, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
+  }, [    canvasRef, drawSelectionHandles, transientRenderer, drawCoordinationOverlay, drawElectricalCircuitOverlay, planRenderer, activeTool, supplierBundleVisualType, bundleStartPoint, activeFamilyId, activeFamilyTypeId, activeSnap, project, planProject, activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
 
-    beamStartNode, wallStartNode, activeWallSnap, doorHanding, stairPreview, stairStartPoint,
+    beamStartNode, wallStartNode, activeWallSnap, doorHanding, stairPreview, stairStartPoint, lineDrawingMode, wallAngleSnapDeg,
     resolveReferencePath, calibrationP1, calibrationMousePoint, selectedIds, editableSelectionIds,
-    hoveredId, underlay, labelMode, labelVisibility, planDiscipline, viewport, displayUnit,
+    hoveredId, underlay, labelMode, labelVisibility, displaySettings, planDiscipline, viewport, displayUnit, collaborators,
     manipulationPreview, externalManipulationPreview, coordination, coordinationSeverities,
-    coordinationFocusSelection, gridStartPoint, gridCopySourceId, tapeMeasure,
-    dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary,
+    coordinationFocusSelection, gridStartPoint, gridCopySourceId, tapeMeasure, measureMode, measurePoints, measureComplete,
+    showRealtimeDimensions, lengthPrecision, anglePrecision, dimensionReferenceMode, selectionBox, roomSeparatorStart, pipeSystem, fixtureKind, furnitureKind, slabBoundary, wallTouchPreview, wallDrawMode, wallAngleSnapDeg, sketchMode, sketchPoints,
   ])
 
   useEffect(() => {

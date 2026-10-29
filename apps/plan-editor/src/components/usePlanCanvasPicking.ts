@@ -4,19 +4,21 @@ import type { ViewportState } from '../viewport/viewportTransform.js'
 import type { PlanCanvasProps } from './PlanCanvas.types.js'
 import { findPlanHitCandidates, findPlanHitObject } from './planHitTesting.mjs'
 import type { ToolType } from './Toolbar.js'
+import { matchesPlanSelectionScope } from './planSelectionScope.js'
 
 interface UsePlanCanvasPickingOptions {
   project: ProjectDocument
   planProject: ProjectDocument
   viewport: ViewportState
   activeTool: ToolType
+  selectionScope?: ToolType | null
   selectedId: string | null
   onSelectObject: PlanCanvasProps['onSelectObject']
   onSelectionChange?: PlanCanvasProps['onSelectionChange']
 }
 
 export function usePlanCanvasPicking({
-  project, planProject, viewport, activeTool, selectedId, onSelectObject, onSelectionChange,
+  project, planProject, viewport, activeTool, selectionScope = null, selectedId, onSelectObject, onSelectionChange,
 }: UsePlanCanvasPickingOptions) {
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [pickCandidates, setPickCandidates] = useState<string[]>([])
@@ -30,12 +32,17 @@ export function usePlanCanvasPicking({
     setPickCandidates(ids)
   }, [])
 
-  const findHitObject = useCallback((worldPointMm: [number, number], preferWall = false, excluded = new Set<string>()): string | null =>
-    findPlanHitObject(worldPointMm, planProject, project, viewport.zoom, preferWall, excluded),
-  [planProject, project, viewport.zoom])
+  const findHitObject = useCallback((worldPointMm: [number, number], preferWall = false, excluded = new Set<string>()): string | null => {
+    if (!selectionScope) return findPlanHitObject(worldPointMm, planProject, project, viewport.zoom, preferWall, excluded)
+    return findPlanHitCandidates(worldPointMm, planProject, project, viewport.zoom, preferWall, excluded)
+      .find(id => matchesPlanSelectionScope(planProject.objects[id], selectionScope)) ?? null
+  }, [planProject, project, viewport.zoom, selectionScope])
 
   const findCandidates = useCallback((point: [number, number], preferWall = false) => {
-    const ids = findPlanHitCandidates(point, planProject, project, viewport.zoom, preferWall)
+    const candidates = findPlanHitCandidates(point, planProject, project, viewport.zoom, preferWall)
+    const ids = selectionScope
+      ? candidates.filter(id => matchesPlanSelectionScope(planProject.objects[id], selectionScope))
+      : candidates
     pickPointRef.current = point
     const chosen = chosenCandidateRef.current
     if (chosen && (!ids.includes(chosen.id) || Math.hypot(point[0] - chosen.point[0], point[1] - chosen.point[1]) * viewport.zoom > 6)) chosenCandidateRef.current = null
@@ -46,7 +53,7 @@ export function usePlanCanvasPicking({
       return [...ids.slice(index), ...ids.slice(0, index)]
     }
     return ids
-  }, [planProject, project, viewport.zoom])
+  }, [planProject, project, viewport.zoom, selectionScope])
 
   const chooseCandidate = useCallback((id: string) => {
     if (pickPointRef.current) chosenCandidateRef.current = { id, point: [...pickPointRef.current] }
@@ -80,7 +87,7 @@ export function usePlanCanvasPicking({
     pickPointRef.current = null
     setHoveredId(null)
     setCandidates([])
-  }, [activeTool, planProject, setCandidates])
+  }, [activeTool, selectionScope, planProject, setCandidates])
 
   useEffect(() => {
     if (selectedId === null) chosenCandidateRef.current = null

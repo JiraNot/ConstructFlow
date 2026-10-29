@@ -154,6 +154,8 @@ export interface WallModuleData {
   mark: string // Human-readable mark, e.g. "W1", "W2"
   start_point_mm: [number, number, number] // [x, y, z] in mm
   end_point_mm: [number, number, number] // [x, y, z] in mm
+  /** Exact circular plan geometry; omitted walls remain straight centerlines. */
+  curve_geometry?: WallCurveGeometry
   thickness_mm: number // e.g. 100, 150, 200 mm
   masonry_thickness_mm?: number
   plaster_inside_thickness_mm?: number
@@ -177,6 +179,16 @@ export interface WallModuleData {
   wall_type_id?: string
   material: 'brick_masonry' | 'lightweight_block' | 'drywall' | 'reinforced_concrete' | string
   interface_treatments?: WallInterfaceTreatment[]
+}
+
+/** Analytic circular wall centerline, stored in canonical millimeters and degrees. */
+export interface WallCurveGeometry {
+  kind: 'circular_arc'
+  center_mm: Point2Mm
+  radius_mm: number
+  start_angle_deg: number
+  /** Signed sweep; positive is counter-clockwise, negative is clockwise. */
+  sweep_angle_deg: number
 }
 
 export type WallInterfaceTreatmentKind = 'chemical_dowel_epoxy' | 'expansion_joint_sealant' | 'roof_flashing'

@@ -1,4 +1,4 @@
-import type { ProjectDocument, StairModuleData, DoorHanding, PlacementReference, DisplayLengthUnit, InteriorFurnitureKind } from '@constructflow/project-model'
+import type { ProjectDocument, StairModuleData, DoorHanding, PlacementReference, DisplayLengthUnit, InteriorFurnitureKind, WallPathSegmentMm } from '@constructflow/project-model'
 import type { ClashSeverity, CoordinationFinding } from '@constructflow/clash-engine'
 import type { ToolType } from './Toolbar.js'
 import type { UnderlayConfig, PlanLabelVisibility } from '../rendering/planRenderer.js'
@@ -7,9 +7,14 @@ import type { CoordinatedPlanViewport } from '../viewport/viewportTransform.js'
 import type { DirectManipulationPreviewResult } from '../directManipulation.mjs'
 import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import type { WallVerticalReference } from './PlanCanvasWallReferences.js'
+import type { ProjectPresenceSession } from '../projectPresence.js'
+import type { SupplierProductBundlePlacement, SupplierBundlePlacementGeometry } from '../supplierBundlePlacement.js'
 
 export interface PlanCanvasProps {
   project: ProjectDocument
+  /** Ephemeral, project-scoped collaborator cursors and selections from authenticated presence. */
+  collaborators?: readonly ProjectPresenceSession[]
+  onOpenProjectComment?: (commentId: string) => void
   preferences: PlanCanvasPreferences
   onPreferencesChange: (updater: (current: PlanCanvasPreferences) => PlanCanvasPreferences) => void
   planDiscipline?: 'architecture' | 'framing' | 'roof'
@@ -17,6 +22,11 @@ export interface PlanCanvasProps {
   activeFamilyId?: string
   activeFamilyTypeId?: string
   activeTool: ToolType
+  /** Restricts click and marquee selection to the object family for this tool. */
+  selectionScope?: ToolType | null
+  /** Render active authoring controls in the shared workspace dock instead of over the canvas. */
+  contextualDockEnabled?: boolean
+  supplierBundlePlacement?: SupplierProductBundlePlacement | null
   toolActivation?: number
   activeColumnTypeMark: string
   activeFoundationTypeMark: string
@@ -42,9 +52,11 @@ export interface PlanCanvasProps {
   onCommitFoundation: (opts: { columnId?: string; location_mm?: [number, number] }) => void
   onCommitBeam: (start: [number, number], end: [number, number], startColId?: string, endColId?: string, placementReference?: PlacementReference) => void
   onCommitWall: (start: [number, number], end: [number, number], placementReference?: PlacementReference, verticalReference?: WallVerticalReference) => void
+  onCommitWallPath?: (segments: WallPathSegmentMm[], placementReference?: PlacementReference, verticalReference?: WallVerticalReference) => void
   onCommitDoor: (wallId: string, point_mm: [number, number], offset_mm: number, handing: DoorHanding) => void
   onCommitWindow: (wallId: string, point_mm: [number, number], offset_mm: number) => void
   onCommitSlab: (boundary_mm: [number, number][]) => void
+  onCommitSupplierBundle?: (geometry: SupplierBundlePlacementGeometry) => void
   onCommitArchitecturalFloor?: (boundary_mm: [number, number][]) => void
   onCommitCeiling?: (boundary_mm: [number, number][]) => void
   onCommitRoof?: (boundary_mm: [number, number][], options?: { shape: 'hip' | 'gable' | 'flat'; slope_deg: number; thickness_mm: number; elevation_offset_mm: number; material: string }) => void
@@ -52,6 +64,8 @@ export interface PlanCanvasProps {
   onCommitFixture?: (point: [number, number], kind: 'light' | 'switch' | 'outlet' | 'panel') => void
   onCommitCabinet?: (start: [number, number], end: [number, number]) => void
   onCommitFurniture?: (start: [number, number], end: [number, number], kind: InteriorFurnitureKind) => void
+  /** Places the active family at a tap-centered point and keeps repeat placement active. */
+  onCommitFamilyFurniture?: (center: [number, number]) => void
   onCommitMoulding?: (start: [number, number], end: [number, number]) => void
   onCommitRoomSeparator?: (start: [number, number], end: [number, number]) => void
   onCommitSurfaceVoid: (hostId: string, boundary_mm: [number, number][]) => void

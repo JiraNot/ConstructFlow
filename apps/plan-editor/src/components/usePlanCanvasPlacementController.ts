@@ -31,7 +31,7 @@ export function usePlanCanvasPlacementController({
     selectedId, onPreferencesChange, onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling,
     onCommitRoof, onCommitSurfaceVoid,
   } = props
-  const { placementReference, lineConstraintMode, dimensionReferenceMode } = props.preferences
+  const { placementReference, lineConstraintMode, lineDrawingMode, wallAngleSnapDeg, dimensionReferenceMode } = props.preferences
   const {
     dimensionInputX, setDimensionInputX, dimensionInputY, setDimensionInputY,
     dimensionAnchorX, setDimensionAnchorX, dimensionAnchorY, setDimensionAnchorY,
@@ -73,7 +73,9 @@ export function usePlanCanvasPlacementController({
     constrainPlanCanvasLineSnap(snap, pointerPoint, start, lockAxis, reference, {
       lineConstraintMode, viewportZoom: viewport.zoom, drawLength: drawLengthMeters,
       drawAngle: drawAngleDegrees, displayUnit,
-    }), [drawLengthMeters, drawAngleDegrees, lineConstraintMode, viewport.zoom, displayUnit])
+      lineDrawingMode: activeTool === 'wall' || activeTool === 'beam' ? lineDrawingMode : undefined,
+      wallAngleSnapDeg,
+    }), [activeTool, drawLengthMeters, drawAngleDegrees, lineConstraintMode, lineDrawingMode, wallAngleSnapDeg, viewport.zoom, displayUnit])
 
   usePlanCanvasLineConstraint({ activeTool, placement, constrainLineSnap })
 
@@ -84,7 +86,7 @@ export function usePlanCanvasPlacementController({
     dimensionAnchorX, dimensionAnchorY, dimensionInputX, dimensionInputY,
     displayUnit, viewport, stairStartPoint: placement.stairStartPoint,
     wallStartNode: placement.wallStartNode, beamStartNode: placement.beamStartNode,
-    roomSeparatorStart: placement.roomSeparatorStart, slabBoundary: placement.slabBoundary,
+    roomSeparatorStart: placement.roomSeparatorStart, slabBoundary: placement.slabBoundary, bundleStartPoint: placement.bundleStartPoint,
     gridStartPoint: placement.gridStartPoint,
   })
 
@@ -96,6 +98,7 @@ export function usePlanCanvasPlacementController({
     roofShape: placement.roofShape, roofSlopeDeg: placement.roofSlopeDeg,
     roofThicknessMm: placement.roofThicknessMm, roofElevationOffsetMm: placement.roofElevationOffsetMm,
     roofMaterial: placement.roofMaterial, clearDimensionOverrides,
+    supplierBundlePlacement: props.supplierBundlePlacement, onCommitSupplierBundle: props.onCommitSupplierBundle,
     onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling, onCommitRoof, onCommitSurfaceVoid,
   })
 

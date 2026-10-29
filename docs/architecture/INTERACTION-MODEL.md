@@ -75,6 +75,32 @@ Examples:
 
 The majority of tools should fit this mental model.
 
+## Tablet-first workbench contract
+
+ArcSite is a useful interaction reference for ConstructFlow because it keeps the drawing task direct and the canvas in view. Apply the following patterns across the workbench while retaining ConstructFlow's model, command, Thai-unit, and renovation-phase semantics. These are product principles, not claims that every workflow is already implemented.
+
+- Keep the plan visible while choosing tools, object types, and drawing styles. Use a persistent right-side tool rail in landscape and a reachable bottom dock in portrait; make the active tool unmistakable.
+- Put one short, action-specific instruction beside the canvas. It names the next gesture, current snap/reference, and how to finish or cancel; it never covers the point being drawn.
+- Prefer direct manipulation on touch. A drag should create or edit the geometry under the user's finger, with live snap and dimension feedback. Keep tap, mouse, keyboard, and numeric entry available for precise work.
+- On tablet, the wall tool exposes Continuous Lines, Continuous Lines & Arcs, Line/Arc, and room Rectangle/L/U modes. A touch/pen drag is one continuous polyline gesture: keep the pointer down while turning, snap straight runs to the saved 0° (free), 15°, 30°, 45°, or 90° construction increment, preview each corner, and commit the full path as one undoable batch using the final release position. Tapping endpoints still supports deliberate point-by-point placement. Curved runs stay analytic in the canonical project model so hosted openings, takeoff, snapping, and exports can use the same geometry. Endpoint or exact-length edits preserve that curve and its opening offsets; reject an edit if a hosted opening would no longer fit. Pointer cancellation or a second-finger gesture cancels only the in-progress stroke and restores any earlier chain start.
+- Chain path tools from the last committed endpoint. Each completed segment is immediately usable and independently undoable; keep the selected type, level, phase, and placement reference until the user finishes the chain.
+- Make completion visible on touch. Provide explicit finish and cancel actions instead of relying on Escape or a physical keyboard.
+- Open catalogs, takeoff, and project detail in a contextual side panel or sheet that preserves the current view and selection. A chosen library item should return directly to placement in that same view.
+- Keep downstream information attached to the model: takeoff rows link to their source objects, proposals consume current quantities, collaboration comments and markups point to model locations, and integrations show sync/export state next to the affected project or deliverable.
+- Keep touch targets at least 44 px and adapt the workbench by orientation and input method rather than scaling the desktop layout uniformly.
+
+### Cross-domain application
+
+| Workflow | Tablet interaction pattern |
+| --- | --- |
+| Tool selection | Persistent family rail, clear active state, relevant type/style controls near the active tool |
+| Draw and edit | Drag-first placement, continuous endpoint chaining, live snap/dimensions, visible finish/cancel |
+| Measure and annotate | Tap/drag two points, show length and reference immediately, keep units editable in place |
+| Library | Searchable visual catalog in an overlay panel, preview before placement, preserve canvas context |
+| Takeoff and proposals | Model-linked quantities and costs, filter by phase/trade, open source geometry from a row |
+| Collaboration | Share, review, comments, and markups tied to a project view or model object |
+| Integrations | Clear connection/sync state and contextual export actions with recoverable errors |
+
 ## Direct manipulation
 
 After creation, important parametric objects must expose model handles where practical.

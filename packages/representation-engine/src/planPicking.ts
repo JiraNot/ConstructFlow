@@ -1,7 +1,7 @@
 import { objectFamilyGeometry } from '@constructflow/family-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
 import { distanceToArc2D, distanceToPath2D, pointInPolygon2D, rectangleCorners2D } from '@constructflow/geometry-kernel'
-import type { ProjectDocument, SmartObject } from '@constructflow/project-model'
+import { wallCenterlineLengthMm, wallCenterlinePointAtOffsetMm, wallCenterlinePointsBetweenOffsetsMm, type ProjectDocument, type SmartObject, type WallModuleData } from '@constructflow/project-model'
 import { buildOpeningRepresentationShapeFromObject, getOpeningPlanLinework } from './index.js'
 
 type Point = [number, number]
@@ -36,13 +36,16 @@ function openingGeometry(object: SmartObject, source: ProjectDocument, paths: Pi
   const wall = host.module_data as Data
   const a = point(wall.start_point_mm), b = point(wall.end_point_mm)
   if (!a || !b) return
-  const length = Math.hypot(b[0] - a[0], b[1] - a[1])
+  const wallData = host.module_data as WallModuleData
+  const length = wallCenterlineLengthMm(wallData)
   const width = Number(data.width_mm), offset = Number(data.offset_along_wall_mm)
   if (length < 1 || !Number.isFinite(width) || width <= 0 || !Number.isFinite(offset)) return
-  const ux = (b[0] - a[0]) / length, uy = (b[1] - a[1]) / length
-  const transform = (p: Point): Point => [a[0] + ux * (offset - width / 2 + p[0]) - uy * p[1], a[1] + uy * (offset - width / 2 + p[0]) + ux * p[1]]
+  const originPose = wallCenterlinePointAtOffsetMm(wallData, offset - width / 2)
+  const ux = Math.cos(originPose.tangent_angle_deg * Math.PI / 180), uy = Math.sin(originPose.tangent_angle_deg * Math.PI / 180)
+  const transform = (p: Point): Point => [originPose.point_mm[0] + ux * p[0] - uy * p[1], originPose.point_mm[1] + uy * p[0] + ux * p[1]]
   // Keep the clear span selectable without turning the whole swing disc into a hit.
-  paths.push({ points: [transform([0, 0]), transform([width, 0])], halfWidth: Number(wall.thickness_mm ?? 100) / 2 })
+  const openingCenterline = wallCenterlinePointsBetweenOffsetsMm(wallData, offset - width / 2, offset + width / 2, 5).map(p => [p[0], p[1]] as Point)
+  paths.push({ points: openingCenterline, halfWidth: Number(wall.thickness_mm ?? 100) / 2 })
   const shape = buildOpeningRepresentationShapeFromObject(source, object)
   if (!shape) return
   const linework = getOpeningPlanLinework({ ...shape, width_mm: width }, Number(wall.thickness_mm ?? 100))
@@ -92,7 +95,11 @@ function geometryFor(plan: ProjectDocument, source: ProjectDocument): PickGeomet
     else if (object.object_type === 'door_window.door' || object.object_type === 'door_window.window') openingGeometry(object, source, paths, arcs)
     else if (object.object_type === 'architecture.wall' || object.object_type === 'structure.beam') {
       const a = point(data.start_point_mm), b = point(data.end_point_mm), section = point(data.section_mm)
-      if (a && b) paths.push({ points: [a, b], halfWidth: Number(object.object_type === 'architecture.wall' ? data.thickness_mm : section?.[0] ?? 0) / 2 })
+      if (a && b && object.object_type === 'architecture.wall') {
+        const wall = object.module_data as WallModuleData
+        const centerline = wallCenterlinePointsBetweenOffsetsMm(wall, 0, wallCenterlineLengthMm(wall), 5).map(p => [p[0], p[1]] as Point)
+        paths.push({ points: centerline, halfWidth: Number(data.thickness_mm ?? 100) / 2 })
+      } else if (a && b) paths.push({ points: [a, b], halfWidth: Number(section?.[0] ?? 0) / 2 })
     } else if (object.object_type === 'structure.grid' || object.object_type === 'reference.grid') {
       const vertical = data.orientation === 'vertical', position = Number(data.position_mm), extent = point(data.extent_mm)
       const a = point(data.start_point_mm) ?? (extent ? vertical ? [position, extent[0]] as Point : [extent[0], position] as Point : undefined)
@@ -105,6 +112,16 @@ function geometryFor(plan: ProjectDocument, source: ProjectDocument): PickGeomet
     } else if (object.object_type === 'architecture.room_separator') {
       const a = point(data.start_point_mm), b = point(data.end_point_mm)
       if (a && b) paths.push({ points: [a, b] })
+    } else if (object.object_type === 'supplier.bundle_instance') {
+      boundary = ring(data.boundary_mm)
+      if (boundary.length >= 3) paths.push({ points: boundary, closed: true, filled: true })
+      else if (Array.isArray(data.path_mm)) {
+        const points = ring(data.path_mm)
+        if (points.length >= 2) paths.push({ points })
+      } else {
+        const location = point(data.location_mm)
+        if (location) paths.push({ points: [[location[0] - 80, location[1]], [location[0] + 80, location[1]]], halfWidth: 80 })
+      }
     }
     if (!paths.length && !arcs.length) {
       const output = outputs.get(object.id)

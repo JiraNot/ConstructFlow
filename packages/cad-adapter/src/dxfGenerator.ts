@@ -3,7 +3,7 @@
 // PaperSpace layouts mirror PermitDrawingSet vectors at page scale, including
 // the per-storey plan sheets generated for taller projects.
 
-import { getDisplayPhase, isMasonryWallPlanHatch, type ProjectDocument, type SmartObject } from "@constructflow/project-model";
+import { getDisplayPhase, isMasonryWallPlanHatch, wallCenterlineLengthMm, wallCenterlinePointAtOffsetMm, wallCenterlinePointsBetweenOffsetsMm, type ProjectDocument, type SmartObject, type WallModuleData } from "@constructflow/project-model";
 import { compilePermitDrawingSet, type PermitSheet, type VectorPrimitive } from "@constructflow/sheet-engine";
 import { wallMasonryHatchSegments } from "@constructflow/geometry-kernel";
 import { CAD_STANDARD_LAYERS, resolveCadLayer } from "./layerStandards.js";
@@ -880,17 +880,40 @@ export class DxfGenerator {
 
   private writeWallPlan(lines: string[], layer: string, wall: SmartObject, d: Record<string, any>): void {
     const start = d.start_point_mm ?? [0, 0, 0], end = d.end_point_mm ?? [0, 0, 0];
-    const dx = end[0] - start[0], dy = end[1] - start[1], length = Math.hypot(dx, dy);
+    const wallData = d as unknown as WallModuleData;
+    const length = wallCenterlineLengthMm(wallData);
     if (length < 1) return;
-    const tangent: [number, number] = [dx / length, dy / length];
-    const normal: [number, number] = [-tangent[1], tangent[0]];
     const half = Number(d.thickness_mm ?? 100) / 2;
+    const pose = (along: number) => wallCenterlinePointAtOffsetMm(wallData, along);
+    const point = (along: number, across: number): [number, number] => {
+      const center = pose(along), angle = center.tangent_angle_deg * Math.PI / 180;
+      return [center.point_mm[0] - Math.sin(angle) * across, center.point_mm[1] + Math.cos(angle) * across];
+    };
+    const curvePoints = (from: number, to: number, across: number): [number, number][] =>
+      wallCenterlinePointsBetweenOffsetsMm(wallData, from, to, 5).map((sample, index, samples) => {
+        const offset = from + (to - from) * index / Math.max(1, samples.length - 1);
+        const center = pose(offset), angle = center.tangent_angle_deg * Math.PI / 180;
+        return [center.point_mm[0] - Math.sin(angle) * across, center.point_mm[1] + Math.cos(angle) * across];
+      });
+    const isCurved = Boolean(wallData.curve_geometry);
+    const hatchSegments = (pitch: number) => {
+      if (!isCurved) return wallMasonryHatchSegments([start[0], start[1]], [end[0], end[1]], Number(d.thickness_mm ?? 100), openings.map(opening => [opening.from, opening.to]), pitch);
+      const centerline = wallCenterlinePointsBetweenOffsetsMm(wallData, 0, length, 10);
+      return centerline.slice(1).flatMap((sample, index) => {
+        const from = length * index / (centerline.length - 1), to = length * (index + 1) / (centerline.length - 1);
+        const localOpenings = openings.flatMap(opening => {
+          const localFrom = Math.max(0, opening.from - from), localTo = Math.min(to - from, opening.to - from);
+          return localTo > localFrom ? [[localFrom, localTo] as [number, number]] : [];
+        });
+        const previous = centerline[index]!;
+        return wallMasonryHatchSegments([previous[0], previous[1]], [sample[0], sample[1]], Number(d.thickness_mm ?? 100), localOpenings, pitch);
+      });
+    };
     const openings = Object.values(this.project.objects)
       .filter(object => (object.object_type === "door_window.door" || object.object_type === "door_window.window") && (object.module_data as Record<string, any>).wall_id === wall.id)
       .map(object => ({ object, data: object.module_data as Record<string, any>, from: Math.max(0, Number((object.module_data as Record<string, any>).offset_along_wall_mm ?? 0) - Number((object.module_data as Record<string, any>).width_mm ?? 0) / 2), to: Math.min(length, Number((object.module_data as Record<string, any>).offset_along_wall_mm ?? 0) + Number((object.module_data as Record<string, any>).width_mm ?? 0) / 2) }))
       .filter(item => item.to > item.from)
       .sort((a, b) => a.from - b.from);
-    const point = (along: number, across: number): [number, number] => [start[0] + tangent[0] * along + normal[0] * across, start[1] + tangent[1] * along + normal[1] * across];
     const merged: Array<[number, number]> = [];
     for (const opening of openings) {
       const last = merged.at(-1);
@@ -903,26 +926,30 @@ export class DxfGenerator {
     if (solidCursor < length) intervals.push([solidCursor, length]);
     const phase = getDisplayPhase(wall);
     if (phase === "existing") {
-      for (const [from, to] of intervals) this.writeSolid(lines, layer, 0, [point(from, -half), point(to, -half), point(to, half), point(from, half)], 7);
+      for (const [from, to] of intervals) {
+        if (!isCurved) this.writeSolid(lines, layer, 0, [point(from, -half), point(to, -half), point(to, half), point(from, half)], 7);
+        else {
+          const centerline = wallCenterlinePointsBetweenOffsetsMm(wallData, from, to, 10);
+          for (let index = 1; index < centerline.length; index += 1) {
+            const a = from + (to - from) * (index - 1) / (centerline.length - 1);
+            const b = from + (to - from) * index / (centerline.length - 1);
+            this.writeSolid(lines, layer, 0, [point(a, -half), point(b, -half), point(b, half), point(a, half)], 7);
+          }
+        }
+      }
     } else if (phase === "demolition") {
-      for (const [from, to] of wallMasonryHatchSegments(
-        [start[0], start[1]], [end[0], end[1]], Number(d.thickness_mm ?? 100),
-        openings.map(opening => [opening.from, opening.to]), 250,
-      )) this.writeLine(lines, layer, 0, from, to);
+      for (const [from, to] of hatchSegments(250)) this.writeLine(lines, layer, 0, from, to);
     } else if (phase === "new_construction" && isMasonryWallPlanHatch(wall, this.project.types)) {
       // Keep phase hatch editable and identical to Canvas/PDF model-space lines.
-      for (const [from, to] of wallMasonryHatchSegments(
-        [start[0], start[1]], [end[0], end[1]], Number(d.thickness_mm ?? 100),
-        openings.map(opening => [opening.from, opening.to]),
-      )) this.writeLine(lines, layer, 0, from, to);
+      for (const [from, to] of hatchSegments(140)) this.writeLine(lines, layer, 0, from, to);
     }
     for (const side of [-1, 1]) {
       let cursor = 0;
       for (const [from, to] of merged) {
-        if (from > cursor) this.writeLine(lines, layer, 0, point(cursor, side * half), point(from, side * half));
+        if (from > cursor) this.writeLwPolyline(lines, layer, 0, curvePoints(cursor, from, side * half));
         cursor = Math.max(cursor, to);
       }
-      if (cursor < length) this.writeLine(lines, layer, 0, point(cursor, side * half), point(length, side * half));
+      if (cursor < length) this.writeLwPolyline(lines, layer, 0, curvePoints(cursor, length, side * half));
     }
     this.writeLine(lines, layer, 0, point(0, -half), point(0, half));
     this.writeLine(lines, layer, 0, point(length, -half), point(length, half));
@@ -960,7 +987,7 @@ export class DxfGenerator {
       const openingPhase = getDisplayPhase(object);
       const openingLayer = resolveCadLayer(object.object_type, openingPhase).name;
       const center = point((a + b) / 2, 0);
-      const angleDeg = (Math.atan2(tangent[1], tangent[0]) * 180) / Math.PI;
+      const angleDeg = pose((a + b) / 2).tangent_angle_deg;
       const thickness = Math.round(half * 2);
 
       if (isWindow) {

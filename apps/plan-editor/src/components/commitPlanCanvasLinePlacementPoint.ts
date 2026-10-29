@@ -16,9 +16,26 @@ export interface BeamPlacementStart {
 
 export interface WallPlacementStart {
   point_mm: Point
+  chainStartPointMm: Point
+  chainSegmentCount: number
   reference?: LinearReference
   hostWallId?: string
   hostWallIds?: string[]
+}
+
+export function wallPlacementStartFromSnap(snap: SnapResult, planProject: ProjectDocument): WallPlacementStart {
+  const hostWallIds = getSnappedWallIds(snap, planProject)
+  const hostWallId = hostWallIds[0]
+  return {
+    point_mm: snap.point_mm,
+    chainStartPointMm: snap.point_mm,
+    chainSegmentCount: 0,
+    // A host snap supplies junction and vertical-datum context; it must not
+    // constrain the new wall to run parallel with its host.
+    reference: hostWallId ? undefined : findNearestLinearReference(planProject, snap.point_mm) ?? undefined,
+    hostWallId,
+    hostWallIds,
+  }
 }
 
 interface CommitPlanCanvasLinePlacementPointOptions {
@@ -29,6 +46,7 @@ interface CommitPlanCanvasLinePlacementPointOptions {
   activeBeamTypeMark: string
   activeWallTypeMark: string
   placementReference: PlacementReference
+  closeLoopToleranceMm?: number
   beamStartNode: BeamPlacementStart | null
   wallStartNode: WallPlacementStart | null
   setBeamStartNode: Dispatch<SetStateAction<BeamPlacementStart | null>>
@@ -49,6 +67,7 @@ export function commitPlanCanvasLinePlacementPoint({
   activeBeamTypeMark,
   activeWallTypeMark,
   placementReference,
+  closeLoopToleranceMm = 100,
   beamStartNode,
   wallStartNode,
   setBeamStartNode,
@@ -86,33 +105,37 @@ export function commitPlanCanvasLinePlacementPoint({
   }
 
   if (!wallStartNode) {
-    const hostWallIds = getSnappedWallIds(snap, planProject)
-    const hostWallId = hostWallIds[0]
-    setWallStartNode({
-      point_mm: snap.point_mm,
-      // A host snap supplies junction and vertical-datum context; it must not
-      // constrain the new wall to run parallel with its host.
-      reference: hostWallId ? undefined : findNearestLinearReference(planProject, snap.point_mm) ?? undefined,
-      hostWallId,
-      hostWallIds,
-    })
+    setWallStartNode(wallPlacementStartFromSnap(snap, planProject))
     setDrawLengthMeters('')
     setDrawAngleDegrees('')
     clearDimensionOverrides()
     return
   }
 
-  const distance = Math.hypot(snap.point_mm[0] - wallStartNode.point_mm[0], snap.point_mm[1] - wallStartNode.point_mm[1])
+  const closesWallChain = wallStartNode.chainSegmentCount >= 2
+    && Math.hypot(snap.point_mm[0] - wallStartNode.chainStartPointMm[0], snap.point_mm[1] - wallStartNode.chainStartPointMm[1]) <= closeLoopToleranceMm
+  const endPoint = closesWallChain ? wallStartNode.chainStartPointMm : snap.point_mm
+  const distance = Math.hypot(endPoint[0] - wallStartNode.point_mm[0], endPoint[1] - wallStartNode.point_mm[1])
   if (distance >= 100) {
     const type = project.types?.find(candidate => candidate.object_type === 'architecture.wall' && candidate.name.toLowerCase() === activeWallTypeMark.toLowerCase())
-    const [start, end] = resolveReferencePath(wallStartNode.point_mm, snap.point_mm, type?.parameters?.thickness_mm || 100)
-    const endHostWallId = getSnappedWallId(snap, planProject)
+    const [start, end] = resolveReferencePath(wallStartNode.point_mm, endPoint, type?.parameters?.thickness_mm || 100)
+    const endHostWallId = closesWallChain ? undefined : getSnappedWallId(snap, planProject)
     const verticalReference = getWallVerticalReference(planProject, wallStartNode.hostWallId ?? endHostWallId)
     onCommitWall(start, end, placementReference, verticalReference)
   }
+  if (closesWallChain) {
+    setWallStartNode(null)
+    setDrawLengthMeters('')
+    setDrawAngleDegrees('')
+    clearDimensionOverrides()
+    return
+  }
   const nextHostWallId = getSnappedWallId(snap, planProject)
+  const committedSegmentCount = wallStartNode.chainSegmentCount + (distance >= 100 ? 1 : 0)
   setWallStartNode({
     point_mm: snap.point_mm,
+    chainStartPointMm: wallStartNode.chainStartPointMm,
+    chainSegmentCount: committedSegmentCount,
     reference: nextHostWallId ? undefined : findNearestLinearReference(planProject, snap.point_mm) ?? undefined,
     hostWallId: nextHostWallId,
     hostWallIds: getSnappedWallIds(snap, planProject),

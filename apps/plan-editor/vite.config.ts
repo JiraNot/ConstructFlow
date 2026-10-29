@@ -98,13 +98,16 @@ export default defineConfig(({ command }) => {
     },
   },
   server: {
-    // Expose Vite to other devices on the user's private LAN, not just loopback.
+    // Expose Vite on the LAN and through temporary Cloudflare quick tunnels.
     host: '0.0.0.0',
     port: 5183,
     strictPort: true,
+    allowedHosts: ['.trycloudflare.com'],
     headers: securityHeaders,
     proxy: {
       '/api/ai': { target: aiGatewayTarget, changeOrigin: true },
+      '/api/collaboration': { target: aiGatewayTarget, changeOrigin: true },
+      '/api/drawing-download': { target: aiGatewayTarget, changeOrigin: true },
     },
   },
   preview: {

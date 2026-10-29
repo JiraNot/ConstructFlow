@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useState } from 'react'
+import { createPortal } from 'react-dom'
 
 export type DragDimensionField = 'x' | 'y' | 'width' | 'height' | 'length' | 'offset'
 export type DragDimensionMode = 'move' | 'axis-x' | 'axis-y' | 'rectangle' | 'opening-width' | 'line-length' | 'stair-width' | 'stair-run' | 'stair-landing' | 'stair-first-flight' | 'stair-second-flight' | 'edge-offset'
@@ -17,6 +18,9 @@ export interface PlanCanvasDragDimensionsProps {
 export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> = ({
   mode, displayUnit, values, style, readout, onChange, onCommit, onCancel,
 }) => {
+  const [keypadField, setKeypadField] = useState<DragDimensionField | null>(null)
+  const [keypadHasStarted, setKeypadHasStarted] = useState(false)
+  const touchInput = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
   const fields: Array<{ key: DragDimensionField; shortLabel: string; accessibleLabel: string }> = mode === 'axis-x' || mode === 'axis-y'
     ? [{ key: mode === 'axis-x' ? 'x' : 'y', shortLabel: mode === 'axis-x' ? 'ΔX' : 'ΔY', accessibleLabel: `ระยะย้ายแกน ${mode === 'axis-x' ? 'X' : 'Y'} (${displayUnit})` }]
     : mode === 'rectangle'
@@ -45,28 +49,89 @@ export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> =
             { key: 'y', shortLabel: 'ΔY', accessibleLabel: `ระยะย้ายแกน Y (${displayUnit})` },
           ]
 
-  return <div
-    className="cf-manipulation-dimensions"
-    role="status"
-    aria-live="polite"
-    aria-label="มิติชั่วคราวระหว่างแก้ไขวัตถุ"
-    onPointerDown={event => event.stopPropagation()}
-    style={style}
-  >
-    {fields.map(field => <label key={field.key}>{field.shortLabel} <input
-      aria-label={field.accessibleLabel}
-      type="text"
-      inputMode="decimal"
-      value={values[field.key]}
-      onFocus={event => event.currentTarget.select()}
-      onChange={event => onChange(field.key, event.target.value)}
-      onKeyDown={event => {
-        event.stopPropagation()
-        if (event.key === 'Enter') { event.preventDefault(); onCommit() }
-        else if (event.key === 'Escape') { event.preventDefault(); onCancel() }
-      }}
-    /></label>)}
-    {readout && <span>{readout}</span>}
-    <span>Tab เพื่อกรอกระยะ · Enter ยืนยัน · Esc ยกเลิกการลาก</span>
-  </div>
+  const keypadValue = keypadField ? values[keypadField] : ''
+  const keypadReadout = keypadHasStarted ? keypadValue : keypadValue || '0'
+  const canToggleSign = keypadField === 'x' || keypadField === 'y' || keypadField === 'offset'
+  const openKeypad = (field: DragDimensionField) => {
+    if (!touchInput) return
+    setKeypadField(field)
+    setKeypadHasStarted(false)
+  }
+  const appendKey = (key: string) => {
+    if (!keypadField) return
+    const current = keypadHasStarted ? keypadValue : keypadValue || ''
+    if (key === '⌫') {
+      onChange(keypadField, current.slice(0, -1))
+      setKeypadHasStarted(true)
+      return
+    }
+    if (key === 'C') {
+      onChange(keypadField, '')
+      setKeypadHasStarted(true)
+      return
+    }
+    if (key === '±') {
+      if (!canToggleSign) return
+      const signed = current || '0'
+      onChange(keypadField, signed.startsWith('-') ? signed.slice(1) : `-${signed}`)
+      setKeypadHasStarted(true)
+      return
+    }
+    if (key === '.') {
+      if (!current.includes('.')) onChange(keypadField, `${current || '0'}.`)
+      setKeypadHasStarted(true)
+      return
+    }
+    onChange(keypadField, `${keypadHasStarted ? keypadValue : ''}${key}`)
+    setKeypadHasStarted(true)
+  }
+
+  return <>
+    <div
+      className="cf-manipulation-dimensions"
+      role="group"
+      aria-label="มิติชั่วคราวระหว่างแก้ไขวัตถุ"
+      onPointerDown={event => event.stopPropagation()}
+      style={style}
+    >
+      {fields.map(field => <label key={field.key}>{field.shortLabel} <input
+        aria-label={field.accessibleLabel}
+        type="text"
+        inputMode={touchInput ? 'none' : 'decimal'}
+        readOnly={touchInput}
+        value={values[field.key]}
+        onFocus={event => { event.currentTarget.select(); openKeypad(field.key) }}
+        onClick={() => openKeypad(field.key)}
+        onChange={event => onChange(field.key, event.target.value)}
+        onKeyDown={event => {
+          event.stopPropagation()
+          if (event.key === 'Enter') { event.preventDefault(); onCommit() }
+          else if (event.key === 'Escape') { event.preventDefault(); onCancel() }
+        }}
+      /></label>)}
+      {readout && <span>{readout}</span>}
+      <span>{touchInput ? 'แตะช่องระยะเพื่อเปิดแป้นตัวเลข' : 'Tab เพื่อเปลี่ยนช่อง · Enter ยืนยัน · Esc ยกเลิก'}</span>
+    </div>
+    {keypadField && touchInput && typeof document !== 'undefined' && createPortal(
+      <div className="cf-plan-numeric-keypad" role="dialog" aria-label={`ป้อน${fields.find(field => field.key === keypadField)?.accessibleLabel ?? 'ระยะ'}ด้วยแป้นตัวเลข`} onPointerDown={event => event.stopPropagation()}>
+        <div className="cf-plan-numeric-keypad__heading">
+          <strong>กำหนด {fields.find(field => field.key === keypadField)?.shortLabel ?? 'ระยะ'}</strong>
+          <button type="button" aria-label="ซ่อนแป้นตัวเลข" onPointerDown={event => event.preventDefault()} onClick={() => setKeypadField(null)}>×</button>
+        </div>
+        <div className="cf-plan-numeric-keypad__readout"><span>{keypadReadout}</span><small>{displayUnit}</small></div>
+        <div className="cf-plan-numeric-keypad__keys">
+          {['7', '8', '9', '⌫', '4', '5', '6', '±', '1', '2', '3', 'C', '0', '.', '00'].map(key => <button type="button" key={key}
+            disabled={key === '±' && !canToggleSign}
+            className={key === '⌫' || key === 'C' || key === '±' ? 'is-function' : ''}
+            aria-label={key === '⌫' ? 'ลบตัวเลขล่าสุด' : key === 'C' ? 'ล้างค่า' : key === '±' ? 'สลับเครื่องหมาย' : key === '.' ? 'จุดทศนิยม' : `เลข ${key}`}
+            onPointerDown={event => event.preventDefault()} onClick={() => appendKey(key)}>{key}</button>)}
+        </div>
+        <div className="cf-plan-numeric-keypad__actions">
+          <button type="button" className="is-cancel" onPointerDown={event => event.preventDefault()} onClick={onCancel}>ยกเลิก</button>
+          <button type="button" className="is-confirm" aria-label="ยืนยันมิติ" onPointerDown={event => event.preventDefault()} onClick={onCommit}>✓ ยืนยัน</button>
+        </div>
+        <small className="cf-plan-numeric-keypad__hint">แตะตัวเลขเพื่อกำหนดมิติ · ✓ ยืนยัน · ยกเลิกเพื่อย้อนกลับ</small>
+      </div>, document.body,
+    )}
+  </>
 }

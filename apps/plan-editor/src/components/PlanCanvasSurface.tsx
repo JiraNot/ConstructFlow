@@ -3,11 +3,12 @@ import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { SmartObject } from '@constructflow/project-model'
 import type { SiteSurveyPoint } from '@constructflow/project-model'
 import type { ViewportState } from '../viewport/viewportTransform.js'
-import { zoomAtScreenPoint } from '../viewport/viewportTransform.js'
+import { planZoomPercent, zoomAtScreenPoint } from '../viewport/viewportTransform.js'
 import { PlanCanvasInteractionOverlays } from './PlanCanvasInteractionOverlays.js'
 import { PlanCanvasObjectContextMenu } from './PlanCanvasObjectContextMenu.js'
 import type { PlanDimensionLayerProps } from './PlanDimensionLayer.js'
 import type { PlanPhotoPinLayerProps } from './PlanPhotoPinLayer.js'
+import type { PlanCommentPinLayerProps } from './PlanCommentPinLayer.js'
 import type { ToolType } from './Toolbar.js'
 
 type CanvasEvents = Pick<ComponentProps<'canvas'>,
@@ -16,6 +17,7 @@ type CanvasEvents = Pick<ComponentProps<'canvas'>,
 
 const PlanDimensionLayer = lazy(() => import('./PlanDimensionLayer.js').then(module => ({ default: module.PlanDimensionLayer })))
 const PlanPhotoPinLayer = lazy(() => import('./PlanPhotoPinLayer.js').then(module => ({ default: module.PlanPhotoPinLayer })))
+const PlanCommentPinLayer = lazy(() => import('./PlanCommentPinLayer.js').then(module => ({ default: module.PlanCommentPinLayer })))
 
 interface PlanCanvasSurfaceProps {
   containerRef: RefObject<HTMLDivElement | null>
@@ -28,6 +30,7 @@ interface PlanCanvasSurfaceProps {
   overlays: ComponentProps<typeof PlanCanvasInteractionOverlays>
   dimensions: PlanDimensionLayerProps
   photoPins?: PlanPhotoPinLayerProps
+  commentPins?: PlanCommentPinLayerProps
   viewport: ViewportState
   setViewport: Dispatch<SetStateAction<ViewportState>>
   fitView: () => void
@@ -47,6 +50,7 @@ export function PlanCanvasSurface({
   overlays,
   dimensions,
   photoPins,
+  commentPins,
   viewport,
   setViewport,
   fitView,
@@ -81,6 +85,7 @@ export function PlanCanvasSurface({
       <PlanDimensionLayer {...dimensions} />
     </Suspense>}
     {photoPins?.sessions.length ? <Suspense fallback={null}><PlanPhotoPinLayer {...photoPins} /></Suspense> : null}
+    {commentPins?.comments.length ? <Suspense fallback={null}><PlanCommentPinLayer {...commentPins} /></Suspense> : null}
     {contextMenu && <PlanCanvasObjectContextMenu {...contextMenu} containerSize={containerSize} />}
     <PlanCanvasInteractionOverlays {...overlays} />
 
@@ -100,7 +105,7 @@ export function PlanCanvasSurface({
         const box = containerRef.current
         if (box) setViewport(current => zoomAtScreenPoint(current, [box.clientWidth / 2, box.clientHeight / 2], 0.8))
       }}><ZoomOut size={16} /></button>
-      <span aria-live="polite">{Math.round((viewport.zoom / 0.08) * 100)}%</span>
+      <span aria-live="polite">{planZoomPercent(viewport.zoom)}%</span>
       <button type="button" aria-label="ซูมเข้า" title="ซูมเข้า" onPointerDown={event => event.stopPropagation()} onClick={() => {
         const box = containerRef.current
         if (box) setViewport(current => zoomAtScreenPoint(current, [box.clientWidth / 2, box.clientHeight / 2], 1.25))

@@ -1,7 +1,7 @@
 // ConstructFlow Revit Direct Transfer Serializer (constructflow.revit_transfer.v1)
 // For consumption by PyRevit / Dynamo automated native Revit modeling bridges.
 
-import { getDisplayPhase, type ProjectDocument, type SmartObject } from "@constructflow/project-model";
+import { getDisplayPhase, wallCenterlinePointsMm, type ProjectDocument, type SmartObject, type WallCurveGeometry, type WallModuleData } from "@constructflow/project-model";
 
 type TransferPhase = "Existing" | "Demolition" | "New Construction";
 
@@ -37,6 +37,8 @@ export interface RevitWall {
   base_level_id: string;
   start_point_mm: [number, number, number];
   end_point_mm: [number, number, number];
+  curve_geometry?: WallCurveGeometry;
+  centerline_points_mm?: [number, number, number][];
   thickness_mm: number;
   height_mm: number;
   location_line: "WallCenterline" | "FinishFaceExterior";
@@ -160,6 +162,8 @@ export function serializeRevitTransfer(project: ProjectDocument): RevitTransferD
         base_level_id: d.level_id ?? d.base_level_id ?? defaultLevelId,
         start_point_mm: d.start_point_mm ?? [0, 0, 0],
         end_point_mm: d.end_point_mm ?? [4000, 0, 0],
+        ...(d.curve_geometry ? { curve_geometry: d.curve_geometry } : {}),
+        ...(d.curve_geometry ? { centerline_points_mm: wallCenterlinePointsMm(obj.module_data as WallModuleData, 5) } : {}),
         thickness_mm: d.thickness_mm ?? 100,
         height_mm: d.height_mm ?? 2800,
         location_line: "WallCenterline",

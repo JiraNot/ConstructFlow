@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ProjectDocument } from '@constructflow/project-model'
 import type { useProjectSession } from './useProjectSession.js'
 import type { EditorViewMode } from './useMultiViewPreferences.js'
@@ -9,14 +9,13 @@ interface UsePlanUnderlaySessionOptions {
   project: ProjectDocument
   viewMode: EditorViewMode
   activeLevelId: string
-  sessionRef: ReturnType<typeof useProjectSession>['sessionRef']
-  setProjectState: Dispatch<SetStateAction<ProjectDocument>>
+  setProject: ReturnType<typeof useProjectSession>['setProject']
   setActiveTool: (tool: ToolType) => void
 }
 
 /** Owns per-view/level reference-underlay hydration, persistence, calibration, and clearing. */
 export function usePlanUnderlaySession({
-  project, viewMode, activeLevelId, sessionRef, setProjectState, setActiveTool,
+  project, viewMode, activeLevelId, setProject, setActiveTool,
 }: UsePlanUnderlaySessionOptions) {
   const [underlay, setUnderlay] = useState<UnderlayConfig>({
     image: null,
@@ -27,6 +26,8 @@ export function usePlanUnderlaySession({
     rotation_deg: 0,
   })
   const underlayKey = `${viewMode}:${activeLevelId}`
+  const setProjectRef = useRef(setProject)
+  setProjectRef.current = setProject
   const hydratedUnderlayRef = useRef<string | null>(null)
   const canCalibrateUnderlayRef = useRef(false)
   const allUnderlays = [underlay, ...(underlay.additional_layers ?? [])]
@@ -94,7 +95,7 @@ export function usePlanUnderlaySession({
     const layers = allUnderlays
     const values = layers.map(layer => ({ key: layer.storage_key ?? underlayKey, value: toProjectUnderlay(layer) })).filter((entry): entry is { key: string; value: NonNullable<ReturnType<typeof toProjectUnderlay>> } => !!entry.value)
     if (!values.length) return
-    const timer = window.setTimeout(() => setProjectState(current => {
+    const timer = window.setTimeout(() => setProjectRef.current(current => {
       const next = { ...(current.underlays ?? {}) }
       let changed = false
       for (const { key, value } of values) {
@@ -104,24 +105,21 @@ export function usePlanUnderlaySession({
       }
       if (!changed) return current
       const updated = { ...current, underlays: next }
-      sessionRef.current?.commit(updated)
       return updated
     }), 180)
     return () => window.clearTimeout(timer)
-  }, [underlay, underlayKey, sessionRef, setProjectState])
+  }, [underlay, underlayKey])
 
   const clearUnderlay = () => {
     setUnderlay({ image: null, origin_mm: [0, 0], scale_mm_per_px: 10, opacity: 0.6, visible: true, rotation_deg: 0, additional_layers: [] })
-    setProjectState(current => {
+    setProjectRef.current(current => {
       if (!current.underlays) return current
       const underlays = { ...current.underlays }
       delete underlays[underlayKey]
       for (const [key, layer] of Object.entries(underlays)) {
         if (layer.view_id === viewMode && layer.level_id === activeLevelId) delete underlays[key]
       }
-      const updated = { ...current, underlays }
-      sessionRef.current?.commit(updated)
-      return updated
+      return { ...current, underlays }
     })
     hydratedUnderlayRef.current = underlayKey
   }

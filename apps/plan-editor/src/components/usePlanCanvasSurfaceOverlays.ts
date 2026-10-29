@@ -1,6 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { ComponentProps } from 'react'
 import { updatePlanCanvasPreference } from '../app/planCanvasPreferences.mjs'
+import { availableFamilies } from '@constructflow/family-engine'
 import type { PlanCanvasPreferences } from '../app/planCanvasPreferences.mjs'
 import type { PlanCanvasProps } from './PlanCanvas.types.js'
 import { PlanCanvasInteractionOverlays } from './PlanCanvasInteractionOverlays.js'
@@ -33,6 +34,7 @@ interface UsePlanCanvasSurfaceOverlaysOptions {
   authoringControlsOpen: boolean
   setAuthoringControlsOpen: Dispatch<SetStateAction<boolean>>
   toggleDimensionReferenceMode: () => void
+  onCommitPlacement: () => void
   onFinishPolygon: () => void
 }
 
@@ -40,7 +42,7 @@ interface UsePlanCanvasSurfaceOverlaysOptions {
 export function usePlanCanvasSurfaceOverlays({
   props, planProject, editableSelectionIds, status, picking, placement, placementDimensions,
   manipulation, pointer, keyboard, displayUnit, dimensionReferenceMode, containerSize,
-  canvasRef, authoringControlsOpen, setAuthoringControlsOpen, toggleDimensionReferenceMode, onFinishPolygon,
+  canvasRef, authoringControlsOpen, setAuthoringControlsOpen, toggleDimensionReferenceMode, onCommitPlacement, onFinishPolygon,
 }: UsePlanCanvasSurfaceOverlaysOptions): OverlayModels {
   const setPreference = <K extends keyof PlanCanvasPreferences>(
     key: K,
@@ -49,6 +51,7 @@ export function usePlanCanvasSurfaceOverlays({
 
   const hints: OverlayModels['hints'] = {
     activeTool: props.activeTool,
+    activeFamilyName: props.activeFamilyId ? availableFamilies(props.project).find(family => family.id === props.activeFamilyId)?.name : undefined,
     showSelectionHandleHint: hasPlanCanvasSelectionGrip(planProject, editableSelectionIds),
     placementStatus: status.placementStatus,
     placementHint: status.placementHint,
@@ -64,11 +67,55 @@ export function usePlanCanvasSurfaceOverlays({
       status.cancelCurrentPlacement()
       canvasRef.current?.focus({ preventScroll: true })
     },
-    canFinishPolygon: ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(props.activeTool) && placement.slabBoundary.length >= 3,
+    wallChainActive: Boolean(placement.wallStartNode),
+    wallDrawMode: pointer.wallDrawMode,
+    onWallDrawModeChange: pointer.setWallDrawMode,
+    lineDrawingMode: props.preferences.lineDrawingMode,
+    onLineDrawingModeChange: value => setPreference('lineDrawingMode', value),
+    wallAngleSnapDeg: props.preferences.wallAngleSnapDeg,
+    onWallAngleSnapChange: value => setPreference('wallAngleSnapDeg', value),
+    sketchMode: pointer.sketchMode,
+    onSketchModeChange: pointer.setSketchMode,
+    sketchPointCount: pointer.sketchPoints.length,
+    onFinishSketch: () => {
+      if (pointer.sketchPoints.length < 2) return
+      const result = props.onCommitManipulation([{ name: 'SavePlanSketch', input: { sketch: {
+        id: crypto.randomUUID(), level_id: planProject.project.active_level_id, created_phase: planProject.project.active_phase,
+        points_mm: pointer.sketchPoints, mode: pointer.sketchMode, closed: false, color: '#334155', width_mm: 2, line_style: 'solid',
+      } } }])
+      if (result.status === 'success') pointer.setSketchPoints([])
+      else props.onManipulationRejected?.(result.errors ?? ['บันทึกเส้นร่างไม่สำเร็จ'])
+    },
+    measureMode: placement.measureMode,
+    measurePointCount: placement.measurePoints.length,
+    measureComplete: placement.measureComplete,
+    measureError: placement.measureError,
+    onMeasureModeChange: placement.setMeasureMode,
+    fillStyle: placement.fillStyle,
+    onFillStyleChange: placement.setFillStyle,
+    onFinishMeasure: () => {
+      if (placement.measureMode === 'fill-boundary') {
+        if (placement.measurePoints.length < 3) return
+        const result = props.onCommitManipulation([{ name: 'SavePlanFill', input: { fill: {
+          id: crypto.randomUUID(), level_id: planProject.project.active_level_id,
+          created_phase: planProject.project.active_phase, boundary_mm: placement.measurePoints,
+          style: placement.fillStyle,
+        } } }])
+        if (result.status === 'success') placement.setMeasureComplete(true)
+        else placement.setMeasureError(result.errors?.[0] ?? 'บันทึก Fill ไม่สำเร็จ')
+      } else placement.setMeasureComplete(true)
+    },
+    onFinishWall: () => {
+      props.onActivateTool?.('select')
+      canvasRef.current?.focus({ preventScroll: true })
+    },
+    canFinishPolygon: (['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(props.activeTool)
+      || (props.activeTool === 'bundle' && props.supplierBundlePlacement?.bundle.visual_type === 'area'))
+      && placement.slabBoundary.length >= 3,
     onFinishPolygon,
   }
 
-  const dragDimensions = manipulation.dimensions && pointer.dragPreviewPoint && pointer.draggingObject ? {
+  const dragDimensions = props.preferences.realtimeDimensions && manipulation.dimensions && manipulation.activePoint && manipulation.activeDrag ? {
     mode: manipulation.mode,
     displayUnit,
     values: manipulation.values,
@@ -77,22 +124,25 @@ export function usePlanCanvasSurfaceOverlays({
         ? manipulation.updateMoveDimension(field, value)
         : manipulation.updateResizeDimension(field, value),
     onCommit: manipulation.commitDragDimensions,
-    onCancel: () => {
-      status.cancelCurrentPlacement()
-      canvasRef.current?.focus({ preventScroll: true })
-    },
+    onCancel: manipulation.cancelDragDimensions,
     readout: manipulation.readout,
     style: manipulation.style ?? {},
   } : null
 
   const dimensionState = placementDimensions
   const placementOverlay: OverlayModels['placement'] = {
-    position: dimensionState.supportsPlacementDimensions ? dimensionState.dimensionOverlayPosition : null,
+    position: props.preferences.realtimeDimensions && dimensionState.supportsPlacementDimensions ? dimensionState.dimensionOverlayPosition : null,
     containerSize,
     displayUnit,
-    showX: dimensionState.showXDimension,
-    showY: dimensionState.showYDimension,
-    hasLineGeometryInput: dimensionState.hasLineGeometryInput,
+    showX: props.preferences.realtimeDimensions && dimensionState.showXDimension,
+    showY: props.preferences.realtimeDimensions && dimensionState.showYDimension,
+    hasLineGeometryInput: props.preferences.realtimeDimensions && dimensionState.hasLineGeometryInput,
+    allowManualAngle: !(
+      (props.activeTool === 'wall' || props.activeTool === 'beam')
+      && (props.preferences.lineDrawingMode === 'orthogonal'
+        || props.preferences.lineConstraintMode === 'parallel'
+        || props.preferences.lineConstraintMode === 'perpendicular')
+    ),
     isHostedOpeningPlacement: dimensionState.isHostedOpeningPlacement,
     dimensionReferenceMode,
     dimensionReferences: dimensionState.dimensionReferences,
@@ -100,6 +150,8 @@ export function usePlanCanvasSurfaceOverlays({
     dimensionAnchorY: placement.dimensionAnchorY,
     xDimensionDisplay: dimensionState.xDimensionDisplay,
     yDimensionDisplay: dimensionState.yDimensionDisplay,
+    dimensionInputX: placement.dimensionInputX,
+    dimensionInputY: placement.dimensionInputY,
     drawLengthMeters: placement.drawLengthMeters,
     drawAngleDegrees: placement.drawAngleDegrees,
     dimensionInputXRef: placement.dimensionInputXRef,
@@ -114,6 +166,7 @@ export function usePlanCanvasSurfaceOverlays({
     setDrawAngleDegrees: placement.setDrawAngleDegrees,
     onDimensionKeyDown: keyboard.handleDimensionInputKeyDown,
     onPlacementKeyDown: keyboard.handlePlacementInputKeyDown,
+    onCommitPlacement,
     onToggleDimensionReference: toggleDimensionReferenceMode,
   }
 
@@ -129,11 +182,14 @@ export function usePlanCanvasSurfaceOverlays({
     activeTool: props.activeTool,
     displayUnit,
     preferences: props.preferences,
+    lineDrawingMode: props.preferences.lineDrawingMode,
+    wallAngleSnapDeg: props.preferences.wallAngleSnapDeg,
+    fillStyle: placement.fillStyle,
     open: authoringControlsOpen,
     pipeSystem: placement.pipeSystem,
     fixtureKind: placement.fixtureKind,
     furnitureKind: placement.furnitureKind,
-    activeFamilyName: props.project.families?.find(family=>family.id===props.activeFamilyId)?.name,
+    activeFamilyName: props.activeFamilyId ? availableFamilies(props.project).find(family=>family.id===props.activeFamilyId)?.name : undefined,
     roof,
     stairOptions: placement.stairOptions,
     stairError: placement.stairError,
@@ -179,11 +235,13 @@ export function usePlanCanvasSurfaceOverlays({
     onGridFirstTagChange: (axis, value) => axis === 'x' ? placement.setGridXFirstTag(value) : placement.setGridYFirstTag(value),
     onPlacementReferenceChange: value => setPreference('placementReference', value),
     onLineConstraintModeChange: value => setPreference('lineConstraintMode', value),
+    onWallAngleSnapChange: value => setPreference('wallAngleSnapDeg', value),
+    onFillStyleChange: placement.setFillStyle,
     onSnapModeToggle: mode => setPreference('snapModes', current => current.includes(mode) ? current.filter(value => value !== mode) : [...current, mode]),
     onPlacementKeyDown: keyboard.handlePlacementInputKeyDown,
     onChangeActiveTypeMark: props.onChangeActiveTypeMark,
     onOpenTypeManager: props.onOpenTypeManager,
   }
 
-  return { hints, manipulation: dragDimensions, placement: placementOverlay, controls }
+  return { portalToContextDock: props.contextualDockEnabled !== false, hints, manipulation: dragDimensions, placement: placementOverlay, controls }
 }

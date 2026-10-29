@@ -1,4 +1,4 @@
-import { ProjectDocument, CabinetModuleData, isGridObject } from '@constructflow/project-model'
+import { ProjectDocument, CabinetModuleData, isGridObject, wallCenterlinePointsMm, type WallModuleData } from '@constructflow/project-model'
 import { polygonInteriorPoint } from '@constructflow/geometry-kernel'
 export { stairLandingGripPoint } from './stairLandingGripPoint.mjs'
 export { stairFlightGripPoints } from './stairFlightGripPoints.mjs'
@@ -32,6 +32,10 @@ export function getPlanObjectBounds(object: ProjectDocument['objects'][string]):
   }
   const data = object.module_data as unknown as Record<string, unknown>
   const points: [number, number][] = []
+  if (object.object_type === 'architecture.wall' && data.curve_geometry) {
+    const wallPoints = wallCenterlinePointsMm(object.module_data as WallModuleData, 5)
+    for (const point of wallPoints) points.push([point[0], point[1]])
+  }
   for (const key of ['location_mm', 'center_mm', 'start_point_mm', 'end_point_mm', 'origin_mm']) {
     const value = data[key]
     if (Array.isArray(value) && Number.isFinite(value[0]) && Number.isFinite(value[1])) points.push([Number(value[0]), Number(value[1])])

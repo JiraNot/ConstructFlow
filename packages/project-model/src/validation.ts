@@ -1,18 +1,104 @@
+import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
 import { validateProjectFamilies } from './family.js'
 import { validateDoorFaceComponents } from './doorFace.js'
 import { validateOpeningPlanSymbolLines } from './openingPlanSymbol.js'
 import type { Phase } from './types.js'
-import { validateRainwaterDesignSettings, type ProjectDocument, type TypeDefinition } from './project.js'
+import { validateRainwaterDesignSettings, type FieldPhotoInspection, type ProjectDocument, type TypeDefinition } from './project.js'
 import { validateConstructionPayloads } from './constructionValidation.js'
 import { validateDrawingSettings } from './sheetSettings.js'
 import { validateCoordinationSettings } from './coordinationSettings.js'
 
 const supportedProjectViews = new Set(['plan', 'framing', 'roofplan', 'north', 'south', 'east', 'west', 'rcp', 'model3d'])
 import { validateSiteSurvey } from './siteSurvey.js'
+import { validateProposalDraft } from './proposal.js'
+import { validateChangeOrder } from './changeOrder.js'
+import { validateInvoice } from './invoice.js'
+import { validateProjectTakeoffRates } from './takeoffRates.js'
+import { validateFieldForms } from './fieldForms.js'
+import { validateProjectComments } from './projectComment.js'
+import { isValidWallCurveGeometry, wallArcEndpointsMm, wallCenterlineLengthMm } from './wallGeometry.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const PHASES = new Set<Phase>(['existing', 'demolition', 'new_construction'])
 const PILE_TYPES = new Set(['micro_pile_i18', 'micro_pile_i22', 'spun_micro_pile_20', 'spun_micro_pile_25', 'bored_pile'])
+const FIELD_PHOTO_DIMENSION_CATEGORIES = new Set(['architecture', 'interior', 'setback', 'defect', 'mep'])
+const FIELD_PHOTO_DIMENSION_STATUSES = new Set(['measured', 'pending', 'defect'])
+const FIELD_PHOTO_AREA_CATEGORIES = new Set(['paint', 'wallpaper', 'tile', 'masonry', 'custom'])
+
+function isNormalizedImagePoint(value: unknown): value is [number, number] {
+  return Array.isArray(value) && value.length === 2 && value.every(item => Number.isFinite(item) && item >= 0 && item <= 1)
+}
+
+function validateFieldText(value: unknown, field: string, maximum: number, required = false): void {
+  if (value === undefined && !required) return
+  if (typeof value !== 'string' || (required && !value.trim()) || value.length > maximum) throw new Error(`Field photo ${field} must be ${required ? 'a non-empty ' : 'a '}string of at most ${maximum} characters`)
+}
+
+export function validateFieldPhotoInspection(value: unknown, levelIds?: ReadonlySet<string>): asserts value is FieldPhotoInspection {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Field photo inspection must be an object')
+  const inspection = value as FieldPhotoInspection
+  if (typeof inspection.id !== 'string' || !UUID_RE.test(inspection.id)) throw new Error('Field photo inspection ID must be an RFC-4122 UUID')
+  if (typeof inspection.image_asset_id !== 'string' || !UUID_RE.test(inspection.image_asset_id)) throw new Error(`Field photo ${inspection.id} image asset ID must be an RFC-4122 UUID`)
+  validateFieldText(inspection.title, 'title', 200, true)
+  validateFieldText(inspection.room_name, 'room name', 200)
+  validateFieldText(inspection.notes, 'notes', 4000)
+  if (![inspection.image_natural_width, inspection.image_natural_height].every(item => Number.isFinite(item) && item > 0 && item <= 50_000)) throw new Error(`Field photo ${inspection.id} has invalid image dimensions`)
+  if (typeof inspection.captured_at !== 'string' || !Number.isFinite(Date.parse(inspection.captured_at))) throw new Error(`Field photo ${inspection.id} has an invalid capture timestamp`)
+  if (inspection.level_id !== undefined && (typeof inspection.level_id !== 'string' || !inspection.level_id.trim() || (levelIds && !levelIds.has(inspection.level_id)))) throw new Error(`Field photo ${inspection.id} references an unknown level`)
+  if (inspection.pin_coords_mm !== undefined && (!Array.isArray(inspection.pin_coords_mm) || inspection.pin_coords_mm.length !== 2 || inspection.pin_coords_mm.some(item => !Number.isFinite(item)))) throw new Error(`Field photo ${inspection.id} has invalid plan coordinates`)
+  if (inspection.camera_heading_deg !== undefined && (!Number.isFinite(inspection.camera_heading_deg) || inspection.camera_heading_deg < 0 || inspection.camera_heading_deg >= 360)) throw new Error(`Field photo ${inspection.id} has an invalid camera heading`)
+  if (!Array.isArray(inspection.dimensions) || inspection.dimensions.length > 500) throw new Error(`Field photo ${inspection.id} must contain at most 500 dimensions`)
+  const dimensionIds = new Set<string>()
+  for (const dimension of inspection.dimensions) {
+    if (!dimension || typeof dimension !== 'object' || typeof dimension.id !== 'string' || !dimension.id.trim() || dimension.id.length > 200 || dimensionIds.has(dimension.id)) throw new Error(`Field photo ${inspection.id} has an invalid or duplicated dimension ID`)
+    if (!isNormalizedImagePoint(dimension.start_ratio) || !isNormalizedImagePoint(dimension.end_ratio)) throw new Error(`Field photo dimension ${dimension.id} has invalid image coordinates`)
+    if (![dimension.distance_mm, dimension.distance_m].every(item => Number.isFinite(item) && item >= 0)) throw new Error(`Field photo dimension ${dimension.id} has an invalid distance`)
+    validateFieldText(dimension.label, 'dimension label', 500)
+    validateFieldText(dimension.notes, 'dimension notes', 2000)
+    validateFieldText(dimension.color, 'dimension color', 32)
+    if (!FIELD_PHOTO_DIMENSION_CATEGORIES.has(dimension.category) || !FIELD_PHOTO_DIMENSION_STATUSES.has(dimension.status)) throw new Error(`Field photo dimension ${dimension.id} has an unsupported category or status`)
+    if (dimension.sub_segments !== undefined && (!Array.isArray(dimension.sub_segments) || dimension.sub_segments.length > 100)) throw new Error(`Field photo dimension ${dimension.id} has too many sub-segments`)
+    const subSegmentIds = new Set<string>()
+    for (const segment of dimension.sub_segments ?? []) {
+      if (!segment || typeof segment.id !== 'string' || !segment.id.trim() || subSegmentIds.has(segment.id) || !Number.isFinite(segment.ratio) || segment.ratio <= 0 || segment.ratio >= 1 || ![segment.distance_mm, segment.distance_m].every(item => Number.isFinite(item) && item >= 0)) throw new Error(`Field photo dimension ${dimension.id} has an invalid sub-segment`)
+      validateFieldText(segment.label, 'sub-segment label', 500)
+      subSegmentIds.add(segment.id)
+    }
+    dimensionIds.add(dimension.id)
+  }
+  if (inspection.areas !== undefined && (!Array.isArray(inspection.areas) || inspection.areas.length > 200)) throw new Error(`Field photo ${inspection.id} must contain at most 200 measured areas`)
+  const areaIds = new Set<string>()
+  for (const area of inspection.areas ?? []) {
+    if (!area || typeof area !== 'object' || typeof area.id !== 'string' || !area.id.trim() || area.id.length > 200 || areaIds.has(area.id)) throw new Error(`Field photo ${inspection.id} has an invalid or duplicated area ID`)
+    if (!Array.isArray(area.bounds_ratio) || area.bounds_ratio.length !== 4 || area.bounds_ratio.some(item => !Number.isFinite(item)) || area.bounds_ratio[0] < 0 || area.bounds_ratio[1] < 0 || area.bounds_ratio[2] <= 0 || area.bounds_ratio[3] <= 0 || area.bounds_ratio[0] + area.bounds_ratio[2] > 1.001 || area.bounds_ratio[1] + area.bounds_ratio[3] > 1.001) throw new Error(`Field photo area ${area.id} has invalid image bounds`)
+    if (![area.width_mm, area.height_mm, area.area_sqm, area.deductions_sqm, area.net_area_sqm].every(item => Number.isFinite(item) && item >= 0)) throw new Error(`Field photo area ${area.id} has invalid quantities`)
+    validateFieldText(area.label, 'area label', 500)
+    validateFieldText(area.notes, 'area notes', 2000)
+    validateFieldText(area.color, 'area color', 32)
+    if (!FIELD_PHOTO_AREA_CATEGORIES.has(area.category)) throw new Error(`Field photo area ${area.id} has an unsupported category`)
+    if (area.tile_config) {
+      if (![area.tile_config.tile_width_cm, area.tile_config.tile_length_cm].every(item => Number.isFinite(item) && item > 0 && item <= 1000) || !Number.isFinite(area.tile_config.waste_percent) || area.tile_config.waste_percent < 0 || area.tile_config.waste_percent > 100 || (area.tile_config.pieces_per_box !== undefined && (!Number.isInteger(area.tile_config.pieces_per_box) || area.tile_config.pieces_per_box <= 0)) || (area.tile_config.show_grid !== undefined && typeof area.tile_config.show_grid !== 'boolean')) throw new Error(`Field photo area ${area.id} has invalid tile configuration`)
+    }
+    if (area.tile_result) {
+      const tileValues = Object.values(area.tile_result)
+      if (tileValues.some(item => typeof item !== 'number' || !Number.isFinite(item) || item < 0)) throw new Error(`Field photo area ${area.id} has invalid tile quantities`)
+    }
+    areaIds.add(area.id)
+  }
+}
+
+export function validateFieldPhotoInspections(value: unknown, levelIds?: ReadonlySet<string>): asserts value is FieldPhotoInspection[] {
+  if (!Array.isArray(value) || value.length > 500) throw new Error('Project field_photo_inspections must contain at most 500 records')
+  const ids = new Set<string>()
+  const assetIds = new Set<string>()
+  for (const inspection of value) {
+    validateFieldPhotoInspection(inspection, levelIds)
+    if (ids.has(inspection.id)) throw new Error(`Duplicate field photo inspection UUID ${inspection.id}`)
+    if (assetIds.has(inspection.image_asset_id)) throw new Error(`Duplicate field photo image asset ${inspection.image_asset_id}`)
+    ids.add(inspection.id)
+    assetIds.add(inspection.image_asset_id)
+  }
+}
 
 export function validateProjectV2(project: ProjectDocument): void {
   if (project.schema_version !== 2) throw new Error(`Unsupported schema_version: ${project.schema_version}`)
@@ -26,14 +112,62 @@ export function validateProjectV2(project: ProjectDocument): void {
   if (!Array.isArray(project.levels) || !Array.isArray(project.types) || !Array.isArray(project.phases) || !Array.isArray(project.relationships)) {
     throw new Error('Invalid project format: levels, types, phases and relationships arrays required')
   }
+  if (project.field_photo_inspections !== undefined) {
+    validateFieldPhotoInspections(project.field_photo_inspections, new Set(project.levels.map(level => level.id)))
+  }
+  if (project.field_forms !== undefined) {
+    validateFieldForms(project.field_forms, {
+      levelIds: new Set(project.levels.map(level => level.id)),
+      photoInspectionIds: new Set((project.field_photo_inspections ?? []).map(inspection => inspection.id)),
+    })
+  }
+  if (project.comments !== undefined) validateProjectComments(project.comments)
   if (project.constraints !== undefined && !Array.isArray(project.constraints)) {
     throw new Error('Invalid project format: constraints must be an array when present')
   }
   if (!project.objects || typeof project.objects !== 'object' || Array.isArray(project.objects)) throw new Error('Invalid project format: objects map required')
   validateProjectFamilies(project)
+  if (project.takeoff_rates !== undefined) validateProjectTakeoffRates(project.takeoff_rates)
+  if (project.proposal_drafts !== undefined) {
+    if (!Array.isArray(project.proposal_drafts) || project.proposal_drafts.length > 100) throw new Error('Invalid project format: proposal_drafts must contain at most 100 proposals')
+    const proposalIds = new Set<string>()
+    for (const proposal of project.proposal_drafts) {
+      validateProposalDraft(proposal)
+      if (proposalIds.has(proposal.id)) throw new Error(`Invalid project format: duplicate proposal UUID ${proposal.id}`)
+      proposalIds.add(proposal.id)
+    }
+  }
+  if (project.change_orders !== undefined) {
+    if (!Array.isArray(project.change_orders) || project.change_orders.length > 500) throw new Error('Invalid project format: change_orders must contain at most 500 change orders')
+    const changeOrderIds = new Set<string>()
+    const changeOrderNumbers = new Set<string>()
+    for (const changeOrder of project.change_orders) {
+      validateChangeOrder(changeOrder, project.proposal_drafts ?? [])
+      if (changeOrderIds.has(changeOrder.id)) throw new Error(`Invalid project format: duplicate change order UUID ${changeOrder.id}`)
+      changeOrderIds.add(changeOrder.id)
+      const numberKey = `${changeOrder.proposal_id}:${changeOrder.number.toLocaleLowerCase('en-US')}`
+      if (changeOrderNumbers.has(numberKey)) throw new Error(`Invalid project format: duplicate change order number ${changeOrder.number}`)
+      changeOrderNumbers.add(numberKey)
+    }
+  }
+  if (project.invoices !== undefined) {
+    if (!Array.isArray(project.invoices) || project.invoices.length > 1000) throw new Error('Invalid project format: invoices must contain at most 1000 records')
+    const invoiceIds = new Set<string>()
+    const invoiceNumbers = new Set<string>()
+    for (const invoice of project.invoices) {
+      validateInvoice(invoice, project.proposal_drafts ?? [], project.change_orders ?? [])
+      if (invoiceIds.has(invoice.id)) throw new Error(`Invalid project format: duplicate invoice UUID ${invoice.id}`)
+      invoiceIds.add(invoice.id)
+      const numberKey = invoice.number.toLocaleLowerCase('en-US')
+      if (invoiceNumbers.has(numberKey)) throw new Error(`Invalid project format: duplicate invoice number ${invoice.number}`)
+      invoiceNumbers.add(numberKey)
+    }
+  }
   validateConstructionPayloads(project)
   if(project.drawing_settings!==undefined)validateDrawingSettings(project.drawing_settings)
   if (project.drawing_settings?.plan_dimensions?.some(dimension => !project.levels.some(level => level.id === dimension.level_id))) throw new Error('Invalid project format: plan dimension references a missing level')
+  if (project.drawing_settings?.plan_fills?.some(fill => !project.levels.some(level => level.id === fill.level_id))) throw new Error('Invalid project format: plan fill references a missing level')
+  if (project.drawing_settings?.plan_sketches?.some(sketch => !project.levels.some(level => level.id === sketch.level_id))) throw new Error('Invalid project format: plan sketch references a missing level')
   if (project.view_settings !== undefined) {
     const settings = project.view_settings as unknown
     if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new Error('Invalid project format: view_settings must be an object')
@@ -75,7 +209,7 @@ export function validateProjectV2(project: ProjectDocument): void {
         (underlay.display_name !== undefined && (typeof underlay.display_name !== 'string' || !underlay.display_name.trim() || underlay.display_name.length > 200)) ||
         (underlay.view_id !== undefined && !supportedProjectViews.has(underlay.view_id)) ||
         (underlay.level_id !== undefined && (typeof underlay.level_id !== 'string' || !project.levels.some(level => level.id === underlay.level_id))) ||
-        (underlay.source_kind !== undefined && !['image', 'dxf', 'dwg'].includes(underlay.source_kind)) ||
+        (underlay.source_kind !== undefined && !['image', 'pdf', 'dxf', 'dwg'].includes(underlay.source_kind)) ||
         (underlay.source_layout !== undefined && (typeof underlay.source_layout !== 'string' || !underlay.source_layout.trim())) ||
         (underlay.source_region !== undefined && (!Array.isArray(underlay.source_region) || underlay.source_region.length !== 4 || underlay.source_region.some(value => !Number.isFinite(value)) || underlay.source_region[2] <= 0 || underlay.source_region[3] <= 0)) ||
         (underlay.scale_source !== undefined && !['declared_units', 'assumed_units', 'calibrated'].includes(underlay.scale_source))) throw new Error(`Invalid project format: underlay ${key} has invalid source metadata`)
@@ -499,6 +633,45 @@ export function validateProjectV2(project: ProjectDocument): void {
     for (const hostId of object.host_refs) if (!project.objects[hostId]) throw new Error(`Invalid project format: object ${id} references missing host ${hostId}`)
 
     switch (object.object_type) {
+      case 'supplier.bundle_instance': {
+        const visualType = moduleData.visual_type
+        const quantityUnit = visualType === 'shape' ? 'item' : visualType === 'length' ? 'm' : visualType === 'area' ? 'm2' : undefined
+        if (!quantityUnit || moduleData.unit !== quantityUnit) throw new Error(`Invalid project format: supplier bundle ${id} has an incompatible visual type and unit`)
+        if (typeof moduleData.bundle_id !== 'string' || !UUID_RE.test(moduleData.bundle_id) || typeof moduleData.bundle_name !== 'string' || !moduleData.bundle_name.trim()) throw new Error(`Invalid project format: supplier bundle ${id} has an invalid catalog snapshot`)
+        const finitePoint = (value: unknown): value is number[] => Array.isArray(value) && value.length === 2 && value.every(Number.isFinite)
+        if (visualType === 'shape' && !finitePoint(moduleData.location_mm)) throw new Error(`Invalid project format: supplier bundle shape ${id} has an invalid location`)
+        if (visualType === 'length' && (!Array.isArray(moduleData.path_mm) || moduleData.path_mm.length < 2 || moduleData.path_mm.length > 500 || !moduleData.path_mm.every(finitePoint))) throw new Error(`Invalid project format: supplier bundle line ${id} has an invalid path`)
+        if (visualType === 'area') {
+          if (!Array.isArray(moduleData.boundary_mm) || moduleData.boundary_mm.length < 3 || moduleData.boundary_mm.length > 500 || !moduleData.boundary_mm.every(finitePoint)) throw new Error(`Invalid project format: supplier bundle area ${id} has an invalid boundary`)
+          const boundaryValidation = validatePolygonWithVoids(moduleData.boundary_mm as number[][])
+          if (!boundaryValidation.valid) throw new Error(`Invalid project format: supplier bundle area ${id} has ${boundaryValidation.reason}`)
+          const areaTwice = moduleData.boundary_mm.reduce((sum: number, point: number[], index: number, ring: number[][]) => {
+            const next = ring[(index + 1) % ring.length]!
+            return sum + point[0]! * next[1]! - next[0]! * point[1]!
+          }, 0)
+          if (!Number.isFinite(areaTwice) || Math.abs(areaTwice) < 1) throw new Error(`Invalid project format: supplier bundle area ${id} has zero area`)
+        }
+        const price = moduleData.unit_rate_snapshot
+        if (!price || typeof price !== 'object' || Array.isArray(price)) throw new Error(`Invalid project format: supplier bundle ${id} is missing its unit rate snapshot`)
+        const rate = price as Record<string, unknown>
+        if (rate.unit !== quantityUnit || !Number.isFinite(rate.material_rate) || Number(rate.material_rate) < 0 || !Number.isFinite(rate.labor_rate) || Number(rate.labor_rate) < 0
+          || (rate.material_sell_rate !== undefined && (!Number.isFinite(rate.material_sell_rate) || Number(rate.material_sell_rate) < Number(rate.material_rate)))) throw new Error(`Invalid project format: supplier bundle ${id} has an invalid unit rate snapshot`)
+        if (moduleData.hide_on_proposal !== undefined && typeof moduleData.hide_on_proposal !== 'boolean') throw new Error(`Invalid project format: supplier bundle ${id} has invalid proposal visibility`)
+        if (!Array.isArray(moduleData.component_snapshots) || moduleData.component_snapshots.length > 100) throw new Error(`Invalid project format: supplier bundle ${id} has invalid component snapshots`)
+        for (const [index, rawComponent] of moduleData.component_snapshots.entries()) {
+          if (!rawComponent || typeof rawComponent !== 'object' || Array.isArray(rawComponent)) throw new Error(`Invalid project format: supplier bundle ${id} component ${index + 1} is malformed`)
+          const component = rawComponent as Record<string, unknown>
+          if (typeof component.product_id !== 'string' || !UUID_RE.test(component.product_id) || typeof component.product_name !== 'string' || !component.product_name.trim()
+            || typeof component.supplier_sku !== 'string' || !component.supplier_sku.trim()
+            || !Number.isFinite(component.purchase_units_per_output_unit) || Number(component.purchase_units_per_output_unit) <= 0
+            || !Number.isFinite(component.waste_percent) || Number(component.waste_percent) < 0 || Number(component.waste_percent) > 200
+            || !Number.isFinite(component.unit_cost_thb) || Number(component.unit_cost_thb) < 0
+            || !Number.isFinite(component.unit_sell_thb) || Number(component.unit_sell_thb) < Number(component.unit_cost_thb)
+            || (component.unit_labor_thb !== undefined && (!Number.isFinite(component.unit_labor_thb) || Number(component.unit_labor_thb) < 0))
+            || (component.quantity_mode !== undefined && !['area', 'perimeter'].includes(String(component.quantity_mode)))) throw new Error(`Invalid project format: supplier bundle ${id} component ${index + 1} is invalid`)
+        }
+        break
+      }
       case 'structure.grid':
         requireFinite(moduleData.position_mm, id, 'position_mm')
         requireTuple(moduleData.extent_mm, 2, id, 'extent_mm')
@@ -559,7 +732,15 @@ export function validateProjectV2(project: ProjectDocument): void {
         requirePositive(moduleData.length_mm, id, 'length_mm')
         validateFamilyParameters(moduleData, 'architecture.wall', `wall ${id}`)
         if (typeof moduleData.level_id !== 'string' || !levelIds.has(moduleData.level_id)) throw new Error(`Invalid project format: wall ${id} references a missing level`)
-        const computedLength = Math.hypot(moduleData.end_point_mm[0] - moduleData.start_point_mm[0], moduleData.end_point_mm[1] - moduleData.start_point_mm[1])
+        if (moduleData.curve_geometry !== undefined) {
+          if (!isValidWallCurveGeometry(moduleData.curve_geometry)) throw new Error(`Invalid project format: wall ${id} has malformed circular curve geometry`)
+          const [arcStart, arcEnd] = wallArcEndpointsMm(moduleData.curve_geometry, moduleData.start_point_mm[2] ?? 0, moduleData.end_point_mm[2] ?? 0)
+          if (Math.hypot(arcStart[0] - moduleData.start_point_mm[0], arcStart[1] - moduleData.start_point_mm[1]) > 1
+            || Math.hypot(arcEnd[0] - moduleData.end_point_mm[0], arcEnd[1] - moduleData.end_point_mm[1]) > 1) {
+            throw new Error(`Invalid project format: wall ${id} circular arc endpoints do not match its centerline`)
+          }
+        }
+        const computedLength = wallCenterlineLengthMm(moduleData as unknown as import('./types.js').WallModuleData)
         if (computedLength <= 0 || Math.abs(computedLength - moduleData.length_mm) > 1) throw new Error(`Invalid project format: wall ${id} length does not match its endpoints`)
         if (moduleData.interface_treatments !== undefined) {
           if (!Array.isArray(moduleData.interface_treatments)) throw new Error(`Invalid project format: wall ${id} interface treatments must be an array`)

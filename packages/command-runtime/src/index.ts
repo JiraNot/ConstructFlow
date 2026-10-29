@@ -20,6 +20,8 @@ import { validateConstructionProject } from '@constructflow/domain-providers'
 import { executeDuplicateObjects } from './clipboardCommands.js'
 import { ConstructFlowSolver } from '@constructflow/constraint-engine'
 import { ModuleRegistry, type ConstructFlowModule } from '@constructflow/module-sdk'
+import { buildProjectHistoryDeltaInput, matchesProjectHistoryTarget } from './projectHistoryDelta.js'
+export { buildProjectHistoryDeltaInput, matchesProjectHistoryTarget }
 
 const handlers = [(context: CommandHandlerContext) => context.commandName === 'DuplicateObjects' ? executeDuplicateObjects(context) : null,
   executeFamilyCommand, executeProjectCommand, executeStructureCommand, executeArchitectureCommand, executeCatalogCommand,
@@ -76,9 +78,10 @@ export class CommandBus {
     commandName: string,
     input: Record<string, unknown>,
     actorKind: CommandActorKind = 'human',
+    sourceEnvelope?: CommandEnvelope,
   ): CommandBusResult {
-    const command_id = crypto.randomUUID()
-    const now = new Date().toISOString()
+    const command_id = sourceEnvelope?.command_id ?? crypto.randomUUID()
+    const now = sourceEnvelope?.timestamp ?? new Date().toISOString()
     const reject = (message: string, status: 'rejected' | 'failed' = 'rejected'): CommandBusResult => ({
       result: { status, command_id, command_name: commandName, affected_object_ids: [], errors: [message] },
       updatedProject: project,
@@ -110,8 +113,9 @@ export class CommandBus {
       const updated = structuredClone(project)
       const payload = structuredClone(input)
       const envelope: CommandEnvelope = {
-        command_id, name: commandName, version: 1, project_id: project.project.id,
-        timestamp: now, actor: { kind: actorKind }, input: payload,
+        command_id, name: commandName, version: sourceEnvelope?.version ?? 1, project_id: project.project.id,
+        timestamp: now, actor: { ...(sourceEnvelope?.actor ?? {}), kind: actorKind }, input: payload,
+        ...(sourceEnvelope?.transaction_id ? { transaction_id: sourceEnvelope.transaction_id } : {}),
       }
       const context: CommandHandlerContext = {
         project, updated, commandName, input: payload, command_id, now, envelope,
@@ -203,7 +207,16 @@ export class CommandBus {
         const moduleErrors = extensionModules.validate(response.updatedProject)
           .filter(issue => issue.severity === 'error')
         if (moduleErrors.length) return reject(moduleErrors.map(issue => `${issue.code}: ${issue.message}`).join('\n'))
-        return response
+        const committed = response.emittedEnvelope ?? envelope
+        return {
+          ...response,
+          committedEnvelope: {
+            ...committed,
+            actor: sourceEnvelope?.actor ?? committed.actor,
+            input: structuredClone(committed.input),
+            ...(sourceEnvelope?.transaction_id ? { transaction_id: sourceEnvelope.transaction_id } : {}),
+          },
+        }
       }
       return reject(`Unknown command: ${commandName}`)
     } catch (error: unknown) {
@@ -217,10 +230,11 @@ export class CommandBus {
     commandName: string,
     input: Record<string, unknown>,
     actorKind: CommandActorKind = 'human',
+    sourceEnvelope?: CommandEnvelope,
   ): Promise<CommandBusResult> {
-    if (!extensionModules.hasCommand(commandName)) return this.execute(project, commandName, input, actorKind)
-    const command_id = crypto.randomUUID()
-    const now = new Date().toISOString()
+    if (!extensionModules.hasCommand(commandName)) return this.execute(project, commandName, input, actorKind, sourceEnvelope)
+    const command_id = sourceEnvelope?.command_id ?? crypto.randomUUID()
+    const now = sourceEnvelope?.timestamp ?? new Date().toISOString()
     const reject = (message: string, status: 'rejected' | 'failed' = 'rejected'): CommandBusResult => ({
       result: { status, command_id, command_name: commandName, affected_object_ids: [], errors: [message] },
       updatedProject: project,
@@ -235,8 +249,9 @@ export class CommandBus {
       if (commandName.startsWith('Create') && typeof input.id === 'string' && input.id && project.objects[input.id]) return reject(`Object UUID ${input.id} already exists`)
       const payload = structuredClone(input)
       const envelope: CommandEnvelope = {
-        command_id, name: commandName, version: 1, project_id: project.project.id,
-        timestamp: now, actor: { kind: actorKind }, input: payload,
+        command_id, name: commandName, version: sourceEnvelope?.version ?? 1, project_id: project.project.id,
+        timestamp: now, actor: { ...(sourceEnvelope?.actor ?? {}), kind: actorKind }, input: payload,
+        ...(sourceEnvelope?.transaction_id ? { transaction_id: sourceEnvelope.transaction_id } : {}),
       }
       const context: CommandHandlerContext = { project, updated: structuredClone(project), commandName, input: payload, command_id, now, envelope }
       const response = await extensionModules.executeAsync(context)
@@ -248,6 +263,13 @@ export class CommandBus {
       validateConstructionProject(response.updatedProject)
       const moduleErrors = extensionModules.validate(response.updatedProject).filter(issue => issue.severity === 'error')
       if (moduleErrors.length) return reject(moduleErrors.map(issue => `${issue.code}: ${issue.message}`).join('\n'))
+      const committed = response.emittedEnvelope ?? envelope
+      response.committedEnvelope = {
+        ...committed,
+        actor: sourceEnvelope?.actor ?? committed.actor,
+        input: structuredClone(committed.input),
+        ...(sourceEnvelope?.transaction_id ? { transaction_id: sourceEnvelope.transaction_id } : {}),
+      }
       return response
     } catch (error: unknown) {
       return reject(error instanceof Error ? error.message : String(error), 'failed')
@@ -262,6 +284,7 @@ export class CommandBus {
     const transaction_id = crypto.randomUUID()
     const results: CommandBatchResult['results'] = []
     const emittedEnvelopes: CommandEnvelope[] = []
+    const committedEnvelopes: CommandEnvelope[] = []
     let current = project
     for (const [index, command] of commands.entries()) {
       const response = this.execute(current, command.name, command.input, actorKind)
@@ -269,13 +292,64 @@ export class CommandBus {
       if (response.result.status !== 'success') {
         return {
           transaction_id, status: response.result.status, updatedProject: project,
-          results, emittedEnvelopes: [], failed_command_index: index, errors: response.result.errors,
+          results, emittedEnvelopes: [], committedEnvelopes: [], failed_command_index: index, errors: response.result.errors,
         }
       }
       current = response.updatedProject
       if (response.emittedEnvelope) emittedEnvelopes.push({ ...response.emittedEnvelope, transaction_id })
+      if (response.committedEnvelope) committedEnvelopes.push({ ...response.committedEnvelope, transaction_id })
     }
-    return { transaction_id, status: 'success', updatedProject: current, results, emittedEnvelopes }
+    return { transaction_id, status: 'success', updatedProject: current, results, emittedEnvelopes, committedEnvelopes }
+  }
+
+  /** Replay a server-ordered command transaction through the same validators and domain handlers. */
+  static executeEnvelopeBatch(project: ProjectDocument, envelopes: readonly CommandEnvelope[], actorKind: CommandActorKind = 'sync'): CommandBatchResult {
+    const transaction_id = envelopes[0]?.transaction_id ?? crypto.randomUUID()
+    if (!envelopes.length || envelopes.length > 500 || envelopes.some(envelope => envelope.project_id !== project.project.id
+      || envelope.transaction_id && envelope.transaction_id !== transaction_id)) {
+      return { transaction_id, status: 'rejected', updatedProject: project, results: [], emittedEnvelopes: [], committedEnvelopes: [], errors: ['Remote command transaction has invalid project or transaction identity'] }
+    }
+    const results: CommandBatchResult['results'] = []
+    const emittedEnvelopes: CommandEnvelope[] = []
+    const committedEnvelopes: CommandEnvelope[] = []
+    let current = project
+    for (const [index, envelope] of envelopes.entries()) {
+      const response = this.execute(current, envelope.name, envelope.input, actorKind, envelope)
+      results.push(response.result)
+      if (response.result.status !== 'success') return {
+        transaction_id, status: response.result.status, updatedProject: project, results,
+        emittedEnvelopes: [], committedEnvelopes: [], failed_command_index: index, errors: response.result.errors,
+      }
+      current = response.updatedProject
+      if (response.emittedEnvelope) emittedEnvelopes.push({ ...response.emittedEnvelope, transaction_id })
+      if (response.committedEnvelope) committedEnvelopes.push({ ...response.committedEnvelope, transaction_id })
+    }
+    return { transaction_id, status: 'success', updatedProject: current, results, emittedEnvelopes, committedEnvelopes }
+  }
+
+  /** Asynchronous counterpart for remote batches that include sandboxed extension commands. */
+  static async executeEnvelopeBatchAsync(project: ProjectDocument, envelopes: readonly CommandEnvelope[], actorKind: CommandActorKind = 'sync'): Promise<CommandBatchResult> {
+    const transaction_id = envelopes[0]?.transaction_id ?? crypto.randomUUID()
+    if (!envelopes.length || envelopes.length > 500 || envelopes.some(envelope => envelope.project_id !== project.project.id
+      || envelope.transaction_id && envelope.transaction_id !== transaction_id)) {
+      return { transaction_id, status: 'rejected', updatedProject: project, results: [], emittedEnvelopes: [], committedEnvelopes: [], errors: ['Remote command transaction has invalid project or transaction identity'] }
+    }
+    const results: CommandBatchResult['results'] = []
+    const emittedEnvelopes: CommandEnvelope[] = []
+    const committedEnvelopes: CommandEnvelope[] = []
+    let current = project
+    for (const [index, envelope] of envelopes.entries()) {
+      const response = await this.executeAsync(current, envelope.name, envelope.input, actorKind, envelope)
+      results.push(response.result)
+      if (response.result.status !== 'success') return {
+        transaction_id, status: response.result.status, updatedProject: project, results,
+        emittedEnvelopes: [], committedEnvelopes: [], failed_command_index: index, errors: response.result.errors,
+      }
+      current = response.updatedProject
+      if (response.emittedEnvelope) emittedEnvelopes.push({ ...response.emittedEnvelope, transaction_id })
+      if (response.committedEnvelope) committedEnvelopes.push({ ...response.committedEnvelope, transaction_id })
+    }
+    return { transaction_id, status: 'success', updatedProject: current, results, emittedEnvelopes, committedEnvelopes }
   }
 
   static async executeBatchAsync(
@@ -286,18 +360,20 @@ export class CommandBus {
     const transaction_id = crypto.randomUUID()
     const results: CommandBatchResult['results'] = []
     const emittedEnvelopes: CommandEnvelope[] = []
+    const committedEnvelopes: CommandEnvelope[] = []
     let current = project
     for (const [index, command] of commands.entries()) {
       const response = await this.executeAsync(current, command.name, command.input, actorKind)
       results.push(response.result)
       if (response.result.status !== 'success') return {
         transaction_id, status: response.result.status, updatedProject: project,
-        results, emittedEnvelopes: [], failed_command_index: index, errors: response.result.errors,
+        results, emittedEnvelopes: [], committedEnvelopes: [], failed_command_index: index, errors: response.result.errors,
       }
       current = response.updatedProject
       if (response.emittedEnvelope) emittedEnvelopes.push({ ...response.emittedEnvelope, transaction_id })
+      if (response.committedEnvelope) committedEnvelopes.push({ ...response.committedEnvelope, transaction_id })
     }
-    return { transaction_id, status: 'success', updatedProject: current, results, emittedEnvelopes }
+    return { transaction_id, status: 'success', updatedProject: current, results, emittedEnvelopes, committedEnvelopes }
   }
 }
 
@@ -305,6 +381,12 @@ export class CommandBus {
 export interface ProjectCommandHistorySnapshot {
   past: ProjectDocument[]
   future: ProjectDocument[]
+}
+
+export interface ProjectHistoryTravelResult {
+  project: ProjectDocument
+  /** Present when the travel could be represented as a validated, replayable CommandBus delta. */
+  commandResult?: CommandBatchResult
 }
 
 export class ProjectCommandSession {
@@ -323,6 +405,7 @@ export class ProjectCommandSession {
     }
   }
   get project(): ProjectDocument { return structuredClone(this.current) }
+  get snapshotRevision(): number { return this.revision }
   get canUndo(): boolean { return this.past.length > 0 }
   get canRedo(): boolean { return this.future.length > 0 }
   get historySnapshot(): ProjectCommandHistorySnapshot {
@@ -356,6 +439,50 @@ export class ProjectCommandSession {
     return { ...response, updatedProject: structuredClone(response.updatedProject) }
   }
 
+  /** Apply a server ordered transaction as one undo entry, using the same command validators. */
+  executeEnvelopes(envelopes: readonly CommandEnvelope[], actorKind: CommandActorKind = 'sync'): CommandBatchResult {
+    const response = CommandBus.executeEnvelopeBatch(this.current, envelopes, actorKind)
+    if (response.status === 'success' && envelopes.length > 0) {
+      this.past.push(this.current)
+      this.current = structuredClone(response.updatedProject)
+      this.future = []
+      this.revision += 1
+    }
+    return { ...response, updatedProject: structuredClone(response.updatedProject) }
+  }
+
+  executeEnvelopesAsync(envelopes: readonly CommandEnvelope[], actorKind: CommandActorKind = 'sync', expectedRevision?: number): Promise<CommandBatchResult> {
+    const run = this.asyncTail.then(async () => {
+      if (expectedRevision !== undefined && this.revision !== expectedRevision) return {
+        transaction_id: envelopes[0]?.transaction_id ?? crypto.randomUUID(),
+        status: 'rejected' as const,
+        updatedProject: structuredClone(this.current),
+        results: [], emittedEnvelopes: [], committedEnvelopes: [],
+        errors: ['Project changed after remote command preview; retry sync against the new local state.'],
+      }
+      const revisionAtStart = this.revision
+      const baseline = structuredClone(this.current)
+      const response = await CommandBus.executeEnvelopeBatchAsync(baseline, envelopes, actorKind)
+      if (this.revision !== revisionAtStart) return {
+        ...response,
+        status: 'rejected' as const,
+        updatedProject: structuredClone(this.current),
+        emittedEnvelopes: [],
+        committedEnvelopes: [],
+        errors: ['Project changed while the remote command transaction was being validated; retry sync.'],
+      }
+      if (response.status === 'success' && envelopes.length > 0) {
+        this.past.push(this.current)
+        this.current = structuredClone(response.updatedProject)
+        this.future = []
+        this.revision += 1
+      }
+      return { ...response, updatedProject: structuredClone(response.updatedProject) }
+    })
+    this.asyncTail = run.then(() => undefined, () => undefined)
+    return run
+  }
+
   executeAsync(commands: readonly CommandRequest[], actorKind: CommandActorKind = 'human'): Promise<CommandBatchResult> {
     const run = this.asyncTail.then(async () => {
       const revisionAtStart = this.revision
@@ -366,6 +493,7 @@ export class ProjectCommandSession {
         status: 'rejected' as const,
         updatedProject: structuredClone(this.current),
         emittedEnvelopes: [],
+        committedEnvelopes: [],
         errors: ['Project changed while the extension command was running; review and retry it.'],
       }
       if (response.status === 'success' && commands.length > 0) {
@@ -386,9 +514,42 @@ export class ProjectCommandSession {
     return this.project
   }
 
+  undoWithHistoryDelta(): ProjectHistoryTravelResult | null {
+    const previous = this.past.pop()
+    if (!previous) return null
+    const from = this.current
+    this.future.push(this.current)
+    return this.travelWithHistoryDelta(from, previous)
+  }
+
   redo(): ProjectDocument {
     const next = this.future.pop()
     if (next) { this.past.push(this.current); this.current = next; this.revision += 1 }
     return this.project
+  }
+
+  redoWithHistoryDelta(): ProjectHistoryTravelResult | null {
+    const next = this.future.pop()
+    if (!next) return null
+    const from = this.current
+    this.past.push(this.current)
+    return this.travelWithHistoryDelta(from, next)
+  }
+
+  private travelWithHistoryDelta(from: ProjectDocument, target: ProjectDocument): ProjectHistoryTravelResult {
+    try {
+      const input = buildProjectHistoryDeltaInput(from, target)
+      const commandResult = CommandBus.executeBatch(from, [{ name: 'ApplyProjectHistoryDelta', input: input as unknown as Record<string, unknown> }], 'human')
+      if (commandResult.status === 'success' && matchesProjectHistoryTarget(commandResult.updatedProject, target)) {
+        this.current = structuredClone(commandResult.updatedProject)
+        this.revision += 1
+        return { project: this.project, commandResult }
+      }
+    } catch {
+      // Large or unsupported history changes still travel locally; the editor keeps live sync paused.
+    }
+    this.current = structuredClone(target)
+    this.revision += 1
+    return { project: this.project }
   }
 }

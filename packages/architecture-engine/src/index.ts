@@ -1,4 +1,4 @@
-import { SmartObject, WallModuleData, DoorModuleData, WindowModuleData, DoorHanding, CATALOG_PARAMETER_FIELDS, resolveCatalogType, catalogInstanceOverrides, isWallObject, isDoorObject, isWindowObject, getLevelElevation, resolveOpeningVerticalExtent, resolveWallVerticalExtent, resolveStairVerticalExtent, validateDoorFaceComponents, validateOpeningPlanSymbolLines } from '@constructflow/project-model'
+import { SmartObject, WallModuleData, WallCurveGeometry, DoorModuleData, WindowModuleData, DoorHanding, CATALOG_PARAMETER_FIELDS, resolveCatalogType, catalogInstanceOverrides, isWallObject, isDoorObject, isWindowObject, getLevelElevation, resolveOpeningVerticalExtent, resolveWallVerticalExtent, resolveStairVerticalExtent, validateDoorFaceComponents, validateOpeningPlanSymbolLines, isValidWallCurveGeometry, wallArcEndpointsMm, wallCenterlineLengthMm, wallCenterlinePointAtOffsetMm, wallCenterlinePointsMm, projectPointToWallCenterlineMm } from '@constructflow/project-model'
 import { CreateWallInput, MoveWallInput, UpdateWallEndpointsInput, MoveOpeningInput, RehostOpeningInput, UpdateWallMarkInput, UpdateWallDimensionsInput, CreateDoorInput, UpdateDoorMarkInput, UpdateDoorDimensionsInput, FlipDoorHandingInput, CreateWindowInput, UpdateWindowMarkInput, UpdateWindowDimensionsInput, UpdateOpeningInstanceParametersInput } from '@constructflow/command-schema'
 
 import { CommandHandlerContext, CommandBusResult } from '@constructflow/command-schema'
@@ -18,17 +18,17 @@ function resolveOpeningResizePlacement(
   if (offset_along_wall_mm === undefined) return {}
   const wall = project.objects[data.wall_id]
   if (!wall || !isWallObject(wall)) throw new Error('Opening host wall not found')
-  const start = wall.module_data.start_point_mm, end = wall.module_data.end_point_mm
-  const dx = end[0] - start[0], dy = end[1] - start[1]
-  const length = Math.hypot(dx, dy)
+  const wallData = wall.module_data
+  const start = wallData.start_point_mm
+  const length = wallCenterlineLengthMm(wallData)
   if (![width_mm, offset_along_wall_mm, length].every(Number.isFinite) || width_mm <= 0 || length <= 0
     || offset_along_wall_mm - width_mm / 2 < -1 || offset_along_wall_mm + width_mm / 2 > length + 1) {
     throw new Error('Resized opening does not fit within its host wall')
   }
-  const ratio = offset_along_wall_mm / length
+  const point = wallCenterlinePointAtOffsetMm(wallData, offset_along_wall_mm).point_mm
   return {
     offset_along_wall_mm,
-    location_mm: [start[0] + dx * ratio, start[1] + dy * ratio, data.location_mm[2] ?? start[2] ?? 0],
+    location_mm: [point[0], point[1], data.location_mm[2] ?? point[2] ?? start[2] ?? 0],
   }
 }
 
@@ -154,9 +154,14 @@ export function detectClosedWallRooms(project: ProjectDocument, levelId: string,
     const start = data.start_point_mm as number[] | undefined
     const end = data.end_point_mm as number[] | undefined
     if (!start || !end || ![start[0], start[1], end[0], end[1]].every(Number.isFinite)) continue
-    const a: [number, number] = [start[0], start[1]], b: [number, number] = [end[0], end[1]]
-    if (Math.hypot(b[0] - a[0], b[1] - a[1]) <= toleranceMm) continue
-    segments.push({ a, b, splits: [0, 1] })
+    const centerline = object.object_type === 'architecture.wall'
+      ? wallCenterlinePointsMm(object.module_data as unknown as WallModuleData, Math.max(2, toleranceMm / 2))
+      : [start, end]
+    for (let index = 1; index < centerline.length; index += 1) {
+      const previous = centerline[index - 1]!, next = centerline[index]!
+      const a: [number, number] = [previous[0], previous[1]], b: [number, number] = [next[0], next[1]]
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) > toleranceMm * 0.25) segments.push({ a, b, splits: [0, 1] })
+    }
   }
   const cross = (a: [number, number], b: [number, number]) => a[0] * b[1] - a[1] * b[0]
   const clamp01 = (value: number) => Math.max(0, Math.min(1, value))
@@ -342,6 +347,8 @@ function createArchitectureObject(context: CommandHandlerContext, family: string
 
 export function refreshWallDerivedRooms(context: CommandHandlerContext, levelIds: string[], createMissing = false) {
   const { updated, now } = context
+  const plannedCreatedIds = Array.isArray(context.input.created_room_ids) ? context.input.created_room_ids : null
+  if (plannedCreatedIds && plannedCreatedIds.some(id => typeof id !== 'string' || !id.trim())) throw new Error('Wall command contains invalid derived room UUIDs')
   const result = { created: [] as string[], updated: [] as string[], updatedObjects: [] as string[], affected: [] as string[] }
   for (const levelId of new Set(levelIds)) {
     if (!updated.levels.some(level => level.id === levelId)) continue
@@ -376,7 +383,10 @@ export function refreshWallDerivedRooms(context: CommandHandlerContext, levelIds
       if (!createMissing || existing.has(key)) continue
       let roomNumber = 1
       while (usedRoomNumbers.has(String(roomNumber)) || usedRoomMarks.has(`R${roomNumber}`)) roomNumber++
-      const id = crypto.randomUUID(), name = String(context.input.default_name ?? 'Room')
+      const id = plannedCreatedIds ? plannedCreatedIds[result.created.length] : crypto.randomUUID()
+      if (plannedCreatedIds && typeof id !== 'string') throw new Error('The remote wall edit no longer creates the same derived rooms; synchronize the project revision first')
+      if (updated.objects[id]) throw new Error(`Derived room UUID ${id} already exists`)
+      const name = String(context.input.default_name ?? 'Room')
       const input = { id, level_id: levelId, mark: `R${roomNumber}`, name: `${name} ${roomNumber}`, number: String(roomNumber), boundary_mm: boundary, area_mm2: nextMetrics.area, boundary_source: 'walls', boundary_status: 'closed' }
       const objectResult = createArchitectureObject({ ...context, commandName: 'RefreshWallDerivedRooms', input }, 'architecture.room', 'constructflow.architecture', input, false)
       result.created.push(id)
@@ -405,6 +415,7 @@ export function refreshWallDerivedRooms(context: CommandHandlerContext, levelIds
   result.updated = [...new Set(result.updated)]
   result.updatedObjects = [...new Set(result.updatedObjects)]
   result.affected = [...new Set(result.affected)]
+  if (plannedCreatedIds && result.created.length !== plannedCreatedIds.length) throw new Error('The remote wall edit creates a different number of rooms; synchronize the project revision first')
   return result
 }
 
@@ -444,14 +455,15 @@ export function projectPointToWallOffsetMm(
   start_point_mm: [number, number],
   end_point_mm: [number, number],
   opening_width_mm: number,
+  curve_geometry?: WallCurveGeometry,
 ): number | undefined {
   if (![...point_mm, ...start_point_mm, ...end_point_mm, opening_width_mm].every(Number.isFinite) || opening_width_mm <= 0) return undefined
-  const dx = end_point_mm[0] - start_point_mm[0]
-  const dy = end_point_mm[1] - start_point_mm[1]
-  const length = Math.hypot(dx, dy)
+  const wall = { start_point_mm: [...start_point_mm, 0] as [number, number, number], end_point_mm: [...end_point_mm, 0] as [number, number, number], curve_geometry }
+  const projected = projectPointToWallCenterlineMm(point_mm, wall)
+  const length = wallCenterlineLengthMm(wall)
   if (!Number.isFinite(length) || length < opening_width_mm) return undefined
-  const projected = ((point_mm[0] - start_point_mm[0]) * dx + (point_mm[1] - start_point_mm[1]) * dy) / length
-  return Math.max(opening_width_mm / 2, Math.min(length - opening_width_mm / 2, projected))
+  if (!projected) return undefined
+  return Math.max(opening_width_mm / 2, Math.min(length - opening_width_mm / 2, projected.offset_along_wall_mm))
 }
 
 /** Domain-owned lifecycle query; the transaction runtime performs generic deletion. */
@@ -561,9 +573,10 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const wallData = target.module_data
       const start: [number, number, number] = [wallData.start_point_mm[0] + dx, wallData.start_point_mm[1] + dy, wallData.start_point_mm[2] ?? 0]
       const end: [number, number, number] = [wallData.end_point_mm[0] + dx, wallData.end_point_mm[1] + dy, wallData.end_point_mm[2] ?? 0]
+      const curve_geometry = wallData.curve_geometry ? { ...wallData.curve_geometry, center_mm: [wallData.curve_geometry.center_mm[0] + dx, wallData.curve_geometry.center_mm[1] + dy] as [number, number] } : undefined
       updated.objects[target.id] = {
         ...target,
-        module_data: { ...wallData, start_point_mm: start, end_point_mm: end },
+        module_data: { ...wallData, start_point_mm: start, end_point_mm: end, ...(curve_geometry ? { curve_geometry } : {}) },
         updated_at: now,
       }
       const affected = [target.id]
@@ -588,23 +601,42 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const update = input as unknown as UpdateWallEndpointsInput
       const target = updated.objects[update.object_id]
       if (!target || !isWallObject(target)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Wall UUID ${update.object_id} not found`] }, updatedProject: project }
-      const [sx, sy] = update.start_point_mm, [ex, ey] = update.end_point_mm
-      if (![sx, sy, ex, ey].every(Number.isFinite) || Math.hypot(ex - sx, ey - sy) < 1) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Wall endpoints must define a finite span of at least 1 mm'] }, updatedProject: project }
       const old = target.module_data
+      const curve = update.curve_geometry
+      if (old.curve_geometry && !curve) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['A curved wall edit must preserve its curve geometry'] }, updatedProject: project }
+      if (curve && !isValidWallCurveGeometry(curve)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Wall circular curve geometry is invalid'] }, updatedProject: project }
+      const [inputSx, inputSy] = update.start_point_mm, [inputEx, inputEy] = update.end_point_mm
+      if (![inputSx, inputSy, inputEx, inputEy].every(Number.isFinite)) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Wall endpoints must contain finite X/Y values'] }, updatedProject: project }
+      let sx = inputSx, sy = inputSy, ex = inputEx, ey = inputEy
+      if (curve) {
+        const [curveStart, curveEnd] = wallArcEndpointsMm(curve, old.start_point_mm[2] ?? 0, old.end_point_mm[2] ?? 0)
+        if (Math.hypot(inputSx - curveStart[0], inputSy - curveStart[1]) > 1.5 || Math.hypot(inputEx - curveEnd[0], inputEy - curveEnd[1]) > 1.5) {
+          return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Wall endpoints do not match the supplied curve geometry'] }, updatedProject: project }
+        }
+        sx = curveStart[0]; sy = curveStart[1]; ex = curveEnd[0]; ey = curveEnd[1]
+      }
+      if (Math.hypot(ex - sx, ey - sy) < 1) return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: ['Wall endpoints must define a finite span of at least 1 mm'] }, updatedProject: project }
       const start: [number, number, number] = [sx, sy, old.start_point_mm[2] ?? 0]
       const end: [number, number, number] = [ex, ey, old.end_point_mm[2] ?? 0]
-      const exactLengthMm = Math.hypot(ex - sx, ey - sy)
+      const exactLengthMm = wallCenterlineLengthMm({ start_point_mm: start, end_point_mm: end, curve_geometry: curve })
+      const nextWallData = { ...old, start_point_mm: start, end_point_mm: end, ...(curve ? { curve_geometry: structuredClone(curve) } : {}) }
+      if (!curve) delete (nextWallData as Partial<typeof nextWallData>).curve_geometry
+      for (const opening of Object.values(updated.objects)) {
+        if ((!isDoorObject(opening) && !isWindowObject(opening)) || opening.module_data.wall_id !== target.id) continue
+        const width = opening.module_data.width_mm
+        const offset = opening.module_data.offset_along_wall_mm
+        if (offset - width / 2 < -1 || offset + width / 2 > exactLengthMm + 1) {
+          return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Opening ${opening.id} no longer fits within the edited wall`] }, updatedProject: project }
+        }
+      }
       const length_mm = Math.round(exactLengthMm)
-      updated.objects[target.id] = { ...target, module_data: { ...old, start_point_mm: start, end_point_mm: end, length_mm }, updated_at: now }
+      updated.objects[target.id] = { ...target, module_data: { ...nextWallData, length_mm }, updated_at: now }
       const affected = [target.id]
       for (const opening of Object.values(updated.objects)) {
         if ((!isDoorObject(opening) && !isWindowObject(opening)) || opening.module_data.wall_id !== target.id) continue
         const offset = opening.module_data.offset_along_wall_mm
-        // The offset is a physical distance from the wall start, not a normalized
-        // fraction of its rounded catalog length. Use the exact endpoint span so
-        // diagonal walls and fractional-millimeter endpoints do not drift.
-        const ratio = offset / exactLengthMm
-        const location: [number, number, number] = [sx + (ex - sx) * ratio, sy + (ey - sy) * ratio, opening.module_data.location_mm[2] ?? 0]
+        const point = wallCenterlinePointAtOffsetMm(nextWallData, offset).point_mm
+        const location: [number, number, number] = [point[0], point[1], opening.module_data.location_mm[2] ?? point[2] ?? 0]
         updated.objects[opening.id] = { ...opening, module_data: { ...opening.module_data, location_mm: location }, updated_at: now }
         affected.push(opening.id)
       }
@@ -641,22 +673,16 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           ?? resolveCatalogType(project, target.object_type, openingData.type_id ?? openingData.mark)?.parameters.width_mm,
         0,
       )
-      const dx = wallData.end_point_mm[0] - wallData.start_point_mm[0]
-      const dy = wallData.end_point_mm[1] - wallData.start_point_mm[1]
-      const wallLength = Math.hypot(dx, dy)
+      const wallLength = wallCenterlineLengthMm(wallData)
       if (!width || !Number.isFinite(wallLength) || wallLength <= 0 || move.offset_along_wall_mm - width / 2 < -1 || move.offset_along_wall_mm + width / 2 > wallLength + 1) {
         return {
           result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Opening ${move.object_id} does not fit within host wall ${wall.id}`] },
           updatedProject: project,
         }
       }
-      const ratio = move.offset_along_wall_mm / wallLength
       const currentLocation = openingData.location_mm
-      const location_mm: [number, number, number] = [
-        wallData.start_point_mm[0] + dx * ratio,
-        wallData.start_point_mm[1] + dy * ratio,
-        currentLocation[2] ?? wallData.start_point_mm[2] ?? 0,
-      ]
+      const projected = wallCenterlinePointAtOffsetMm(wallData, move.offset_along_wall_mm).point_mm
+      const location_mm: [number, number, number] = [projected[0], projected[1], currentLocation[2] ?? projected[2]]
       updated.objects[target.id] = {
         ...target,
         updated_at: now,
@@ -692,9 +718,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           ?? resolveCatalogType(project, target.object_type, openingData.type_id ?? openingData.mark)?.parameters.width_mm,
         0,
       )
-      const dx = wallData.end_point_mm[0] - wallData.start_point_mm[0]
-      const dy = wallData.end_point_mm[1] - wallData.start_point_mm[1]
-      const wallLength = Math.hypot(dx, dy)
+      const wallLength = wallCenterlineLengthMm(wallData)
       if (!Number.isFinite(rehost.offset_along_wall_mm) || !Number.isFinite(wallLength) || !width || wallLength <= 0
         || rehost.offset_along_wall_mm - width / 2 < -1 || rehost.offset_along_wall_mm + width / 2 > wallLength + 1) {
         return { result: { status: 'rejected', command_id, command_name: commandName, affected_object_ids: [], errors: [`Opening ${rehost.object_id} does not fit within target host wall ${wall.id}`] }, updatedProject: project }
@@ -718,12 +742,8 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       }
 
       const oldWallId = openingData.wall_id
-      const ratio = rehost.offset_along_wall_mm / wallLength
-      const location_mm: [number, number, number] = [
-        wallData.start_point_mm[0] + dx * ratio,
-        wallData.start_point_mm[1] + dy * ratio,
-        openingData.location_mm[2] ?? wallData.start_point_mm[2] ?? 0,
-      ]
+      const projected = wallCenterlinePointAtOffsetMm(wallData, rehost.offset_along_wall_mm).point_mm
+      const location_mm: [number, number, number] = [projected[0], projected[1], openingData.location_mm[2] ?? projected[2]]
       updated.relationships = updated.relationships.filter(relationship => !(
         (relationship.kind === 'hosted_on' && relationship.source_id === target.id && relationship.target_id === oldWallId)
         || (relationship.kind === 'hosts' && relationship.source_id === oldWallId && relationship.target_id === target.id)
@@ -754,8 +774,12 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
       const legacyInput = wallInput as CreateWallInput & { start_node_mm?: [number, number, number]; end_node_mm?: [number, number, number] }
       const rawStart = wallInput.start_point_mm || legacyInput.start_node_mm || [0, 0, 0]
       const rawEnd = wallInput.end_point_mm || legacyInput.end_node_mm || [0, 0, 0]
-      const start_point_mm: [number, number, number] = [rawStart[0], rawStart[1], rawStart[2] ?? 0]
-      const end_point_mm: [number, number, number] = [rawEnd[0], rawEnd[1], rawEnd[2] ?? 0]
+      let start_point_mm: [number, number, number] = [rawStart[0], rawStart[1], rawStart[2] ?? 0]
+      let end_point_mm: [number, number, number] = [rawEnd[0], rawEnd[1], rawEnd[2] ?? 0]
+      if (wallInput.curve_geometry !== undefined) {
+        if (!isValidWallCurveGeometry(wallInput.curve_geometry)) throw new Error('Wall circular curve geometry is invalid')
+        ;[start_point_mm, end_point_mm] = wallArcEndpointsMm(wallInput.curve_geometry, start_point_mm[2], end_point_mm[2])
+      }
       const inheritedWall = wallInput.inherit_joined_wall_constraint && wallInput.top_level_id === undefined && wallInput.height_mm === undefined
         ? Object.values(project.objects)
           .filter(object => object.object_type === 'architecture.wall' && object.status !== 'archived' && !object.removed_phase)
@@ -811,9 +835,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
         : wallInput.height_mm ?? inheritedWall?.height_mm ?? positiveCatalogNumber(typeDef?.parameters.height_mm, 2800)
       if (!Number.isFinite(height_mm) || height_mm <= 0) throw new Error('Wall top level must be above its base level')
       const material = wallInput.material || catalogString(typeDef?.parameters.material, 'brick_masonry')
-      const dx = end_point_mm[0] - start_point_mm[0]
-      const dy = end_point_mm[1] - start_point_mm[1]
-      const length_mm = Math.round(Math.sqrt(dx * dx + dy * dy))
+      const length_mm = Math.round(wallCenterlineLengthMm({ start_point_mm, end_point_mm, curve_geometry: wallInput.curve_geometry }))
       const instance_overrides = catalogInstanceOverrides('architecture.wall', {
         thickness_mm, height_mm, material,
         ...(hasLayerAssembly ? {
@@ -854,6 +876,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
           type_id: typeDef?.id,
           instance_overrides,
           start_point_mm,
+          ...(wallInput.curve_geometry ? { curve_geometry: structuredClone(wallInput.curve_geometry) } : {}),
           fit_to_stair: wallInput.fit_to_stair,
           end_point_mm,
           thickness_mm,
@@ -897,6 +920,7 @@ export function executeArchitectureCommand(context: CommandHandlerContext): Comm
             mark,
             level_id,
             path_mm: [start_point_mm, end_point_mm],
+            ...(wallInput.curve_geometry ? { curve_geometry: structuredClone(wallInput.curve_geometry) } : {}),
             thickness_mm: wallInput.thickness_mm || 100,
             height_mm: wallInput.height_mm || 2800,
             length_mm,

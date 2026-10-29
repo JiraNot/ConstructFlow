@@ -1,5 +1,5 @@
 import type { ProjectDocument } from '@constructflow/project-model'
-import type { StairModuleData } from '@constructflow/project-model'
+import type { StairModuleData, WallCurveGeometry } from '@constructflow/project-model'
 import type { CommandRequest } from '@constructflow/command-schema'
 
 export interface DirectManipulationPreviewResult {
@@ -20,6 +20,8 @@ export interface PlanDragGesture {
   roofSeamGripMm?: [number, number]
   startPointMm?: [number, number]
   endPointMm?: [number, number]
+  curveGeometry?: WallCurveGeometry
+  nextCurveGeometry?: WallCurveGeometry
   boundaryPointsMm?: [number, number][]
   edgeStartMm?: [number, number]
   edgeNormalMm?: [number, number]

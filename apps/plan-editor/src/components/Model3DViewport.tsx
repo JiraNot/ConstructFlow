@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import type { CoordinatedPlanViewport } from '../viewport/viewportTransform.js'
 import type { ProjectDocument } from '@constructflow/project-model'
 import { resolveOpeningMuntinGrid, muntinGridPositions, type OpeningGridZone } from '@constructflow/architecture-engine'
-import { buildProjectRepresentations3D, doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement, type ObjectRepresentation3D, type RepresentationInteraction } from '@constructflow/representation-engine'
+import { buildProjectRepresentations3D, getRepresentationTriangles, doorLeafDetails, sashBeadDetails, openingMaterialAppearance, openingHandlePlacement, type ObjectRepresentation3D, type RepresentationInteraction } from '@constructflow/representation-engine'
 import type { CoordinationFinding } from '@constructflow/clash-engine'
 import { buildCoordinationHighlightGroup, disposeCoordinationHighlightGroup } from '../rendering/coordinationHighlight3d.mjs'
 import { applyRepresentationTransform3D } from '../rendering/modelTransform3d.mjs'
@@ -393,6 +393,21 @@ export function makeObjectMesh(representation: ObjectRepresentation3D): ModelObj
     geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position',new THREE.Float32BufferAttribute(representation.shape.triangles_mm.flat(2).map(mmToM),3))
     geometry.computeVertexNormals()
+  } else if (representation.shape.kind === 'wall_extrusion' && representation.shape.centerline_points_mm) {
+    const cosine = Math.cos(representation.rotation_rad), sine = Math.sin(representation.rotation_rad)
+    const vertices = getRepresentationTriangles(representation).flatMap(triangle => triangle.flatMap(([x, y, z]) => {
+      const dx = x - representation.position_mm[0], dy = y - representation.position_mm[1]
+      const localX = dx * cosine + dy * sine
+      const localY = -dx * sine + dy * cosine
+      return [mmToM(localX), mmToM(z - representation.position_mm[2]), mmToM(-localY)]
+    }))
+    geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
+    geometry.computeVertexNormals()
+    const mesh = new THREE.Mesh(geometry, standardMaterial(objectColor(representation)))
+    mesh.castShadow = true; mesh.receiveShadow = true; root.add(mesh)
+    root.userData = { objectId: representation.object_id, objectType: representation.object_type, interaction: representation.interaction, moveable: representation.interaction.kind !== 'select_only' }
+    return root
   } else if (representation.shape.kind === 'wall_extrusion') {
     const { length_mm, height_mm, thickness_mm, cutouts } = representation.shape
     const length = mmToM(length_mm), height = mmToM(height_mm), thickness = mmToM(thickness_mm)

@@ -46,25 +46,62 @@ export function resolvePlanCanvasReferencePath(start, end, widthMm, placementRef
 }
 
 export function constrainPlanCanvasLineSnap(snap, pointerPoint, start, lockAxis, reference, options) {
-  let constrainedSnap = !lockAxis && !reference && options.lineConstraintMode === 'auto'
+  const axisMode = !lockAxis && options.lineDrawingMode === 'orthogonal'
+  const guidedAngleMode = !lockAxis && options.lineDrawingMode === 'angled'
+  const referenceRelationMode = options.lineConstraintMode === 'parallel' || options.lineConstraintMode === 'perpendicular'
+  const allowManualAngle = !axisMode && !referenceRelationMode
+  const missingRelationReference = guidedAngleMode && referenceRelationMode && !reference
+  let constrainedSnap = !axisMode && !guidedAngleMode && !lockAxis && !reference && options.lineConstraintMode === 'auto'
     ? snapToDrawingAxis(snap, pointerPoint, start, { zoom: options.viewportZoom }) : snap
-  const inferredMode = !lockAxis && options.lineConstraintMode === 'auto' && reference
+  const inferredMode = !axisMode && !lockAxis && options.lineConstraintMode === 'auto' && reference
     ? inferLinearConstraint(pointerPoint, start, reference, 12 / Math.max(options.viewportZoom, 0.0001))
     : null
-  const appliedMode = options.lineConstraintMode === 'auto'
+  const appliedMode = axisMode ? null : options.lineConstraintMode === 'auto'
     ? inferredMode
-    : options.lineConstraintMode === 'none' ? null : options.lineConstraintMode
-  if (!lockAxis && appliedMode && reference) {
+    : options.lineConstraintMode === 'none' || !reference ? null : options.lineConstraintMode
+  if (!axisMode && !lockAxis && appliedMode && reference) {
     constrainedSnap = constrainPointToReference(snap.point_mm, start, reference, appliedMode)
   }
   let dx = constrainedSnap.point_mm[0] - start[0], dy = constrainedSnap.point_mm[1] - start[1]
-  if (lockAxis) {
-    if (Math.abs(dx) >= Math.abs(dy)) dy = 0
+  let axisLocked = lockAxis || axisMode
+  if (axisLocked) {
+    const rawDx = pointerPoint[0] - start[0], rawDy = pointerPoint[1] - start[1]
+    if (Math.abs(rawDx) >= Math.abs(rawDy)) dy = 0
     else dx = 0
+  } else if (guidedAngleMode && !appliedMode && !(allowManualAngle && options.drawAngle.trim())) {
+    // A chosen parallel/perpendicular relation must never degrade into a free
+    // angle when the pointer is outside the reference capture range. Hold the
+    // line to the drafting axes until a nearby wall/beam can define the relation.
+    const angleStepDeg = missingRelationReference ? 90 : Number(options.wallAngleSnapDeg ?? 0)
+    if (angleStepDeg > 0) {
+      const rawDx = pointerPoint[0] - start[0], rawDy = pointerPoint[1] - start[1]
+      const rawLength = Math.hypot(rawDx, rawDy)
+      if (rawLength > 1) {
+        const angle = Math.atan2(rawDy, rawDx)
+        const angleStep = angleStepDeg * Math.PI / 180
+        const snappedAngle = Math.round(angle / angleStep) * angleStep
+        const ux = Math.cos(snappedAngle), uy = Math.sin(snappedAngle)
+        const snappedLength = Math.hypot(constrainedSnap.point_mm[0] - start[0], constrainedSnap.point_mm[1] - start[1])
+        const projectedLength = Math.max(0, rawDx * ux + rawDy * uy)
+        const length = snappedLength > 0 ? snappedLength : projectedLength
+        dx = ux * length
+        dy = uy * length
+
+        // Preserve a real object snap only when it lies on the chosen angular ray.
+        const snapDx = snap.point_mm[0] - start[0], snapDy = snap.point_mm[1] - start[1]
+        const snapLength = Math.hypot(snapDx, snapDy)
+        const snapDeviation = Math.abs(-uy * snapDx + ux * snapDy)
+        const snapToleranceMm = Math.max(80, 10 / Math.max(options.viewportZoom, 0.0001))
+        if (snap.target_id && snapLength > 0 && snapDeviation <= snapToleranceMm && snapDx * ux + snapDy * uy > 0) {
+          dx = snapDx
+          dy = snapDy
+        }
+      }
+    }
   }
   const targetLengthMm = parseLengthMm(options.drawLength, options.displayUnit) ?? Number.NaN
   const targetAngle = Number(options.drawAngle)
-  if (options.drawAngle.trim() && Number.isFinite(targetAngle)) {
+  if (allowManualAngle && options.drawAngle.trim() && Number.isFinite(targetAngle)) {
     const cursorLength = Math.hypot(dx, dy)
     const length = Number.isFinite(targetLengthMm) && targetLengthMm > 0 ? targetLengthMm : cursorLength
     if (length > 0) {
@@ -81,12 +118,14 @@ export function constrainPlanCanvasLineSnap(snap, pointerPoint, start, lockAxis,
   }
   const point_mm = [Math.round(start[0] + dx), Math.round(start[1] + dy)]
   const changed = Math.hypot(point_mm[0] - snap.point_mm[0], point_mm[1] - snap.point_mm[1]) >= 1
-  const constraintApplied = !lockAxis && !!appliedMode && !!reference
+  const constraintApplied = !axisMode && !lockAxis && !!appliedMode && !!reference
+  axisLocked = axisLocked && !(allowManualAngle && options.drawAngle.trim())
+  const angleSnapApplied = guidedAngleMode && !appliedMode && !(allowManualAngle && options.drawAngle.trim()) && (missingRelationReference || Number(options.wallAngleSnapDeg ?? 0) > 0)
   return {
     ...snap,
     point_mm,
     kind: constraintApplied || constrainedSnap !== snap ? constrainedSnap.kind : snap.kind,
     target_id: constraintApplied ? reference?.target_id : changed ? undefined : snap.target_id,
-    description: `${constrainedSnap.description}${options.lineConstraintMode === 'auto' && reference && !inferredMode && !lockAxis ? ' · Auto: เล็งใกล้แนวขนาน/ตั้งฉากเพื่อจัดแนว' : ''}${lockAxis ? ' · Ortho' : ''}${Number.isFinite(targetLengthMm) && targetLengthMm > 0 ? ` · ${formatLengthMm(targetLengthMm, options.displayUnit)} ${options.displayUnit}` : ''}`,
+    description: `${constrainedSnap.description}${axisLocked ? ' · 0°/90°' : angleSnapApplied ? ` · ${missingRelationReference ? '0°/90° จนพบแนวอ้างอิง' : Number(options.wallAngleSnapDeg) + '° snap'}` : ''}${options.lineDrawingMode === 'angled' && options.lineConstraintMode === 'auto' && reference && !inferredMode && !lockAxis ? ' · Auto: เล็งใกล้แนวขนาน/ตั้งฉากเพื่อจัดแนว' : ''}${lockAxis && !axisMode ? ' · Ortho' : ''}${constraintApplied ? ` · ${options.lineConstraintMode === 'perpendicular' ? 'ตั้งฉากกับแนว' : 'ขนานกับแนว'}` : ''}${Number.isFinite(targetLengthMm) && targetLengthMm > 0 ? ` · ${formatLengthMm(targetLengthMm, options.displayUnit)} ${options.displayUnit}` : ''}`,
   }
 }

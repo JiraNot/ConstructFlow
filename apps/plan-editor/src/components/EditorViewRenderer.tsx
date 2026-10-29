@@ -46,6 +46,7 @@ export const EditorViewRenderer: React.FC<EditorViewRendererProps> = ({
   if (mode === 'plan' || mode === 'framing' || mode === 'roofplan') return (
     <PlanCanvas key={mode} {...planCanvasProps}
       activeTool={auxiliary ? 'select' : activeTool}
+      contextualDockEnabled={!auxiliary}
       toolActivation={auxiliary ? undefined : toolActivation}
       planDiscipline={mode === 'framing' ? 'framing' : mode === 'roofplan' ? 'roof' : 'architecture'} />
   )
@@ -62,6 +63,9 @@ export const EditorViewRenderer: React.FC<EditorViewRendererProps> = ({
 
   return <Suspense fallback={<div role="status" style={{ padding: 24, color: '#64748b' }}>กำลังเปิดรูปด้าน…</div>}>
     <ElevationViewRenderer mode={mode} project={project} selectedId={selectedId} selectedIds={selectedIds}
+      displayUnit={planCanvasProps.displayUnit}
+      lengthPrecision={planCanvasProps.preferences.lengthPrecision}
+      elevationPrecision={planCanvasProps.preferences.elevationPrecision}
       onSelectObject={onSelectObject} onSelectionChange={onSelectionChange} underlay={underlay}
       coordination={coordination} navigation={elevationNavigation} onNavigationChange={onElevationNavigationChange}
       planNavigationViewport={planNavigationViewport} onPlanNavigationViewportChange={onPlanNavigationViewportChange}

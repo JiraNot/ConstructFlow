@@ -13,7 +13,7 @@ interface UsePlanTransformCommandsOptions {
   dispatchCommandBatch: (commands: CommandRequest[]) => CommandBatchResult
   setSelectedIds: Dispatch<SetStateAction<string[]>>
   setSelectedId: Dispatch<SetStateAction<string | null>>
-  setRightPanelTab: Dispatch<SetStateAction<'properties' | 'quantities' | 'objects' | 'coordination' | 'ai' | 'extensions'>>
+  setRightPanelTab: Dispatch<SetStateAction<'properties' | 'quantities' | 'objects' | 'field_forms' | 'coordination' | 'ai' | 'extensions' | 'integrations'>>
   setFileFeedback: (message: string) => void
   setViewMode: Dispatch<SetStateAction<EditorView>>
 }

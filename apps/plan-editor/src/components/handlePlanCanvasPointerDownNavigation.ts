@@ -8,6 +8,7 @@ interface PlanCanvasPointerDownNavigationOptions {
   activeTool: string
   viewport: ViewportState
   pointerPositionsRef: MutableRefObject<Map<number, [number, number]>>
+  touchSelectionSnapshotRef: MutableRefObject<{ ids: string[]; primaryId: string | null } | null>
   pinchRef: MutableRefObject<{ distance: number; center: [number, number] } | null>
   pinchActiveRef: MutableRefObject<boolean>
   longPressStartRef: MutableRefObject<{ pointerId: number; point: [number, number] } | null>
@@ -17,10 +18,13 @@ interface PlanCanvasPointerDownNavigationOptions {
   setSelectionBox: (value: null) => void
   setDraggingObject: (value: null) => void
   setIsPanning: (value: boolean) => void
+  cancelActiveGesture: () => void
   setObjectContextMenu: (menu: { id: string; x: number; y: number } | null) => void
   findHitObject: (point: [number, number], cycle?: boolean) => string | null
   onSelectionChange?: (ids: string[], primaryId: string | null) => void
   onSelectObject: (id: string | null) => void
+  selectedIds: string[]
+  selectedId: string | null
   setPointerCapture: (pointerId: number) => void
 }
 
@@ -31,6 +35,7 @@ export function handlePlanCanvasPointerDownNavigation({
   activeTool,
   viewport,
   pointerPositionsRef,
+  touchSelectionSnapshotRef,
   pinchRef,
   pinchActiveRef,
   longPressStartRef,
@@ -40,10 +45,13 @@ export function handlePlanCanvasPointerDownNavigation({
   setSelectionBox,
   setDraggingObject,
   setIsPanning,
+  cancelActiveGesture,
   setObjectContextMenu,
   findHitObject,
   onSelectionChange,
   onSelectObject,
+  selectedIds,
+  selectedId,
   setPointerCapture,
 }: PlanCanvasPointerDownNavigationOptions): boolean {
   const [screenX, screenY] = screenPoint
@@ -62,6 +70,7 @@ export function handlePlanCanvasPointerDownNavigation({
   }
 
   if (event.pointerType === 'touch') {
+    if (pointerPositionsRef.current.size === 0) touchSelectionSnapshotRef.current = { ids: [...selectedIds], primaryId: selectedId }
     pointerPositionsRef.current.set(event.pointerId, screenPoint)
     try { setPointerCapture(event.pointerId) } catch {}
     if (pointerPositionsRef.current.size >= 2) {
@@ -69,8 +78,13 @@ export function handlePlanCanvasPointerDownNavigation({
       longPressTimerRef.current = null
       selectionStartRef.current = null
       setSelectionBox(null)
-      setDraggingObject(null)
-      setIsPanning(false)
+      setObjectContextMenu(null)
+      cancelActiveGesture()
+      const snapshot = touchSelectionSnapshotRef.current
+      if (snapshot) {
+        onSelectionChange?.(snapshot.ids, snapshot.primaryId)
+        onSelectObject(snapshot.primaryId)
+      }
       const points = [...pointerPositionsRef.current.values()]
       pinchRef.current = {
         distance: Math.max(1, Math.hypot(points[0][0] - points[1][0], points[0][1] - points[1][1])),
@@ -101,6 +115,14 @@ export function handlePlanCanvasPointerDownNavigation({
         }
       }, 500)
     }
+  }
+
+  if (activeTool === 'pan' && event.button === 0) {
+    event.preventDefault()
+    setIsPanning(true)
+    panStartRef.current = screenPoint
+    setPointerCapture(event.pointerId)
+    return true
   }
 
   if (event.button === 1) {

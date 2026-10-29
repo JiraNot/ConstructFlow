@@ -15,6 +15,7 @@ interface UsePlanCanvasToolControllerOptions {
   preferences: PlanCanvasPreferences
   onPreferencesChange: PlanCanvasProps['onPreferencesChange']
   activeTool: PlanCanvasProps['activeTool']
+  supplierBundlePlacement: PlanCanvasProps['supplierBundlePlacement']
   selectedId: string | null
   editableSelectionIds: string[]
   selectedIds: string[]
@@ -29,6 +30,7 @@ interface UsePlanCanvasToolControllerOptions {
 /** Owns tool-step feedback, cancellation, and tool-specific global keyboard actions. */
 export function usePlanCanvasToolController({
   project, planProject, preferences, onPreferencesChange, activeTool, selectedId,
+  supplierBundlePlacement,
   editableSelectionIds, selectedIds, placement, pointer, onActivateTool,
   onSelectionChange, onSelectObject, onFlipDoorHanding,
 }: UsePlanCanvasToolControllerOptions) {
@@ -52,8 +54,13 @@ export function usePlanCanvasToolController({
     beamStartNode: placement.beamStartNode,
     wallStartNode: placement.wallStartNode,
     roomSeparatorStart: placement.roomSeparatorStart,
+    sketchPoints: pointer.sketchPoints,
+    bundleStartPoint: placement.bundleStartPoint,
+    supplierBundleVisualType: supplierBundlePlacement?.bundle.visual_type ?? 'shape',
     slabBoundary: placement.slabBoundary,
     tapeMeasure: placement.tapeMeasure,
+    measurePoints: placement.measurePoints,
+    measureComplete: placement.measureComplete,
     dimensionPoints: placement.dimensionPoints,
     calibrationP1: placement.calibrationP1,
     dimensionInputX: placement.dimensionInputX,
@@ -67,7 +74,7 @@ export function usePlanCanvasToolController({
     activeWallSnap: placement.activeWallSnap,
     lineConstraintLabel: ({ auto: 'อัตโนมัติ: ขนาน/ตั้งฉาก', none: 'อิสระ', parallel: 'ขนาน', perpendicular: 'ตั้งฉาก' } as const)[preferences.lineConstraintMode],
     placementReferenceLabel: ({ centerline: 'กึ่งกลาง', left_face: 'ชิดซ้าย', right_face: 'ชิดขวา' } as const)[preferences.placementReference],
-    snapCount: preferences.snapModes.length,
+    snapCount: preferences.objectSnapEnabled ? preferences.snapModes.length : 0,
   }
 
   const interactionStatus = usePlanCanvasToolInteraction({

@@ -1,4 +1,4 @@
-import { resolveCatalogType, type ProjectDocument, type Phase } from '@constructflow/project-model'
+import { resolveCatalogType, wallCenterlineLengthMm, type ProjectDocument, type Phase, type WallModuleData } from '@constructflow/project-model'
 import { getWallSolidProfiles, wallProfileAreaMm2 } from '@constructflow/architecture-engine'
 import { constructionOutputs } from '@constructflow/domain-providers'
 
@@ -18,6 +18,8 @@ export interface TakeoffLine {
   quantity: number
   source_object_ids: string[]
   formula: string
+  /** Per-instance commercial snapshot; later library edits must not change placed work. */
+  rate_snapshot?: Pick<UnitRate, 'material_rate' | 'labor_rate' | 'unit' | 'material_sell_rate' | 'product_gross_margin_percent' | 'hide_on_proposal'>
   waste_percent?: number
   gross_quantity?: number
 }
@@ -35,6 +37,7 @@ interface TakeoffClassification {
   cost_center: ClassificationCostCenter
   object_type?: string
   mark?: string
+  rate_snapshot?: TakeoffLine['rate_snapshot']
 }
 
 type Data = Record<string, unknown>
@@ -190,7 +193,7 @@ function phaseAndCostCenter(created: Phase, removed: 'demolition' | null): { pha
 }
 
 function lineKey(line: Omit<TakeoffLine, 'id' | 'quantity' | 'source_object_ids'>): string {
-  return [line.phase, line.cost_center, line.object_type, line.type_id ?? line.mark, line.unit, line.material ?? '', line.formula].join('|')
+  return [line.phase, line.cost_center, line.object_type, line.type_id ?? line.mark, line.unit, line.material ?? '', line.formula, line.rate_snapshot ? JSON.stringify(line.rate_snapshot) : ''].join('|')
 }
 
 /** Deterministic quantity-only takeoff for the supported standalone vertical slice. */
@@ -219,6 +222,7 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
       type_id: typeId,
       mark: classification?.mark ?? (typeof data.mark === 'string' && data.mark.trim() ? data.mark : object.object_type),
       material: material ?? (typeof data.material === 'string' ? data.material : undefined), unit, formula,
+      ...(classification?.rate_snapshot ? { rate_snapshot: classification.rate_snapshot } : {}),
     }
     const key = lineKey(dimensions)
     const line = lines.get(key) ?? {
@@ -226,6 +230,7 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
       ...dimensions,
       quantity: 0,
       source_object_ids: [],
+      ...(classification?.rate_snapshot ? { waste_percent: 0 } : {}),
     }
     line.quantity += quantity
     line.source_object_ids.push(object.id)
@@ -236,6 +241,53 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
   for (const object of objects) {
     const data = object.module_data as Data
     switch (object.object_type) {
+      case 'supplier.bundle_instance': {
+        const visualType = data.visual_type
+        const rateSnapshot = data.unit_rate_snapshot as TakeoffLine['rate_snapshot'] | undefined
+        const bundleName = typeof data.bundle_name === 'string' && data.bundle_name.trim() ? data.bundle_name : 'Product Bundle'
+        let quantity: number | undefined
+        let formula = ''
+        if (visualType === 'shape') {
+          quantity = 1
+          formula = '1 ชุด · รูปทรง Shape'
+        } else if (visualType === 'length') {
+          const path = Array.isArray(data.path_mm) ? data.path_mm.map(point => finiteTuple(point, 2)).filter((point): point is number[] => !!point) : []
+          if (path.length >= 2) quantity = path.slice(1).reduce((sum, point, index) => sum + Math.hypot(point[0]! - path[index]![0]!, point[1]! - path[index]![1]!), 0) / 1000
+          formula = path.length >= 2 ? `Bundle “${bundleName}” · ความยาว ${quantity?.toFixed(3) ?? '—'} m` : ''
+        } else if (visualType === 'area') {
+          const areaMm2 = polygonAreaMm2(data.boundary_mm)
+          if (areaMm2 !== undefined) quantity = areaMm2 / 1_000_000
+          formula = areaMm2 !== undefined ? `Bundle “${bundleName}” · พื้นที่ ${quantity?.toFixed(3) ?? '—'} m²` : ''
+        }
+        const componentSnapshots = Array.isArray(data.component_snapshots) ? data.component_snapshots as Data[] : []
+        if (componentSnapshots.length) formula += ` · ${componentSnapshots.map(component => {
+          const name = typeof component.product_name === 'string' ? component.product_name : String(component.supplier_sku ?? 'SKU')
+          const group = typeof component.product_group_name === 'string' ? `${component.product_group_name}: ` : ''
+          const amount = finitePositive(component.purchase_units_per_output_unit) ? component.purchase_units_per_output_unit : 1
+          const waste = finiteNumber(component.waste_percent) && component.waste_percent > 0 ? ` + เผื่อ ${component.waste_percent}%` : ''
+          const basis = component.quantity_mode === 'perimeter' ? ' / m perimeter' : component.quantity_mode === 'area' ? ' / m² area' : ''
+          return `${group}${name} × ${amount}${basis}${waste}`
+        }).join(' / ')}`
+        const unit = data.unit
+        const expectedUnit = visualType === 'shape' ? 'item' : visualType === 'length' ? 'm' : visualType === 'area' ? 'm2' : undefined
+        if (!expectedUnit || unit !== expectedUnit) {
+          warnings.push(`${object.id}: bundle visual type and quantity unit do not match`)
+          break
+        }
+        if (quantity === undefined || !Number.isFinite(quantity) || quantity <= 0) {
+          warnings.push(`${object.id}: bundle geometry is missing or invalid; quantity was omitted`)
+          break
+        }
+        if (!rateSnapshot || rateSnapshot.unit !== unit || !finiteNumber(rateSnapshot.material_rate) || !finiteNumber(rateSnapshot.labor_rate)) {
+          warnings.push(`${object.id}: saved bundle price snapshot is missing or incompatible; quantity was omitted`)
+          break
+        }
+        add(object, expectedUnit, quantity, formula || `Bundle “${bundleName}”`, bundleName, {
+          ...phaseAndCostCenter(object.created_phase, object.removed_phase),
+          object_type: 'supplier.bundle_instance', mark: bundleName, rate_snapshot: rateSnapshot,
+        })
+        break
+      }
       case 'structure.column': {
         const section = positiveTuple(valueFor(project, object.object_type, data, 'section_mm'), 2)
         const width = section?.[0]
@@ -289,8 +341,8 @@ export function calculateTakeoff(project: ProjectDocument): TakeoffReport {
         const height = valueFor(project, object.object_type, data, 'height_mm')
         const start = finiteTuple(data.start_point_mm, 3)
         const end = finiteTuple(data.end_point_mm, 3)
-        const computedLength = start && end ? Math.hypot(end[0] - start[0], end[1] - start[1]) : 0
-        const length = finitePositive(data.length_mm) ? data.length_mm : computedLength
+        const computedLength = start && end ? wallCenterlineLengthMm(data as unknown as WallModuleData) : 0
+        const length = computedLength
         if (!finitePositive(thickness) || !finitePositive(height) || !finitePositive(length)) {
           warnings.push(`${object.id}: wall thickness, height or length is missing/invalid`)
           break
@@ -943,6 +995,114 @@ export function calculateFactorF(directCostThb: number): FactorFResult {
   }
 }
 
+export interface ProposalPricingInput {
+  direct_cost_thb: number
+  preliminaries_thb: number
+  /** Frozen product-level gross profit, based on supplier material sell rates. */
+  product_margin_amount_thb?: number
+  /** Additional target gross margin over the pre-VAT Factor F amount, expressed as a percentage of sell price. */
+  gross_margin_percent?: number
+  /** Discount applied to the pre-VAT sell subtotal before VAT is calculated. */
+  discount_percent?: number
+}
+
+export interface ProposalPricingBreakdown {
+  factor_f: number
+  vat_rate: number
+  factor_f_subtotal_thb: number
+  product_margin_amount_thb: number
+  gross_margin_percent: number
+  gross_margin_amount_thb: number
+  subtotal_before_discount_thb: number
+  discount_percent: number
+  discount_amount_thb: number
+  taxable_amount_thb: number
+  vat_amount_thb: number
+  grand_total_thb: number
+}
+
+export interface ChangeOrderPricingInput {
+  direct_cost_delta_thb: number
+  factor_f: number
+  gross_margin_percent: number
+  discount_percent: number
+  vat_rate: number
+  product_margin_delta_thb?: number
+}
+
+export interface ChangeOrderPricingBreakdown {
+  factor_f_subtotal_delta_thb: number
+  product_margin_delta_thb: number
+  gross_margin_amount_delta_thb: number
+  subtotal_before_discount_delta_thb: number
+  discount_amount_delta_thb: number
+  taxable_amount_delta_thb: number
+  vat_amount_delta_thb: number
+  grand_total_delta_thb: number
+}
+
+/** Price a signed scope delta using the accepted contract's frozen commercial inputs. */
+export function calculateChangeOrderPricing(input: ChangeOrderPricingInput): ChangeOrderPricingBreakdown {
+  const { direct_cost_delta_thb: direct, factor_f: factor, gross_margin_percent: margin, discount_percent: discount, vat_rate: vat } = input
+  const productMargin = input.product_margin_delta_thb ?? 0
+  if (![direct, factor, margin, discount, vat, productMargin].every(Number.isFinite) || factor <= 0 || vat < 0 || vat > 1 || margin < 0 || margin >= 100 || discount < 0 || discount > 100)
+    throw new RangeError('Change order pricing values are outside their supported range')
+  const round = (value: number) => Number(value.toFixed(2))
+  const factorSubtotal = direct * factor / (1 + vat)
+  const subtotal = (factorSubtotal + productMargin) / (1 - margin / 100)
+  const discountAmount = subtotal * discount / 100
+  const taxable = subtotal - discountAmount
+  const grand = taxable * (1 + vat)
+  return {
+    factor_f_subtotal_delta_thb: round(factorSubtotal),
+    product_margin_delta_thb: round(productMargin),
+    gross_margin_amount_delta_thb: round(subtotal - factorSubtotal - productMargin),
+    subtotal_before_discount_delta_thb: round(subtotal),
+    discount_amount_delta_thb: round(discountAmount),
+    taxable_amount_delta_thb: round(taxable),
+    vat_amount_delta_thb: round(grand - taxable),
+    grand_total_delta_thb: round(grand),
+  }
+}
+
+/** Apply commercial gross margin and discount to a Thai Factor F estimate before VAT. */
+export function calculateProposalPricing(input: ProposalPricingInput): ProposalPricingBreakdown {
+  const direct = input.direct_cost_thb
+  const preliminaries = input.preliminaries_thb
+  const productMargin = input.product_margin_amount_thb ?? 0
+  const marginPercent = input.gross_margin_percent ?? 0
+  const discountPercent = input.discount_percent ?? 0
+  if (![direct, preliminaries, productMargin, marginPercent, discountPercent].every(Number.isFinite) || direct < 0 || preliminaries < 0 || productMargin < 0)
+    throw new RangeError('Proposal pricing values must be finite and non-negative')
+  if (marginPercent < 0 || marginPercent >= 100) throw new RangeError('Gross margin must be at least 0% and less than 100%')
+  if (discountPercent < 0 || discountPercent > 100) throw new RangeError('Discount must be between 0% and 100%')
+
+  const factor = calculateFactorF(direct + preliminaries)
+  const factorFSubtotal = (direct + preliminaries) * factor.factor_f / (1 + factor.vat_rate)
+  const subtotalBeforeDiscount = (factorFSubtotal + productMargin) / (1 - marginPercent / 100)
+  const discountAmount = subtotalBeforeDiscount * discountPercent / 100
+  const taxableAmount = Math.max(0, subtotalBeforeDiscount - discountAmount)
+  const grandTotal = marginPercent === 0 && discountPercent === 0 && productMargin === 0
+    ? factor.total_with_factor_f_thb
+    : Number((taxableAmount * (1 + factor.vat_rate)).toFixed(2))
+  const money = (value: number) => Number(value.toFixed(2))
+
+  return {
+    factor_f: factor.factor_f,
+    vat_rate: factor.vat_rate,
+    factor_f_subtotal_thb: money(factorFSubtotal),
+    product_margin_amount_thb: money(productMargin),
+    gross_margin_percent: marginPercent,
+    gross_margin_amount_thb: money(subtotalBeforeDiscount - factorFSubtotal - productMargin),
+    subtotal_before_discount_thb: money(subtotalBeforeDiscount),
+    discount_percent: discountPercent,
+    discount_amount_thb: money(discountAmount),
+    taxable_amount_thb: money(taxableAmount),
+    vat_amount_thb: money(grandTotal - taxableAmount),
+    grand_total_thb: grandTotal,
+  }
+}
+
 // =============================================================================
 // Phased BOQ Calculator (การคำนวณและสรุปตาราง BOQ แยก 3 Discrete Cost Centers)
 // =============================================================================
@@ -951,6 +1111,290 @@ export interface UnitRate {
   material_rate: number
   labor_rate: number
   unit: QuantityUnit
+  /** Customer-facing material price, separate from the BOQ cost basis. */
+  material_sell_rate?: number
+  product_gross_margin_percent?: number
+  supplier_product_id?: string
+  supplier_product_bundle_id?: string
+  hide_on_app?: boolean
+  hide_on_proposal?: boolean
+}
+
+export interface SupplierProductPricingSettings {
+  default_gross_margin_percent: number
+  minimum_gross_margin_percent: number
+}
+
+export const DEFAULT_SUPPLIER_PRODUCT_PRICING_SETTINGS: SupplierProductPricingSettings = {
+  default_gross_margin_percent: 0,
+  minimum_gross_margin_percent: 0,
+}
+
+export function validateSupplierProductPricingSettings(value: unknown): asserts value is SupplierProductPricingSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid supplier product pricing settings')
+  const settings = value as Record<string, unknown>
+  for (const field of ['default_gross_margin_percent', 'minimum_gross_margin_percent'] as const) {
+    const amount = settings[field]
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0 || amount >= 100) throw new Error(`${field} must be from 0% to less than 100%`)
+  }
+}
+
+/** Resolve product override: undefined inherits company default, null explicitly disables margin. */
+export function supplierProductGrossMarginPercent(
+  product: Pick<SupplierProduct, 'gross_margin_percent'>,
+  settings: SupplierProductPricingSettings = DEFAULT_SUPPLIER_PRODUCT_PRICING_SETTINGS,
+): number {
+  validateSupplierProductPricingSettings(settings)
+  return product.gross_margin_percent === undefined
+    ? settings.default_gross_margin_percent
+    : product.gross_margin_percent ?? 0
+}
+
+/** Target gross margin is a share of sell price, so sell = cost / (1 - margin). */
+export function supplierProductSellRate(costRate: number, grossMarginPercent: number): number {
+  if (!Number.isFinite(costRate) || costRate < 0 || !Number.isFinite(grossMarginPercent) || grossMarginPercent < 0 || grossMarginPercent >= 100)
+    throw new RangeError('Supplier product cost and gross margin are outside their supported range')
+  return Number((costRate / (1 - grossMarginPercent / 100)).toFixed(4))
+}
+
+/** Supplier catalog item mapped to the canonical quantity unit used by a takeoff rate key. */
+export interface SupplierProduct {
+  id: string
+  supplier_name: string
+  supplier_sku: string
+  name: string
+  /** One-level catalog category shared by the library picker and reusable bundles. */
+  category?: string
+  rate_key: string
+  unit: QuantityUnit
+  purchase_unit: string
+  package_quantity: number
+  package_price_thb: number
+  labor_rate_per_unit: number
+  /** Optional fixed sale rate in the model's takeoff unit; when set, it overrides cost-plus-margin pricing. */
+  input_unit_sell_rate_thb?: number
+  /** Undefined inherits the company default; null explicitly prices at cost. */
+  gross_margin_percent?: number | null
+  /** Hide this SKU from field selection while retaining it for bundle calculations. */
+  hide_on_app?: boolean
+  /** Keep this SKU's price in the proposal total while replacing its detail with a roll-up. */
+  hide_on_proposal?: boolean
+  product_url?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+/** Mutually exclusive supplier SKUs that can fill one component of a reusable assembly. */
+export interface SupplierProductGroup {
+  id: string
+  name: string
+  product_ids: string[]
+  default_product_id: string
+  created_at: string
+  updated_at: string
+}
+
+export function validateSupplierProductGroup(value: unknown): asserts value is SupplierProductGroup {
+  const fail = (message: string): never => { throw new Error(`Invalid supplier product group: ${message}`) }
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('record must be an object')
+  const group = value as Record<string, unknown>
+  if (typeof group.id !== 'string' || !uuid.test(group.id)) fail('ID must be a UUID')
+  if (typeof group.name !== 'string' || !group.name.trim() || group.name.length > 160) fail('name must be a non-empty string of at most 160 characters')
+  if (!Array.isArray(group.product_ids) || group.product_ids.length < 1 || group.product_ids.length > 100) fail('product_ids must contain 1 to 100 products')
+  const ids = group.product_ids as unknown[]
+  if (ids.some(id => typeof id !== 'string' || !uuid.test(id)) || new Set(ids).size !== ids.length) fail('product IDs must be unique UUIDs')
+  if (typeof group.default_product_id !== 'string' || !uuid.test(group.default_product_id) || !ids.includes(group.default_product_id)) fail('default product must be a member of the group')
+  for (const field of ['created_at', 'updated_at'] as const) if (typeof group[field] !== 'string' || !Number.isFinite(Date.parse(group[field] as string))) fail(`${field} must be an ISO date`)
+}
+
+export function validateSupplierProductGroupProducts(group: SupplierProductGroup, products: SupplierProduct[]): void {
+  validateSupplierProductGroup(group)
+  const byId = new Map(products.map(product => [product.id, product]))
+  const members = group.product_ids.map(id => byId.get(id))
+  if (members.some(product => !product)) throw new Error(`Product Group “${group.name}” references a missing SKU`)
+  const units = new Set(members.map(product => product!.unit))
+  if (units.size > 1) throw new Error(`Product Group “${group.name}” must use one takeoff unit`)
+}
+
+export function validateSupplierProduct(value: unknown): asserts value is SupplierProduct {
+  const fail = (message: string): never => { throw new Error(`Invalid supplier product: ${message}`) }
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('record must be an object')
+  const product = value as Record<string, unknown>
+  if (typeof product.id !== 'string' || !uuid.test(product.id)) fail('ID must be a UUID')
+  for (const [field, maximum] of [['supplier_name', 120], ['supplier_sku', 100], ['name', 160], ['rate_key', 160], ['purchase_unit', 40]] as const) {
+    if (typeof product[field] !== 'string' || !(product[field] as string).trim() || (product[field] as string).length > maximum) fail(`${field} must be a non-empty string of at most ${maximum} characters`)
+  }
+  if (product.category !== undefined && (typeof product.category !== 'string' || !product.category.trim() || product.category.length > 80)) fail('category must be a non-empty string of at most 80 characters')
+  if (!['item', 'm', 'm2', 'm3', 'kg'].includes(String(product.unit))) fail('takeoff unit is unsupported')
+  if (typeof product.package_quantity !== 'number' || !Number.isFinite(product.package_quantity) || product.package_quantity <= 0 || product.package_quantity > 1_000_000_000) fail('package quantity must be positive')
+  if (typeof product.package_price_thb !== 'number' || !Number.isFinite(product.package_price_thb) || product.package_price_thb < 0 || product.package_price_thb > 1_000_000_000_000) fail('package price must be non-negative THB')
+  if (typeof product.labor_rate_per_unit !== 'number' || !Number.isFinite(product.labor_rate_per_unit) || product.labor_rate_per_unit < 0 || product.labor_rate_per_unit > 1_000_000_000) fail('labor rate must be non-negative')
+  const fixedMaterialSellRate = product.input_unit_sell_rate_thb
+  if (fixedMaterialSellRate !== undefined && (typeof fixedMaterialSellRate !== 'number' || !Number.isFinite(fixedMaterialSellRate) || fixedMaterialSellRate < 0 || fixedMaterialSellRate > 1_000_000_000_000)) fail('fixed material sell rate must be non-negative THB')
+  if (typeof fixedMaterialSellRate === 'number' && typeof product.package_price_thb === 'number' && typeof product.package_quantity === 'number'
+    && Number.isFinite(product.package_price_thb) && Number.isFinite(product.package_quantity) && product.package_quantity > 0
+    && fixedMaterialSellRate < Number((product.package_price_thb / product.package_quantity).toFixed(4))) fail('fixed material sell rate cannot be below material cost')
+  if (product.gross_margin_percent !== undefined && product.gross_margin_percent !== null
+    && (typeof product.gross_margin_percent !== 'number' || !Number.isFinite(product.gross_margin_percent) || product.gross_margin_percent < 0 || product.gross_margin_percent >= 100)) fail('gross margin must be between 0% and less than 100%')
+  for (const field of ['hide_on_app', 'hide_on_proposal'] as const) if (product[field] !== undefined && typeof product[field] !== 'boolean') fail(`${field} must be a boolean`)
+  for (const field of ['created_at', 'updated_at'] as const) {
+    if (typeof product[field] !== 'string' || !Number.isFinite(Date.parse(product[field] as string))) fail(`${field} must be an ISO date`)
+  }
+  if (product.product_url !== undefined) {
+    if (typeof product.product_url !== 'string' || product.product_url.length > 2000) fail('product URL is too long')
+    try {
+      if (new URL(product.product_url as string).protocol !== 'https:') fail('product URL must use HTTPS')
+    } catch { fail('product URL is invalid') }
+  }
+  if (product.notes !== undefined && (typeof product.notes !== 'string' || product.notes.length > 1000)) fail('notes must be at most 1000 characters')
+}
+
+/** Convert the supplier pack price to the model's takeoff unit while keeping labor separate. */
+export function supplierProductUnitRate(
+  product: SupplierProduct,
+  settings: SupplierProductPricingSettings = DEFAULT_SUPPLIER_PRODUCT_PRICING_SETTINGS,
+): UnitRate {
+  validateSupplierProduct(product)
+  const materialRate = Number((product.package_price_thb / product.package_quantity).toFixed(4))
+  const margin = supplierProductGrossMarginPercent(product, settings)
+  return {
+    material_rate: materialRate,
+    labor_rate: product.labor_rate_per_unit,
+    unit: product.unit,
+    material_sell_rate: product.input_unit_sell_rate_thb ?? supplierProductSellRate(materialRate, margin),
+    product_gross_margin_percent: product.input_unit_sell_rate_thb === undefined
+      ? margin
+      : product.input_unit_sell_rate_thb > 0
+        ? Number(((product.input_unit_sell_rate_thb - materialRate) / product.input_unit_sell_rate_thb * 100).toFixed(4))
+        : 0,
+    supplier_product_id: product.id,
+    ...(product.hide_on_app ? { hide_on_app: true } : {}),
+    ...(product.hide_on_proposal !== undefined ? { hide_on_proposal: product.hide_on_proposal } : {}),
+  }
+}
+
+export interface SupplierProductBundleComponent {
+  product_id: string
+  /** Present when this component is one selected option from a mutually exclusive group. */
+  product_group_id?: string
+  purchase_units_per_output_unit: number
+  waste_percent: number
+  /** Area bundles can consume their SKU by polygon area or edge length. */
+  quantity_mode?: 'area' | 'perimeter'
+}
+
+/** A reusable assembly cost made from supplier SKUs for one canonical takeoff rate key. */
+export interface SupplierProductBundle {
+  id: string
+  name: string
+  /** Canvas geometry used when a bundle is placed as a model object. */
+  visual_type?: 'shape' | 'length' | 'area'
+  /** Source of assembly labor: a fixed output-unit rate or the component SKU labor rates. */
+  labor_calculation_mode?: 'fixed' | 'components'
+  /** One-level catalog category; existing bundles without a category remain in the default group. */
+  category?: string
+  rate_key: string
+  unit: QuantityUnit
+  labor_rate_per_output_unit: number
+  components: SupplierProductBundleComponent[]
+  /** Hide this bundle from field selection without changing its computed takeoff rate. */
+  hide_on_app?: boolean
+  /** Keep this bundle's price in the proposal total while replacing its detail with a roll-up. */
+  hide_on_proposal?: boolean
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+export function validateSupplierProductBundle(value: unknown, groups?: SupplierProductGroup[]): asserts value is SupplierProductBundle {
+  const fail = (message: string): never => { throw new Error(`Invalid supplier product bundle: ${message}`) }
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('record must be an object')
+  const bundle = value as Record<string, unknown>
+  if (typeof bundle.id !== 'string' || !uuid.test(bundle.id)) fail('ID must be a UUID')
+  if (typeof bundle.name !== 'string' || !bundle.name.trim() || bundle.name.length > 160) fail('name must be a non-empty string of at most 160 characters')
+  if (bundle.visual_type !== undefined && !['shape', 'length', 'area'].includes(String(bundle.visual_type))) fail('visual_type is unsupported')
+  if (bundle.labor_calculation_mode !== undefined && !['fixed', 'components'].includes(String(bundle.labor_calculation_mode))) fail('labor_calculation_mode is unsupported')
+  const visualUnit = bundle.visual_type === 'shape' ? 'item' : bundle.visual_type === 'length' ? 'm' : bundle.visual_type === 'area' ? 'm2' : undefined
+  if (visualUnit && bundle.unit !== visualUnit) fail(`${String(bundle.visual_type)} visual type requires ${visualUnit} output units`)
+  if (bundle.category !== undefined && (typeof bundle.category !== 'string' || !bundle.category.trim() || bundle.category.length > 80)) fail('category must be a non-empty string of at most 80 characters')
+  if (typeof bundle.rate_key !== 'string' || !bundle.rate_key.trim() || bundle.rate_key.length > 160) fail('rate key is invalid')
+  if (!['item', 'm', 'm2', 'm3', 'kg'].includes(String(bundle.unit))) fail('takeoff unit is unsupported')
+  if (typeof bundle.labor_rate_per_output_unit !== 'number' || !Number.isFinite(bundle.labor_rate_per_output_unit) || bundle.labor_rate_per_output_unit < 0 || bundle.labor_rate_per_output_unit > 1_000_000_000) fail('labor rate must be non-negative')
+  const components = bundle.components
+  if (!Array.isArray(components) || !components.length || components.length > 100) fail('components must contain 1 to 100 supplier products')
+  for (const field of ['hide_on_app', 'hide_on_proposal'] as const) if (bundle[field] !== undefined && typeof bundle[field] !== 'boolean') fail(`${field} must be a boolean`)
+  const productIds = new Set<string>()
+  for (const component of components as unknown[]) {
+    if (!component || typeof component !== 'object' || Array.isArray(component)) fail('component is malformed')
+    const item = component as Record<string, unknown>
+    const productId = item.product_id
+    if (typeof productId !== 'string' || !uuid.test(productId) || productIds.has(productId)) fail('component product IDs must be unique UUIDs')
+    productIds.add(productId as string)
+    if (item.product_group_id !== undefined && (typeof item.product_group_id !== 'string' || !uuid.test(item.product_group_id))) fail('component product_group_id must be a UUID')
+    if (item.quantity_mode !== undefined && !['area', 'perimeter'].includes(String(item.quantity_mode))) fail('component quantity_mode is unsupported')
+    if (typeof item.product_group_id === 'string' && groups) {
+      const group = groups.find(candidate => candidate.id === item.product_group_id)
+      if (!group) return fail(`component references missing Product Group ${item.product_group_id}`)
+      if (!group.product_ids.includes(productId as string)) fail(`selected SKU ${productId} is not a member of Product Group “${group.name}”`)
+    }
+    if (typeof item.purchase_units_per_output_unit !== 'number' || !Number.isFinite(item.purchase_units_per_output_unit) || item.purchase_units_per_output_unit <= 0 || item.purchase_units_per_output_unit > 1_000_000) fail('component purchase quantity must be positive')
+    if (typeof item.waste_percent !== 'number' || !Number.isFinite(item.waste_percent) || item.waste_percent < 0 || item.waste_percent > 200) fail('component waste must be between 0 and 200 percent')
+  }
+  for (const field of ['created_at', 'updated_at'] as const) {
+    if (typeof bundle[field] !== 'string' || !Number.isFinite(Date.parse(bundle[field] as string))) fail(`${field} must be an ISO date`)
+  }
+  if (bundle.notes !== undefined && (typeof bundle.notes !== 'string' || bundle.notes.length > 1000)) fail('notes must be at most 1000 characters')
+}
+
+/** Derive BOQ rates from component pack usage; proposal snapshots remain independent of later catalog edits. */
+export function supplierProductBundleUnitRate(
+  bundle: SupplierProductBundle,
+  products: SupplierProduct[],
+  settings: SupplierProductPricingSettings = DEFAULT_SUPPLIER_PRODUCT_PRICING_SETTINGS,
+  groups: SupplierProductGroup[] = [],
+): UnitRate {
+  validateSupplierProductBundle(bundle, groups)
+  if (bundle.visual_type === 'area' && bundle.components.some(component => component.quantity_mode === 'perimeter')) {
+    throw new Error('Area Bundle contains perimeter-based components; place it on a plan to calculate its geometry-dependent rate')
+  }
+  const productsById = new Map(products.map(product => {
+    validateSupplierProduct(product)
+    return [product.id, product] as const
+  }))
+  let materialRate = 0
+  let materialSellRate = 0
+  for (const component of bundle.components) {
+    const product = productsById.get(component.product_id)
+    if (!product) throw new Error(`Supplier product ${component.product_id} is missing from this library`)
+    if (component.product_group_id) {
+      const group = groups.find(candidate => candidate.id === component.product_group_id)
+      if (!group || !group.product_ids.includes(product.id)) throw new Error(`Selected SKU is not available in Product Group ${component.product_group_id}`)
+      const groupProducts = group.product_ids.map(id => productsById.get(id))
+      if (groupProducts.some(candidate => !candidate)) throw new Error(`Product Group “${group.name}” is missing one or more SKUs`)
+      if (groupProducts.some(candidate => candidate!.unit !== product.unit)) throw new Error(`Product Group “${group.name}” contains mismatched takeoff units`)
+    }
+    const quantityWithWaste = component.purchase_units_per_output_unit * (1 + component.waste_percent / 100)
+    const unitRate = supplierProductUnitRate(product, settings)
+    materialRate += unitRate.material_rate * quantityWithWaste
+    materialSellRate += (unitRate.material_sell_rate ?? unitRate.material_rate) * quantityWithWaste
+  }
+  materialRate = Number(materialRate.toFixed(4))
+  materialSellRate = Number(materialSellRate.toFixed(4))
+  const effectiveMargin = materialSellRate > 0 ? Number(((materialSellRate - materialRate) / materialSellRate * 100).toFixed(4)) : 0
+  return {
+    material_rate: materialRate,
+    labor_rate: bundle.labor_rate_per_output_unit,
+    unit: bundle.unit,
+    material_sell_rate: materialSellRate,
+    product_gross_margin_percent: effectiveMargin,
+    supplier_product_bundle_id: bundle.id,
+    ...(bundle.hide_on_app ? { hide_on_app: true } : {}),
+    ...(bundle.hide_on_proposal !== undefined ? { hide_on_proposal: bundle.hide_on_proposal } : {}),
+  }
 }
 
 export const DEFAULT_THAI_UNIT_RATES: Record<string, UnitRate> = {
@@ -996,7 +1440,12 @@ export interface BOQLineItem {
   gross_quantity: number
   unit_material_cost_thb: number
   unit_labor_cost_thb: number
+  /** Material sell rate and margin stay separate from the direct-cost basis. */
+  unit_material_sell_rate_thb?: number
+  product_gross_margin_percent?: number
+  hide_on_proposal?: boolean
   total_material_cost_thb: number
+  total_product_margin_thb: number
   total_labor_cost_thb: number
   total_direct_cost_thb: number
   formula: string
@@ -1007,6 +1456,7 @@ export interface PhasedCostCenterSummary {
   cost_center_label_th: string
   items: BOQLineItem[]
   total_material_thb: number
+  total_product_margin_thb: number
   total_labor_thb: number
   total_direct_cost_thb: number
 }
@@ -1018,6 +1468,7 @@ export interface PhasedBOQReport {
   formwork: FormworkReport
   preliminaries: PreliminariesReport
   total_direct_material_thb: number
+  total_product_margin_thb: number
   total_direct_labor_thb: number
   total_direct_cost_thb: number
   preliminaries_cost_thb: number
@@ -1040,7 +1491,13 @@ export function calculatePhasedBOQ(
     ...(customRates as Record<string, UnitRate> | undefined),
   }
 
-  const resolveRate = (line: TakeoffLine): { material: number; labor: number } => {
+  const resolveRate = (line: TakeoffLine): { material: number; labor: number; materialSell?: number; productMargin?: number; hideOnProposal?: boolean } => {
+    if (line.rate_snapshot) return {
+      material: line.rate_snapshot.material_rate, labor: line.rate_snapshot.labor_rate,
+      ...(line.rate_snapshot.material_sell_rate !== undefined ? { materialSell: line.rate_snapshot.material_sell_rate } : {}),
+      ...(line.rate_snapshot.product_gross_margin_percent !== undefined ? { productMargin: line.rate_snapshot.product_gross_margin_percent } : {}),
+      ...(line.rate_snapshot.hide_on_proposal !== undefined ? { hideOnProposal: line.rate_snapshot.hide_on_proposal } : {}),
+    }
     // 1. Demolition cost center is pure labor (no new material purchase)
     if (line.cost_center === 'demolition_site_prep') {
       if (line.unit === 'm3') return { material: 0, labor: 650 }
@@ -1051,7 +1508,11 @@ export function calculatePhasedBOQ(
 
     // 2. Check exact material rate
     const matKey = line.material?.toLowerCase()
-    if (matKey && rates[matKey]) return { material: rates[matKey].material_rate, labor: rates[matKey].labor_rate }
+    if (matKey && rates[matKey]) {
+      const rate = rates[matKey]
+      if (rate.material_sell_rate !== undefined && (!Number.isFinite(rate.material_sell_rate) || rate.material_sell_rate < rate.material_rate)) throw new RangeError(`Invalid supplier sell rate for ${matKey}`)
+      return { material: rate.material_rate, labor: rate.labor_rate, materialSell: rate.material_sell_rate, productMargin: rate.product_gross_margin_percent, hideOnProposal: rate.hide_on_proposal }
+    }
 
     // 3. Remodeling joint treatment cost center
     if (line.cost_center === 'remodeling_joint_treatment') {
@@ -1102,6 +1563,7 @@ export function calculatePhasedBOQ(
       cost_center_label_th: costCenterLabels.demolition_site_prep,
       items: [],
       total_material_thb: 0,
+      total_product_margin_thb: 0,
       total_labor_thb: 0,
       total_direct_cost_thb: 0,
     },
@@ -1110,6 +1572,7 @@ export function calculatePhasedBOQ(
       cost_center_label_th: costCenterLabels.new_construction,
       items: [],
       total_material_thb: 0,
+      total_product_margin_thb: 0,
       total_labor_thb: 0,
       total_direct_cost_thb: 0,
     },
@@ -1118,6 +1581,7 @@ export function calculatePhasedBOQ(
       cost_center_label_th: costCenterLabels.remodeling_joint_treatment,
       items: [],
       total_material_thb: 0,
+      total_product_margin_thb: 0,
       total_labor_thb: 0,
       total_direct_cost_thb: 0,
     },
@@ -1128,6 +1592,7 @@ export function calculatePhasedBOQ(
     const wastePercent = line.waste_percent ?? (line.unit === 'item' ? 0 : getStandardWasteFactor(line.material || line.mark || line.object_type))
     const grossQty = line.gross_quantity ?? Number((line.quantity * (1 + wastePercent / 100)).toFixed(4))
     const totalMat = Number((grossQty * rate.material).toFixed(2))
+    const totalProductMargin = rate.materialSell === undefined ? 0 : Number((grossQty * (rate.materialSell - rate.material)).toFixed(2))
     const totalLab = Number((line.quantity * rate.labor).toFixed(2))
     const totalDirect = Number((totalMat + totalLab).toFixed(2))
 
@@ -1144,7 +1609,11 @@ export function calculatePhasedBOQ(
       gross_quantity: grossQty,
       unit_material_cost_thb: rate.material,
       unit_labor_cost_thb: rate.labor,
+      ...(rate.materialSell !== undefined ? { unit_material_sell_rate_thb: rate.materialSell } : {}),
+      ...(rate.productMargin !== undefined ? { product_gross_margin_percent: rate.productMargin } : {}),
+      ...(rate.hideOnProposal !== undefined ? { hide_on_proposal: rate.hideOnProposal } : {}),
       total_material_cost_thb: totalMat,
+      total_product_margin_thb: totalProductMargin,
       total_labor_cost_thb: totalLab,
       total_direct_cost_thb: totalDirect,
       formula: line.formula,
@@ -1154,12 +1623,14 @@ export function calculatePhasedBOQ(
     if (cc) {
       cc.items.push(boqItem)
       cc.total_material_thb = Number((cc.total_material_thb + totalMat).toFixed(2))
+      cc.total_product_margin_thb = Number((cc.total_product_margin_thb + totalProductMargin).toFixed(2))
       cc.total_labor_thb = Number((cc.total_labor_thb + totalLab).toFixed(2))
       cc.total_direct_cost_thb = Number((cc.total_direct_cost_thb + totalDirect).toFixed(2))
     }
   }
 
   const directMaterial = Object.values(costCenters).reduce((sum, cc) => sum + cc.total_material_thb, 0)
+  const totalProductMargin = Number(Object.values(costCenters).reduce((sum, cc) => sum + cc.total_product_margin_thb, 0).toFixed(2))
   const directLabor = Object.values(costCenters).reduce((sum, cc) => sum + cc.total_labor_thb, 0)
   const directCost = Number((directMaterial + directLabor).toFixed(2))
   const prelimCost = preliminaries.total_amount_thb
@@ -1175,6 +1646,7 @@ export function calculatePhasedBOQ(
     formwork,
     preliminaries,
     total_direct_material_thb: Number(directMaterial.toFixed(2)),
+    total_product_margin_thb: totalProductMargin,
     total_direct_labor_thb: Number(directLabor.toFixed(2)),
     total_direct_cost_thb: directCost,
     preliminaries_cost_thb: prelimCost,

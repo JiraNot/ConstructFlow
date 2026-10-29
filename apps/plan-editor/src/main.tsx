@@ -1,6 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { App } from './App.js'
+import { ProposalApprovalPage } from './components/ProposalApprovalPage.js'
+import { PublicDrawingDownloadPage } from './components/PublicDrawingDownloadPage.js'
 import './app.css'
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
@@ -30,8 +32,14 @@ if (typeof globalThis.crypto?.randomUUID !== 'function') {
   })
 }
 
+const approvalMatch = window.location.hash.match(/^#cf-proposal-approval=([A-Za-z0-9_-]{40,60})$/)
+const proposalApprovalToken = approvalMatch?.[1]
+const drawingDownloadMatch = window.location.hash.match(/^#cf-drawing-download=([A-Za-z0-9_-]{40,60})$/)
+const drawingDownloadToken = drawingDownloadMatch?.[1]
+if (proposalApprovalToken || drawingDownloadToken) window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    {proposalApprovalToken ? <ProposalApprovalPage token={proposalApprovalToken} /> : drawingDownloadToken ? <PublicDrawingDownloadPage token={drawingDownloadToken} /> : <App />}
   </React.StrictMode>
 )

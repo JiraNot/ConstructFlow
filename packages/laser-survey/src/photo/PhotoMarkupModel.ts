@@ -1,43 +1,20 @@
-export type DimensionCategory = 'architecture' | 'interior' | 'setback' | 'defect' | 'mep'
-export type DimensionStatus = 'measured' | 'pending' | 'defect'
-export type AreaCategory = 'paint' | 'wallpaper' | 'tile' | 'masonry' | 'custom'
+import type {
+  FieldPhotoAreaBox,
+  FieldPhotoAreaCategory,
+  FieldPhotoDimensionCategory,
+  FieldPhotoDimensionLine,
+  FieldPhotoDimensionStatus,
+  FieldPhotoInspection,
+  FieldPhotoSubSegment,
+  FieldPhotoTileCalculationConfig,
+  FieldPhotoTileCalculationResult,
+} from '@constructflow/project-model'
 
-/** Sub-segment within a continuous multi-segment dimension chain */
-export interface SubSegment {
-  id: string
-  /** Split position ratio along the line (0.0 < ratio < 1.0) */
-  ratio: number
-  /** Measured distance of this sub-segment in canonical millimeters */
-  distance_mm: number
-  /** Distance in meters */
-  distance_m: number
-  /** Label for this segment (e.g. 'ถึงปลั๊กไฟ', 'ถึงท่อน้ำ') */
-  label?: string
-}
-
-export interface PhotoDimensionLine {
-  id: string
-  /** Normalized start coordinate (0.0 to 1.0 relative to image width/height) */
-  start_ratio: [number, number]
-  /** Normalized end coordinate (0.0 to 1.0 relative to image width/height) */
-  end_ratio: [number, number]
-  /** Total measured distance in canonical millimeters */
-  distance_mm: number
-  /** Total distance in meters */
-  distance_m: number
-  /** Descriptive label (e.g. 'ความกว้างช่องตู้เย็น', 'ระยะร่นรั้ว', 'รอยร้าวเสา') */
-  label: string
-  /** Work category */
-  category: DimensionCategory
-  /** Status */
-  status: DimensionStatus
-  /** Notes in Thai or English */
-  notes?: string
-  /** Color hex code for rendering */
-  color?: string
-  /** Optional continuous multi-segment division points along this line */
-  sub_segments?: SubSegment[]
-}
+export type DimensionCategory = FieldPhotoDimensionCategory
+export type DimensionStatus = FieldPhotoDimensionStatus
+export type AreaCategory = FieldPhotoAreaCategory
+export type SubSegment = FieldPhotoSubSegment
+export type PhotoDimensionLine = FieldPhotoDimensionLine
 
 export interface TileSizePreset {
   id: string
@@ -58,77 +35,11 @@ export const STANDARD_TILE_PRESETS: TileSizePreset[] = [
   { id: '20x20', name: '20x20 cm (วินเทจ/โมเสก)', width_cm: 20, length_cm: 20, pieces_per_box: 25, description: 'กระเบื้องตกแต่งลายโบราณ / พื้นห้องน้ำ (1 กล่อง = 1.00 ตร.ม.)' },
 ]
 
-export interface TileCalculationConfig {
-  tile_width_cm: number
-  tile_length_cm: number
-  waste_percent: number // e.g. 5, 10, 15
-  pieces_per_box?: number
-  show_grid?: boolean
-}
-
-export interface TileCalculationResult {
-  tile_width_cm: number
-  tile_length_cm: number
-  tile_area_sqm: number
-  net_area_sqm: number
-  waste_percent: number
-  base_pieces: number // Net Area / Tile Area (ceil)
-  waste_pieces: number // Extra cut waste
-  total_pieces: number // base + waste
-  pieces_per_box: number
-  total_boxes: number // ceil(total_pieces / pieces_per_box)
-  box_coverage_sqm: number // total_boxes * pieces_per_box * tile_area_sqm
-  mortar_bags_20kg: number // 1 bag (20kg) covers ~4.0 m²
-  grout_bags_1kg: number // 1 bag (1kg) covers ~3.5 m²
-}
-
-/** Rectangular surface area box on photo for calculating paint/tile/wallpaper */
-export interface PhotoAreaBox {
-  id: string
-  /** Normalized bounding box [left, top, width, height] (0.0 to 1.0) */
-  bounds_ratio: [number, number, number, number]
-  /** Width in canonical millimeters */
-  width_mm: number
-  /** Height in canonical millimeters */
-  height_mm: number
-  /** Gross area in square meters (width_mm * height_mm / 1,000,000) */
-  area_sqm: number
-  /** Area to deduct in square meters (e.g. doors, windows) */
-  deductions_sqm: number
-  /** Net surface area in square meters (area_sqm - deductions_sqm) */
-  net_area_sqm: number
-  /** Label for this area (e.g. 'ผนังทาสีห้องนอน', 'ผนังกระเบื้องห้องน้ำ') */
-  label: string
-  /** Work category */
-  category: AreaCategory
-  /** Notes */
-  notes?: string
-  /** Color */
-  color?: string
-  /** Tile calculation configuration if category === 'tile' */
-  tile_config?: TileCalculationConfig
-  /** Computed tile piece count, box count, and mortar/grout bags */
-  tile_result?: TileCalculationResult
-}
-
-export interface PhotoDimensionSession {
-  id: string
-  title: string
-  room_name?: string
-  image_data_url: string
-  image_natural_width: number
-  image_natural_height: number
-  captured_at: string
-  dimensions: PhotoDimensionLine[]
-  areas?: PhotoAreaBox[]
-  notes?: string
-  /** Pinned 2D coordinate on ConstructFlow active level in model millimeters [x_mm, y_mm] */
-  pin_coords_mm?: [number, number]
-  /** Camera orientation angle in degrees (0 = North, 90 = East, 180 = South, 270 = West) */
-  camera_heading_deg?: number
-  /** Level ID this photo is attached to */
-  level_id?: string
-}
+export type TileCalculationConfig = FieldPhotoTileCalculationConfig
+export type TileCalculationResult = FieldPhotoTileCalculationResult
+export type PhotoAreaBox = FieldPhotoAreaBox
+/** Runtime photo session extends the canonical inspection record with its resolved local image. */
+export type PhotoDimensionSession = Omit<FieldPhotoInspection, 'image_asset_id'> & { image_asset_id?: string; image_data_url: string }
 
 export function createNewPhotoDimensionLine(
   start_ratio: [number, number],

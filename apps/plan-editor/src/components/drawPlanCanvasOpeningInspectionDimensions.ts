@@ -41,156 +41,40 @@ export function drawOpeningInspectionDimensions(
   const isStartWarn = clearanceStart < 100
   const isEndWarn = clearanceEnd < 100
 
-  // Dimension line side: opposite door swing, or side +1 for window
+  // Keep the dimension badge opposite the door's flip control, which sits on
+  // the swing side. This gives both controls their own clear hit area.
   const isDoor = isDoorObject(opening)
   const swingSign = isDoor ? ((opening.module_data.handing || 'left_in').endsWith('_out') ? -1 : 1) : 1
-  const dimSide = isDoor ? -swingSign : 1
-  const dimOffsetMm = (hostWall.module_data.thickness_mm / 2 + 380) * dimSide
-
-  // 4 witness points along the wall line (at wall surface)
-  const pStartFace: [number, number] = [sx + ux * startColFace, sy + uy * startColFace]
-  const pJamb1: [number, number] = [sx + ux * jambStart, sy + uy * jambStart]
-  const pJamb2: [number, number] = [sx + ux * jambEnd, sy + uy * jambEnd]
-  const pEndFace: [number, number] = [ex - ux * endColFace, ey - uy * endColFace]
-
-  // Projected points on the dimension line
-  const dStartFace: [number, number] = [pStartFace[0] + nx * dimOffsetMm, pStartFace[1] + ny * dimOffsetMm]
-  const dJamb1: [number, number] = [pJamb1[0] + nx * dimOffsetMm, pJamb1[1] + ny * dimOffsetMm]
-  const dJamb2: [number, number] = [pJamb2[0] + nx * dimOffsetMm, pJamb2[1] + ny * dimOffsetMm]
-  const dEndFace: [number, number] = [pEndFace[0] + nx * dimOffsetMm, pEndFace[1] + ny * dimOffsetMm]
-
-  // Screen conversions
-  const [sPStart, sPJamb1, sPJamb2, sPEnd] = [
-    worldToScreen(pStartFace, viewport),
-    worldToScreen(pJamb1, viewport),
-    worldToScreen(pJamb2, viewport),
-    worldToScreen(pEndFace, viewport),
-  ]
-  const [sDStart, sDJamb1, sDJamb2, sDEnd] = [
-    worldToScreen(dStartFace, viewport),
-    worldToScreen(dJamb1, viewport),
-    worldToScreen(dJamb2, viewport),
-    worldToScreen(dEndFace, viewport),
-  ]
+  const dimSide = isDoor ? swingSign : 1
+  const badgeOffsetPx = Math.max(28, Math.min(48, (hostWall.module_data.thickness_mm / 2 + 400) * viewport.zoom))
+  const badgeOffsetMm = hostWall.module_data.thickness_mm / 2 + badgeOffsetPx / viewport.zoom
+  const openingCenter: [number, number] = [sx + ux * offset, sy + uy * offset]
+  const badgeCenter = worldToScreen([
+    openingCenter[0] + nx * badgeOffsetMm * dimSide,
+    openingCenter[1] + ny * badgeOffsetMm * dimSide,
+  ], viewport)
+  const sizeText = `${formatLengthMm(w, displayUnit)} × ${formatLengthMm(opening.module_data.height_mm || (isDoor ? 2000 : 1200), displayUnit)} ${displayUnit}`
+  const clearanceText = `← ${formatLengthMm(clearanceStart, displayUnit)} · ${formatLengthMm(clearanceEnd, displayUnit)} ${displayUnit} →`
 
   ctx.save()
-
-  // 1. Extension Witness Lines
+  ctx.font = '600 10px sans-serif'
+  const width = Math.min(240, Math.max(ctx.measureText(sizeText).width, ctx.measureText(clearanceText).width) + 16)
+  const height = 34
+  const x = badgeCenter[0] - width / 2
+  const y = badgeCenter[1] - height / 2
+  ctx.fillStyle = 'rgba(255,255,255,0.96)'
   ctx.strokeStyle = '#94a3b8'
   ctx.lineWidth = 1
-  ctx.setLineDash([3, 3])
-  const witnessOverrun = 6
-  for (const [[pBaseX, pBaseY], [pDimX, pDimY]] of [
-    [sPStart, sDStart],
-    [sPJamb1, sDJamb1],
-    [sPJamb2, sDJamb2],
-    [sPEnd, sDEnd],
-  ]) {
-    const wvx = pDimX - pBaseX, wvy = pDimY - pBaseY
-    const wlen = Math.hypot(wvx, wvy)
-    if (wlen > 1) {
-      const wdx = wvx / wlen, wdy = wvy / wlen
-      ctx.beginPath()
-      ctx.moveTo(pBaseX, pBaseY)
-      ctx.lineTo(pDimX + wdx * witnessOverrun, pDimY + wdy * witnessOverrun)
-      ctx.stroke()
-    }
-  }
-  ctx.setLineDash([])
-
-  // 2. Dimension Line Segments
-  const drawInterval = (
-    p1: [number, number],
-    p2: [number, number],
-    valueMm: number,
-    isWarning: boolean,
-    labelPrefix?: string
-  ) => {
-    ctx.beginPath()
-    ctx.strokeStyle = isWarning ? '#dc2626' : '#0284c7'
-    ctx.lineWidth = isWarning ? 1.8 : 1.2
-    ctx.moveTo(p1[0], p1[1])
-    ctx.lineTo(p2[0], p2[1])
-    ctx.stroke()
-
-    // 45° Architectural Slashes at endpoints
-    const tickLen = 5
-    for (const pt of [p1, p2]) {
-      ctx.beginPath()
-      ctx.strokeStyle = isWarning ? '#dc2626' : '#0369a1'
-      ctx.lineWidth = 1.6
-      ctx.moveTo(pt[0] - tickLen, pt[1] + tickLen)
-      ctx.lineTo(pt[0] + tickLen, pt[1] - tickLen)
-      ctx.stroke()
-    }
-
-    // Text Label
-    const midX = (p1[0] + p2[0]) / 2
-    const midY = (p1[1] + p2[1]) / 2
-    const distText = `${formatLengthMm(valueMm, displayUnit)} ${displayUnit}`
-    const text = labelPrefix ? `${labelPrefix} ${distText}` : distText
-
-    ctx.font = isWarning ? 'bold 11px sans-serif' : '600 11px sans-serif'
-    const textWidth = ctx.measureText(text).width + 10
-    ctx.fillStyle = isWarning ? '#fef2f2' : 'rgba(255, 255, 255, 0.95)'
-    ctx.strokeStyle = isWarning ? '#f87171' : '#bae6fd'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.roundRect(midX - textWidth / 2, midY - 9, textWidth, 18, 4)
-    ctx.fill()
-    ctx.stroke()
-
-    ctx.fillStyle = isWarning ? '#b91c1c' : '#0369a1'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(text, midX, midY)
-  }
-
-  // Draw 3 intervals: Start clearance, Opening width, End clearance
-  drawInterval(sDStart, sDJamb1, clearanceStart, isStartWarn, isStartWarn ? '⚠️ เอ็น' : 'ริมเสา')
-  drawInterval(sDJamb1, sDJamb2, w, false, 'ช่องกว้าง')
-  drawInterval(sDJamb2, sDEnd, clearanceEnd, isEndWarn, isEndWarn ? '⚠️ เอ็น' : 'ริมเสา')
-
-  // 3. Opening Specification Pill Tag (Centered above opening width)
-  const midJambX = (sDJamb1[0] + sDJamb2[0]) / 2
-  const midJambY = (sDJamb1[1] + sDJamb2[1]) / 2
-  const specText = isDoor
-    ? `🚪 ${opening.module_data.mark || 'D1'}: ${formatLengthMm(w, displayUnit)} × ${formatLengthMm(opening.module_data.height_mm || 2000, displayUnit)} ${displayUnit} · ธรณี +0.00`
-    : `🪟 ${opening.module_data.mark || 'W1'}: ${formatLengthMm(w, displayUnit)} × ${formatLengthMm(opening.module_data.height_mm || 1200, displayUnit)} ${displayUnit} (ธรณี +${formatLengthMm(opening.module_data.sill_height_mm ?? 900, displayUnit)})`
-  
-  ctx.font = '600 11px sans-serif'
-  const specWidth = ctx.measureText(specText).width + 14
-  const specYOffset = dimSide > 0 ? 22 : -22
-  ctx.fillStyle = '#0f172a'
-  ctx.strokeStyle = '#38bdf8'
-  ctx.lineWidth = 1.2
   ctx.beginPath()
-  ctx.roundRect(midJambX - specWidth / 2, midJambY + specYOffset - 10, specWidth, 20, 5)
+  ctx.roundRect(x, y, width, height, 5)
   ctx.fill()
   ctx.stroke()
-  ctx.fillStyle = '#ffffff'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(specText, midJambX, midJambY + specYOffset)
-
-  // 4. Stiffener Compliance Indicator Badge
-  if (!isStartWarn && !isEndWarn) {
-    const okText = '✓ ระยะเสาเอ็น-ทับหลัง ผ่านเกณฑ์ (≥ 100 มม.)'
-    ctx.font = '500 10px sans-serif'
-    const okWidth = ctx.measureText(okText).width + 12
-    const okYOffset = dimSide > 0 ? 44 : -44
-    ctx.fillStyle = '#f0fdf4'
-    ctx.strokeStyle = '#86efac'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.roundRect(midJambX - okWidth / 2, midJambY + okYOffset - 9, okWidth, 18, 4)
-    ctx.fill()
-    ctx.stroke()
-    ctx.fillStyle = '#15803d'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(okText, midJambX, midJambY + okYOffset)
-  }
-
+  ctx.fillStyle = '#334155'
+  ctx.fillText(sizeText, x + width / 2, y + 10, width - 10)
+  ctx.font = '500 9px sans-serif'
+  ctx.fillStyle = isStartWarn || isEndWarn ? '#b91c1c' : '#64748b'
+  ctx.fillText(clearanceText, x + width / 2, y + 24, width - 10)
   ctx.restore()
 }

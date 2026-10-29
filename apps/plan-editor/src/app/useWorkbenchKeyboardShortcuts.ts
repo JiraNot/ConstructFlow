@@ -7,16 +7,14 @@ interface UseWorkbenchKeyboardShortcutsOptions {
   setActiveTool: ReturnType<typeof useToolSession>['activate']
   setSelectedId: Dispatch<SetStateAction<string | null>>
   handleSaveProject: () => Promise<void>
-  projectSessionRef: ReturnType<typeof useProjectSession>['sessionRef']
-  setProjectState: ReturnType<typeof useProjectSession>['setProjectState']
-  setCommandQueue: ReturnType<typeof useProjectSession>['setCommandQueue']
+  undo: ReturnType<typeof useProjectSession>['undo']
+  redo: ReturnType<typeof useProjectSession>['redo']
   canCalibrateUnderlayRef: MutableRefObject<boolean>
 }
 
 /** Keeps global shortcuts out of the workbench shell and binds them to current project actions. */
 export function useWorkbenchKeyboardShortcuts({
-  viewMode, setActiveTool, setSelectedId, handleSaveProject, projectSessionRef, setProjectState,
-  setCommandQueue, canCalibrateUnderlayRef,
+  viewMode, setActiveTool, setSelectedId, handleSaveProject, undo, redo, canCalibrateUnderlayRef,
 }: UseWorkbenchKeyboardShortcutsOptions) {
   const saveProjectRef = useRef(handleSaveProject)
   saveProjectRef.current = handleSaveProject
@@ -37,24 +35,12 @@ export function useWorkbenchKeyboardShortcuts({
       } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         if (isTextEditing) return
         event.preventDefault()
-        const session = projectSessionRef.current!
-        if (event.shiftKey) {
-          if (session.canRedo) {
-            setProjectState(session.redo())
-            setCommandQueue([])
-          }
-        } else if (session.canUndo) {
-          setProjectState(session.undo())
-          setCommandQueue([])
-        }
+        if (event.shiftKey) redo()
+        else undo()
       } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
         if (isTextEditing) return
-        const session = projectSessionRef.current!
-        if (session.canRedo) {
-          event.preventDefault()
-          setProjectState(session.redo())
-          setCommandQueue([])
-        }
+        event.preventDefault()
+        redo()
       } else if (event.key === 'Escape') {
         // PlanCanvas owns staged Escape in plan-derived views, including automatic framing/roof-plan switches.
         if (['plan', 'framing', 'roofplan'].includes(viewMode)) return
@@ -109,5 +95,5 @@ export function useWorkbenchKeyboardShortcuts({
 
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [viewMode, setActiveTool, setSelectedId, projectSessionRef, setProjectState, setCommandQueue, canCalibrateUnderlayRef])
+  }, [viewMode, setActiveTool, setSelectedId, undo, redo, canCalibrateUnderlayRef])
 }

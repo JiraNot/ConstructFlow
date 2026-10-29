@@ -1,4 +1,4 @@
-import { ProjectDocument, isBeamObject, isColumnObject, isDoorObject, isFoundationObject, isGridObject, isWallObject, isWindowObject, type CabinetModuleData, type MouldingModuleData, type PipeRouteModuleData, type StairModuleData } from '@constructflow/project-model'
+import { ProjectDocument, isBeamObject, isColumnObject, isDoorObject, isFoundationObject, isGridObject, isWallObject, isWindowObject, wallCenterlineLengthMm, wallCenterlinePointAtOffsetMm, type CabinetModuleData, type MouldingModuleData, type PipeRouteModuleData, type StairModuleData } from '@constructflow/project-model'
 import { polygonEdgeGrip } from '@constructflow/geometry-kernel'
 import { getEditableRoofRidge, getRoofSeams } from '@constructflow/roof-engine'
 import { ViewportState, worldToScreen } from '../viewport/viewportTransform.js'
@@ -40,6 +40,7 @@ export function findPlanCanvasEditHandle({ planProject, editableSelectionIds, vi
         if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
           id, kind: isWallObject(object) ? 'wall-endpoint' as const : 'beam-endpoint' as const,
           endpointIndex: endpointIndex as 0 | 1, startPointMm: [...start] as [number, number], endPointMm: [...end] as [number, number],
+          ...(isWallObject(object) && object.module_data.curve_geometry ? { curveGeometry: structuredClone(object.module_data.curve_geometry) } : {}),
         }
       }
     } else if (isGridObject(object)) {
@@ -128,17 +129,21 @@ export function findPlanCanvasEditHandle({ planProject, editableSelectionIds, vi
     } else if (isDoorObject(object) || isWindowObject(object)) {
       const host = planProject.objects[object.module_data.wall_id]
       if (!host || !isWallObject(host)) continue
-      const [sx, sy] = host.module_data.start_point_mm, [ex, ey] = host.module_data.end_point_mm
-      const length = Math.hypot(ex - sx, ey - sy)
+      const [hostStartX, hostStartY] = host.module_data.start_point_mm
+      const [hostEndX, hostEndY] = host.module_data.end_point_mm
+      const hostStartMm: [number, number] = [hostStartX, hostStartY]
+      const hostEndMm: [number, number] = [hostEndX, hostEndY]
+      const length = wallCenterlineLengthMm(host.module_data)
       if (length < 1) continue
-      const ux = (ex - sx) / length, uy = (ey - sy) / length
+      const centerPose = wallCenterlinePointAtOffsetMm(host.module_data, object.module_data.offset_along_wall_mm)
+      const [cx, cy] = centerPose.point_mm
+      const tangent = centerPose.tangent_angle_deg * Math.PI / 180
+      const ux = Math.cos(tangent), uy = Math.sin(tangent)
+      const nx = -uy, ny = ux
       const halfWidth = object.module_data.width_mm / 2
-      const cx = sx + ux * object.module_data.offset_along_wall_mm
-      const cy = sy + uy * object.module_data.offset_along_wall_mm
 
       // Door Flip Handing Button hit test
       if (isDoorObject(object) && onFlipDoorHanding) {
-        const nx = -uy, ny = ux
         const handing = object.module_data.handing || 'left_in'
         const swingSign = handing.endsWith('_out') ? -1 : 1
         const flipBtnX = cx - nx * (host.module_data.thickness_mm / 2 + 180) * swingSign
@@ -146,7 +151,9 @@ export function findPlanCanvasEditHandle({ planProject, editableSelectionIds, vi
         const [sfx, sfy] = worldToScreen([flipBtnX, flipBtnY], viewport)
         if (Math.hypot(screenPoint[0] - sfx, screenPoint[1] - sfy) <= 18) {
           onFlipDoorHanding(object.id)
-          return null
+          // Consume this pointer-down so the empty canvas around the control
+          // cannot clear the opening selection after the handing update.
+          return { id: object.id, kind: 'door-flip' as const }
         }
       }
 
@@ -155,17 +162,18 @@ export function findPlanCanvasEditHandle({ planProject, editableSelectionIds, vi
       if (Math.hypot(screenPoint[0] - scx, screenPoint[1] - scy) <= tolerance) {
         return {
           id, kind: 'opening-center' as const,
-          hostStartMm: [sx, sy] as [number, number], hostEndMm: [ex, ey] as [number, number],
+          hostStartMm, hostEndMm,
           openingWidthMm: object.module_data.width_mm, openingCenterOffsetMm: object.module_data.offset_along_wall_mm,
         }
       }
 
       // Edge Resize Handles hit test
       for (const [endpointIndex, offset] of [[0, object.module_data.offset_along_wall_mm - halfWidth], [1, object.module_data.offset_along_wall_mm + halfWidth]] as const) {
-        const [x, y] = worldToScreen([sx + ux * offset, sy + uy * offset], viewport)
+        const point = wallCenterlinePointAtOffsetMm(host.module_data, offset).point_mm
+        const [x, y] = worldToScreen(point, viewport)
         if (Math.hypot(screenPoint[0] - x, screenPoint[1] - y) <= tolerance) return {
           id, kind: 'opening-edge' as const, endpointIndex,
-          hostStartMm: [sx, sy] as [number, number], hostEndMm: [ex, ey] as [number, number],
+          hostStartMm, hostEndMm,
           openingWidthMm: object.module_data.width_mm, openingCenterOffsetMm: object.module_data.offset_along_wall_mm,
         }
       }

@@ -11,21 +11,33 @@ import {
   type DisplayLengthUnit,
   type ProjectViewTemplate,
   type ProjectUnderlay,
+  type FieldPhotoInspection,
+  type InvoiceDraft,
+  type InvoicePaymentMethod,
+  type InvoiceStatusTarget,
+  type ProposalDeviceSignatureInput,
+  type ProposalRecipientSignature,
+  type ProjectTakeoffRate,
 } from '@constructflow/project-model'
+import { validatePolygonWithVoids } from '@constructflow/geometry-kernel'
 import { useProjectSession } from './app/useProjectSession.js'
 import { useEditorObjectSelection } from './app/useEditorObjectSelection.js'
 import { useToolSession } from './app/useToolSession.js'
-import { DEFAULT_PLAN_CANVAS_PREFERENCES, type PlanCanvasPreferences } from './app/planCanvasPreferences.mjs'
-import { CommandBus, ProjectCommandSession } from './commands/CommandBus.js'
-import { Toolbar, ToolType } from './components/Toolbar.js'
+import { DEFAULT_PLAN_CANVAS_PREFERENCES, loadPlanCanvasPreferences, savePlanCanvasPreferences, type PlanCanvasPreferences } from './app/planCanvasPreferences.mjs'
+import { buildProjectHistoryDeltaInput, CommandBus } from './commands/CommandBus.js'
+import { Toolbar, toolLabel, ToolType } from './components/Toolbar.js'
 import type { PlanCanvasProps } from './components/PlanCanvas.types.js'
+import type { SupplierProductBundlePlacement } from './supplierBundlePlacement.js'
 import type { CoordinatedElevationNavigation } from './components/ElevationCanvas.js'
 import { EditorViewRenderer } from './components/EditorViewRenderer.js'
 import type { PhotoDimensionSession } from '@constructflow/laser-survey'
+import { deleteLocalFieldPhotoAssets, getLocalCollaborationToken, listLocalFieldPhotoAssets, LOCAL_COLLABORATION_TOKEN_CHANGED_EVENT, LOCAL_FIELD_PHOTO_ASSETS_CHANGED_EVENT, LOCAL_PROJECT_REVISIONS_CHANGED_EVENT, saveLocalFieldPhotoAssets } from './projectAutosave.js'
+import { syncFieldPhotoAssets } from './fieldPhotoSync.js'
+import { syncProjectRevisionHistory } from './revisionSync.js'
 import { useCoordinationReport } from './features/coordination/useCoordinationReport.js'
 import type { ProjectLegalMetadata } from '@constructflow/project-model'
 import { DEFAULT_PLAN_LABEL_VISIBILITY, type PlanLabelVisibility } from './rendering/planRendererTypes.js'
-import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home, Compass, PanelRightOpen } from 'lucide-react'
+import { Building2, Layers, History, Layers2, Ruler, ArrowUpDown, Sparkles, Undo2, Redo2, Folder, FolderOpen, Save, Download, CookingPot, FileCheck, MoreHorizontal, Tag, ChevronDown, Home, Compass, PanelRightOpen, Network, Users, MessageSquare, Cloud, CloudOff, AlertTriangle, Share2, Check, Loader2, AlertCircle } from 'lucide-react'
 import { usePlanTransformCommands } from './app/usePlanTransformCommands.js'
 import { usePlanPlacementCommands } from './app/usePlanPlacementCommands.js'
 import { usePropertiesPanelActions } from './app/usePropertiesPanelActions.js'
@@ -35,6 +47,10 @@ import { useProjectBrowserCommands } from './app/useProjectBrowserCommands.js'
 import { useTypeCatalogSession } from './app/useTypeCatalogSession.js'
 import { useProjectContextCommands } from './app/useProjectContextCommands.js'
 import { useLocalProjectPersistence } from './app/useLocalProjectPersistence.js'
+import { useProjectPresence } from './app/useProjectPresence.js'
+import { useProjectCommentSync } from './app/useProjectCommentSync.js'
+import { useProjectCommandSync } from './app/useProjectCommandSync.js'
+import { projectSyncFingerprint } from './projectFingerprint.js'
 import { useProjectFileActions, type ProjectFileAccess } from './app/useProjectFileActions.js'
 import { useProjectCreationActions } from './app/useProjectCreationActions.js'
 import type { CoordinatedPlanViewport } from './viewport/viewportTransform.js'
@@ -47,9 +63,12 @@ import { useWorkbenchExportActions } from './app/useWorkbenchExportActions.js'
 import { usePlanUnderlaySession } from './app/usePlanUnderlaySession.js'
 import { createElevationObjectCommandHandler } from './app/elevationObjectCommands.js'
 import { MultiViewResizeHandle } from './components/MultiViewResizeHandle.js'
+import { SelectionActionDock } from './components/SelectionActionDock.js'
+import { CanvasObjectLibraryPanel, type CanvasLibraryCategory } from './components/CanvasObjectLibraryPanel.js'
 import { ViewModePicker } from './components/ViewModePicker.js'
 import { DwgDrawingPickerModal } from './components/DwgDrawingPickerModal.js'
 import type { DwgDrawingCandidate } from './cad/importDwgUnderlay.js'
+import type { PdfPageAlignment, PdfPageScaleCalibration } from './cad/renderPdfUnderlayPage.js'
 
 const FamilyWorkbench = lazy(() => import('./components/FamilyWorkbench.js').then(module => ({ default: module.FamilyWorkbench })))
 const LaserBleHudPill = lazy(() => import('./components/LaserBleHudPill.js').then(module => ({ default: module.LaserBleHudPill })))
@@ -59,6 +78,12 @@ const TypeManagerModal = lazy(() => import('./components/TypeManagerModal.js').t
 const UnderlayCalibrationModal = lazy(() => import('./components/UnderlayCalibrationModal.js').then(module => ({ default: module.UnderlayCalibrationModal })))
 const ProjectLegalModal = lazy(() => import('./components/ProjectLegalModal.js').then(module => ({ default: module.ProjectLegalModal })))
 const PhotoDimensionModal = lazy(() => import('./components/PhotoDimensionModal.js').then(module => ({ default: module.PhotoDimensionModal })))
+const ProjectVersionHistoryModal = lazy(() => import('./components/ProjectVersionHistoryModal.js').then(module => ({ default: module.ProjectVersionHistoryModal })))
+const ProjectDrawingDownloadLinkModal = lazy(() => import('./components/ProjectDrawingDownloadLinkModal.js').then(module => ({ default: module.ProjectDrawingDownloadLinkModal })))
+const LocalProjectLibraryModal = lazy(() => import('./components/LocalProjectLibraryModal.js').then(module => ({ default: module.LocalProjectLibraryModal })))
+const ProjectCommentsPanel = lazy(() => import('./components/ProjectCommentsPanel.js').then(module => ({ default: module.ProjectCommentsPanel })))
+const ProjectCommandOutboxModal = lazy(() => import('./components/ProjectCommandOutboxModal.js').then(module => ({ default: module.ProjectCommandOutboxModal })))
+const PdfPagePicker = lazy(() => import('./components/PdfPagePicker.js').then(module => ({ default: module.PdfPagePicker })))
 
 const ExtensionPresetsModal = lazy(() => import('./components/ExtensionPresetsModal.js').then(module => ({ default: module.ExtensionPresetsModal })))
 
@@ -99,7 +124,10 @@ const phasePickerLabel = (phase: Phase, fallback: string) => {
 
 export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [dwgPickerState, setDwgPickerState] = useState<{ file: File; candidates: DwgDrawingCandidate[] } | null>(null)
-  const [quickStartDismissed, setQuickStartDismissed] = useState(false)
+  const [pdfUnderlayFile, setPdfUnderlayFile] = useState<File | null>(null)
+  const [pdfUnderlayBusy, setPdfUnderlayBusy] = useState(false)
+  const [pdfUnderlayCalibrations, setPdfUnderlayCalibrations] = useState<PdfPageScaleCalibration[]>([])
+  const [pdfUnderlayAlignments, setPdfUnderlayAlignments] = useState<PdfPageAlignment[]>([])
   const [laserHudReady, setLaserHudReady] = useState(false)
   const {
     project,
@@ -107,11 +135,19 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setProject,
     commandQueue,
     setCommandQueue,
+    localCommandTransactions,
+    setLocalCommandTransactions,
+    historyTravelRevision,
+    recordHistoryTravel,
+    undo,
+    redo,
     sessionRef: projectSessionRef,
     dispatchCommandBatch,
     dispatchAsyncCommandBatch,
     previewCommands: previewDirectManipulation,
-  } = useProjectSession(() => createDefaultResidentialProjectDocument('CF-UNTITLED', 'Untitled Project'))
+  } = useProjectSession(() => createDefaultResidentialProjectDocument(crypto.randomUUID(), 'Untitled Project'))
+  const currentProjectRef = useRef(project)
+  currentProjectRef.current = project
   const { selectedId, selectedIds, setSelectedId, setSelectedIds, selectObjects } = useEditorObjectSelection()
 
   useEffect(() => {
@@ -124,14 +160,129 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     localAutosaveReady, localAutosaveState, setLocalAutosaveState, activeProjectFileHandle,
     activeProjectFileHandleRef, updateActiveProjectFileHandle, fileFeedback, setFileFeedback,
   } = useLocalProjectPersistence({ project, sessionRef: projectSessionRef, setProjectState, setCommandQueue, setSelectedId })
+  const fieldPhotoSyncSignature = (project.field_photo_inspections ?? [])
+    .map(inspection => inspection.image_asset_id).sort().join('|')
+  useEffect(() => {
+    if (!fieldPhotoSyncSignature) return
+    let active = true
+    let inFlight = false
+    let retryDelay = 5_000
+    let retryTimer: number | null = null
+
+    const schedule = (delay: number) => {
+      if (retryTimer !== null) window.clearTimeout(retryTimer)
+      retryTimer = window.setTimeout(() => { retryTimer = null; void syncPhotos() }, delay)
+    }
+    const syncPhotos = async () => {
+      if (!active || !navigator.onLine || document.visibilityState === 'hidden') return
+      if (inFlight) { schedule(500); return }
+      inFlight = true
+      try {
+        const settings = await getLocalCollaborationToken()
+        if (!active || !settings) return
+        const result = await syncFieldPhotoAssets(project, settings.token)
+        if (!active) return
+        const hasConflicts = result.conflicts.length > 0
+        const hasMissing = result.missing > 0
+        if (hasConflicts) {
+          setFileFeedback(`ซิงค์รูปหน้างานพบ UUID ที่มีภาพคนละไฟล์ ${result.conflicts.length} รายการ · เก็บภาพเดิมไว้และไม่เขียนทับ`)
+        } else if (hasMissing) {
+          setFileFeedback(`ซิงค์รูปหน้างานแล้ว · ยังขาด ${result.missing} ไฟล์ รอทีมออนไลน์หรือซิงค์อีกครั้ง`)
+        } else if (result.uploaded || result.downloaded) {
+          setFileFeedback(`ซิงค์รูปหน้างานอัตโนมัติแล้ว · อัปโหลด ${result.uploaded} · ดาวน์โหลด ${result.downloaded}`)
+        }
+        if (hasMissing && result.can_upload) {
+          schedule(retryDelay)
+          retryDelay = Math.min(retryDelay * 2, 60_000)
+        } else retryDelay = 5_000
+      } catch (error) {
+        if (active) {
+          setFileFeedback(`ซิงค์รูปหน้างานอัตโนมัติไม่สำเร็จ: ${error instanceof Error ? error.message : 'เกิดข้อผิดพลาด'} · จะลองใหม่เมื่อเชื่อมต่อได้`)
+          schedule(retryDelay)
+          retryDelay = Math.min(retryDelay * 2, 60_000)
+        }
+      } finally {
+        inFlight = false
+      }
+    }
+    const resumeSync = () => schedule(0)
+    const handleVisibility = () => { if (document.visibilityState === 'visible') resumeSync() }
+
+    schedule(1_200)
+    window.addEventListener('online', resumeSync)
+    window.addEventListener('focus', resumeSync)
+    window.addEventListener(LOCAL_COLLABORATION_TOKEN_CHANGED_EVENT, resumeSync)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      active = false
+      if (retryTimer !== null) window.clearTimeout(retryTimer)
+      window.removeEventListener('online', resumeSync)
+      window.removeEventListener('focus', resumeSync)
+      window.removeEventListener(LOCAL_COLLABORATION_TOKEN_CHANGED_EVENT, resumeSync)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [fieldPhotoSyncSignature, project.project.id])
+  useEffect(() => {
+    let active = true
+    let inFlight = false
+    let retryDelay = 5_000
+    let retryTimer: number | null = null
+
+    const schedule = (delay: number) => {
+      if (retryTimer !== null) window.clearTimeout(retryTimer)
+      retryTimer = window.setTimeout(() => { retryTimer = null; void syncRevisions() }, delay)
+    }
+    const syncRevisions = async () => {
+      if (!active || !navigator.onLine || document.visibilityState === 'hidden') return
+      if (inFlight) { schedule(500); return }
+      inFlight = true
+      try {
+        const settings = await getLocalCollaborationToken()
+        if (!active || !settings) return
+        const result = await syncProjectRevisionHistory(currentProjectRef.current, settings.token)
+        if (!active) return
+        if (result.uploaded || result.imported || result.serverConflicts || result.conflicts) {
+          setFileFeedback(`ประวัติเวอร์ชันซิงค์กับทีมแล้ว · ส่งใหม่ ${result.uploaded} · รับใหม่ ${result.imported} · conflict ฝั่ง gateway ${result.serverConflicts} · ในเครื่อง ${result.conflicts}`)
+        }
+        retryDelay = 5_000
+      } catch (error) {
+        if (active) {
+          setFileFeedback(`ซิงค์ประวัติเวอร์ชันอัตโนมัติไม่สำเร็จ: ${error instanceof Error ? error.message : 'เกิดข้อผิดพลาด'} · จะลองใหม่เมื่อเชื่อมต่อได้`)
+          schedule(retryDelay)
+          retryDelay = Math.min(retryDelay * 2, 60_000)
+        }
+      } finally {
+        inFlight = false
+      }
+    }
+    const resumeSync = () => schedule(0)
+    const handleVisibility = () => { if (document.visibilityState === 'visible') resumeSync() }
+
+    schedule(1_800)
+    window.addEventListener('online', resumeSync)
+    window.addEventListener('focus', resumeSync)
+    window.addEventListener(LOCAL_COLLABORATION_TOKEN_CHANGED_EVENT, resumeSync)
+    window.addEventListener(LOCAL_PROJECT_REVISIONS_CHANGED_EVENT, resumeSync)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      active = false
+      if (retryTimer !== null) window.clearTimeout(retryTimer)
+      window.removeEventListener('online', resumeSync)
+      window.removeEventListener('focus', resumeSync)
+      window.removeEventListener(LOCAL_COLLABORATION_TOKEN_CHANGED_EVENT, resumeSync)
+      window.removeEventListener(LOCAL_PROJECT_REVISIONS_CHANGED_EVENT, resumeSync)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [project.project.id])
   const {
-    supportsProjectFileOpen, confirmReplaceUnsavedProject, handleSaveProject, handleSaveAsProject,
+    supportsProjectFileOpen, confirmReplaceUnsavedProject, handleDownloadProjectCopy, handleSaveProject, handleSaveAsProject,
     handleOpenProject, handleChooseProject,
   } = useProjectFileActions({
-    project, projectJson, projectFileAccess, sessionRef: projectSessionRef, setProjectState, setCommandQueue,
+    project, projectJson, projectFileAccess, sessionRef: projectSessionRef, dispatchCommandBatch, setProjectState, setCommandQueue,
     setSelectedId, setSelectedIds, savedProjectJson, setSavedProjectJson, replacementBaselineJson,
     setReplacementBaselineJson, activeProjectFileHandleRef, updateActiveProjectFileHandle,
     setLocalAutosaveState, setFileFeedback,
+    recordHistoryTravel,
   })
   const displayUnit: DisplayLengthUnit = project.project.display_unit ?? 'm'
   const [isProjectNameEditing, setIsProjectNameEditing] = useState(false)
@@ -157,12 +308,20 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }
 
   const { activeTool, activation: toolActivation, lastPlacementTool, activate: setActiveTool, repeat: repeatLastTool } = useToolSession()
+  const [selectionScope, setSelectionScope] = useState<ToolType | null>(null)
+  const [canvasLibraryCategory, setCanvasLibraryCategory] = useState<CanvasLibraryCategory | null>(null)
+  const [toolContextOpen, setToolContextOpen] = useState(false)
+  const [supplierBundlePlacement, setSupplierBundlePlacement] = useState<SupplierProductBundlePlacement | null>(null)
+  useEffect(() => {
+    if (activeTool !== 'select') setSelectionScope(null)
+  }, [activeTool])
   useEffect(() => {
     if (['door', 'window', 'pipe', 'fixture', 'cabinet', 'furniture', 'moulding', 'archFloor', 'ceiling', 'roomSeparator', 'slabVoid', 'stair'].includes(activeTool)) {
       void preloadPlanAuthoringHandlers().catch(() => undefined)
     }
   }, [activeTool])
-  const [planCanvasPreferences, setPlanCanvasPreferences] = useState<PlanCanvasPreferences>(DEFAULT_PLAN_CANVAS_PREFERENCES)
+  const [planCanvasPreferences, setPlanCanvasPreferences] = useState<PlanCanvasPreferences>(() => loadPlanCanvasPreferences())
+  useEffect(() => { savePlanCanvasPreferences(planCanvasPreferences) }, [planCanvasPreferences])
   const [planNavigationViewport, setPlanNavigationViewport] = useState<CoordinatedPlanViewport | null>(null)
   const [elevationNavigation, setElevationNavigation] = useState<CoordinatedElevationNavigation>({ zoom: 1, panY: 0, panXNorthSouth: 0, panXEastWest: 0 })
   const multiView = useWorkbenchMultiViewLayout(project.project.id, activeTool)
@@ -178,7 +337,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   } = multiView
   const { handleStartKitchenProof, handleStartHouseDemo, handleNewBlankProject } = useProjectCreationActions({
     confirmReplaceUnsavedProject,
-    resetProjectSession: nextProject => projectSessionRef.current!.reset(nextProject),
+    resetProjectSession: nextProject => { projectSessionRef.current!.reset(nextProject); recordHistoryTravel() },
     updateActiveProjectFileHandle,
     setProjectState,
     setSavedProjectJson,
@@ -191,8 +350,16 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     setViewMode,
   })
   const [labelMode, setLabelMode] = useState<'name' | 'name-size'>('name-size')
-  const [labelVisibility, setLabelVisibility] = useState<PlanLabelVisibility>(DEFAULT_PLAN_LABEL_VISIBILITY)
-  const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'coordination' | 'ai' | 'extensions'>('properties')
+  const labelVisibility = planCanvasPreferences.labelVisibility ?? DEFAULT_PLAN_LABEL_VISIBILITY
+  const setLabelVisibility = (updater: PlanLabelVisibility | ((current: PlanLabelVisibility) => PlanLabelVisibility)) => {
+    setPlanCanvasPreferences(current => ({
+      ...current,
+      labelVisibility: typeof updater === 'function'
+        ? updater(current.labelVisibility ?? DEFAULT_PLAN_LABEL_VISIBILITY)
+        : updater,
+    }))
+  }
+  const [rightPanelTab, setRightPanelTab] = useState<'properties' | 'quantities' | 'objects' | 'field_forms' | 'coordination' | 'ai' | 'extensions' | 'integrations'>('properties')
   useEffect(() => {
     if (rightPanelTab === 'objects') void import('./app/planTransformHandlers.js').catch(() => undefined)
   }, [rightPanelTab])
@@ -204,7 +371,47 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const moduleUIContributions = useMemo(() => CommandBus.getModuleUIContributions(), [moduleRegistryRevision])
   const moduleCommandDescriptors = useMemo(() => CommandBus.getModuleCommandDescriptors(), [moduleRegistryRevision])
   const [isSettingsOpen,setIsSettingsOpen] = useState(false)
-  const [inspectorOpen,setInspectorOpen] = useState(() => window.innerWidth > 1180 && !window.matchMedia('(pointer: coarse)').matches)
+  const [isProjectLibraryOpen, setIsProjectLibraryOpen] = useState(false)
+  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false)
+  const [isDrawingShareOpen, setIsDrawingShareOpen] = useState(false)
+  const [isCommandOutboxOpen, setIsCommandOutboxOpen] = useState(false)
+  const [isCommentsPanelOpen, setIsCommentsPanelOpen] = useState(false)
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
+  const [inspectorOpen,setInspectorOpen] = useState(false)
+  useEffect(() => {
+    if (activeTool !== 'select') setInspectorOpen(false)
+  }, [activeTool])
+  useEffect(() => {
+    const closeInspectorForCompactWorkspace = () => {
+      if (window.innerWidth <= 1180) setInspectorOpen(false)
+    }
+    window.addEventListener('resize', closeInspectorForCompactWorkspace)
+    return () => window.removeEventListener('resize', closeInspectorForCompactWorkspace)
+  }, [])
+  const handleOpenLocalProject = async (projectId: string) => {
+    if (projectId === project.project.id) { setIsProjectLibraryOpen(false); return }
+    try {
+      const { loadLocalProjectSnapshotById } = await import('./projectAutosave.js')
+      const snapshot = await loadLocalProjectSnapshotById(projectId)
+      if (!snapshot) { setFileFeedback('ไม่พบ snapshot ของโครงการนี้ในอุปกรณ์'); return }
+      if (!confirmReplaceUnsavedProject()) return
+      projectSessionRef.current!.reset(snapshot.project)
+      recordHistoryTravel()
+      updateActiveProjectFileHandle(null)
+      setProjectState(snapshot.project)
+      setSavedProjectJson(snapshot.savedProjectJson)
+      setReplacementBaselineJson(snapshot.replacementBaselineJson ?? snapshot.projectJson)
+      setCommandQueue([])
+      setSelectedId(null)
+      setSelectedIds([])
+      setActiveTool('select')
+      setViewMode('plan')
+      setFileFeedback(`เปิด “${snapshot.project.project.name}” จากคลังในอุปกรณ์แล้ว`)
+      setIsProjectLibraryOpen(false)
+    } catch (error) {
+      setFileFeedback(error instanceof Error ? error.message : 'เปิดโครงการจากคลังไม่สำเร็จ')
+    }
+  }
   const coordinationViews = splitViewEnabled ? paneModes : [viewMode]
   const coordinationNeeded = (inspectorOpen && rightPanelTab === 'coordination')
     || coordinationViews.some(mode => !['plan', 'framing', 'roofplan'].includes(mode))
@@ -255,12 +462,75 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     if (!hiddenObjectIds.size) return project
     return { ...project, objects: Object.fromEntries(Object.entries(project.objects).filter(([id]) => !hiddenObjectIds.has(id))) }
   }, [project, hiddenObjectIds])
+  const selectionDock = useMemo(() => {
+    const ids = selectedIds.filter(id => Boolean(project.objects[id]))
+    const selected = ids.map(id => project.objects[id]!)
+    const selectedWallIds = new Set(selected.filter(object => object.object_type === 'architecture.wall').map(object => object.id))
+    const selectedIdsSet = new Set(ids)
+    const hostedOpeningCount = Object.values(project.objects).filter(object =>
+      (object.object_type === 'door_window.door' || object.object_type === 'door_window.window')
+      && selectedWallIds.has(String((object.module_data as Record<string, unknown>).wall_id ?? ''))
+      && !selectedIdsSet.has(object.id),
+    ).length
+    const arrayObjectCount = ids.length + hostedOpeningCount
+    const lineTypes = new Set(['architecture.wall', 'structure.beam', 'structure.grid', 'reference.grid', 'architecture.room_separator'])
+    const offsetSupported = selected.length > 0 && selected.every(object => {
+      const data = object.module_data as Record<string, unknown>
+      if (!lineTypes.has(object.object_type)) return false
+      if (object.object_type === 'architecture.wall' && data.curve_geometry) return false
+      if (object.object_type === 'structure.beam') return !object.host_refs.length && !data.start_column_id && !data.end_column_id
+      if (object.object_type === 'structure.grid' || object.object_type === 'reference.grid') return !data.system_id
+      return true
+    })
+    const mirrorSupported = selected.length > 1 && selected.every(object => {
+      const data = object.module_data as Record<string, unknown>
+      if (object.object_type === 'architecture.wall') {
+        if (data.curve_geometry) return false
+        return !Object.values(project.objects).some(candidate =>
+          (candidate.object_type === 'door_window.door' || candidate.object_type === 'door_window.window')
+          && String((candidate.module_data as Record<string, unknown>).wall_id ?? '') === object.id)
+      }
+      if (object.object_type === 'structure.beam') return !object.host_refs.length && !data.start_column_id && !data.end_column_id
+      if (object.object_type === 'structure.grid' || object.object_type === 'reference.grid') return !data.system_id
+      return object.object_type === 'architecture.room_separator'
+    })
+    return { ids, arrayObjectCount, offsetSupported, mirrorSupported }
+  }, [project.objects, selectedIds])
   const [cursorCoords_mm, setCursorCoords_mm] = useState<[number, number]>([0, 0])
+  const cursorUpdatedAtRef = useRef(0)
   const [snapKind, setSnapKind] = useState<string>('Free')
+  const teamPresence = useProjectPresence(project.project.id, localAutosaveReady, {
+    selectedObjectIds: selectedIds,
+    cursorMm: cursorCoords_mm,
+    cursorUpdatedAt: cursorUpdatedAtRef.current,
+  })
+  const commandSyncStatus = useProjectCommandSync(
+    project.project.id,
+    localAutosaveReady,
+    localCommandTransactions,
+    transactionIds => setLocalCommandTransactions(current => current.filter(transaction => !transactionIds.includes(transaction.transaction_id))),
+    async (envelopes, expectedFingerprint) => {
+      const session = projectSessionRef.current!
+      const expectedRevision = session.snapshotRevision
+      const preview = await CommandBus.executeEnvelopeBatchAsync(session.project, envelopes, 'sync')
+      if (session.snapshotRevision !== expectedRevision) return { status: 'rejected', errors: ['แบบเปลี่ยนระหว่างตรวจคำสั่งจากทีม กรุณาซิงก์ใหม่'] }
+      if (preview.status !== 'success') return { status: preview.status, errors: preview.errors }
+      if (expectedFingerprint && projectSyncFingerprint(preview.updatedProject) !== expectedFingerprint) {
+        return { status: 'rejected', errors: ['ผล replay ไม่ตรงกับ fingerprint ที่เครื่องต้นทางยืนยัน'] }
+      }
+      const result = await session.executeEnvelopesAsync(envelopes, 'sync', expectedRevision)
+      if (result.status === 'success') setProjectState(result.updatedProject)
+      return { status: result.status, errors: result.errors, project: result.updatedProject }
+    },
+    teamPresence.currentRole,
+    historyTravelRevision,
+    projectJson,
+  )
+  const commentSyncStatus = useProjectCommentSync(project.project.id, localAutosaveReady, project.comments ?? [], commands => dispatchCommandBatch(commands))
 
   const underlaySession = usePlanUnderlaySession({
     project, viewMode, activeLevelId: project.project.active_level_id,
-    sessionRef: projectSessionRef, setProjectState, setActiveTool,
+    setProject, setActiveTool,
   })
   const { underlay, setUnderlay, underlayKey, hydratedUnderlayRef, canCalibrateUnderlayRef, calibrationPointsRef } = underlaySession
   const [calibrationModalOpen, setCalibrationModalOpen] = useState<boolean>(false)
@@ -269,37 +539,97 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const [isLegalModalOpen, setIsLegalModalOpen] = useState<boolean>(false)
   const [isPhotoDimensionModalOpen, setIsPhotoDimensionModalOpen] = useState<boolean>(false)
   const photoSessionsStorageKey = `cf_photo_sessions:${project.project.id}`
-  const [photoSessions, setPhotoSessions] = useState<PhotoDimensionSession[]>(() => {
-    try {
-      const saved = localStorage.getItem(photoSessionsStorageKey)
-      const parsed: unknown = saved ? JSON.parse(saved) : []
-      return Array.isArray(parsed) ? parsed as PhotoDimensionSession[] : []
-    } catch {
-      return []
-    }
-  })
+  const [photoSessions, setPhotoSessions] = useState<PhotoDimensionSession[]>([])
   const [activePhotoSession, setActivePhotoSession] = useState<PhotoDimensionSession | null>(null)
   useEffect(() => {
+    let active = true
+    setPhotoSessions([])
+    setActivePhotoSession(null)
+    const hydrate = async () => {
+      try {
+        let inspections = [...(project.field_photo_inspections ?? [])]
+        let legacy: PhotoDimensionSession[] = []
+        try {
+          const saved = localStorage.getItem(photoSessionsStorageKey)
+          const parsed: unknown = saved ? JSON.parse(saved) : []
+          legacy = Array.isArray(parsed) ? parsed as PhotoDimensionSession[] : []
+        } catch { /* A browser blocked the legacy localStorage entry; IndexedDB remains available. */ }
+        if (legacy.length && active) {
+          let migrated: PhotoDimensionSession[] = []
+          try {
+            migrated = legacy.map(session => ({
+              ...session,
+              id: crypto.randomUUID(),
+              image_asset_id: crypto.randomUUID(),
+              level_id: project.levels.some(level => level.id === session.level_id) ? session.level_id : project.project.active_level_id,
+              camera_heading_deg: session.camera_heading_deg === undefined ? undefined : ((session.camera_heading_deg % 360) + 360) % 360,
+              dimensions: session.dimensions ?? [],
+              areas: session.areas ?? [],
+            }))
+            const migratedInspections: FieldPhotoInspection[] = migrated.map(({ image_data_url: _image, ...inspection }) => ({ ...inspection, image_asset_id: inspection.image_asset_id! }))
+            await saveLocalFieldPhotoAssets(project.project.id, migrated.map(session => ({ asset_id: session.image_asset_id!, data_url: session.image_data_url })))
+            const result = dispatchCommandBatch(migratedInspections.map(inspection => ({ name: 'SaveFieldPhotoInspection', input: { inspection } })))
+            if (result.status !== 'success') {
+              await deleteLocalFieldPhotoAssets(project.project.id, migratedInspections.map(inspection => inspection.image_asset_id))
+              throw new Error(result.errors?.join(' · ') ?? 'บันทึกข้อมูลภาพลงโครงการไม่สำเร็จ')
+            }
+            inspections = [...inspections, ...migratedInspections]
+            legacy = []
+            try { localStorage.removeItem(photoSessionsStorageKey) } catch { /* The project has the migrated records. */ }
+            if (active) {
+              setFileFeedback(`ย้ายรูปถ่ายหน้างาน ${migrated.length} รายการเข้าโครงการแล้ว`)
+            }
+          } catch (error) {
+            if (active) {
+              setFileFeedback(`ย้ายรูปถ่ายหน้างานเข้าโครงการไม่สำเร็จ: ${error instanceof Error ? error.message : 'เกิดข้อผิดพลาด'} · เก็บข้อมูลเดิมไว้ในเครื่อง`)
+            }
+          }
+        }
+        if (!active) return
+        const assets = await listLocalFieldPhotoAssets(project.project.id)
+        const resolved = inspections.flatMap(inspection => {
+          const image_data_url = assets[inspection.image_asset_id]
+          return image_data_url ? [{ ...inspection, image_data_url } as PhotoDimensionSession] : []
+        })
+        setPhotoSessions([...resolved, ...legacy])
+        if (resolved.length !== inspections.length) setFileFeedback(`รูปถ่ายหน้างานขาด ${inspections.length - resolved.length} ไฟล์ในอุปกรณ์นี้ · ข้อมูลวัดและตำแหน่งยังอยู่ในโครงการ`)
+      } catch (error) {
+        if (active) setFileFeedback(`อ่านรูปถ่ายหน้างานไม่สำเร็จ: ${error instanceof Error ? error.message : 'เกิดข้อผิดพลาด'}`)
+      }
+    }
+    void hydrate()
+    const handlePhotoAssetsChanged = () => { void hydrate() }
+    window.addEventListener(LOCAL_FIELD_PHOTO_ASSETS_CHANGED_EVENT, handlePhotoAssetsChanged)
+    return () => {
+      active = false
+      window.removeEventListener(LOCAL_FIELD_PHOTO_ASSETS_CHANGED_EVENT, handlePhotoAssetsChanged)
+    }
+  }, [photoSessionsStorageKey, project.field_photo_inspections])
+  const handleSavePhotoSession = async (session: PhotoDimensionSession) => {
+    const legacySessionId = session.id
+    const inspectionId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(session.id) ? session.id : crypto.randomUUID()
+    const image_asset_id = crypto.randomUUID()
+    await saveLocalFieldPhotoAssets(project.project.id, [{ asset_id: image_asset_id, data_url: session.image_data_url }])
+    const { image_data_url: _image, image_asset_id: _previousAsset, ...metadata } = { ...session, id: inspectionId }
+    const inspection: FieldPhotoInspection = { ...metadata, image_asset_id }
+    const result = dispatchCommandBatch([{ name: 'SaveFieldPhotoInspection', input: { inspection } }])
+    if (result.status !== 'success') {
+      await deleteLocalFieldPhotoAssets(project.project.id, [image_asset_id])
+      throw new Error(result.errors?.join(' · ') ?? 'บันทึกข้อมูลภาพลงโครงการไม่สำเร็จ')
+    }
+    const nextSession = { ...session, id: inspectionId, image_asset_id }
+    const next = [...photoSessions.filter(item => item.id !== legacySessionId && item.id !== inspectionId), nextSession]
     try {
       const saved = localStorage.getItem(photoSessionsStorageKey)
       const parsed: unknown = saved ? JSON.parse(saved) : []
-      setPhotoSessions(Array.isArray(parsed) ? parsed as PhotoDimensionSession[] : [])
-    } catch {
-      setPhotoSessions([])
-    }
-    setActivePhotoSession(null)
-  }, [photoSessionsStorageKey])
-  const handleSavePhotoSession = (session: PhotoDimensionSession) => {
-    setPhotoSessions(prev => {
-      const idx = prev.findIndex(s => s.id === session.id)
-      const next = idx >= 0 ? prev.map(s => s.id === session.id ? session : s) : [...prev, session]
-      try {
-        localStorage.setItem(photoSessionsStorageKey, JSON.stringify(next))
-      } catch (e) {
-        console.warn('Could not save photo sessions', e)
+      if (Array.isArray(parsed)) {
+        const remaining = (parsed as PhotoDimensionSession[]).filter(item => item.id !== legacySessionId)
+        if (remaining.length) localStorage.setItem(photoSessionsStorageKey, JSON.stringify(remaining))
+        else localStorage.removeItem(photoSessionsStorageKey)
       }
-      return next
-    })
+    } catch { /* The project now owns inspection metadata even if legacy cleanup is unavailable. */ }
+    setPhotoSessions(next)
+    setFileFeedback('บันทึกรูปถ่าย ข้อมูลวัด และหมุดไว้ในโครงการแล้ว')
   }
 
   useEffect(() => {
@@ -320,8 +650,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   }, [localAutosaveState])
 
   useWorkbenchKeyboardShortcuts({
-    viewMode, setActiveTool, setSelectedId, handleSaveProject, projectSessionRef,
-    setProjectState, setCommandQueue, canCalibrateUnderlayRef,
+    viewMode, setActiveTool: tool => { setSelectionScope(null); setActiveTool(tool) }, setSelectedId, handleSaveProject, undo, redo, canCalibrateUnderlayRef,
   })
 
   const propertiesActions = usePropertiesPanelActions({ project, dispatchCommandBatch, setFileFeedback, setSelectedId, setSelectedIds })
@@ -360,6 +689,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     handleCommitFoundation,
     handleCommitBeam,
     handleCommitWall,
+    handleCommitWallPath,
     handleCommitSlab,
     handleCommitRoof,
   } = usePlanPlacementCommands({
@@ -371,10 +701,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     activeWallType,
     activeSlabType,
     activeRoofType,
-    setProject,
     setSelectedId,
-    setCommandQueue,
     setFileFeedback,
+    dispatchCommandBatch,
   })
   const {
     handleCommitPipeRoute, handleCommitFixture, handleCommitCabinet, handleCommitFurniture, handleCommitMoulding,
@@ -387,8 +716,19 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const { handleCommitGrid, handleCopyGrid, handleCommitGridSystem } = useGridAuthoringCommands({
     project, dispatchCommandBatch, setFileFeedback,
   })
-  const { handleUploadUnderlayImage, handleImportDwgCandidates, handleImportSiteSurvey } = useReferenceDataImportActions({
+  const { handleUploadUnderlayImage, handleImportPdfUnderlay, handleImportDwgCandidates, handleImportSiteSurvey } = useReferenceDataImportActions({
     underlayKey, hydratedUnderlayRef, setUnderlay, setFileFeedback, dispatchCommandBatch,
+    activeLevelId: project.project.active_level_id,
+    onChoosePdf: file => {
+      setPdfUnderlayBusy(false)
+      setPdfUnderlayCalibrations([])
+      setPdfUnderlayAlignments([])
+      setPdfUnderlayFile(file)
+    },
+    onImportPdfUnderlay: underlays => {
+      const additions = Object.fromEntries(underlays.map(underlay => [`drawing:${underlay.drawing_id ?? crypto.randomUUID()}`, underlay])) as Record<string, ProjectUnderlay>
+      setProject(current => ({ ...current, underlays: { ...current.underlays, ...additions } }))
+    },
     onChooseDwgCandidates: (file, candidates) => setDwgPickerState({ file, candidates }),
     onImportDwgDrawings: drawings => {
       const additions = Object.fromEntries(drawings.map(({ key, underlay }) => [key, underlay])) as Record<string, ProjectUnderlay>
@@ -415,12 +755,16 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
 
   const planCanvasProps: Omit<PlanCanvasProps, 'planDiscipline'> = {
     project: viewProject,
+    collaborators: teamPresence.sessions,
+    onOpenProjectComment: commentId => { setActiveCommentId(commentId); setIsCommentsPanelOpen(true) },
     navigationViewport: planNavigationViewport,
     onNavigationViewportChange: setPlanNavigationViewport,
     preferences: planCanvasPreferences,
     onPreferencesChange: setPlanCanvasPreferences,
     displayUnit,
     activeTool,
+    selectionScope,
+    supplierBundlePlacement,
     activeFamilyId: familyWorkbench.activeFamily?.id,
     activeFamilyTypeId: familyWorkbench.activeTypeId,
     toolActivation: toolActivation,
@@ -460,9 +804,71 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     onCommitFoundation: handleCommitFoundation,
     onCommitBeam: handleCommitBeam,
     onCommitWall: handleCommitWall,
+    onCommitWallPath: handleCommitWallPath,
     onCommitDoor: (wallId, point, offset, handing) => { if (!familyWorkbench.placeOpening('door', wallId, point, offset, handing)) handleCommitDoor(wallId, point, offset, handing) },
     onCommitWindow: (wallId, point, offset) => { if (!familyWorkbench.placeOpening('window', wallId, point, offset)) handleCommitWindow(wallId, point, offset) },
     onCommitSlab: handleCommitSlab,
+    onCommitSupplierBundle: geometry => {
+      const placement = supplierBundlePlacement
+      if (!placement) { setFileFeedback('เลือก Bundle จาก Library ก่อนวางบนแปลน'); setActiveTool('select'); return }
+      const visualType = placement.bundle.visual_type ?? 'shape'
+      const unit = visualType === 'shape' ? 'item' : visualType === 'length' ? 'm' : 'm2'
+      let unitRate: ProjectTakeoffRate = { ...placement.unit_rate, unit }
+      if (visualType === 'area' && geometry.boundary_mm && geometry.boundary_mm.length >= 3) {
+        const ring = geometry.boundary_mm
+        const boundaryValidation = validatePolygonWithVoids(ring)
+        if (!boundaryValidation.valid) { setFileFeedback(`พื้นที่ Bundle ไม่ถูกต้อง · ${boundaryValidation.reason}`); return }
+        const areaM2 = Math.abs(ring.reduce((sum, point, index) => {
+          const next = ring[(index + 1) % ring.length]!
+          return sum + point[0] * next[1] - next[0] * point[1]
+        }, 0)) / 2_000_000
+        const perimeterM = ring.reduce((sum, point, index) => {
+          const next = ring[(index + 1) % ring.length]!
+          return sum + Math.hypot(next[0] - point[0], next[1] - point[1]) / 1000
+        }, 0)
+        if (areaM2 <= 0 || !Number.isFinite(areaM2)) { setFileFeedback('พื้นที่ Bundle เป็นศูนย์หรือรูปทรงไม่ถูกต้อง'); return }
+        let material = 0, materialSell = 0, labor = 0
+        for (const component of placement.components) {
+          const basis = component.quantity_mode === 'perimeter' ? perimeterM : areaM2
+          const quantity = component.purchase_units_per_output_unit * (1 + component.waste_percent / 100) * basis
+          material += component.unit_cost_thb * quantity
+          materialSell += component.unit_sell_thb * quantity
+          if (placement.bundle.labor_calculation_mode === 'components') labor += (component.unit_labor_thb ?? 0) * quantity
+        }
+        if (placement.bundle.labor_calculation_mode !== 'components') labor = placement.bundle.labor_rate_per_output_unit * areaM2
+        material = Number((material / areaM2).toFixed(4))
+        materialSell = Number((materialSell / areaM2).toFixed(4))
+        labor = Number((labor / areaM2).toFixed(4))
+        unitRate = {
+          ...unitRate,
+          material_rate: material,
+          labor_rate: labor,
+          material_sell_rate: materialSell,
+          product_gross_margin_percent: materialSell > 0 ? Number(((materialSell - material) / materialSell * 100).toFixed(4)) : 0,
+        }
+      }
+      const id = crypto.randomUUID()
+      const module_data: Record<string, unknown> = {
+        bundle_id: placement.bundle.id,
+        bundle_name: placement.bundle.name,
+        rate_key: placement.bundle.rate_key,
+        unit,
+        visual_type: visualType,
+        unit_rate_snapshot: unitRate,
+        hide_on_proposal: placement.bundle.hide_on_proposal === true,
+        component_snapshots: structuredClone(placement.components),
+        ...geometry,
+      }
+      const result = dispatchCommandBatch([{ name: 'CreateSupplierBundleInstance', input: {
+        id, level_id: project.project.active_level_id, created_phase: project.project.active_phase, module_data,
+      } }])
+      if (result.status === 'success') {
+        setSelectedId(id)
+        const path = geometry.path_mm ?? []
+        const lengthM = path.slice(1).reduce((sum, point, index) => sum + Math.hypot(point[0] - path[index]![0], point[1] - path[index]![1]), 0) / 1000
+        setFileFeedback(`วาง ${placement.bundle.name} แล้ว · ${visualType === 'shape' ? '1 ชุด' : visualType === 'length' ? `${lengthM.toFixed(2)} ม.` : 'คำนวณพื้นที่ตามขอบเขต'} · ราคาและตัวเลือก SKU ถูกบันทึกไว้กับวัตถุ`)
+      } else setFileFeedback(result.errors?.[0] ?? 'วาง Bundle ไม่สำเร็จ')
+    },
     onCommitArchitecturalFloor: handleCommitArchitecturalFloor,
     onCommitCeiling: handleCommitCeiling,
     onCommitRoof: handleCommitRoof,
@@ -470,13 +876,14 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     onCommitFixture: handleCommitFixture,
     onCommitCabinet: handleCommitCabinet,
     onCommitFurniture: (start, end, kind) => { if (!familyWorkbench.placeFurniture(start, end, kind)) handleCommitFurniture(start, end, kind) },
+    onCommitFamilyFurniture: center => { familyWorkbench.placeFurnitureAt(center) },
     onCommitMoulding: handleCommitMoulding,
     onCommitRoomSeparator: handleCommitRoomSeparator,
     onCommitSurfaceVoid: handleCommitSurfaceVoid,
     onCommitGrid: handleCommitGrid,
     onCommitGridSystem: handleCommitGridSystem,
     onCopyGrid: handleCopyGrid,
-    onActivateTool: setActiveTool,
+    onActivateTool: tool => { setSelectionScope(null); setActiveTool(tool) },
     onCommitStair: handleCommitStair,
     onPreviewManipulation: previewDirectManipulation,
     onCommitManipulation: commitDirectManipulation,
@@ -490,6 +897,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
     },
     onCursorChange: (coords, kind) => {
       setCursorCoords_mm(coords)
+      cursorUpdatedAtRef.current = Date.now()
       setSnapKind(kind)
     },
     photoSessions,
@@ -513,7 +921,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
   const localSaveStatusLabel = localAutosaveState === 'saving' || localAutosaveState === 'restoring'
     ? 'กำลังบันทึกในเครื่อง…'
     : localAutosaveState === 'error' ? 'บันทึกในเครื่องไม่สำเร็จ' : 'บันทึกอัตโนมัติในเครื่องแล้ว'
-  const localSaveStatusIcon = localAutosaveState === 'error' ? '!' : localAutosaveState === 'saving' || localAutosaveState === 'restoring' ? '…' : '✓'
+  const LocalSaveStatusIcon = localAutosaveState === 'error' ? AlertCircle : localAutosaveState === 'saving' || localAutosaveState === 'restoring' ? Loader2 : Check
 
   if (!localAutosaveReady) return (
     <div role="status" aria-live="polite" style={{ display: 'grid', placeItems: 'center', width: '100vw', height: '100vh', color: '#475569', fontFamily: 'sans-serif' }}>
@@ -555,19 +963,40 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               onClick={() => { setProjectNameDraft(project.project.name); setIsProjectNameEditing(true) }}
             >{project.project.name}</button>
           )}
+          {teamPresence.connected && <span
+            className="cf-presence-pill"
+            role="status"
+            aria-label={`ผู้ร่วมงานออนไลน์: ${teamPresence.users.map(user => user.user_id).join(', ')}`}
+            title={`กำลังเปิดโครงการนี้: ${teamPresence.users.map(user => user.user_id).join(', ')}${teamPresence.sessions.length ? ` · กำลังเลือก: ${teamPresence.sessions.filter(session => session.selected_object_ids.length).map(session => `${session.user_id} ${session.selected_object_ids.length} ชิ้น`).join(', ') || 'ไม่มี'}` : ''} · แชร์เคอร์เซอร์และการเลือกแบบชั่วคราว · หมดอายุใน 90 วินาทีหลังปิดหรือขาดการเชื่อมต่อ`}
+          ><span className="cf-presence-dot" aria-hidden="true" /><Users size={13} aria-hidden="true" /><span>{teamPresence.users.length}</span><span className="cf-presence-label">ออนไลน์</span></span>}
+          {commandSyncStatus.phase !== 'idle' && <button
+            type="button"
+            className={`cf-command-sync-pill cf-command-sync-${commandSyncStatus.phase}`}
+            aria-label={commandSyncStatus.message ?? (commandSyncStatus.phase === 'synced' ? 'ซิงก์คำสั่งแบบแล้ว' : 'สถานะซิงก์คำสั่งแบบ')}
+            aria-haspopup="dialog"
+            aria-expanded={isCommandOutboxOpen}
+            disabled={commandSyncStatus.phase !== 'conflict' && commandSyncStatus.phase !== 'baseline-required' && commandSyncStatus.pendingCount === 0}
+            onClick={() => setIsCommandOutboxOpen(true)}
+            title={`${commandSyncStatus.message ?? (commandSyncStatus.phase === 'synced' ? `ซิงก์แบบแล้วถึงลำดับ ${commandSyncStatus.cursor ?? 0}` : 'กำลังเชื่อมต่อการซิงก์แบบ')}${commandSyncStatus.pendingCount ? ` · ค้าง ${commandSyncStatus.pendingCount} transaction` : ''}${commandSyncStatus.phase === 'conflict' || commandSyncStatus.phase === 'baseline-required' || commandSyncStatus.pendingCount ? ' · คลิกเพื่อตรวจคิวในเครื่อง' : ''}`}
+          >{commandSyncStatus.phase === 'conflict' || commandSyncStatus.phase === 'baseline-required'
+            ? <AlertTriangle size={13} aria-hidden="true" />
+            : commandSyncStatus.connected ? <Cloud size={13} aria-hidden="true" /> : <CloudOff size={13} aria-hidden="true" />}
+            <span>{commandSyncStatus.phase === 'synced' ? 'แบบซิงก์' : commandSyncStatus.phase === 'catching-up' ? 'กำลังตามแบบ' : commandSyncStatus.phase === 'conflict' ? 'ตรวจคิว' : commandSyncStatus.phase === 'baseline-required' ? 'เทียบเวอร์ชัน' : 'กำลังเชื่อมต่อ'}</span>
+            {commandSyncStatus.pendingCount > 0 && <span>{commandSyncStatus.pendingCount}</span>}
+          </button>}
         </div>
 
         <div className="cf-header-model-controls">
           <label className="cf-header-field">
             <span>ชั้น</span>
             <select value={project.project.active_level_id} onChange={(e) => handleSetWorkingLevel(e.target.value)} aria-label="ชั้นอาคาร">
-              {project.levels.map(lvl => <option key={lvl.id} value={lvl.id}>{levelPickerLabel(lvl.name)} ({lvl.elevation_mm >= 0 ? '+' : ''}{formatLengthMm(lvl.elevation_mm, displayUnit)} {displayUnit})</option>)}
+              {project.levels.map(lvl => <option key={lvl.id} value={lvl.id}>{levelPickerLabel(lvl.name)} ({lvl.elevation_mm >= 0 ? '+' : ''}{formatLengthMm(lvl.elevation_mm, displayUnit, planCanvasPreferences.elevationPrecision)} {displayUnit})</option>)}
             </select>
           </label>
           {activeTool === 'column' && <label className="cf-header-field">
             <span>ยอดเสา</span>
             <select aria-label="ระดับยอดเสาที่กำลังวาด" value={project.levels.some(level => level.id === activeColumnTopLevelId && level.elevation_mm > (project.levels.find(item => item.id === project.project.active_level_id)?.elevation_mm ?? -Infinity)) ? activeColumnTopLevelId : nextHigherLevelId(project, project.project.active_level_id)} onChange={event => setActiveColumnTopLevelId(event.target.value)}>
-              {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === project.project.active_level_id)?.elevation_mm ?? -Infinity)).map(level => <option key={level.id} value={level.id}>{level.name} (+{formatLengthMm(level.elevation_mm, displayUnit)} {displayUnit})</option>)}
+              {project.levels.filter(level => level.elevation_mm > (project.levels.find(item => item.id === project.project.active_level_id)?.elevation_mm ?? -Infinity)).map(level => <option key={level.id} value={level.id}>{level.name} (+{formatLengthMm(level.elevation_mm, displayUnit, planCanvasPreferences.elevationPrecision)} {displayUnit})</option>)}
               {!project.levels.some(level => level.elevation_mm > (project.levels.find(item => item.id === project.project.active_level_id)?.elevation_mm ?? -Infinity)) && <option value="">ความสูงตามช่วงชั้น</option>}
             </select>
           </label>}
@@ -596,11 +1025,12 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           <input id="cfproj-open" type="file" accept=".cfproj,application/json" aria-hidden="true" tabIndex={-1} className="cf-visually-hidden" onChange={(e) => { void handleOpenProject(e.currentTarget.files?.[0] ?? undefined); e.currentTarget.value = '' }} />
           <input id="cf-survey-open" type="file" accept=".csv,text/csv" aria-hidden="true" tabIndex={-1} className="cf-visually-hidden" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) handleImportSiteSurvey(file); event.currentTarget.value = '' }} />
           {supportsProjectFileOpen ? (
-            <button type="button" className="cf-button cf-button-quiet" onClick={() => void handleChooseProject()} title="เปิดไฟล์โครงการ .cfproj"><FolderOpen size={16} /><span>เปิด</span></button>
+            <button type="button" className="cf-button cf-button-quiet" aria-label="เปิดไฟล์โครงการ" onClick={() => void handleChooseProject()} title="เปิดไฟล์โครงการ .cfproj"><FolderOpen size={16} aria-hidden="true" /><span aria-hidden="true">เปิด</span></button>
           ) : (
-            <label htmlFor="cfproj-open" role="button" tabIndex={0} className="cf-button cf-button-quiet" onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); document.getElementById('cfproj-open')?.click() } }}><FolderOpen size={16} /><span>เปิด</span></label>
+            <label htmlFor="cfproj-open" role="button" tabIndex={0} aria-label="เปิดไฟล์โครงการ" className="cf-button cf-button-quiet" title="เปิดไฟล์โครงการ .cfproj" onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); document.getElementById('cfproj-open')?.click() } }}><FolderOpen size={16} aria-hidden="true" /><span aria-hidden="true">เปิด</span></label>
           )}
-          <button type="button" className="cf-button cf-button-primary" onClick={() => void handleSaveProject()} title={activeProjectFileHandle ? 'บันทึกกลับไปยังไฟล์โครงการที่เปิดอยู่' : 'บันทึกงานในเบราว์เซอร์เครื่องนี้'}><Save size={16} /><span>บันทึก</span></button>
+          <button type="button" className="cf-button cf-button-quiet cf-local-project-library-launcher" aria-label="คลังโครงการในอุปกรณ์" onClick={() => setIsProjectLibraryOpen(true)} title="ค้นหาและจัดการโครงการที่บันทึกในอุปกรณ์นี้"><Folder size={16} aria-hidden="true" /><span aria-hidden="true">โครงการ</span></button>
+          <button type="button" className="cf-button cf-button-primary" aria-label="บันทึกโครงการ" onClick={() => void handleSaveProject()} title={activeProjectFileHandle ? 'บันทึกกลับไปยังไฟล์โครงการที่เปิดอยู่' : 'บันทึกงานในเบราว์เซอร์เครื่องนี้'}><Save size={16} aria-hidden="true" /><span aria-hidden="true">บันทึก</span></button>
           <details className="cf-save-menu" onClick={(event) => {
             if ((event.target as HTMLElement).closest('button')) event.currentTarget.open = false
           }}>
@@ -611,11 +1041,12 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           </details>
           <span role="status" aria-live="polite" title={localSaveStatusLabel} className={`cf-save-status ${localAutosaveState === 'error' ? 'is-unsaved' : ''} ${localAutosaveState === 'saving' || localAutosaveState === 'restoring' ? 'is-saving' : 'is-saved'}`}>
             <span className="cf-save-status-full">{localSaveStatusLabel}{fileFeedback ? ` · ${fileFeedback}` : ''}</span>
-            <span className="cf-save-status-compact" aria-hidden="true">{localSaveStatusIcon}</span>
+            <span className="cf-save-status-compact" aria-hidden="true"><LocalSaveStatusIcon size={15} strokeWidth={2.25} className={localAutosaveState === 'saving' || localAutosaveState === 'restoring' ? 'cf-spin' : undefined} /></span>
           </span>
-          <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canUndo} onClick={() => { setProjectState(projectSessionRef.current!.undo()); setCommandQueue([]) }} title="ย้อนกลับ (Ctrl/⌘+Z)" aria-label="ย้อนกลับ"><Undo2 size={17} /></button>
-          <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canRedo} onClick={() => { setProjectState(projectSessionRef.current!.redo()); setCommandQueue([]) }} title="ทำซ้ำ (Ctrl/⌘+Shift+Z หรือ Ctrl/⌘+Y)" aria-label="ทำซ้ำ"><Redo2 size={17} /></button>
-          <button type="button" className="cf-button cf-button-quiet cf-inspector-launcher" aria-expanded={inspectorOpen} aria-label={inspectorOpen ? 'ปิดแผงแก้ไข' : selectedId ? 'แก้ไขวัตถุที่เลือก' : 'เปิดแผงข้อมูล'} onClick={() => { setRightPanelTab('properties'); setInspectorOpen(value => !value) }}><PanelRightOpen size={17} /><span>{selectedId ? 'แก้ไข' : 'ข้อมูล'}</span></button>
+          <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canUndo} onClick={undo} title="ย้อนกลับ (Ctrl/⌘+Z)" aria-label="ย้อนกลับ"><Undo2 size={17} /></button>
+          <button type="button" className="cf-icon-button" disabled={!projectSessionRef.current!.canRedo} onClick={redo} title="ทำซ้ำ (Ctrl/⌘+Shift+Z หรือ Ctrl/⌘+Y)" aria-label="ทำซ้ำ"><Redo2 size={17} /></button>
+          <button type="button" className="cf-button cf-button-quiet" aria-label="ความเห็นบนแบบ" aria-expanded={isCommentsPanelOpen} onClick={() => { setActiveCommentId(null); setIsCommentsPanelOpen(value => !value) }} title="เปิดความเห็นและหมุดบนแบบ"><MessageSquare size={16} aria-hidden="true" /><span aria-hidden="true">ความเห็น</span>{(project.comments ?? []).filter(comment => comment.status === 'open').length > 0 && <span className="cf-comments-count">{(project.comments ?? []).filter(comment => comment.status === 'open').length}</span>}</button>
+          <button type="button" className="cf-button cf-button-quiet cf-inspector-launcher" aria-expanded={inspectorOpen} aria-label={inspectorOpen ? 'ปิดแผงแก้ไข' : selectedId ? 'แก้ไขวัตถุที่เลือก' : 'เปิดแผงข้อมูล'} title={inspectorOpen ? 'ปิดแผงแก้ไข' : selectedId ? 'แก้ไขวัตถุที่เลือก' : 'เปิดแผงข้อมูล'} onClick={() => { setRightPanelTab('properties'); setInspectorOpen(value => !value) }}><PanelRightOpen size={17} aria-hidden="true" /><span aria-hidden="true">{selectedId ? 'แก้ไข' : 'ข้อมูล'}</span></button>
           <details className="cf-more-menu" onClick={(event) => {
             if ((event.target as HTMLElement).closest('button')) {
               event.currentTarget.open = false;
@@ -624,10 +1055,12 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               }
             }
           }}>
-            <summary className="cf-button cf-button-quiet" aria-label="เมนูโครงการ" title="เมนูโครงการ">เมนู</summary>
+            <summary className="cf-button cf-button-quiet" aria-label="เมนูโครงการ" title="เมนูโครงการ"><MoreHorizontal size={17} aria-hidden="true" /></summary>
             <div className="cf-more-popover">
               <div className="cf-menu-label">โครงการ</div>
               <button type="button" data-preserve-focus onClick={() => { setProjectNameDraft(project.project.name); setIsProjectNameEditing(true) }}>เปลี่ยนชื่อโครงการ</button>
+              <button type="button" onClick={() => setIsVersionHistoryOpen(true)}><History size={15} /> เวอร์ชันและคืนค่าในเครื่อง</button>
+              <button type="button" onClick={() => { setRightPanelTab('integrations'); setInspectorOpen(true) }}><Network size={15} /> เชื่อมต่อ CAD / BIM</button>
               <button type="button" onClick={handleNewBlankProject}>สร้างโครงการใหม่ (ว่าง)</button>
               <button type="button" aria-label="โฉนดและผู้เซ็นแบบ" onClick={() => setIsLegalModalOpen(true)}><FileCheck size={15} /> โฉนดและผู้เซ็นแบบ</button>
               <button type="button" onClick={() => document.getElementById('cf-survey-open')?.click()}>นำเข้าข้อมูลสำรวจ CSV</button>
@@ -641,6 +1074,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               <button type="button" onClick={()=>familyWorkbench.show()}>Family Studio · นำเข้า / สร้าง / แก้ CAD</button>
               <div className="cf-menu-label">แบบและส่งออก</div>
               <button type="button" onClick={()=>{setWorkbenchTab('sheets');setIsConstructionOpen(true)}}>ชุดแบบและตาราง</button>
+              <button type="button" disabled={teamPresence.currentRole === 'viewer'} title={teamPresence.currentRole === 'viewer' ? 'ต้องเป็น Owner หรือ Editor เพื่อสร้างลิงก์ดาวน์โหลด' : 'สร้างลิงก์ดาวน์โหลด PDF A3 แบบ snapshot'} onClick={() => setIsDrawingShareOpen(true)}><Share2 size={15} />แชร์ Vector PDF A3 ให้ลูกค้า/ทีม</button>
               <button type="button" aria-label="ส่งออก DXF 20 แผ่น" onClick={() => void handleExportDxf()}>DXF · 20 แผ่น</button>
               <button type="button" aria-label="ส่งออก IFC 4.3" onClick={() => void handleExportIfc()}>IFC 4.3</button>
               <div className="cf-menu-label">ตั้งค่าและช่วยเหลือ</div>
@@ -657,11 +1091,32 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
       <div className="cf-workspace">
         <aside className="cf-tool-rail" aria-label="เครื่องมือเขียนแบบ">
           <div className="cf-rail-caption">เครื่องมือ</div>
-          <button type="button" className="cf-button cf-rail-family" onClick={()=>familyWorkbench.show()} title="สร้าง Family · เปิด DWG/DXF · นำเข้าโมเดล 3D">Family / CAD</button>
             <Toolbar orientation="vertical"
               activeTool={activeTool}
+              selectionScope={selectionScope}
+              onSelectScope={tool => {
+                familyWorkbench.clear()
+                setSupplierBundlePlacement(null)
+                setSelectionScope(tool)
+                setActiveTool('select')
+                selectObjects([], null)
+              }}
+              contextOpen={toolContextOpen}
+              externalPanelOpen={Boolean(canvasLibraryCategory)}
+              onContextOpenChange={setToolContextOpen}
+              onContextCategoryChange={category => {
+                const libraryMatchesCategory = (category === 'openings' && (activeTool === 'door' || activeTool === 'window'))
+                  || (category === 'shapes' && activeTool === 'furniture')
+                if (!libraryMatchesCategory) setCanvasLibraryCategory(null)
+              }}
               lastPlacementTool={lastPlacementTool}
-              onSelectTool={tool => { familyWorkbench.clear(); setActiveTool(tool) }}
+              onSelectTool={tool => {
+                familyWorkbench.clear()
+                if (tool !== 'bundle') setSupplierBundlePlacement(null)
+                setSelectionScope(null)
+                setActiveTool(tool)
+                setCanvasLibraryCategory(tool === 'door' || tool === 'window' || tool === 'furniture' ? tool : null)
+              }}
               onRepeatLastTool={repeatLastTool}
               activeColumnType={activeColumnType}
               onChangeActiveColumnType={setActiveColumnType}
@@ -702,22 +1157,42 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               onUploadUnderlayImage={handleUploadUnderlayImage}
               onClearUnderlay={handleClearUnderlay}
               onOpenTypeManager={() => openCatalog()}
+              onOpenTakeoff={() => { setRightPanelTab('quantities'); setInspectorOpen(true) }}
+              onOpenFieldForms={() => { setRightPanelTab('field_forms'); setInspectorOpen(true) }}
             />
+        </aside>
+
+        <aside className={`cf-tool-context-dock${toolContextOpen || (!splitViewEnabled && viewMode === 'plan' && canvasLibraryCategory) ? ' is-open' : ''}${!splitViewEnabled && viewMode === 'plan' && canvasLibraryCategory ? ' has-library' : ''}`} aria-label="ตัวเลือกเครื่องมือ" aria-hidden={!toolContextOpen && !(!splitViewEnabled && viewMode === 'plan' && canvasLibraryCategory)}>
+          <header className="cf-tool-context-header">
+            <div><span>ConstructFlow</span><strong>เครื่องมือ</strong></div>
+            <button type="button" aria-label="ซ่อนแผงเครื่องมือ" title="ซ่อนแผงเครื่องมือ" onClick={() => setToolContextOpen(false)}>×</button>
+          </header>
+          <div id="cf-tool-category-content" />
+          <div id="cf-tool-canvas-content" />
+          {!splitViewEnabled && viewMode === 'plan' && canvasLibraryCategory && <CanvasObjectLibraryPanel
+            embedded
+            category={canvasLibraryCategory}
+            types={project.types.filter(type => type.object_type === (canvasLibraryCategory === 'door' ? 'door_window.door' : 'door_window.window'))}
+            families={familyWorkbench.families.filter(family => family.category === 'furniture')}
+            activeDoorType={activeDoorType}
+            activeWindowType={activeWindowType}
+            activeFamilyId={familyWorkbench.activeFamily?.id}
+            displayUnit={displayUnit}
+            onSelectType={(category, type) => {
+              familyWorkbench.clear()
+              setActiveTool(category)
+              if (category === 'door') setActiveDoorType(type.name)
+              else setActiveWindowType(type.name)
+            }}
+            onSelectFamily={(family, typeId) => familyWorkbench.place(family.id, typeId, family)}
+            onOpenFamilyStudio={() => familyWorkbench.show()}
+            onOpenTypeCatalog={() => openCatalog()}
+            onClose={() => setCanvasLibraryCategory(null)}
+          />}
         </aside>
 
         {/* Center Canvas Area */}
         <main className="cf-canvas-shell">
-          {Object.keys(project.objects).length === 0 && !quickStartDismissed && <section aria-label="เริ่มทำแปลน" style={{ position: 'absolute', zIndex: 6, top: 58, left: '50%', transform: 'translateX(-50%)', width: 'min(760px, calc(100% - 24px))', padding: '12px 14px', border: '1px solid #cbd5e1', borderRadius: 12, background: 'rgba(255,255,255,.97)', boxShadow: '0 10px 28px rgba(15,23,42,.12)' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-              <div><strong style={{ display: 'block', fontSize: 15 }}>เริ่มแบบบ้านของคุณ</strong><span style={{ color: '#64748b', fontSize: 12 }}>เลือกวิธีเริ่มงานได้เลย เปลี่ยนหรือย้อนกลับได้ภายหลัง</span></div>
-              <button type="button" aria-label="ปิดคำแนะนำเริ่มงาน" onClick={() => setQuickStartDismissed(true)} style={{ minWidth: 44, minHeight: 44, border: 0, borderRadius: 8, background: 'transparent', color: '#64748b', fontSize: 20, lineHeight: 1 }}>×</button>
-            </div>
-            <div className="cf-quick-start-actions">
-              <button type="button" onClick={() => document.querySelector<HTMLInputElement>('.cf-underlay-tools input[type="file"]')?.click()} style={{ minHeight: 44, border: '1px solid #7dd3fc', borderRadius: 9, background: '#f0f9ff', color: '#075985', fontWeight: 650 }}>นำเข้าแบบเดิม</button>
-              <button type="button" onClick={() => { setQuickStartDismissed(true); setActiveTool('wall') }} style={{ minHeight: 44, border: '1px solid #cbd5e1', borderRadius: 9, background: '#fff', color: '#334155', fontWeight: 650 }}>วาดผนังเอง</button>
-              <button type="button" onClick={() => { setQuickStartDismissed(true); handleStartHouseDemo() }} style={{ minHeight: 44, border: '1px solid #cbd5e1', borderRadius: 9, background: '#fff', color: '#334155', fontWeight: 650 }}>ลองแบบตัวอย่าง</button>
-            </div>
-          </section>}
           <details className="cf-view-switch-shell" onClick={event => {
             if ((event.target as HTMLElement).closest('.cf-view-switch button')) event.currentTarget.open = false
           }}>
@@ -803,6 +1278,10 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
               <summary title="การแสดงป้ายและระยะ" aria-label="การแสดงป้ายและระยะ"><Tag size={15} aria-hidden="true" /></summary>
               <div className="cf-label-popover" role="group" aria-label="การแสดงป้ายและระยะ">
                 <strong>ป้ายชื่อและระยะ</strong>
+                <button type="button" className="cf-label-all-toggle" onClick={() => {
+                  const allVisible = Object.values(labelVisibility).every(Boolean)
+                  setLabelVisibility({ structure: !allVisible, beams: !allVisible, walls: !allVisible, openings: !allVisible, grids: !allVisible })
+                }}>{Object.values(labelVisibility).every(Boolean) ? 'ซ่อนป้ายทั้งหมด' : 'แสดงป้ายทั้งหมด'}</button>
                 <div className="cf-label-style-toggle" role="group" aria-label="รูปแบบป้ายคาน">
                   <button type="button" aria-pressed={labelMode === 'name'} onClick={() => setLabelMode('name')}>ชื่อ</button>
                   <button type="button" aria-pressed={labelMode === 'name-size'} onClick={() => setLabelMode('name-size')}>ชื่อ + ขนาดคาน</button>
@@ -882,6 +1361,25 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
                 />
               })}
             </>}
+            {!splitViewEnabled && viewMode === 'plan' && activeTool === 'select' && selectionDock.ids.length > 0 && <SelectionActionDock
+              selectedIds={selectionDock.ids}
+              arrayObjectCount={selectionDock.arrayObjectCount}
+              previewActive={Boolean(alignmentPreview)}
+              offsetSupported={selectionDock.offsetSupported}
+              mirrorSupported={selectionDock.mirrorSupported}
+              onDeselect={() => { setSelectedId(null); setSelectedIds([]) }}
+              onDuplicate={() => { handleCopyObjects(selectionDock.ids); handlePasteObjects() }}
+              onDelete={() => handleDeleteObjects(selectionDock.ids)}
+              onPreviewArray={handlePreviewArrayObjects}
+              onPreviewOffset={handlePreviewOffset}
+              onPreviewMirror={handlePreviewMirror}
+              onCommitPreview={handleCommitAlignment}
+              onCancelPreview={() => { setAlignmentPreview(null); setFileFeedback('ยกเลิก Preview แล้ว') }}
+            />}
+          </div>
+
+          <div className={`cf-tablet-authoring-dock${activeTool === 'select' ? '' : ' is-active'}`} aria-label="ตั้งค่าเครื่องมือวาด" aria-hidden={activeTool === 'select'}>
+            <div id="cf-tool-tablet-canvas-content" />
           </div>
 
           {/* Bottom Coordinate Bar */}
@@ -912,7 +1410,9 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             </div>
             <div>
               <span>
-                คลิกขวา/แตะค้างวัตถุเพื่อแก้ไขหรือลบ · เมาส์กลางเลื่อนแปลน · แตะค้างพื้นที่ว่างเพื่อเลื่อน · ลูกกลิ้งซูม · {activeTool === 'wall' || activeTool === 'beam' ? 'Space เปลี่ยนแนวอ้างอิง' : activeTool === 'door' ? 'Space กลับทิศประตู' : 'เลือกเครื่องมือเพื่อเริ่มวาด'}
+                {selectionScope
+                  ? `เลือกเฉพาะ${toolLabel(selectionScope)} · ลากครอบหรือแตะเพื่อเลือก · กด “เลือก” เพื่อกลับไปเลือกทุกชนิด`
+                  : `คลิกขวา/แตะค้างวัตถุเพื่อแก้ไขหรือลบ · เมาส์กลางเลื่อนแปลน · แตะค้างพื้นที่ว่างเพื่อเลื่อน · ลูกกลิ้งซูม · ${activeTool === 'wall' || activeTool === 'beam' ? 'Space เปลี่ยนแนวอ้างอิง' : activeTool === 'door' ? 'Space กลับทิศประตู' : 'เลือกเครื่องมือเพื่อเริ่มวาด'}`}
               </span>
             </div>
           </footer>
@@ -943,8 +1443,88 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
             onCreateRoomFinish: handleCreateRoomFinish,
           }}
           onOpenConstruction={() => setIsConstructionOpen(true)}
+          onCapturePhotoDimension={() => { setActivePhotoSession(null); setIsPhotoDimensionModalOpen(true) }}
+          onImportSiteSurvey={() => document.getElementById('cf-survey-open')?.click()}
           onExportTakeoff={handleExportTakeoff}
           onExportBOQ={handleExportBOQ}
+          onSelectTakeoffObjects={ids => {
+            const sourceIds = ids.filter(id => !!project.objects[id])
+            if (!sourceIds.length) return
+            selectObjects(sourceIds, sourceIds[0] ?? null)
+            setActiveTool('select')
+            setRightPanelTab('properties')
+            setInspectorOpen(false)
+          }}
+          onSaveProposal={proposal => {
+            const result = dispatchCommandBatch([{ name: 'SaveProposalDraft', input: { proposal } }])
+            if (result.status !== 'success') setFileFeedback(result.errors?.join(' · ') ?? 'บันทึกข้อเสนอไม่สำเร็จ')
+            else setFileFeedback('บันทึกข้อเสนอแบบร่างแล้ว')
+            return result.status === 'success'
+          }}
+          onTransitionProposal={(proposalId, targetStatus, deviceSignature?: ProposalDeviceSignatureInput, recipientSignature?: ProposalRecipientSignature, note?: string) => {
+            const result = dispatchCommandBatch([{
+              name: 'TransitionProposalStatus',
+              input: { proposal_id: proposalId, target_status: targetStatus, ...(deviceSignature ? { device_signature: deviceSignature } : {}), ...(recipientSignature ? { recipient_signature: recipientSignature } : {}), ...(note?.trim() ? { note: note.trim() } : {}) },
+            }])
+            if (result.status !== 'success') setFileFeedback(result.errors?.join(' · ') ?? 'บันทึกสถานะข้อเสนอไม่สำเร็จ')
+            else setFileFeedback('บันทึกสถานะข้อเสนอและประวัติรายการแล้ว')
+            return result.status === 'success'
+          }}
+          onSaveChangeOrder={changeOrder => {
+            const result = dispatchCommandBatch([{ name: 'SaveChangeOrderDraft', input: { change_order: changeOrder } }])
+            if (result.status !== 'success') setFileFeedback(result.errors?.join(' · ') ?? 'บันทึก change order ไม่สำเร็จ')
+            else setFileFeedback('บันทึก change order แบบร่างและ snapshot ส่วนต่างแล้ว')
+            return result.status === 'success'
+          }}
+          onTransitionChangeOrder={(changeOrderId, targetStatus) => {
+            const result = dispatchCommandBatch([{
+              name: 'TransitionChangeOrderStatus',
+              input: { change_order_id: changeOrderId, target_status: targetStatus },
+            }])
+            if (result.status !== 'success') setFileFeedback(result.errors?.join(' · ') ?? 'เปลี่ยนสถานะ change order ไม่สำเร็จ')
+            else setFileFeedback('บันทึกสถานะ change order และประวัติรายการแล้ว')
+            return result.status === 'success'
+          }}
+          onSaveInvoice={invoice => {
+            const result = dispatchCommandBatch([{ name: 'SaveInvoiceDraft', input: { invoice } }])
+            if (result.status !== 'success') setFileFeedback(result.errors?.join(' · ') ?? 'บันทึกใบแจ้งหนี้ไม่สำเร็จ')
+            else setFileFeedback('บันทึกใบแจ้งหนี้แบบร่างและ snapshot ยอดสัญญาแล้ว')
+            return result.status === 'success'
+          }}
+          onTransitionInvoice={(invoiceId, targetStatus: InvoiceStatusTarget) => {
+            const result = dispatchCommandBatch([{ name: 'TransitionInvoiceStatus', input: { invoice_id: invoiceId, target_status: targetStatus } }])
+            if (result.status !== 'success') setFileFeedback(result.errors?.join(' · ') ?? 'เปลี่ยนสถานะใบแจ้งหนี้ไม่สำเร็จ')
+            else setFileFeedback(targetStatus === 'issued' ? 'ออกเอกสารใบแจ้งหนี้และบันทึกประวัติแล้ว' : 'ยกเลิกใบแจ้งหนี้แล้ว')
+            return result.status === 'success'
+          }}
+          onRecordInvoicePayment={(invoiceId, amountThb, method: InvoicePaymentMethod, reference, note) => {
+            const result = dispatchCommandBatch([{ name: 'RecordInvoicePayment', input: { invoice_id: invoiceId, amount_thb: amountThb, method, reference, note } }])
+            if (result.status !== 'success') setFileFeedback(result.errors?.join(' · ') ?? 'บันทึกรับชำระไม่สำเร็จ')
+            else setFileFeedback('บันทึกรับชำระในรายการใบแจ้งหนี้แล้ว')
+            return result.status === 'success'
+          }}
+          onSaveTakeoffRates={rates => {
+            const result = dispatchCommandBatch([{ name: 'UpdateTakeoffRates', input: { rates } }])
+            if (result.status !== 'success') setFileFeedback(result.errors?.join(' · ') ?? 'บันทึกราคาไม่สำเร็จ')
+            else setFileFeedback('บันทึกราคา Library ของโครงการแล้ว')
+            return result.status === 'success'
+          }}
+          onBeginBundlePlacement={placement => {
+            setSupplierBundlePlacement(placement)
+            setActiveTool('bundle')
+            setInspectorOpen(false)
+            const drawAs = placement.bundle.visual_type ?? 'shape'
+            setFileFeedback(drawAs === 'shape' ? `วาง ${placement.bundle.name}: แตะตำแหน่งบนแปลน` : drawAs === 'length' ? `วาง ${placement.bundle.name}: แตะจุดเริ่มและจุดปลาย` : `วาง ${placement.bundle.name}: แตะมุมพื้นที่แล้วปิดรูปที่จุดเริ่ม`)
+          }}
+          onExecute={dispatchCommandBatch}
+          integrations={{
+            project,
+            onExportProject: handleDownloadProjectCopy,
+            onExportDxf: handleExportDxf,
+            onExportIfc: handleExportIfc,
+            onConfigureCollaboration: () => setIsVersionHistoryOpen(true),
+            onExecute: dispatchCommandBatch,
+          }}
           coordination={{
             project,
             report: coordination.report,
@@ -1038,6 +1618,23 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
           void handleImportDwgCandidates(file, selections)
         }}
       />}
+      {pdfUnderlayFile && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดตัวเลือกหน้า PDF…</div>}><PdfPagePicker
+        file={pdfUnderlayFile}
+        scaleCalibrations={pdfUnderlayCalibrations}
+        alignments={pdfUnderlayAlignments}
+        levels={project.levels.map(level => ({ id: level.id, name: levelPickerLabel(level.name) }))}
+        activeLevelId={project.project.active_level_id}
+        requireScaleCalibration
+        confirmBusy={pdfUnderlayBusy}
+        onClose={() => { setPdfUnderlayBusy(false); setPdfUnderlayFile(null); setPdfUnderlayCalibrations([]); setPdfUnderlayAlignments([]) }}
+        onUpdate={(pages, calibrations, alignments) => { setPdfUnderlayCalibrations(calibrations); setPdfUnderlayAlignments(alignments ?? []) }}
+        onConfirm={(pages, calibrations, alignments) => {
+          setPdfUnderlayBusy(true)
+          void handleImportPdfUnderlay(pdfUnderlayFile, pages, calibrations, alignments).then(imported => {
+            if (imported) { setPdfUnderlayFile(null); setPdfUnderlayCalibrations([]); setPdfUnderlayAlignments([]) }
+          }).finally(() => setPdfUnderlayBusy(false))
+        }}
+      /></Suspense>}
       {isConstructionOpen&&<Suspense fallback={<div>กำลังเปิด BIM Workbench…</div>}><ConstructionWorkbench project={project} initialTab={workbenchTab} onOpenCatalog={()=>{setIsConstructionOpen(false);openCatalog(false,false,'structure.slab')}} onClose={()=>setIsConstructionOpen(false)} onExecute={dispatchCommandBatch}/></Suspense>}
       {isTypeManagerOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดคลังชนิด…</div>}><TypeManagerModal
         isOpen
@@ -1054,7 +1651,65 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         onRenamed={syncRenamedActiveType}
       /></Suspense>}
 
-      {isSettingsOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดการตั้งค่า…</div>}><SettingsModal project={project} displayUnit={displayUnit} onClose={()=>setIsSettingsOpen(false)} onExecute={dispatchCommandBatch} inspectorOpen={inspectorOpen} onInspectorChange={setInspectorOpen}/></Suspense>}
+      {isProjectLibraryOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดคลังโครงการ…</div>}><LocalProjectLibraryModal isOpen currentProjectId={project.project.id} onClose={() => setIsProjectLibraryOpen(false)} onOpenProject={projectId => { void handleOpenLocalProject(projectId) }} /></Suspense>}
+      {isSettingsOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดการตั้งค่า…</div>}><SettingsModal project={project} displayUnit={displayUnit} preferences={planCanvasPreferences} onPreferencesChange={setPlanCanvasPreferences} onClose={()=>setIsSettingsOpen(false)} onExecute={dispatchCommandBatch} inspectorOpen={inspectorOpen} onInspectorChange={setInspectorOpen}/></Suspense>}
+      {isCommandOutboxOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดคิวซิงก์…</div>}><ProjectCommandOutboxModal
+        project={project}
+        projectId={project.project.id}
+        syncMessage={commandSyncStatus.message}
+        onClose={() => setIsCommandOutboxOpen(false)}
+        onOpenVersionHistory={() => { setIsCommandOutboxOpen(false); setIsVersionHistoryOpen(true) }}
+      /></Suspense>}
+      {isVersionHistoryOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดประวัติเวอร์ชัน…</div>}><ProjectVersionHistoryModal project={project} onClose={() => setIsVersionHistoryOpen(false)} onRestore={async (revisionId, restoredProject) => {
+        try {
+          const { createLocalProjectRevision } = await import('./projectAutosave.js')
+          const currentProject = projectSessionRef.current!.project
+          await createLocalProjectRevision(currentProject, `ก่อนคืนเวอร์ชัน · ${new Date().toLocaleString('th-TH')}`)
+          let historyDelta: ReturnType<typeof buildProjectHistoryDeltaInput> | null = null
+          let localOnlyReason = ''
+          try { historyDelta = buildProjectHistoryDeltaInput(currentProject, restoredProject) }
+          catch (error) { localOnlyReason = error instanceof Error ? error.message : String(error) }
+          const result = historyDelta
+            ? dispatchCommandBatch([{ name: 'ApplyProjectHistoryDelta', input: historyDelta as unknown as Record<string, unknown> }])
+            : dispatchCommandBatch([{ name: 'RestoreProjectRevision', input: { revision_id: revisionId, project: restoredProject } }])
+          if (result.status !== 'success') {
+            setFileFeedback(result.errors?.join(' · ') ?? 'คืนเวอร์ชันไม่สำเร็จ')
+            return false
+          }
+          setCommandQueue([])
+          if (!historyDelta) recordHistoryTravel()
+          setSelectedId(null)
+          setSelectedIds([])
+          setActiveTool('select')
+          setViewMode('plan')
+          setFileFeedback(historyDelta
+            ? 'คืนเวอร์ชันแล้ว · บันทึกการคืนค่าเป็น delta ในประวัติทีม และ Undo กลับได้'
+            : `คืนเวอร์ชันในเครื่องแล้ว · Undo กลับไปแบบก่อนคืนค่าได้ · live sync หยุดเพื่อเทียบ revision (${localOnlyReason || 'ไม่สามารถสร้าง delta ได้'})`)
+          return true
+        } catch (error) {
+          setFileFeedback(error instanceof Error ? error.message : String(error))
+          return false
+        }
+      }} /></Suspense>}
+      {isDrawingShareOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดแชร์ชุดแบบ…</div>}><ProjectDrawingDownloadLinkModal project={project} onClose={() => setIsDrawingShareOpen(false)} /></Suspense>}
+      {isCommentsPanelOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดความเห็น…</div>}><ProjectCommentsPanel
+        project={project}
+        activeLevelId={project.project.active_level_id}
+        selectedObjectId={selectedId}
+        cursorMm={cursorCoords_mm}
+        author={teamPresence.currentUser ?? 'สมาชิกทีม'}
+        selectedCommentId={activeCommentId}
+        syncStatus={commentSyncStatus}
+        readOnly={teamPresence.currentRole === 'viewer' || (commentSyncStatus.connected && !commentSyncStatus.canWrite)}
+        onExecute={dispatchCommandBatch}
+        onClose={() => { setIsCommentsPanelOpen(false); setActiveCommentId(null) }}
+        onJumpTo={comment => {
+          setActiveTool('select')
+          setViewMode('plan')
+          if (comment.level_id !== project.project.active_level_id) handleSetWorkingLevel(comment.level_id)
+          setPlanNavigationViewport({ center_mm: comment.point_mm, zoom: Math.max(0.04, planNavigationViewport?.zoom ?? 0.08) })
+        }}
+      /></Suspense>}
       {/* Underlay Point-to-Point Scale Calibration Modal */}
       {calibrationModalOpen && <Suspense fallback={<div role="status" className="cf-modal-loading">กำลังเปิดปรับมาตราส่วน…</div>}><UnderlayCalibrationModal
         isOpen
@@ -1080,9 +1735,7 @@ export const App: React.FC<AppProps> = ({ projectFileAccess }) => {
         project={project}
         onSave={(legal) => {
           setProject((prev) => {
-            const next = { ...prev, legal_metadata: legal }
-            projectSessionRef.current = new ProjectCommandSession(next)
-            return next
+            return { ...prev, legal_metadata: legal }
           })
         }}
       /></Suspense>}

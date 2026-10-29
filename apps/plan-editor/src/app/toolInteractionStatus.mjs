@@ -1,14 +1,16 @@
 import { TOOL_INTERACTION_REGISTRY } from './toolInteractionRegistry.mjs'
 
 const labels = {
+  pan: 'เลื่อนมุมมอง', draw: 'วาดเส้น',
   column: 'เสา', foundation: 'ฐานราก', beam: 'คาน', wall: 'ผนัง', door: 'ประตู', window: 'หน้าต่าง',
   slab: 'พื้นโครงสร้าง', slabVoid: 'ช่องเจาะพื้น/หลังคา', archFloor: 'พื้นสถาปัตย์', ceiling: 'ฝ้าเพดาน', roof: 'หลังคา',
   pipe: 'แนวท่อ', fixture: 'อุปกรณ์ไฟฟ้า', cabinet: 'บิลท์อิน', furniture: 'เฟอร์นิเจอร์', moulding: 'แนวบัว', roomSeparator: 'เส้นแบ่งห้อง',
-  stair: 'บันได', grid: 'เส้นกริด', gridSystem: 'ระบบกริด', gridCopy: 'สำเนาเส้นกริด', measure: 'ตลับเมตร', dimension: 'บอกระยะ', calibrate: 'ปรับสเกลภาพ',
+  stair: 'บันได', grid: 'เส้นกริด', gridSystem: 'ระบบกริด', gridCopy: 'สำเนาเส้นกริด', measure: 'ตลับเมตร', fill: 'Fill / Hatch', dimension: 'บอกระยะ', calibrate: 'ปรับสเกลภาพ', bundle: 'ชุดสินค้า',
 }
 
 const getStep = (tool, state) => {
-  if (tool === 'select' || tool === 'erase') return 'ready'
+  if (tool === 'select' || tool === 'pan' || tool === 'erase') return 'ready'
+  if (tool === 'draw') return state.sketchPoints?.length ? 'add-vertex' : 'first-vertex'
   if (['wall', 'beam', 'grid', 'roomSeparator', 'pipe', 'cabinet', 'furniture', 'moulding', 'stair'].includes(tool)) {
     const hasStart = tool === 'wall' ? state.wallStartNode : tool === 'beam' ? state.beamStartNode
       : tool === 'grid' ? state.gridStartPoint : tool === 'stair' ? state.stairStartPoint
@@ -16,7 +18,13 @@ const getStep = (tool, state) => {
     return hasStart ? 'end-point' : 'start-point'
   }
   if (['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(tool)) return state.slabBoundary?.length ? 'add-vertex' : 'first-vertex'
+  if (tool === 'bundle') {
+    if (state.supplierBundleVisualType === 'area') return state.slabBoundary?.length ? 'add-vertex' : 'first-vertex'
+    if (state.supplierBundleVisualType === 'length') return state.bundleStartPoint ? 'end-point' : 'start-point'
+    return 'position'
+  }
   if (tool === 'measure') return state.tapeMeasure?.complete ? 'complete' : state.tapeMeasure ? 'end-point' : 'start-point'
+  if (tool === 'fill') return state.measureComplete ? 'complete' : state.measurePoints?.length ? 'add-vertex' : 'first-vertex'
   if (tool === 'dimension') return state.dimensionPoints?.length === 2 ? 'dimension-offset' : state.dimensionPoints?.length ? 'end-point' : 'start-point'
   if (tool === 'calibrate') return state.calibrationP1 ? 'second-reference' : 'first-reference'
   if (tool === 'gridSystem') return state.gridSystemError ? 'fix-intervals' : 'origin'
@@ -40,6 +48,8 @@ export function resolveToolInteractionStatus(tool, state = {}) {
   let instruction = ''
   switch (tool) {
     case 'select': instruction = state.selectionHint ?? 'เลือก · คลิกเลือกหรือลากครอบวัตถุ · Tab สลับวัตถุซ้อน'; break
+    case 'pan': instruction = 'เลื่อนมุมมอง · ลากบนแปลนเพื่อ Pan · ใช้สองนิ้วเพื่อเลื่อนและซูม'; break
+    case 'draw': instruction = `วาดเส้น · ${step === 'add-vertex' ? 'คลิกเพิ่มจุด · แตะจุดเริ่มหรือกด Enter เพื่อจบ' : 'เลือกจุดเริ่ม'} · Esc ยกเลิก`; break
     case 'erase': instruction = 'ยางลบ · คลิกหรือลากผ่านวัตถุเพื่อลบ'; break
     case 'wall': instruction = `ผนัง · ${step === 'end-point' ? 'เลื่อนหาจุดปลาย' : 'เลือกจุดเริ่ม'} · Enter ${step === 'end-point' ? 'วาดช่วงและต่อแนว' : 'กำหนดจุดเริ่ม'}`; break
     case 'beam': instruction = `คาน · ${step === 'end-point' ? 'เลื่อนหาจุดปลาย' : 'เลือกจุดเริ่ม'} · Enter ${step === 'end-point' ? 'วาดช่วงและต่อแนว' : 'กำหนดจุดเริ่ม'}`; break
@@ -51,6 +61,15 @@ export function resolveToolInteractionStatus(tool, state = {}) {
     case 'gridSystem': instruction = 'ระบบกริด · กรอกช่วงระยะ แล้วเลือกจุดกำเนิดหรือ Enter วางตรงเคอร์เซอร์'; break
     case 'slab': case 'slabVoid': case 'archFloor': case 'ceiling': case 'roof':
       instruction = `${labels[tool]} · ${step === 'add-vertex' ? 'กรอกระยะ/องศาแล้ว Enter เพิ่มจุด' : 'คลิกหรือ Enter จุดแรก'} · Enter บนแปลนปิดรูปเมื่อครบ 3 จุด`; break
+    case 'bundle': {
+      const visualType = state.supplierBundleVisualType ?? 'shape'
+      instruction = visualType === 'area'
+        ? `ชุดสินค้าแบบพื้นที่ · ${step === 'add-vertex' ? 'แตะเพิ่มมุมหรือปิดรูป' : 'แตะกำหนดมุมแรก'} · กด “ปิดรูป” เมื่อครบอย่างน้อย 3 มุม`
+        : visualType === 'length'
+          ? `ชุดสินค้าแบบแนว · ${step === 'end-point' ? 'แตะกำหนดจุดปลายเพื่อคำนวณความยาว' : 'แตะกำหนดจุดเริ่ม'} · ระยะจะคำนวณจากแนวที่วาง`
+          : 'ชุดสินค้าแบบจุด · แตะตำแหน่งบนแบบเพื่อวาง';
+      break
+    }
     case 'roomSeparator': instruction = `เส้นแบ่งห้อง · ${step === 'end-point' ? 'กำหนดระยะ/องศาแล้วเลือกจุดปลาย' : 'เลือกจุดเริ่ม'} · Enter ยืนยันจุด`; break
     case 'pipe': {
       const system = ({ waste: 'น้ำทิ้ง', soil: 'โสโครก', rainwater: 'น้ำฝน', vent: 'อากาศ', cold_water: 'น้ำดีเย็น', hot_water: 'น้ำร้อน' })[state.pipeSystem] ?? 'น้ำทิ้ง'
@@ -62,6 +81,7 @@ export function resolveToolInteractionStatus(tool, state = {}) {
     case 'fixture': instruction = `อุปกรณ์ไฟฟ้า ${state.fixtureKind ?? 'light'} · เลื่อนแล้ว Enter วาง`; break
     case 'stair': instruction = `บันได · ${step === 'end-point' ? 'เลือกปลายเที่ยวแรก · ระยะ/องศากำหนดเอง · Shift ล็อกแกน · Enter วาง' : 'เลือกจุดเริ่มริมเที่ยวแรก · เลือกระดับจบและรูปแบบก่อนวาง'}`; break
     case 'measure': instruction = 'ตลับเมตร · เลือกจุดเริ่มและจุดปลาย · Enter ยืนยันจุด'; break
+    case 'fill': instruction = 'Fill / Hatch · แตะพื้นที่ปิดหรือวาดขอบเขต · เลือกสีและลายก่อนใช้'; break
     case 'dimension': instruction = `บอกระยะ · ${step === 'dimension-offset' ? 'เลื่อนแล้วคลิกวางแนวระยะ' : step === 'end-point' ? 'เลือกจุดที่สอง · Shift ล็อกแกน' : 'เลือกจุดแรก'} · Enter ยืนยัน`; break
     case 'calibrate': instruction = 'ปรับสเกลภาพ · เลือกจุดอ้างอิงสองจุด · Enter ยืนยันจุด'; break
   }
@@ -84,7 +104,8 @@ export function resolveEscapeAction(tool, hasPendingStep, hasSelection = false) 
 export function hasPendingToolStep(state = {}) {
   return Boolean(state.dimensionPoints?.length || state.draggingObject || state.objectContextMenu || state.stairStartPoint || state.gridStartPoint
     || state.gridCopySourceId
-    || state.beamStartNode || state.wallStartNode || state.roomSeparatorStart || state.slabBoundary?.length
-    || state.calibrationP1 || state.tapeMeasure || state.dimensionInputX?.trim() || state.dimensionInputY?.trim()
+    || state.beamStartNode || state.wallStartNode || state.roomSeparatorStart || state.bundleStartPoint || state.slabBoundary?.length
+    || state.sketchPoints?.length
+    || state.calibrationP1 || state.tapeMeasure || state.measurePoints?.length || state.dimensionInputX?.trim() || state.dimensionInputY?.trim()
     || state.drawLengthMeters?.trim() || state.drawAngleDegrees?.trim() || state.gridSystemError)
 }

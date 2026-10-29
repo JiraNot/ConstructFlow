@@ -193,10 +193,10 @@ export const ProjectBrowser: React.FC<ProjectBrowserProps> = ({ project, selecte
       const distanceMm = Number(offsetDistance) * 1000
       if (Number.isFinite(distanceMm) && Math.abs(distanceMm) >= 1) onPreviewOffset(selectedIds, Math.round(distanceMm), offsetSide)
     }}>
-      <strong>Offset เส้นที่เลือก</strong>
+      <strong>ทำสำเนา Offset เส้นที่เลือก</strong>
       <div className="cf-browser-offset-fields"><label>ระยะ (m)<input aria-label="ระยะ Offset เมตร" type="number" step="0.01" value={offsetDistance} onChange={event => setOffsetDistance(event.target.value)} /></label><label>ด้าน<select aria-label="ด้าน Offset" value={offsetSide} onChange={event => setOffsetSide(event.target.value as 'left' | 'right')}><option value="left">ซ้ายตามทิศวาด</option><option value="right">ขวาตามทิศวาด</option></select></label></div>
-      <button type="submit">แสดงตัวอย่าง Offset</button>
-      <small>รองรับผนัง คาน กริด และเส้นแบ่งห้อง · ระยะวัดตั้งฉากจากเส้นเดิม</small>
+      <button type="submit">แสดงตัวอย่างสำเนา</button>
+      <small>รองรับผนังตรง คานอิสระ กริดอิสระ และเส้นแบ่งห้อง · ประตูหน้าต่างบนผนังตรงจะคัดลอกไปด้วย</small>
     </form>}
     {selectedIds.length > 1 && <form className="cf-browser-array cf-browser-align" onSubmit={event => {
       event.preventDefault()

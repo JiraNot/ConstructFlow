@@ -1,6 +1,6 @@
 // Architecture & Openings Domain Mutation Command Payloads (Vertical Slice 02)
 
-import { Phase, DoorHanding, WallInterfaceTreatment, PlacementReference, RoomModuleData, RoomSeparatorModuleData, ArchitecturalFloorModuleData, CeilingModuleData } from '@constructflow/project-model'
+import { Phase, DoorHanding, WallCurveGeometry, WallInterfaceTreatment, PlacementReference, RoomModuleData, RoomSeparatorModuleData, ArchitecturalFloorModuleData, CeilingModuleData } from '@constructflow/project-model'
 
 export type ArchitectureObjectInput<T extends object> = T & { id?: string; created_phase?: Phase; phase?: Phase }
 export interface ArchitectureRoomCommands {
@@ -30,6 +30,9 @@ export interface CreateWallInput {
 
   /** End point in millimeters: [x, y] or [x, y, z] */
   end_point_mm: [number, number, number] | [number, number]
+
+  /** Optional exact circular plan centerline; endpoints and length are derived from this geometry. */
+  curve_geometry?: WallCurveGeometry
 
   /** Wall thickness in mm, e.g. 100, 150, 200 */
   thickness_mm: number
@@ -85,6 +88,8 @@ export interface UpdateWallEndpointsInput {
   object_id: string
   start_point_mm: [number, number]
   end_point_mm: [number, number]
+  /** Required when editing an existing curved wall; preserves its analytic centerline. */
+  curve_geometry?: WallCurveGeometry
 }
 
 /** Move a hosted door/window along its host wall centerline, preserving the relationship. */

@@ -1,6 +1,6 @@
 export type Vec2 = [number, number];
 export { alignedDimensionGeometry, alignedDimensionOffset } from './alignedDimension.js';
-export { distanceToSegment2D, distanceToPath2D, pointInPolygon2D, rectangleCorners2D, distanceToArc2D } from './picking.js';
+export { distanceToSegment2D, distanceToPath2D, pointInPolygon2D, polygonArea2D, angleAtVertexDegrees, rectangleCorners2D, distanceToArc2D } from './picking.js';
 export type Vec3 = [number, number, number];
 export type Triangle = [Vec3, Vec3, Vec3];
 export type SegmentPlacementReference = 'centerline' | 'left_face' | 'right_face';

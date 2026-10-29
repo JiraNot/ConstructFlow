@@ -1,6 +1,7 @@
 import {
   type DisplayLengthUnit,
   type ProjectDocument,
+  formatLengthMm,
   type PipeRouteModuleData,
   type CabinetModuleData,
   type MouldingModuleData,
@@ -12,12 +13,15 @@ import {
   isWallObject,
   isDoorObject,
   isWindowObject,
+  wallCenterlineLengthMm,
+  wallCenterlinePointAtOffsetMm,
 } from '@constructflow/project-model'
 import { polygonEdgeGrip } from '@constructflow/geometry-kernel'
 import { getRoofSeams } from '@constructflow/roof-engine'
 import { cabinetRotationGripPoint, gridLineEndpoints, orientedRectangleCorners, slabSlopeArrow, stairFlightGripPoints, stairLandingGripPoint } from './PlanCanvasGeometry.js'
 import { drawOpeningInspectionDimensions } from './drawPlanCanvasOpeningInspectionDimensions.js'
 import { worldToScreen, type ViewportState } from '../viewport/viewportTransform.js'
+import { getPlanObjectBounds } from './PlanCanvasGeometry.js'
 
 interface SelectionManipulationPreview {
   project: ProjectDocument
@@ -32,14 +36,38 @@ export function drawPlanCanvasSelectionHandles(
   viewport: ViewportState,
   displayUnit: DisplayLengthUnit,
   manipulationPreview: SelectionManipulationPreview | null,
+  showRealtimeDimensions = true,
+  precision = 3,
+  showSelectionHandles = true,
 ) {
+  if (!showSelectionHandles) return
   const activeTool = 'select'
     if (activeTool === 'select') {
       ctx.save()
-      for (const id of editableSelectionIds) {
+      for (const [selectionIndex, id] of editableSelectionIds.entries()) {
         const object = planProject.objects[id]
         if (!object) continue
         const data = object.module_data as unknown as Record<string, unknown>
+        if (showRealtimeDimensions && !isDoorObject(object) && !isWindowObject(object)) {
+          const start = data.start_point_mm as [number, number] | undefined
+          const end = data.end_point_mm as [number, number] | undefined
+          const bounds = getPlanObjectBounds(object)
+          if (bounds) {
+            const wallLength = isWallObject(object) ? wallCenterlineLengthMm(object.module_data) : undefined
+            const label = start && end
+              ? `L ${formatLengthMm(wallLength ?? Math.hypot(end[0] - start[0], end[1] - start[1]), displayUnit, precision)} ${displayUnit}`
+              : `${formatLengthMm(bounds[2] - bounds[0], displayUnit, precision)} × ${formatLengthMm(bounds[3] - bounds[1], displayUnit, precision)} ${displayUnit}`
+            const anchor = worldToScreen([(bounds[0] + bounds[2]) / 2, bounds[3]], viewport)
+            ctx.save()
+            ctx.font = '600 11px system-ui, sans-serif'
+            const width = ctx.measureText(label).width + 14
+            const x = anchor[0], y = anchor[1] - 17 - selectionIndex * 20
+            ctx.fillStyle = 'rgba(255,255,255,.96)'; ctx.strokeStyle = '#93c5fd'; ctx.lineWidth = 1
+            ctx.beginPath(); ctx.roundRect(x - width / 2, y - 11, width, 22, 6); ctx.fill(); ctx.stroke()
+            ctx.fillStyle = '#075985'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, x, y)
+            ctx.restore()
+          }
+        }
         const points: Array<[number, number, 'linear' | 'opening' | 'opening-center' | 'cabinet-rotation' | 'stair-width' | 'stair-run' | 'stair-landing' | 'stair-first-flight' | 'stair-second-flight' | 'slab-edge' | 'slab-slope' | 'pipe-node']> = []
         let slabArrow: ReturnType<typeof slabSlopeArrow> = null
         let roofSeams: ReturnType<typeof getRoofSeams> = []
@@ -94,24 +122,31 @@ export function drawPlanCanvasSelectionHandles(
         } else if (isDoorObject(object) || isWindowObject(object)) {
           const host = planProject.objects[object.module_data.wall_id]
           if (host && isWallObject(host)) {
-            const [sx, sy] = host.module_data.start_point_mm, [ex, ey] = host.module_data.end_point_mm
-            const length = Math.hypot(ex - sx, ey - sy)
+            const wallData = host.module_data
+            const length = wallCenterlineLengthMm(wallData)
             if (length > 1) {
-              const ux = (ex - sx) / length, uy = (ey - sy) / length, halfWidth = object.module_data.width_mm / 2
-              const cx = sx + ux * object.module_data.offset_along_wall_mm
-              const cy = sy + uy * object.module_data.offset_along_wall_mm
+              const halfWidth = object.module_data.width_mm / 2
+              const startPose = wallCenterlinePointAtOffsetMm(wallData, object.module_data.offset_along_wall_mm - halfWidth)
+              const endPose = wallCenterlinePointAtOffsetMm(wallData, object.module_data.offset_along_wall_mm + halfWidth)
+              const centerPose = wallCenterlinePointAtOffsetMm(wallData, object.module_data.offset_along_wall_mm)
               points.push(
-                [sx + ux * (object.module_data.offset_along_wall_mm - halfWidth), sy + uy * (object.module_data.offset_along_wall_mm - halfWidth), 'opening'],
-                [sx + ux * (object.module_data.offset_along_wall_mm + halfWidth), sy + uy * (object.module_data.offset_along_wall_mm + halfWidth), 'opening'],
-                [cx, cy, 'opening-center']
+                [startPose.point_mm[0], startPose.point_mm[1], 'opening'],
+                [endPose.point_mm[0], endPose.point_mm[1], 'opening'],
+                [centerPose.point_mm[0], centerPose.point_mm[1], 'opening-center']
               )
 
-              // Draw full architectural dimensioning and clearance verification
-              drawOpeningInspectionDimensions(ctx, object, host, planProject, viewport, displayUnit)
+              // Keep opening inspection readable in a multi-selection: detailed
+              // clearances are useful for one active opening, but collide when
+              // several openings are selected together.
+              if (editableSelectionIds.length === 1) {
+                drawOpeningInspectionDimensions(ctx, object, host, planProject, viewport, displayUnit)
+              }
 
               // Draw Flip Handing Icon Button for doors on opposite wall face
               if (isDoorObject(object)) {
-                const nx = -uy, ny = ux
+                const tangent = centerPose.tangent_angle_deg * Math.PI / 180
+                const nx = -Math.sin(tangent), ny = Math.cos(tangent)
+                const cx = centerPose.point_mm[0], cy = centerPose.point_mm[1]
                 const handing = object.module_data.handing || 'left_in'
                 const swingSign = handing.endsWith('_out') ? -1 : 1
                 const flipBtnX = cx - nx * (host.module_data.thickness_mm / 2 + 180) * swingSign

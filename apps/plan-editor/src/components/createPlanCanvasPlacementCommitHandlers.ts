@@ -12,9 +12,11 @@ type PlacementCommitCallbacks = Pick<PlanCanvasProps,
   | 'onCommitCeiling'
   | 'onCommitRoof'
   | 'onCommitSurfaceVoid'
+  | 'onCommitSupplierBundle'
 >
 
 interface CreatePlanCanvasPlacementCommitHandlersOptions extends PlacementCommitCallbacks {
+  supplierBundlePlacement: PlanCanvasProps['supplierBundlePlacement']
   canvasRef: RefObject<HTMLCanvasElement | null>
   activeSnap: SnapResult | null
   activeTool: ToolType
@@ -39,12 +41,15 @@ export function createPlanCanvasPlacementCommitHandlers(options: CreatePlanCanva
     canvasRef, activeSnap, activeTool, supportsPlacementDimensions, viewport,
     selectedId, project, slabBoundary, setSlabBoundary, roofShape, roofSlopeDeg, roofThicknessMm,
     roofElevationOffsetMm, roofMaterial, clearDimensionOverrides,
+    supplierBundlePlacement, onCommitSupplierBundle,
     onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling, onCommitRoof, onCommitSurfaceVoid,
   } = options
 
+  const isAreaBundle = activeTool === 'bundle' && supplierBundlePlacement?.bundle.visual_type === 'area'
+
   const commitPlacementAtCursor = () => {
     const canvas = canvasRef.current
-    if (!canvas || !activeSnap || (!supportsPlacementDimensions && !['measure', 'dimension', 'calibrate'].includes(activeTool))) return
+    if (!canvas || !activeSnap || (!supportsPlacementDimensions && !['measure', 'fill', 'dimension', 'calibrate'].includes(activeTool))) return
     const rect = canvas.getBoundingClientRect()
     const [x, y] = worldToScreen(activeSnap.point_mm, viewport)
     canvas.focus({ preventScroll: true })
@@ -64,7 +69,8 @@ export function createPlanCanvasPlacementCommitHandlers(options: CreatePlanCanva
 
   const finishPolygonPlacement = () => {
     if (slabBoundary.length < 3) return false
-    if (activeTool === 'slab') onCommitSlab(slabBoundary)
+    if (isAreaBundle && onCommitSupplierBundle) onCommitSupplierBundle({ boundary_mm: slabBoundary })
+    else if (activeTool === 'slab') onCommitSlab(slabBoundary)
     else if (activeTool === 'archFloor') onCommitArchitecturalFloor?.(slabBoundary)
     else if (activeTool === 'ceiling') onCommitCeiling?.(slabBoundary)
     else if (activeTool === 'roof') onCommitRoof?.(slabBoundary, {
@@ -82,13 +88,13 @@ export function createPlanCanvasPlacementCommitHandlers(options: CreatePlanCanva
   }
 
   const handleCanvasDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!polygonTools.has(activeTool)) return
+    if (!polygonTools.has(activeTool) && !isAreaBundle) return
     event.preventDefault()
     finishPolygonPlacement()
   }
 
   const commitActivePlacement = (fromInput = false) => {
-    if (polygonTools.has(activeTool) && !fromInput && finishPolygonPlacement()) return
+    if ((polygonTools.has(activeTool) || isAreaBundle) && !fromInput && finishPolygonPlacement()) return
     commitPlacementAtCursor()
   }
 

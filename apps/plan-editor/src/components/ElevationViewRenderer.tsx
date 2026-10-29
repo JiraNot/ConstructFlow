@@ -10,6 +10,9 @@ import { buildElevationManipulationCommands } from '../elevationManipulationComm
 interface ElevationViewRendererProps {
   mode: Extract<EditorViewMode, ElevationDirection>
   project: ProjectDocument
+  displayUnit: PlanCanvasProps['displayUnit']
+  lengthPrecision: number
+  elevationPrecision: number
   selectedId: string | null
   selectedIds: string[]
   onSelectObject: PlanCanvasProps['onSelectObject']
@@ -29,12 +32,12 @@ interface ElevationViewRendererProps {
 
 /** Loaded only when an elevation or reflected ceiling plan is opened. */
 export const ElevationViewRenderer: React.FC<ElevationViewRendererProps> = ({
-  mode, project, selectedId, selectedIds, onSelectObject, onSelectionChange, underlay, coordination,
+  mode, project, displayUnit, lengthPrecision, elevationPrecision, selectedId, selectedIds, onSelectObject, onSelectionChange, underlay, coordination,
   navigation, onNavigationChange, planNavigationViewport, onPlanNavigationViewportChange, planAndRcpNavigationLinked,
   onMoveElevationObject,
   previewManipulation, commitManipulation, onManipulationRejected,
 }) => (
-  <ElevationCanvas project={project} direction={mode} selectedId={selectedId} selectedIds={selectedIds}
+  <ElevationCanvas project={project} direction={mode} displayUnit={displayUnit} lengthPrecision={lengthPrecision} elevationPrecision={elevationPrecision} selectedId={selectedId} selectedIds={selectedIds}
     onSelectObject={onSelectObject} onSelectionChange={onSelectionChange} underlay={underlay}
     coordination={coordination} navigation={navigation} onNavigationChange={onNavigationChange}
     planNavigation={mode === 'rcp' && planAndRcpNavigationLinked ? planNavigationViewport : null}

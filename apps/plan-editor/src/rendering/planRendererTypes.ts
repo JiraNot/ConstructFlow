@@ -1,5 +1,14 @@
 import type { DoorHanding, StairModuleData } from '@constructflow/project-model'
 
+export interface PlanCanvasDisplaySettings {
+  backgroundVisible: boolean
+  rulersEnabled: boolean
+  gridEnabled: boolean
+  gridSpacingMm: number
+  majorGridEvery: number
+  lengthPrecision: number
+}
+
 export interface UnderlayConfig {
   image: HTMLImageElement | null
   drawing_id?: string
@@ -8,7 +17,7 @@ export interface UnderlayConfig {
   level_id?: string
   storage_key?: string
   source_file?: string
-  source_kind?: 'image' | 'dxf' | 'dwg'
+  source_kind?: 'image' | 'pdf' | 'dxf' | 'dwg'
   source_layout?: string
   source_region?: [number, number, number, number]
   scale_source?: 'declared_units' | 'assumed_units' | 'calibrated'

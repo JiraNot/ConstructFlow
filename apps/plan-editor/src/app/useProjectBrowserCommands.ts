@@ -1,6 +1,7 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import type { CommandRequest } from '@constructflow/command-schema'
 import type { ProjectDocument, ProjectViewTemplate } from '@constructflow/project-model'
+import { expandSelectionWithHostedOpenings } from './duplicateSelection.js'
 import type { EditorViewMode } from './useMultiViewPreferences.js'
 import type { useProjectSession } from './useProjectSession.js'
 
@@ -74,7 +75,7 @@ export function useProjectBrowserCommands({
   }
 
   const handlePasteObjects = () => {
-    const objectIds = copiedObjectIdsRef.current.filter(id => Boolean(project.objects[id]))
+    const objectIds = expandSelectionWithHostedOpenings(project, copiedObjectIdsRef.current)
     if (!objectIds.length) return
     const id_map = Object.fromEntries(objectIds.map(id => [id, crypto.randomUUID()]))
     const distance = 500 * (pasteCountRef.current + 1)

@@ -7,6 +7,11 @@ export interface ViewportState {
   zoom: number // Screen pixels per millimeter (e.g. 0.08 = 1000mm -> 80px)
 }
 
+/** Zoom percentage shown by the plan canvas controls (100% = 80 px per meter). */
+export function planZoomPercent(zoom: number): number {
+  return Math.round((zoom / 0.08) * 100)
+}
+
 /** Screen-independent plan navigation shared by panes with different sizes and projections. */
 export interface CoordinatedPlanViewport {
   center_mm: [number, number]

@@ -24,6 +24,7 @@ export function usePlanCanvasController(props: PlanCanvasProps) {
     planDiscipline = 'architecture',
     displayUnit,
     activeTool,
+    selectionScope,
     toolActivation = 0,
     selectedId,
     selectedIds = selectedId ? [selectedId] : [],
@@ -50,19 +51,20 @@ export function usePlanCanvasController(props: PlanCanvasProps) {
   )
   const { viewport, setViewport } = viewportController
   const placement = usePlanCanvasPlacementSession({ project, displayUnit, activeTool, activation: toolActivation })
-  const [authoringControlsOpen, setAuthoringControlsOpen] = useState(false)
-  const surveySelection = usePlanCanvasSurveySelection({ project, activeTool, viewport, onSelectObject, onSelectionChange })
-  const { snapModes } = preferences
+  const [authoringControlsOpen, setAuthoringControlsOpen] = useState(true)
+  const surveySelection = usePlanCanvasSurveySelection({ project, activeTool, selectionScope, viewport, onSelectObject, onSelectionChange })
+  const snapModes = preferences.objectSnapEnabled ? preferences.snapModes : []
   const { snapPlanPoint, snapPlanWallHost } = usePlanCanvasSnapping({ planProject, viewport, snapModes })
 
   const picking = usePlanCanvasPicking({
-    project, planProject, viewport, activeTool, selectedId, onSelectObject, onSelectionChange,
+    project, planProject, viewport, activeTool, selectionScope, selectedId, onSelectObject, onSelectionChange,
   })
   const pointerState = usePlanCanvasPointerState({
     manualDragPointRef: dragDimensionInput.manualPointRef,
     setResizeDimensionWidth: dragDimensionInput.setWidth,
     setResizeDimensionHeight: dragDimensionInput.setHeight,
     setResizeDimensionLength: dragDimensionInput.setLength,
+    onCancelWallTouchGesture: gesture => placement.setWallStartNode(gesture.hadExistingStart ? gesture.startNode : null),
   })
 
   const editableSelectionIds = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
@@ -72,6 +74,7 @@ export function usePlanCanvasController(props: PlanCanvasProps) {
     preferences,
     onPreferencesChange,
     activeTool,
+    supplierBundlePlacement: props.supplierBundlePlacement,
     selectedId,
     editableSelectionIds,
     selectedIds,

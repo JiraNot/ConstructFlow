@@ -25,6 +25,26 @@ export function pointInPolygon2D(point: Point, ring: readonly Point[]): boolean 
   return inside
 }
 
+/** Area enclosed by a 2D polygon ring, in square coordinate units. */
+export function polygonArea2D(ring: readonly Point[]): number {
+  if (ring.length < 3) return 0
+  const twiceArea = ring.reduce((sum, point, index) => {
+    const next = ring[(index + 1) % ring.length]
+    return sum + point[0] * next[1] - next[0] * point[1]
+  }, 0)
+  return Math.abs(twiceArea) / 2
+}
+
+/** Interior angle at vertex, returned in degrees from 0 to 180. */
+export function angleAtVertexDegrees(start: Point, vertex: Point, end: Point): number {
+  const ax = start[0] - vertex[0], ay = start[1] - vertex[1]
+  const bx = end[0] - vertex[0], by = end[1] - vertex[1]
+  const aLength = Math.hypot(ax, ay), bLength = Math.hypot(bx, by)
+  if (aLength < 1e-9 || bLength < 1e-9) return 0
+  const cosine = Math.max(-1, Math.min(1, (ax * bx + ay * by) / (aLength * bLength)))
+  return Math.acos(cosine) * 180 / Math.PI
+}
+
 export function rectangleCorners2D(center: Point, width: number, depth: number, rotationDeg = 0): [number, number][] {
   const angle = rotationDeg * Math.PI / 180, cos = Math.cos(angle), sin = Math.sin(angle)
   return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) => [

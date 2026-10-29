@@ -2,11 +2,13 @@ import { objectFamilyGeometry } from '@constructflow/family-engine'
 import { drawFamilyPath } from '../rendering/familyRenderer.js'
 import { resolveWallTopSegments } from '@constructflow/architecture-engine'
 import React, { useEffect, useRef, useState } from 'react'
-import { getDisplayPhase, resolveBeamBaseElevation, resolveColumnVerticalExtent, resolveOpeningVerticalExtent, resolveSlabElevation, resolveWallVerticalExtent, type ProjectDocument } from '@constructflow/project-model'
+import { formatLengthMm, getDisplayPhase, resolveBeamBaseElevation, resolveColumnVerticalExtent, resolveOpeningVerticalExtent, resolveSlabElevation, resolveWallVerticalExtent, type DisplayLengthUnit, type ProjectDocument } from '@constructflow/project-model'
 import { clipElevationEdgeBySurfaces, getElevationFinishSurfaces, buildProjectRepresentations3D, getElevationVisibleOpeningIds, getElevationVisibleWallIds, getOpeningElevationLinework, getPlanVisibleObjects, getVisibleElevationMeshEdges, resolveCeilingGridStyle, resolvePlanPhaseStyle } from '@constructflow/representation-engine'
 import { clippedGridSegments, polygonDiagonalHatchSegments, polygonInteriorPoint } from '@constructflow/geometry-kernel'
 import { getElevationBeamHorizontalBounds, getElevationWallStyle, getVisibleElevationLevelRows, layoutElevationTags, packElevationLevelLabelCenters, panElevationView, resolveElevationWallFaceMark, sortElevationObjectsForDrawing, zoomElevationViewAtPoint, zoomElevationViewFromCenter } from '../elevationLabelLayout.mjs'
 import { formatRoomAreaM2 } from '../roomLabel.mjs'
+import { planZoomPercent } from '../viewport/viewportTransform.js'
+import { formatPlanRoomTag, shouldShowPlanSymbolTag } from '../rendering/planLabels.js'
 import { buildElevationGroupMoveCommands, resolveElevationMoveSelection } from '../elevationMoveSelection.mjs'
 
 import type { CoordinationFinding } from '@constructflow/clash-engine'
@@ -51,6 +53,9 @@ function createElevationViewStates(): Record<ElevationDirection, ElevationViewSt
 interface Props {
   project: ProjectDocument
   direction: ElevationDirection
+  displayUnit: DisplayLengthUnit
+  lengthPrecision: number
+  elevationPrecision: number
   selectedId: string | null
   selectedIds?: string[]
   onSelectObject: (id: string | null) => void
@@ -124,7 +129,7 @@ function drawTag(ctx: CanvasRenderingContext2D, centerX: number, centerY: number
 }
 
 /** Orthographic, semantic projection of the project model. The canvas never becomes an editable copy of model edges. */
-export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedId, selectedIds = selectedId ? [selectedId] : [], onSelectObject, onSelectionChange, underlay, onMoveObject, onBuildManipulation, onPreviewManipulation, onCommitManipulation, onManipulationRejected, coordination = [], navigation, onNavigationChange, planNavigation, onPlanNavigationChange }) => {
+export const ElevationCanvas: React.FC<Props> = ({ project, direction, displayUnit, lengthPrecision, elevationPrecision, selectedId, selectedIds = selectedId ? [selectedId] : [], onSelectObject, onSelectionChange, underlay, onMoveObject, onBuildManipulation, onPreviewManipulation, onCommitManipulation, onManipulationRejected, coordination = [], navigation, onNavigationChange, planNavigation, onPlanNavigationChange }) => {
   const isSelected = (id: string) => selectedIds.includes(id) || selectedId === id
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hitRegions = useRef<Array<{ id: string; x: number; y: number; w: number; h: number }>>([])
@@ -177,7 +182,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
         if(underlay?.visible&&underlay.image){ctx.save();ctx.globalAlpha=Math.max(.05,Math.min(1,underlay.opacity));const rotation=-(underlay.rotation_deg??0)*Math.PI/180;ctx.translate(sx(underlay.origin_mm[0]),sy(underlay.origin_mm[1]));ctx.rotate(rotation);ctx.drawImage(underlay.image,0,0,underlay.image.width*underlay.scale_mm_per_px*scale,underlay.image.height*underlay.scale_mm_per_px*scale);ctx.restore()}
         hitRegions.current=[]
         const roomLabels:Array<{x:number;y:number;text:string;color:string}> = []
-        for(const room of rooms){const d=room.module_data as Record<string,unknown>,ring=d.boundary_mm as [number,number][],boundaryOpen=d.boundary_status==='unclosed',selected=isSelected(room.id),phaseStyle=resolvePlanPhaseStyle(getDisplayPhase(room));ctx.beginPath();ring.forEach((p,i)=>i?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));ctx.closePath();ctx.fillStyle=selected?'rgba(2,132,199,.09)':boundaryOpen?'rgba(239,68,68,.10)':getDisplayPhase(room)==='existing'?'rgba(148,163,184,.4)':phaseStyle.fill;ctx.fill();ctx.strokeStyle=boundaryOpen?'#dc2626':selected?'#0284c7':phaseStyle.stroke;ctx.lineWidth=selected?2:phaseStyle.dash.length?1.5:1.2;ctx.setLineDash(boundaryOpen?[5,3]:phaseStyle.dash);ctx.stroke();ctx.setLineDash([]);const [cx,cy]=polygonInteriorPoint(ring)??[ring.reduce((s,p)=>s+p[0],0)/ring.length,ring.reduce((s,p)=>s+p[1],0)/ring.length];const areaLabel=formatRoomAreaM2(d.area_mm2,d.boundary_status);roomLabels.push({x:sx(cx),y:sy(cy),text:`${String(d.number??'')} ${String(d.name??'Room')}${areaLabel?` · ${areaLabel} m²`:''}${boundaryOpen?' · วงผนังเปิด':''}`,color:boundaryOpen?'#b91c1c':phaseStyle.stroke});const px=ring.map(p=>sx(p[0])),py=ring.map(p=>sy(p[1])),minX=Math.min(...px),minY=Math.min(...py);hitRegions.current.push({id:room.id,x:minX,y:minY,w:Math.max(...px)-minX,h:Math.max(...py)-minY})}
+        for(const room of rooms){const d=room.module_data as Record<string,unknown>,ring=d.boundary_mm as [number,number][],boundaryOpen=d.boundary_status==='unclosed',selected=isSelected(room.id),phaseStyle=resolvePlanPhaseStyle(getDisplayPhase(room));ctx.beginPath();ring.forEach((p,i)=>i?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));ctx.closePath();ctx.fillStyle=selected?'rgba(2,132,199,.09)':boundaryOpen?'rgba(239,68,68,.10)':getDisplayPhase(room)==='existing'?'rgba(148,163,184,.4)':phaseStyle.fill;ctx.fill();ctx.strokeStyle=boundaryOpen?'#dc2626':selected?'#0284c7':phaseStyle.stroke;ctx.lineWidth=selected?2:phaseStyle.dash.length?1.5:1.2;ctx.setLineDash(boundaryOpen?[5,3]:phaseStyle.dash);ctx.stroke();ctx.setLineDash([]);const [cx,cy]=polygonInteriorPoint(ring)??[ring.reduce((s,p)=>s+p[0],0)/ring.length,ring.reduce((s,p)=>s+p[1],0)/ring.length];if(shouldShowPlanSymbolTag(planNavigation?planZoomPercent(view.zoom):Math.round(view.zoom*100),true,selected)){const areaLabel=formatRoomAreaM2(d.area_mm2,d.boundary_status);roomLabels.push({x:sx(cx),y:sy(cy),text:`${String(d.number??'')} ${String(d.name??'Room')}${areaLabel?` · ${areaLabel} m²`:''}${boundaryOpen?' · วงผนังเปิด':''}`,color:boundaryOpen?'#b91c1c':phaseStyle.stroke})}const px=ring.map(p=>sx(p[0])),py=ring.map(p=>sy(p[1])),minX=Math.min(...px),minY=Math.min(...py);hitRegions.current.push({id:room.id,x:minX,y:minY,w:Math.max(...px)-minX,h:Math.max(...py)-minY})}
         for (const ceiling of ceilings) {
           const d = ceiling.module_data as Record<string, unknown>
           const ring = d.boundary_mm as number[][] | undefined
@@ -222,7 +227,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
         }
         // Keep room tags above ceiling fills and grids; otherwise only fragments outside
         // the ceiling boundary remain visible in the reflected ceiling plan.
-        for(const label of roomLabels){ctx.save();ctx.font='12px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';const width=ctx.measureText(label.text).width;ctx.fillStyle='rgba(251,253,255,.92)';ctx.fillRect(label.x-width/2-4,label.y-9,width+8,18);ctx.fillStyle=label.color;ctx.fillText(label.text,label.x,label.y);ctx.restore()}
+        for(const label of roomLabels){ctx.save();ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';const lines=formatPlanRoomTag(label.text).split('\n'),width=Math.max(...lines.map(line=>ctx.measureText(line).width)),height=Math.max(18,lines.length*11+8);ctx.fillStyle='rgba(251,253,255,.94)';ctx.fillRect(label.x-width/2-6,label.y-height/2,width+12,height);ctx.strokeStyle='#cbd5e1';ctx.lineWidth=.7;ctx.strokeRect(label.x-width/2-6,label.y-height/2,width+12,height);if(lines.length>1){ctx.beginPath();ctx.moveTo(label.x-width/2-3,label.y);ctx.lineTo(label.x+width/2+3,label.y);ctx.stroke()}ctx.fillStyle=label.color;lines.forEach((line,index)=>ctx.fillText(line,label.x,label.y+(index-(lines.length-1)/2)*11));ctx.restore()}
         ctx.fillStyle='#64748b';ctx.font='12px sans-serif';ctx.fillText('แปลนฝ้า RCP · คลิกเลือกห้องหรือฝ้า',12,20);return
       }
       const isEastWest = direction === 'east' || direction === 'west'
@@ -301,8 +306,8 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
       }
       const drawLevelLabels=()=>{
         for(const [index,{level,y}] of levelRows.entries()){
-        const value=level.elevation_mm===0?'±0.000':`${level.elevation_mm>0?'+':''}${(level.elevation_mm/1000).toFixed(3)}`
-        const label=`${level.name}  ${value} m`;ctx.font='11px sans-serif'
+        const value=level.elevation_mm===0?`±${formatLengthMm(0,displayUnit,elevationPrecision)}`:`${level.elevation_mm>0?'+':''}${formatLengthMm(level.elevation_mm,displayUnit,elevationPrecision)}`
+        const label=`${level.name}  ${value} ${displayUnit}`;ctx.font='11px sans-serif'
         const labelY=labelYs[index],labelW=ctx.measureText(label).width+12,labelRight=6+labelW
         ctx.fillStyle='rgba(251,253,255,.97)';ctx.fillRect(6,labelY-labelHalfHeight,labelW,labelHalfHeight*2)
         ctx.strokeStyle='#cbd5e1';ctx.strokeRect(6,labelY-labelHalfHeight,labelW,labelHalfHeight*2)
@@ -567,15 +572,15 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
           ctx.fillText(text,bx,by+0.5)
         }
         if(topElev!==undefined){
-          const topSign=topElev>=0?'+':''
-          drawBadge(x+w/2,y-11,`▲ ${topSign}${(topElev/1000).toFixed(3)} m`)
+          const topSign=topElev>=0?'+':'-'
+          drawBadge(x+w/2,y-11,`▲ ${topSign}${formatLengthMm(Math.abs(topElev),displayUnit,elevationPrecision)} ${displayUnit}`)
         }
         if(baseElev!==undefined){
-          const baseSign=baseElev>=0?'+':''
-          drawBadge(x+w/2,y+h+11,`▼ ${baseSign}${(baseElev/1000).toFixed(3)} m`)
+          const baseSign=baseElev>=0?'+':'-'
+          drawBadge(x+w/2,y+h+11,`▼ ${baseSign}${formatLengthMm(Math.abs(baseElev),displayUnit,elevationPrecision)} ${displayUnit}`)
         }
         if(objHeight!==undefined&&objHeight>0){
-          drawBadge(x+w+28,y+h/2,`H ${(objHeight/1000).toFixed(3)} m`)
+          drawBadge(x+w+28,y+h/2,`H ${formatLengthMm(objHeight,displayUnit,lengthPrecision)} ${displayUnit}`)
         }
         ctx.restore()
       }
@@ -586,7 +591,7 @@ export const ElevationCanvas: React.FC<Props> = ({ project, direction, selectedI
     const observer=new ResizeObserver(draw);observer.observe(canvas)
     window.addEventListener('resize', draw)
     return ()=>{observer.disconnect();window.removeEventListener('resize',draw)}
-  },[project,direction,selectedId,selectedIds,underlay,viewRevision,coordination,manipulationPreview,navigation,planNavigation])
+  },[project,direction,displayUnit,lengthPrecision,elevationPrecision,selectedId,selectedIds,underlay,viewRevision,coordination,manipulationPreview,navigation,planNavigation])
 
   const zoomBy = (factor: number) => {
     const view = currentView()

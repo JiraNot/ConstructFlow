@@ -35,8 +35,10 @@ export function createWorkbenchExportActions(
       ]),
     ]
     downloadTextFile(`${project.project.id || 'project'}-takeoff.csv`, csvDocument(rows), 'text/csv;charset=utf-8')
+      return true
     } catch (error) {
       setFileFeedback(`ส่งออกปริมาณไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+      return false
     }
   }
 
@@ -80,8 +82,10 @@ export function createWorkbenchExportActions(
     rows.push([`Factor F (งานอาคาร กรมบัญชีกลาง - กำไร ดอกเบี้ย ภาษี 7%)`, '', '', '', '', '', '', '', '', '', '', '', '', boq.factor_f.factor_f.toFixed(4), ''])
     rows.push(['ยอดรวมค่าก่อสร้างสุทธิ (Grand Total THB)', '', '', '', '', '', '', '', '', '', '', '', '', boq.grand_total_thb.toFixed(2), ''])
     downloadTextFile(`${project.project.id || 'project'}-boq-thailand.csv`, csvDocument(rows), 'text/csv;charset=utf-8')
+      return true
     } catch (error) {
       setFileFeedback(`ส่งออก BOQ ไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+      return false
     }
   }
 
@@ -98,8 +102,10 @@ export function createWorkbenchExportActions(
         anchor.click()
       }
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      return true
     } catch (error) {
       setFileFeedback(`ส่งออกชุดแบบไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+      return false
     }
   }
 
@@ -113,8 +119,10 @@ export function createWorkbenchExportActions(
       })
       downloadTextFile(`${project.project.id || 'ConstructFlow'}_20Layouts.dxf`, result.dxfContent, 'application/dxf', 1000)
       setFileFeedback('ส่งออก DXF 20 แผ่นแล้ว')
+      return true
     } catch (error) {
       setFileFeedback(`ส่งออก DXF ไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+      return false
     }
   }
 
@@ -127,8 +135,10 @@ export function createWorkbenchExportActions(
       })
       downloadTextFile(`${project.project.id || 'ConstructFlow'}.ifc`, result.ifcContent, 'application/x-step', 1000)
       setFileFeedback('ส่งออก IFC 4.3 แล้ว')
+      return true
     } catch (error) {
       setFileFeedback(`ส่งออก IFC ไม่สำเร็จ: ${error instanceof Error ? error.message : String(error)}`)
+      return false
     }
   }
 

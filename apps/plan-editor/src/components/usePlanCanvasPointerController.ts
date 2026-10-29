@@ -8,6 +8,7 @@ import type { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.
 import type { usePlanCanvasSnapping } from './usePlanCanvasSnapping.js'
 import type { usePlanCanvasPlacementController } from './usePlanCanvasPlacementController.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
+import { matchesPlanSelectionScope } from './planSelectionScope.js'
 import { usePlanCanvasManipulationInteractions } from './usePlanCanvasManipulationInteractions.js'
 import { usePlanCanvasPointerInteractions } from './usePlanCanvasPointerInteractions.js'
 
@@ -37,37 +38,43 @@ export function usePlanCanvasPointerController({
   placementController, snapPlanPoint, snapPlanWallHost,
 }: UsePlanCanvasPointerControllerOptions) {
   const {
-    project, activeTool, displayUnit, activeBeamTypeMark, activeWallTypeMark,
+    project, activeTool, supplierBundlePlacement, displayUnit, activeBeamTypeMark, activeWallTypeMark,
     activeDoorTypeMark, activeWindowTypeMark, preferences,
     onCopyGrid, onCommitColumn, onCommitFoundation, onCommitDoor, onCommitWindow,
-    onCommitFixture, onSelectionChange, onSelectObject, onCommitBeam, onCommitWall,
-    onCommitRoomSeparator, onCommitPipeRoute, onCommitCabinet, onCommitFurniture, onCommitMoulding,
-    onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling, onCommitRoof,
+    onCommitFixture, onSelectionChange, onSelectObject, onCommitBeam, onCommitWall, onCommitWallPath,
+    onCommitRoomSeparator, onCommitPipeRoute, onCommitCabinet, onCommitFurniture, onCommitFamilyFurniture, onCommitMoulding,
+    onCommitSlab, onCommitSupplierBundle, onCommitArchitecturalFloor, onCommitCeiling, onCommitRoof,
     onCommitSurfaceVoid, onCommitGrid, onCommitGridSystem, onStartCalibrationModal,
     onCommitStair, onActivateTool, onDeleteObjects, onPreviewManipulation,
     onCommitManipulation, onManipulationRejected, onCursorChange,
   } = props
   const {
-    draggingObject, dragPreviewPoint, manipulationPreview,
-    setDraggingObject, setDragPreviewPoint, setManipulationPreview,
+    draggingObject, dimensionEdit, dragPreviewPoint, manipulationPreview,
+    setDraggingObject, setDimensionEdit, setDragPreviewPoint, setManipulationPreview,
   } = pointerState
 
-  const findEditHandle = (screenPoint: [number, number]) => findPlanCanvasEditHandle({
-    planProject, editableSelectionIds, viewport, screenPoint, onFlipDoorHanding: props.onFlipDoorHanding,
-  })
+  const findEditHandle = (screenPoint: [number, number]) => {
+    const handle = findPlanCanvasEditHandle({
+      planProject, editableSelectionIds, viewport, screenPoint, onFlipDoorHanding: props.onFlipDoorHanding,
+    })
+    return handle && matchesPlanSelectionScope(planProject.objects[handle.id], props.selectionScope) ? handle : null
+  }
 
   const manipulation = usePlanCanvasManipulationInteractions({
-    containerRef, canvasRef, planProject, viewport, displayUnit, dragDimensions,
-    draggingObject, dragPreviewPoint, manipulationPreview,
-    setDraggingObject, setDragPreviewPoint, setManipulationPreview, snapPlanPoint,
+    containerRef, canvasRef, planProject, viewport, displayUnit, precision: preferences.lengthPrecision, dragDimensions,
+    draggingObject, dimensionEdit, dragPreviewPoint, manipulationPreview,
+    setDraggingObject, setDimensionEdit, setDragPreviewPoint, setManipulationPreview, snapPlanPoint,
     onPreviewManipulation, onCommitManipulation, onManipulationRejected,
   })
 
   const pointerInteractions = usePlanCanvasPointerInteractions({
     canvasRef,
-    activeTool, viewport, setViewport, project, planProject, selectedId, selectedIds, displayUnit,
+    activeTool, activeFamilyId: props.activeFamilyId, viewport, setViewport, project, planProject, supplierBundlePlacement, selectedId, selectedIds, displayUnit,
+    realtimeDimensions: preferences.realtimeDimensions,
+    selectionScope: props.selectionScope,
     activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
     placementReference: preferences.placementReference, doorHanding: preferences.doorHanding,
+    lineDrawingMode: preferences.lineDrawingMode, wallAngleSnapDeg: preferences.wallAngleSnapDeg,
     draggingObject, gridCopySourceId: placement.gridCopySourceId, hoveredId: picking.hoveredId,
     pointerState, placement, picking, dragDimensions,
     manipulation: {
@@ -90,11 +97,12 @@ export function usePlanCanvasPointerController({
     findEditHandle,
     callbacks: {
       onCopyGrid, onCommitColumn, onCommitFoundation, onCommitDoor, onCommitWindow,
-      onCommitFixture, onSelectionChange, onSelectObject, onCommitBeam, onCommitWall,
+      onCommitFixture, onSelectionChange, onSelectObject, onCommitBeam, onCommitWall, onCommitWallPath,
       onCommitRoomSeparator, onCommitPipeRoute, onCommitCabinet,
       onCommitFurniture: onCommitFurniture ? (start, end) => onCommitFurniture(start, end, placement.furnitureKind) : undefined,
+      onCommitFamilyFurniture,
       onCommitMoulding,
-      onCommitSlab, onCommitArchitecturalFloor, onCommitCeiling, onCommitRoof,
+      onCommitSlab, onCommitSupplierBundle, onCommitArchitecturalFloor, onCommitCeiling, onCommitRoof,
       onCommitSurfaceVoid, onCommitGrid, onCommitGridSystem, onStartCalibrationModal,
       onCommitStair, onActivateTool, onDeleteObjects, onPreviewManipulation,
       onCommitManipulation, onManipulationRejected, onCursorChange,

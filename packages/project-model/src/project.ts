@@ -108,6 +108,78 @@ export interface TypeDefinition {
   parameters: TypeParameters
 }
 
+export type FieldPhotoDimensionCategory = 'architecture' | 'interior' | 'setback' | 'defect' | 'mep'
+export type FieldPhotoDimensionStatus = 'measured' | 'pending' | 'defect'
+export type FieldPhotoAreaCategory = 'paint' | 'wallpaper' | 'tile' | 'masonry' | 'custom'
+
+export interface FieldPhotoSubSegment { id: string; ratio: number; distance_mm: number; distance_m: number; label?: string }
+export interface FieldPhotoDimensionLine {
+  id: string
+  start_ratio: [number, number]
+  end_ratio: [number, number]
+  distance_mm: number
+  distance_m: number
+  label: string
+  category: FieldPhotoDimensionCategory
+  status: FieldPhotoDimensionStatus
+  notes?: string
+  color?: string
+  sub_segments?: FieldPhotoSubSegment[]
+}
+export interface FieldPhotoTileCalculationConfig {
+  tile_width_cm: number
+  tile_length_cm: number
+  waste_percent: number
+  pieces_per_box?: number
+  show_grid?: boolean
+}
+export interface FieldPhotoTileCalculationResult {
+  tile_width_cm: number
+  tile_length_cm: number
+  tile_area_sqm: number
+  net_area_sqm: number
+  waste_percent: number
+  base_pieces: number
+  waste_pieces: number
+  total_pieces: number
+  pieces_per_box: number
+  total_boxes: number
+  box_coverage_sqm: number
+  mortar_bags_20kg: number
+  grout_bags_1kg: number
+}
+export interface FieldPhotoAreaBox {
+  id: string
+  bounds_ratio: [number, number, number, number]
+  width_mm: number
+  height_mm: number
+  area_sqm: number
+  deductions_sqm: number
+  net_area_sqm: number
+  label: string
+  category: FieldPhotoAreaCategory
+  notes?: string
+  color?: string
+  tile_config?: FieldPhotoTileCalculationConfig
+  tile_result?: FieldPhotoTileCalculationResult
+}
+/** Canonical field observation metadata; the binary image lives in the local media store. */
+export interface FieldPhotoInspection {
+  id: string
+  image_asset_id: string
+  title: string
+  room_name?: string
+  image_natural_width: number
+  image_natural_height: number
+  captured_at: string
+  dimensions: FieldPhotoDimensionLine[]
+  areas?: FieldPhotoAreaBox[]
+  notes?: string
+  pin_coords_mm?: [number, number]
+  camera_heading_deg?: number
+  level_id?: string
+}
+
 export interface RainwaterDesignSettings {
   /** Project site location used to identify the governing rainfall record. */
   location?: string
@@ -157,6 +229,20 @@ export function validateRainwaterDesignSettings(value: unknown): asserts value i
 export interface ProjectDocument {
   schema_version: 2
   families?: import('./family.js').FamilyDefinition[]
+  /** Frozen quantity and price snapshots generated from the model takeoff. */
+  proposal_drafts?: import('./proposal.js').ProposalDraft[]
+  /** Incremental scope/price snapshots linked to accepted proposals. */
+  change_orders?: import('./changeOrder.js').ChangeOrderDraft[]
+  /** Contract installment snapshots and manually recorded receipt history. */
+  invoices?: import('./invoice.js').InvoiceDraft[]
+  /** Per-project unit price overrides applied to calculated Thai phased BOQ. */
+  takeoff_rates?: Record<string, import('./takeoffRates.js').ProjectTakeoffRate>
+  /** Field photo measurements and observations; binary images live in the project media store. */
+  field_photo_inspections?: FieldPhotoInspection[]
+  /** Offline field forms with immutable field snapshots and UUID references to project context. */
+  field_forms?: import('./fieldForms.js').FieldFormRecord[]
+  /** Model-linked team discussion threads pinned to plan coordinates and optional object UUIDs. */
+  comments?: import('./projectComment.js').ProjectComment[]
   project: ProjectMetadata
   levels: Level[]
   phases: PhaseDefinition[]
@@ -202,7 +288,7 @@ export interface ProjectUnderlay {
   view_id?: ProjectViewId
   level_id?: string
   source_file?: string
-  source_kind?: 'image' | 'dxf' | 'dwg'
+  source_kind?: 'image' | 'pdf' | 'dxf' | 'dwg'
   source_layout?: string
   source_region?: [number, number, number, number]
   scale_source?: 'declared_units' | 'assumed_units' | 'calibrated'

@@ -82,7 +82,7 @@ export function useProjectCreationActions({
   const handleNewBlankProject = () => {
     if (!confirmReplaceUnsavedProject()) return
     if (!window.confirm('สร้างโครงการใหม่แบบว่างหรือไม่? งานที่เปิดอยู่จะถูกแทนที่ด้วยโครงการค่าเริ่มต้น')) return
-    const blank = createDefaultResidentialProjectDocument(`CF-${crypto.randomUUID()}`, 'โครงการใหม่')
+    const blank = createDefaultResidentialProjectDocument(crypto.randomUUID(), 'โครงการใหม่')
     replaceProject(blank, 'สร้างโครงการใหม่แบบว่างแล้ว')
   }
 

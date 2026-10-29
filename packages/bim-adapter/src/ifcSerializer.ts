@@ -1,7 +1,7 @@
 // ConstructFlow IFC 4.3 ADD2 Serializer (ISO 16739-1:2024 / ISO 10303-21 STEP)
 // Standalone pure TypeScript implementation
 
-import { getDisplayPhase, type ProjectDocument, type SmartObject, type Phase } from "@constructflow/project-model";
+import { getDisplayPhase, wallCenterlinePointsMm, type ProjectDocument, type SmartObject, type Phase, type WallModuleData } from "@constructflow/project-model";
 import { uuidToIfcGuid } from "./ifcGuid.js";
 
 /** Quote a value for an ISO 10303-21 STEP string literal. */
@@ -289,6 +289,35 @@ export class IfcSerializer {
       const ep = d.end_point_mm ?? [4000, 0, 0];
       const thMm = d.thickness_mm ?? 100;
       const hMm = d.height_mm ?? 2800;
+      if (d.curve_geometry) {
+        const centerline = wallCenterlinePointsMm(obj.module_data as WallModuleData, 5);
+        const half = thMm / 2;
+        const left: [number, number][] = [], right: [number, number][] = [];
+        centerline.forEach((point, index) => {
+          const before = centerline[Math.max(0, index - 1)]!, after = centerline[Math.min(centerline.length - 1, index + 1)]!;
+          const dx = after[0] - before[0], dy = after[1] - before[1], span = Math.hypot(dx, dy) || 1;
+          const nx = -dy / span, ny = dx / span;
+          left.push([point[0] + nx * half, point[1] + ny * half]);
+          right.push([point[0] - nx * half, point[1] - ny * half]);
+        });
+        const outline = [...left, ...right.reverse()];
+        outline.push(outline[0]!);
+        const profilePoints = outline.map(([x, y]) => {
+          const id = this.nextId();
+          lines.push(`#${id}=IFCCARTESIANPOINT((${toM(x)},${toM(y)}));`);
+          return `#${id}`;
+        });
+        const polylineId = this.nextId();
+        lines.push(`#${polylineId}=IFCPOLYLINE((${profilePoints.join(",")}));`);
+        const profileId = this.nextId();
+        lines.push(`#${profileId}=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,'WallArcProfile',$,#${polylineId});`);
+        const locPt = this.nextId();
+        lines.push(`#${locPt}=IFCCARTESIANPOINT((0.,0.,${toM(sp[2] ?? 0)}));`);
+        placementId = this.createLocalPlacement(lines, locPt, axisZ, axisX);
+        const solidId = this.nextId();
+        lines.push(`#${solidId}=IFCEXTRUDEDAREASOLID(#${profileId},$,#${axisZ},${toM(hMm)});`);
+        shapeRepId = this.createShapeRepresentation(lines, subContextId, solidId);
+      } else {
       const lenMm = Math.hypot(ep[0] - sp[0], ep[1] - sp[1]) || 1000;
 
       const locPt = this.nextId();
@@ -304,6 +333,7 @@ export class IfcSerializer {
         `#${solidId}=IFCEXTRUDEDAREASOLID(#${profileId},$,#${axisZ},${toM(hMm)});`,
       );
       shapeRepId = this.createShapeRepresentation(lines, subContextId, solidId);
+      }
     } else if (type.startsWith("arch.door") || type.startsWith("opening.door") || type.startsWith("door_window.door")) {
       ifcClass = "IFCDOOR";
       predefinedType = ".DOOR.";

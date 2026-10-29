@@ -73,7 +73,7 @@ export function resolvePlanCanvasPointerSnap({
         return shiftKey ? constrainGridCopyToParallelOffset(positioned, copySource) : positioned
       })()
     : usesPlacementDimensions(activeTool)
-      ? applyPlacementDimensions(snap.point_mm, findTemporaryDimensionRefs(snap.point_mm, planProject, undefined, dimensionReferenceMode), rawWorld)
+      ? applyPlacementDimensions(snap.point_mm, findTemporaryDimensionRefs(snap.point_mm, planProject, snap.target_id, dimensionReferenceMode), rawWorld)
       : snap.point_mm
 
   if (point[0] !== snap.point_mm[0] || point[1] !== snap.point_mm[1]) {

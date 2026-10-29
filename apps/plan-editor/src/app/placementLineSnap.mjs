@@ -1,4 +1,4 @@
-const lineTools = new Set(['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'])
+const lineTools = new Set(['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof', 'bundle'])
 const spanTools = new Set(['roomSeparator', 'pipe', 'cabinet', 'furniture', 'moulding'])
 
 export function resolvePlanCanvasLineSnap(snap, pointerPoint, shiftKey, tool, state, constrainLineSnap) {
@@ -14,6 +14,8 @@ export function resolvePlanCanvasLineSnap(snap, pointerPoint, shiftKey, tool, st
     reference = state.wallStartNode.reference
   } else if (tool === 'stair' && state.stairStartPoint) {
     start = state.stairStartPoint
+  } else if (tool === 'bundle' && state.bundleStartPoint) {
+    start = state.bundleStartPoint
   } else if (tool === 'grid' && state.gridStartPoint) {
     start = state.gridStartPoint
   } else if (spanTools.has(tool) && state.roomSeparatorStart) {

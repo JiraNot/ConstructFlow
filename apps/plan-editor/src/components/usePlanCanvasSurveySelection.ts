@@ -11,13 +11,14 @@ const EMPTY_SURVEY_POINTS: SiteSurveyPoint[] = []
 interface UsePlanCanvasSurveySelectionOptions {
   project: PlanCanvasProps['project']
   activeTool: ToolType
+  selectionScope?: ToolType | null
   viewport: ViewportState
   onSelectObject: PlanCanvasProps['onSelectObject']
   onSelectionChange: PlanCanvasProps['onSelectionChange']
 }
 
 export function usePlanCanvasSurveySelection({
-  project, activeTool, viewport, onSelectObject, onSelectionChange,
+  project, activeTool, selectionScope, viewport, onSelectObject, onSelectionChange,
 }: UsePlanCanvasSurveySelectionOptions) {
   const [selectedSurveyPointId, setSelectedSurveyPointId] = useState<string | null>(null)
   const surveyPoints = project.site_survey?.points ?? EMPTY_SURVEY_POINTS
@@ -31,7 +32,7 @@ export function usePlanCanvasSurveySelection({
     event: ReactPointerEvent<HTMLCanvasElement>,
     continueCanvasPointerDown?: (event: ReactPointerEvent<HTMLCanvasElement>) => void,
   ) => {
-    if (event.button === 0 && !event.shiftKey && activeTool === 'select' && surveyPoints.length > 0) {
+    if (event.button === 0 && !event.shiftKey && activeTool === 'select' && !selectionScope && surveyPoints.length > 0) {
       const rect = event.currentTarget.getBoundingClientRect()
       const point: [number, number] = [event.clientX - rect.left, event.clientY - rect.top]
       const nearestId = findNearestSurveyPoint(point, projectedCandidates)
@@ -47,7 +48,7 @@ export function usePlanCanvasSurveySelection({
 
     setSelectedSurveyPointId(null)
     continueCanvasPointerDown?.(event)
-  }, [activeTool, onSelectObject, onSelectionChange, projectedCandidates, surveyPoints.length])
+  }, [activeTool, selectionScope, onSelectObject, onSelectionChange, projectedCandidates, surveyPoints.length])
   const dismissSurveyPoint = useCallback(() => setSelectedSurveyPointId(null), [])
 
   return {

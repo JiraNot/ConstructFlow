@@ -13,16 +13,17 @@ interface UsePlanCanvasLineConstraintOptions {
 /** Reapplies the current line constraint when dimensions or the construction start point changes. */
 export function usePlanCanvasLineConstraint({ activeTool, placement, constrainLineSnap }: UsePlanCanvasLineConstraintOptions) {
   const { activeSnap, setActiveSnap, wallStartNode, beamStartNode, stairStartPoint, gridStartPoint,
-    roomSeparatorStart, slabBoundary, drawLengthMeters, drawAngleDegrees } = placement
+    roomSeparatorStart, slabBoundary, bundleStartPoint, drawLengthMeters, drawAngleDegrees } = placement
 
   useEffect(() => {
     if (!activeSnap) return
-    const isPolygonTool = isPolygonInteraction(activeTool)
+    const isPolygonTool = isPolygonInteraction(activeTool) || (activeTool === 'bundle' && slabBoundary.length > 0)
     const isTwoPointTool = isTwoPointInteraction(activeTool)
     const start = activeTool === 'wall' ? wallStartNode : activeTool === 'beam' ? beamStartNode
       : activeTool === 'stair' && stairStartPoint ? { point_mm: stairStartPoint }
         : activeTool === 'grid' && gridStartPoint ? { point_mm: gridStartPoint }
           : isTwoPointTool && roomSeparatorStart ? { point_mm: roomSeparatorStart }
+              : activeTool === 'bundle' && bundleStartPoint ? { point_mm: bundleStartPoint }
             : isPolygonTool && slabBoundary.length ? { point_mm: slabBoundary[slabBoundary.length - 1] } : null
     if (!start) return
 
@@ -32,5 +33,5 @@ export function usePlanCanvasLineConstraint({ activeTool, placement, constrainLi
       setActiveSnap(constrained)
     }
   }, [activeTool, activeSnap, wallStartNode, beamStartNode, stairStartPoint, gridStartPoint, roomSeparatorStart,
-    slabBoundary, drawLengthMeters, drawAngleDegrees, constrainLineSnap, setActiveSnap])
+    slabBoundary, bundleStartPoint, drawLengthMeters, drawAngleDegrees, constrainLineSnap, setActiveSnap])
 }

@@ -2,7 +2,19 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { electricalFixtureScreenSymbol, PLAN_GRID_BUBBLE_RADIUS_PX } from '../src/rendering/planAnnotationSymbols.mjs'
 import { beginPlanLabels, flushPlanLabels, planLabelScale, queuePlanLabel } from '../src/rendering/planLabels.ts'
-import { worldToScreen } from '../src/viewport/viewportTransform.ts'
+import { planZoomPercent, worldToScreen } from '../src/viewport/viewportTransform.ts'
+import { PLAN_SYMBOL_TAG_MIN_ZOOM_PERCENT, shouldShowPlanSymbolTag } from '../src/rendering/planLabels.ts'
+
+test('plan symbol tags declutter below the zoom shown by the canvas controls', () => {
+  assert.equal(PLAN_SYMBOL_TAG_MIN_ZOOM_PERCENT, 70)
+  assert.equal(planZoomPercent(0.08 * 0.69), 69)
+  assert.equal(planZoomPercent(0.08 * 0.70), 70)
+  assert.equal(shouldShowPlanSymbolTag(planZoomPercent(0.08 * 0.69)), false)
+  assert.equal(shouldShowPlanSymbolTag(planZoomPercent(0.08 * 0.70)), true)
+  assert.equal(shouldShowPlanSymbolTag(planZoomPercent(0.08 * 0.25), true, true), true)
+  assert.equal(shouldShowPlanSymbolTag(planZoomPercent(0.08 * 0.25), true, false, true), true)
+  assert.equal(shouldShowPlanSymbolTag(planZoomPercent(0.08 * 1), false, true, true), false)
+})
 
 test('screen annotations and grid bubble dimensions do not scale with model zoom', () => {
   assert.deepEqual([0.005, 0.08, 2].map(planLabelScale), [1, 1, 1])

@@ -8,6 +8,8 @@ const definition = (input, preview, dimensionPlacement = false) => ({
 /** Single source of truth for how each toolbar tool consumes pointer input. */
 export const TOOL_INTERACTION_REGISTRY = Object.freeze({
   select: definition('selection', 'selection'),
+  pan: definition('selection', 'none'),
+  draw: definition('freehand', 'line'),
   column: definition('point', 'point', true),
   foundation: definition('point', 'point', true),
   beam: definition('two-point', 'line', true),
@@ -30,9 +32,11 @@ export const TOOL_INTERACTION_REGISTRY = Object.freeze({
   gridCopy: definition('grid-copy', 'line'),
   stair: definition('two-point', 'line', true),
   measure: definition('measure', 'line'),
+  fill: { ...definition('measure', 'polygon'), keepsToolActive: true },
   dimension: definition('dimension', 'line'),
   calibrate: definition('calibration', 'line'),
   erase: definition('point', 'none'),
+  bundle: definition('point', 'line', true),
 })
 
 export const isPolygonInteraction = tool => TOOL_INTERACTION_REGISTRY[tool].input === 'polyline'

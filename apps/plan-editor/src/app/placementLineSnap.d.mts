@@ -9,6 +9,7 @@ interface PlacementLineState {
   stairStartPoint?: [number, number] | null
   gridStartPoint?: [number, number] | null
   roomSeparatorStart?: [number, number] | null
+  bundleStartPoint?: [number, number] | null
   slabBoundary?: [number, number][]
 }
 

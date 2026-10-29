@@ -1,5 +1,84 @@
 import { validateOpeningPlanSymbolLines, type OpeningPlanSymbolLine } from './openingPlanSymbol.js'
 import { validatePlanDimension, type PlanDimension } from './planDimension.js'
+import type { Phase } from './types.js'
+
+export type PlanFillPattern = 'diagonal' | 'crosshatch' | 'grid' | 'dots'
+export type PlanFillBorderStyle = 'solid' | 'dashed' | 'dotted' | 'dot-dash'
+export interface PlanFillStyle {
+  fill_type: 'solid' | 'pattern'
+  pattern: PlanFillPattern
+  scale_mm: number
+  rotation_deg: number
+  color: string
+  opacity: number
+  border_color: string
+  border_width_mm: number
+  border_style: PlanFillBorderStyle
+}
+export interface PlanFill {
+  id: string
+  level_id: string
+  created_phase: Phase
+  boundary_mm: [number, number][]
+  style: PlanFillStyle
+}
+
+export type PlanSketchMode = 'line' | 'polyline' | 'freehand' | 'rectangle'
+export type PlanSketchLineStyle = 'solid' | 'dashed' | 'dotted'
+export interface PlanSketch {
+  id: string
+  level_id: string
+  created_phase: Phase
+  points_mm: [number, number][]
+  closed: boolean
+  mode: PlanSketchMode
+  color: string
+  width_mm: number
+  line_style: PlanSketchLineStyle
+}
+
+const PLAN_SKETCH_MODES: PlanSketchMode[] = ['line', 'polyline', 'freehand', 'rectangle']
+const PLAN_SKETCH_LINE_STYLES: PlanSketchLineStyle[] = ['solid', 'dashed', 'dotted']
+export function validatePlanSketch(value: unknown): asserts value is PlanSketch {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid plan sketch')
+  const sketch = value as PlanSketch
+  if (typeof sketch.id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sketch.id)) throw new Error('Plan sketch requires a persistent UUID')
+  if (typeof sketch.level_id !== 'string' || !sketch.level_id.trim()) throw new Error('Plan sketch requires a level')
+  if (!['existing', 'demolition', 'new_construction'].includes(sketch.created_phase)) throw new Error('Plan sketch requires a valid phase')
+  if (!PLAN_SKETCH_MODES.includes(sketch.mode) || typeof sketch.closed !== 'boolean') throw new Error('Plan sketch mode or closure is invalid')
+  if (!Array.isArray(sketch.points_mm) || sketch.points_mm.length < 2 || sketch.points_mm.length > 5000) throw new Error('Plan sketch must contain 2 to 5000 points')
+  for (const point of sketch.points_mm) if (!Array.isArray(point) || point.length !== 2 || point.some(coordinate => typeof coordinate !== 'number' || !Number.isFinite(coordinate))) throw new Error('Plan sketch points must be finite XY coordinates')
+  if (!/^#[0-9a-f]{6}$/i.test(sketch.color)) throw new Error('Plan sketch color must be a six digit hex color')
+  if (!Number.isFinite(sketch.width_mm) || sketch.width_mm < 1 || sketch.width_mm > 100) throw new Error('Plan sketch width must be between 1 and 100 mm')
+  if (!PLAN_SKETCH_LINE_STYLES.includes(sketch.line_style)) throw new Error('Plan sketch line style is invalid')
+}
+
+const PLAN_FILL_HEX_COLOR = /^#[0-9a-f]{6}$/i
+const PLAN_FILL_PATTERNS: PlanFillPattern[] = ['diagonal', 'crosshatch', 'grid', 'dots']
+const PLAN_FILL_BORDER_STYLES: PlanFillBorderStyle[] = ['solid', 'dashed', 'dotted', 'dot-dash']
+
+export function validatePlanFillStyle(value: unknown): asserts value is PlanFillStyle {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid plan fill style')
+  const style = value as PlanFillStyle
+  if (!['solid', 'pattern'].includes(style.fill_type) || !PLAN_FILL_PATTERNS.includes(style.pattern)) throw new Error('Invalid plan fill type or pattern')
+  if (!Number.isFinite(style.scale_mm) || style.scale_mm < 20 || style.scale_mm > 10000) throw new Error('Plan fill pattern scale must be between 20 and 10000 mm')
+  if (!Number.isFinite(style.rotation_deg) || style.rotation_deg < -360 || style.rotation_deg > 360) throw new Error('Plan fill rotation must be between -360 and 360 degrees')
+  if (!PLAN_FILL_HEX_COLOR.test(style.color) || !PLAN_FILL_HEX_COLOR.test(style.border_color)) throw new Error('Plan fill colors must be six digit hex colors')
+  if (!Number.isFinite(style.opacity) || style.opacity < 0 || style.opacity > 1) throw new Error('Plan fill opacity must be between 0 and 1')
+  if (!Number.isFinite(style.border_width_mm) || style.border_width_mm < 0 || style.border_width_mm > 100) throw new Error('Plan fill border width must be between 0 and 100 mm')
+  if (!PLAN_FILL_BORDER_STYLES.includes(style.border_style)) throw new Error('Invalid plan fill border style')
+}
+
+export function validatePlanFill(value: unknown): asserts value is PlanFill {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid plan fill')
+  const fill = value as PlanFill
+  if (typeof fill.id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(fill.id)) throw new Error('Plan fill requires a persistent UUID')
+  if (typeof fill.level_id !== 'string' || !fill.level_id.trim()) throw new Error('Plan fill requires a level')
+  if (!['existing', 'demolition', 'new_construction'].includes(fill.created_phase)) throw new Error('Plan fill requires a valid phase')
+  if (!Array.isArray(fill.boundary_mm) || fill.boundary_mm.length < 3 || fill.boundary_mm.length > 1000) throw new Error('Plan fill boundary must contain 3 to 1000 points')
+  for (const point of fill.boundary_mm) if (!Array.isArray(point) || point.length !== 2 || point.some(coordinate => typeof coordinate !== 'number' || !Number.isFinite(coordinate))) throw new Error('Plan fill boundary points must be finite XY coordinates')
+  validatePlanFillStyle(fill.style)
+}
 
 /** Sheet-specific cleanup/redrafting for one model-hosted opening. */
 export interface OpeningViewOverride {
@@ -56,6 +135,10 @@ export interface SheetLayoutTemplate {
 export interface DrawingSettings {
   viewports: Record<string, SavedSheetViewport>;
   plan_dimensions?: PlanDimension[];
+  /** User-authored color and hatch regions in model space. */
+  plan_fills?: PlanFill[];
+  /** User-authored non-semantic plan linework, saved in model-space millimeters. */
+  plan_sketches?: PlanSketch[];
   layout_templates?: SheetLayoutTemplate[];
   revision?: string;
   author?: string;
@@ -73,6 +156,24 @@ export function validateDrawingSettings(
       validatePlanDimension(dimension)
       if (ids.has(dimension.id)) throw new Error('Duplicate plan dimension UUID')
       ids.add(dimension.id)
+    }
+  }
+  if (settings.plan_fills !== undefined) {
+    if (!Array.isArray(settings.plan_fills) || settings.plan_fills.length > 10000) throw new Error('Invalid plan fills')
+    const ids = new Set<string>()
+    for (const fill of settings.plan_fills) {
+      validatePlanFill(fill)
+      if (ids.has(fill.id)) throw new Error('Duplicate plan fill UUID')
+      ids.add(fill.id)
+    }
+  }
+  if (settings.plan_sketches !== undefined) {
+    if (!Array.isArray(settings.plan_sketches) || settings.plan_sketches.length > 10000) throw new Error('Invalid plan sketches')
+    const ids = new Set<string>()
+    for (const sketch of settings.plan_sketches) {
+      validatePlanSketch(sketch)
+      if (ids.has(sketch.id)) throw new Error('Duplicate plan sketch UUID')
+      ids.add(sketch.id)
     }
   }
   if (

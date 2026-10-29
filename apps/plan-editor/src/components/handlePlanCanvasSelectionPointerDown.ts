@@ -1,6 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { DisplayLengthUnit, ProjectDocument } from '@constructflow/project-model'
-import { formatLengthMm, isColumnObject, isDoorObject, isFoundationObject, isGridObject, isWallObject, isWindowObject } from '@constructflow/project-model'
+import { formatLengthMm, isColumnObject, isDoorObject, isFoundationObject, isGridObject, isWallObject, isWindowObject, wallCenterlineLengthMm } from '@constructflow/project-model'
 import { gridLineEndpoints } from './PlanCanvasGeometry.js'
 import { findPlanCanvasEditHandle } from './PlanCanvasEditHandles.js'
 import type { PlanCanvasDraggingObject } from './planCanvasInteractionTypes.js'
@@ -60,6 +60,7 @@ export function handlePlanCanvasSelectionPointerDown({
   const editHandle = findEditHandle(screenPoint)
 
   if (editHandle) {
+    if (editHandle.kind === 'door-flip') return
     const editObject = planProject.objects[editHandle.id]
     const editData = editObject?.module_data as Record<string, unknown> | undefined
     const editSize = editData && editObject?.object_type === 'structure.column'
@@ -68,7 +69,9 @@ export function handlePlanCanvasSelectionPointerDown({
     setResizeDimensionWidth(editSize ? formatLengthMm(Number(editSize[0]), displayUnit) : editHandle.kind === 'opening-edge' ? formatLengthMm(Number(editHandle.openingWidthMm), displayUnit) : '')
     setResizeDimensionHeight(editSize ? formatLengthMm(Number(editSize[1]), displayUnit) : '')
     setResizeDimensionLength(editHandle.startPointMm && editHandle.endPointMm
-      ? formatLengthMm(Math.hypot(editHandle.endPointMm[0] - editHandle.startPointMm[0], editHandle.endPointMm[1] - editHandle.startPointMm[1]), displayUnit)
+      ? formatLengthMm(editHandle.kind === 'wall-endpoint' && editHandle.curveGeometry && editObject && isWallObject(editObject)
+        ? wallCenterlineLengthMm(editObject.module_data)
+        : Math.hypot(editHandle.endPointMm[0] - editHandle.startPointMm[0], editHandle.endPointMm[1] - editHandle.startPointMm[1]), displayUnit)
       : editHandle.kind === 'stair-run' && editHandle.stairData
         ? formatLengthMm(Math.max(1, editHandle.stairData.num_risers - 1) * editHandle.stairData.tread_depth_mm, displayUnit)
         : (editHandle.kind === 'stair-first-flight' || editHandle.kind === 'stair-second-flight') && editHandle.stairData
@@ -80,6 +83,7 @@ export function handlePlanCanvasSelectionPointerDown({
     setDraggingObject({ id: editHandle.id, kind: editHandle.kind, endpointIndex: editHandle.endpointIndex,
       ...(editHandle.kind === 'grid' && editObject && isGridObject(editObject) ? { gridStartMm: gridLineEndpoints(editObject)[0], gridEndMm: gridLineEndpoints(editObject)[1] } : {}),
       startPointMm: editHandle.startPointMm, endPointMm: editHandle.endPointMm,
+      curveGeometry: editHandle.kind === 'wall-endpoint' ? editHandle.curveGeometry : undefined,
       boundaryPointsMm: editHandle.boundaryPointsMm,
       edgeStartMm: editHandle.edgeStartMm,
       edgeNormalMm: editHandle.edgeNormalMm,

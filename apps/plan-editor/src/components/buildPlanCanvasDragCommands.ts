@@ -1,7 +1,7 @@
 import { ProjectDocument, isColumnObject, isGridObject, type CabinetModuleData, type PipeRouteModuleData } from '@constructflow/project-model'
 import { projectPointToWallOffsetMm } from '@constructflow/architecture-engine'
 import { movePipeRouteEndpoint, movePipeRouteNode } from '@constructflow/drainage-engine'
-import { snapOpeningOffsetBimAware, resizeOpeningFromEdge, type SnapResult } from '@constructflow/snapping-engine'
+import { constrainEndpointToLineAxis, snapOpeningOffsetBimAware, resizeOpeningFromEdge, type SnapResult } from '@constructflow/snapping-engine'
 import type { CommandRequest } from '@constructflow/command-schema'
 import type { PlanDragGesture } from '../directManipulation.mjs'
 import { loadDirectManipulation } from '../directManipulationLoader.js'
@@ -18,11 +18,17 @@ interface BuildPlanCanvasDragCommandsOptions {
 }
 
 export async function buildPlanCanvasDragCommands({ planProject, drag, rawWorld, ctrlKey, viewport, snapPlanPoint }: BuildPlanCanvasDragCommandsOptions): Promise<CommandRequest[]> {
-  const snap = ctrlKey
-    ? { point_mm: rawWorld, target_id: undefined }
+  const snap: SnapResult = ctrlKey
+    ? { point_mm: rawWorld, kind: 'free', description: 'Free / อิสระ (Ctrl)' }
     : snapPlanPoint(rawWorld, 16, drag.id)
   let point = ['slab-edge', 'slab-slope', 'roof-ridge', 'roof-seam', 'stair-landing', 'stair-first-flight', 'stair-second-flight'].includes(drag.kind) ? rawWorld : snap.point_mm
   const options: Record<string, unknown> = {}
+
+  if (drag.kind === 'wall-endpoint' && !drag.curveGeometry && drag.startPointMm && drag.endPointMm && drag.endpointIndex !== undefined) {
+    const fixedPoint = drag.endpointIndex === 0 ? drag.endPointMm : drag.startPointMm
+    const originalEndpoint = drag.endpointIndex === 0 ? drag.startPointMm : drag.endPointMm
+    point = constrainEndpointToLineAxis(rawWorld, fixedPoint, originalEndpoint, ctrlKey ? null : snap, viewport)
+  }
 
   const grid = planProject.objects[drag.id]
   if (drag.kind === 'grid' && grid && isGridObject(grid) && grid.module_data.system_id) {

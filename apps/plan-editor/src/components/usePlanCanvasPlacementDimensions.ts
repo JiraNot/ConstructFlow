@@ -29,6 +29,7 @@ interface UsePlanCanvasPlacementDimensionsOptions {
   wallStartNode: { point_mm: [number, number] } | null
   beamStartNode: { point_mm: [number, number] } | null
   roomSeparatorStart: [number, number] | null
+  bundleStartPoint: [number, number] | null
   slabBoundary: [number, number][]
   gridStartPoint: [number, number] | null
 }
@@ -37,12 +38,13 @@ export function usePlanCanvasPlacementDimensions({
   project, planProject, activeTool, activeDoorTypeMark, activeWindowTypeMark, activeSnap, activeWallSnap,
   gridCopySourceId, dimensionReferenceMode, dimensionAnchorX, dimensionAnchorY, dimensionInputX,
   dimensionInputY, displayUnit, viewport, stairStartPoint, wallStartNode, beamStartNode,
-  roomSeparatorStart, slabBoundary, gridStartPoint,
+  roomSeparatorStart, slabBoundary, gridStartPoint, bundleStartPoint,
 }: UsePlanCanvasPlacementDimensionsOptions) {
   const dimensionHostAxis: 'x' | 'y' | null = activeWallSnap
     ? Math.abs(activeWallSnap.wall_end_mm[0] - activeWallSnap.wall_start_mm[0]) >= Math.abs(activeWallSnap.wall_end_mm[1] - activeWallSnap.wall_start_mm[1]) ? 'x' : 'y'
     : null
-  const isHostedOpeningPlacement = (activeTool === 'door' || activeTool === 'window') && !!activeWallSnap
+  const isOpeningPlacement = activeTool === 'door' || activeTool === 'window'
+  const isHostedOpeningPlacement = isOpeningPlacement && !!activeWallSnap
   const copyDimensionSource = activeTool === 'gridCopy' && gridCopySourceId ? planProject.objects[gridCopySourceId] : null
   const copyDimensionStart = copyDimensionSource && isGridObject(copyDimensionSource) ? gridLineEndpoints(copyDimensionSource)[0] : null
   const dimensionReferences = activeSnap
@@ -50,14 +52,18 @@ export function usePlanCanvasPlacementDimensions({
       ? { refX: copyDimensionStart[0], refY: copyDimensionStart[1] }
       : activeWallSnap
         ? openingDimensionRefs(activeSnap.point_mm, planProject, activeWallSnap, dimensionReferenceMode)
-        : findTemporaryDimensionRefs(activeSnap.point_mm, planProject, undefined, dimensionReferenceMode)
+        : findTemporaryDimensionRefs(activeSnap.point_mm, planProject, activeSnap.target_id, dimensionReferenceMode)
     : { refX: undefined, refY: undefined }
-  const hasPolygonSegment = ['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool) && slabBoundary.length > 0
-  const hasLineGeometryInput = !!stairStartPoint || !!wallStartNode || !!beamStartNode || !!roomSeparatorStart || hasPolygonSegment || (activeTool === 'grid' && !!gridStartPoint)
+  const hasPolygonSegment = (['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool) || activeTool === 'bundle') && slabBoundary.length > 0
+  const hasLineGeometryInput = !!stairStartPoint || !!wallStartNode || !!beamStartNode || !!roomSeparatorStart || hasPolygonSegment || (activeTool === 'bundle' && !!bundleStartPoint) || (activeTool === 'grid' && !!gridStartPoint)
   // While drawing a segment, the length/angle controls are the intended numeric
   // inputs. Showing nearby reference X/Y dimensions at the same time is ambiguous.
-  const showXDimension = !!activeSnap && !hasLineGeometryInput && (dimensionHostAxis ? dimensionHostAxis === 'x' : dimensionReferences.refX !== undefined)
-  const showYDimension = !!activeSnap && !hasLineGeometryInput && (dimensionHostAxis ? dimensionHostAxis === 'y' : dimensionReferences.refY !== undefined)
+  // An opening only has a meaningful placement offset while it is snapped to a
+  // host wall. Showing the generic X/Y panel over empty space makes it look
+  // like an opening can be placed there and obscures the drawing.
+  const showOpeningOffset = !isOpeningPlacement || !!activeWallSnap
+  const showXDimension = !!activeSnap && showOpeningOffset && !hasLineGeometryInput && (dimensionHostAxis ? dimensionHostAxis === 'x' : dimensionReferences.refX !== undefined)
+  const showYDimension = !!activeSnap && showOpeningOffset && !hasLineGeometryInput && (dimensionHostAxis ? dimensionHostAxis === 'y' : dimensionReferences.refY !== undefined)
   const xDimensionAnchor = dimensionAnchorX ?? dimensionReferences.refX
   const yDimensionAnchor = dimensionAnchorY ?? dimensionReferences.refY
   const activeOpeningWidth = activeWallSnap

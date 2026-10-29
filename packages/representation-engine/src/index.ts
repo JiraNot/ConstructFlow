@@ -12,8 +12,10 @@ import {
   type Phase,
   type ProjectDocument,
   type SmartObject,
+  type WallModuleData,
 } from '@constructflow/project-model'
 import { getWallSolidProfiles, wallProfileAreaMm2 } from '@constructflow/architecture-engine'
+import { wallCenterlineLengthMm, wallCenterlinePointAtOffsetMm, wallCenterlinePointsMm } from '@constructflow/project-model'
 import { extrude, clipHalfPlane, type Vec2 } from '@constructflow/geometry-kernel'
 import { constructionOutputs } from '@constructflow/domain-providers'
 import { box, tube, type Triangle, type Vec3 } from '@constructflow/geometry-kernel'
@@ -79,7 +81,7 @@ export interface WallExtrusionLayer {
 export type RepresentationShape =
   | { kind: 'triangle_mesh'; triangles_mm: Triangle[]; parts?: { color: string; triangles_mm: Triangle[]; uvs?: [number, number][]; texture_data_url?: string; roughness?: number; metalness?: number }[] }
   | { kind: 'box'; size_mm: Vec3Mm }
-  | { kind: 'wall_extrusion'; length_mm: number; thickness_mm: number; height_mm: number; cutouts: OpeningCutout[]; profiles_mm?: Vec2[][]; layers?: WallExtrusionLayer[] }
+  | { kind: 'wall_extrusion'; length_mm: number; thickness_mm: number; height_mm: number; cutouts: OpeningCutout[]; profiles_mm?: Vec2[][]; layers?: WallExtrusionLayer[]; centerline_points_mm?: Vec2[]; centerline_offsets_mm?: number[] }
   | {
       kind: 'opening'
       opening_type: 'door' | 'window'
@@ -336,6 +338,39 @@ export function getRepresentationTriangles(representation: ObjectRepresentation3
     const { length_mm: length, thickness_mm: thickness, height_mm: height, cutouts } = shape
     if (shape.profiles_mm) return shape.profiles_mm.flatMap(profile => extrude(profile, -thickness / 2, thickness / 2)
       .map(triangle => triangle.map(([x, z, y]) => transformRepresentationPoint(representation, [x, y, z])).reverse() as Triangle))
+    if (shape.centerline_points_mm && shape.centerline_offsets_mm && shape.centerline_points_mm.length === shape.centerline_offsets_mm.length && shape.centerline_points_mm.length >= 2) {
+      const layers = shape.layers?.length ? shape.layers : [{ role: 'masonry' as const, thickness_mm: thickness, offset_mm: 0, material: 'wall' }]
+      const triangles: Triangle[] = []
+      const pushQuad = (a: Vec3, b: Vec3, c: Vec3, d: Vec3) => {
+        triangles.push([a, b, c], [a, c, d])
+      }
+      for (const layer of layers) {
+        const half = layer.thickness_mm / 2
+        for (let index = 1; index < shape.centerline_points_mm.length; index += 1) {
+          const p0 = shape.centerline_points_mm[index - 1]!, p1 = shape.centerline_points_mm[index]!
+          const s0 = shape.centerline_offsets_mm[index - 1]!, s1 = shape.centerline_offsets_mm[index]!
+          const dx = p1[0] - p0[0], dy = p1[1] - p0[1], span = Math.hypot(dx, dy)
+          if (span <= 1e-6 || s1 <= s0) continue
+          const nx = -dy / span, ny = dx / span
+          const a0: Vec2 = [p0[0] + nx * layer.offset_mm + nx * half, p0[1] + ny * layer.offset_mm + ny * half]
+          const b0: Vec2 = [p0[0] + nx * layer.offset_mm - nx * half, p0[1] + ny * layer.offset_mm - ny * half]
+          const a1: Vec2 = [p1[0] + nx * layer.offset_mm + nx * half, p1[1] + ny * layer.offset_mm + ny * half]
+          const b1: Vec2 = [p1[0] + nx * layer.offset_mm - nx * half, p1[1] + ny * layer.offset_mm - ny * half]
+          const zs = [0, height, ...cutouts.flatMap(cutout => [cutout.min_z_mm, cutout.max_z_mm])]
+            .map(z => Math.max(0, Math.min(height, z))).sort((a, b) => a - b).filter((z, i, all) => i === 0 || z - all[i - 1]! > 1e-6)
+          for (let band = 1; band < zs.length; band += 1) {
+            const z0 = zs[band - 1]!, z1 = zs[band]!, midX = (s0 + s1) / 2, midZ = (z0 + z1) / 2
+            if (cutouts.some(cutout => midX > cutout.min_x_mm && midX < cutout.max_x_mm && midZ > cutout.min_z_mm && midZ < cutout.max_z_mm)) continue
+            const a0b: Vec3 = [a0[0], a0[1], z0], b0b: Vec3 = [b0[0], b0[1], z0], a1b: Vec3 = [a1[0], a1[1], z0], b1b: Vec3 = [b1[0], b1[1], z0]
+            const a0t: Vec3 = [a0[0], a0[1], z1], b0t: Vec3 = [b0[0], b0[1], z1], a1t: Vec3 = [a1[0], a1[1], z1], b1t: Vec3 = [b1[0], b1[1], z1]
+            pushQuad(a0b, a1b, b1b, b0b); pushQuad(a0t, b0t, b1t, a1t)
+            pushQuad(a0b, a0t, a1t, a1b); pushQuad(b0b, b1b, b1t, b0t)
+            pushQuad(a0b, b0b, b0t, a0t); pushQuad(a1b, a1t, b1t, b1b)
+          }
+        }
+      }
+      return triangles.map(triangle => triangle.map(vertex => transformRepresentationPoint(representation, vertex)) as Triangle)
+    }
     const xs = [0, length, ...cutouts.flatMap(cutout => [cutout.min_x_mm, cutout.max_x_mm])].sort((a, b) => a - b)
     const zs = [0, height, ...cutouts.flatMap(cutout => [cutout.min_z_mm, cutout.max_z_mm])].sort((a, b) => a - b)
     const local: Triangle[] = []
@@ -361,6 +396,7 @@ export function isWallFacadeForElevation(
   const data = moduleData(wall)
   const start = data?.start_point_mm, end = data?.end_point_mm
   if (!Array.isArray(start) || !Array.isArray(end) || !isFiniteNumber(start[0]) || !isFiniteNumber(start[1]) || !isFiniteNumber(end[0]) || !isFiniteNumber(end[1])) return false
+  if ((data as unknown as WallModuleData).curve_geometry) return true
   const dx = Math.abs(end[0] - start[0]), dy = Math.abs(end[1] - start[1])
   if (dx + dy <= 1e-8) return false
   return direction === 'east' || direction === 'west' ? dy > dx : dx >= dy
@@ -534,15 +570,17 @@ export function getElevationVisibleOpeningIds(
     const data = moduleData(wall)
     if (!data) continue
     const start = data.start_point_mm, end = data.end_point_mm
-    const x1 = coordinate(start, horizontalAxis), x2 = coordinate(end, horizontalAxis)
-    const d1 = coordinate(start, depthAxis), d2 = coordinate(end, depthAxis)
+    const wallData = wall.module_data as WallModuleData
+    const centerline = wallCenterlinePointsMm(wallData, 20)
+    const horizontal = centerline.map(point => point[horizontalAxis]).filter(isFiniteNumber)
+    const depths = centerline.map(point => point[depthAxis]).filter(isFiniteNumber)
     const extent = resolveWallVerticalExtent(project, wall)
-    if (x1 === undefined || x2 === undefined || d1 === undefined || d2 === undefined || !extent) continue
+    if (!horizontal.length || !depths.length || !extent) continue
     const halfThickness = Math.max(0, Number(data.thickness_mm ?? 0)) / 2
     wallBounds.set(wall.id, {
-      depth: (d1 + d2) / 2 + cameraSign * halfThickness,
-      minX: Math.min(x1, x2) - halfThickness,
-      maxX: Math.max(x1, x2) + halfThickness,
+      depth: depths.reduce((sum, value) => sum + value, 0) / depths.length + cameraSign * halfThickness,
+      minX: Math.min(...horizontal) - halfThickness,
+      maxX: Math.max(...horizontal) + halfThickness,
       base: extent.base_elevation_mm,
       top: extent.top_elevation_mm,
     })
@@ -552,10 +590,14 @@ export function getElevationVisibleOpeningIds(
     const data = moduleData(opening)
     const hostId = typeof data?.wall_id === 'string' ? data.wall_id : ''
     const host = wallBounds.get(hostId)
-    const center = coordinate(data?.location_mm, horizontalAxis)
     const extent = resolveOpeningVerticalExtent(project, opening)
+    const hostObject = project.objects[hostId]
+    const hostData = hostObject?.object_type === 'architecture.wall' ? hostObject.module_data as WallModuleData : undefined
+    const offset = Number(data?.offset_along_wall_mm)
+    const pose = hostData && Number.isFinite(offset) ? wallCenterlinePointAtOffsetMm(hostData, offset) : undefined
+    const center = pose?.point_mm[horizontalAxis] ?? coordinate(data?.location_mm, horizontalAxis)
     if (!host || center === undefined || !extent) continue
-    const halfWidth = Math.max(0, Number(data?.width_mm ?? 0)) / 2
+    const halfWidth = Math.max(0, Number(data?.width_mm ?? 0)) / 2 * (pose ? Math.abs(Math.cos(pose.tangent_angle_deg * Math.PI / 180) * (horizontalAxis === 0 ? 1 : 0) + Math.sin(pose.tangent_angle_deg * Math.PI / 180) * (horizontalAxis === 1 ? 1 : 0)) : 1)
     openingBounds.set(opening.id, { hostId, minX: center - halfWidth, maxX: center + halfWidth, base: extent.base_elevation_mm, top: extent.top_elevation_mm, depth: host.depth })
   }
   const visible = new Set<string>()
@@ -909,7 +951,8 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
         return undefined
       }
       const dx = end[0] - start[0], dy = end[1] - start[1]
-      const length = Math.hypot(dx, dy)
+      const wallData = object.module_data as WallModuleData
+      const length = wallCenterlineLengthMm(wallData)
       if (!isPositive(length)) {
         warnings.push(`${object.id}: wall has no horizontal span; 3D representation omitted`)
         return undefined
@@ -944,6 +987,25 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
             ...(isPositive(outsidePlasterThickness) ? [{ role: 'plaster_outside' as const, thickness_mm: outsidePlasterThickness, offset_mm: -insideSign * (thickness / 2 - outsidePlasterThickness / 2), material: String(resolveValue(project, object, data, 'plaster_outside_material') ?? 'cement_plaster') }] : []),
           ]
         : undefined
+      const curve = wallData.curve_geometry
+      if (curve) {
+        const basePoints = wallCenterlinePointsMm(wallData, 5)
+        const offsets = new Set<number>(basePoints.map((_, index) => length * index / Math.max(1, basePoints.length - 1)))
+        for (const cutout of cutouts) { offsets.add(cutout.min_x_mm); offsets.add(cutout.max_x_mm) }
+        const sortedOffsets = [...offsets].map(offset => Math.max(0, Math.min(length, offset))).sort((a, b) => a - b)
+        const startPose = wallCenterlinePointAtOffsetMm(wallData, 0)
+        const angle = startPose.tangent_angle_deg * Math.PI / 180
+        const originX = start[0], originY = start[1]
+        const centerline = sortedOffsets.map(offset => {
+          const point = wallCenterlinePointAtOffsetMm(wallData, offset).point_mm
+          const dx = point[0] - originX, dy = point[1] - originY
+          return [dx * Math.cos(angle) + dy * Math.sin(angle), -dx * Math.sin(angle) + dy * Math.cos(angle)] as Vec2
+        })
+        return baseObject(object, data, [originX, originY, vertical?.base_elevation_mm ?? start[2]], angle,
+          { kind: 'wall_extrusion', length_mm: length, thickness_mm: thickness, height_mm: height, cutouts,
+            centerline_points_mm: centerline, centerline_offsets_mm: sortedOffsets,
+            ...(layers ? { layers } : {}) }, { kind: 'wall' })
+      }
       return baseObject(object, data, [start[0], start[1], vertical?.base_elevation_mm ?? start[2]], Math.atan2(dy, dx),
         { kind: 'wall_extrusion', length_mm: length, thickness_mm: thickness, height_mm: height, cutouts, ...(data.fit_to_stair ? { profiles_mm: getWallSolidProfiles(project, object) } : {}), ...(layers ? { layers } : {}) }, { kind: 'wall' })
     }
@@ -964,9 +1026,8 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
         warnings.push(`${object.id}: host or opening dimensions are invalid; 3D representation omitted`)
         return undefined
       }
-      const dx = hostData.end_point_mm[0] - hostData.start_point_mm[0]
-      const dy = hostData.end_point_mm[1] - hostData.start_point_mm[1]
-      const hostLength = Math.hypot(dx, dy)
+      const wallData = hostData as unknown as WallModuleData
+      const hostLength = wallCenterlineLengthMm(wallData)
       if (!isPositive(hostLength)) {
         warnings.push(`${object.id}: host wall has no horizontal span; 3D representation omitted`)
         return undefined
@@ -984,7 +1045,8 @@ function representObject(project: ProjectDocument, object: SmartObject, warnings
         warnings.push(`${object.id}: host or opening dimensions are invalid; 3D representation omitted`)
         return undefined
       }
-      return baseObject(object, data, [location[0], location[1], (vertical?.base_elevation_mm ?? location[2] + sill) + height / 2], Math.atan2(dy, dx), shape, interaction)
+      const tangent = wallCenterlinePointAtOffsetMm(wallData, data.offset_along_wall_mm).tangent_angle_deg * Math.PI / 180
+      return baseObject(object, data, [location[0], location[1], (vertical?.base_elevation_mm ?? location[2] + sill) + height / 2], tangent, shape, interaction)
     }
     default:
       return undefined

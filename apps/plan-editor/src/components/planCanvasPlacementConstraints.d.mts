@@ -31,5 +31,5 @@ export function constrainPlanCanvasLineSnap(
   start: Point,
   lockAxis: boolean,
   reference: LinearReference | undefined,
-  options: { lineConstraintMode: 'auto' | 'none' | 'parallel' | 'perpendicular'; viewportZoom: number; drawLength: string; drawAngle: string; displayUnit: DisplayLengthUnit },
+  options: { lineConstraintMode: 'auto' | 'none' | 'parallel' | 'perpendicular'; lineDrawingMode?: 'orthogonal' | 'angled'; wallAngleSnapDeg?: 0 | 15 | 30 | 45 | 90; viewportZoom: number; drawLength: string; drawAngle: string; displayUnit: DisplayLengthUnit },
 ): SnapResult

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { formatLengthMm, parseLengthMm, type DisplayLengthUnit, type ProjectDocument } from '@constructflow/project-model'
+import { formatLengthMm, parseLengthMm, type DisplayLengthUnit, type ProjectDocument, wallArcEndpointsMm, wallCenterlineLengthMm, wallCurveWithLengthMm } from '@constructflow/project-model'
 import type { PlanDragGesture } from '../directManipulation.mjs'
 import { resolveDragDimensionTarget, resolveLineEndpointLengthTarget, resolveOpeningEdgeWidthTarget, resolveRectangleResizeTarget } from '../app/dragDimensionInput.mjs'
 import { stairLandingGripPoint } from './stairLandingGripPoint.mjs'
@@ -38,11 +38,18 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
     else if (axis === 'length') setLength(value)
     else setOffset(value)
     if (!drag) return
-    let target: { point_mm: [number, number] } | null = null
+    let target: { point_mm: [number, number]; curveGeometry?: NonNullable<PlanDragGesture['curveGeometry']> } | null = null
     if ((drag.kind === 'column-corner' || drag.kind === 'foundation-corner') && drag.centerMm && drag.sectionMm && drag.endpointIndex !== undefined) {
       target = resolveRectangleResizeTarget(drag.centerMm, drag.sectionMm, drag.rotationDeg ?? 0, drag.endpointIndex, axis === 'width' ? value : width, axis === 'height' ? value : height, displayUnit)
     } else if ((drag.kind === 'wall-endpoint' || drag.kind === 'beam-endpoint' || drag.kind === 'grid-endpoint' || drag.kind === 'separator-endpoint') && drag.startPointMm && drag.endPointMm && drag.endpointIndex !== undefined && axis === 'length') {
-      target = resolveLineEndpointLengthTarget(drag.startPointMm, drag.endPointMm, drag.endpointIndex as 0 | 1, value, displayUnit)
+      if (drag.kind === 'wall-endpoint' && drag.curveGeometry) {
+        const desiredLength = parseLengthMm(value, displayUnit)
+        const curveGeometry = desiredLength === null ? undefined : wallCurveWithLengthMm(drag.curveGeometry, drag.endpointIndex as 0 | 1, desiredLength)
+        if (curveGeometry) {
+          const [start, end] = wallArcEndpointsMm(curveGeometry)
+          target = { point_mm: drag.endpointIndex === 0 ? [start[0], start[1]] : [end[0], end[1]], curveGeometry }
+        }
+      } else target = resolveLineEndpointLengthTarget(drag.startPointMm, drag.endPointMm, drag.endpointIndex as 0 | 1, value, displayUnit)
     } else if (drag.kind === 'pipe-endpoint' && drag.pipeRouteData && axis === 'length') {
       const routeData = drag.pipeRouteData as Record<string, unknown>
       const segment = endpointSegment(routeData.nodes_mm as number[][] | undefined, drag.endpointIndex)
@@ -88,7 +95,8 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
       }
     }
     if (!target) { manualPointRef.current = [Number.NaN, Number.NaN]; return }
-    previewAt(drag, target.point_mm, true, true)
+    manualPointRef.current = target.point_mm
+    previewAt(target.curveGeometry ? { ...drag, nextCurveGeometry: target.curveGeometry } : drag, target.point_mm, true, true)
   }
 
   const syncFromPreview = (drag: PlanDragGesture, point: [number, number], project: ProjectDocument, manual: boolean) => {
@@ -105,7 +113,9 @@ export function usePlanCanvasDragDimensions(displayUnit: DisplayLengthUnit) {
     } else if (data && (drag.kind === 'wall-endpoint' || drag.kind === 'beam-endpoint' || drag.kind === 'grid-endpoint' || drag.kind === 'separator-endpoint')) {
       const start = data.start_point_mm as [number, number] | undefined
       const end = data.end_point_mm as [number, number] | undefined
-      if (start && end) setLength(formatLengthMm(Math.hypot(end[0] - start[0], end[1] - start[1]), displayUnit))
+      if (start && end) setLength(formatLengthMm(object?.object_type === 'architecture.wall'
+        ? wallCenterlineLengthMm(object.module_data as Parameters<typeof wallCenterlineLengthMm>[0])
+        : Math.hypot(end[0] - start[0], end[1] - start[1]), displayUnit))
     } else if (data && drag.kind === 'pipe-endpoint') {
       const segment = endpointSegment(data.nodes_mm as number[][] | undefined, drag.endpointIndex)
       if (segment) setLength(formatLengthMm(Math.hypot(segment.end[0] - segment.start[0], segment.end[1] - segment.start[1]), displayUnit))

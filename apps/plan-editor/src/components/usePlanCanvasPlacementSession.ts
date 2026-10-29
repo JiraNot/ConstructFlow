@@ -4,6 +4,8 @@ import type { StairPlacementOptions } from '@constructflow/architecture-engine'
 import type { SnapResult, WallHostSnapResult } from '@constructflow/snapping-engine'
 import type { ToolType } from './Toolbar.js'
 import type { BeamPlacementStart, WallPlacementStart } from './commitPlanCanvasLinePlacementPoint.js'
+import type { MeasureMode } from './planCanvasInteractionTypes.js'
+import type { PlanFillStyle } from '@constructflow/project-model'
 import { reformatPlacementLengthInput } from './reformatPlacementLengthInput.mjs'
 
 type Point = [number, number]
@@ -41,6 +43,7 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
   const [beamStartNode, setBeamStartNode] = useState<BeamPlacementStart | null>(null)
   const [wallStartNode, setWallStartNode] = useState<WallPlacementStart | null>(null)
   const [roomSeparatorStart, setRoomSeparatorStart] = useState<Point | null>(null)
+  const [bundleStartPoint, setBundleStartPoint] = useState<Point | null>(null)
   const [roofShape, setRoofShape] = useState<'hip' | 'gable' | 'flat'>('hip')
   const [roofSlopeDeg, setRoofSlopeDeg] = useState(25)
   const [roofThicknessMm, setRoofThicknessMm] = useState(30)
@@ -53,6 +56,21 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
   const [calibrationP1, setCalibrationP1] = useState<Point | null>(null)
   const [calibrationMousePoint, setCalibrationMousePoint] = useState<Point | null>(null)
   const [tapeMeasure, setTapeMeasure] = useState<{ start: Point; end: Point; complete: boolean } | null>(null)
+  const [measureMode, setMeasureModeState] = useState<MeasureMode>('distance')
+  const [measurePoints, setMeasurePoints] = useState<Point[]>([])
+  const [measureComplete, setMeasureComplete] = useState(false)
+  const [measureError, setMeasureError] = useState('')
+  const [fillStyle, setFillStyle] = useState<PlanFillStyle>({
+    fill_type: 'pattern', pattern: 'diagonal', scale_mm: 250, rotation_deg: 45,
+    color: '#64748b', opacity: 0.22, border_color: '#475569', border_width_mm: 20, border_style: 'solid',
+  })
+  const setMeasureMode = (mode: MeasureMode) => {
+    setMeasureModeState(mode)
+    setMeasurePoints([])
+    setMeasureComplete(false)
+    setMeasureError('')
+    setTapeMeasure(null)
+  }
   const [activeSnap, setActiveSnap] = useState<SnapResult | null>(null)
   const [activeWallSnap, setActiveWallSnap] = useState<WallHostSnapResult | null>(null)
   const previousDisplayUnit = useRef(displayUnit)
@@ -78,10 +96,14 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
     setBeamStartNode(null)
     setWallStartNode(null)
     setRoomSeparatorStart(null)
+    setBundleStartPoint(null)
     setSlabBoundary([])
     setCalibrationP1(null)
     setCalibrationMousePoint(null)
     setTapeMeasure(null)
+    setMeasurePoints([])
+    setMeasureComplete(false)
+    setMeasureError('')
     setActiveSnap(null)
     setActiveWallSnap(null)
   }
@@ -118,6 +140,10 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
   }, [activeTool, activation])
 
   useEffect(() => {
+    if (activeTool === 'fill') setMeasureModeState('fill-pick')
+  }, [activeTool, activation])
+
+  useEffect(() => {
     clearDimensionOverrides()
   }, [activeTool, activation])
 
@@ -128,10 +154,12 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
     if (activeTool !== 'grid') setGridStartPoint(null)
     if (activeTool !== 'stair') { setStairStartPoint(null); setStairError('') }
     if (activeTool !== 'gridCopy') setGridCopySourceId(null)
-    if (!['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof'].includes(activeTool)) setSlabBoundary([])
+    if (!['slab', 'slabVoid', 'archFloor', 'ceiling', 'roof', 'bundle'].includes(activeTool)) setSlabBoundary([])
     if (activeTool !== 'calibrate') { setCalibrationP1(null); setCalibrationMousePoint(null) }
     if (activeTool !== 'measure') setTapeMeasure(null)
+    if (activeTool !== 'measure') { setMeasurePoints([]); setMeasureComplete(false); setMeasureError('') }
     if (activeTool !== 'dimension') setDimensionPoints([])
+    if (activeTool !== 'bundle') { setBundleStartPoint(null); setSlabBoundary([]) }
     setDrawLengthMeters('')
     setDrawAngleDegrees('')
   }, [activeTool, activation])
@@ -149,9 +177,12 @@ export function usePlanCanvasPlacementSession({ project, displayUnit, activeTool
     dimensionKeyboardAxis, setDimensionKeyboardAxis, clearDimensionOverrides, resetPlacementDrafts,
     beamStartNode, setBeamStartNode, wallStartNode, setWallStartNode,
     roomSeparatorStart, setRoomSeparatorStart, roofShape, setRoofShape, roofSlopeDeg, setRoofSlopeDeg,
+    bundleStartPoint, setBundleStartPoint,
     roofThicknessMm, setRoofThicknessMm, roofElevationOffsetMm, setRoofElevationOffsetMm, roofMaterial, setRoofMaterial,
     pipeSystem, setPipeSystem, fixtureKind, setFixtureKind, furnitureKind, setFurnitureKind, slabBoundary, setSlabBoundary,
     calibrationP1, setCalibrationP1, calibrationMousePoint, setCalibrationMousePoint,
     tapeMeasure, setTapeMeasure, activeSnap, setActiveSnap, activeWallSnap, setActiveWallSnap,
+    measureMode, setMeasureMode, measurePoints, setMeasurePoints, measureComplete, setMeasureComplete, measureError, setMeasureError,
+    fillStyle, setFillStyle,
   }
 }

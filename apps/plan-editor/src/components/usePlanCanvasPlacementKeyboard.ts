@@ -63,7 +63,7 @@ export function usePlanCanvasPlacementKeyboard({
   }, [commitActivePlacement, cancelCurrentPlacement, canvasRef])
 
   const handleCanvasDimensionKeyDown = useCallback((event: KeyboardEvent<HTMLCanvasElement>) => {
-    if (!supportsPlacementDimensions && !['measure', 'dimension', 'calibrate'].includes(activeTool)) return
+    if (!supportsPlacementDimensions && !['measure', 'fill', 'dimension', 'calibrate'].includes(activeTool)) return
     if (event.key === 'Enter') {
       event.preventDefault()
       event.stopPropagation()

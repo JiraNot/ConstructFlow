@@ -34,11 +34,11 @@ export function usePlanCanvasSceneController({
     activeBeamTypeMark, activeWallTypeMark, activeDoorTypeMark, activeWindowTypeMark,
     labelMode, labelVisibility, planDiscipline = 'architecture', displayUnit,
     underlay, externalManipulationPreview = null, coordination = [],
-    coordinationSeverities, coordinationFocusSelection = false,
+    coordinationSeverities, coordinationFocusSelection = false, collaborators = [],
   } = props
   const { activeSnap, activeWallSnap, beamStartNode, wallStartNode,
     stairStartPoint, calibrationP1, calibrationMousePoint, gridStartPoint,
-    gridCopySourceId, tapeMeasure, pipeSystem, fixtureKind, furnitureKind, slabBoundary } = placement
+    gridCopySourceId, tapeMeasure, measureMode, measurePoints, measureComplete, pipeSystem, fixtureKind, furnitureKind, slabBoundary, bundleStartPoint } = placement
 
   const stairPreview = useMemo(() => {
     if (activeTool !== 'stair' || !stairStartPoint || !activeSnap) return null
@@ -49,13 +49,31 @@ export function usePlanCanvasSceneController({
     containerRef, canvasRef, project, planProject, activeTool, activeSnap, activeWallSnap,
     activeColumnTypeMark, activeFoundationTypeMark, activeBeamTypeMark, activeWallTypeMark,
     activeDoorTypeMark, activeWindowTypeMark, beamStartNode, wallStartNode,
+    supplierBundleVisualType: props.supplierBundlePlacement?.bundle.visual_type ?? 'shape', bundleStartPoint,
     doorHanding: props.preferences.doorHanding,
     stairPreview, stairStartPoint, resolveReferencePath: placementController.resolveReferencePath,
-    calibrationP1, calibrationMousePoint, selectedIds, editableSelectionIds,
-    hoveredId: picking.hoveredId, underlay, labelMode, labelVisibility, planDiscipline,
+    calibrationP1, calibrationMousePoint, selectedIds, editableSelectionIds, collaborators,
+    hoveredId: picking.hoveredId, underlay, labelMode, labelVisibility,
+    displaySettings: {
+      backgroundVisible: props.preferences.backgroundVisible,
+      rulersEnabled: props.preferences.rulersEnabled,
+      gridEnabled: props.preferences.gridEnabled,
+      gridSpacingMm: props.preferences.gridSpacingMm,
+      majorGridEvery: props.preferences.majorGridEvery,
+      lengthPrecision: props.preferences.lengthPrecision,
+    },
+    planDiscipline,
     viewport, displayUnit, manipulationPreview: pointer.manipulationPreview,
+    showRealtimeDimensions: props.preferences.realtimeDimensions,
+    lengthPrecision: props.preferences.lengthPrecision,
+    anglePrecision: props.preferences.anglePrecision,
     externalManipulationPreview, coordination, coordinationSeverities, coordinationFocusSelection,
-    gridStartPoint, gridCopySourceId, tapeMeasure, dimensionReferenceMode: props.preferences.dimensionReferenceMode,
+    gridStartPoint, gridCopySourceId, tapeMeasure, measureMode, measurePoints, measureComplete, dimensionReferenceMode: props.preferences.dimensionReferenceMode,
+    wallTouchPreview: pointer.wallTouchPreview,
+    wallDrawMode: pointer.wallDrawMode,
+    sketchMode: pointer.sketchMode, sketchPoints: pointer.sketchPoints,
+    lineDrawingMode: props.preferences.lineDrawingMode,
+    wallAngleSnapDeg: props.preferences.wallAngleSnapDeg,
     selectionBox: pointer.selectionBox, roomSeparatorStart: placement.roomSeparatorStart,
     pipeSystem, fixtureKind, furnitureKind, slabBoundary, activeFamilyId: props.activeFamilyId, activeFamilyTypeId: props.activeFamilyTypeId,
   })

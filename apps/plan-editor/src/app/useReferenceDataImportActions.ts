@@ -4,6 +4,7 @@ import type { useProjectSession } from './useProjectSession.js'
 import type { DwgDrawingCandidate } from '../cad/importDwgUnderlay.js'
 import type { DwgDrawingSelection } from '../components/DwgDrawingPickerModal.js'
 import type { ProjectUnderlay, ProjectViewId } from '@constructflow/project-model'
+import type { PdfPageAlignment, PdfPageScaleCalibration } from '../cad/renderPdfUnderlayPage.js'
 
 interface UseReferenceDataImportActionsOptions {
   underlayKey: string
@@ -11,6 +12,9 @@ interface UseReferenceDataImportActionsOptions {
   setUnderlay: Dispatch<SetStateAction<UnderlayConfig>>
   setFileFeedback: Dispatch<SetStateAction<string>>
   dispatchCommandBatch: ReturnType<typeof useProjectSession>['dispatchCommandBatch']
+  onChoosePdf: (file: File) => void
+  onImportPdfUnderlay: (underlays: ProjectUnderlay[]) => void
+  activeLevelId: string
   onChooseDwgCandidates: (file: File, candidates: DwgDrawingCandidate[]) => void
   onImportDwgDrawings: (drawings: Array<{ key: string; underlay: ProjectUnderlay }>) => void
   viewId: ProjectViewId
@@ -18,7 +22,7 @@ interface UseReferenceDataImportActionsOptions {
 
 /** Owns reference-file parsing while project mutations remain on the shared session command path. */
 export function useReferenceDataImportActions({
-  underlayKey, hydratedUnderlayRef, setUnderlay, setFileFeedback, dispatchCommandBatch, onChooseDwgCandidates, onImportDwgDrawings, viewId,
+  underlayKey, hydratedUnderlayRef, setUnderlay, setFileFeedback, dispatchCommandBatch, onChoosePdf, onImportPdfUnderlay, activeLevelId, onChooseDwgCandidates, onImportDwgDrawings, viewId,
 }: UseReferenceDataImportActionsOptions) {
   const openUnderlayImage = (file: File, dataUrl: string, originMm: [number, number], scaleMmPerPx: number, scaleSource: 'declared_units' | 'assumed_units' = 'assumed_units', source: { source_kind?: 'image' | 'dxf' | 'dwg'; source_layout?: string; source_region?: [number, number, number, number] } = {}) => {
       const image = new Image()
@@ -36,6 +40,12 @@ export function useReferenceDataImportActions({
 
   const handleUploadUnderlayImage = (file: File) => {
 
+    if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+      if (file.size > 100 * 1024 * 1024) { setFileFeedback('PDF เกิน 100 MB · แยกไฟล์หรือส่งออกเฉพาะหน้าแปลนก่อนนำเข้า'); return }
+      onChoosePdf(file)
+      return
+    }
+
     if (/\.(dwg|dxf)$/i.test(file.name)) {
       setFileFeedback(`กำลังอ่าน ${file.name} และแยก Model Space / Layout…`)
       void import('../cad/importDwgUnderlay.js').then(({ importDwgUnderlayCandidates }) => importDwgUnderlayCandidates(file)).then(candidates => {
@@ -52,6 +62,35 @@ export function useReferenceDataImportActions({
       openUnderlayImage(file, dataUrl, [0, 0], 10, 'assumed_units', { source_kind: 'image' })
     }
     reader.readAsDataURL(file)
+  }
+
+  const handleImportPdfUnderlay = async (
+    file: File,
+    pageNumbers: number[],
+    calibrations: PdfPageScaleCalibration[],
+    alignments: PdfPageAlignment[] = [],
+  ) => {
+    if (!pageNumbers.length) { setFileFeedback('เลือกหน้า PDF อย่างน้อยหนึ่งหน้าก่อนนำเข้า'); return false }
+    const requests = pageNumbers.map(pageNumber => {
+      const calibration = calibrations.find(item => item.filename === file.name && item.source_page_number === pageNumber)
+      return { pageNumber, calibration, alignment: alignments.find(item => item.filename === file.name && item.source_page_number === pageNumber) }
+    })
+    const missingCalibration = requests.find(item => !item.calibration)
+    if (missingCalibration) { setFileFeedback(`ตั้งสเกลหน้า ${missingCalibration.pageNumber} จากมิติที่ทราบค่าก่อนนำเข้า`); return false }
+    try {
+      const { renderPdfUnderlayPages } = await import('../cad/renderPdfUnderlayPage.js')
+      const underlays = await renderPdfUnderlayPages({
+        file,
+        pages: requests.map(item => ({ pageNumber: item.pageNumber, calibration: item.calibration!, ...(item.alignment ? { alignment: item.alignment } : {}) })),
+        viewId, activeLevelId,
+      })
+      onImportPdfUnderlay(underlays)
+      setFileFeedback(`นำเข้า ${file.name} ${underlays.length} หน้าเป็นแบบอ้างอิงแล้ว · ตั้งสเกลแยกต่อหน้า · เลือกชั้นได้ในตำแหน่งอ้างอิง`)
+      return true
+    } catch (error) {
+      setFileFeedback(error instanceof Error ? error.message : 'แปลงหน้า PDF เป็นแบบอ้างอิงไม่สำเร็จ')
+      return false
+    }
   }
 
   const handleImportDwgCandidates = async (file: File, selections: DwgDrawingSelection[]) => {
@@ -107,5 +146,5 @@ export function useReferenceDataImportActions({
     }).catch(() => setFileFeedback('อ่านข้อมูลสำรวจ CSV ไม่สำเร็จ'))
   }
 
-  return { handleUploadUnderlayImage, handleImportDwgCandidates, handleImportSiteSurvey }
+  return { handleUploadUnderlayImage, handleImportPdfUnderlay, handleImportDwgCandidates, handleImportSiteSurvey }
 }

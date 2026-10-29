@@ -2,20 +2,21 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { formatLengthMm, parseLengthMm, type DisplayLengthUnit } from "@constructflow/project-model";
 
 /** Presentation conversion only. Invalid drafts propagate NaN so commands reject. */
-export function WorkbenchNumberInput({ value, onChange, unit, disabled, style, ariaLabel }: {
+export function WorkbenchNumberInput({ value, onChange, unit, precision, disabled, style, ariaLabel }: {
   value: number | null;
   onChange: (value: number) => void;
   unit?: DisplayLengthUnit;
+  precision?: number;
   disabled?: boolean;
   style?: CSSProperties;
   ariaLabel?: string;
 }) {
   const format = (v: number | null) => v === null || !Number.isFinite(v)
     ? ""
-    : unit ? formatLengthMm(v, unit) : String(v);
+    : unit ? formatLengthMm(v, unit, precision) : String(v);
   const [draft, setDraft] = useState(() => format(value));
   const focused = useRef(false);
-  useEffect(() => { if (!focused.current) setDraft(format(value)); }, [value, unit]);
+  useEffect(() => { if (!focused.current) setDraft(format(value)); }, [value, unit, precision]);
   const parse = (text: string) => unit
     ? parseLengthMm(text, unit) ?? NaN
     : text.trim() !== "" && Number.isFinite(Number(text)) ? Number(text) : NaN;

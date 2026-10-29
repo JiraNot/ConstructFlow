@@ -1,5 +1,5 @@
 import { objectFamilyGeometry } from '@constructflow/family-engine'
-import { type ProjectDocument, isColumnObject, isGridObject, isBeamObject, isWallObject } from '@constructflow/project-model'
+import { type ProjectDocument, isColumnObject, isGridObject, isBeamObject, isWallObject, projectPointToWallCenterlineMm, wallCenterlineLengthMm, wallCenterlinePointAtOffsetMm, wallCenterlinePointsMm } from '@constructflow/project-model'
 
 export interface SnapViewport { zoom: number }
 
@@ -64,6 +64,33 @@ function projectToSegment(point: Point, start: Point, end: Point): { point: Poin
   if (lengthSq <= 0) return { point: [...start], t: 0 }
   const t = Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSq))
   return { point: [start[0] + dx * t, start[1] + dy * t], t }
+}
+
+/** Keeps an edited line endpoint on its original axis while accepting nearby snaps. */
+export function constrainEndpointToLineAxis(
+  rawPoint_mm: Point,
+  fixedPoint_mm: Point,
+  originalEndpoint_mm: Point,
+  acquiredSnap: SnapResult | null,
+  viewport: SnapViewport,
+  tolerancePx = 16,
+): Point {
+  const dx = originalEndpoint_mm[0] - fixedPoint_mm[0]
+  const dy = originalEndpoint_mm[1] - fixedPoint_mm[1]
+  const length = Math.hypot(dx, dy)
+  if (length < 1) return acquiredSnap?.point_mm ?? rawPoint_mm
+
+  const ux = dx / length, uy = dy / length
+  const candidate = acquiredSnap && acquiredSnap.kind !== 'free' ? acquiredSnap.point_mm : rawPoint_mm
+  const candidateDx = candidate[0] - fixedPoint_mm[0]
+  const candidateDy = candidate[1] - fixedPoint_mm[1]
+  const perpendicularDistance = Math.abs(candidateDx * uy - candidateDy * ux)
+  const acceptedSnap = acquiredSnap && acquiredSnap.kind !== 'free' && perpendicularDistance <= tolerancePx / Math.max(viewport.zoom, 0.0001)
+  const source = acceptedSnap ? candidate : rawPoint_mm
+  const sourceDx = source[0] - fixedPoint_mm[0]
+  const sourceDy = source[1] - fixedPoint_mm[1]
+  const alongAxis = Math.max(0, sourceDx * ux + sourceDy * uy)
+  return [Math.round(fixedPoint_mm[0] + ux * alongAxis), Math.round(fixedPoint_mm[1] + uy * alongAxis)]
 }
 
 function closestSegmentIntersection(a: Segment, b: Segment): Point | null {
@@ -378,22 +405,32 @@ export function snapPoint(
       const [sx, sy] = object.module_data.start_point_mm
       const [ex, ey] = object.module_data.end_point_mm
       const start: Point = [sx, sy], end: Point = [ex, ey]
-      const dx = ex - sx, dy = ey - sy, length = Math.hypot(dx, dy)
+      const length = wallCenterlineLengthMm(object.module_data)
       if (length <= 1) continue
-      const normal: Point = [-dy / length, dx / length]
       const halfThickness = object.module_data.thickness_mm / 2
+      const startPose = wallCenterlinePointAtOffsetMm(object.module_data, 0)
+      const endPose = wallCenterlinePointAtOffsetMm(object.module_data, length)
+      const middlePose = wallCenterlinePointAtOffsetMm(object.module_data, length / 2)
+      const projection = projectPointToWallCenterlineMm(rawWorldPoint_mm, object.module_data)
+      const projectionPose = projection ? wallCenterlinePointAtOffsetMm(object.module_data, projection.offset_along_wall_mm) : undefined
+      const normalAt = (angle: number): Point => [-Math.sin(angle * Math.PI / 180), Math.cos(angle * Math.PI / 180)]
+      const startNormal = normalAt(startPose.tangent_angle_deg), endNormal = normalAt(endPose.tangent_angle_deg)
       offer(start, 'wall_endpoint', object.id, `ปลายผนัง ${object.module_data.mark || ''}`.trim(), 0)
       offer(end, 'wall_endpoint', object.id, `ปลายผนัง ${object.module_data.mark || ''}`.trim(), 0)
-      offer(midpoint(start, end), 'wall_midpoint', object.id, `กึ่งกลางผนัง ${object.module_data.mark || ''}`.trim(), 1)
-      offer(projectToSegment(rawWorldPoint_mm, start, end).point, 'wall_centerline', object.id, `แนวกึ่งกลางผนัง ${object.module_data.mark || ''}`.trim(), 3)
+      offer([middlePose.point_mm[0], middlePose.point_mm[1]], 'wall_midpoint', object.id, `กึ่งกลางผนัง ${object.module_data.mark || ''}`.trim(), 1)
+      if (projection) offer(projection.point_mm, 'wall_centerline', object.id, `แนวกึ่งกลางผนัง ${object.module_data.mark || ''}`.trim(), 3)
       for (const side of [-1, 1]) {
-        const offset: Point = [normal[0] * halfThickness * side, normal[1] * halfThickness * side]
-        const faceStart: Point = [sx + offset[0], sy + offset[1]], faceEnd: Point = [ex + offset[0], ey + offset[1]]
+        const faceStart: Point = [sx + startNormal[0] * halfThickness * side, sy + startNormal[1] * halfThickness * side]
+        const faceEnd: Point = [ex + endNormal[0] * halfThickness * side, ey + endNormal[1] * halfThickness * side]
         offer(faceStart, 'wall_corner', object.id, `มุมผนัง ${object.module_data.mark || ''}`.trim(), 0)
         offer(faceEnd, 'wall_corner', object.id, `มุมผนัง ${object.module_data.mark || ''}`.trim(), 0)
-        offer(projectToSegment(rawWorldPoint_mm, faceStart, faceEnd).point, 'wall_face', object.id, `ผิวผนัง ${object.module_data.mark || ''}`.trim(), 1)
+        if (projection && projectionPose) {
+          const normal = normalAt(projectionPose.tangent_angle_deg)
+          offer([projection.point_mm[0] + normal[0] * halfThickness * side, projection.point_mm[1] + normal[1] * halfThickness * side], 'wall_face', object.id, `ผิวผนัง ${object.module_data.mark || ''}`.trim(), 1)
+        }
       }
-      segments.push({ start, end, object_id: object.id, source: 'wall' })
+      const centerline = wallCenterlinePointsMm(object.module_data, 10)
+      for (let index = 1; index < centerline.length; index += 1) segments.push({ start: [centerline[index - 1]![0], centerline[index - 1]![1]], end: [centerline[index]![0], centerline[index]![1]], object_id: object.id, source: 'wall' })
     } else {
       for (const path of objectPaths(object, project)) {
         path.points.forEach(point => offer(point, 'object_endpoint', object.id, 'จุดปลาย / มุมวัตถุ', 0))
@@ -503,17 +540,16 @@ export function snapToWallHost(
     if (!isWallObject(obj)) continue
     const [sx, sy] = obj.module_data.start_point_mm
     const [ex, ey] = obj.module_data.end_point_mm
-    const dx = ex - sx, dy = ey - sy, length = Math.hypot(dx, dy)
+    const length = wallCenterlineLengthMm(obj.module_data)
     if (length < 10 || length < openingWidth_mm) continue
-    const ux = dx / length, uy = dy / length
-    const px = rawWorldPoint_mm[0] - sx, py = rawWorldPoint_mm[1] - sy
-    const t = px * ux + py * uy
-    if (t < -tolerance_mm || t > length + tolerance_mm) continue
+    const projection = projectPointToWallCenterlineMm(rawWorldPoint_mm, obj.module_data)
+    if (!projection || projection.offset_along_wall_mm < -tolerance_mm || projection.offset_along_wall_mm > length + tolerance_mm) continue
     const halfOpening = openingWidth_mm / 2
     const minT = Math.min(halfOpening, length / 2)
     const maxT = Math.max(minT, length - halfOpening)
-    const clampedT = Math.max(minT, Math.min(maxT, t))
-    const projX = sx + clampedT * ux, projY = sy + clampedT * uy
+    const clampedT = Math.max(minT, Math.min(maxT, projection.offset_along_wall_mm))
+    const projectedPoint = wallCenterlinePointAtOffsetMm(obj.module_data, clampedT).point_mm
+    const projX = projectedPoint[0], projY = projectedPoint[1]
     const perpDist = Math.hypot(rawWorldPoint_mm[0] - projX, rawWorldPoint_mm[1] - projY)
     const isCloser = perpDist < minPerpDist - 1e-9
     const isStableTie = Math.abs(perpDist - minPerpDist) <= 1e-9

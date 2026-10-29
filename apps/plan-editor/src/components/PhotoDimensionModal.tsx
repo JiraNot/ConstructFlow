@@ -42,13 +42,17 @@ import {
 
 import { getGlobalLaserDriver } from './LaserBleHudPill.js'
 
+const canonicalPhotoSessionId = (value?: string): string => value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  ? value
+  : crypto.randomUUID()
+
 export interface PhotoDimensionModalProps {
   isOpen: boolean
   onClose: () => void
   currentRoomName?: string
   activeLevelId?: string
   initialSession?: PhotoDimensionSession | null
-  onSaveSession?: (session: PhotoDimensionSession) => void
+  onSaveSession?: (session: PhotoDimensionSession) => void | Promise<void>
 }
 
 export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
@@ -60,7 +64,7 @@ export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
   onSaveSession,
 }) => {
   // Session State
-  const [sessionId, setSessionId] = useState<string>(() => initialSession?.id ?? `photo-session-${Date.now()}`)
+  const [sessionId, setSessionId] = useState<string>(() => canonicalPhotoSessionId(initialSession?.id))
   const [sessionTitle, setSessionTitle] = useState<string>(() => initialSession?.title ?? `${currentRoomName} - วัดระยะหน้างาน`)
   const [imageSrc, setImageSrc] = useState<string | null>(() => initialSession?.image_data_url ?? null)
   const [dimensions, setDimensions] = useState<PhotoDimensionLine[]>(() => initialSession?.dimensions ?? [])
@@ -99,7 +103,7 @@ export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
   // Sync initialSession if changed
   useEffect(() => {
     if (initialSession) {
-      setSessionId(initialSession.id)
+      setSessionId(canonicalPhotoSessionId(initialSession.id))
       setSessionTitle(initialSession.title)
       setImageSrc(initialSession.image_data_url)
       setDimensions(initialSession.dimensions ?? [])
@@ -467,7 +471,7 @@ export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
   }
 
   // Save Session & Pin to 2D Plan
-  const handleSaveAndPinSession = () => {
+  const handleSaveAndPinSession = async () => {
     if (!imageSrc || !imageElementRef.current) return
 
     const session: PhotoDimensionSession = {
@@ -485,10 +489,12 @@ export const PhotoDimensionModal: React.FC<PhotoDimensionModalProps> = ({
       level_id: activeLevelId,
     }
 
-    if (onSaveSession) {
-      onSaveSession(session)
+    try {
+      await onSaveSession?.(session)
+      showFeedback('📍 บันทึกรูปถ่าย ข้อมูลวัด และหมุดบนแปลน 2D แล้ว')
+    } catch (error) {
+      showFeedback(`บันทึกรูปถ่ายไม่สำเร็จ: ${error instanceof Error ? error.message : 'เกิดข้อผิดพลาด'}`)
     }
-    showFeedback('📍 บันทึกหมุดรูปถ่ายและมุมกล้องลงบนแปลน 2D แล้ว!')
   }
 
   // Export Photo

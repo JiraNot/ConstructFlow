@@ -1,5 +1,6 @@
 import { offsetPolygonEdge } from '@constructflow/geometry-kernel'
 import { moveEditableRoofRidge, moveRoofSeam } from '@constructflow/roof-engine'
+import { wallArcEndpointsMm, wallCenterlineLengthMm, wallCenterlinePointAtOffsetMm, wallCurveWithEndpointMm } from '@constructflow/project-model'
 import { stairFlightGripPoints } from './components/stairFlightGripPoints.mjs'
 
 const point2 = (point) => [Number(point?.[0] ?? 0), Number(point?.[1] ?? 0)]
@@ -136,6 +137,12 @@ function moveSingleObject(project, object, dx, dy) {
       return fullObjectUpdate(object, 'UpdateLEDRun', { path_mm: (data.path_mm ?? []).map(point => [point[0] + dx, point[1] + dy, point[2]]) })
     case 'architecture.bathroom':
       return fullObjectUpdate(object, 'UpdateBathroom', { boundary_mm: translateRing(data.boundary_mm, dx, dy), drain_mm: point2(data.drain_mm).map((value, index) => value + (index === 0 ? dx : dy)) })
+    case 'supplier.bundle_instance':
+      return fullObjectUpdate(object, 'UpdateSupplierBundleInstance', {
+        ...(Array.isArray(data.location_mm) ? { location_mm: [data.location_mm[0] + dx, data.location_mm[1] + dy] } : {}),
+        ...(Array.isArray(data.path_mm) ? { path_mm: data.path_mm.map(point => [point[0] + dx, point[1] + dy]) } : {}),
+        ...(Array.isArray(data.boundary_mm) ? { boundary_mm: translateRing(data.boundary_mm, dx, dy) } : {}),
+      })
     default:
       return null
   }
@@ -287,7 +294,20 @@ export function buildDirectManipulationCommands(project, gesture, point, options
   } else if (gesture.kind === 'wall-endpoint') {
     const start = point2(gesture.startPointMm), end = point2(gesture.endPointMm)
     if (endpoint === 0) start.splice(0, 2, point[0], point[1]); else end.splice(0, 2, point[0], point[1])
-    command = input('UpdateWallEndpoints', { object_id: object.id, start_point_mm: start, end_point_mm: end })
+    let curveGeometry = gesture.nextCurveGeometry
+    if (gesture.curveGeometry && !curveGeometry) {
+      if (endpoint !== 0 && endpoint !== 1) return []
+      curveGeometry = wallCurveWithEndpointMm(gesture.curveGeometry, endpoint, endpoint === 0 ? start : end)
+      if (!curveGeometry) return []
+      const [curveStart, curveEnd] = wallArcEndpointsMm(curveGeometry)
+      start.splice(0, 2, curveStart[0], curveStart[1])
+      end.splice(0, 2, curveEnd[0], curveEnd[1])
+    } else if (curveGeometry) {
+      const [curveStart, curveEnd] = wallArcEndpointsMm(curveGeometry)
+      start.splice(0, 2, curveStart[0], curveStart[1])
+      end.splice(0, 2, curveEnd[0], curveEnd[1])
+    }
+    command = input('UpdateWallEndpoints', { object_id: object.id, start_point_mm: start, end_point_mm: end, ...(curveGeometry ? { curve_geometry: curveGeometry } : {}) })
   } else if (gesture.kind === 'beam-endpoint') {
     const start = point2(gesture.startPointMm), end = point2(gesture.endPointMm)
     const beam = object
@@ -413,11 +433,14 @@ export function optimisticManipulationProject(project, commands) {
     } else if (name === 'UpdateWallEndpoints') {
       data.start_point_mm = [...payload.start_point_mm, data.start_point_mm[2] ?? 0]
       data.end_point_mm = [...payload.end_point_mm, data.end_point_mm[2] ?? 0]
-      const dx = payload.end_point_mm[0] - payload.start_point_mm[0], dy = payload.end_point_mm[1] - payload.start_point_mm[1]
-      const length = Math.hypot(dx, dy)
+      if (payload.curve_geometry) data.curve_geometry = structuredClone(payload.curve_geometry)
+      else delete data.curve_geometry
+      const wall = { start_point_mm: data.start_point_mm, end_point_mm: data.end_point_mm, curve_geometry: data.curve_geometry }
+      const length = wallCenterlineLengthMm(wall)
       for (const opening of Object.values(candidate.objects)) if ((opening.object_type === 'door_window.door' || opening.object_type === 'door_window.window') && opening.module_data.wall_id === objectId && length > 0) {
         const offset = Number(opening.module_data.offset_along_wall_mm)
-        opening.module_data.location_mm = [payload.start_point_mm[0] + dx * offset / length, payload.start_point_mm[1] + dy * offset / length, opening.module_data.location_mm[2] ?? 0]
+        const point = wallCenterlinePointAtOffsetMm(wall, offset).point_mm
+        opening.module_data.location_mm = [point[0], point[1], opening.module_data.location_mm[2] ?? point[2] ?? 0]
       }
     } else if (name === 'UpdateBeamEndpoints') {
       data.start_point_mm = [...payload.start_point_mm, data.start_point_mm[2] ?? 0]

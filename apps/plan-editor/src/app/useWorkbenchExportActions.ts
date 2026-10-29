@@ -7,10 +7,10 @@ export function useWorkbenchExportActions(
   project: ProjectDocument,
   setFileFeedback: (message: string) => void,
 ) {
-  const runExport = async (action: ExportActionName) => {
+  const runExport = async (action: ExportActionName): Promise<boolean> => {
     try {
       const { createWorkbenchExportActions } = await import('./workbenchExportHandlers.js')
-      await createWorkbenchExportActions(project, setFileFeedback)[action]()
+      return await createWorkbenchExportActions(project, setFileFeedback)[action]()
     } catch (error) {
       const messages: Record<ExportActionName, string> = {
         handleExportTakeoff: 'ส่งออกปริมาณไม่สำเร็จ',
@@ -20,6 +20,7 @@ export function useWorkbenchExportActions(
         handleExportIfc: 'ส่งออก IFC ไม่สำเร็จ',
       }
       setFileFeedback(`${messages[action]}: ${error instanceof Error ? error.message : String(error)}`)
+      return false
     }
   }
 
