@@ -23,6 +23,10 @@ export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> =
   const [keypadHasStarted, setKeypadHasStarted] = useState(false)
   const touchInput = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
   const touchControls = typeof window !== 'undefined' && window.matchMedia('(any-pointer: coarse)').matches
+  const relativeHint = mode === 'move'
+    ? 'ΔX/ΔY วัดจากตำแหน่งเดิมของวัตถุ (+/−)'
+    : mode === 'axis-x' || mode === 'axis-y' ? 'Δ วัดจากตำแหน่งเดิมของกริด (+/−)' : ''
+  const editHint = touchInput ? 'แตะช่องระยะเพื่อแก้ค่า · กดยืนยันเพื่อบันทึก' : 'Tab เพื่อเปลี่ยนช่อง · Enter ยืนยัน · Esc ยกเลิก'
   const fields: Array<{ key: DragDimensionField; shortLabel: string; accessibleLabel: string }> = mode === 'axis-x' || mode === 'axis-y'
     ? [{ key: mode === 'axis-x' ? 'x' : 'y', shortLabel: mode === 'axis-x' ? 'ΔX' : 'ΔY', accessibleLabel: `ระยะย้ายแกน ${mode === 'axis-x' ? 'X' : 'Y'} (${displayUnit})` }]
     : mode === 'rectangle'
@@ -111,7 +115,7 @@ export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> =
         }}
       /></label>)}
       {showDimensions && readout && <span className="cf-manipulation-dimensions__readout">{readout}</span>}
-      {showDimensions && <span className="cf-manipulation-dimensions__hint">{touchInput ? 'แตะช่องระยะเพื่อแก้ค่า · กดยืนยันเพื่อบันทึก' : 'Tab เพื่อเปลี่ยนช่อง · Enter ยืนยัน · Esc ยกเลิก'}</span>}
+      {showDimensions && <span className="cf-manipulation-dimensions__hint">{[relativeHint, editHint].filter(Boolean).join(' · ')}</span>}
       {!showDimensions && <strong className="cf-manipulation-dimensions__prompt">ยืนยันการแก้ไขวัตถุ</strong>}
       {touchControls && <div className="cf-manipulation-actions">
         <button type="button" className="is-cancel" onClick={onCancel}>ยกเลิก</button>
