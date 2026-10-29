@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { getPlanViewProject, getPlanVisibleObjects } from '@constructflow/representation-engine'
 import { usePlanCanvasViewport } from './usePlanCanvasViewport.js'
 import { usePlanCanvasDragDimensions } from './usePlanCanvasDragDimensions.js'
@@ -107,6 +107,21 @@ export function usePlanCanvasController(props: PlanCanvasProps) {
     snapPlanPoint,
     snapPlanWallHost,
   })
+  const commitDragDimensionsRef = useRef(pointerController.manipulation.commitDragDimensions)
+  commitDragDimensionsRef.current = pointerController.manipulation.commitDragDimensions
+
+  useEffect(() => {
+    if (!pointerState.draggingObject && !pointerState.dimensionEdit) return
+    const handleManipulationEnter = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || event.repeat || event.isComposing || document.querySelector('[role="dialog"]')) return
+      if (event.target instanceof Element && event.target.closest('input, textarea, select, button, [contenteditable="true"]')) return
+      event.preventDefault()
+      event.stopPropagation()
+      void commitDragDimensionsRef.current()
+    }
+    window.addEventListener('keydown', handleManipulationEnter)
+    return () => window.removeEventListener('keydown', handleManipulationEnter)
+  }, [pointerState.draggingObject, pointerState.dimensionEdit])
 
   usePlanCanvasSceneController({
     props, planProject, viewport, containerRef, canvasRef, selectedIds,

@@ -364,7 +364,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   font-family: inherit;
   touch-action: manipulation;
 }
-.cf-plan-numeric-keypad__heading { display: flex; align-items: center; justify-content: space-between; min-height: 30px; padding: 0 2px 7px; color: #334b63; font-size: 13px; }
+.cf-plan-numeric-keypad__heading { position: relative; display: flex; align-items: center; justify-content: space-between; min-height: 34px; padding: 7px 2px 7px; color: #334b63; font-size: 13px; cursor: grab; touch-action: none; user-select: none; }
+.cf-plan-numeric-keypad__heading::before { position: absolute; top: 1px; left: 50%; width: 28px; height: 3px; border-radius: 2px; background: #cbd5e1; content: ''; transform: translateX(-50%); }
+.cf-plan-numeric-keypad__heading.is-dragging { cursor: grabbing; }
 .cf-plan-numeric-keypad__heading button { width: 30px; height: 30px; border: 0; border-radius: 50%; background: #eff4f8; color: #52677d; font-size: 21px; line-height: 1; }
 .cf-plan-numeric-keypad__readout { display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; min-height: 52px; margin-bottom: 8px; padding: 5px 11px; border: 1px solid #d9e3ec; border-radius: 7px; background: #f8fafc; font: 600 24px ui-monospace, monospace; }
 .cf-plan-numeric-keypad__readout span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

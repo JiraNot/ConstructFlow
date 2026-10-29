@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 export type DragDimensionField = 'x' | 'y' | 'width' | 'height' | 'length' | 'offset'
@@ -21,6 +21,9 @@ export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> =
 }) => {
   const [keypadField, setKeypadField] = useState<DragDimensionField | null>(null)
   const [keypadHasStarted, setKeypadHasStarted] = useState(false)
+  const [keypadPosition, setKeypadPosition] = useState<{ left: number; top: number } | null>(null)
+  const [keypadDragging, setKeypadDragging] = useState(false)
+  const keypadDragRef = useRef<{ pointerId: number; startX: number; startY: number; left: number; top: number; width: number; height: number } | null>(null)
   const touchInput = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
   const touchControls = typeof window !== 'undefined' && window.matchMedia('(any-pointer: coarse)').matches
   const relativeHint = mode === 'move'
@@ -62,6 +65,41 @@ export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> =
     if (!touchInput) return
     setKeypadField(field)
     setKeypadHasStarted(false)
+  }
+  const startKeypadDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || (event.target instanceof Element && event.target.closest('button'))) return
+    const panel = event.currentTarget.parentElement
+    if (!panel) return
+    const bounds = panel.getBoundingClientRect()
+    keypadDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+    }
+    setKeypadPosition({ left: bounds.left, top: bounds.top })
+    setKeypadDragging(true)
+    event.currentTarget.setPointerCapture(event.pointerId)
+    event.preventDefault()
+  }
+  const moveKeypadDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = keypadDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const left = drag.left + event.clientX - drag.startX
+    const top = drag.top + event.clientY - drag.startY
+    setKeypadPosition({
+      left: Math.max(8, Math.min(window.innerWidth - drag.width - 8, left)),
+      top: Math.max(8, Math.min(window.innerHeight - drag.height - 8, top)),
+    })
+    event.preventDefault()
+  }
+  const finishKeypadDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (keypadDragRef.current?.pointerId !== event.pointerId) return
+    keypadDragRef.current = null
+    setKeypadDragging(false)
   }
   const appendKey = (key: string) => {
     if (!keypadField) return
@@ -128,8 +166,10 @@ export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> =
       ? createPortal(manipulationPanel, document.body)
       : manipulationPanel)}
     {keypadField && touchInput && typeof document !== 'undefined' && createPortal(
-      <div className="cf-plan-numeric-keypad" role="dialog" aria-label={`ป้อน${fields.find(field => field.key === keypadField)?.accessibleLabel ?? 'ระยะ'}ด้วยแป้นตัวเลข`} onPointerDown={event => event.stopPropagation()}>
-        <div className="cf-plan-numeric-keypad__heading">
+      <div className="cf-plan-numeric-keypad" role="dialog" aria-label={`ป้อน${fields.find(field => field.key === keypadField)?.accessibleLabel ?? 'ระยะ'}ด้วยแป้นตัวเลข`} onPointerDown={event => event.stopPropagation()}
+        style={keypadPosition ? { left: keypadPosition.left, top: keypadPosition.top, right: 'auto', bottom: 'auto' } : undefined}>
+        <div className={`cf-plan-numeric-keypad__heading${keypadDragging ? ' is-dragging' : ''}`} title="ลากหัวแป้นเพื่อย้ายตำแหน่ง"
+          onPointerDown={startKeypadDrag} onPointerMove={moveKeypadDrag} onPointerUp={finishKeypadDrag} onPointerCancel={finishKeypadDrag}>
           <strong>กำหนด {fields.find(field => field.key === keypadField)?.shortLabel ?? 'ระยะ'}</strong>
           <button type="button" aria-label="ซ่อนแป้นตัวเลข" onPointerDown={event => event.preventDefault()} onClick={() => setKeypadField(null)}>×</button>
         </div>
@@ -145,7 +185,7 @@ export const PlanCanvasDragDimensions: React.FC<PlanCanvasDragDimensionsProps> =
           <button type="button" className="is-cancel" onPointerDown={event => event.preventDefault()} onClick={onCancel}>ยกเลิก</button>
           <button type="button" className="is-confirm" aria-label="เสร็จสิ้นการป้อนตัวเลข" onPointerDown={event => event.preventDefault()} onClick={() => setKeypadField(null)}>เสร็จ</button>
         </div>
-        <small className="cf-plan-numeric-keypad__hint">เสร็จเพื่อปิดแป้น · กดยืนยันบนแถบด้านล่างเพื่อบันทึก</small>
+        <small className="cf-plan-numeric-keypad__hint">ลากหัวแป้นเพื่อย้าย · เสร็จเพื่อปิดแป้น · กดยืนยันด้านล่างเพื่อบันทึก</small>
       </div>, document.body,
     )}
   </>
